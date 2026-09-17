@@ -1,6 +1,6 @@
 ---
 title: "Configuration | Mastra platform"
-description: How Mastra platform deploys resolve their target project through .mastra-project.json and their environment variables across managed, stored, and local sources.
+description: "Configure Mastra platform project resolution with .mastra-project.json and manage environment variables from platform, stored, and local sources."
 ---
 
 # Configuration
@@ -55,7 +55,7 @@ The following environment variables configure the Observability product on the M
 | - | - |
 | `MASTRA_PLATFORM_ACCESS_TOKEN` | Org-scoped access token. The CLI writes this during observability provisioning and uses it for platform authentication. |
 | `MASTRA_PROJECT_ID` | UUID of the platform project. `MastraPlatformExporter` uses it to link observability data to the platform project. Studio and Server deploys read the project ID from `.mastra-project.json`. |
-| `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` | Optional observability endpoint override. This is only set automatically for local platform development. Defaults to `https://observability.mastra.ai`. |
+| `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` | Optional observability endpoint override for `MastraPlatformExporter` and Studio. Set it to your region's collector, for example `https://observability.eu.mastra.ai`, when your project isn't in the default US region. Defaults to `https://observability.mastra.ai`. |
 | `MASTRA_ORG_ID` | Overrides the active organization for CLI commands. You can also set it with the `--org` flag on supported commands. |
 
 `MastraPlatformExporter` reads `MASTRA_PLATFORM_ACCESS_TOKEN` to authenticate platform export.

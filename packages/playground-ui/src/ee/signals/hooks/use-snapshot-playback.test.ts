@@ -43,6 +43,33 @@ describe('useSnapshotPlayback', () => {
     expect(onAdvance).not.toHaveBeenCalled();
   });
 
+  it('drops a pending tick when playback pauses before it fires', () => {
+    vi.useFakeTimers();
+    const onAdvance = vi.fn();
+
+    const { rerender } = renderHook(props => useSnapshotPlayback(props), {
+      initialProps: {
+        isPlaying: true,
+        isPlaybackBlocked: false,
+        nextSnapshot: 'snapshot-2',
+        onAdvance,
+        snapshotCount: 2,
+      },
+    });
+
+    vi.advanceTimersByTime(500);
+    rerender({
+      isPlaying: false,
+      isPlaybackBlocked: false,
+      nextSnapshot: 'snapshot-2',
+      onAdvance,
+      snapshotCount: 2,
+    });
+    vi.advanceTimersByTime(400);
+
+    expect(onAdvance).not.toHaveBeenCalled();
+  });
+
   it('does not advance a single-snapshot timeline', () => {
     vi.useFakeTimers();
     const onAdvance = vi.fn();

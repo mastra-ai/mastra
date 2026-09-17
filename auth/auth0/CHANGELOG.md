@@ -1,5 +1,31 @@
 # @mastra/auth-auth0
 
+## 1.2.4-alpha.0
+
+### Patch Changes
+
+- Fixed a jose security advisory by updating jose to 6.2.11. Auth token verification APIs are unchanged. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+## 1.2.3
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 1.2.3-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+## 1.2.3-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
 ## 1.2.2
 
 ### Patch Changes

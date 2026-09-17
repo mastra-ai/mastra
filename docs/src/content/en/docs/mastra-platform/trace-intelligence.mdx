@@ -1,11 +1,11 @@
 ---
 title: 'Trace Intelligence | Mastra platform'
-description: Find recurring goals, outcomes, behaviors, and sentiment across your agent traces with Trace Intelligence on Mastra platform.
+description: "Use Mastra Trace Intelligence to identify recurring goals, outcomes, behaviors, sentiment, and themes across agent traces captured by Observability."
 ---
 
 # Trace Intelligence on Mastra platform
 
-Trace Intelligence finds recurring patterns across your agent's interactions. It analyzes traces captured by Mastra Observability and produces trace signals for four dimensions. It then clusters similar trace signals into themes.
+Trace Intelligence finds recurring patterns across your agent's interactions. It analyzes traces captured by Mastra Observability and produces trace signals for four built-in dimensions plus any custom signals enabled for the project. It then clusters similar trace signals into themes.
 
 Use Trace Intelligence to investigate questions such as:
 
@@ -40,7 +40,7 @@ Use representative traffic. A small set of repeated test prompts can produce unr
 
 ## Understand the analysis
 
-Each analyzable completed trace produces four trace signals:
+Each analyzable completed trace produces four built-in trace signals, along with any custom signals enabled for the project:
 
 | Trace signal | Meaning |
 | - | - |
@@ -77,10 +77,23 @@ A theme can persist, disappear, split, merge, or return across snapshots. Treat 
 
 ## Use the Trace Intelligence page
 
-1. Use the **Agent** selector to switch between agents with available analysis. An agent doesn't appear until its first themes are ready.
+1. Open **Intelligence** to see the entity index. Search or sort the index, then select an entity to open its analysis.
 1. Select a theme in the flow to open its details and filter every column to traces containing that theme.
 1. The details panel shows the theme's description, its share of the snapshot, paged example summaries, and a trend of its trace count over time.
 1. Select **Clear filter** to restore the complete flow.
+
+Entities appear while their signals are still collecting or processing. The index shows each entity's analyzed trace count, ready and enabled signal counts, lifecycle status, and last update.
+
+### Configure a custom signal
+
+Users with project management permission can configure custom signals without leaving Intelligence:
+
+1. Return to the entity index and select **Signal settings**.
+1. Select **Create signal**, provide a stable signal name, display label, description, and signal instructions, then save it. Definitions and their versions are shared across the organization.
+1. Enable the signal under **Current project**. Project enablement affects only the current project and applies to newly processed traces.
+1. Open an entity from the index and follow its signal status as it moves from collecting to processing and ready.
+
+You can edit a custom signal's label, description, or instructions. Instruction changes create a new version and apply only to new traces. You can also archive definitions that should no longer be available or restore archived definitions later.
 
 You can also:
 
@@ -99,7 +112,7 @@ Confirm that Mastra enrolled the correct project, that you use the beta-compatib
 
 ### An agent is missing
 
-Confirm that its completed traces are listed under **Traces**. The agent is listed only after its first themes are ready. If it recently reached 100 traces, allow time for asynchronous processing.
+Confirm that its completed traces are listed under **Traces** and that the project is enrolled. Trace Intelligence lists an entity after signal generation begins, before its first themes are ready. If it recently reached 100 traces, allow time for asynchronous processing.
 
 ### The relationship flow is unavailable
 

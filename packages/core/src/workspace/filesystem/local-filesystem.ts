@@ -114,22 +114,25 @@ export interface LocalMountConfig extends FilesystemMountConfig {
 }
 
 /**
- * Local filesystem implementation.
- *
- * Stores files in a folder on the user's machine.
- * This is the recommended filesystem for development and persistent local storage.
+ * Stores workspace files in a folder on the host machine for development
+ * and persistent local storage.
  *
  * @example
  * ```typescript
- * import { Workspace, LocalFilesystem } from '@mastra/core';
+ * import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
  *
  * const workspace = new Workspace({
  *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
  * });
- *
- * await workspace.init();
- * await workspace.writeFile('hello.txt', 'Hello World!');
  * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Local filesystem documentation](https://mastra.ai/reference/workspace/local-filesystem)
+ * if packaged docs are unavailable.
  */
 export class LocalFilesystem extends MastraFilesystem {
   readonly id: string;

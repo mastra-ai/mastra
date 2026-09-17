@@ -1,6 +1,7 @@
 import type { GithubIssue, GithubPullRequest } from '../../../factory/services/factory';
 import type { WorkItem } from '../../../factory/services/workItems';
-import type { FactoryProjectPayload, FactoryUserSession } from '../../../workspaces/services/github';
+import type { FactoryProjectPayload } from '../../../workspaces/services/github';
+import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 
 export const ACTIVE_FACTORY_ID = 'factory-active';
 export const OTHER_FACTORY_ID = 'factory-other';
@@ -109,6 +110,10 @@ export const workItems: WorkItem[] = [
       },
     },
     metadata: { number: 321 },
+    triageType: null,
+    acceptedAt: null,
+    commentCount: 0,
+    feedActivityAt: null,
     revision: 2,
     createdAt: '2026-07-29T10:00:00.000Z',
     updatedAt: '2026-07-29T12:30:00.000Z',
@@ -134,6 +139,10 @@ export const workItems: WorkItem[] = [
       },
     },
     metadata: { number: 900 },
+    triageType: null,
+    acceptedAt: null,
+    commentCount: 0,
+    feedActivityAt: null,
     revision: 1,
     createdAt: '2026-07-29T13:30:00.000Z',
     updatedAt: '2026-07-29T14:30:00.000Z',
@@ -152,6 +161,10 @@ export const workItems: WorkItem[] = [
     stageHistory: [],
     sessions: {},
     metadata: { number: 4242 },
+    triageType: null,
+    acceptedAt: null,
+    commentCount: 0,
+    feedActivityAt: null,
     revision: 1,
     createdAt: '2026-07-29T09:00:00.000Z',
     updatedAt: '2026-07-29T09:30:00.000Z',
@@ -170,6 +183,10 @@ export const workItems: WorkItem[] = [
     stageHistory: [],
     sessions: {},
     metadata: { number: 777 },
+    triageType: null,
+    acceptedAt: null,
+    commentCount: 0,
+    feedActivityAt: null,
     revision: 1,
     createdAt: '2026-07-29T08:00:00.000Z',
     updatedAt: '2026-07-29T08:30:00.000Z',

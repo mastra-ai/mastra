@@ -1,6 +1,6 @@
 ---
 title: "Reference: Couchbase vector store | Vectors"
-description: Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
+description: "The CouchbaseVector class provides vector search using Couchbase Vector Search. It enables efficient similarity search and metadata filtering within your Couchbase collections."
 packages:
   - "@mastra/couchbase"
 ---
@@ -358,7 +358,7 @@ try {
 
 - **Index Deletion Caveat:** Deleting a Search index doesn't delete the vectors/documents in the associated Couchbase collection. Data remains unless explicitly removed.
 - **Required Permissions:** The Couchbase user must have permissions to connect, read/write documents in the target collection (`kv` role), and manage Search Indexes (`search_admin` role on the relevant bucket/scope).
-- **Index Definition Details & Document Structure:** The `createIndex` method constructs a Search Index definition that indexes the `embedding` field (as type `vector`) and the `content` field (as type `text`), targeting documents within the specified `scopeName.collectionName`. Each document stores the vector in the `embedding` field and metadata in the `metadata` field. If `metadata` contains a `text` property, its value is also copied to a top-level `content` field, which is indexed for text search.
+- **Index Definition Details & Document Structure:** The `createIndex` method builds a Search Index definition for documents in `scopeName.collectionName`. It indexes the `embedding` field as a vector and the `content` field as text. Each document stores its vector in `embedding`, with metadata kept in `metadata`. A `text` property within `metadata` is also copied to the top-level `content` field for text search.
 - **Replication & Durability:** Consider using Couchbase's built-in replication and persistence features for data durability. Monitor index statistics regularly to ensure efficient search.
 
 ## Limitations

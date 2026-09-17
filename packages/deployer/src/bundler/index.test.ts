@@ -1,9 +1,21 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SourceDependencyConstraints } from './index';
 import { Bundler, applySourceDependencyRange, getSourceDependencyConstraints, isRegistryVersionSpec } from './index';
+
+const depsMocks = vi.hoisted(() => ({
+  setLogger: vi.fn(),
+  install: vi.fn(),
+}));
+
+vi.mock('../services/deps', () => ({
+  DepsService: class {
+    __setLogger = depsMocks.setLogger;
+    install = depsMocks.install;
+  },
+}));
 
 const tempDirs: string[] = [];
 
@@ -12,6 +24,10 @@ class TestBundler extends Bundler {
 
   getEnvFiles(): Promise<string[]> {
     return Promise.resolve([]);
+  }
+
+  installForTest(outputDirectory: string, rootDir: string, pnpmOverrides?: Record<string, string>) {
+    return this.installDependencies(outputDirectory, rootDir, pnpmOverrides);
   }
 }
 
@@ -67,7 +83,56 @@ const createSourceApp = async ({
 };
 
 afterEach(async () => {
+  vi.clearAllMocks();
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+});
+
+describe('Bundler.installDependencies', () => {
+  it('updates the selected lockfile and installs packed workspace dependencies in one operation', async () => {
+    const bundler = new TestBundler('Test');
+    const pnpmOverrides = {
+      '@inner/transitive-c': 'file:./workspace-module/inner-transitive-c-1.0.0.tgz',
+    };
+
+    await bundler.installForTest('/tmp/build', '/tmp/source', pnpmOverrides);
+
+    expect(depsMocks.install).toHaveBeenCalledTimes(1);
+    expect(depsMocks.install).toHaveBeenCalledWith({
+      dir: join('/tmp/build', 'output'),
+      pnpmOverrides,
+      pnpmNodeLinker: undefined,
+    });
+  });
+});
+
+describe('Bundler.listToolsInputOptions', () => {
+  it('returns stable, sorted inputs relative to the project root', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-tools-'));
+    tempDirs.push(tempDir);
+    const projectRoot = join(tempDir, 'apps', 'api');
+    const toolsDir = join(projectRoot, 'src', 'mastra', 'tools');
+    await mkdir(join(toolsDir, 'nested'), { recursive: true });
+    for (const file of ['b.ts', 'a.ts', join('nested', 'c.ts')]) {
+      await writeFile(join(toolsDir, file), 'export {}', 'utf-8');
+    }
+
+    const bundler = new TestBundler('Test');
+    const toolsGlob = join(toolsDir, '**/*.ts');
+    const first = await bundler.listToolsInputOptions([toolsGlob], projectRoot);
+    const second = await bundler.listToolsInputOptions([join(toolsDir, 'b.ts'), toolsGlob], projectRoot);
+
+    expect(second).toEqual(first);
+    expect(Object.values(first)).toEqual([
+      join(toolsDir, 'a.ts').replaceAll('\\', '/'),
+      join(toolsDir, 'b.ts').replaceAll('\\', '/'),
+      join(toolsDir, 'nested', 'c.ts').replaceAll('\\', '/'),
+    ]);
+    expect(Object.keys(first)).toEqual([
+      'tools/a3576fdd-4db8-3860-0363-043d8e044095',
+      'tools/c8a75e35-2420-ce8d-d5d1-d6a12388c682',
+      'tools/a34d68f6-b252-bc06-1de9-238ce99e3110',
+    ]);
+  });
 });
 
 describe('Bundler.writePackageJson', () => {

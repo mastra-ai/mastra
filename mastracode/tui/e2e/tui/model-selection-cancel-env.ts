@@ -9,8 +9,8 @@ const realEnvKey = 'sk-real-env-selection-e2e';
 
 export const modelSelectionCancelEnvScenario = {
   name: 'model-selection-cancel-env',
-  description: 'selects an env-backed model without prompting and preserves missing-key cancellation semantics',
-  testName: 'skips model-selection key prompt for env keys and preserves cancelled missing-key selection',
+  description: 'selects an env-backed model without prompting and leaves the prior model after key cancellation',
+  testName: 'skips model-selection key prompt for env keys and preserves the prior model after cancellation',
   env() {
     return {
       '302AI_API_KEY': realEnvKey,
@@ -80,7 +80,7 @@ export const modelSelectionCancelEnvScenario = {
     await runtime.waitForScreenText(/Enter an API key for cancel-only:/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenText(/Edit custom pack: Cancel Env Selection E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(/cancel-only\/cancelled-key-e2e-model/i, terminal, 8_000);
+    await runtime.waitForScreenText(/anthropic\/claude-sonnet-4-5/i, terminal, 8_000);
 
     terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B');
     terminal.write('\r');
@@ -94,7 +94,7 @@ export const modelSelectionCancelEnvScenario = {
       `!node -e 'const fs=require("fs"); const authPath=process.env.MASTRA_APP_DATA_DIR+"/auth.json"; const settings=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const auth=fs.existsSync(authPath) ? JSON.parse(fs.readFileSync(authPath,"utf8")) : {}; const pack=settings.customModelPacks.find(p=>p.name==="${packName}"); console.log("MODEL_CANCEL_PLAN="+pack.models.plan); console.log("MODEL_CANCEL_BUILD="+pack.models.build); console.log("MODEL_CANCEL_302_KEY="+(auth["apikey:302ai"]?.key || "missing")); console.log("MODEL_CANCEL_CANCEL_KEY="+(auth["apikey:cancel-only"]?.key || "missing"));'`,
     );
     await runtime.waitForScreenText(/MODEL_CANCEL_PLAN=302ai\/env-precedence-e2e-model/i, terminal, 8_000);
-    await runtime.waitForScreenText(/MODEL_CANCEL_BUILD=cancel-only\/cancelled-key-e2e-model/i, terminal, 8_000);
+    await runtime.waitForScreenText(/MODEL_CANCEL_BUILD=anthropic\/claude-sonnet-4-5/i, terminal, 8_000);
     await runtime.waitForScreenText(/MODEL_CANCEL_302_KEY=missing/i, terminal, 8_000);
     await runtime.waitForScreenText(/MODEL_CANCEL_CANCEL_KEY=missing/i, terminal, 8_000);
 

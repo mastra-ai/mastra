@@ -13,7 +13,7 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-export const USER_SESSION_BRANCH_PREFIX = 'user/';
+import { postRepositoryGitOp, readJsonOrThrow } from './http';
 
 export interface GithubInstallation {
   installationId: number;
@@ -78,8 +78,6 @@ export interface GithubRepo {
   installationId: number;
   /** Storage UUID of the installation row backing this repo. */
   installationStorageId: string;
-  /** Storage UUID of the repository row backing this repo. */
-  repositoryStorageId: string;
   sandboxProvider: string;
   sandboxWorkdir: string;
 }
@@ -205,6 +203,8 @@ export interface FactoryProjectPayload {
   slackWorkItemsEnabled?: boolean;
   /** Whether Factory rules may start agent runs without someone asking for them. */
   autoRunEnabled?: boolean;
+  /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
+  autoApprovePlans?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -236,15 +236,6 @@ export interface FactoryProjectSnapshot extends FactoryProjectPayload {
 }
 
 export type FactoryProject = FactoryProjectSnapshot;
-
-async function readJsonOrThrow<T>(res: Response, failure: string): Promise<T> {
-  if (!res.ok) {
-    const error = new Error(`${failure} (${res.status})`) as Error & { status?: number };
-    error.status = res.status;
-    throw error;
-  }
-  return (await res.json()) as T;
-}
 
 function toLinkedRepositoryPayload(
   project: FactoryProjectPayload,
@@ -341,19 +332,19 @@ export async function updateFactoryDefaultModel(
   return project;
 }
 
-/** Enable or disable rule-started agent runs (review, triage, planning) for this Factory. */
-export async function updateFactoryAutoRun(
+/** Toggle a Factory's automation settings: rule-started runs, plan approval. */
+export async function updateFactoryAutomation(
   baseUrl: string,
   factoryProjectId: string,
-  autoRunEnabled: boolean,
+  patch: { autoRunEnabled?: boolean; autoApprovePlans?: boolean },
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ autoRunEnabled }),
+    body: JSON.stringify(patch),
   });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automatic runs');
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automation');
   return project;
 }
 
@@ -423,7 +414,7 @@ export async function linkRepository(
       credentials: 'include',
       headers: { 'content-type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
-        repositoryId: repo.repositoryStorageId,
+        repository: { externalId: String(repo.id), slug: repo.fullName },
         branch: repo.defaultBranch,
         sandboxProvider: repo.sandboxProvider,
         sandboxWorkdir: repo.sandboxWorkdir,
@@ -465,240 +456,6 @@ export async function deleteFactoryProject(baseUrl: string, factoryProjectId: st
     headers: { Accept: 'application/json' },
   });
   if (!res.ok && res.status !== 404) throw new Error(`Failed to delete Factory (${res.status})`);
-}
-
-export interface MaterializeResult {
-  resourceId: string;
-  factoryProjectId: string;
-  projectRepositoryId: string;
-  sandboxId: string;
-  sandboxWorkdir: string;
-}
-
-/** A coarse-grained step of the server-side sandbox preparation. */
-export interface PrepareProgress {
-  phase: 'reattaching' | 'provisioning' | 'preparing-workspace' | 'cloning' | 'pulling' | 'finalizing' | 'done';
-  message: string;
-}
-
-/**
- * Materialize a GitHub project into its cloud sandbox: provision/reattach the
- * sandbox and clone/pull the repo inside it. Streams live server-side progress
- * via SSE, invoking `onProgress` for each step so the UI can show the user what
- * is happening. Returns the resourceId used to open the project. Throws an Error
- * whose message carries the server's error code so the UI can surface
- * "sandbox not configured" distinctly.
- */
-export async function ensureRepoMaterialized(
-  baseUrl: string,
-  projectRepositoryId: string,
-  onProgress?: (event: PrepareProgress) => void,
-): Promise<MaterializeResult> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/ensure`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { Accept: 'text/event-stream' },
-  });
-
-  // Non-2xx responses are sent as plain JSON (auth gate, 503, 404, etc.) rather
-  // than as an SSE stream, so handle those before reading the event stream.
-  if (!res.ok) {
-    throw await ensureError(res);
-  }
-
-  const contentType = res.headers.get('content-type') ?? '';
-  if (!contentType.includes('text/event-stream') || !res.body) {
-    // Server fell back to a single JSON response — read it directly.
-    return (await res.json()) as MaterializeResult;
-  }
-
-  let result: MaterializeResult | undefined;
-  let failure: (Error & { code?: string }) | undefined;
-
-  await readSSE(res.body, (event, data) => {
-    if (event === 'progress') {
-      onProgress?.(JSON.parse(data) as PrepareProgress);
-    } else if (event === 'done') {
-      result = JSON.parse(data) as MaterializeResult;
-    } else if (event === 'error') {
-      const body = JSON.parse(data) as { error?: string; message?: string };
-      failure = new Error(body.message ?? 'Failed to prepare repository') as Error & { code?: string };
-      failure.code = body.error;
-    }
-  });
-
-  if (failure) throw failure;
-  if (!result) throw new Error('Sandbox preparation ended without a result.');
-  return result;
-}
-
-/** Build an Error carrying the server's error code from a non-OK JSON response. */
-async function ensureError(res: Response): Promise<Error & { code?: string }> {
-  let code = `http_${res.status}`;
-  let message = `Failed to prepare repository (${res.status})`;
-  try {
-    const body = (await res.json()) as { error?: string; message?: string };
-    if (body.error) code = body.error;
-    if (body.message) message = body.message;
-  } catch {
-    /* ignore non-JSON */
-  }
-  const err = new Error(message) as Error & { code?: string };
-  err.code = code;
-  return err;
-}
-
-/**
- * Minimal SSE reader over a fetch ReadableStream. Parses `event:`/`data:` frames
- * separated by blank lines and invokes `onEvent` for each. Defaults the event
- * name to `message` per the SSE spec.
- */
-async function readSSE(
-  body: ReadableStream<Uint8Array>,
-  onEvent: (event: string, data: string) => void,
-): Promise<void> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    // Normalize CRLF/CR to LF so frame and line splitting work regardless of
-    // how the server terminates SSE lines (the spec allows \r\n, \r, or \n).
-    buffer += decoder.decode(value, { stream: true }).replace(/\r\n|\r/g, '\n');
-    let sep: number;
-    while ((sep = buffer.indexOf('\n\n')) !== -1) {
-      const frame = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      let event = 'message';
-      const dataLines: string[] = [];
-      for (const line of frame.split('\n')) {
-        if (line.startsWith('event:')) event = line.slice(6).trim();
-        else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
-      }
-      if (dataLines.length > 0) onEvent(event, dataLines.join('\n'));
-    }
-  }
-}
-
-/**
- * An error from a git write operation (worktree/commit/push/pr) that carries the
- * server's error code so the UI can distinguish actionable failures (e.g.
- * `authRequired` for a 401, `Invalid branch` for a 400) from generic failures.
- */
-export interface GitOpError extends Error {
-  code?: string;
-  status?: number;
-  authRequired?: boolean;
-}
-
-/**
- * POST helper for the per-project git endpoints. Parses the server's JSON body,
- * surfacing `error`/`message` codes on failure (and `authRequired` for 401) so
- * callers can react without re-implementing the parsing dance each time.
- */
-async function postRepositoryGitOp<T>(
-  baseUrl: string,
-  projectRepositoryId: string,
-  action: string,
-  payload: unknown,
-): Promise<T> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/${action}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(payload ?? {}),
-  });
-  if (!res.ok) {
-    let code = `http_${res.status}`;
-    let message = `Request failed (${res.status})`;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      if (body.error) code = body.error;
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    const err = new Error(message) as GitOpError;
-    err.code = code;
-    err.status = res.status;
-    if (res.status === 401) err.authRequired = true;
-    throw err;
-  }
-  return (await res.json()) as T;
-}
-
-export interface FactoryUserSession {
-  id: string;
-  sessionId: string;
-  projectRepositoryId: string;
-  orgId: string;
-  userId: string;
-  visibility: 'org' | 'private';
-  title?: string;
-  branch: string;
-  baseBranch: string;
-  sandboxId: string | null;
-  sandboxWorkdir: string | null;
-  materializedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
-
-function normalizeUserSession({ title, ...session }: FactoryUserSessionPayload): FactoryUserSession {
-  return { ...session, title: title ?? undefined };
-}
-
-export async function listUserSessions(
-  baseUrl: string,
-  projectRepositoryId: string,
-  signal?: AbortSignal,
-): Promise<FactoryUserSession[]> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/sessions`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-    signal,
-  });
-  const body = await readJsonOrThrow<{ sessions: FactoryUserSessionPayload[] }>(res, 'Failed to list sessions');
-  return body.sessions.map(normalizeUserSession);
-}
-
-export type CreateUserSessionOptions =
-  | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
-  | { sessionId: string; title: string; branch?: never; baseBranch?: never };
-
-export async function createUserSession(
-  baseUrl: string,
-  projectRepositoryId: string,
-  options: CreateUserSessionOptions,
-): Promise<FactoryUserSession> {
-  const result = await postRepositoryGitOp<{ session: FactoryUserSessionPayload }>(
-    baseUrl,
-    projectRepositoryId,
-    'sessions',
-    options,
-  );
-  return normalizeUserSession(result.session);
-}
-
-export async function getUserSession(baseUrl: string, sessionId: string): Promise<FactoryUserSession> {
-  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
-  const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(res, 'Failed to load session');
-  return normalizeUserSession(body.session);
-}
-
-export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {
-  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
-    method: 'DELETE',
-    credentials: 'include',
-  });
-  if (!res.ok && res.status !== 404) throw new Error(`Failed to delete session (${res.status})`);
 }
 
 export interface CommitResult {

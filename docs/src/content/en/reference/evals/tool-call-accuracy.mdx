@@ -1,6 +1,6 @@
 ---
 title: "Reference: Tool call accuracy scorers | Evals"
-description: Documentation for the Tool Call Accuracy Scorers in Mastra, which evaluate whether LLM outputs call the correct tools from available options.
+description: "Use tool-call accuracy scorers to evaluate whether an LLM selected the expected tools, either from recorded calls or against available tool definitions."
 packages:
   - "@mastra/evals"
 ---
@@ -114,7 +114,7 @@ const strictOrderScorer = createCodeScorer({
 
 ### Code-Based Scorer Results
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   runId: string,
   preprocessStepResult: {
@@ -347,7 +347,7 @@ The LLM-based scorer provides:
 
 ### LLM-Based Scorer Options
 
-```typescript prettier:false
+```typescript oxfmt:false
 // Basic configuration
 const basicLLMScorer = createLLMScorer({
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -366,7 +366,7 @@ const customModelScorer = createLLMScorer({
 
 ### LLM-Based Scorer Results
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   runId: string,
   score: number,  // 0.0 to 1.0
@@ -478,7 +478,7 @@ console.log(result.reason) // "The agent used search-tool when weather-tool woul
 
 The LLM scorer recognizes when agents appropriately ask for clarification:
 
-```typescript prettier:false title="src/example-llm-clarification.ts"
+```typescript oxfmt:false title="src/example-llm-clarification.ts"
 const vagueInput = [
   createTestMessage({
     content: 'I need help with something',

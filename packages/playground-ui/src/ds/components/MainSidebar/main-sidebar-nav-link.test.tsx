@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { useMobileDrawer } from './main-sidebar-context';
 import { MainSidebarNavHeader } from './main-sidebar-nav-header';
@@ -11,19 +11,11 @@ import { MainSidebarProvider } from './main-sidebar-provider';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/ds/components/Tooltip';
 import type { LinkComponentProps } from '@/ds/types/link-component';
 
-const getTooltipPopup = () => {
-  const popup = document.querySelector<HTMLElement>('.bg-surface3');
-  assert(popup, 'Expected tooltip popup');
-  return popup;
-};
-
 const DrawerToggle = () => {
   const { openMobile, setOpenMobile } = useMobileDrawer();
   return <button onClick={() => setOpenMobile(!openMobile)}>Toggle drawer</button>;
 };
 
-// MainSidebarProvider reads matchMedia at mount to decide mobile vs desktop.
-// jsdom does not implement it, so polyfill before any render.
 beforeAll(() => {
   if (!window.matchMedia) {
     Object.defineProperty(window, 'matchMedia', {
@@ -44,18 +36,6 @@ beforeAll(() => {
 });
 
 afterEach(() => cleanup());
-
-// Floating UI / Base UI computes the arrow `transform` from the trigger's
-// bounding rect. jsdom returns zeros for layout, so this suite does NOT assert
-// absolute pixel positions. Instead it asserts the invariants that broke the
-// sidebar arrow in production:
-//
-//  1. The trigger is rendered as the real DOM element passed to `render` (an
-//     `<a>` from the consumer), so Floating UI anchors to the right node.
-//  2. The popup className does NOT contain CSS margin utilities. A margin on
-//     the popup shifts it AFTER Floating UI has positioned the anchor, so the
-//     arrow stays at the calculated anchor while the popup drifts away —
-//     producing an arrow stranded in the middle of empty space.
 
 describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
   it('does not re-render navigation rows when only the mobile drawer state changes', () => {
@@ -133,7 +113,6 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
   it('does not apply CSS margin utilities on TooltipContent that would dislocate the arrow', async () => {
     render(
       <TooltipProvider delay={0}>
-        {/* Force the tooltip open so the popup is mounted and inspectable. */}
         <TooltipPrimitive.Root open>
           <TooltipTrigger render={<a href="/agents">Agents</a>} />
           <TooltipContent side="right" align="center" sideOffset={16}>
@@ -143,13 +122,8 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
       </TooltipProvider>,
     );
 
-    // The Positioner and Popup both expose data-side. Target the Popup
-    // specifically via its unique design-system class (bg-surface3) so the
-    // assertions cannot accidentally pass against the Positioner wrapper.
-    const popup = await waitFor(getTooltipPopup);
+    const popup = await screen.findByRole('tooltip');
 
-    // Critical: no margin classes on the popup. Margins shift the popup AFTER
-    // Floating UI calculated the arrow's anchor; use `sideOffset` instead.
     expect(popup.className).not.toMatch(/(^|\s)-?m[trblxy]?-(\[|\d|auto)/);
   });
 
@@ -165,22 +139,12 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
       </TooltipProvider>,
     );
 
-    // The Positioner and Popup both expose data-side. Target the Popup
-    // specifically via its unique design-system class (bg-surface3) so the
-    // assertions cannot accidentally pass against the Positioner wrapper.
-    const popup = await waitFor(getTooltipPopup);
+    const popup = await screen.findByRole('tooltip');
 
-    // jsdom has no layout, so Floating UI may flip the requested side away
-    // from "right". Assert only that *some* side is set, which proves the
-    // positioner saw a real trigger ref.
     expect(popup.getAttribute('data-side')).toMatch(/^(top|bottom|left|right)$/);
   });
 
   it('exposes role="tooltip" on the popup so consumers can query via getByRole("tooltip")', async () => {
-    // Regression: Base UI's Popup does not set role="tooltip" automatically
-    // (unlike Radix). Several Playwright E2E tests assert on `getByRole`, so
-    // the wrapper must add it explicitly. Without this the agent observability
-    // tab tests fail with a 5s tooltip-not-found timeout.
     render(
       <TooltipProvider delay={0}>
         <TooltipPrimitive.Root open>
@@ -192,9 +156,185 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
       </TooltipProvider>,
     );
 
-    const popup = await waitFor(getTooltipPopup);
+    const popup = await screen.findByRole('tooltip');
 
     expect(popup.getAttribute('role')).toBe('tooltip');
+  });
+});
+
+describe('MainSidebarNavLink — what it renders a row as', () => {
+  const renderLink = (element: React.ReactElement) => render(<TooltipProvider>{element}</TooltipProvider>);
+
+  it('refuses to be told twice how to render itself', () => {
+    expect(() =>
+      renderLink(
+        <MainSidebarNavLink asChild render={<a href="/agents">Agents</a>}>
+          <a href="/agents">Agents</a>
+        </MainSidebarNavLink>,
+      ),
+    ).toThrow(/either `render` or `asChild`/);
+  });
+
+  it('hands back what it was given when there is no link to build', () => {
+    const { container } = renderLink(<MainSidebarNavLink>just text</MainSidebarNavLink>);
+
+    expect(container.textContent).toBe('just text');
+    expect(container.querySelector('a')).toBeNull();
+  });
+
+  it.each([
+    ['https://mastra.ai/docs', '_blank'],
+    ['http://mastra.ai/docs', '_blank'],
+    ['//mastra.ai/docs', '_blank'],
+    ['/agents', ''],
+    ['/redirect?to=https://mastra.ai', ''],
+  ])('sends %s to %s', (url, target) => {
+    renderLink(<MainSidebarNavLink link={{ name: 'Docs', url }} />);
+
+    const anchor = screen.getByRole<HTMLAnchorElement>('link', { name: 'Docs' });
+    expect(anchor.target).toBe(target);
+    expect(anchor.rel).toBe(target === '_blank' ? 'noreferrer' : '');
+  });
+
+  it('marks a featured row so it reads apart from the rest', () => {
+    const plain = renderLink(<MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} />);
+    const plainClass = plain.container.querySelector('a')?.className ?? '';
+
+    cleanup();
+
+    const featured = renderLink(<MainSidebarNavLink link={{ name: 'Agents', url: '/agents', variant: 'featured' }} />);
+
+    expect(featured.container.querySelector('a')?.className).not.toBe(plainClass);
+  });
+
+  it('wraps the row only when it has a trailing action to hold', () => {
+    const plain = renderLink(<MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} />);
+    expect(plain.container.querySelector('li > a')).toBeTruthy();
+
+    cleanup();
+
+    const withAction = renderLink(
+      <MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} action={<button type="button">More</button>} />,
+    );
+
+    expect(withAction.container.querySelector('li > a')).toBeNull();
+    expect(withAction.container.querySelector('li > div > a')).toBeTruthy();
+  });
+
+  it('keeps a caller class on the row it was told to render', () => {
+    const { container } = renderLink(
+      <MainSidebarNavLink
+        render={<a href="/agents" className="my-own-class" />}
+        link={{ name: 'Agents', url: '/agents' }}
+      />,
+    );
+
+    const row = container.querySelector('a');
+    expect(row?.classList.contains('my-own-class')).toBe(true);
+    expect((row?.className.split(' ').length ?? 0) > 1).toBe(true);
+  });
+
+  it('keeps a caller class on a slotted row', () => {
+    const { container } = renderLink(
+      <MainSidebarNavLink asChild link={{ name: 'Agents', url: '/agents' }}>
+        <a href="/agents" className="my-own-class">
+          Agents
+        </a>
+      </MainSidebarNavLink>,
+    );
+
+    const row = container.querySelector('a');
+    expect(row?.textContent).toBe('Agents');
+    expect(row?.classList.contains('my-own-class')).toBe(true);
+    expect((row?.className.split(' ').length ?? 0) > 1).toBe(true);
+  });
+
+  it('paints the whole row, action included, when it is the active one', () => {
+    const inactive = renderLink(
+      <MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} action={<button type="button">More</button>} />,
+    );
+    const inactiveClass = inactive.container.querySelector('li > div')?.className;
+
+    cleanup();
+
+    const active = renderLink(
+      <MainSidebarNavLink
+        isActive
+        link={{ name: 'Agents', url: '/agents' }}
+        action={<button type="button">More</button>}
+      />,
+    );
+
+    expect(active.container.querySelector('li > div')?.className).not.toBe(inactiveClass);
+  });
+
+  it('indents a nested row that carries an action', () => {
+    const flat = renderLink(
+      <MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} action={<button type="button">More</button>} />,
+    );
+    const flatClass = flat.container.querySelector('li > div > a')?.className;
+
+    cleanup();
+
+    const nested = renderLink(
+      <MainSidebarNavLink
+        link={{ name: 'Agents', url: '/agents', indent: true }}
+        action={<button type="button">More</button>}
+      />,
+    );
+
+    expect(nested.container.querySelector('li > div > a')?.className).not.toBe(flatClass);
+  });
+
+  it('drops the trailing action on a collapsed rail, which has no room for it', () => {
+    renderLink(
+      <MainSidebarNavLink
+        state="collapsed"
+        link={{ name: 'Agents', url: '/agents' }}
+        action={<button type="button">More</button>}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
+  });
+});
+
+describe('MainSidebarNavLink — how a row names itself', () => {
+  const renderLink = (element: React.ReactElement) => render(<TooltipProvider>{element}</TooltipProvider>);
+  const tooltipText = async () => (await screen.findByRole('tooltip')).textContent;
+
+  it('says nothing extra while the label is on screen', () => {
+    renderLink(<MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} />);
+
+    fireEvent.focus(screen.getByRole('link', { name: 'Agents' }));
+
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('names itself while collapsed, since the label is hidden', async () => {
+    renderLink(<MainSidebarNavLink state="collapsed" link={{ name: 'Agents', url: '/agents' }} />);
+
+    fireEvent.focus(screen.getByRole('link'));
+
+    expect(await tooltipText()).toBe('Agents');
+  });
+
+  it('says what the caller wrote while the label is on screen', async () => {
+    renderLink(<MainSidebarNavLink link={{ name: 'Agents', url: '/agents', tooltipMsg: 'Your agents' }} />);
+
+    fireEvent.focus(screen.getByRole('link', { name: 'Agents' }));
+
+    expect(await tooltipText()).toBe('Your agents');
+  });
+
+  it('says both while collapsed', async () => {
+    renderLink(
+      <MainSidebarNavLink state="collapsed" link={{ name: 'Agents', url: '/agents', tooltipMsg: 'Your agents' }} />,
+    );
+
+    fireEvent.focus(screen.getByRole('link'));
+
+    expect(await tooltipText()).toBe('Agents | Your agents');
   });
 });
 

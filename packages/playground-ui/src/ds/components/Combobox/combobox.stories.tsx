@@ -230,3 +230,25 @@ export const Multiple: Story = {
     );
   },
 };
+
+/** Selected, described and multi items side by side, to compare against the menu components. */
+export const KitchenSink: Story = {
+  render: () => (
+    <div className="flex w-56 flex-col gap-4">
+      <Combobox
+        placeholder="Single"
+        value="react"
+        options={[
+          { label: 'Plain item', value: 'plain' },
+          { label: 'React', value: 'react' },
+          {
+            label: 'With description',
+            value: 'described',
+            description: 'A second line under the label',
+          },
+        ]}
+      />
+      <Combobox multiple placeholder="Multiple" value={['react', 'vue']} options={frameworkOptions} />
+    </div>
+  ),
+};

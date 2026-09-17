@@ -27,6 +27,13 @@ export interface KnowledgeNode {
   name: string;
   kind: string;
   content?: string;
+  /**
+   * Bounded synopsis for list/graph surfaces. The bound is part of the storage contract: every
+   * adapter enforces {@link MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} in `createNode` and `updateNode`
+   * regardless of which writer performs the write; merge adoption only propagates a description
+   * storage already accepted. Long-form detail belongs in {@link KnowledgeNode.content}.
+   */
+  description?: string;
   scope: KnowledgeScope;
   version: number;
   mergedInto?: string;
@@ -102,6 +109,7 @@ export interface CreateKnowledgeNodeInput {
   name: string;
   kind: string;
   content?: string;
+  description?: string;
   scope: KnowledgeScope;
   resolutionScope?: KnowledgeScope;
 }
@@ -113,6 +121,7 @@ export interface UpdateKnowledgeNodeInput {
   name?: string;
   kind?: string;
   content?: string;
+  description?: string;
   scope?: KnowledgeScope;
   resolutionScope?: KnowledgeScope;
 }
@@ -319,6 +328,33 @@ export function expandKnowledgeScope(context: KnowledgeScope, level: KnowledgeSc
     throw new Error(`Cannot expand knowledge scope to ${level}: context has no ${level} entry`);
   }
   return expanded;
+}
+
+/**
+ * Maximum length of {@link KnowledgeNode.description}, counted in UTF-16 code units.
+ *
+ * `description` is a concise synopsis rendered into graph and list payloads, potentially across
+ * hundreds of nodes at once, so the bound belongs to the storage contract rather than to any one
+ * writer: every adapter enforces it in `createNode` and `updateNode` regardless of which tool
+ * performs the write. Long-form detail stays in {@link KnowledgeNode.content}.
+ *
+ * @experimental
+ */
+export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
+
+/**
+ * Rejects an over-long node description before any write occurs, so an oversized update leaves the
+ * existing node untouched and does not increment its version.
+ *
+ * @experimental
+ */
+export function assertKnowledgeDescriptionWithinBound(description: string | undefined): void {
+  if (description === undefined) return;
+  if (description.length > MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH) {
+    throw new Error(
+      `Knowledge node description exceeds the ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code unit limit`,
+    );
+  }
 }
 
 export function assertKnowledgeScopeWithinCeiling(scope: KnowledgeScope, maxScope?: KnowledgeScopeLevel): void {

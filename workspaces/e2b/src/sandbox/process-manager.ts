@@ -116,8 +116,8 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
     return this.sandbox.retryOnDead(async () => {
       const e2b = this.sandbox.e2b;
 
-      // Merge default env with per-spawn env
-      const mergedEnv = { ...this.env, ...options.env };
+      // The base spawn wrapper already merged the sandbox env into options.env
+      const mergedEnv = { ...options.env };
       const envs = Object.fromEntries(
         Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
       );
@@ -130,7 +130,7 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
       const e2bHandle = await e2b.commands.run(command, {
         background: true,
         stdin: true,
-        cwd: options.cwd,
+        cwd: options.cwd ?? this.sandbox.workingDirectory,
         envs,
         timeoutMs: options.timeout,
         onStdout: (data: string) => handle.emitStdout(data),

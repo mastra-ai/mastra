@@ -34,7 +34,7 @@ const ECONNRESET_MESSAGE_PATTERN = /econnreset|socket hang up/i;
 function isECONNRESETError(error: unknown): boolean {
   if (!error) return false;
 
-  const code = typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined;
+  const code = typeof error === 'object' && 'code' in error ? error.code : undefined;
   if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true;
 
   const message = error instanceof Error ? error.message : undefined;

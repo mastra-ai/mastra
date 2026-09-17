@@ -25,6 +25,15 @@ describe('traces routes', () => {
     });
   });
 
+  describe('when a legacy /traces/:traceId link is opened', () => {
+    it('redirects to /traces with the traceId as a search param', async () => {
+      const router = await navigateTo('/traces/trace-1?spanId=span-1');
+
+      expect(router.state.location.pathname).toBe('/traces');
+      expect(router.state.location.search).toBe('?spanId=span-1&traceId=trace-1');
+    });
+  });
+
   describe('when a legacy /observability link is opened', () => {
     it('redirects to /traces and keeps its filters', async () => {
       const router = await navigateTo('/observability?entity=weather');

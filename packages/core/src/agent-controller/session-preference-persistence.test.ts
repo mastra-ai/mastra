@@ -75,6 +75,33 @@ describe('AgentController session preference persistence (thinkingLevel, notific
     expect((restartedSession.state.get() as any).notifications).toBe('system');
   });
 
+  it('deletes a cleared preference so it stays cleared after restart', async () => {
+    const stateSchema = z.object({
+      thinkingLevel: z.preprocess(
+        value => (value === null ? undefined : value),
+        z.enum(['off', 'low', 'medium', 'high']).optional(),
+      ),
+    });
+    const controller = createController(storage, {}, stateSchema);
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const thread = await session.thread.create();
+
+    await session.state.set({ thinkingLevel: 'high' });
+    await session.state.set({ thinkingLevel: null });
+
+    const memory = await storage.getStore('memory');
+    const savedThread = await memory?.getThreadById({ threadId: thread.id });
+    expect(Object.hasOwn(savedThread?.metadata ?? {}, 'thinkingLevel')).toBe(false);
+
+    const restarted = createController(storage, {}, stateSchema);
+    await restarted.init();
+    const restartedSession = await restarted.createSession({ id: 'restarted-session', ownerId: 'test-owner' });
+    await restartedSession.thread.switch({ threadId: thread.id });
+
+    expect(restartedSession.state.get().thinkingLevel).toBeUndefined();
+  });
+
   it('restores preferences when switching back to a thread', async () => {
     const controller = createController(storage);
     await controller.init();

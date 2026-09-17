@@ -301,6 +301,54 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
     });
   });
 
+  describe('embedding dimension probe', () => {
+    function createSemanticRecallMemory(embedder: MastraEmbeddingModel<string>) {
+      const memory = new MockMemory({
+        storage: mockStorage as any,
+        enableMessageHistory: false,
+      });
+
+      (memory as any).vector = mockVector;
+      (memory as any).embedder = embedder;
+      (memory as any).threadConfig = {
+        ...(memory as any).threadConfig,
+        semanticRecall: true,
+        lastMessages: false,
+      };
+
+      return memory;
+    }
+
+    it('should reject processor creation without selecting a default index when the probe fails', async () => {
+      const probeError = new Error('provider rejected dimension probe');
+      const embedder = {
+        modelId: 'failing-embedder',
+        doEmbed: vi.fn().mockRejectedValue(probeError),
+      } as unknown as MastraEmbeddingModel<string>;
+      const memory = createSemanticRecallMemory(embedder);
+
+      await expect(memory.getInputProcessors()).rejects.toThrow(`Failed to determine the embedder's output dimension`);
+      await expect(memory.getOutputProcessors()).rejects.toThrow(`Failed to determine the embedder's output dimension`);
+
+      expect(embedder.doEmbed).toHaveBeenCalledTimes(1);
+      expect(mockVector.createIndex).not.toHaveBeenCalled();
+      expect(mockVector.upsert).not.toHaveBeenCalled();
+    });
+
+    it('should reject processor creation when the probe returns no usable embedding', async () => {
+      const embedder = {
+        modelId: 'malformed-embedder',
+        doEmbed: vi.fn().mockResolvedValue({ embeddings: [] }),
+      } as unknown as MastraEmbeddingModel<string>;
+      const memory = createSemanticRecallMemory(embedder);
+
+      await expect(memory.getInputProcessors()).rejects.toThrow(`Failed to determine the embedder's output dimension`);
+
+      expect(mockVector.createIndex).not.toHaveBeenCalled();
+      expect(mockVector.upsert).not.toHaveBeenCalled();
+    });
+  });
+
   describe('processor creation', () => {
     it('should create new processor instances on each call (not cached)', async () => {
       const memory = new MockMemory({

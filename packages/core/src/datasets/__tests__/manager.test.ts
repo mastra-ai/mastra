@@ -59,6 +59,7 @@ describe('DatasetsManager', () => {
       getScorerById: vi.fn(),
       getWorkflowById: vi.fn(),
       getWorkflow: vi.fn(),
+      getLogger: vi.fn().mockReturnValue({ warn: vi.fn(), debug: vi.fn(), info: vi.fn(), error: vi.fn() }),
     } as unknown as Mastra;
 
     mgr = new DatasetsManager(mastra);
@@ -385,6 +386,62 @@ describe('DatasetsManager', () => {
       expect(call?.id).toBe(exp.id);
       expect(call?.filters?.organizationId).toBeUndefined();
       expect(call?.filters?.projectId).toBeUndefined();
+    });
+  });
+
+  describe('deleteExperiment', () => {
+    it('deletes an experiment that has no dataset', async () => {
+      const exp = await experimentsStorage.createExperiment({
+        name: 'orphan-exp',
+        datasetId: null,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+      });
+
+      await mgr.deleteExperiment({ experimentId: exp.id });
+
+      expect(await mgr.getExperiment({ experimentId: exp.id })).toBeNull();
+    });
+
+    it('is a no-op on tenancy mismatch (no cross-tenant existence leak)', async () => {
+      const exp = await experimentsStorage.createExperiment({
+        name: 'tenant-exp',
+        datasetId: null,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      await mgr.deleteExperiment({ experimentId: exp.id, organizationId: 'org_b' });
+
+      expect(await mgr.getExperiment({ experimentId: exp.id })).not.toBeNull();
+    });
+
+    it('always runs the trace cascade before the relational delete', async () => {
+      const exp = await experimentsStorage.createExperiment({
+        name: 'trace-cascade',
+        datasetId: null,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+      });
+
+      // The cascade collects trace ids from the experiment's results, which the
+      // relational delete would otherwise have already removed.
+      const listResults = vi.spyOn(experimentsStorage, 'listExperimentResults');
+      const deleteExperiment = vi.spyOn(experimentsStorage, 'deleteExperiment');
+      await mgr.deleteExperiment({ experimentId: exp.id });
+
+      expect(listResults).toHaveBeenCalledWith(expect.objectContaining({ experimentId: exp.id }));
+      expect(deleteExperiment).toHaveBeenCalledWith({ id: exp.id, filters: undefined });
+      expect(listResults.mock.invocationCallOrder[0]!).toBeLessThan(deleteExperiment.mock.invocationCallOrder[0]!);
+      expect(await mgr.getExperiment({ experimentId: exp.id })).toBeNull();
     });
   });
 

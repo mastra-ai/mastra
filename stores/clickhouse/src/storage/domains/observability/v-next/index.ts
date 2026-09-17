@@ -10,6 +10,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
+import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
   ObservabilityStorageStrategy,
@@ -51,6 +52,7 @@ import type {
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
   CreateScoreArgs,
+  DeleteScoresArgs,
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
@@ -64,9 +66,12 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   BatchCreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
+  FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -85,6 +90,14 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
+  GetTraceQueryValuesResponse,
+  QueryThreadsResult,
+  TraceQueryObservedFieldsResult,
+  TraceQueryResponse,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
+  TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 
 import { resolveClickhouseConfig } from '../../../db';
@@ -111,18 +124,40 @@ import {
   MV_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
+  RETENTION_MANAGED_TABLES,
   buildRetentionEntries,
   parseTtlExpression,
 } from './ddl';
 import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
+export { TABLE_DELETION_REQUESTS } from './ddl';
+export { recordDeletionRequest } from './deletion-requests';
+export type { DeletionRequestRow, RecordDeletionRequestArgs } from './deletion-requests';
 export type { RetentionConfig } from './ddl';
 
-/** Extended config for v-next observability, adding per-signal retention. */
-export type VNextObservabilityConfig = ClickhouseDomainConfig & {
+export interface TraceQueryConfig {
+  /** Maximum execution time for one advanced trace query. Default 15 seconds. */
+  timeoutMs?: number;
+  discovery?: {
+    /** Maximum execution time for one trace-query discovery request. Default 5 seconds. */
+    timeoutMs?: number;
+    /** Maximum memory for one trace-query discovery request. Default 256 MiB. */
+    memoryLimitBytes?: number;
+  };
+}
+
+export interface VNextObservabilityOptions {
   retention?: RetentionConfig;
-  /** @internal Test-only override for the ClickHouse delta cursor strategy. */
-  deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
-};
+  traceQuery?: TraceQueryConfig;
+}
+
+/** Extended config for v-next observability. */
+export type VNextObservabilityConfig = ClickhouseDomainConfig &
+  VNextObservabilityOptions & {
+    /** @deprecated Use `traceQuery.timeoutMs` instead. */
+    traceQueryTimeoutMs?: number;
+    /** @internal Test-only override for the ClickHouse delta cursor strategy. */
+    deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
+  };
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
@@ -137,6 +172,7 @@ import {
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import * as scoresOps from './scores';
+import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
 
@@ -213,38 +249,156 @@ async function filterAppliedMigrations(
   });
 }
 
+async function readRetentionCreateQueries(
+  client: ClickHouseClient,
+  tables: readonly string[],
+): Promise<Map<string, string>> {
+  const result = await client.query({
+    query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+    query_params: { tables },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json()) as Array<{ name: string; create_table_query: string }>;
+  return new Map(rows.map(row => [row.name, row.create_table_query ?? '']));
+}
+
+function retentionEntryMatches(createQuery: string | undefined, entry: RetentionEntry): boolean {
+  if (!createQuery) return false;
+  const current = parseTtlExpression(createQuery);
+  if (entry.operation === 'remove') return current === null;
+  return current?.column === entry.column && current.days === entry.days;
+}
+
+function buildRetentionRemovalEntry(table: string): RetentionEntry {
+  return {
+    operation: 'remove',
+    table,
+    column: '',
+    days: 0,
+    sql: `ALTER TABLE ${table} REMOVE TTL`,
+  };
+}
+
+type ClusterRetentionSnapshot = {
+  hostCount: number;
+  createQueries: Map<string, string[]>;
+};
+
+async function readClusterRetentionSnapshot(
+  client: ClickHouseClient,
+  tables: readonly string[],
+  cluster: string,
+): Promise<ClusterRetentionSnapshot> {
+  const hostCountResult = await client.query({
+    query: `SELECT count() AS host_count FROM system.clusters WHERE cluster = {cluster:String}`,
+    query_params: { cluster },
+    format: 'JSONEachRow',
+  });
+  const [{ host_count: hostCountValue } = { host_count: 0 }] = (await hostCountResult.json()) as Array<{
+    host_count: number | string;
+  }>;
+  const hostCount = Number(hostCountValue);
+
+  const createQueriesResult = await client.query({
+    query: `SELECT name, create_table_query FROM clusterAllReplicas({cluster:String}, system.tables) WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+    query_params: { cluster, tables },
+    format: 'JSONEachRow',
+  });
+  const rows = (await createQueriesResult.json()) as Array<{ name: string; create_table_query: string }>;
+  const createQueries = new Map<string, string[]>();
+  for (const row of rows) {
+    const tableQueries = createQueries.get(row.name) ?? [];
+    tableQueries.push(row.create_table_query ?? '');
+    createQueries.set(row.name, tableQueries);
+  }
+
+  return { hostCount, createQueries };
+}
+
+function retentionEntryMatchesEveryClusterHost(snapshot: ClusterRetentionSnapshot, entry: RetentionEntry): boolean {
+  if (!Number.isInteger(snapshot.hostCount) || snapshot.hostCount <= 0) return false;
+  const createQueries = snapshot.createQueries.get(entry.table) ?? [];
+  return (
+    createQueries.length === snapshot.hostCount &&
+    createQueries.every(createQuery => retentionEntryMatches(createQuery, entry))
+  );
+}
+
 /**
- * Returns retention entries whose `MODIFY TTL` would actually change the
- * table's TTL. Falls back to running every entry if introspection fails.
+ * Returns the DDL needed to reconcile every retention-managed table with the
+ * configured policy. Falls back to applying configured TTLs without removing
+ * existing TTLs if introspection fails.
  */
 async function filterAppliedRetention(
   client: ClickHouseClient,
   entries: readonly RetentionEntry[],
+  replication?: ClickhouseReplicationConfig,
 ): Promise<readonly RetentionEntry[]> {
-  if (entries.length === 0) return entries;
+  const desiredTables = new Set(entries.map(entry => entry.table));
+  const tables = RETENTION_MANAGED_TABLES;
 
-  const tables = [...new Set(entries.map(e => e.table))];
-
-  let createQueries: Map<string, string>;
   try {
-    const result = await client.query({
-      query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
-      query_params: { tables },
-      format: 'JSONEachRow',
-    });
-    const rows = (await result.json()) as Array<{ name: string; create_table_query: string }>;
-    createQueries = new Map(rows.map(r => [r.name, r.create_table_query ?? '']));
+    const cluster = replication?.cluster?.trim();
+    if (cluster) {
+      const snapshot = await readClusterRetentionSnapshot(client, tables, cluster);
+      const pending = entries.filter(entry => !retentionEntryMatchesEveryClusterHost(snapshot, entry));
+      for (const table of tables) {
+        if (desiredTables.has(table)) continue;
+        const createQueries = snapshot.createQueries.get(table) ?? [];
+        if (createQueries.some(createQuery => parseTtlExpression(createQuery) !== null)) {
+          pending.push(buildRetentionRemovalEntry(table));
+        }
+      }
+      return pending;
+    }
+
+    const createQueries = await readRetentionCreateQueries(client, tables);
+    const pending = entries.filter(entry => !retentionEntryMatches(createQueries.get(entry.table), entry));
+    for (const table of tables) {
+      if (desiredTables.has(table)) continue;
+      if (parseTtlExpression(createQueries.get(table) ?? '') !== null) {
+        pending.push(buildRetentionRemovalEntry(table));
+      }
+    }
+    return pending;
   } catch {
     return entries;
   }
+}
 
-  return entries.filter(e => {
-    const createQuery = createQueries.get(e.table);
-    if (!createQuery) return true;
-    const current = parseTtlExpression(createQuery);
-    if (!current) return true;
-    return current.column !== e.column || current.days !== e.days;
-  });
+/**
+ * Reconciles observability TTLs on existing ClickHouse tables with the current
+ * retention configuration. Statements whose current TTL already matches are skipped.
+ */
+export async function applyClickHouseRetention(args: {
+  client: ClickHouseClient;
+  retention: RetentionConfig;
+  replication?: ClickhouseReplicationConfig;
+}): Promise<readonly RetentionEntry[]> {
+  const pending = await filterAppliedRetention(args.client, buildRetentionEntries(args.retention), args.replication);
+  for (const entry of pending) {
+    try {
+      await args.client.command({ query: addOnClusterToDDL(entry.sql, args.replication) });
+    } catch (error) {
+      try {
+        const cluster = args.replication?.cluster?.trim();
+        const installed = cluster
+          ? retentionEntryMatchesEveryClusterHost(
+              await readClusterRetentionSnapshot(args.client, [entry.table], cluster),
+              entry,
+            )
+          : retentionEntryMatches(
+              (await readRetentionCreateQueries(args.client, [entry.table])).get(entry.table),
+              entry,
+            );
+        if (installed) continue;
+      } catch {
+        // Preserve the ALTER error when the reconciliation check also fails.
+      }
+      throw error;
+    }
+  }
+  return pending;
 }
 
 /**
@@ -439,11 +593,25 @@ async function detectExistingDeltaCursorStrategy(
   }
 }
 
+const TRACE_QUERY_DISCOVERY_DEFAULT_TIMEOUT_MS = 5_000;
+const TRACE_QUERY_DISCOVERY_DEFAULT_MEMORY_LIMIT_BYTES = 256 * 1024 * 1024;
+
+function resolveTraceQueryDiscoveryMemoryLimitBytes(
+  memoryLimitBytes = TRACE_QUERY_DISCOVERY_DEFAULT_MEMORY_LIMIT_BYTES,
+): number {
+  if (!Number.isSafeInteger(memoryLimitBytes) || memoryLimitBytes <= 0) {
+    throw new RangeError('traceQuery.discovery.memoryLimitBytes must be a positive safe integer');
+  }
+  return memoryLimitBytes;
+}
+
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
   readonly #retention?: RetentionConfig;
   readonly #replication?: ClickhouseReplicationConfig;
   readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
+  readonly #traceQueryTimeoutMs: number;
+  readonly #traceQueryDiscoveryLimits: traceQueryOps.ClickHouseTraceQueryExecutionLimits;
   #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
   constructor(config: VNextObservabilityConfig) {
@@ -453,11 +621,31 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     this.#replication = replication;
     this.#retention = config.retention;
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
+    this.#traceQueryTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(
+      config.traceQuery?.timeoutMs ?? config.traceQueryTimeoutMs,
+    );
+    this.#traceQueryDiscoveryLimits = {
+      timeoutMs: coreStorage.resolveTraceQueryTimeoutMs(
+        config.traceQuery?.discovery?.timeoutMs ??
+          config.traceQuery?.timeoutMs ??
+          config.traceQueryTimeoutMs ??
+          TRACE_QUERY_DISCOVERY_DEFAULT_TIMEOUT_MS,
+      ),
+      memoryLimitBytes: resolveTraceQueryDiscoveryMemoryLimitBytes(config.traceQuery?.discovery?.memoryLimitBytes),
+    };
   }
 
   // -------------------------------------------------------------------------
   // Initialization
   // -------------------------------------------------------------------------
+
+  async applyRetention(retention: RetentionConfig = this.#retention ?? {}): Promise<readonly RetentionEntry[]> {
+    return applyClickHouseRetention({
+      client: this.#client,
+      retention,
+      replication: this.#replication,
+    });
+  }
 
   async init(): Promise<void> {
     const migrationStatus = await checkSignalTablesMigrationStatus(this.#client);
@@ -532,10 +720,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // metadata version unconditionally, so re-issuing it on every boot is the
       // primary source of replica-catch-up races in deployments with retention.
       if (this.#retention) {
-        const pendingRetention = await filterAppliedRetention(this.#client, buildRetentionEntries(this.#retention));
-        for (const entry of pendingRetention) {
-          await this.#client.command({ query: addOnClusterToDDL(entry.sql, this.#replication) });
-        }
+        await this.applyRetention();
       }
 
       // Burn `cursorId = 0` for every delta stream on the `serial` strategy.
@@ -675,10 +860,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingSupported(this.#deltaCursorStrategy)) {
-      return ['metrics', 'logs'] as const;
+      return ['metrics', 'logs', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
     }
 
-    return ['metrics', 'logs', 'delta-polling'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
   }
 
   // -------------------------------------------------------------------------
@@ -816,6 +1001,92 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    try {
+      return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async getTraceQueryObservedFields(
+    plan: TrustedTraceQueryObservedFieldsPlan,
+  ): Promise<TraceQueryObservedFieldsResult> {
+    try {
+      return await traceQueryOps.getTraceQueryObservedFields(this.#client, plan, this.#traceQueryDiscoveryLimits);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_QUERY_OBSERVED_FIELDS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async getTraceQueryValues(plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
+    try {
+      return await traceQueryOps.getTraceQueryValues(this.#client, plan, this.#traceQueryDiscoveryLimits);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_QUERY_VALUES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+    try {
+      return await traceQueryOps.queryThreads(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -971,6 +1242,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    try {
+      await scoresOps.deleteScores(this.#client, args, this.#replication);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_SCORES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: args.scoreIds.length },
+        },
+        error,
+      );
+    }
+  }
+
   override async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     try {
       return await scoresOps.getScoreById(this.#client, scoreId);
@@ -1015,6 +1303,40 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: args.feedbacks.length },
+        },
+        error,
+      );
+    }
+  }
+
+  override async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    try {
+      await feedbackOps.deleteFeedback(this.#client, args, this.#replication);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_FEEDBACK', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: args.feedbackIds.length },
+        },
+        error,
+      );
+    }
+  }
+
+  override async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    try {
+      return await feedbackOps.updateFeedbackReviewStatus(this.#client, args, this.#replication);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'UPDATE_FEEDBACK_REVIEW_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { feedbackId: args.feedbackId },
         },
         error,
       );
@@ -1383,7 +1705,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     try {
-      await tracingOps.batchDeleteTraces(this.#client, args);
+      await tracingOps.batchDeleteTraces(this.#client, args, this.#replication);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

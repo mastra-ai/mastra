@@ -1,6 +1,6 @@
 ---
 title: "Vercel | Sandbox"
-description: "API reference for VercelSandbox and VercelServerlessSandbox workspace providers."
+description: "Run Mastra workspace commands in Vercel Sandbox microVMs or stateless Serverless Functions, with authentication, files, ports, and processes."
 packages:
   - "@mastra/vercel"
 ---
@@ -196,6 +196,13 @@ Both callbacks are optional and can be used independently.
     defaultValue: '{}',
   },
   {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. Use an absolute path.',
+    isOptional: true,
+  },
+  {
     name: 'metadata',
     type: 'Record<string, unknown>',
     description: 'Custom metadata surfaced via getInfo().',
@@ -211,7 +218,7 @@ Both callbacks are optional and can be used independently.
   },
   {
     name: 'onStart',
-    type: 'SandboxLifecycleHook',
+    type: 'SandboxStartHook',
     description: 'Lifecycle hook called after the sandbox reaches `running` status.',
     isOptional: true,
   },
@@ -417,6 +424,13 @@ const workspace = new Workspace({
     isOptional: true,
   },
   {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. When omitted, commands fall back to `/tmp` and `sandbox.workingDirectory` stays undefined.',
+    isOptional: true,
+  },
+  {
     name: 'commandTimeout',
     type: 'number',
     description: 'Per-invocation command timeout in milliseconds.',
@@ -432,7 +446,7 @@ const workspace = new Workspace({
   },
   {
     name: 'onStart',
-    type: 'SandboxLifecycleHook',
+    type: 'SandboxStartHook',
     description: 'Lifecycle hook called after the sandbox reaches `running` status.',
     isOptional: true,
   },

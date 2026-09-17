@@ -1,9 +1,11 @@
 'use client';
 
+import '../../../../new-theme.css';
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import type { TooltipPopupProps, TooltipPositionerProps } from '@base-ui/react/tooltip';
 import * as React from 'react';
 
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { cn } from '@/lib/utils';
 
 type TooltipProviderProps = Omit<TooltipPrimitive.Provider.Props, 'delay' | 'timeout'> & {
@@ -62,7 +64,7 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
       alignOffset = 0,
       arrowPadding = 10,
       anchor,
-      positionMethod,
+      positionMethod = FLOATING_POSITION_METHOD,
       collisionBoundary,
       collisionPadding,
       sticky,
@@ -93,15 +95,13 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
         <TooltipPrimitive.Positioner className="isolate z-100" {...positionerProps}>
           <TooltipPrimitive.Popup
             ref={ref}
-            // Base UI's Popup omits `role="tooltip"` by default (only the trigger
-            // gets `aria-describedby`). Radix used to set it on Content, and our
-            // consumers query via `getByRole('tooltip')`, so set it explicitly.
+            // Base UI omits the tooltip role queried by existing consumers.
             role="tooltip"
             className={cn(
-              'relative z-100 flex origin-(--transform-origin) flex-col rounded-lg border border-border1 bg-surface3 px-2.5 py-1.5 text-ui-sm leading-ui-sm text-neutral5 shadow-dialog transition-[transform,scale,opacity] duration-150',
+              'new-theme relative z-100 flex origin-(--transform-origin) flex-col rounded-lg border border-border bg-popover px-2.5 py-1.5 text-ui-sm leading-ui-sm text-foreground shadow-dialog transition-[transform,scale,opacity] duration-150',
               'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
               'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
-              'data-[instant]:transition-none',
+              'data-[instant]:transition-none motion-reduce:transition-none',
               className,
             )}
             {...props}
@@ -126,17 +126,14 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
 );
 TooltipContent.displayName = 'TooltipContent';
 
-// Triangle with a rounded apex. The stroke endpoints land on the popup border
-// center (popup_top + 0.5 with `border border-border1`), so the arrow outline
-// merges cleanly with the popup border without a horizontal extension that
-// would overlap and thicken the border at the join.
+// Stroke endpoints meet the popup border without overlapping its edge.
 function TooltipArrowSvg() {
   return (
     <svg width="12" height="8" viewBox="0 0 12 8" fill="none" overflow="visible">
-      <path d="M0 7L4 2Q6 0 8 2L12 7L12 8L0 8Z" className="fill-surface3" />
+      <path d="M0 7L4 2Q6 0 8 2L12 7L12 8L0 8Z" className="fill-popover" />
       <path
         d="M0 7.5L4 2.5Q6 0.5 8 2.5L12 7.5"
-        className="stroke-border1 fill-none"
+        className="stroke-border fill-none"
         strokeWidth="1"
         strokeLinejoin="round"
         strokeLinecap="round"

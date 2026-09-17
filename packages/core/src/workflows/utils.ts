@@ -43,7 +43,7 @@ async function validateWithStandardSchema<T>(
     };
   }
 
-  return { success: true, data: resolvedResult.value as T };
+  return { success: true, data: resolvedResult.value };
 }
 
 export async function validateStepInput({
@@ -505,10 +505,8 @@ export const createTimeTravelExecutionParams = (params: {
     stepIds.forEach(stepId => {
       let result;
       const stepContext = context?.[stepId] ?? snapshotContext[stepId];
-      // Siblings of the time-travel target inside a conditional were not selected by the
-      // branch's condition, so they should be reported as skipped rather than as a fake
-      // success (otherwise their empty output leaks into the conditional's aggregated result).
-      const isUnselectedConditionalSibling = isTargetEntry && entry.type === 'conditional' && !steps?.includes(stepId);
+      const isUnselectedConditionalSibling =
+        entry.type === 'conditional' && !steps.includes(stepId) && (isTargetEntry || !stepContext);
       const defaultStepStatus = steps?.includes(stepId)
         ? 'running'
         : isUnselectedConditionalSibling
@@ -657,7 +655,7 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
  * This is a helper for cleanStepResult that handles one level of cleaning.
  */
 function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
-  const { __state: _state, metadata, ...rest } = result;
+  const { __state: _state, __stateDelta: _stateDelta, metadata, ...rest } = result;
 
   // Strip nestedRunId from metadata but keep other user-defined fields
   if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
@@ -795,8 +793,9 @@ export function resolveForeachConcurrency(
   return Math.floor(resolved);
 }
 
-const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
+export const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
 const RESUME_SNAPSHOT_POLL_TIMEOUT_MS = 2000;
+export const RESUME_SNAPSHOT_WAIT_STATUSES = new Set(['running', 'pending']);
 
 export async function waitForSuspendedSnapshot(
   workflowsStore:
@@ -804,14 +803,30 @@ export async function waitForSuspendedSnapshot(
     | undefined,
   workflowName: string,
   runId: string,
+  {
+    timeoutMs = RESUME_SNAPSHOT_POLL_TIMEOUT_MS,
+    missingSnapshotGraceReads = 1,
+  }: { timeoutMs?: number; missingSnapshotGraceReads?: number } = {},
 ): Promise<WorkflowRunState | null> {
   if (!workflowsStore) return null;
 
-  const deadline = Date.now() + RESUME_SNAPSHOT_POLL_TIMEOUT_MS;
-  let snapshot = (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) ?? null;
-  while ((!snapshot || snapshot.status !== 'suspended') && Date.now() < deadline) {
-    await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
+  const deadline = Date.now() + timeoutMs;
+  let snapshot: WorkflowRunState | null = null;
+  let missingReads = 0;
+  let observedTransitionableSnapshot = false;
+
+  while (Date.now() < deadline) {
     snapshot = (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) ?? null;
+
+    if (snapshot) {
+      if (!RESUME_SNAPSHOT_WAIT_STATUSES.has(snapshot.status)) return snapshot;
+      observedTransitionableSnapshot = true;
+    } else if (!observedTransitionableSnapshot && ++missingReads >= missingSnapshotGraceReads) {
+      return null;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
   }
+
   return snapshot;
 }

@@ -1,7 +1,6 @@
 import { format } from 'date-fns';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { CircleSlashIcon } from 'lucide-react';
 import type { TraceDatePreset } from '../types';
-import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 
 const PRESET_LABELS: Record<Exclude<TraceDatePreset, 'all' | 'custom'>, string> = {
@@ -50,23 +49,8 @@ function describeRange({ datePreset, dateFrom, dateTo }: NoTracesInfoProps): { t
 export const NoTracesInfo = ({ datePreset, dateFrom, dateTo }: NoTracesInfoProps = {}) => {
   const { title, description } = describeRange({ datePreset, dateFrom, dateTo });
   return (
-    <div className="flex h-full items-center justify-center">
-      <EmptyState
-        iconSlot={<CircleSlashIcon />}
-        titleSlot={title}
-        descriptionSlot={description}
-        actionSlot={
-          <Button
-            variant="ghost"
-            as="a"
-            href="https://mastra.ai/en/docs/observability/tracing/overview"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Tracing Documentation <ExternalLinkIcon />
-          </Button>
-        }
-      />
+    <div className="flex h-full items-center-safe justify-center-safe">
+      <EmptyState iconSlot={<CircleSlashIcon />} titleSlot={title} descriptionSlot={description} />
     </div>
   );
 };

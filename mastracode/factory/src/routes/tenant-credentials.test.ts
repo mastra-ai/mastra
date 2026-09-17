@@ -221,17 +221,21 @@ describe('createTenantCredentialPrimer', () => {
     return app;
   }
 
-  it('primes the caller snapshot so the first model call sees tenant credentials', async () => {
+  it('primes snapshots for both credential precedence modes', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
+    await seed.credentials.setCredential(ORG_TENANT, 'openai', { type: 'api_key', key: 'org-key' });
     registerTenantCredentialResolver(seed.credentials);
 
     const res = await buildApp({ workosId: USER, organizationId: ORG }).request('/ok');
     expect(res.status).toBe(200);
 
-    const ctx = new RequestContext();
-    ctx.set('user', { workosId: USER, organizationId: ORG });
-    // Snapshot already hydrated by the primer — sync read works immediately.
-    expect(resolveCredentialStore(ctx)!.getStoredApiKey('openai')).toBe('user-key');
+    const userFirstContext = new RequestContext();
+    userFirstContext.set('user', { workosId: USER, organizationId: ORG });
+    expect(resolveCredentialStore(userFirstContext)!.getStoredApiKey('openai')).toBe('user-key');
+
+    const orgFirstContext = new RequestContext();
+    orgFirstContext.set('user', { workosId: USER, organizationId: ORG, orgFirstCredentials: true });
+    expect(resolveCredentialStore(orgFirstContext)!.getStoredApiKey('openai')).toBe('org-key');
   });
 
   it('passes unauthenticated requests through untouched', async () => {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
+import type { AgentExecutionOptions } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
 import type { AgentMemoryOption, ToolsInput } from '../agent/types';
 import { tryStreamWithJsonFallback } from '../agent/utils';
@@ -85,6 +86,8 @@ export interface ScorerJudgeConfig {
    * Defaults to automatic capability-based routing.
    */
   jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
+  /** @internal Injection placement for the format-error retry; leaves the initial request unchanged. */
+  fallbackJsonPromptInjection?: 'system' | 'inline';
   /** Optional tools the judge agent may call while evaluating (e.g. readonly verification tools). */
   tools?: ToolsInput;
   /** Optional memory instance for the internal judge agent. */
@@ -122,6 +125,13 @@ export interface ScorerJudgeConfig {
    * 10. Set this explicitly to bound the coordinated retry budget.
    */
   maxProcessorRetries?: number;
+  /**
+   * Optional model call settings (e.g. temperature, topP, topK, maxOutputTokens,
+   * maxRetries, frequencyPenalty, presencePenalty, timeout) forwarded to the
+   * internal judge agent run. Step-level `judge.modelSettings` replaces this
+   * scorer-level value.
+   */
+  modelSettings?: AgentExecutionOptions['modelSettings'];
   /**
    * Optional request context forwarded to the judge agent execution. When the judge
    * agent has memory with OM observers that read dynamic model config from controller
@@ -1372,6 +1382,8 @@ class MastraScorer<
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
     const jsonPromptInjection =
       originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection ?? 'auto';
+    const fallbackJsonPromptInjection =
+      originalStep.judge?.fallbackJsonPromptInjection ?? this.config.judge?.fallbackJsonPromptInjection;
     // Step-level tools override scorer-level tools. When present, the judge agent
     // can call them (in its own tool-call loop) before producing the step output.
     const tools = originalStep.judge?.tools ?? this.config.judge?.tools;
@@ -1386,6 +1398,7 @@ class MastraScorer<
     const outputProcessors = originalStep.judge?.outputProcessors ?? this.config.judge?.outputProcessors;
     const errorProcessors = originalStep.judge?.errorProcessors ?? this.config.judge?.errorProcessors;
     const maxProcessorRetries = originalStep.judge?.maxProcessorRetries ?? this.config.judge?.maxProcessorRetries;
+    const modelSettings = originalStep.judge?.modelSettings ?? this.config.judge?.modelSettings;
     const memoryOptions = stepMemoryOptions
       ? {
           ...defaultMemoryOptions,
@@ -1595,6 +1608,7 @@ class MastraScorer<
       ...observabilityContext,
       ...(memoryOptions ? { memory: memoryOptions } : {}),
       ...(maxSteps ? { maxSteps } : {}),
+      ...(modelSettings ? { modelSettings } : {}),
       ...(this.config.judge?.requestContext ? { requestContext: this.config.judge.requestContext } : {}),
     };
     const createJudgeStreamRunOptions = () => ({
@@ -1655,6 +1669,7 @@ class MastraScorer<
         let result;
         if (isSupportedLanguageModel(resolvedModel)) {
           result = await tryStreamWithJsonFallback(judge, prompt, {
+            fallbackJsonPromptInjection,
             structuredOutput: {
               schema: z.object({ score: z.number() }),
               jsonPromptInjection,
@@ -1712,6 +1727,7 @@ class MastraScorer<
         if (isSupportedLanguageModel(resolvedModel)) {
           // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
           result = await tryStreamWithJsonFallback(judge, prompt, {
+            fallbackJsonPromptInjection,
             structuredOutput: {
               schema: standardSchema as any,
               jsonPromptInjection,
@@ -1866,6 +1882,29 @@ class MastraScorer<
 }
 
 // Overload: enum type shortcuts (e.g., type: 'agent')
+/**
+ * Creates a scorer builder for evaluating input/output pairs.
+ * Add a `generateScore` stage before running the scorer.
+ *
+ * @example
+ * ```typescript
+ * import { createScorer } from '@mastra/core/evals';
+ *
+ * const scorer = createScorer({
+ *   id: 'response-presence',
+ *   description: 'Check whether the agent produced any output messages.',
+ *   type: 'agent',
+ * }).generateScore(({ run }) => (run.output.length > 0 ? 1 : 0));
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Scorer documentation](https://mastra.ai/reference/evals/create-scorer)
+ * if packaged docs are unavailable.
+ */
 export function createScorer<TID extends string, TType extends keyof ScorerTypeShortcuts>(
   config: Omit<ScorerConfig<TID, any, any>, 'type'> & {
     type: TType;

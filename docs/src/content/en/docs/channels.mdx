@@ -1,6 +1,6 @@
 ---
 title: "Channels"
-description: "Channels connect Mastra agents to messaging platforms like Slack, Discord, and Telegram."
+description: "Connect Mastra agents to Slack, Discord, Telegram, and other messaging channels with webhooks, thread context, tool approvals, and formatted replies."
 packages:
   - "@mastra/core"
 ---
@@ -55,7 +55,7 @@ Channel adapters require provider-specific environment variables for credentials
 
 :::
 
-We recommend configuring [storage](/docs/storage) for channels. Storage lets Mastra persist channel state, thread subscriptions, tool approvals, and memory across restarts:
+We recommend configuring [storage](/docs/storage) for channels. Storage preserves channel and memory state across restarts, including thread subscriptions and tool approvals:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -73,7 +73,7 @@ export const mastra = new Mastra({
 
 ## Webhook routes
 
-Platforms send channel activity to Mastra through webhooks. A webhook is an HTTP endpoint that the platform calls when something happens, such as a new message, a mention, or a user selecting "Approve" on an interactive tool approval card. This is how your agent receives a new message and starts processing it, plus responds in the same channel.
+Platforms send channel activity to Mastra through webhooks. A webhook is an HTTP endpoint that the platform calls when something happens, such as a new message, a mention, or a user selecting "Approve" on an interactive tool approval card. The webhook delivers the message to your agent for processing, and the agent responds in the same channel.
 
 Mastra registers a webhook route for each configured adapter and handles the request for you:
 
@@ -87,7 +87,7 @@ For example, a Slack adapter on an agent with the `your-agent` ID uses:
 /api/agents/your-agent/channels/slack/webhook
 ```
 
-Point the platform's webhook, event, or interactions URL to this path. Follow the guide for your platform or the [Chat SDK docs](https://chat-sdk.dev/adapters).
+Point the platform's webhook, event, or interactions URL to this path. Follow the guide for your platform or the [Chat SDK docs](https://chat-sdk.dev/adapters). The webhook acknowledges the request before the agent finishes responding. See [Error handling and delivery](#error-handling-and-delivery) for what happens when verification or a handler fails.
 
 During local development, platform webhooks need a public URL to reach your local server. Use a tunnel like [cloudflared](https://github.com/cloudflare/cloudflared) or [ngrok](https://ngrok.com/) to expose your server, `localhost:4111` by default:
 
@@ -143,13 +143,36 @@ When the agent calls this tool, users see a card with the tool name, arguments, 
 
 Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode, `autoResumeSuspendedTools` can resume data-bearing `suspend()` flows when a later user message arrives on the same thread. This requires memory. Hidden mode only suppresses approval buttons. It doesn't turn a message into consent. Tools that require approval remain suspended until an explicit approval or decline is submitted through a UI or API action.
 
+### Custom action handling
+
+Use `handlers.onAction` to handle button clicks and select changes from cards you post yourself. The handler is called with the Chat SDK action event and the default handler, plus the same `ctx` the other channel handlers receive. Values you set on `ctx.requestContext` before delegating carry through to the resumed tool call. The default handler processes the built-in Approve and Deny buttons and ignores every other action ID, so call it for events you don't handle to keep tool approval working:
+
+```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
+channels: {
+  adapters: {
+    slack: createSlackAdapter(),
+  },
+  handlers: {
+    onAction: async (event, defaultHandler, ctx) => {
+      if (event.actionId === 'retry') {
+        await event.thread?.post('Retrying...')
+        return
+      }
+      await defaultHandler()
+    },
+  },
+},
+```
+
+Setting `onAction: false` disables action handling entirely, including the built-in tool approval buttons. To register more Chat SDK handlers after the channels start, use `agent.channels.sdk`.
+
 ## Reply formatting
 
 Agent replies post as markdown by default. Platforms with native markdown rendering, such as Slack, render bold text, links, and tables directly. Other platforms convert the markdown to their own format. Agents write standard markdown and it renders correctly everywhere, matching how the same reply renders in Studio.
 
 Set `textFormat: 'plain'` on an adapter to post replies as literal plain text instead:
 
-```typescript title="src/mastra/agents/your-agent.ts"
+```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
 channels: {
   adapters: {
     slack: {
@@ -203,6 +226,32 @@ export const yourAgent = new Agent({
 Add only JSON-serializable, non-sensitive values. Signal metadata may be stored in memory or sent through a shared publish-subscribe transport. It isn't added to the model prompt.
 
 Use `requestContext` for run-scoped configuration, such as credentials for a message that starts a run. Use `signalMetadata` for context that must stay attached to one message, including messages delivered to an active run.
+
+## Error handling and delivery
+
+A channel webhook acknowledges the platform before the agent finishes, so a `200` response means "received", not "answered". Before that acknowledgment, the adapter rejects bad requests synchronously (`401` for failed verification, `400` for an unparseable body, `503` for transient state failures) and the platform redelivers on non-`2xx` responses per its own policy. After the `200`, the platform never retries and Mastra owns errors. The default handler catches agent-run failures and posts an error message to the thread (customize it with `formatError`, which defaults to `❌ Error: {message}`). A custom handler that throws is only logged by Chat SDK, so nothing is posted or retried. Catch failures in custom handlers yourself:
+
+```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
+channels: {
+  adapters: {
+    slack: createSlackAdapter(),
+  },
+  handlers: {
+    onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+      try {
+        ctx.signalMetadata.ticketId = await lookupTicket(message)
+      } catch (error) {
+        ctx.mastra?.getLogger().error('Ticket lookup failed', { error })
+        await thread.post('Something went wrong looking up your ticket. Try again in a moment.')
+        return
+      }
+      await defaultHandler(thread, message)
+    },
+  },
+},
+```
+
+Platform retries sometimes deliver an event more than once. Adapters use channel state for deduplication, which [storage](/docs/storage) can preserve across restarts. Because this protection is best effort, custom-handler side effects should be idempotent so duplicate delivery can't repeat work such as ticket creation.
 
 ## Multimodal content
 
@@ -316,6 +365,7 @@ At the time of writing, Chat SDK lists adapters for:
 - Kapso
 - Lark / Feishu
 - Linear
+- Linq
 - Liveblocks
 - Matrix
 - Mattermost

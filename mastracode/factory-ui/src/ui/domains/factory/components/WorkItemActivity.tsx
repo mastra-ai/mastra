@@ -1,31 +1,40 @@
+import { isAuditAction } from '@mastra/factory/storage/domains/audit/actions';
+import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { History } from 'lucide-react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
+import { SYSTEM_ACTOR_NAME } from '../auditPresentation';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
+import { ASSIGNED_ACTION, CREATED_ACTION } from '../workItemActivity';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 
-const CREATED_ACTION = 'factory.work_item.created';
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
   timeStyle: 'short',
 });
 
-const ACTION_LABELS: Record<string, string> = {
-  'factory.work_item.assigned': 'Assigned the item',
+const ACTION_LABELS: Partial<Record<AuditAction | typeof ASSIGNED_ACTION, string>> = {
+  [ASSIGNED_ACTION]: 'Assigned the item',
   'factory.work_item.updated': 'Updated the item',
   'factory.work_item.stage_moved': 'Moved the item',
   'factory.work_item.deleted': 'Removed the item',
   'factory.run.started': 'Started a run',
+  'factory.run.ended': 'Run ended',
   'factory.run.approved': 'Started a suggested run',
   'factory.run.dismissed': 'Dismissed a suggested run',
 };
 
+function knownActionLabel(action: string): string | undefined {
+  if (isAuditAction(action) || action === ASSIGNED_ACTION) return ACTION_LABELS[action];
+  return undefined;
+}
+
 function actionLabel(action: string): string {
   return (
-    ACTION_LABELS[action] ??
+    knownActionLabel(action) ??
     action
       .replace(/^factory\./, '')
       .replaceAll('.', ' ')
@@ -42,16 +51,25 @@ function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>
   if (event.actorType === 'agent') {
     return { id: event.actorId, name: metadataString(event, 'agentName') ?? 'Factory agent' };
   }
+  if (event.actorType === 'system') return { id: event.actorId, name: SYSTEM_ACTOR_NAME };
   return actors[event.actorId];
 }
 
-function ActivityEvent({ event, actors }: { event: AuditEvent; actors: Record<string, AuditActorProfile> }) {
+export function ActivityEvent({
+  event,
+  actors,
+  className,
+}: {
+  event: AuditEvent;
+  actors: Record<string, AuditActorProfile>;
+  className?: string;
+}) {
   const actor = eventActor(event, actors);
   if (!actor) return null;
   const modelId = event.actorType === 'agent' ? metadataString(event, 'modelId') : undefined;
   const isCreated = event.action === CREATED_ACTION;
   return (
-    <li className="flex items-start gap-2">
+    <div className={cn('flex items-start gap-2', className)}>
       <Avatar src={actor.avatarUrl} name={actor.name} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-ui-xs text-icon5 truncate font-medium">
@@ -75,7 +93,7 @@ function ActivityEvent({ event, actors }: { event: AuditEvent; actors: Record<st
           )}
         </span>
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -104,8 +122,8 @@ export function WorkItemActivity({
             aria-label={`View activity by ${worker.name}`}
             onPointerDown={event => event.stopPropagation()}
           >
-            <Avatar src={worker.avatarUrl} name={worker.name} size="sm" interactive />
             <span className="max-w-32 truncate">{worker.name}</span>
+            <Avatar src={worker.avatarUrl} name={worker.name} size="sm" interactive />
           </button>
         }
       />
@@ -129,7 +147,9 @@ export function WorkItemActivity({
           {timeline.length > 0 ? (
             <ol className="flex flex-col gap-2.5">
               {timeline.map(event => (
-                <ActivityEvent key={event.id} event={event} actors={mergedActors} />
+                <li key={event.id}>
+                  <ActivityEvent event={event} actors={mergedActors} />
+                </li>
               ))}
             </ol>
           ) : (

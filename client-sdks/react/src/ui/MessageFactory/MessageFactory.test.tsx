@@ -112,6 +112,8 @@ const reasoningPart = (reasoning: string, state?: 'streaming' | 'done'): Accumul
   asPart({ type: 'reasoning', reasoning, state });
 const filePart = (): AccumulatorPart => asPart({ type: 'file', mimeType: 'image/png', data: 'AAAA' });
 const stepStartPart = (): AccumulatorPart => asPart({ type: 'step-start' });
+const errorPart = (): AccumulatorPart =>
+  asPart({ type: 'error', error: { name: 'Error', message: 'The model request failed.' } });
 const toolInvocationPart = (toolCallId: string, toolName: string): AccumulatorPart =>
   asPart({
     type: 'tool-invocation',
@@ -179,7 +181,7 @@ describe('MessageFactory', () => {
   it('when no StepStart renderer is supplied, step-start renders nothing and never calls fallback', () => {
     const { calls, renderers } = makeSpyRenderers();
     const { StepStart: _omitted, ...withoutStepStart } = renderers;
-    const fallback = vi.fn((part: AccumulatorPart) => <div data-testid="fallback">{part.type}</div>);
+    const fallback = vi.fn((part: AccumulatorPart | DynamicToolPart) => <div data-testid="fallback">{part.type}</div>);
 
     const { container } = render(
       <MessageFactory message={makeMessage([stepStartPart()])} {...withoutStepStart} fallback={fallback} />,
@@ -189,6 +191,16 @@ describe('MessageFactory', () => {
     expect(fallback).not.toHaveBeenCalled();
     expect(calls.StepStart).not.toHaveBeenCalled();
     expect(container.textContent).toBe('');
+  });
+
+  it('routes persisted terminal errors to fallback', () => {
+    const { renderers } = makeSpyRenderers();
+    const fallback = vi.fn((part: AccumulatorPart | DynamicToolPart) => <div data-testid="fallback">{part.type}</div>);
+
+    render(<MessageFactory message={makeMessage([errorPart()])} {...renderers} fallback={fallback} />);
+
+    expect(screen.getByTestId('fallback').textContent).toBe('error');
+    expect(fallback).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
   });
 
   it('renders tool-invocation via ToolInvocation, never DynamicTool', () => {

@@ -18,7 +18,7 @@ export interface DatasetItemPageProps {
  */
 export function DatasetItemPage({ item }: DatasetItemPageProps) {
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-4">
       <DatasetItemContent item={item} />
     </div>
   );
@@ -34,7 +34,7 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
   return (
     <>
       <div className="mb-4">
-        <h3 className="flex items-center gap-2 text-lg font-medium">
+        <h3 className="text-header-sm flex items-center gap-2 font-medium">
           <FileInputIcon className="h-5 w-5" /> Dataset Item
         </h3>
         <TextAndIcon>

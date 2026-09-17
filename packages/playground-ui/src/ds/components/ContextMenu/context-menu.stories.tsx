@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { ContextMenu } from './context-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
+import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof ContextMenu> = {
   title: 'Elements/ContextMenu',
@@ -204,5 +206,83 @@ export const States: Story = {
         </ContextMenu.Item>
       </ContextMenu.Content>
     </ContextMenu>
+  ),
+};
+
+/** Every item kind side by side, to compare against DropdownMenu / Select / Combobox. */
+export const KitchenSink: Story = {
+  render: () => {
+    const [checked, setChecked] = useState(true);
+    const [radio, setRadio] = useState('medium');
+    return (
+      <ContextMenu>
+        <ContextMenu.Trigger className={triggerClass}>Right click here</ContextMenu.Trigger>
+        <ContextMenu.Content className="w-56">
+          <ContextMenu.Label>Account</ContextMenu.Label>
+          <ContextMenu.Item>Plain item</ContextMenu.Item>
+          <ContextMenu.Item>
+            <User />
+            <span>With icon</span>
+            <ContextMenu.Shortcut>⇧⌘P</ContextMenu.Shortcut>
+          </ContextMenu.Item>
+          <ContextMenu.Item disabled>
+            <CreditCard />
+            <span>Disabled</span>
+          </ContextMenu.Item>
+          <ContextMenu.Separator />
+          <ContextMenu.CheckboxItem checked={checked} onCheckedChange={setChecked}>
+            Checkbox item
+          </ContextMenu.CheckboxItem>
+          <ContextMenu.RadioGroup value={radio} onValueChange={setRadio}>
+            <ContextMenu.RadioItem value="small">Radio small</ContextMenu.RadioItem>
+            <ContextMenu.RadioItem value="medium">Radio medium</ContextMenu.RadioItem>
+          </ContextMenu.RadioGroup>
+          <ContextMenu.Separator />
+          <ContextMenu.Sub>
+            <ContextMenu.SubTrigger>
+              <UserPlus />
+              <span>Sub menu</span>
+            </ContextMenu.SubTrigger>
+            <ContextMenu.SubContent>
+              <ContextMenu.Item>
+                <Mail />
+                <span>Email</span>
+              </ContextMenu.Item>
+              <ContextMenu.Item>
+                <MessageSquare />
+                <span>Message</span>
+              </ContextMenu.Item>
+            </ContextMenu.SubContent>
+          </ContextMenu.Sub>
+          <ContextMenu.Separator />
+          <ContextMenu.Item variant="destructive">
+            <Trash2 />
+            <span>Destructive</span>
+          </ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu>
+    );
+  },
+};
+
+/** Stacking check: a right-click menu opened inside a modal Dialog (z-50) must render above it. */
+export const InsideDialog: Story = {
+  render: () => (
+    <Dialog open>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Dialog</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <ContextMenu>
+            <ContextMenu.Trigger className={cn(triggerClass, 'w-full')}>Right click here</ContextMenu.Trigger>
+            <ContextMenu.Content>
+              <ContextMenu.Item>Plain item</ContextMenu.Item>
+              <ContextMenu.Item>Second item</ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   ),
 };

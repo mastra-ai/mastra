@@ -25,6 +25,7 @@ import type {
   ListMetricsArgs,
   ListMetricsResponse,
   CreateScoreArgs,
+  DeleteScoresArgs,
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
@@ -38,9 +39,12 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   BatchCreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
+  FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -73,9 +77,22 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
+  GetTraceQueryValuesResponse,
   ObservabilityStorageStrategy,
+  PruneOptions,
+  PruneResult,
+  QueryThreadsResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
+  TraceQueryObservedFieldsResult,
+  TraceQueryResponse,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
+  TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
+import { resolveTargets, runPrune } from '../../retention';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
@@ -84,6 +101,7 @@ import * as metricOps from './metrics';
 import { checkSignalTablesMigrationStatus, dropLegacyCursorIdDefaults, migrateSignalTables } from './migration';
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
+import * as traceQueryOps from './trace-query';
 import * as tracingOps from './tracing';
 
 function buildSignalMigrationRequiredMessage(args: { tables: Array<{ table: string }> }): string {
@@ -126,11 +144,29 @@ export interface ObservabilityDuckDBConfig {
  * Uses an append-only event-sourced model with SQL-based reconstruction for spans.
  */
 export class ObservabilityStorageDuckDB extends ObservabilityStorage {
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: 'span_events', column: 'timestamp', indexed: false },
+    metrics: { table: 'metric_events', column: 'timestamp', indexed: false },
+    logs: { table: 'log_events', column: 'timestamp', indexed: false },
+    scores: { table: 'score_events', column: 'timestamp', indexed: false },
+    feedback: { table: 'feedback_events', column: 'timestamp', indexed: false },
+  };
+
   private db: DuckDBConnection;
 
   constructor(config: ObservabilityDuckDBConfig) {
     super();
     this.db = config.db;
+  }
+
+  /** Delete observability events older than their configured max age. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: ObservabilityStorageDuckDB.retentionTables,
+      order: ['spans', 'metrics', 'logs', 'scores', 'feedback'],
+    });
+    return runPrune({ db: this.db, domain: 'observability', targets, options });
   }
 
   /** Create all observability tables if they don't exist. */
@@ -202,10 +238,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingFeatureEnabled()) {
-      return ['metrics', 'logs'] as const;
+      return ['metrics', 'logs', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
     }
 
-    return ['metrics', 'logs', 'delta-polling'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
   }
 
   // Tracing
@@ -235,6 +271,20 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return tracingOps.listTraces(this.db, args);
+  }
+  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    return traceQueryOps.queryTraces(this.db, plan);
+  }
+  override async getTraceQueryObservedFields(
+    plan: TrustedTraceQueryObservedFieldsPlan,
+  ): Promise<TraceQueryObservedFieldsResult> {
+    return traceQueryOps.getTraceQueryObservedFields(this.db, plan);
+  }
+  override async getTraceQueryValues(plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
+    return traceQueryOps.getTraceQueryValues(this.db, plan);
+  }
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+    return traceQueryOps.queryThreads(this.db, plan);
   }
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
     if (args.mode === 'delta') {
@@ -308,6 +358,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
     return scoreOps.batchCreateScores(this.db, args);
   }
+  async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    return scoreOps.deleteScores(this.db, args);
+  }
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     return scoreOps.listScores(this.db, args);
   }
@@ -334,8 +387,14 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
     return feedbackOps.batchCreateFeedback(this.db, args);
   }
+  async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    return feedbackOps.deleteFeedback(this.db, args);
+  }
   async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     return feedbackOps.listFeedback(this.db, args);
+  }
+  async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return feedbackOps.updateFeedbackReviewStatus(this.db, args);
   }
   async getFeedbackAggregate(args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
     return feedbackOps.getFeedbackAggregate(this.db, args);

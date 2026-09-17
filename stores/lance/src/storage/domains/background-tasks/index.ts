@@ -1,4 +1,4 @@
-import type { Connection } from '@lancedb/lancedb';
+import type { Connection, IntoSql } from '@lancedb/lancedb';
 import type {
   BackgroundTask,
   BackgroundTaskStatus,
@@ -117,27 +117,28 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
     await table.add([toRecord(task)], { mode: 'append' });
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
-    const existing = await this.getTask(taskId);
-    if (!existing) return;
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
+    const values: Record<string, IntoSql> = {};
+    if ('status' in update) values.status = update.status!;
+    if ('result' in update) values.result = serializeJson(update.result) ?? null;
+    if ('error' in update) values.error = serializeJson(update.error) ?? null;
+    if ('suspendPayload' in update) values.suspend_payload = serializeJson(update.suspendPayload) ?? null;
+    if ('retryCount' in update) values.retry_count = update.retryCount!;
+    if ('startedAt' in update) values.startedAt = update.startedAt?.getTime() ?? 0;
+    if ('suspendedAt' in update) values.suspendedAt = update.suspendedAt?.getTime() ?? 0;
+    if ('completedAt' in update) values.completedAt = update.completedAt?.getTime() ?? 0;
+    if (Object.keys(values).length === 0) return false;
 
-    const merged = { ...existing };
-    if ('status' in update) merged.status = update.status!;
-    // Keep `result`/`error`/`suspendPayload` raw — `toRecord(merged)` below
-    // serializes once. Serializing twice would double-encode (e.g.
-    // `"\"value\""`).
-    if ('result' in update) merged.result = update.result;
-    if ('error' in update) merged.error = update.error;
-    if ('suspendPayload' in update) merged.suspendPayload = update.suspendPayload;
-    if ('retryCount' in update) merged.retryCount = update.retryCount!;
-    if ('startedAt' in update) merged.startedAt = update.startedAt;
-    if ('suspendedAt' in update) merged.suspendedAt = update.suspendedAt;
-    if ('completedAt' in update) merged.completedAt = update.completedAt;
+    const conditions = [`id = '${escapeStr(taskId)}'`];
+    if (options?.expectedStatus) conditions.push(`status = '${escapeStr(options.expectedStatus)}'`);
 
-    // LanceDB doesn't have a native partial update — delete and re-add
     const table = await this.client.openTable(TABLE_BACKGROUND_TASKS);
-    await table.delete(`id = '${escapeStr(taskId)}'`);
-    await table.add([toRecord(merged)], { mode: 'append' });
+    const result = await table.update({ where: conditions.join(' AND '), values });
+    return result.rowsUpdated > 0;
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

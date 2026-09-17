@@ -118,8 +118,6 @@ describe('useAgentControllerConnection', () => {
     const factorySessionState = {
       factoryProjectId: 'factory-project-1',
       projectRepositoryId: 'project-repository-1',
-      sandboxId: 'sandbox-1',
-      sandboxWorkdir: '/sandbox/repo',
     };
     const { result } = renderHookWithProviders(() =>
       useAgentControllerConnection({
@@ -578,11 +576,11 @@ describe('useAgentControllerConnection', () => {
     const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
 
     await waitFor(() => expect(onStream).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(onReadState).toHaveBeenCalledTimes(2), { timeout: 2500 });
+    await waitFor(() => expect(onReadState.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 2500 });
     await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
-    expect(result.current.state?.threadId).toBe('state-thread-2');
+    await waitFor(() => expect(result.current.state?.threadId).toBe(`state-thread-${onReadState.mock.calls.length}`));
   });
 
   it('given the stream drops and recovers, then the resource message windows are invalidated to close the event gap', async () => {
@@ -633,5 +631,50 @@ describe('useAgentControllerConnection', () => {
 
     await waitFor(() => expect(client.getQueryState(messagesKey)?.isInvalidated).toBe(true));
     expect(client.getQueryState(otherResourceKey)?.isInvalidated).toBe(false);
+  });
+  it('given the stream drops and recovers, then the session state is refetched to close the event gap', async () => {
+    const onStream = vi.fn();
+    const onEvent = vi.fn();
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(sessionUrl, () => {
+        const afterReconnect = onStream.mock.calls.length >= 2;
+        return HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: afterReconnect ? 'state-thread-after-gap' : 'state-thread',
+          running: false,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        });
+      }),
+      http.get(`${sessionUrl}/stream`, () => {
+        onStream();
+        if (onStream.mock.calls.length === 1) {
+          return new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                setTimeout(() => controller.error(new Error('stream dropped')), 0);
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        }
+        return new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
+
+    await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2), { timeout: 2500 });
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    await waitFor(() => expect(result.current.state?.threadId).toBe('state-thread-after-gap'), { timeout: 3000 });
   });
 });

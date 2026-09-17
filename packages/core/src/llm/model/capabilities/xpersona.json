@@ -12,7 +12,7 @@
     "gpt-5.6-sol",
     "gpt-5.6-terra"
   ],
-  "temperature": ["claude-haiku-4-5", "claude-sonnet-4-6", "gemini-3.5-flash"],
+  "temperature": ["claude-haiku-4-5", "claude-sonnet-4-6", "gemini-3.5-flash", "gpt-5.4", "gpt-5.4-mini"],
   "structuredOutput": [
     "gemini-3.5-flash",
     "gpt-5.4",

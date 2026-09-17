@@ -369,6 +369,18 @@ describe('BlaxelSandbox', () => {
         }),
       );
     });
+
+    it('setEnv after construction reaches subsequent commands', async () => {
+      const sandbox = new BlaxelSandbox();
+      await sandbox._start();
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.process.exec).toHaveBeenLastCalledWith(
+        expect.objectContaining({ env: expect.objectContaining({ GH_TOKEN: 'tok_1' }) }),
+      );
+    });
   });
 
   describe('Stop/Destroy', () => {
@@ -533,6 +545,36 @@ describe('BlaxelSandbox', () => {
           workingDir: '/tmp',
         }),
       );
+    });
+
+    it('defaults workingDir to the configured workingDirectory', async () => {
+      const sandbox = new BlaxelSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+
+      await sandbox.executeCommand('pwd');
+
+      expect(mockSandbox.process.exec).toHaveBeenCalledWith(expect.objectContaining({ workingDir: '/srv/app' }));
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('per-command cwd wins over the configured workingDirectory', async () => {
+      const sandbox = new BlaxelSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+
+      await sandbox.executeCommand('pwd', [], { cwd: '/tmp' });
+
+      expect(mockSandbox.process.exec).toHaveBeenCalledWith(expect.objectContaining({ workingDir: '/tmp' }));
+    });
+
+    it('passes undefined workingDir when neither cwd nor workingDirectory is set', async () => {
+      const sandbox = new BlaxelSandbox();
+      await sandbox._start();
+
+      await sandbox.executeCommand('pwd');
+
+      const callArg = (mockSandbox.process.exec as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0];
+      expect(callArg.workingDir).toBeUndefined();
+      expect(sandbox.workingDirectory).toBeUndefined();
     });
 
     it('respects timeout option', async () => {

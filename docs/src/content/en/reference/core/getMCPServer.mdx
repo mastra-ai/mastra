@@ -1,6 +1,6 @@
 ---
 title: "Reference: Mastra.getMCPServer() | Core"
-description: "Documentation for the `Mastra.getMCPServer()` method in Mastra, which retrieves a specific MCP server instance by ID and optional version."
+description: "The .getMCPServer() method retrieves an MCP server instance by its registry key (the key used when registering the server in the mcpServers configuration)."
 packages:
   - "@mastra/core"
 ---
@@ -57,6 +57,53 @@ const serverById = mastra.getMCPServerById('my-mcp-server')
   },
 ]}
 />
+
+## MCP 1.x and 2026-07-28 servers
+
+Both `@mastra/mcp` 1.x and 2.x servers extend the same `MCPServerBase` from `@mastra/core/mcp`. A 2.x server sets `mcpVersion` to `2`, while 1.x servers leave it undefined and need no new properties or methods. The differences are limited to what the 2026-07-28 protocol changed: `startSSE` and `startHonoSSE` are no longer abstract and throw unless a 1.x server overrides them (only 1.x implements the standalone SSE transport, and both are deprecated), and a server with `mcpVersion` set to `2` resolves `executeTool` to a `MCPToolExecutionResultV2` that reports a suspended tool rather than a bare result.
+
+The 1.x-only surfaces are marked `@deprecated` and are removed in the next major release of `@mastra/core`: `startSSE`, `startHonoSSE`, `MCPServerSSEOptions`, `MCPServerHonoSSEOptions`, `MCPServerHTTPOptions.options`, and on `context.mcp` the members `elicitation`, `extra.sendNotification` and `extra.sendRequest`.
+
+### Tools that ask for input
+
+A 2026-07-28 server runs ordinary `createTool` definitions. A tool that needs something from the user before it can finish declares `suspendSchema` and `resumeSchema` and calls `suspend()`, exactly as it would for an agent or a workflow. Core reports the suspension as `{ status: 'suspended', suspendPayload, resumeSchema }` from `executeTool`. An `@mastra/mcp` 2.x server turns that into an `input_required` round on the wire, and resumes the tool with the answer in `resumeData`.
+
+```typescript
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const confirm = createTool({
+  id: 'confirm',
+  description: 'Ask for confirmation before charging',
+  inputSchema: z.object({ amount: z.number() }),
+  outputSchema: z.boolean(),
+  suspendSchema: z.object({ phase: z.literal('confirm'), amount: z.number() }),
+  resumeSchema: z.object({ confirmed: z.boolean() }),
+  execute: async ({ amount }, context) => {
+    if (!context.resumeData) {
+      await context.suspend?.({ phase: 'confirm', amount })
+      return
+    }
+    return context.resumeData.confirmed
+  },
+})
+```
+
+On a 2026-07-28 server and in direct execution, `suspend`, `resumeData` and `suspendPayload` sit at the top level of the tool context. Agents and workflows still nest them under `context.agent` and `context.workflow` until the next major release of `@mastra/core`. `resumeSchema` must be a flat object of primitive fields so it can be presented as an input form.
+
+Each round is a separate request. `resumeData` carries only the current round's answer, validated against `resumeSchema`, and `suspendPayload` carries what the tool last suspended with. Because the framework never replays earlier rounds, handlers branch on explicit named phases, every round is re-authorized, and writes rely on domain-owned idempotency. `suspendPayload` is also handed back to tools resumed by agents and workflows.
+
+### The `mcp` context
+
+Both server versions hand a tool the same `context.mcp` (`MCPToolExecutionContext`): `extra` with the request's `signal`, `requestId`, `authInfo` and `_meta`, plus `log(level, message, data?)` and `progress({ progress, total?, message? })`. A tool that only uses these works unchanged on either version. A 2026-07-28 server also sets `context.mcp.protocolVersion` to `'2026-07-28'`.
+
+The 2026-07-28 protocol removed server-initiated requests, so on a 2.x server the deprecated members `elicitation.sendRequest`, `extra.sendRequest` and `extra.sendNotification` throw with a message naming the replacement instead of doing nothing. A 1.x server keeps providing them as before. To ask the user for input, call `context.suspend()` and read `context.resumeData`.
+
+### Registration and execution
+
+Tools are registered on the Mastra instance exactly as a 1.x server registers them. On a server with `mcpVersion` set to `2`, `executeTool(toolId, args, context?)` returns `{ status: 'completed', output }` or, when the tool suspended, `{ status: 'suspended', suspendPayload, resumeSchema }` with `resumeSchema` as JSON Schema. The result has no failure variant: a tool that throws, or input or resume data that fails its schema, rejects the promise. Shared REST execution endpoints return the suspended shape instead of pretending the tool finished, and accept `resumeData` plus the echoed `suspendPayload` on the next call to continue the tool. Legacy SSE routes remain available only to 1.x servers. A server with `mcpVersion` set to `2` gets a 404 there.
+
+Registering another server under an occupied registry key keeps the existing instance. Registry keys and intrinsic server IDs remain distinct.
 
 ## Related methods
 

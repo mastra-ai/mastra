@@ -3,36 +3,10 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { extractLinesWithLimit, formatWithLineNumbers } from '../line-utils';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import type { MediaToolResult } from './media';
+import { DEFAULT_MAX_MEDIA_BYTES, mediaToModelOutput } from './media';
 import { applyTokenLimit } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
-
-/**
- * Internal marker on the tool's text result that signals to `toModelOutput`
- * that the file should be surfaced to the model as a media part (image or
- * binary file) rather than as plain text. We attach this on a wrapper object
- * but only the `text` field is shown to the model (via toModelOutput); the
- * marker is stripped before it ever reaches the model.
- *
- * The shape is intentionally JSON-serialisable so it round-trips through
- * storage layers that snapshot tool results.
- */
-type MediaToolResult = {
-  __workspaceMedia: true;
-  text: string;
-  mediaType: string;
-  data: string;
-};
-
-function isMediaToolResult(value: unknown): value is MediaToolResult {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as Record<string, unknown>).__workspaceMedia === true &&
-    typeof (value as Record<string, unknown>).text === 'string' &&
-    typeof (value as Record<string, unknown>).mediaType === 'string' &&
-    typeof (value as Record<string, unknown>).data === 'string'
-  );
-}
 
 /**
  * Default mime types surfaced to the model as media parts. The list is
@@ -42,14 +16,6 @@ function isMediaToolResult(value: unknown): value is MediaToolResult {
  * that some providers reject. Override `mediaTypes` to broaden this.
  */
 const DEFAULT_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
-
-/**
- * Default cap (in bytes) on inline media reads. Files larger than this fall
- * back to metadata-only output instead of being fully base64-encoded into
- * the model context (and persisted in storage on rehydration). 10 MiB is
- * roughly aligned with provider per-image/per-pdf limits.
- */
-const DEFAULT_MAX_MEDIA_BYTES = 10 * 1024 * 1024;
 
 /**
  * `application/*` mime types that are actually text content and safe to read
@@ -190,28 +156,35 @@ export const readFileTool = createTool({
       const readFileConfig = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
       const shouldReturnAsMedia = buildMediaTypeCheck(readFileConfig?.mediaTypes);
 
-      // When the caller didn't ask for a specific encoding and the file's
-      // mime type matches the `mediaTypes` predicate, read as base64 and
-      // return a MediaToolResult so `toModelOutput` can surface it as a
-      // file/image part the model can natively consume.
-      if (!encoding && shouldReturnAsMedia(stat.mimeType)) {
+      // Whether the file is surfaced as media is decided from the file's mime
+      // type and the `mediaTypes` config — NOT from the absence of the optional
+      // `encoding` argument. Strict-schema providers always populate optional
+      // parameters, so gating this branch on `!encoding` made media parts
+      // unreachable for them and turned `mediaTypes`/`maxMediaBytes` into dead
+      // config (#23896). Read as base64 and return a MediaToolResult so
+      // `toModelOutput` can surface it as a file/image part the model can
+      // natively consume.
+      if (shouldReturnAsMedia(stat.mimeType)) {
         const maxMediaBytes = readFileConfig?.maxMediaBytes ?? DEFAULT_MAX_MEDIA_BYTES;
-        // Avoid materializing huge media files (and persisting their base64
-        // string through storage on rehydration). Fall back to metadata-only
-        // when the file exceeds the configured size cap.
-        if (stat.size > maxMediaBytes) {
+        if (stat.size <= maxMediaBytes) {
+          const base64 = (await filesystem.readFile(path, { encoding: 'base64' })) as string;
+          const header = `${stat.path} (${stat.size} bytes, ${stat.mimeType})`;
+          span.end({ success: true }, { bytesTransferred: stat.size });
+          return {
+            __workspaceMedia: true,
+            text: header,
+            mediaType: stat.mimeType!,
+            data: base64,
+          } satisfies MediaToolResult;
+        }
+        // Oversized media: avoid materializing huge base64 strings (and
+        // persisting them through storage on rehydration). Return metadata-only
+        // unless the caller explicitly asked for raw bytes via `encoding`, in
+        // which case fall through to the raw read path below.
+        if (!encoding) {
           span.end({ success: true }, { bytesTransferred: 0 });
           return `${stat.path} (${stat.size} bytes, ${stat.mimeType}) — exceeds maxMediaBytes (${maxMediaBytes}). Returning metadata only; configure \`maxMediaBytes\` on the read_file tool to raise this cap.`;
         }
-        const base64 = (await filesystem.readFile(path, { encoding: 'base64' })) as string;
-        const header = `${stat.path} (${stat.size} bytes, ${stat.mimeType})`;
-        span.end({ success: true }, { bytesTransferred: stat.size });
-        return {
-          __workspaceMedia: true,
-          text: header,
-          mediaType: stat.mimeType!,
-          data: base64,
-        } satisfies MediaToolResult;
       }
 
       // When the caller didn't ask for a specific encoding and the file is
@@ -275,19 +248,8 @@ export const readFileTool = createTool({
       throw err;
     }
   },
-  toModelOutput: (output: unknown) => {
-    if (isMediaToolResult(output)) {
-      return {
-        type: 'content',
-        value: [
-          { type: 'text', text: output.text },
-          { type: 'media', data: output.data, mediaType: output.mediaType },
-        ],
-      };
-    }
-    // For plain string output, return undefined so we don't store a duplicate
-    // copy on providerMetadata.mastra.modelOutput — the original string result
-    // is already what the model sees.
-    return undefined;
-  },
+  // For plain string output, mediaToModelOutput returns undefined so we don't
+  // store a duplicate copy on providerMetadata.mastra.modelOutput — the
+  // original string result is already what the model sees.
+  toModelOutput: mediaToModelOutput,
 });

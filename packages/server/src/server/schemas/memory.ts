@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { paginationInfoSchema, createPagePaginationSchema, successResponseSchema } from './common';
+import { lastMessagesSchema, messageHistorySchema } from './message-history';
 
 // Path parameter schemas
 export const threadIdPathParams = z.object({
@@ -58,7 +59,7 @@ const storageOrderBySchema = z
  * Handles JSON parsing from query strings. See `storageOrderBySchema` for why
  * the inner object schema is also `.optional()`.
  */
-const messageOrderBySchema = z
+export const messageOrderBySchema = z
   .preprocess(
     val => {
       if (val === undefined) return val;
@@ -83,7 +84,7 @@ const messageOrderBySchema = z
 /**
  * Include schema for message listing - handles JSON parsing from query strings
  */
-const includeSchema = z
+export const includeSchema = z
   .preprocess(
     val => {
       if (val === undefined) return val;
@@ -124,7 +125,7 @@ const metadataFilterSchema = z.record(metadataFilterKeySchema, metadataFilterVal
 /**
  * Filter schema for message listing - handles JSON parsing from query strings
  */
-const filterSchema = z
+export const filterSchema = z
   .preprocess(
     val => {
       if (val === undefined) return val;
@@ -481,7 +482,8 @@ export const memoryConfigResponseSchema = z.object({
   memoryType: z.enum(['local', 'gateway']).optional(),
   config: z
     .object({
-      lastMessages: z.union([z.number(), z.literal(false)]).optional(),
+      lastMessages: lastMessagesSchema.optional(),
+      messageHistory: messageHistorySchema.optional(),
       semanticRecall: z.union([z.boolean(), z.unknown()]).optional(),
       workingMemory: z
         .object({
@@ -557,6 +559,19 @@ export const updateThreadBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   resourceId: z.string().optional(),
 });
+
+/**
+ * Body schema for POST /memory/threads/:threadId/transfer
+ * Reassigns the thread (and its messages) to a different resource.
+ */
+export const transferThreadBodySchema = z.object({
+  resourceId: z.string().min(1),
+});
+
+/**
+ * Response schema for POST /memory/threads/:threadId/transfer
+ */
+export const transferThreadResponseSchema = threadSchema;
 
 /**
  * Body schema for PUT /memory/threads/:threadId/working-memory

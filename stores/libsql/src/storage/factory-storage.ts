@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 import { createClient } from '@libsql/client';
-import type { Client, InValue } from '@libsql/client';
 import { FactoryStorage, UniqueViolationError } from '@mastra/core/storage';
 import type {
   CollectionColumnSpec,
@@ -15,7 +14,9 @@ import type {
   RetentionConfig,
 } from '@mastra/core/storage';
 
+import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from './db/client';
 import { withClientWriteLock } from './db/write-lock';
 import { LibSQLStore } from './index';
 
@@ -379,8 +380,13 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
     const filter = this.#buildWhere(schema, where);
     const sql = `UPDATE "${schema.name}" SET ${columns.map(c => `"${c}" = ?`).join(', ')} WHERE ${filter.sql}`;
     const args = [...columns.map(column => this.#serialize(this.#column(schema, column), set[column])), ...filter.args];
-    const result = await this.#client.execute({ sql, args });
-    return result.rowsAffected;
+    try {
+      const result = await this.#client.execute({ sql, args });
+      return result.rowsAffected;
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new UniqueViolationError(collection, { cause: error });
+      throw error;
+    }
   }
 
   async updateMany(collection: string, where: CollectionWhere, set: Record<string, unknown>): Promise<number> {
@@ -437,11 +443,12 @@ export class LibSQLFactoryStorage extends FactoryStorage {
     super();
     this.#config = config;
     const isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
-    this.#client = createClient({
+    const client = createClient({
       url: config.url,
       ...(config.authToken ? { authToken: config.authToken } : {}),
       ...(isLocalDb ? { timeout: DEFAULT_CONNECTION_TIMEOUT_MS } : {}),
     });
+    this.#client = isSingleConnectionDatabase(config) ? gateSingleConnectionClient(client) : client;
     this.ops = new LibSQLFactoryStorageOps(this.#client, this.#schemas, fn => withClientWriteLock(this.#client, fn));
   }
 
@@ -487,7 +494,7 @@ export class LibSQLFactoryStorage extends FactoryStorage {
   }
 
   async close(): Promise<void> {
-    this.#client.close();
+    await this.#client.close();
   }
 
   authDatabase(): FactoryAuthDatabase {

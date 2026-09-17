@@ -1,6 +1,6 @@
 ---
 title: 'Reference: CLI commands | CLI'
-description: Documentation for the Mastra CLI to develop, build, and start your project.
+description: 'You can use the Command-Line Interface (CLI) provided by Mastra to develop, build, and start your Mastra project.'
 packages:
   - 'mastra'
 ---
@@ -365,7 +365,7 @@ The command runs `mastra build` and zips the output before uploading it to the s
 
 Organization, project, and environment are resolved in order from: environment variable (`MASTRA_ORG_ID`, `MASTRA_PROJECT_ID`), CLI flag (`--org`, `--project`, `--env`), `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved org and project IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
 
-If the project doesn't exist yet, the CLI creates it from the `package.json` `name` field after confirmation. If the target environment doesn't exist, the CLI creates it (defaulting to `type: staging` for anything other than `production`) after confirmation. Combined with `--yes`, this creates and deploys everything in one non-interactive command:
+After confirmation, the CLI creates a missing project from the `package.json` `name` field and creates a missing target environment, defaulting to `type: staging` for anything other than `production`. Combined with `--yes`, this creates and deploys everything in one non-interactive command:
 
 ```bash
 mastra deploy --env staging --yes
@@ -621,6 +621,30 @@ Omit `[environment]` to show deploys across all environments; pass an environmen
 
 Emit machine-readable JSON.
 
+### `mastra env diagnosis`
+
+Diagnoses a failed deploy and prints suggestions for fixing it. Each suggestion includes a description, a recommended action, and a documentation link when one applies, followed by a link to the deploy logs in the dashboard.
+
+```bash
+mastra env diagnosis
+mastra env diagnosis <deploy-id>
+mastra env diagnosis --environment staging
+```
+
+Omit `<deploy-id>` to diagnose the environment's latest deploy. The environment comes from `--environment`, or from the project when it has exactly one environment. Projects with several environments require `--environment` or a deploy ID. A deploy ID passed on its own works without a linked project.
+
+If the deploy is running successfully, the command reports that no suggestions are required and exits. Otherwise it starts a diagnosis when one doesn't already exist and polls until the result is ready, for up to five minutes. Rerunning the command reuses an in-progress diagnosis instead of restarting it. The command exits with a non-zero code when the diagnosis itself fails.
+
+After a failed `mastra deploy`, the CLI prints the exact `mastra env diagnosis <deploy-id>` command to run.
+
+#### `--project`
+
+Project name, slug, or ID. Defaults to the linked project, as described in [`mastra env`](#mastra-env).
+
+#### `--environment`
+
+Environment name, slug, or ID. Defaults to the project's only environment. Required when the project has more than one and no deploy ID is passed.
+
 ## `mastra studio deploy`
 
 :::note
@@ -733,7 +757,7 @@ Shows diagnosis results and suggested fixes for a failed Studio deploy.
 mastra studio deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. Suggestions appear only when the diagnosis finds a problem.
+When you omit `deploy-id`, the command uses the latest deploy for the linked project and starts a diagnosis if needed, polling until the results are ready. Suggestions appear only when the diagnosis finds a problem.
 
 ### `mastra studio projects`
 
@@ -741,7 +765,7 @@ Lists all projects in the current organization.
 
 ### `mastra studio projects create`
 
-Creates a new project through an interactive prompt. This command doesn't accept a `--name` flag; for non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead, which creates the project and deploys to it in one step.
+Creates a new project through an interactive prompt, but doesn't accept a `--name` flag. For non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead. That command creates the project and deploys to it in one step.
 
 ## `mastra server deploy`
 
@@ -767,7 +791,7 @@ Shows diagnosis results and suggested fixes for a failed Server deploy.
 mastra server deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. Suggestions appear only when the diagnosis finds a problem.
+When you omit `deploy-id`, the command uses the latest deploy for the linked project and starts a diagnosis if needed, polling until the results are ready. Suggestions appear only when the diagnosis finds a problem.
 
 ## `mastra server pause`
 
@@ -1055,6 +1079,90 @@ See the [Storage migration guide](/reference/migrations/upgrade-to-v1/storage#du
 
 It accepts [common flags][common-flags].
 
+## `mastra traces import`
+
+Imports historical traces from a supported observability provider into an existing Mastra Platform project. The command prepares complete traces locally, uploads whole-trace batches, supports resume, and verifies a sample through Mastra Platform.
+
+```bash
+mastra traces import <provider> [options]
+```
+
+The following provider is currently supported:
+
+| Provider | Argument | Requirements |
+| - | - | - |
+| Langfuse | `langfuse` | Langfuse Cloud or self-hosted Langfuse v4 or later |
+
+See [Import existing traces](/docs/mastra-platform/observability#import-existing-traces) for the complete workflow, data mapping, local-file lifecycle, and limits.
+
+### Options
+
+#### `--project <name|slug|id>`
+
+Selects the destination Mastra Platform project. `MASTRA_PROJECT_ID` takes precedence when set. Without either value, the command uses the project linked in `.mastra-project.json`.
+
+#### `--from <date>`
+
+Sets the inclusive start of the import window as an ISO 8601 date or timestamp. It defaults to 30 days before `--to`, clamped to the current 30-day Platform retention boundary.
+
+#### `--to <date>`
+
+Sets the exclusive end of the import window as an ISO 8601 date or timestamp. It defaults to the time when the import starts and can't be in the future.
+
+The complete window must fall within the current 30-day Platform retention period, `--from` must be earlier than `--to`, and the window can't exceed 30 days.
+
+#### `--dry-run`
+
+Reads the source and prepares valid traces locally without uploading them. The command writes a report and prints a command that resumes the prepared import.
+
+#### `--resume <import-id>`
+
+Resumes a prepared import using its saved provider, destination project, date window, and acknowledged progress. Use the same destination project shown in the generated resume command. This option can't be combined with `--from`, `--to`, or `--dry-run`.
+
+#### `-y, --yes`
+
+Uploads without asking for confirmation.
+
+### Environment variables
+
+The command loads `.env` and `.env.local` from the current directory.
+
+| Variable | Required | Description |
+| - | - | - |
+| `LANGFUSE_PUBLIC_KEY` | For new Langfuse imports | Public project API key. |
+| `LANGFUSE_SECRET_KEY` | For new Langfuse imports | Secret project API key. |
+| `LANGFUSE_BASE_URL` | No | Langfuse host. Defaults to `https://cloud.langfuse.com`. |
+| `MASTRA_API_TOKEN` | For headless authentication | Mastra Platform API token. Without it, the command uses credentials from `mastra auth login`. |
+| `MASTRA_ORG_ID` | With `MASTRA_API_TOKEN` | Organization that owns the destination project. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | For upload and read-back with interactive login | Mastra Platform access token for the destination. Not required for `--dry-run` or when `MASTRA_API_TOKEN` is set. |
+| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. Takes precedence over `--project`. |
+
+### Examples
+
+Preview the default 30-day window without uploading:
+
+```bash
+mastra traces import langfuse --project my-project --dry-run
+```
+
+Import a smaller date window without a confirmation prompt:
+
+```bash
+mastra traces import langfuse \
+  --project my-project \
+  --from "$FROM" \
+  --to "$TO" \
+  --yes
+```
+
+Resume an existing import:
+
+```bash
+mastra traces import langfuse \
+  --resume 00000000-0000-0000-0000-000000000000 \
+  --project my-project
+```
+
 ## `mastra api`
 
 Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra platform projects, self-hosted Mastra servers, or hosted Mastra Platform Observability APIs.
@@ -1102,9 +1210,9 @@ For runtime commands, the command resolves the target server in this order:
 1. `http://localhost:4111` for a local `mastra dev` server.
 1. `.mastra-project.json` for a Mastra platform project.
 
-Automatic platform auth is only used when the CLI resolves a Mastra platform target from `.mastra-project.json`. Localhost targets and explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
+Automatic Platform authentication is used when the CLI resolves a project from `.mastra-project.json` or recognizes an explicit Mastra-hosted Studio, Factory, or observability URL. Localhost and arbitrary explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
 
-For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targets `https://observability.mastra.ai` by default instead of a project deployment URL. Trace Intelligence commands (`learning`) work the same way but target `https://output.signals.mastra.ai`. Both resolve credentials in this order:
+For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targets the United States endpoint at `https://observability.mastra.ai` by default instead of a project deployment URL. Trace Intelligence commands (`learning`) work the same way but target `https://output.signals.mastra.ai`. When the CLI selects either hosted target automatically, it resolves credentials in this order:
 
 1. Explicit `Authorization` and `X-Mastra-Project-Id` headers passed with `--header`.
 1. `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from your environment.
@@ -1113,7 +1221,43 @@ For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targ
 
 Learning commands also send `X-Mastra-Organization-Id`, resolved from an explicit `--header`, `MASTRA_ORGANIZATION_ID` in your environment, or `.mastra-project.json`, in that order.
 
-Use `--url` and `--header` when you need to override the default hosted observability target or credentials.
+European Union observability data is stored at `https://observability.eu.mastra.ai`. Pass that trusted host with `--url`; it uses the same Platform credential resolution as the default United States endpoint:
+
+```bash
+mastra api --url https://observability.eu.mastra.ai trace list
+```
+
+Use `--url` and `--header` when you need to override another target or its credentials.
+
+### Factory commands
+
+Use `mastra api factory` to manage Factory projects, work items, decisions, attention items, queue health, and supervisor sessions. These commands use the same JSON input, output, authentication, headers, timeout, and target resolution as other `mastra api` commands.
+
+List the Factory projects available to the current organization:
+
+```bash
+mastra api factory project list
+```
+
+Inspect the generated request schema before sending a governed work-item transition:
+
+```bash
+mastra api factory work-item transition --schema
+```
+
+Move a work item using its current revision:
+
+```bash
+mastra api factory work-item transition <project-id> <work-item-id> '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}'
+```
+
+After you deploy the project with `mastra deploy`, the resulting non-secret `.mastra-project.json` lets the CLI find the hosted Factory instance, apply your Mastra CLI credentials, and select the deployed project's organization automatically. For an explicit hosted Factory `--url`, the CLI uses `MASTRA_ORG_ID` when set, then the organization selected by `mastra auth orgs switch`. An explicit `X-Mastra-Organization-Id` header takes precedence over both. Before deployment, or to target a specific local, remote, or self-hosted Factory server, pass `--url` instead:
+
+```bash
+mastra api --url http://localhost:4111 factory project list
+```
+
+Factory endpoints use their root-level `/web/factory/...` paths. `--server-api-prefix` still controls local target probing, but it isn't prepended to Factory requests.
 
 ### Flags
 
@@ -1446,6 +1590,34 @@ mastra api trace list '{"page":0,"perPage":20}' --verbose
 
 `trace list` returns lightweight root span records by default so you can page through traces without fetching large input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full root span records.
 
+#### `mastra api trace query`
+
+Queries completed observability traces with recursive predicates over trace and related span or score fields. The inline JSON input is required. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+
+```bash
+mastra api trace query <input>
+mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'
+```
+
+Inspect the target server's exact request contract before constructing a query:
+
+```bash
+mastra api trace query --schema
+```
+
+The response remains nested under `data` to preserve cursor pagination:
+
+```json
+{
+  "data": {
+    "traces": [],
+    "page": { "next": "opaque-cursor" }
+  }
+}
+```
+
+Pass a non-null `page.next` value back as `page.after` in the next query. See [Advanced trace queries](/reference/observability/tracing/trace-query) for supported fields and operators, recursive predicates, limits, pagination, and errors.
+
 #### `mastra api trace get`
 
 Gets a lightweight timeline for one observability trace without fetching full span input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full trace payload.
@@ -1529,7 +1701,7 @@ mastra api metric label-values '{"metricName":"latency_ms","labelKey":"model","p
 
 #### Observability with `curl`
 
-You can call the hosted observability API directly with your platform access token and project ID:
+You can call the hosted observability API directly with your platform access token and project ID. The examples below use the United States host. Substitute `https://observability.eu.mastra.ai` for a European Union environment. The [hosted feedback query API](/docs/mastra-platform/api#observability-feedback-query-api) documents feedback endpoints that don't have CLI commands:
 
 ```bash
 curl -sS "https://observability.mastra.ai/api/observability/traces?page=0&perPage=20" \

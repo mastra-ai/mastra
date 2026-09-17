@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
+import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
@@ -32,12 +33,20 @@ import {
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { disposeAssistantRenderState } from './assistant-render-registry.js';
+import {
+  clearCompletedBackgroundActivitiesForTarget,
+  compareBackgroundActivities,
+  completeBackgroundActivity,
+  getBackgroundActivitiesForTarget,
+} from './background-activity.js';
+import type { BackgroundActivity } from './background-activity.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
+import { BackgroundActivitySelectorComponent } from './components/background-activity-selector.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
@@ -74,7 +83,6 @@ import {
   refreshSkillsAutocomplete,
   setupKeyHandlers,
   subscribeToAgentController,
-  updateTerminalTitle,
   promptForThreadSelection,
   renderExistingTasks,
 } from './setup.js';
@@ -82,6 +90,7 @@ import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
+import { setCurrentThreadTitle } from './thread-title.js';
 
 // =============================================================================
 // Types
@@ -108,13 +117,14 @@ const CAFFEINATE_ARGS = ['-i', '-m'];
 
 export async function syncInitialThreadState(state: TUIState): Promise<void> {
   const initThreadId = state.session.thread.getId();
-  if (!initThreadId) return;
+  if (!initThreadId) {
+    setCurrentThreadTitle(state, undefined);
+    return;
+  }
 
   const initThreads = await state.session.thread.list();
   const initThread = initThreads.find(t => t.id === initThreadId);
-  if (initThread?.title) {
-    state.currentThreadTitle = initThread.title;
-  }
+  setCurrentThreadTitle(state, initThread?.title);
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
   state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
   // Prefer the durable ThreadState objective; fall back to the legacy
@@ -151,6 +161,8 @@ export class MastraTUI {
   private cleanupKeyHandlers?: () => void;
   private cleanupPluginReloadListener?: () => void;
   private cleanupPluginUpdateListener?: () => void;
+  private cleanupBackgroundCompletionListener?: () => void;
+  private backgroundNoticeQueue = Promise.resolve();
   private lastStreamError: string | null = null;
   private stopped = false;
   /**
@@ -255,7 +267,74 @@ export class MastraTUI {
       exit: exitCode => this.exit(exitCode),
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
       queueFollowUpMessage: text => this.queueFollowUpMessage(text),
+      ...(this.state.options.backgroundToolsEnabled
+        ? {
+            openBackgroundActivityCenter: () => this.showBackgroundActivityCenter(),
+            clearFinishedBackgroundActivities: () => this.clearFinishedBackgroundActivity(),
+          }
+        : {}),
     });
+  }
+
+  private getCurrentThreadBackgroundActivities(): BackgroundActivity[] {
+    return getBackgroundActivitiesForTarget(
+      this.state.backgroundActivities,
+      this.state.session.identity.getResourceId(),
+      this.state.pendingNewThread ? null : this.state.session.thread.getId(),
+    );
+  }
+
+  private refreshBackgroundActivity(): void {
+    if (!this.state.options.backgroundToolsEnabled) return;
+    this.state.globalBackgroundNotice.setActivities(this.getCurrentThreadBackgroundActivities());
+    flushRender(this.state);
+  }
+
+  private clearFinishedBackgroundActivity(): void {
+    clearCompletedBackgroundActivitiesForTarget(
+      this.state.backgroundActivities,
+      this.state.session.identity.getResourceId(),
+      this.state.pendingNewThread ? null : this.state.session.thread.getId(),
+    );
+    this.refreshBackgroundActivity();
+  }
+
+  private showBackgroundActivityCenter(): void {
+    const activities = this.getCurrentThreadBackgroundActivities().sort(compareBackgroundActivities);
+    if (activities.length === 0) return;
+
+    const selector = new BackgroundActivitySelectorComponent({
+      tui: this.state.ui,
+      activities,
+      getActivity: taskId => this.state.backgroundActivities.get(taskId),
+      onCancel: () => this.state.ui.hideOverlay(),
+      onAbort: activity => void this.abortBackgroundActivity(activity),
+    });
+    showModalOverlay(this.state.ui, selector, { maxHeight: '80%' });
+    selector.focused = true;
+  }
+
+  private async abortBackgroundActivity(activity: BackgroundActivity): Promise<void> {
+    try {
+      const manager = this.state.controller.getMastra()?.backgroundTaskManager;
+      if (!manager) return;
+      await manager.cancel(activity.taskId);
+    } catch (error) {
+      showError(this.state, error instanceof Error ? error.message : 'Failed to cancel background task');
+    } finally {
+      this.state.ui.hideOverlay();
+    }
+  }
+
+  private handleBackgroundCompletion(event: BackgroundCompletionEvent): void {
+    this.backgroundNoticeQueue = this.backgroundNoticeQueue
+      .then(() => {
+        completeBackgroundActivity(this.state.backgroundActivities, event);
+        this.refreshBackgroundActivity();
+      })
+      .catch(error => {
+        showError(this.state, error instanceof Error ? error.message : 'Failed to refresh background activity');
+      });
   }
 
   private exit(exitCode: number): void {
@@ -285,7 +364,7 @@ export class MastraTUI {
       const msg = this.state.options.initialMessage;
 
       if (!this.state.session.model.hasSelection()) {
-        showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
+        showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
       } else {
         const messageId = `user-${Date.now()}`;
         addUserMessage(this.state, {
@@ -343,7 +422,7 @@ export class MastraTUI {
 
         // Check if a model is selected (sync — fast, no reason to defer)
         if (!this.state.session.model.hasSelection()) {
-          showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
+          showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
           continue;
         }
 
@@ -574,6 +653,11 @@ export class MastraTUI {
       this.cleanupPluginUpdateListener = undefined;
     }
 
+    if (this.cleanupBackgroundCompletionListener) {
+      this.cleanupBackgroundCompletionListener();
+      this.cleanupBackgroundCompletionListener = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
@@ -649,6 +733,11 @@ export class MastraTUI {
 
     // Subscribe to controller events
     subscribeToAgentController(this.state, event => this.handleEvent(event));
+    if (this.state.options.backgroundToolsEnabled) {
+      this.cleanupBackgroundCompletionListener = this.state.options.backgroundCompletionEvents?.subscribe(event =>
+        this.handleBackgroundCompletion(event),
+      );
+    }
     // Restore escape-as-cancel setting from persisted state
     const escState = this.state.session.state.get() as any;
     if (escState?.escapeAsCancel === false) {
@@ -687,8 +776,6 @@ export class MastraTUI {
         });
     }
 
-    // Set terminal title
-    updateTerminalTitle(this.state);
     // Render existing messages
     await this.renderExistingMessagesAndSeedIdleCounter();
     // Render existing tasks if any
@@ -812,6 +899,7 @@ export class MastraTUI {
       if (event.type === 'thread_created') {
         await this.syncThreadActivePackMetadata(event.thread);
       } else if (event.type === 'thread_changed') {
+        this.refreshBackgroundActivity();
         await this.syncThreadActivePackMetadata();
       }
 

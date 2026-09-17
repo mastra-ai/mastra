@@ -16,6 +16,8 @@ import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPaylo
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
+import type { AgentSignalType } from './signals';
+import type { SubAgentGenerateResult } from './subagent';
 import type {
   AgentMemoryOption,
   ToolsetsInput,
@@ -155,6 +157,24 @@ export interface DelegationCompleteContext {
     text: string;
     subAgentThreadId?: string;
     subAgentResourceId?: string;
+    /**
+     * Why the sub-agent stopped generating (e.g. 'stop', 'tool-calls').
+     * Use this to detect a sub-agent that stopped on a tool-calls step and
+     * returned empty text. Populated on the generate and stream paths for
+     * v2 models; undefined on legacy (v1) paths.
+     */
+    finishReason?: SubAgentGenerateResult['finishReason'];
+    /**
+     * Results of the tools the sub-agent executed during the delegation.
+     * Always attached on the generate and stream paths for v2 models.
+     */
+    subAgentToolResults?: Array<{
+      toolName: string;
+      toolCallId: string;
+      result?: unknown;
+      args?: unknown;
+      isError?: boolean;
+    }>;
     /** Aggregate token usage from the sub-agent's execution */
     usage?: {
       inputTokens: number;
@@ -202,8 +222,9 @@ export interface DelegationCompleteResult {
    * `feedback` is persisted to the parent's memory and therefore only reaches the
    * model on the next turn. Use `resultText` when the sub-agent's own result would
    * mislead the parent right now — for example when the sub-agent stopped on a
-   * tool-calls step and returned empty text, which reads to the model as a
-   * successful but empty delegation.
+   * tool-calls step and returned empty text, or when a failed delegation needs a
+   * more useful error message. Replacing the text does not recover a failed
+   * delegation; the parent still receives a failed tool result.
    */
   resultText?: string;
 }
@@ -336,6 +357,21 @@ export interface DelegationConfig {
    * results in the supervisor model context.
    */
   includeSubAgentToolResultsInModelContext?: boolean;
+
+  /**
+   * Let a later delegation reuse an earlier subagent's result verbatim.
+   *
+   * When enabled, every successful, non-empty subagent result in this run is
+   * registered under a reference ID and the supervisor model sees a
+   * `[ref: <id>]` line after the subagent's text. The `agent-*` delegation
+   * tools gain a `contextFromRefs` input so the supervisor can name earlier
+   * results; their text is inserted into the next subagent's prompt in labeled
+   * blocks instead of the supervisor restating it. References are in-memory
+   * and scoped to a single supervisor run.
+   *
+   * @default false
+   */
+  enableResultReferences?: boolean;
 
   /**
    * Callback that controls which parent messages are passed to each subagent as conversation
@@ -515,6 +551,13 @@ export type MultiPrimitiveExecutionOptions<OUTPUT = undefined> = NetworkOptions<
 export type PublicNetworkOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
 
 export type AgentExecutionOptionsBase<OUTPUT> = {
+  /**
+   * Signal chunks to hide from this caller's stream: true hides all recognized signals,
+   * false hides none, and an array hides selected types. Defaults to none.
+   * Does not affect generated results, model context, or storage.
+   */
+  hideSignals?: boolean | AgentSignalType[];
+
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 
@@ -546,23 +589,6 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Save messages incrementally after each stream step completes (default: false). Is disabled internally when observational memory is enabled, as OM handles its own message saving */
   savePerStep?: boolean;
-
-  /**
-   * Persist non-empty assistant text that was streamed before an abort.
-   *
-   * Disabled by default because abort signals can represent a disconnected caller,
-   * in which case partial output should not be added to memory.
-   * @default false
-   *
-   * @example
-   * ```typescript
-   * const stream = await agent.stream('Hello', {
-   *   memory: { thread: 'my-thread', resource: 'user-123' },
-   *   persistPartialOnAbort: true,
-   * });
-   * ```
-   */
-  persistPartialOnAbort?: boolean;
 
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
@@ -763,6 +789,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to disable background tasks for this execution */
   disableBackgroundTasks?: boolean;
+
+  /** @internal Execution-scoped background dispatch policy for delegated agents. */
+  backgroundTaskPolicy?: {
+    allowToolDispatch: boolean;
+    allowDelegationDispatch: boolean;
+  };
 
   /**
    * When set, keeps the stream open across background-task continuations.

@@ -1,8 +1,16 @@
 import * as React from 'react'
 import { Input } from '@site/src/components/ui/input'
 import { Search as SearchIcon } from 'lucide-react'
+import Heading from '@theme/Heading'
 import { getIntegrationItemKey, integrationCategories } from './data'
 import { IntegrationItemsGrid } from './grid'
+
+function toAnchorId(label: string) {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
 
 export default function IntegrationsPage() {
   const [query, setQuery] = React.useState('')
@@ -37,7 +45,9 @@ export default function IntegrationsPage() {
 
       {filteredCategories.map(category => (
         <section key={category.label} className="mb-12">
-          <h2>{category.label}</h2>
+          <Heading as="h2" id={toAnchorId(category.label)}>
+            {category.label}
+          </Heading>
           <IntegrationItemsGrid items={category.items} columns={4} />
         </section>
       ))}

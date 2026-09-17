@@ -57,8 +57,6 @@ describe('slash commands (reducer-level)', () => {
   it('/settings dumps session state as a notice', () => {
     let state = transcriptReducer(initialTranscript, { type: 'reset', threadId: 'thread-123' });
 
-    // Mode/model live in the session-state layer (ChatModes/ChatModels), not
-    // the transcript — /settings combines both, exactly like useRunPaletteCommand.
     const activeModeId = 'build';
     const activeModelId = 'openai/gpt-4o';
     const lines = [`Mode: ${activeModeId}`, `Model: ${activeModelId}`, `Thread: ${state.threadId}`];

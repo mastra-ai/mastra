@@ -7,7 +7,7 @@
  *   - workflow-builder sub-agent (so `create-workflow` can delegate)
  *   - code-agent (as a plain agent, callable via agent steps)
  *   - workspace tools (view/write/edit/find_files/execute_command/etc.)
- *   - web tools (Tavily-gated) so workflows can compose search/extract steps
+ *   - configured model-independent web tools so workflows can compose search/extract steps
  *   - notification_inbox
  *   - snapshot of MCP tools from mcpManager
  *
@@ -18,22 +18,22 @@
  * Tradeoffs:
  *   - MCP tools are snapshotted. Servers added after boot are invisible to
  *     the workflow-builder until restart.
- *   - Web tool flavor is Tavily-only. Provider-native (Anthropic/OpenAI) web
+ *   - Provider-native (Anthropic/OpenAI) web
  *     tools are skipped because they'd freeze workflows to one model provider.
- *   - Workflow tool steps get the closed-over workspace + auth (Tavily key,
- *     MCP server credentials), not per-request permissions — deliberate; if
+ *   - Workflow tool steps get the closed-over workspace + auth (web provider
+ *     key, MCP server credentials), not per-request permissions — deliberate; if
  *     the user built + saved the workflow they meant to run it.
  */
 import type { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { createNotificationInboxTool } from '@mastra/core/notifications';
 import { LocalFilesystem, LocalSandbox, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
-import { MASTRACODE_WORKSPACE_TOOLS } from '../agents/tool-availability.js';
+import { createMastraCodeWorkspaceTools } from '../agents/tool-availability.js';
 import { LazyNotificationsStorage } from '../agents/tools.js';
 import { workflowBuilderAgent } from '../agents/workflow-builder-agent.js';
 import type { McpManager } from '../mcp';
 import { MC_TOOLS } from '../tool-names.js';
-import { createWebExtractTool, createWebSearchTool, hasTavilyKey } from '../tools/web-search.js';
+import { createConfiguredWebTools } from '../tools/web-search.js';
 
 export interface RegisterWorkflowBuilderPrimitivesOptions {
   projectPath: string;
@@ -76,18 +76,19 @@ export async function registerWorkflowBuilderPrimitives(
       allowedPaths: [projectPath, ...allowedPaths],
     }),
     sandbox: new LocalSandbox({ workingDirectory: projectPath }),
-    tools: MASTRACODE_WORKSPACE_TOOLS,
+    tools: createMastraCodeWorkspaceTools(),
   });
   const workspaceTools = await createWorkspaceTools(workspace, { workspace });
   for (const [toolId, tool] of Object.entries(workspaceTools)) {
     mastra.addTool(tool, toolId);
   }
 
-  // 3. Web tools — Tavily only. Provider-native web tools (Anthropic/OpenAI)
+  // 3. Model-independent web tools. Provider-native web tools (Anthropic/OpenAI)
   //    are model-locked and would freeze workflows to one provider.
-  if (hasTavilyKey()) {
-    mastra.addTool(createWebSearchTool(), 'web-search');
-    mastra.addTool(createWebExtractTool(), 'web-extract');
+  const configuredWebTools = createConfiguredWebTools();
+  if (configuredWebTools) {
+    mastra.addTool(configuredWebTools.web_search, 'web-search');
+    mastra.addTool(configuredWebTools.web_extract, 'web-extract');
   }
 
   // 4. notification_inbox — LazyNotificationsStorage resolves the notifications

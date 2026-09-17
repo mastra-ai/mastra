@@ -1,19 +1,18 @@
-import type { SpanRecord } from '@mastra/core/storage';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import {
-  formatSpanDuration,
-  formatSpanPanelTimestamp,
-  getTokenLimitMessage,
-  isTokenLimitExceeded,
-} from '../utils/span-utils';
+import type { SpanRecord } from '../types';
+import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
+import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { TraceIdButton } from './trace-id-button';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { cn } from '@/lib/utils';
+
+const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto p-3';
 
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
   return (
@@ -23,10 +22,10 @@ function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId:
         {sectionTitle}
       </span>
       <span>
-        › Span <b className="text-neutral3">#{span.spanId}</b>
+        › Span <b className="text-neutral3">{span.spanId}</b>
       </span>
       <span>
-        › Trace <b className="text-neutral3">#{span.traceId}</b>
+        › Trace <b className="text-neutral3">{span.traceId}</b>
       </span>
     </>
   );
@@ -44,18 +43,11 @@ export interface SpanDataPanelViewProps {
   activeTab?: string;
   onTabChange?: (tab: string) => void;
   /**
-   * When provided, a "Scoring" tab appears; the slot receives the loaded span and renders
-   * whatever scoring UI the consumer wants. When undefined, only the "Details" tab renders.
-   */
-  scoringTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  /** Optional count shown in the "Scoring" tab label (e.g. number of scores). */
-  scoringTabBadge?: ReactNode;
-  /**
    * When provided, a "Feedback" tab appears; the slot receives the loaded span and renders
    * whatever feedback UI the consumer wants.
    */
   feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  /** Optional count shown in the "Feedback" tab label. */
+  /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
   feedbackTabBadge?: ReactNode;
   /**
    * Whether this span is the displayed root of the current view (trace root or
@@ -63,6 +55,8 @@ export interface SpanDataPanelViewProps {
    * to `span.parentSpanId == null` (trace case) when omitted.
    */
   isAnchor?: boolean;
+  /** Extra classes for the panel root (e.g. flattening the card when nested in the trace panel). */
+  className?: string;
 }
 
 export function SpanDataPanelView({
@@ -75,19 +69,24 @@ export function SpanDataPanelView({
   onNext,
   activeTab,
   onTabChange,
-  scoringTabSlot,
-  scoringTabBadge,
   feedbackTabSlot,
   feedbackTabBadge,
   isAnchor,
+  className,
 }: SpanDataPanelViewProps) {
+  // Not a DataPanel: this is the span column rendered inside `TraceDataPanelView`,
+  // which already provides the panel chrome.
   return (
-    <DataPanel>
+    <section className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
       <DataPanel.Header>
-        <DataPanel.Heading>
-          Span <b># {spanId}</b>
-        </DataPanel.Heading>
-        <ButtonsGroup className="ml-auto shrink-0">
+        <DataPanel.HeaderContent>
+          <DataPanel.Heading>
+            Span
+            <TraceIdButton id={spanId} />
+          </DataPanel.Heading>
+          {span && <SpanSummaryDescription span={span} />}
+        </DataPanel.HeaderContent>
+        <DataPanel.HeaderActions>
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}
             onNext={onNext}
@@ -95,7 +94,7 @@ export function SpanDataPanelView({
             nextLabel="Next span"
           />
           <DataPanel.CloseButton onClick={onClose} />
-        </ButtonsGroup>
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
 
       {isLoading ? (
@@ -109,14 +108,12 @@ export function SpanDataPanelView({
           spanId={spanId}
           activeTab={activeTab}
           onTabChange={onTabChange}
-          scoringTabSlot={scoringTabSlot}
-          scoringTabBadge={scoringTabBadge}
           feedbackTabSlot={feedbackTabSlot}
           feedbackTabBadge={feedbackTabBadge}
           isAnchor={isAnchor}
         />
       )}
-    </DataPanel>
+    </section>
   );
 }
 
@@ -126,8 +123,6 @@ function SpanDataPanelContent({
   spanId,
   activeTab,
   onTabChange,
-  scoringTabSlot,
-  scoringTabBadge,
   feedbackTabSlot,
   feedbackTabBadge,
   isAnchor,
@@ -137,15 +132,10 @@ function SpanDataPanelContent({
   spanId: string;
   activeTab?: string;
   onTabChange?: (tab: string) => void;
-  scoringTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  scoringTabBadge?: ReactNode;
   feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
-  const duration = formatSpanDuration(span.startedAt, span.endedAt);
-  const startedAt = formatSpanPanelTimestamp(span.startedAt);
-  const endedAt = formatSpanPanelTimestamp(span.endedAt);
   const usage = span.attributes?.usage as TokenUsage | undefined;
 
   const detailsBody = (
@@ -165,34 +155,10 @@ function SpanDataPanelContent({
          *  lightweight payload, so they only have values once the full span is loaded. */}
         {(isAnchor ?? span.parentSpanId == null) && (
           <>
-            {span.traceId && (
-              <>
-                <DataKeysAndValues.Key>Trace Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Trace Id to clipboard" copyValue={span.traceId}>
-                  {span.traceId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
             {span.tags && span.tags.length > 0 && (
               <>
                 <DataKeysAndValues.Key>Tags</DataKeysAndValues.Key>
                 <DataKeysAndValues.Value>{span.tags.join(', ')}</DataKeysAndValues.Value>
-              </>
-            )}
-            {span.runId && (
-              <>
-                <DataKeysAndValues.Key>Run Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Run Id to clipboard" copyValue={span.runId}>
-                  {span.runId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.threadId && (
-              <>
-                <DataKeysAndValues.Key>Thread Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Thread Id to clipboard" copyValue={span.threadId}>
-                  {span.threadId}
-                </DataKeysAndValues.ValueWithCopyBtn>
               </>
             )}
             {span.sessionId && (
@@ -214,17 +180,6 @@ function SpanDataPanelContent({
                   copyValue={span.requestId}
                 >
                   {span.requestId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.resourceId && (
-              <>
-                <DataKeysAndValues.Key>Resource Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Resource Id to clipboard"
-                  copyValue={span.resourceId}
-                >
-                  {span.resourceId}
                 </DataKeysAndValues.ValueWithCopyBtn>
               </>
             )}
@@ -260,36 +215,6 @@ function SpanDataPanelContent({
             )}
           </>
         )}
-        {span.name && (
-          <>
-            <DataKeysAndValues.Key>Name</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{span.name}</DataKeysAndValues.Value>
-          </>
-        )}
-        {span.spanType && (
-          <>
-            <DataKeysAndValues.Key>Type</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{span.spanType}</DataKeysAndValues.Value>
-          </>
-        )}
-        {startedAt && (
-          <>
-            <DataKeysAndValues.Key>Started</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{startedAt}</DataKeysAndValues.Value>
-          </>
-        )}
-        {endedAt && (
-          <>
-            <DataKeysAndValues.Key>Ended</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{endedAt}</DataKeysAndValues.Value>
-          </>
-        )}
-        {duration && (
-          <>
-            <DataKeysAndValues.Key>Duration</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{duration}</DataKeysAndValues.Value>
-          </>
-        )}
       </DataKeysAndValues>
 
       <div className="mt-3 grid gap-3">
@@ -322,25 +247,21 @@ function SpanDataPanelContent({
   );
 
   // No extra tab slots → render details directly without the Tabs/TabList wrapper.
-  if (!scoringTabSlot && !feedbackTabSlot) {
-    return <DataPanel.Content>{detailsBody}</DataPanel.Content>;
+  if (!feedbackTabSlot) {
+    return <div className={BODY_CLASS}>{detailsBody}</div>;
   }
 
   return (
-    <DataPanel.Content>
+    <div className={BODY_CLASS}>
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
-        <TabList>
+        <TabList variant="pill-ghost">
           <Tab value="details">Details</Tab>
-          {scoringTabSlot && <Tab value="scoring">Scoring {scoringTabBadge != null && <>({scoringTabBadge})</>}</Tab>}
-          {feedbackTabSlot && (
-            <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
-          )}
+          <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
         </TabList>
 
         <TabContent value="details">{detailsBody}</TabContent>
-        {scoringTabSlot && <TabContent value="scoring">{scoringTabSlot({ span, traceId, spanId })}</TabContent>}
-        {feedbackTabSlot && <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>}
+        <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>
       </Tabs>
-    </DataPanel.Content>
+    </div>
   );
 }

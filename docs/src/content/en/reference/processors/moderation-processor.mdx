@@ -1,6 +1,6 @@
 ---
 title: "Reference: ModerationProcessor | Processors"
-description: "Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories."
+description: "Use ModerationProcessor for LLM-based input and output moderation across configurable content categories, thresholds, strategies, and model settings."
 packages:
   - "@mastra/core"
 ---
@@ -41,6 +41,14 @@ const processor = new ModerationProcessor({
             type: 'MastraModelConfig',
             description: 'Model configuration for the moderation agent',
             isOptional: false,
+          },
+          {
+            name: 'errorStrategy',
+            type: "'warn' | 'strict'",
+            description:
+              "How to handle failures from the internal model call. 'warn' is fail-open: it logs the failure and allows the content through unchanged. 'strict' is fail-closed: it stops processing with a tripwire.",
+            isOptional: true,
+            default: "'warn'",
           },
           {
             name: 'categories',

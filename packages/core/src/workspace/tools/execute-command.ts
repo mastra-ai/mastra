@@ -21,7 +21,7 @@ export const executeCommandInputSchema = z.object({
     .describe('Maximum execution time in seconds. Example: 60 for 1 minute.'),
   cwd: z.string().nullish().describe('Working directory for the command'),
   tail: z
-    .preprocess(coerceNumericString, z.number())
+    .preprocess(coerceNumericString, z.number().int())
     .nullish()
     .describe(
       `For foreground commands: limit output to the last N lines, similar to tail -n. Defaults to ${DEFAULT_TAIL_LINES}. Use 0 for no limit.`,
@@ -264,7 +264,12 @@ async function executeCommand(input: Record<string, any>, context: any) {
       return appendTerminalLine(parts, `Exit code: ${result.exitCode}`);
     }
 
-    return (await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom)) || '(no output)';
+    return (
+      formatCommandOutput(
+        await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
+        await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom),
+      ).join('\n') || '(no output)'
+    );
   } catch (error) {
     await context?.writer?.custom({
       type: 'data-sandbox-exit',
@@ -297,7 +302,7 @@ Usage:
 - Commands run in a shell, so pipes, redirects, and chaining (&&, ||, ;) all work.
 - Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
 - Use the timeout parameter (in seconds) to limit execution time. Behavior when omitted depends on the sandbox provider.
-- Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.`;
+- Optionally use cwd to override the working directory. Commands run from the sandbox's configured workingDirectory (or the provider default) if omitted.`;
 
 /** Foreground-only tool (no background param in schema). */
 export const executeCommandTool = createTool({

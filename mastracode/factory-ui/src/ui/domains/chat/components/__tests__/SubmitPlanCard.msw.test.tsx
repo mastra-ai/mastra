@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { WorkspaceFile } from '../../../../../api/types';
-import type { FactoryUserSession } from '../../../workspaces/services/github';
+import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 import { SubmitPlanCard } from '../SubmitPlanCard';
 
 const PLAN_PATH = '.artifacts/plans/add-dark-mode.md';
@@ -72,6 +72,21 @@ function stubPlanFile({ fail = false }: { fail?: boolean } = {}) {
     }),
   );
   return requests;
+}
+
+/** Stubs the rendered-list route so absolute paths can be normalized against `rootPath`. */
+function stubRenderedList(rootPath: string) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      return HttpResponse.json({
+        workspacePath: params.get('workspacePath') ?? '',
+        root: params.get('root') ?? '.artifacts',
+        rootPath,
+        entries: [],
+      });
+    }),
+  );
 }
 
 function renderCard(props: Partial<Parameters<typeof SubmitPlanCard>[0]> = {}) {
@@ -152,7 +167,7 @@ describe('SubmitPlanCard', () => {
       expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
     });
 
-    it('keeps approve and reject usable when the plan file cannot be read', async () => {
+    it('disables approve but keeps reject usable when the plan file cannot be read', async () => {
       stubUserSession();
       stubPlanFile({ fail: true });
       const onRespond = vi.fn();
@@ -161,12 +176,60 @@ describe('SubmitPlanCard', () => {
 
       expect(await screen.findByRole('note')).toHaveTextContent('The plan could not be loaded');
 
+      // A plan that was never shown must not be approvable.
+      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeDisabled();
+
       const reject = screen.getByRole('button', { name: 'Reject the plan' });
       expect(reject).toBeEnabled();
       await user.click(reject);
 
       // No content to back-fill — only the action and path travel.
       expect(onRespond).toHaveBeenCalledWith({ action: 'rejected', path: PLAN_PATH });
+    });
+
+    it('normalizes an absolute artifact path against the workspace root before fetching', async () => {
+      stubUserSession();
+      stubRenderedList('/leadrvision/.artifacts');
+      const requests = stubPlanFile();
+      renderCard({
+        input: { toolId: 'submit_plan', path: '/leadrvision/.artifacts/plans/add-dark-mode.md' },
+        onRespond: () => {},
+      });
+
+      expect(await screen.findByText('Ship dark mode')).toBeInTheDocument();
+      // The absolute path was mapped to a workspace-relative path the file route accepts.
+      expect(requests).toHaveLength(1);
+      expect(requests[0].get('path')).toBe('.artifacts/plans/add-dark-mode.md');
+      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeEnabled();
+    });
+
+    it('does not fetch an absolute path outside the workspace artifacts root', async () => {
+      stubUserSession();
+      stubRenderedList('/leadrvision/.artifacts');
+      const requests = stubPlanFile();
+      renderCard({
+        input: { toolId: 'submit_plan', path: '/leadrvision/secrets/plan.md' },
+        onRespond: () => {},
+      });
+
+      expect(await screen.findByRole('note')).toHaveTextContent('The plan could not be loaded');
+      expect(requests).toHaveLength(0);
+      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
+    });
+
+    it('disables Approve for a whitespace-only inline plan', async () => {
+      stubUserSession();
+      stubPlanFile();
+      renderCard({
+        input: { toolId: 'submit_plan', path: PLAN_PATH, title: 'Blank plan', plan: '   \n\t  ' },
+        onRespond: () => {},
+      });
+
+      await screen.findByText('Blank plan');
+      // A plan with no visible body must not be approvable.
+      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
     });
 
     it('does not fetch paths outside the workspace artifacts root', async () => {

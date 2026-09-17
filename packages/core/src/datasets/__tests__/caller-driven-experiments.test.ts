@@ -45,7 +45,13 @@ const createMockScorer = (scorerId: string, score = 1): MastraScorer<any, any, a
   }) as unknown as MastraScorer<any, any, any, any>;
 
 async function setup(
-  inputs: { input: unknown; groundTruth?: unknown; expectedTrajectory?: unknown; scorerIds?: string[] }[],
+  inputs: {
+    input: unknown;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
+    expectedTrajectory?: unknown;
+    scorerIds?: string[];
+  }[],
   opts?: { agent?: Agent; scorers?: MastraScorer<any, any, any, any>[]; datasetScorerIds?: string[] },
 ) {
   const db = new InMemoryDB();
@@ -94,6 +100,7 @@ async function setup(
       datasetId: record.id,
       input: item.input,
       groundTruth: item.groundTruth,
+      metadata: item.metadata,
       expectedTrajectory: item.expectedTrajectory,
       scorerIds: item.scorerIds,
     });
@@ -170,6 +177,18 @@ describe('submitExperimentResult', () => {
     const { results } = await ds.listExperimentResults({ experimentId });
     expect(results).toHaveLength(1);
     expect(results[0]!.output).toBe('v2');
+  });
+
+  it('snapshots metadata from the pinned dataset item version', async () => {
+    const { ds, itemIds } = await setup([{ input: 'q1', metadata: { source: 'original' } }]);
+    const { experimentId } = await ds.createExperiment({});
+
+    await ds.updateItem({ itemId: itemIds[0]!, metadata: { source: 'updated' } });
+    const result = await ds.submitExperimentResult({ experimentId, itemId: itemIds[0]!, output: 'a1' });
+
+    expect(result.metadata).toEqual({ source: 'original' });
+    const { results } = await ds.listExperimentResults({ experimentId });
+    expect(results[0]?.metadata).toEqual({ source: 'original' });
   });
 
   it('keeps separate rows per attempt for repeated trials', async () => {
@@ -532,15 +551,27 @@ describe('runExperimentItem (mode 2: caller drives loop, Mastra runs items)', ()
     expect(listed.results).toHaveLength(2);
   });
 
-  it('captures agent errors on the row instead of throwing', async () => {
-    const agent = createMockAgent('unused', true);
+  it('persists agent errors with their assigned trace ID instead of throwing', async () => {
+    let assignedTraceId: string | undefined;
+    const agent = {
+      ...createMockAgent('unused'),
+      generate: vi.fn().mockImplementation(async (_input: unknown, options: any) => {
+        assignedTraceId = options.tracingOptions.traceId;
+        throw new Error('Agent error');
+      }),
+    } as unknown as Agent;
     const { ds, itemIds } = await setup(THREE_ITEMS, { agent });
     const { experimentId } = await ds.createExperiment({ targetType: 'agent', targetId: 'test-agent' });
 
     const { result } = await ds.runExperimentItem({ experimentId, itemId: itemIds[0]! });
 
+    expect(assignedTraceId).toMatch(/^[0-9a-f]{32}$/);
     expect(result.error).toMatchObject({ message: expect.stringContaining('Agent error') });
     expect(result.output).toBeNull();
+    expect(result.traceId).toBe(assignedTraceId);
+
+    const listed = await ds.listExperimentResults({ experimentId });
+    expect(listed.results[0]?.traceId).toBe(assignedTraceId);
   });
 
   it('falls back to item scorerIds, then dataset scorerIds, when the experiment has no scorers', async () => {
@@ -627,5 +658,56 @@ describe('runExperimentItem (mode 2: caller drives loop, Mastra runs items)', ()
     expect(finalized.succeededCount).toBe(2);
     expect(finalized.failedCount).toBe(0);
     expect(finalized.skippedCount).toBe(1);
+  });
+});
+
+describe('Dataset.updateExperiment', () => {
+  it('should persist the new name and description', async () => {
+    // Given an experiment created with an initial label
+    const { ds } = await setup(THREE_ITEMS);
+    const { experimentId } = await ds.createExperiment({ name: 'first', description: 'initial' });
+
+    // When it is renamed
+    const updated = await ds.updateExperiment({ experimentId, name: 'renamed', description: 'updated' });
+
+    // Then the new label is returned and persisted
+    expect(updated.name).toBe('renamed');
+    expect(updated.description).toBe('updated');
+    const reloaded = await ds.getExperiment({ experimentId });
+    expect(reloaded?.name).toBe('renamed');
+    expect(reloaded?.description).toBe('updated');
+  });
+
+  it('should leave untouched fields unchanged', async () => {
+    const { ds } = await setup(THREE_ITEMS);
+    const { experimentId } = await ds.createExperiment({ name: 'first', description: 'initial', metadata: { k: 1 } });
+
+    const updated = await ds.updateExperiment({ experimentId, name: 'renamed' });
+
+    expect(updated.name).toBe('renamed');
+    expect(updated.description).toBe('initial');
+    expect(updated.metadata).toEqual({ k: 1 });
+    expect(updated.status).toBe('running');
+    expect(updated.totalItems).toBe(3);
+  });
+
+  it('should throw EXPERIMENT_NOT_FOUND for an experiment owned by another dataset', async () => {
+    const { ds: dsA } = await setup(THREE_ITEMS);
+    const { ds: dsB, mastra } = await setup(THREE_ITEMS);
+    const { experimentId } = await dsB.createExperiment({ name: 'other' });
+    // Share storage so dsA can see dsB's experiment id but not own it
+    const dsAOnSharedStorage = new Dataset(dsA.id, mastra);
+
+    await expect(dsAOnSharedStorage.updateExperiment({ experimentId, name: 'stolen' })).rejects.toMatchObject({
+      id: 'EXPERIMENT_NOT_FOUND',
+    });
+  });
+
+  it('should throw for an unknown experiment id', async () => {
+    const { ds } = await setup(THREE_ITEMS);
+
+    await expect(ds.updateExperiment({ experimentId: 'does-not-exist', name: 'x' })).rejects.toMatchObject({
+      id: 'EXPERIMENT_NOT_FOUND',
+    });
   });
 });

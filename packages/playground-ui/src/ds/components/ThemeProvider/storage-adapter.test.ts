@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createLocalStorageAdapter } from './storage-adapter';
 
@@ -61,17 +61,64 @@ describe('createLocalStorageAdapter', () => {
     expect(window.localStorage.getItem(DEFAULT_KEY)).toBeNull();
   });
 
+  it.each(['dark', 'light', 'system'] as const)('reads back the %s theme', theme => {
+    window.localStorage.setItem(DEFAULT_KEY, theme);
+    expect(createLocalStorageAdapter().get()).toBe(theme);
+  });
+
+  it.each(['dark', 'system'] as const)('migrates the legacy %s theme', theme => {
+    window.localStorage.setItem('mastra-playground-store', JSON.stringify({ state: { theme }, version: 0 }));
+
+    expect(createLocalStorageAdapter().get()).toBe(theme);
+    expect(window.localStorage.getItem(DEFAULT_KEY)).toBe(theme);
+  });
+
+  it('returns null when storage access is denied', () => {
+    // Safari private mode throws on every localStorage read.
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+
+    expect(createLocalStorageAdapter().get()).toBeNull();
+
+    vi.restoreAllMocks();
+  });
+
   it('subscribes to storage events for cross-tab sync', () => {
     const adapter = createLocalStorageAdapter();
     const seen: Array<string | null> = [];
     const unsubscribe = adapter.subscribe(value => seen.push(value));
 
     window.dispatchEvent(new StorageEvent('storage', { key: DEFAULT_KEY, newValue: 'light' }));
+    window.dispatchEvent(new StorageEvent('storage', { key: DEFAULT_KEY, newValue: 'dark' }));
+    window.dispatchEvent(new StorageEvent('storage', { key: DEFAULT_KEY, newValue: 'system' }));
     window.dispatchEvent(new StorageEvent('storage', { key: DEFAULT_KEY, newValue: null }));
     window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated', newValue: 'dark' }));
     window.dispatchEvent(new StorageEvent('storage', { key: DEFAULT_KEY, newValue: 'neon-pink' }));
 
     unsubscribe();
-    expect(seen).toEqual(['light', null]);
+    expect(seen).toEqual(['light', 'dark', 'system', null]);
+  });
+
+  it('stops notifying after unsubscribe', () => {
+    const adapter = createLocalStorageAdapter();
+    const seen: Array<string | null> = [];
+    const unsubscribe = adapter.subscribe(value => seen.push(value));
+
+    unsubscribe();
+    window.dispatchEvent(new StorageEvent('storage', { key: DEFAULT_KEY, newValue: 'dark' }));
+
+    expect(seen).toEqual([]);
+  });
+
+  it('subscribes to nothing when there is no window (SSR)', () => {
+    vi.stubGlobal('window', undefined);
+
+    try {
+      const unsubscribe = createLocalStorageAdapter().subscribe(() => {});
+      expect(() => unsubscribe()).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

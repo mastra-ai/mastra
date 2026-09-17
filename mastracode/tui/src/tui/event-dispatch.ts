@@ -2,11 +2,11 @@
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
-import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, AgentControllerThread, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
-import { getMessageText } from './db-message-parts.js';
+import { acceptBackgroundActivity, getBackgroundActivitiesForTarget } from './background-activity.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -44,10 +44,12 @@ import {
   clearPendingShellOutputs,
   clearToolInputParsers,
 } from './handlers/index.js';
+import { getBackgroundToolTaskId } from './handlers/tool.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
+import { setCurrentThreadTitle } from './thread-title.js';
 
 /**
  * Dispatch a AgentControllerEvent to the appropriate handler.
@@ -58,6 +60,35 @@ function trackInteractivePrompt(
   properties?: Record<string, unknown>,
 ): void {
   ectx.analytics?.trackInteractivePrompt(promptType, properties);
+}
+
+function isMessageForCurrentThread(message: MastraDBMessage, state: TUIState): boolean {
+  if (state.pendingNewThread) return !message.threadId;
+  return !message.threadId || message.threadId === state.session.thread.getId();
+}
+
+function applyMessageUpdate(
+  message: MastraDBMessage,
+  update: Extract<AgentControllerEvent, { type: 'message_update' }>['event'],
+): MastraDBMessage | undefined {
+  if (message.role !== 'assistant' || typeof message.content === 'string') return undefined;
+
+  const parts = [...message.content.parts];
+  if (update.type === 'text-delta') {
+    const textIndex = parts.findLastIndex(part => part.type === 'text');
+    const textPart = parts[textIndex];
+    if (!textPart || textPart.type !== 'text') return undefined;
+    parts[textIndex] = { ...textPart, text: textPart.text + update.delta };
+  } else if (update.type === 'reasoning-delta') {
+    const reasoningPart = parts[update.index];
+    if (!reasoningPart || reasoningPart.type !== 'reasoning') return undefined;
+    const reasoning = reasoningPart.reasoning + update.delta;
+    parts[update.index] = { ...reasoningPart, reasoning, details: [{ type: 'text', text: reasoning }] };
+  } else {
+    parts[update.index] = update.part;
+  }
+
+  return { ...message, content: { ...message.content, parts } };
 }
 
 export async function dispatchEvent(
@@ -108,31 +139,51 @@ export async function dispatchEvent(
       break;
 
     case 'message_start':
-      handleMessageStart(ectx, event.message);
+      if (isMessageForCurrentThread(event.message, state)) {
+        handleMessageStart(ectx, event.message);
+      }
       break;
 
     case 'message_update': {
+      const message = state.streamingMessage;
+      if (!message || message.id !== event.id || !isMessageForCurrentThread(message, state)) break;
+
+      const updated = applyMessageUpdate(message, event.event);
+      if (!updated) break;
+
       // Only open the decode window when an assistant message carries actual
-      // streamed text — tool-result-only updates (e.g. plan approval resume) and
-      // user/system message updates must not count toward tokens/sec.
-      const hasAssistantText = event.message.role === 'assistant' && getMessageText(event.message).trim().length > 0;
-      if (hasAssistantText) {
+      // streamed text. Tool-result-only updates and user/system messages must
+      // not count toward tokens/sec.
+      if (event.event.type === 'text-delta') {
         state.agentRunLastStreamPartAt = Date.now();
         if (state.decodeStartedAt === 0) {
           state.decodeStartedAt = state.agentRunLastStreamPartAt;
         }
+        ectx.updateStatusLine();
       }
-      ectx.updateStatusLine();
-      handleMessageUpdate(ectx, event.message);
+      handleMessageUpdate(ectx, updated);
       break;
     }
 
     case 'message_end':
-      handleMessageEnd(ectx, event.message);
+      if (state.streamingMessage?.id === event.id && isMessageForCurrentThread(state.streamingMessage, state)) {
+        handleMessageEnd(ectx, state.streamingMessage);
+      }
       break;
 
     case 'tool_start':
       state.agentRunLastStreamPartAt = Date.now();
+      if (state.options.backgroundToolsEnabled) {
+        const threadId = state.session.thread.getId();
+        if (threadId) {
+          state.backgroundToolContexts.set(event.toolCallId, {
+            toolName: event.toolName,
+            resourceId: state.session.identity.getResourceId(),
+            threadId,
+            createdAt: Date.now(),
+          });
+        }
+      }
       handleToolStart(ectx, event.toolCallId, event.toolName, event.args);
       break;
 
@@ -177,10 +228,28 @@ export async function dispatchEvent(
       handleToolInputEnd(ectx, event.toolCallId);
       break;
 
-    case 'tool_end':
+    case 'tool_end': {
       state.agentRunLastStreamPartAt = Date.now();
+      if (state.options.backgroundToolsEnabled) {
+        const taskId = getBackgroundToolTaskId(event.result);
+        const context = state.backgroundToolContexts.get(event.toolCallId);
+        if (taskId && context) {
+          acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
+          state.backgroundToolContexts.delete(event.toolCallId);
+          state.globalBackgroundNotice.setActivities(
+            getBackgroundActivitiesForTarget(
+              state.backgroundActivities,
+              state.session.identity.getResourceId(),
+              state.pendingNewThread ? null : state.session.thread.getId(),
+            ),
+          );
+          flushRender(state);
+        }
+        if (!taskId) state.backgroundToolContexts.delete(event.toolCallId);
+      }
       handleToolEnd(ectx, event.toolCallId, event.result, event.isError);
       break;
+    }
 
     case 'info':
       ectx.showInfo(event.message);
@@ -200,6 +269,7 @@ export async function dispatchEvent(
 
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
+      state.latestRequestPromptTokens = undefined;
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
       await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
@@ -222,7 +292,7 @@ export async function dispatchEvent(
       const threads = await state.session.thread.list();
       const currentThread = threads.find((t: AgentControllerThread) => t.id === event.threadId);
       if (currentThread) {
-        state.currentThreadTitle = currentThread.title;
+        setCurrentThreadTitle(state, currentThread.title);
         const metadata = currentThread.metadata as Record<string, unknown> | undefined;
         state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
         state.githubPrPollingActive = false;
@@ -239,8 +309,9 @@ export async function dispatchEvent(
 
     case 'thread_created': {
       ectx.showInfo(`Created thread: ${event.thread.id}`);
+      state.latestRequestPromptTokens = undefined;
       // Update current thread title for status line display
-      state.currentThreadTitle = event.thread.title;
+      setCurrentThreadTitle(state, event.thread.title);
       state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
         event.thread.metadata as Record<string, unknown> | undefined,
       );
@@ -271,7 +342,9 @@ export async function dispatchEvent(
     }
 
     case 'usage_update': {
-      // Token accumulation handled by AgentController display state.
+      // Token accumulation handled by AgentController display state. Keep the
+      // latest step separate for context auditing; cumulative usage is billing data.
+      state.latestRequestPromptTokens = event.usage.promptTokens ?? 0;
       // usage_update fires at step-finish and carries the completion (and any
       // reasoning) tokens generated during this step. Measure tokens/sec over the
       // decode window only — from this step's first content delta
@@ -368,8 +441,15 @@ export async function dispatchEvent(
       break;
     }
 
+    case 'thread_title_updated':
+      if (event.threadId !== state.session.thread.getId()) break;
+      setCurrentThreadTitle(state, event.title);
+      ectx.updateStatusLine();
+      break;
+
     case 'om_thread_title_updated':
-      state.currentThreadTitle = event.newTitle;
+      if (event.threadId !== state.session.thread.getId()) break;
+      setCurrentThreadTitle(state, event.newTitle);
       handleOMThreadTitleUpdated(ectx, event.newTitle, event.oldTitle);
       ectx.updateStatusLine();
       break;

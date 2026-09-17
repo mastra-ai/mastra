@@ -13,6 +13,8 @@ import {
   listScoresResponseSchema as obsListScoresResponseSchema,
   createScoreBodySchema,
   createScoreResponseSchema,
+  deleteScoresArgsSchema,
+  deleteScoresResponseSchema,
   scoreRecordSchema,
   getScoreAggregateArgsSchema,
   getScoreAggregateResponseSchema,
@@ -25,9 +27,12 @@ import {
   // Feedback
   feedbackFilterSchema,
   feedbackOrderBySchema,
-  listFeedbackResponseSchema,
+  feedbackRecordSchema,
+  feedbackReviewStatusSchema,
   createFeedbackBodySchema,
   createFeedbackResponseSchema,
+  deleteFeedbackArgsSchema,
+  deleteFeedbackResponseSchema,
   getFeedbackAggregateArgsSchema,
   getFeedbackAggregateResponseSchema,
   getFeedbackBreakdownArgsSchema,
@@ -62,18 +67,27 @@ import {
 } from '@internal/core/storage';
 import { coreFeatures } from '@mastra/core/features';
 import { generateSignalId } from '@mastra/core/observability';
+import type { ValidationErrorHook } from '@mastra/core/server';
+import * as coreStorage from '@mastra/core/storage';
 import { z } from 'zod/v4';
+import { MASTRA_USER_KEY, MASTRA_CLIENT_TYPE_HEADER, isStudioClientTypeHeader } from '../constants';
 import { HTTPException } from '../http-exception';
+import { listFeedbackResponseSchema } from '../schemas/feedback';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
+import { prepareAuthorEnrichment } from './author-enrichment';
 import { handleError } from './error';
 import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
+  assertObservabilityThreadQuerySupported,
+  assertObservabilityTraceQueryDiscoverySupported,
+  assertObservabilityTraceQuerySupported,
   createObservabilityListQuerySchema,
   getObservabilityStore,
   NEW_ROUTE_DEFS,
   OBSERVABILITY_LIST_ENDPOINTS,
+  supportsTraceQueryDiscoveryCore,
 } from './observability-shared';
 import type { RouteDetails } from './observability-shared';
 
@@ -89,10 +103,15 @@ function createNewRoute<
     queryParamSchema?: TQuerySchema;
     bodySchema?: TBodySchema;
     responseSchema?: TResponseSchema;
+    onValidationError?: ValidationErrorHook;
+    maxBodySize?: number;
+    preserveHttpExceptions?: boolean;
+    isCoreSupported?: () => boolean;
+    onUnsupportedCore?: () => never;
     handler: ServerRouteHandler<InferParams<TPathSchema, TQuerySchema, TBodySchema>>;
   },
 ) {
-  const { handler, ...schemas } = config;
+  const { handler, preserveHttpExceptions, isCoreSupported, onUnsupportedCore, ...schemas } = config;
   return createRoute({
     ...def,
     ...schemas,
@@ -101,7 +120,8 @@ function createNewRoute<
     requiresAuth: true,
     handler: (async (params: InferParams<TPathSchema, TQuerySchema, TBodySchema> & ServerContext) => {
       try {
-        if (!coreFeatures.has('observability:v1.13.2')) {
+        if (!coreFeatures.has('observability:v1.13.2') || (isCoreSupported && !isCoreSupported())) {
+          if (onUnsupportedCore) onUnsupportedCore();
           throw new HTTPException(501, {
             message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
           });
@@ -109,6 +129,7 @@ function createNewRoute<
 
         return await handler(params);
       } catch (error) {
+        if (preserveHttpExceptions && error instanceof HTTPException) throw error;
         return handleError(error, `Error calling: '${def.summary.toLocaleLowerCase()}'`);
       }
     }) as ServerRouteHandler<
@@ -117,6 +138,367 @@ function createNewRoute<
       'json'
     >,
   });
+}
+
+// ============================================================================
+// Trace query route
+// ============================================================================
+
+const traceQueryMalformedBodyErrorSchema = z
+  .object({
+    error: z.literal('Invalid request body'),
+    issues: z.array(z.object({ field: z.literal('body'), message: z.string() }).strict()),
+  })
+  .strict();
+
+const traceQueryBodyTooLargeErrorSchema = z
+  .object({
+    error: z.literal('Request body too large'),
+  })
+  .strict();
+
+const traceQueryMalformedCursorErrorSchema = z
+  .object({
+    code: z.literal('TRACE_QUERY_CURSOR_MALFORMED'),
+    message: z.string(),
+  })
+  .strict();
+
+const traceQueryCursorConflictErrorSchema = z
+  .object({
+    code: z.literal('TRACE_QUERY_CURSOR_CONFLICT'),
+    message: z.string(),
+  })
+  .strict();
+
+const traceQueryValidationIssueSchema = z
+  .object({
+    code: z.string(),
+    path: z.array(z.union([z.string(), z.number()])),
+    message: z.string(),
+  })
+  .strict();
+
+const traceQueryValidationResponseSchema = z
+  .object({
+    code: z.literal('TRACE_QUERY_INVALID'),
+    message: z.string(),
+    issues: z.array(traceQueryValidationIssueSchema),
+  })
+  .strict();
+
+const traceQueryUnsupportedErrorSchema = z
+  .object({
+    code: z.literal('TRACE_QUERY_UNSUPPORTED'),
+    message: z.string(),
+  })
+  .strict();
+
+const traceQueryTimeoutErrorSchema = z
+  .object({
+    code: z.literal('TRACE_QUERY_EXECUTION_TIMEOUT'),
+    message: z.string(),
+  })
+  .strict();
+
+const traceQueryResourceLimitErrorSchema = z
+  .object({
+    code: z.literal('TRACE_QUERY_RESOURCE_LIMIT'),
+    message: z.string(),
+  })
+  .strict();
+
+const traceQueryDiscoveryUnsupportedErrorSchema = z
+  .object({
+    code: z.literal('TRACE_QUERY_DISCOVERY_UNSUPPORTED'),
+    message: z.string(),
+  })
+  .strict();
+
+const traceQueryValidationError: ValidationErrorHook = error => ({
+  status: 422,
+  body: {
+    code: 'TRACE_QUERY_INVALID',
+    message: 'The trace query is invalid',
+    issues: error.issues.map(issue => ({
+      code: 'invalid_request',
+      path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
+      message: issue.message,
+    })),
+  },
+});
+
+function throwTraceQueryError(status: 400 | 409 | 413 | 422 | 501 | 503 | 504, body: Record<string, unknown>): never {
+  const message = typeof body.message === 'string' ? body.message : 'Trace query failed';
+  throw new HTTPException(status, {
+    message,
+    res: new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    }),
+  });
+}
+
+const throwTraceQueryDiscoveryCoreUnsupported = () =>
+  throwTraceQueryError(501, {
+    code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
+    message: 'Trace query discovery requires a newer @mastra/core. Please upgrade.',
+  });
+
+export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
+  bodySchema: coreStorage.traceQueryRequestSchema,
+  responseSchema: coreStorage.traceQueryResponseSchema,
+  onValidationError: traceQueryValidationError,
+  maxBodySize: 256 * 1024,
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, timeRange, where, group, orderBy, page, pagination }) => {
+    let plan;
+    try {
+      plan = coreStorage.planTraceQuery({ timeRange, where, group, orderBy, page, pagination });
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryValidationError) {
+        throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });
+      }
+      if (error instanceof coreStorage.TraceQueryCursorError) {
+        throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {
+          code: error.code,
+          message: error.message,
+        });
+      }
+      throw error;
+    }
+
+    let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
+    try {
+      observabilityStore = await getObservabilityStore(mastra);
+      assertObservabilityTraceQuerySupported(observabilityStore);
+    } catch (error) {
+      if (error instanceof HTTPException && error.status === 501) {
+        throwTraceQueryError(501, { code: 'TRACE_QUERY_UNSUPPORTED', message: error.message });
+      }
+      throw error;
+    }
+
+    try {
+      return await observabilityStore.queryTraces(plan);
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryExecutionError) {
+        throwTraceQueryError(504, { code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  },
+});
+
+if (QUERY_TRACES.openapi) {
+  QUERY_TRACES.openapi.responses[400] = {
+    description: 'Malformed JSON or malformed cursor',
+    content: {
+      'application/json': {
+        schema: z.union([traceQueryMalformedBodyErrorSchema, traceQueryMalformedCursorErrorSchema]),
+      },
+    },
+  };
+  QUERY_TRACES.openapi.responses[409] = {
+    description: 'Cursor does not match the normalized query',
+    content: { 'application/json': { schema: traceQueryCursorConflictErrorSchema } },
+  };
+  QUERY_TRACES.openapi.responses[413] = {
+    description: 'Request body exceeds 256 KiB',
+    content: { 'application/json': { schema: traceQueryBodyTooLargeErrorSchema } },
+  };
+  QUERY_TRACES.openapi.responses[422] = {
+    description: 'Structurally or semantically invalid trace query',
+    content: { 'application/json': { schema: traceQueryValidationResponseSchema } },
+  };
+  QUERY_TRACES.openapi.responses[501] = {
+    description: 'The configured observability store does not support trace queries',
+    content: { 'application/json': { schema: traceQueryUnsupportedErrorSchema } },
+  };
+  QUERY_TRACES.openapi.responses[504] = {
+    description: 'Trace query exceeded the configured database execution timeout',
+    content: { 'application/json': { schema: traceQueryTimeoutErrorSchema } },
+  };
+}
+
+export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QUERY_FIELDS, {
+  bodySchema: coreStorage.getTraceQueryFieldsArgsSchema,
+  responseSchema: coreStorage.getTraceQueryFieldsResponseSchema,
+  onValidationError: traceQueryValidationError,
+  maxBodySize: 256 * 1024,
+  preserveHttpExceptions: true,
+  isCoreSupported: supportsTraceQueryDiscoveryCore,
+  onUnsupportedCore: throwTraceQueryDiscoveryCoreUnsupported,
+  handler: async ({ mastra, timeRange, predicateScope, search, limit }) => {
+    const args = { timeRange, predicateScope, search, limit };
+    const plan = coreStorage.planTraceQueryObservedFields(args);
+    let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
+    try {
+      observabilityStore = await getObservabilityStore(mastra);
+      assertObservabilityTraceQueryDiscoverySupported(observabilityStore);
+    } catch (error) {
+      if (error instanceof HTTPException && error.status === 501) {
+        throwTraceQueryError(501, { code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED', message: error.message });
+      }
+      throw error;
+    }
+
+    try {
+      const observed = await observabilityStore.getTraceQueryObservedFields(plan);
+      return {
+        canonicalFields: coreStorage.getTraceQueryCanonicalFieldDescriptors(predicateScope, search),
+        ...observed,
+      };
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryResourceLimitError) {
+        throwTraceQueryError(503, { code: error.code, message: error.message });
+      }
+      if (error instanceof coreStorage.TraceQueryExecutionError) {
+        throwTraceQueryError(504, { code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  },
+});
+
+export const GET_TRACE_QUERY_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QUERY_VALUES, {
+  bodySchema: coreStorage.getTraceQueryValuesArgsSchema,
+  responseSchema: coreStorage.getTraceQueryValuesResponseSchema,
+  onValidationError: traceQueryValidationError,
+  maxBodySize: 256 * 1024,
+  preserveHttpExceptions: true,
+  isCoreSupported: supportsTraceQueryDiscoveryCore,
+  onUnsupportedCore: throwTraceQueryDiscoveryCoreUnsupported,
+  handler: async ({ mastra, timeRange, predicateScope, path, search, limit }) => {
+    const plan = coreStorage.planTraceQueryValues({ timeRange, predicateScope, path, search, limit });
+    let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
+    try {
+      observabilityStore = await getObservabilityStore(mastra);
+      assertObservabilityTraceQueryDiscoverySupported(observabilityStore);
+    } catch (error) {
+      if (error instanceof HTTPException && error.status === 501) {
+        throwTraceQueryError(501, { code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED', message: error.message });
+      }
+      throw error;
+    }
+
+    try {
+      return await observabilityStore.getTraceQueryValues(plan);
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryResourceLimitError) {
+        throwTraceQueryError(503, { code: error.code, message: error.message });
+      }
+      if (error instanceof coreStorage.TraceQueryExecutionError) {
+        throwTraceQueryError(504, { code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  },
+});
+
+for (const route of [GET_TRACE_QUERY_FIELDS, GET_TRACE_QUERY_VALUES]) {
+  if (!route.openapi) continue;
+  route.openapi.responses[413] = {
+    description: 'Request body exceeds 256 KiB',
+    content: { 'application/json': { schema: traceQueryBodyTooLargeErrorSchema } },
+  };
+  route.openapi.responses[422] = {
+    description: 'Structurally or semantically invalid trace-query discovery request',
+    content: { 'application/json': { schema: traceQueryValidationResponseSchema } },
+  };
+  route.openapi.responses[501] = {
+    description: 'The installed Core or configured observability store does not support trace-query discovery',
+    content: { 'application/json': { schema: traceQueryDiscoveryUnsupportedErrorSchema } },
+  };
+  route.openapi.responses[503] = {
+    description: 'Trace-query discovery exceeded the configured database resource limit',
+    content: { 'application/json': { schema: traceQueryResourceLimitErrorSchema } },
+  };
+  route.openapi.responses[504] = {
+    description: 'Trace-query discovery exceeded the configured database execution timeout',
+    content: { 'application/json': { schema: traceQueryTimeoutErrorSchema } },
+  };
+}
+
+export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
+  bodySchema: coreStorage.queryThreadsInputSchema,
+  responseSchema: coreStorage.queryThreadsResultSchema,
+  onValidationError: traceQueryValidationError,
+  maxBodySize: 256 * 1024,
+  preserveHttpExceptions: true,
+  onUnsupportedCore: () =>
+    throwTraceQueryError(501, {
+      code: 'TRACE_QUERY_UNSUPPORTED',
+      message: 'Thread queries require a newer @mastra/core with observability thread-query support. Please upgrade.',
+    }),
+  handler: async ({ mastra, traces, where, page }) => {
+    let plan;
+    try {
+      plan = coreStorage.planThreadQuery({ traces, where, page });
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryValidationError) {
+        throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });
+      }
+      if (error instanceof coreStorage.TraceQueryCursorError) {
+        throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {
+          code: error.code,
+          message: error.message,
+        });
+      }
+      throw error;
+    }
+
+    let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
+    try {
+      observabilityStore = await getObservabilityStore(mastra);
+      assertObservabilityThreadQuerySupported(observabilityStore);
+    } catch (error) {
+      if (error instanceof HTTPException && error.status === 501) {
+        throwTraceQueryError(501, { code: 'TRACE_QUERY_UNSUPPORTED', message: error.message });
+      }
+      throw error;
+    }
+
+    try {
+      return await observabilityStore.queryThreads(plan);
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryExecutionError) {
+        throwTraceQueryError(504, { code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  },
+});
+
+if (QUERY_THREADS.openapi) {
+  QUERY_THREADS.openapi.responses[400] = {
+    description: 'Malformed JSON or malformed cursor',
+    content: {
+      'application/json': {
+        schema: z.union([traceQueryMalformedBodyErrorSchema, traceQueryMalformedCursorErrorSchema]),
+      },
+    },
+  };
+  QUERY_THREADS.openapi.responses[409] = {
+    description: 'Cursor does not match the normalized query',
+    content: { 'application/json': { schema: traceQueryCursorConflictErrorSchema } },
+  };
+  QUERY_THREADS.openapi.responses[413] = {
+    description: 'Request body exceeds 256 KiB',
+    content: { 'application/json': { schema: traceQueryBodyTooLargeErrorSchema } },
+  };
+  QUERY_THREADS.openapi.responses[422] = {
+    description: 'Structurally or semantically invalid thread query',
+    content: { 'application/json': { schema: traceQueryValidationResponseSchema } },
+  };
+  QUERY_THREADS.openapi.responses[501] = {
+    description: 'The configured observability store does not support thread queries',
+    content: { 'application/json': { schema: traceQueryUnsupportedErrorSchema } },
+  };
+  QUERY_THREADS.openapi.responses[504] = {
+    description: 'Thread query exceeded the configured database execution timeout',
+    content: { 'application/json': { schema: traceQueryTimeoutErrorSchema } },
+  };
 }
 
 // ============================================================================
@@ -189,6 +571,22 @@ export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
   },
 });
 
+export const DELETE_SCORES = createNewRoute(NEW_ROUTE_DEFS.DELETE_SCORES, {
+  bodySchema: deleteScoresArgsSchema,
+  responseSchema: deleteScoresResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    if (!coreFeatures.has('observability-signal-deletion')) {
+      throw new HTTPException(501, {
+        message: 'Score deletion requires a newer @mastra/core with observability signal deletion support.',
+      });
+    }
+    const args = pickParams(deleteScoresArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    await observabilityStore.deleteScores(args);
+    return { success: true };
+  },
+});
+
 export const GET_SCORE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE, {
   pathParamSchema: z.object({ scoreId: z.string() }),
   responseSchema: z.object({ score: scoreRecordSchema.nullable() }),
@@ -246,37 +644,83 @@ export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PER
 export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
   queryParamSchema: createObservabilityListQuerySchema(feedbackFilterSchema, feedbackOrderBySchema),
   responseSchema: listFeedbackResponseSchema,
-  handler: async ({ mastra, mode, after, limit, ...params }) => {
+  handler: async ({ mastra, requestContext, request, mode, after, limit, ...params }) => {
     const filters = pickParams(feedbackFilterSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
 
     if (mode === 'delta') {
       assertObservabilityDeltaSupported(observabilityStore, OBSERVABILITY_LIST_ENDPOINTS.feedback);
-      return await observabilityStore.listFeedback({
-        mode,
-        filters,
-        after: typeof after === 'string' ? after : undefined,
-        limit,
-      });
     }
-
     const pagination = pickParams(paginationArgsSchema, params);
     const orderBy = pickParams(feedbackOrderBySchema, params);
-    return await observabilityStore.listFeedback(
-      mode === 'page' ? { mode, filters, pagination, orderBy } : { filters, pagination, orderBy },
+    const result = await observabilityStore.listFeedback(
+      mode === 'delta'
+        ? { mode, filters, after: typeof after === 'string' ? after : undefined, limit }
+        : mode === 'page'
+          ? { mode, filters, pagination, orderBy }
+          : { filters, pagination, orderBy },
     );
+    const authors = await prepareAuthorEnrichment(
+      mastra,
+      requestContext,
+      result.feedback.map(record => record.feedbackUserId),
+      isStudioClientTypeHeader(request?.headers.get(MASTRA_CLIENT_TYPE_HEADER) ?? undefined),
+    );
+    return {
+      ...result,
+      feedback: result.feedback.map(record => {
+        const author = record.feedbackUserId ? authors?.get(record.feedbackUserId) : undefined;
+        return author ? { ...record, author } : record;
+      }),
+    };
   },
 });
 
 export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
   bodySchema: createFeedbackBodySchema,
   responseSchema: createFeedbackResponseSchema,
-  handler: async ({ mastra, feedback }) => {
+  handler: async ({ mastra, requestContext, feedback }) => {
+    const user = requestContext.get(MASTRA_USER_KEY);
+    const authenticatedId = user && typeof user === 'object' && 'id' in user ? user.id : undefined;
     const observabilityStore = await getObservabilityStore(mastra);
     await observabilityStore.createFeedback({
-      feedback: { ...feedback, feedbackId: feedback.feedbackId ?? generateSignalId(), timestamp: new Date() },
+      feedback: {
+        ...feedback,
+        ...(typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
+          ? { feedbackUserId: authenticatedId }
+          : {}),
+        feedbackId: feedback.feedbackId ?? generateSignalId(),
+        timestamp: new Date(),
+        reviewStatus: feedback.reviewStatus ?? 'needs-review',
+      },
     });
     return { success: true };
+  },
+});
+
+export const DELETE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.DELETE_FEEDBACK, {
+  bodySchema: deleteFeedbackArgsSchema,
+  responseSchema: deleteFeedbackResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    if (!coreFeatures.has('observability-signal-deletion')) {
+      throw new HTTPException(501, {
+        message: 'Feedback deletion requires a newer @mastra/core with observability signal deletion support.',
+      });
+    }
+    const args = pickParams(deleteFeedbackArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    await observabilityStore.deleteFeedback(args);
+    return { success: true };
+  },
+});
+
+export const UPDATE_FEEDBACK_REVIEW_STATUS = createNewRoute(NEW_ROUTE_DEFS.UPDATE_FEEDBACK_REVIEW_STATUS, {
+  pathParamSchema: z.object({ feedbackId: z.string() }),
+  bodySchema: z.object({ reviewStatus: feedbackReviewStatusSchema }),
+  responseSchema: feedbackRecordSchema,
+  handler: async ({ mastra, feedbackId, reviewStatus }) => {
+    const observabilityStore = await getObservabilityStore(mastra);
+    return await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
   },
 });
 
@@ -476,9 +920,12 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
 });
 
 export const NEW_ROUTES = {
+  QUERY_TRACES,
+  QUERY_THREADS,
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,
+  DELETE_SCORES,
   GET_SCORE,
   GET_SCORE_AGGREGATE,
   GET_SCORE_BREAKDOWN,
@@ -486,6 +933,8 @@ export const NEW_ROUTES = {
   GET_SCORE_PERCENTILES,
   LIST_FEEDBACK,
   CREATE_FEEDBACK,
+  DELETE_FEEDBACK,
+  UPDATE_FEEDBACK_REVIEW_STATUS,
   GET_FEEDBACK_AGGREGATE,
   GET_FEEDBACK_BREAKDOWN,
   GET_FEEDBACK_TIME_SERIES,

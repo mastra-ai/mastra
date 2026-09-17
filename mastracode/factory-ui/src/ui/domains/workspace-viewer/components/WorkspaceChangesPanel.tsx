@@ -56,7 +56,7 @@ function ChangesEmptyState({ available }: { available: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
       <Txt variant="ui-sm" className="text-icon3">
-        {available ? 'No changes' : 'Changes will appear once the workspace is ready.'}
+        {available ? 'No changes' : 'No sandbox running. Changes appear once the session sandbox starts.'}
       </Txt>
     </div>
   );
@@ -207,7 +207,7 @@ function DiffViewer({
   const { name, directory } = splitPath(selectedPath);
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col" aria-label="Workspace change diff">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Workspace change diff">
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
         <Button size="icon-xs" variant="ghost" onClick={onBack} aria-label="Back to changed files">
           <ArrowLeft />
@@ -294,7 +294,7 @@ export function WorkspaceChangesPanel({
 
   if (selectedPath) {
     return (
-      <div className="flex h-full w-full min-w-0" data-testid="workspace-changes-panel">
+      <div className="flex min-h-0 w-full min-w-0 grow" data-testid="workspace-changes-panel">
         <DiffViewer
           selectedPath={selectedPath}
           change={selectedChange}
@@ -312,7 +312,7 @@ export function WorkspaceChangesPanel({
 
   return (
     <aside
-      className="flex h-full min-w-0 flex-1 flex-col"
+      className="flex min-h-0 min-w-0 grow flex-col"
       aria-label="Workspace changes"
       data-testid="workspace-changes-panel"
     >

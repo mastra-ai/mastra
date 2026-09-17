@@ -1,6 +1,6 @@
 ---
 title: "Reference: Agents API | Client SDK"
-description: Learn how to interact with Mastra AI agents, including response generation and streamed interactions, along with agent-tool management using the client-js SDK.
+description: "The Agents API provides methods to interact with Mastra AI agents, including generating responses and streaming interactions."
 packages:
   - "@mastra/ai-sdk"
   - "@mastra/client-js"
@@ -122,6 +122,31 @@ while (true) {
   if (done) break
   console.log(new TextDecoder().decode(value))
 }
+```
+
+#### Cancelling a stream
+
+Cancelling the response body aborts the underlying HTTP request and stops any pending client tool executions and follow-up requests:
+
+```typescript
+const response = await agent.stream('Tell me a story')
+const reader = response.body.getReader()
+
+const { value } = await reader.read()
+await reader.cancel('user navigated away')
+```
+
+You can also pass an `abortSignal` to cancel from outside the stream. The same option is available on `streamUntilIdle()`, `resumeStream()`, `resumeStreamUntilIdle()`, `approveToolCall()`, `declineToolCall()`, `generate()`, and `generateLegacy()`:
+
+```typescript
+const controller = new AbortController()
+
+const response = await agent.stream('Tell me a story', {
+  abortSignal: controller.signal,
+})
+
+// Later
+controller.abort()
 ```
 
 #### AI SDK compatible format

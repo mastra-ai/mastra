@@ -11,7 +11,10 @@ import type { CommandOptions } from '../types';
 // =============================================================================
 
 /** Options for spawning a process. */
-export interface SpawnProcessOptions extends CommandOptions {}
+export interface SpawnProcessOptions extends CommandOptions {
+  /** @internal Original argv before shell quoting; providers may ignore this hint. */
+  originalInvocation?: { command: string; args: string[] };
+}
 
 // =============================================================================
 // Process Info

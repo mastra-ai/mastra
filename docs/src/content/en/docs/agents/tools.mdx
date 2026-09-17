@@ -1,6 +1,6 @@
 ---
 title: "Tools | Agents"
-description: Learn how to create tools and add them to agents to extend capabilities beyond text generation.
+description: "Create schema-validated Mastra tools that let agents call APIs, query databases, run functions, and invoke agents, workflows, or remote MCP servers."
 packages:
   - "@mastra/core"
 ---
@@ -13,7 +13,7 @@ import TabItem from "@theme/TabItem";
 Agents use tools to call APIs or query databases. They can also run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/connections/mcp) to expand an agent's capabilities.
 
 <Inject>
-  **For AI agents:** Run `npx mastra api tool execute weather-tool '{"location":"San Francisco"}'` to test this tool directly instead of writing a temporary script. The command requires a running Mastra server; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api tool execute --schema` before constructing different input. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
+  **For AI agents:** `execute` has exactly one signature: `execute(inputData, context)`. The first parameter is validated against `inputSchema`. The runtime always provides the second parameter with `requestContext`, `tracingContext`, `abortSignal`, and other execution metadata. You may omit it when unused. Other shapes are outdated. Run `npx mastra api tool execute weather-tool '{"location":"San Francisco"}'` to test this tool directly instead of writing a temporary script. The command requires a running Mastra server; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api tool execute --schema` before constructing different input. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
 </Inject>
 
 ## When to use tools
@@ -24,7 +24,7 @@ Use tools when an agent needs additional context or information from remote reso
 
 Import [`createTool`](/reference/tools/create-tool) from `@mastra/core/tools` and define a tool with an `id`, `description`, `inputSchema`, `outputSchema`, and `execute` function.
 
-This example creates a tool that fetches weather data from an API. The `execute` function receives input validated against `inputSchema` as its first argument and an optional execution context as its second. You can destructure the input fields directly in the function signature.
+This example creates a tool that fetches weather data from an API. `execute` has exactly one signature: `execute(inputData, context)`. The first parameter contains input validated against `inputSchema`. The runtime always provides the second parameter as the execution context, though you may omit it from your function signature when unused. You can destructure the input fields directly in the function signature.
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
 import { createTool } from '@mastra/core/tools'
@@ -293,7 +293,7 @@ export const weatherTool = createTool({
 })
 ```
 
-`toModelOutput` also works on client-side tools passed through `clientTools`. The mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result.
+`toModelOutput` also works with client-side tools. For tools passed through `clientTools`, the mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result. For tools defined on the server without an `execute` function (the browser runs the tool and sends the result back on the next request), the server definition's `toModelOutput` is applied to the incoming result, so the model receives the transformed content instead of the raw tool result.
 
 ## Transform tool payloads for UI and transcripts
 
@@ -472,7 +472,7 @@ See the [`Agent.generate()` reference](/reference/agents/generate) for all runti
 
 The `toolName` in stream responses is determined by the **object key** you use, not the `id` property of the tool, agent, or workflow.
 
-```typescript prettier:false
+```typescript oxfmt:false
 export const weatherTool = createTool({
   id: 'weather-tool',
 })

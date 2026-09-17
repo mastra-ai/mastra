@@ -1,0 +1,27 @@
+{
+  "attachment": [
+    "minimax/minimax-m3",
+    "moonshotai/kimi-k3",
+    "ornith-ai/ornith-1.5-35b-a3b",
+    "qwen/qwen3.8-2.4t-a95b",
+    "qwen/qwen3.8-27b",
+    "z-ai/glm-5.3-flash"
+  ],
+  "temperature": [
+    "deepseek/deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4-pro-0813",
+    "minimax/minimax-m3",
+    "ornith-ai/ornith-1.5-35b-a3b",
+    "qwen/qwen3.8-2.4t-a95b",
+    "qwen/qwen3.8-27b",
+    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash"
+  ],
+  "structuredOutput": [
+    "deepseek/deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4-pro-0813",
+    "ornith-ai/ornith-1.5-35b-a3b",
+    "qwen/qwen3.8-2.4t-a95b",
+    "qwen/qwen3.8-27b"
+  ]
+}

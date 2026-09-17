@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraCompositeStore, ObservabilityStorage, ScoresStorage } from '@mastra/core/storage';
+import * as coreStorage from '@mastra/core/storage';
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
@@ -15,6 +16,22 @@ import {
 export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
 export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
+const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
+const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
+const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
+
+export function supportsTraceQueryDiscoveryCore() {
+  return (
+    coreStorage.getTraceQueryFieldsArgsSchema !== undefined &&
+    coreStorage.getTraceQueryFieldsResponseSchema !== undefined &&
+    coreStorage.getTraceQueryValuesArgsSchema !== undefined &&
+    coreStorage.getTraceQueryValuesResponseSchema !== undefined &&
+    typeof coreStorage.planTraceQueryObservedFields === 'function' &&
+    typeof coreStorage.planTraceQueryValues === 'function' &&
+    typeof coreStorage.getTraceQueryCanonicalFieldDescriptors === 'function' &&
+    typeof coreStorage.TraceQueryResourceLimitError === 'function'
+  );
+}
 
 export const OBSERVABILITY_LIST_ENDPOINTS = {
   traces: 'traces',
@@ -68,6 +85,30 @@ export async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
   return scores;
 }
 
+export function assertObservabilityTraceQuerySupported(observabilityStore: ObservabilityStorage) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Advanced trace queries are not supported by the configured observability store',
+  });
+}
+
+export function assertObservabilityTraceQueryDiscoverySupported(observabilityStore: ObservabilityStorage) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Trace query discovery is not supported by the configured observability store',
+  });
+}
+
+export function assertObservabilityThreadQuerySupported(observabilityStore: ObservabilityStorage) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Advanced thread queries are not supported by the configured observability store',
+  });
+}
+
 export function assertObservabilityDeltaSupported(
   observabilityStore: ObservabilityStorage,
   endpoint: ObservabilityListEndpoint,
@@ -96,6 +137,38 @@ export interface RouteDetails {
 }
 
 export const NEW_ROUTE_DEFS = {
+  QUERY_TRACES: {
+    method: 'POST',
+    path: '/observability/traces/query',
+    summary: 'Query traces',
+    description: 'Returns completed logical traces or distinct thread groups matching an advanced trace query',
+    requiresPermission: 'observability:read',
+  },
+
+  QUERY_THREADS: {
+    method: 'POST',
+    path: '/observability/threads/query',
+    summary: 'Query threads',
+    description: 'Returns thread identities matching eligible trace and cross-trace predicates',
+    requiresPermission: 'observability:read',
+  },
+
+  GET_TRACE_QUERY_FIELDS: {
+    method: 'POST',
+    path: '/observability/traces/query/fields',
+    summary: 'Discover trace query fields',
+    description: 'Returns canonical query fields and observed top-level string metadata fields',
+    requiresPermission: 'observability:read',
+  },
+
+  GET_TRACE_QUERY_VALUES: {
+    method: 'POST',
+    path: '/observability/traces/query/values',
+    summary: 'Discover trace query values',
+    description: 'Returns bounded string value suggestions and occurrence counts for one eligible query field',
+    requiresPermission: 'observability:read',
+  },
+
   LIST_METRICS: {
     method: 'GET',
     path: '/observability/metrics',
@@ -122,6 +195,14 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/scores',
     summary: 'Create a score',
     description: 'Creates a single score record in the observability store',
+  },
+
+  DELETE_SCORES: {
+    method: 'DELETE',
+    path: '/observability/scores',
+    summary: 'Delete scores',
+    description: 'Deletes score records by scoreId, optionally scoped to a tenant',
+    requiresPermission: 'observability:delete',
   },
 
   GET_SCORE: {
@@ -175,6 +256,22 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/feedback',
     summary: 'Create feedback',
     description: 'Creates a single feedback record in the observability store',
+  },
+
+  DELETE_FEEDBACK: {
+    method: 'DELETE',
+    path: '/observability/feedback',
+    summary: 'Delete feedback',
+    description: 'Deletes feedback records by feedbackId, optionally scoped to a tenant',
+    requiresPermission: 'observability:delete',
+  },
+
+  UPDATE_FEEDBACK_REVIEW_STATUS: {
+    method: 'PATCH',
+    path: '/observability/feedback/:feedbackId/review-status',
+    summary: 'Update feedback review status',
+    description: "Updates a feedback record's review workflow status",
+    requiresPermission: 'observability:write',
   },
 
   GET_FEEDBACK_AGGREGATE: {

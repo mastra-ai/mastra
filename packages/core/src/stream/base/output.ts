@@ -7,6 +7,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
 // Inlined to avoid importing structured-output.ts which pulls in the agent
@@ -16,6 +17,7 @@ import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
+import { isSignalChunkExcluded } from '../signal-exclusions';
 import type {
   ChunkType,
   LanguageModelUsage,
@@ -30,6 +32,7 @@ import type {
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
+import { packStepMessageMirrors, unpackStepMessageMirrors } from './step-message-mirrors';
 import { dedupeStepRequests, rehydrateStepRequests } from './step-request-dedupe';
 
 /**
@@ -355,6 +358,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     initialState?: any;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
+    if (options.logger) {
+      this.__setLogger(options.logger);
+    }
     this.#options = options;
     this.#transportRef = options.transportRef;
     this.#returnScorerData = !!options.returnScorerData;
@@ -400,6 +406,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         ProcessorState<OUTPUT>
       >;
 
+      // `options` never changes for the lifetime of this stream, so the
+      // resolved context is the same for every chunk. Deriving it eagerly
+      // per chunk clones the span metadata for logger + metrics contexts
+      // on every part, even when no stream processor consumes it.
+      let observabilityContext: ObservabilityContext | undefined;
+      const getObservabilityContext = () => (observabilityContext ??= resolveObservabilityContext(options));
+
       processedStream = stream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           async transform(chunk, controller) {
@@ -439,6 +452,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     tracingContext: options.tracingContext,
                     processorIndex,
                     createSpan: true,
+                    processor: structuredOutputProcessor,
                   });
                   structuredOutputProcessorState.customState = { controller };
                   processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
@@ -471,7 +485,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               } = await processorRunner.processPart(
                 chunk,
                 processorStates,
-                resolveObservabilityContext(options),
+                getObservabilityContext(),
                 options.requestContext,
                 self.messageList,
                 0,
@@ -504,7 +518,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // processing.
               const reprocessed = await processorRunner.drainReprocessParts(
                 processorStates,
-                resolveObservabilityContext(options),
+                getObservabilityContext(),
                 options.requestContext,
                 self.messageList,
                 0,
@@ -520,6 +534,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }
               }
             }
+          },
+          flush() {
+            processorRunner.endStreamProcessorSpans(processorStates);
+          },
+          cancel() {
+            processorRunner.endStreamProcessorSpans(processorStates);
           },
         }),
       );
@@ -941,7 +961,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               if (self.#status !== 'failed' && self.#status !== 'canceled') {
                 self.#status = 'success';
               }
-              if (chunk.payload.stepResult.reason) {
+              // A caller `abortSignal` cancellation bails through the same path processor
+              // tripwires use, so the bail's `finish` chunk carries `reason: 'tripwire'`. The
+              // preceding `abort` chunk already set the status to 'canceled'; preserve the
+              // 'aborted' finish reason instead of overwriting it with the synthetic tripwire.
+              if (self.#status === 'canceled') {
+                self.#finishReason = 'aborted';
+              } else if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
 
@@ -964,12 +990,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 const outputSteps = chunk.payload.output?.steps;
                 const lastStep = outputSteps?.[outputSteps?.length - 1];
                 const stepTripwire = lastStep?.tripwire;
-                self.#tripwire = {
-                  reason: stepTripwire?.reason || 'Processor tripwire triggered',
-                  retry: stepTripwire?.retry,
-                  metadata: stepTripwire?.metadata,
-                  processorId: stepTripwire?.processorId,
-                };
+                // Don't synthesize a tripwire for a caller cancellation: aborts bail through this
+                // same 'tripwire' reason but carry no real step tripwire. Only surface a tripwire
+                // when an actual processor produced one (or when the run wasn't aborted).
+                if (self.#status !== 'canceled' || stepTripwire) {
+                  self.#tripwire = {
+                    reason: stepTripwire?.reason || 'Processor tripwire triggered',
+                    retry: stepTripwire?.retry,
+                    metadata: stepTripwire?.metadata,
+                    processorId: stepTripwire?.processorId,
+                  };
+                }
               }
 
               // Add structured output to the latest assistant message metadata
@@ -1045,20 +1076,28 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     steps: [...self.#bufferedSteps] as LLMStepResult[],
                   };
 
-                  // Output processors must still run on failed streams so user-configured
-                  // processors (and onFinish consumers) observe error terminals. Only
-                  // canceled (aborted) streams skip the pass. Orphan-input protection for
-                  // failed turns lives in MessageHistory.processOutputResult.
-                  if (self.#status !== 'canceled') {
-                    self.messageList = await self.processorRunner.runOutputProcessors(
-                      self.messageList,
-                      resolveObservabilityContext(options),
-                      self.#options.requestContext,
-                      0,
-                      outputResultWriter,
-                      outputResult,
+                  // Canceled output bypasses the normal LLM-step response assembly. Add its
+                  // nonblank in-flight text to MessageList so every output processor receives
+                  // the same terminal transcript shape; persistence remains processor-owned.
+                  if (self.#status === 'canceled' && self.#bufferedByStep.text.trim().length > 0) {
+                    self.messageList.add(
+                      {
+                        role: 'assistant',
+                        content: [{ type: 'text', text: self.#bufferedByStep.text }],
+                      },
+                      'response',
+                      { merge: false },
                     );
                   }
+
+                  self.messageList = await self.processorRunner.runOutputProcessors(
+                    self.messageList,
+                    resolveObservabilityContext(options),
+                    self.#options.requestContext,
+                    0,
+                    outputResultWriter,
+                    outputResult,
+                  );
 
                   // Get text from the latest response message (the last assistant message)
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
@@ -1067,7 +1106,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // This preserves text from retry scenarios where step.text is already correct.
                   // Compare against undefined, not truthiness, so a processor clearing the text
                   // to '' still overwrites the step text instead of leaking the original.
-                  if (lastStep && outputText !== undefined && outputText !== originalText) {
+                  if (
+                    self.#status !== 'canceled' &&
+                    lastStep &&
+                    outputText !== undefined &&
+                    outputText !== originalText
+                  ) {
                     lastStep.text = outputText;
                   }
 
@@ -1440,6 +1484,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * Stream of all chunks. Provides complete control over stream processing.
    */
   get fullStream() {
+    const stream = this.__getUnfilteredFullStream();
+    const hideSignals = this.#options.hideSignals;
+    if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.length === 0)) return stream;
+    return stream.pipeThrough(
+      new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
+        transform(chunk, controller) {
+          if (!isSignalChunkExcluded(chunk, hideSignals)) controller.enqueue(chunk);
+        },
+      }),
+    );
+  }
+
+  /** @internal Shared fanout must retain signal chunks, with the existing transforms applied. */
+  __getUnfilteredFullStream() {
     const configuredTransforms = this.#options.experimentalTransform;
     if (!configuredTransforms) {
       return this.#createEventedStream();
@@ -2055,7 +2113,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   serializeState() {
-    const { steps, requests } = dedupeStepRequests(this.#bufferedSteps);
+    const { steps, requests } = dedupeStepRequests(packStepMessageMirrors(this.#bufferedSteps));
     return {
       status: this.#status,
       bufferedSteps: steps,
@@ -2085,7 +2143,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   deserializeState(state: any) {
     this.#status = state.status;
-    this.#bufferedSteps = rehydrateStepRequests(state.bufferedSteps, state.bufferedStepRequests);
     this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
     this.#bufferedByStepReasoningDetails = state.bufferedByStepReasoningDetails ?? {};
     this.#bufferedByStep = state.bufferedByStep;
@@ -2106,5 +2163,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#tripwire = state.tripwire;
     this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);
+    // Buffered steps hold only the IDs of the response messages they had seen;
+    // rebuilding their lazy mirrors needs the restored message list, so this has
+    // to come last.
+    this.#bufferedSteps = unpackStepMessageMirrors(
+      rehydrateStepRequests(state.bufferedSteps, state.bufferedStepRequests),
+      this.messageList,
+    );
   }
 }

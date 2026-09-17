@@ -106,6 +106,9 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
           params.workflowStatus === 'suspended'
         );
       },
+      // Excluding `running` means resume claims cannot persist; the agent loop
+      // serializes its own resumes, so suppress the per-resume warning.
+      allowUnclaimedResumes: true,
       // Agent-loop snapshots are pure resume artifacts — strip everything a
       // resume never reads (stale suspend payloads, duplicated message
       // arrays, AI SDK step history) before persisting.
@@ -129,10 +132,10 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         // called this step. A pure-safe batch parallelizes even while an
         // approval/suspend tool stays registered; a batch that calls one still
         // serializes; run-wide requireToolApproval still forces sequential.
-        const stepActiveTools = _internal?.stepActiveTools as string[] | undefined;
+        const stepActiveTools = _internal?.stepActiveTools;
         toolCallForeachOptions.concurrency = resolveToolCallConcurrency({
           requireToolApproval: rest.requireToolApproval,
-          tools: ((_internal?.stepTools as Tools | undefined) ?? rest.tools) as Tools | undefined,
+          tools: (_internal?.stepTools as Tools | undefined) ?? rest.tools,
           activeTools: stepActiveTools,
           configuredConcurrency: configuredToolCallConcurrency,
           strategy: toolCallConcurrencyStrategy,

@@ -2,6 +2,7 @@ export interface PlatformClientOptions {
   accessToken?: string;
   projectId?: string;
   actingUserId?: string;
+  sandboxProvider?: SandboxProvider;
   /**
    * Advisory correlation id for the factory session driving this client.
    * Sent as `x-mastra-session-id` on every proxy request so proxy-side logs
@@ -25,6 +26,24 @@ export interface PlatformRequestOptions extends RequestInit {
 export type SandboxProvider = 'railway' | 'e2b';
 
 const DEFAULT_PROXY_URL = 'https://workspaces.mastra.ai';
+const REGIONAL_PROXY_URLS: Record<'us' | 'eu', string> = {
+  us: 'https://workspaces.us.mastra.ai',
+  eu: 'https://workspaces.eu.mastra.ai',
+};
+
+/**
+ * Resolves the workspace proxy URL, preferring an explicit
+ * `MASTRA_WORKSPACE_PROXY_URL` override, then a regional replica selected by
+ * `MASTRA_PLATFORM_REGION` (case-insensitive `us` or `eu`), then the global
+ * default. Unknown region values fall through to the global default.
+ */
+function resolveProxyUrl(): string {
+  const override = process.env.MASTRA_WORKSPACE_PROXY_URL?.trim();
+  if (override) return override;
+  const region = process.env.MASTRA_PLATFORM_REGION?.trim().toLowerCase();
+  if (region === 'us' || region === 'eu') return REGIONAL_PROXY_URLS[region];
+  return DEFAULT_PROXY_URL;
+}
 
 /**
  * Default per-request timeout for calls to the workspace proxy. Applied only
@@ -39,7 +58,7 @@ export function requireOption(value: string | undefined, name: string): string {
 }
 
 function resolveSandboxProvider(value: string | undefined): SandboxProvider {
-  const provider = value?.trim() || 'railway';
+  const provider = value?.trim() || 'e2b';
   if (provider !== 'railway' && provider !== 'e2b') {
     throw new Error('SANDBOX_PROVIDER must be either "railway" or "e2b"');
   }
@@ -47,15 +66,19 @@ function resolveSandboxProvider(value: string | undefined): SandboxProvider {
 }
 
 export function resolvePlatformOptions(options: PlatformClientOptions) {
-  const configuredSandboxProvider = process.env.SANDBOX_PROVIDER?.trim();
+  const environmentSandboxProvider = process.env.SANDBOX_PROVIDER?.trim();
+  const configuredSandboxProvider = options.sandboxProvider ?? environmentSandboxProvider;
 
   return {
-    accessToken: requireOption(options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN, 'accessToken'),
+    accessToken: requireOption(
+      options.accessToken ??
+        (process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim()),
+      'accessToken',
+    ),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
     actingUserId: options.actingUserId?.trim() || undefined,
-    proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
+    proxyUrl: resolveProxyUrl().replace(/\/$/, ''),
     sandboxProvider: resolveSandboxProvider(configuredSandboxProvider),
-    useLegacyRoutes: !configuredSandboxProvider,
     sessionId: options.sessionId,
     threadId: options.threadId,
     fetch: options.fetch ?? fetch,
@@ -116,7 +139,6 @@ export class PlatformClient {
   readonly actingUserId: string | undefined;
   readonly proxyUrl: string;
   readonly sandboxProvider: SandboxProvider;
-  private readonly useLegacyRoutes: boolean;
   /** Advisory session correlation id — see {@link PlatformClientOptions.sessionId}. */
   readonly sessionId: string | undefined;
   /** Advisory thread correlation id — see {@link PlatformClientOptions.threadId}. */
@@ -130,14 +152,20 @@ export class PlatformClient {
     this.actingUserId = resolved.actingUserId;
     this.proxyUrl = resolved.proxyUrl;
     this.sandboxProvider = resolved.sandboxProvider;
-    this.useLegacyRoutes = resolved.useLegacyRoutes;
     this.sessionId = resolved.sessionId;
     this.threadId = resolved.threadId;
     this.fetch = resolved.fetch;
   }
 
   async request(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
-    const providerPath = this.useLegacyRoutes ? '' : `/${this.sandboxProvider}`;
+    return this.requestAtPath(`/${this.sandboxProvider}`, path, options);
+  }
+
+  async requestProvider(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
+    return this.requestAtPath(`/${this.sandboxProvider}`, path, options);
+  }
+
+  private async requestAtPath(providerPath: string, path: string, options: PlatformRequestOptions): Promise<Response> {
     const url = new URL(`${this.proxyUrl}/v1${providerPath}/projects/${encodeURIComponent(this.projectId)}${path}`);
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));

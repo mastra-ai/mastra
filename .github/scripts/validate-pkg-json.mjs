@@ -6,6 +6,7 @@ const IGNORE_LIST = [
   '@mastra/memory-integration-tests',
   '@mastra/longmemeval',
   '@mastra/mcp-configuration',
+  '@mastra/server-adapters-test-suite',
   'mastra-docs',
 ];
 
@@ -87,7 +88,7 @@ async function main() {
 
     // Check files array
     const filesArr = pkg.files || [];
-    const missing = ['dist', 'CHANGELOG.md'].filter(f => !filesArr.includes(f));
+    const missing = ['dist'].filter(f => !filesArr.includes(f));
     if (missing.length > 0) {
       console.log(`❌ ${file}: missing ${missing.join(', ')}`);
       hasError = true;

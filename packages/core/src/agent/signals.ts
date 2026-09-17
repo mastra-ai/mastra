@@ -144,6 +144,21 @@ export function isMastraSignalMessage(message: MastraDBMessage): message is Mast
 }
 
 /**
+ * True for a message the human wrote. A live agent-controller session persists
+ * chat messages (and steers) as `user` signals rather than `user` rows, so a
+ * plain `role === 'user'` check misses every message such a session received.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export function isUserAuthoredMessage(message: MastraDBMessage): boolean {
+  if (message.role === 'user') return true;
+  if (message.role !== 'signal') return false;
+  const signal = message.content?.metadata?.signal;
+  if (typeof signal !== 'object' || signal === null || !('type' in signal)) return false;
+  return signal.type === 'user' || signal.type === 'user-message';
+}
+
+/**
  * True for a signal DB message created with `transient: true`.
  *
  * @mastra/memory keeps a matching local predicate because its peer range includes core versions

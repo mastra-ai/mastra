@@ -1,47 +1,17 @@
-Unless user explicitly asks do not inspect reference or modify examples
-Prefer most specific AGENTS.md for changed area
-For work in packages read package local packages/<name>/AGENTS.md first
+# Repository guidance
 
-turborepo pnpm workspace
-packages use strict TypeScript
-vitest tests are colocated with source
-When adding a model name or ID to changesets or comments, use a literal value from docs/src/plugins/remark-model-tokens/models.ts (do not use placeholder tokens, remark does not replace them in changesets/comments)
+Unless asked, don't inspect reference or modify examples.
+Use the most-specific `AGENTS.md`; for package work, read `packages/<name>/AGENTS.md` first.
 
-Prefer narrowest package build/test/lint/typecheck; start with unit/integration before E2E
-Use specific root scripts like pnpm build:core, pnpm --filter ./packages/name script, or pnpm turbo build --filter ./packages/<name>; these build that package's dependency graph
-Avoid pnpm setup/build/build:packages unless package-local options are insufficient whole monorepo builds are slow and usually unneeded
-Fresh clone: pnpm install, then build relevant packages
-Unresolvable internal/workspace imports means deps aren't built
-some integration tests need pnpm i --ignore-workspace
+Turborepo pnpm workspace; packages use strict TypeScript; Vitest tests are colocated.
+For schema-backed execution, put deterministic input/output constraints (shape, types, ranges, formats, cross-field invariants) in schemas, not `execute`. Keep runtime/external checks (authorization, existence, conflicts, API responses) in `execute`.
+Use literal model names/IDs from `docs/src/plugins/remark-model-tokens/models.ts` in changesets/comments; placeholders are not replaced.
 
-features and new packages need related docs updates
-Follow docs/AGENTS.md and docs/styleguides when editing docs
+Use the narrowest package build/test/lint/typecheck; run unit/integration before E2E. Prefer targeted `pnpm --filter` or `pnpm turbo build --filter` commands; avoid root setup/build scripts unless needed. Fresh clone: `pnpm install`, then build relevant dependencies. Unresolved workspace imports usually mean dependencies need building; some integration tests need `pnpm i --ignore-workspace`.
 
-After code changes follow @.mastracode/commands/changeset.md
+Features/new packages need docs. For docs, follow `docs/AGENTS.md` and styleguides. After code changes, read `@.mastracode/commands/changeset.md`.
 
-Architecture
-modular agent framework with central orchestration and pluggable components
-packages/core/src
-mastra/ central config hub dependency injection
-agent/ abstraction with tools memory voice
-tools/ agent tools
-memory/ semantic recall working memory observational memory history persistence
-workflows/ step based execution suspend resume
-storage/ pluggable db backends with shared interfaces
+Architecture: `packages/core/src`; `mastra/` config/DI; `agent/`, `tools/`, `memory/`, `workflows/`, `storage/` are modular framework components.
 
-Read relevant @.claude/commands/
-changeset
-commit
-gh-new-pr
-gh-pr-comments
-make-moves
-
-Read relevant @.claude/skills/
-playground-msw-tests PRIMARY test approach for packages/playground packages/playground-ui
-e2e-tests-studio SECONDARY test approach for packages/playground-ui packages/playground
-mastra-docs
-react-best-practices
-tailwind-v4
-mastra-frontend build app UI with the design system
-mastra-smoke-test
-smoke-test create Mastra project and smoke test studio
+Read applicable `@.claude/commands/`: `changeset`, `commit`, `gh-new-pr`, `gh-pr-comments`, `make-moves`.
+Read applicable `@.claude/skills/`: `playground-msw-tests` (primary for playground/UI), `e2e-tests-studio` (secondary), `mastra-docs`, `react-best-practices`, `tailwind-v4`, `mastra-frontend`, `mastra-smoke-test`, `smoke-test`.

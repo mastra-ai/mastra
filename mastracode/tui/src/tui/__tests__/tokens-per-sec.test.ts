@@ -81,16 +81,18 @@ async function decodeStep(
   ectx: ReturnType<typeof createEctx>,
   opts: { startMs: number; endMs: number; completionTokens: number; reasoningTokens?: number },
 ): Promise<void> {
+  state.streamingMessage = {
+    id: 'msg-streaming',
+    role: 'assistant',
+    createdAt: new Date(),
+    content: { format: 2, parts: [{ type: 'text', text: '' }] },
+  };
   vi.setSystemTime(opts.startMs);
   await dispatchEvent(
     {
       type: 'message_update',
-      message: {
-        id: 'msg-streaming',
-        role: 'assistant',
-        createdAt: new Date(),
-        content: { format: 2, parts: [{ type: 'text', text: 'streaming...' }] },
-      },
+      id: 'msg-streaming',
+      event: { type: 'text-delta', delta: 'streaming...' },
     } as any,
     ectx,
     state,
@@ -144,16 +146,18 @@ describe('tokens/sec decode-window calculation', () => {
     // Even though usage arrives at t=5000, decoding only began at t=4000, so
     // 20 tokens over 1s = 20 tok/s — not 20 / 4s.
     vi.setSystemTime(1000); // request issued; nothing streamed yet
+    state.streamingMessage = {
+      id: 'msg-hello',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: { format: 2, parts: [{ type: 'text', text: '' }] },
+    };
     vi.setSystemTime(4000);
     await dispatchEvent(
       {
         type: 'message_update',
-        message: {
-          id: 'msg-hello',
-          role: 'assistant',
-          createdAt: new Date(),
-          content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
-        },
+        id: 'msg-hello',
+        event: { type: 'text-delta', delta: 'hello' },
       } as any,
       ectx,
       state,
@@ -168,20 +172,43 @@ describe('tokens/sec decode-window calculation', () => {
     expect(state.tokensPerSec).toBe(20);
   });
 
+  it('keeps the latest request prompt tokens separate from cumulative usage', async () => {
+    const state = createMinimalState();
+    const ectx = createEctx();
+
+    await dispatchEvent(
+      { type: 'usage_update', usage: { completionTokens: 10, promptTokens: 50_000, totalTokens: 50_010 } } as any,
+      ectx,
+      state,
+    );
+    await dispatchEvent(
+      { type: 'usage_update', usage: { completionTokens: 20, promptTokens: 90_000, totalTokens: 90_020 } } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.latestRequestPromptTokens).toBe(90_000);
+  });
+
   it('records stream activity on assistant message updates', async () => {
-    const state = createMinimalState({ agentRunStartedAt: 1000, agentRunLastStreamPartAt: 1000 });
+    const state = createMinimalState({
+      agentRunStartedAt: 1000,
+      agentRunLastStreamPartAt: 1000,
+      streamingMessage: {
+        id: 'msg-streaming',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: '' }] },
+      },
+    });
     const ectx = createEctx();
 
     vi.setSystemTime(4000);
     await dispatchEvent(
       {
         type: 'message_update',
-        message: {
-          id: 'msg-streaming',
-          role: 'assistant',
-          createdAt: new Date(),
-          content: { format: 2, parts: [{ type: 'text', text: 'streaming...' }] },
-        },
+        id: 'msg-streaming',
+        event: { type: 'text-delta', delta: 'streaming...' },
       } as any,
       ectx,
       state,
@@ -193,19 +220,24 @@ describe('tokens/sec decode-window calculation', () => {
   });
 
   it('does not open the decode window for non-assistant text updates', async () => {
-    const state = createMinimalState({ agentRunStartedAt: 1000, agentRunLastStreamPartAt: 1000 });
+    const state = createMinimalState({
+      agentRunStartedAt: 1000,
+      agentRunLastStreamPartAt: 1000,
+      streamingMessage: {
+        id: 'msg-user',
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: '' }] },
+      },
+    });
     const ectx = createEctx();
 
     vi.setSystemTime(4000);
     await dispatchEvent(
       {
         type: 'message_update',
-        message: {
-          id: 'msg-user',
-          role: 'user',
-          createdAt: new Date(),
-          content: { format: 2, parts: [{ type: 'text', text: 'user text' }] },
-        },
+        id: 'msg-user',
+        event: { type: 'text-delta', delta: 'user text' },
       } as any,
       ectx,
       state,
@@ -213,7 +245,7 @@ describe('tokens/sec decode-window calculation', () => {
 
     expect(state.agentRunLastStreamPartAt).toBe(1000);
     expect(state.decodeStartedAt).toBe(0);
-    expect(ectx.updateStatusLine).toHaveBeenCalled();
+    expect(ectx.updateStatusLine).not.toHaveBeenCalled();
   });
 
   it('records tool and shell activity without opening the decode window', async () => {
@@ -348,20 +380,23 @@ describe('tokens/sec decode-window calculation', () => {
 
     // message_update with tool-result only (no text content) — this is what
     // fires when the plan tool's result is delivered back to the model.
+    state.streamingMessage = {
+      id: 'msg-plan-resume',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: { format: 2, parts: [] },
+    };
     vi.setSystemTime(10_010);
     await dispatchEvent(
       {
         type: 'message_update',
-        message: {
-          role: 'assistant',
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'tool-invocation',
-                toolInvocation: { toolCallId: 'tc_1', toolName: 'submit_plan', args: {}, state: 'call' },
-              },
-            ],
+        id: 'msg-plan-resume',
+        event: {
+          type: 'part',
+          index: 0,
+          part: {
+            type: 'tool-invocation',
+            toolInvocation: { toolCallId: 'tc_1', toolName: 'submit_plan', args: {}, state: 'call' },
           },
         },
       } as any,

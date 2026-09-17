@@ -1,6 +1,7 @@
 import type { Agent } from '../agent';
-import type { MastraDBMessage } from '../agent/message-list/state/types';
+import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
+import type { BackgroundTaskManagerConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { AgentControllerChannelsConfig } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
@@ -252,6 +253,9 @@ export interface AgentControllerConfig<TState = {}> {
 
   /** Storage backend for persistence (threads, messages, state) */
   storage?: MastraCompositeStore;
+
+  /** Background task configuration for the controller's standalone internal Mastra instance. */
+  backgroundTasks?: BackgroundTaskManagerConfig;
 
   /** Schema defining the shape of controller state (Zod, JSON Schema, Standard Schema, etc.) */
   stateSchema?: PublicSchema<TState, any>;
@@ -770,11 +774,11 @@ export function defaultOMProgressState(): OMProgressState {
 /**
  * Events emitted by the controller that UIs can subscribe to.
  *
- * Streamed `message_start`, `message_update`, and `message_end` events for one
- * assistant turn intentionally share a live `MastraDBMessage`. Its content is
- * updated in place as later deltas arrive. `display_state_changed.currentMessage`
- * refers to that same live message. Consumers that retain an event across an
- * asynchronous or storage boundary must copy or serialize the value there.
+ * A logical message emits one `message_start` containing its initial
+ * `MastraDBMessage`, zero or more compact id-addressed `message_update` deltas,
+ * and one id-only `message_end` after terminal metadata has been applied.
+ * Consumers reconstruct streamed text, reasoning, and non-text message parts
+ * from ordered deltas, then use the id-only end to finalize the matching entry.
  */
 export type AgentControllerEvent =
   | { type: 'mode_changed'; modeId: string; previousModeId: string }
@@ -786,8 +790,15 @@ export type AgentControllerEvent =
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
   | { type: 'message_start'; message: MastraDBMessage }
-  | { type: 'message_update'; message: MastraDBMessage }
-  | { type: 'message_end'; message: MastraDBMessage }
+  | {
+      type: 'message_update';
+      id: string;
+      event:
+        | { type: 'text-delta'; delta: string }
+        | { type: 'reasoning-delta'; index: number; delta: string }
+        | { type: 'part'; index: number; part: MastraMessagePart };
+    }
+  | { type: 'message_end'; id: string }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
   | {
@@ -805,6 +816,14 @@ export type AgentControllerEvent =
       toolCallId: string;
       result: unknown;
       isError: boolean;
+      /**
+       * True when the tool call resolved without ever running because the user
+       * denied its approval gate or the run was aborted while it was parked
+       * waiting for approval. `isError` stays `false` in that case (the tool
+       * did not fail — it simply never executed), so subscribers that gate on
+       * "the tool actually did work" must exclude `denied === true`.
+       */
+      denied?: boolean;
       providerMetadata?: Record<string, unknown>;
     }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
@@ -918,6 +937,7 @@ export type AgentControllerEvent =
       currentModel?: string;
     }
   | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
+  | { type: 'thread_title_updated'; threadId: string; title: string }
   | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {

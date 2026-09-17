@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantRenderRegistry, getAssistantSegmentKey } from '../../assistant-render-registry.js';
@@ -18,14 +19,20 @@ function createMockState() {
     assistantRenderRegistry,
     assistantSegment,
     pendingNewThread: false,
+    currentThreadTitle: 'Current thread',
+    options: { appName: 'Mastra Code' },
     chatContainer: { clear: vi.fn() },
     pendingTools: { clear: vi.fn() },
     pendingTaskToolIds: { clear: vi.fn() },
+    pendingSubagents: new Map([['subagent', {}]]),
+    pendingSignalMessageComponentsById: new Map([['signal', {}]]),
+    followUpComponents: [{}],
     allToolComponents: [{}],
     allSlashCommandComponents: [{}],
     allSystemReminderComponents: [{}],
     messageComponentsById: new Map([['a', {}]]),
     allShellComponents: [{}],
+    globalBackgroundNotice: { setActivities: vi.fn() },
     taskProgress: { updateTasks: vi.fn() },
     taskToolInsertIndex: 5,
     session: {
@@ -41,7 +48,7 @@ function createMockState() {
       },
       setState: vi.fn(async () => {}),
     },
-    ui: { requestRender: vi.fn() },
+    ui: { requestRender: vi.fn(), terminal: { setTitle: vi.fn() } },
   } as any;
 }
 
@@ -88,6 +95,10 @@ describe('handleNewCommand', () => {
 
     expect(state.chatContainer.clear).toHaveBeenCalled();
     expect(state.pendingTools.clear).toHaveBeenCalled();
+    expect(state.pendingTaskToolIds.clear).toHaveBeenCalled();
+    expect(state.pendingSubagents.size).toBe(0);
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.followUpComponents).toEqual([]);
     expect(state.allToolComponents).toEqual([]);
     expect(state.allSlashCommandComponents).toEqual([]);
     expect(state.allSystemReminderComponents).toEqual([]);
@@ -95,6 +106,7 @@ describe('handleNewCommand', () => {
     expect(state.assistantRenderRegistry.size).toBe(0);
     expect(state.assistantSegment.component.disposeRenderState).toHaveBeenCalledOnce();
     expect(state.allShellComponents).toEqual([]);
+    expect(state.globalBackgroundNotice.setActivities).toHaveBeenCalledWith([]);
     expect(state.session.state.set).toHaveBeenCalledWith({
       tasks: [],
       activePlan: null,
@@ -102,6 +114,8 @@ describe('handleNewCommand', () => {
     });
     expect(state.taskProgress.updateTasks).toHaveBeenCalledWith([]);
     expect(state.taskToolInsertIndex).toBe(-1);
+    expect(state.currentThreadTitle).toBeUndefined();
+    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith(`Mastra Code - ${basename(process.cwd())}`);
     expect(ctx.updateStatusLine).toHaveBeenCalled();
     expect(state.ui.requestRender).toHaveBeenCalled();
   });

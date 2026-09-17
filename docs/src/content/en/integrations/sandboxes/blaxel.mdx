@@ -1,6 +1,6 @@
 ---
 title: "Blaxel | Sandbox"
-description: "Documentation for the BlaxelSandbox provider for isolated cloud code execution."
+description: "Run Mastra workspace commands in isolated Blaxel cloud sandboxes with custom images, resource limits, storage mounts, and lifecycle management."
 packages:
   - "@mastra/blaxel"
 ---
@@ -99,6 +99,13 @@ const workspace = new Workspace({
     name: 'env',
     type: 'Record<string, string>',
     description: 'Environment variables to set in the sandbox.',
+    isOptional: true,
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. Use an absolute path.',
     isOptional: true,
   },
   {

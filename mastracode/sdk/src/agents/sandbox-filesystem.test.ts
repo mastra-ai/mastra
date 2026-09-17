@@ -265,4 +265,325 @@ describe('SandboxFilesystem', () => {
     expect(fs.id).toBe(`sandbox-fs:fake-sandbox:${WORKDIR}`);
     expect(fs.getInfo().metadata).toMatchObject({ basePath: WORKDIR, sandboxId: 'fake-sandbox' });
   });
+
+  describe('lazy workdir', () => {
+    it('resolves the workdir once on first use and memoizes it', async () => {
+      let resolves = 0;
+      const sandbox = new FakeSandbox(script =>
+        isContainmentCheck(script) ? realpathResult(`${WORKDIR}/a.txt`) : { exitCode: 0, stdout: '', stderr: '' },
+      );
+      const fs = new SandboxFilesystem({
+        sandbox,
+        workdir: async () => {
+          resolves += 1;
+          return WORKDIR;
+        },
+      });
+      // Unresolved: no sync absolute form, empty basePath, sandbox-only id.
+      expect(fs.basePath).toBe('');
+      expect(fs.resolveAbsolutePath('/a.txt')).toBeUndefined();
+      expect(fs.id).toBe('sandbox-fs:fake-sandbox');
+
+      await fs.exists('/a.txt');
+      await fs.exists('/b.txt');
+
+      expect(resolves).toBe(1);
+      expect(fs.basePath).toBe(WORKDIR);
+      expect(fs.resolveAbsolutePath('/a.txt')).toBe(`${WORKDIR}/a.txt`);
+      expect(sandbox.calls.some(c => c.includes(`test -e '${WORKDIR}/a.txt'`))).toBe(true);
+    });
+
+    it('does not memoize a failed resolution', async () => {
+      let attempt = 0;
+      const sandbox = new FakeSandbox();
+      const fs = new SandboxFilesystem({
+        sandbox,
+        workdir: async () => {
+          attempt += 1;
+          if (attempt === 1) throw new Error('VM not up');
+          return WORKDIR;
+        },
+      });
+      await expect(fs.exists('/a.txt')).rejects.toThrow('VM not up');
+      await expect(fs.exists('/a.txt')).resolves.toBe(true);
+      expect(fs.basePath).toBe(WORKDIR);
+    });
+  });
+});
+
+describe('SandboxFilesystem.walk', () => {
+  it('walks the tree in one find command and classifies entries', async () => {
+    const { fs, sandbox } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.includes('find ')) {
+        return {
+          exitCode: 0,
+          stdout: [
+            `d\t${WORKDIR}/src`,
+            `f\t${WORKDIR}/src/index.ts`,
+            `d\t${WORKDIR}/src/utils`,
+            `f\t${WORKDIR}/src/utils/helpers.ts`,
+            `F\t${WORKDIR}/link.ts\tsrc/index.ts`,
+            `D\t${WORKDIR}/linkdir\t/elsewhere`,
+          ].join('\n'),
+          stderr: '',
+        };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    const entries = await fs.walk('.');
+
+    expect(entries).toEqual([
+      { name: 'src', type: 'directory', path: 'src' },
+      { name: 'index.ts', type: 'file', path: 'src/index.ts' },
+      { name: 'utils', type: 'directory', path: 'src/utils' },
+      { name: 'helpers.ts', type: 'file', path: 'src/utils/helpers.ts' },
+      { name: 'link.ts', type: 'file', isSymlink: true, symlinkTarget: 'src/index.ts', path: 'link.ts' },
+      { name: 'linkdir', type: 'directory', isSymlink: true, symlinkTarget: '/elsewhere', path: 'linkdir' },
+    ]);
+    // Exactly one find invocation regardless of tree depth.
+    expect(sandbox.calls.filter(c => c.includes('find ')).length).toBe(1);
+  });
+
+  it('passes maxDepth and prunes hidden entries by default', async () => {
+    const { fs, sandbox } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await fs.walk('.', { maxDepth: 3 });
+    const findCall = sandbox.calls.find(c => c.includes('find '))!;
+    expect(findCall).toContain('-maxdepth 3');
+    expect(findCall).toContain(`-name '.*' -prune -o`);
+
+    await fs.walk('.', { includeHidden: true });
+    const hiddenCall = sandbox.calls.filter(c => c.includes('find ')).at(-1)!;
+    expect(hiddenCall).not.toContain('-prune');
+  });
+
+  it('throws DirectoryNotFoundError when the root is missing', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      return { exitCode: 20, stdout: '', stderr: '' };
+    });
+    await expect(fs.walk('./missing')).rejects.toMatchObject({ name: 'DirectoryNotFoundError', code: 'ENOENT' });
+  });
+
+  it('throws NotDirectoryError when the root is a file', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      return { exitCode: 23, stdout: '', stderr: '' };
+    });
+    await expect(fs.walk('./file.txt')).rejects.toMatchObject({ name: 'NotDirectoryError', code: 'ENOTDIR' });
+  });
+});
+
+describe('SandboxFilesystem.grep', () => {
+  function rgEvent(type: string, filePath: string, lineNumber: number, text: string, byteStart?: number) {
+    return JSON.stringify({
+      type,
+      data: {
+        path: { text: filePath },
+        line_number: lineNumber,
+        lines: { text: `${text}\n` },
+        ...(type === 'match' ? { submatches: [{ start: byteStart ?? 0, end: (byteStart ?? 0) + 1 }] } : {}),
+      },
+    });
+  }
+
+  it('uses rg --json when ripgrep is available and converts byte offsets to UTF-16 columns', async () => {
+    const { fs, sandbox } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('rg ')) {
+        return {
+          exitCode: 0,
+          stdout: [
+            // "héllo foo" — 'é' is 2 bytes in UTF-8 but 1 UTF-16 unit, so
+            // "foo" starts at byte 7 and string index 6.
+            rgEvent('match', `${WORKDIR}/src/a.ts`, 3, 'héllo foo', 7),
+            rgEvent('match', `${WORKDIR}/b.ts`, 1, 'foo', 0),
+          ].join('\n'),
+          stderr: '',
+        };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    const results = await fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false });
+
+    expect(results).toEqual([
+      { path: 'src/a.ts', matches: [{ line: 3, column: 6, text: 'héllo foo' }] },
+      { path: 'b.ts', matches: [{ line: 1, column: 0, text: 'foo' }] },
+    ]);
+    expect(sandbox.calls.filter(c => c.startsWith('rg ')).length).toBe(1);
+  });
+
+  it('assembles before/after context from rg context events', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('rg ')) {
+        return {
+          exitCode: 0,
+          stdout: [
+            rgEvent('context', `${WORKDIR}/a.ts`, 1, 'line one'),
+            rgEvent('match', `${WORKDIR}/a.ts`, 2, 'foo here', 0),
+            rgEvent('context', `${WORKDIR}/a.ts`, 3, 'line three'),
+          ].join('\n'),
+          stderr: '',
+        };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    const results = await fs.grep({
+      pattern: 'foo',
+      path: '.',
+      caseSensitive: true,
+      includeHidden: false,
+      contextLines: 1,
+    });
+
+    expect(results).toEqual([
+      {
+        path: 'a.ts',
+        matches: [{ line: 2, column: 0, text: 'foo here', before: ['line one'], after: ['line three'] }],
+      },
+    ]);
+  });
+
+  it('returns [] when rg exits 1 (no matches)', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('rg ')) return { exitCode: 1, stdout: '', stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(fs.grep({ pattern: 'nope', path: '.', caseSensitive: true, includeHidden: false })).resolves.toEqual(
+      [],
+    );
+  });
+
+  it('keeps partial matches when rg exits 2 because of a per-file error', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('rg ')) {
+        return {
+          exitCode: 2,
+          stdout: rgEvent('match', `${WORKDIR}/a.ts`, 1, 'foo', 0),
+          stderr: 'rg: secret.txt: Permission denied (os error 13)',
+        };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false })).resolves.toEqual([
+      { path: 'a.ts', matches: [{ line: 1, column: 0, text: 'foo' }] },
+    ]);
+  });
+
+  it('signals UnsupportedGrepPatternError when rg exits 2 with no output (bad pattern)', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('rg ')) return { exitCode: 2, stdout: '', stderr: 'regex parse error' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(
+      fs.grep({ pattern: 'foo(?<=x)', path: '.', caseSensitive: true, includeHidden: false }),
+    ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
+  });
+
+  it('falls back to grep -rnE when rg is missing and recomputes columns', async () => {
+    const { fs, sandbox } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.startsWith('grep ')) {
+        return {
+          exitCode: 0,
+          stdout: [`${WORKDIR}/src/a.ts:2:const foo = 1;`, `${WORKDIR}/src/a.ts:5:let foobar;`].join('\n'),
+          stderr: '',
+        };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    const results = await fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false });
+
+    expect(results).toEqual([
+      {
+        path: 'src/a.ts',
+        matches: [
+          { line: 2, column: 6, text: 'const foo = 1;' },
+          { line: 5, column: 4, text: 'let foobar;' },
+        ],
+      },
+    ]);
+    expect(sandbox.calls.some(c => c.startsWith('grep -rnIE'))).toBe(true);
+  });
+
+  it('signals UnsupportedGrepPatternError for patterns ERE cannot express', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 1, stdout: '', stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    for (const pattern of ['\\bfoo\\b', '\\d+', 'foo(?=bar)', 'a+?', '[[:digit:]]+', '\\<foo\\>', 'foo[']) {
+      await expect(fs.grep({ pattern, path: '.', caseSensitive: true, includeHidden: false })).rejects.toMatchObject({
+        code: 'EUNSUPPORTED_PATTERN',
+      });
+    }
+  });
+
+  it('signals fallback when grep matched a line the JS regex cannot (dialect mismatch)', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.startsWith('grep ')) return { exitCode: 0, stdout: `${WORKDIR}/a.ts:1:zzz`, stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(
+      fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false }),
+    ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
+  });
+
+  it('signals fallback when context is requested without ripgrep', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 1, stdout: '', stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await expect(
+      fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false, contextLines: 2 }),
+    ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
+  });
+
+  it('applies the global match cap across files', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.startsWith('grep ')) {
+        return {
+          exitCode: 0,
+          stdout: [`${WORKDIR}/a.ts:1:foo`, `${WORKDIR}/a.ts:2:foo`, `${WORKDIR}/b.ts:1:foo`].join('\n'),
+          stderr: '',
+        };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    const results = await fs.grep({
+      pattern: 'foo',
+      path: '.',
+      caseSensitive: true,
+      includeHidden: false,
+      maxTotalMatches: 2,
+    });
+
+    expect(results.flatMap(r => r.matches)).toHaveLength(2);
+  });
 });

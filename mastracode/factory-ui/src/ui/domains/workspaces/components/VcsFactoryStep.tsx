@@ -3,6 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { useState } from 'react';
 
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
@@ -31,9 +32,10 @@ export function VcsFactoryStep({
   onSelectRepository,
 }: VcsFactoryStepProps) {
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(query, 750);
   const githubStatus = useGithubStatusQuery();
   const connected = githubStatus.data?.connected === true;
-  const repos = useGithubReposQuery(query || undefined, connected);
+  const repos = useGithubReposQuery(debouncedQuery || undefined, connected);
 
   return (
     <section

@@ -230,6 +230,19 @@ describe('setupKeyboardShortcuts', () => {
     expect(state.session.abort).not.toHaveBeenCalled();
   });
 
+  it('does not register background shortcuts when background tools are disabled', () => {
+    const { state, actions } = createState(false);
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    expect(actions.has('openBackgroundActivityCenter')).toBe(false);
+    expect(actions.has('clearFinishedBackgroundActivities')).toBe(false);
+  });
+
   it('defaults slash-command autocomplete to the first visible built-in command before custom commands', () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     autocompleteProviders.length = 0;
@@ -286,7 +299,11 @@ describe('setupKeyboardShortcuts', () => {
     ]);
     expect(profileCommand?.getArgumentCompletions?.('ca').map(command => command.value)).toEqual(['capture']);
     expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
+    expect(commandNames.indexOf('models')).toBeLessThan(commandNames.indexOf('model'));
     expect(commandNames).toContain('skill/');
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'login')?.description).toBe(
+      'Sign in with a provider account',
+    );
     expect(commandNames).toContain('memory');
     expect(commandNames).toContain('om');
     expect(commandNames).toContain('knowledge');

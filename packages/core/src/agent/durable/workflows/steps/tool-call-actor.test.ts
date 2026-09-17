@@ -3,7 +3,10 @@ import type { MCPToolExecutionContext } from '../../../../tools';
 import { globalRunRegistry } from '../../run-registry';
 import { createDurableToolCallStep } from './tool-call';
 
-vi.mock('../../utils/resolve-runtime', () => ({
+vi.mock('../../utils/resolve-runtime', async () => ({
+  restoreRequestContext: (
+    await vi.importActual<typeof import('../../utils/resolve-runtime')>('../../utils/resolve-runtime')
+  ).restoreRequestContext,
   resolveTool: vi.fn(),
   toolRequiresApproval: vi.fn().mockResolvedValue(false),
   rebuildRunToolsFromMastra: vi.fn().mockResolvedValue(undefined),
@@ -36,6 +39,160 @@ describe('durable tool-call context forwarding', () => {
       });
 
       expect(execute).toHaveBeenCalledWith({ query: 'mastra' }, expect.objectContaining({ actor: resumeActor }));
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
+  it.each([
+    ['false', false],
+    ['zero', 0],
+    ['an empty string', ''],
+  ])(
+    'retires both persisted representations of only the selected delegated suspension for %s',
+    async (_label, resumeData) => {
+      const runId = 'durable-tool-resume-run';
+      const execute = vi.fn().mockResolvedValue('ok');
+      const message = {
+        id: 'assistant-suspended',
+        role: 'assistant',
+        createdAt: new Date(0),
+        content: {
+          format: 2,
+          metadata: {
+            suspendedTools: {
+              'call-a': {
+                toolCallId: 'call-a',
+                toolName: 'workflow-sub',
+                delegatedRunId: 'inner-a',
+              },
+              'call-b': {
+                toolCallId: 'call-b',
+                toolName: 'workflow-sub',
+                delegatedRunId: 'inner-b',
+              },
+            },
+          },
+          parts: [
+            {
+              type: 'data-tool-call-suspended',
+              data: { toolCallId: 'call-a', toolName: 'workflow-sub', runId: 'inner-a' },
+            },
+            {
+              type: 'data-tool-call-suspended',
+              data: { toolCallId: 'call-b', toolName: 'workflow-sub', runId: 'inner-b' },
+            },
+          ],
+        },
+      };
+      const messageList = {
+        add: vi.fn(),
+        get: {
+          response: { db: () => [message] },
+          all: { db: () => [message] },
+        },
+      };
+      globalRunRegistry.set(runId, { tools: { 'workflow-sub': { execute } }, messageList } as any);
+
+      try {
+        await (createDurableToolCallStep() as any).execute({
+          inputData: {
+            toolCallId: 'resume-call',
+            toolName: 'workflow-sub',
+            args: {
+              resumeData,
+              suspendedToolCallId: 'call-b',
+              suspendedToolRunId: 'inner-b',
+            },
+          },
+          mastra: { getLogger: () => undefined },
+          suspend: vi.fn(),
+          getInitData: () => ({ runId, agentId: 'agent-1', options: {}, state: {} }),
+        });
+
+        expect(execute).toHaveBeenCalledWith(
+          expect.objectContaining({ suspendedToolRunId: 'inner-b' }),
+          expect.objectContaining({ resumeData }),
+        );
+        expect(message.content.metadata.suspendedTools).toEqual({
+          'call-a': expect.objectContaining({ delegatedRunId: 'inner-a' }),
+        });
+        expect(message.content.parts).toEqual([
+          expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'call-a' }) }),
+          expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'call-b', resumed: true }) }),
+        ]);
+        expect(messageList.add).toHaveBeenCalledWith([message], 'response');
+      } finally {
+        globalRunRegistry.delete(runId);
+      }
+    },
+  );
+
+  it('treats null model resume data as framework-driven and ignores model identity claims', async () => {
+    const runId = 'durable-null-resume-run';
+    const execute = vi.fn().mockResolvedValue('ok');
+    const message = {
+      id: 'assistant-suspended',
+      role: 'assistant',
+      createdAt: new Date(0),
+      content: {
+        format: 2,
+        metadata: {
+          suspendedTools: {
+            'call-a': { toolCallId: 'call-a', toolName: 'workflow-sub', delegatedRunId: 'inner-a' },
+            'call-b': { toolCallId: 'call-b', toolName: 'workflow-sub', delegatedRunId: 'inner-b' },
+          },
+        },
+        parts: [
+          {
+            type: 'data-tool-call-suspended',
+            data: { toolCallId: 'call-a', toolName: 'workflow-sub', runId: 'inner-a' },
+          },
+          {
+            type: 'data-tool-call-suspended',
+            data: { toolCallId: 'call-b', toolName: 'workflow-sub', runId: 'inner-b' },
+          },
+        ],
+      },
+    };
+    const messageList = {
+      add: vi.fn(),
+      get: {
+        response: { db: () => [message] },
+        all: { db: () => [message] },
+      },
+    };
+    globalRunRegistry.set(runId, { tools: { 'workflow-sub': { execute } }, messageList } as any);
+
+    try {
+      await (createDurableToolCallStep() as any).execute({
+        inputData: {
+          toolCallId: 'call-a',
+          toolName: 'workflow-sub',
+          args: {
+            resumeData: null,
+            suspendedToolCallId: 'call-b',
+            suspendedToolRunId: 'inner-b',
+          },
+        },
+        resumeData: { approved: true },
+        suspendData: { suspendedToolRunId: 'inner-a' },
+        mastra: { getLogger: () => undefined },
+        suspend: vi.fn(),
+        getInitData: () => ({ runId, agentId: 'agent-1', options: {}, state: {} }),
+      });
+
+      expect(execute).toHaveBeenCalledWith(
+        expect.objectContaining({ suspendedToolRunId: 'inner-a' }),
+        expect.objectContaining({ resumeData: { approved: true } }),
+      );
+      expect(message.content.metadata.suspendedTools).toEqual({
+        'call-b': expect.objectContaining({ delegatedRunId: 'inner-b' }),
+      });
+      expect(message.content.parts).toEqual([
+        expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'call-a', resumed: true }) }),
+        expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'call-b' }) }),
+      ]);
     } finally {
       globalRunRegistry.delete(runId);
     }

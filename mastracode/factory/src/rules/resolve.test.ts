@@ -1,109 +1,95 @@
 import { describe, expect, it, vi } from 'vitest';
-import { defaultFactoryRules } from './defaults.js';
-import {
-  resolveFactoryGithubRule,
-  resolveFactoryLinearRule,
-  resolveFactoryStageRules,
-  resolveFactoryToolRule,
-} from './resolve.js';
+import { createBoardRegistry, defineBoard, reviewBoard, workBoard } from '../boards/index.js';
+import { resolveFactoryStageRules } from './resolve.js';
 
 describe('Factory rule resolution', () => {
-  it('resolves a board stage transition in exit-before-enter order', () => {
-    const onExit = vi.fn(() => undefined);
-    const onEnter = vi.fn(() => undefined);
-    const rules = defaultFactoryRules({
-      version: 'resolve-v1',
-      overrides: {
-        work: {
-          planning: { issue: { onExit } },
-          execute: { issue: { onEnter } },
-        },
+  const onExit = vi.fn(() => undefined);
+  const onEnter = vi.fn(() => undefined);
+  const board = defineBoard({
+    id: 'release',
+    title: 'Release',
+    initialPhase: 'queued',
+    phases: {
+      queued: {
+        title: 'Queued',
+        kind: 'resting',
+        next: 'shipped',
+        onExit: { issue: onExit },
+        onEnter: { issue: onEnter },
       },
-    });
+      shipped: { title: 'Shipped', kind: 'terminal', onEnter: { issue: onEnter } },
+    },
+  });
+  const boards = createBoardRegistry({ boards: [board], includeDefaultBoards: false });
+  const input = { board: 'release', source: 'issue' as const, fromStage: 'queued', toStage: 'shipped' };
 
-    expect(
-      resolveFactoryStageRules(rules, {
-        board: 'work',
-        source: 'issue',
-        fromStage: 'planning',
-        toStage: 'execute',
-      }),
-    ).toEqual([
+  it('resolves custom-only installed phases in exit-before-enter order', () => {
+    expect(resolveFactoryStageRules(boards, input)).toEqual([
       { phase: 'exit', handler: onExit },
       { phase: 'enter', handler: onEnter },
     ]);
   });
 
-  it('matches board and source exactly and skips unchanged stages', () => {
-    const reviewEnter = vi.fn(() => undefined);
-    const rules = defaultFactoryRules({
-      version: 'resolve-v2',
-      overrides: { review: { review: { pullRequest: { onEnter: reviewEnter } } } },
-    });
-
+  it('resolves built-in handlers directly from their installed definitions', () => {
+    const defaults = createBoardRegistry();
     expect(
-      resolveFactoryStageRules(rules, {
-        board: 'work',
+      resolveFactoryStageRules(defaults, { ...input, board: 'work', fromStage: 'intake', toStage: 'triage' }),
+    ).toEqual([{ phase: 'enter', handler: workBoard.rules.triage?.issue?.onEnter }]);
+    expect(
+      resolveFactoryStageRules(defaults, {
+        ...input,
+        board: 'review',
         source: 'pullRequest',
         fromStage: 'intake',
         toStage: 'review',
       }),
-    ).toEqual([]);
-    expect(
-      resolveFactoryStageRules(rules, {
-        board: 'review',
-        source: 'issue',
-        fromStage: 'intake',
-        toStage: 'review',
-      }),
-    ).toEqual([]);
-    expect(
-      resolveFactoryStageRules(rules, {
-        board: 'review',
-        source: 'pullRequest',
-        fromStage: 'review',
-        toStage: 'review',
-      }),
-    ).toEqual([]);
+    ).toEqual([{ phase: 'enter', handler: reviewBoard.rules.review?.pullRequest?.onEnter }]);
   });
 
-  it('re-runs only entry rules on same-stage reentry', () => {
-    const onExit = vi.fn(() => undefined);
-    const onEnter = vi.fn(() => undefined);
-    const rules = defaultFactoryRules({
-      version: 'resolve-v4',
-      overrides: { work: { planning: { issue: { onExit, onEnter } } } },
-    });
-
-    expect(
-      resolveFactoryStageRules(rules, {
-        board: 'work',
-        source: 'issue',
-        fromStage: 'planning',
-        toStage: 'planning',
-        reenter: true,
-      }),
-    ).toEqual([{ phase: 'enter', handler: onEnter }]);
+  it.each(['issue', 'pullRequest', 'linearIssue', 'manual'] as const)('matches the %s source exactly', source => {
+    expect(resolveFactoryStageRules(boards, { ...input, source })).toEqual(
+      source === 'issue'
+        ? [
+            { phase: 'exit', handler: onExit },
+            { phase: 'enter', handler: onEnter },
+          ]
+        : [],
+    );
   });
 
-  it('resolves open tool names and closed integration event leaves', () => {
-    const onResult = vi.fn(() => undefined);
-    const onEvent = vi.fn(() => undefined);
-    const onLinearEvent = vi.fn(() => undefined);
-    const rules = defaultFactoryRules({
-      version: 'resolve-v3',
-      overrides: {
-        tools: { submit_plan: { onResult } },
-        github: { pullRequestMerged: { onEvent } },
-        linear: { issueObserved: { onEvent: onLinearEvent } },
-      },
-    });
+  it('skips unchanged stages and runs only entry on reentry or initial entry', () => {
+    const same = { ...input, toStage: 'queued' };
+    expect(resolveFactoryStageRules(boards, same)).toEqual([]);
+    expect(resolveFactoryStageRules(boards, { ...same, reenter: true })).toEqual([
+      { phase: 'enter', handler: onEnter },
+    ]);
+    expect(resolveFactoryStageRules(boards, { ...same, initialEntry: true })).toEqual([
+      { phase: 'enter', handler: onEnter },
+    ]);
+  });
 
-    expect(resolveFactoryToolRule(rules, 'submit_plan')).toBe(onResult);
-    expect(resolveFactoryToolRule(rules, 'unknown_tool')).toBeUndefined();
-    expect(resolveFactoryGithubRule(rules, 'pullRequestMerged')).toBe(onEvent);
-    expect(resolveFactoryGithubRule(rules, 'issueOpened')).toEqual(expect.any(Function));
-    expect(resolveFactoryGithubRule(rules, 'pullRequestUpdated')).toEqual(expect.any(Function));
-    expect(resolveFactoryLinearRule(rules, 'issueObserved')).toBe(onLinearEvent);
+  it('never falls back to uninstalled built-ins or another registry', () => {
+    const empty = createBoardRegistry({ includeDefaultBoards: false });
+    for (const id of ['release', 'work', 'review', 'missing']) {
+      expect(resolveFactoryStageRules(empty, { ...input, board: id, fromStage: 'intake', toStage: 'triage' })).toEqual(
+        [],
+      );
+    }
+    const other = createBoardRegistry({
+      boards: [
+        defineBoard({
+          id: 'release',
+          title: 'Other release',
+          initialPhase: 'queued',
+          phases: {
+            queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+            shipped: { title: 'Shipped', kind: 'terminal' },
+          },
+        }),
+      ],
+      includeDefaultBoards: false,
+    });
+    expect(resolveFactoryStageRules(other, input)).toEqual([]);
+    expect(resolveFactoryStageRules(boards, input)).toHaveLength(2);
   });
 });

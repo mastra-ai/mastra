@@ -29,7 +29,7 @@ function ConfigTabLabel({ title, icon, badge }: { title: string; icon: React.Rea
       <Txt as="span" variant="ui-sm" className="text-inherit">
         {title}
       </Txt>
-      {badge}
+      {badge !== undefined && badge !== null ? <> {badge}</> : null}
     </>
   );
 }
@@ -45,9 +45,9 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
   return (
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
       <div className="flex items-center gap-2 py-1">
-        <code className="text-accent1 text-xs">{name}</code>
-        <span className="text-neutral3 text-[11px]">{typeLabel}</span>
-        {prop.description && <span className="text-neutral3 truncate text-[11px] italic">— {prop.description}</span>}
+        <code className="text-accent1 text-ui-sm">{name}</code>
+        <span className="text-neutral3 text-ui-sm">{typeLabel}</span>
+        {prop.description && <span className="text-neutral3 text-ui-sm truncate italic">— {prop.description}</span>}
       </div>
       {hasChildren && (
         <div className="border-border1 ml-1 border-l">
@@ -171,7 +171,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
     const diffLines = computeLineDiff(oldStr, newStr);
     return (
-      <div className="border-border1 relative overflow-hidden rounded-md border font-mono text-sm">
+      <div className="border-border1 text-ui-md relative overflow-hidden rounded-md border font-mono">
         {block && (
           <div className="absolute top-2 right-2 z-10">
             <BlockCopyButton block={block} />
@@ -209,7 +209,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (!prevBlock && currBlock) {
           return (
-            <div key={idx} className="rounded-md border border-green-900/30 bg-green-950/10 p-3 font-mono text-sm">
+            <div key={idx} className="text-ui-md rounded-md border border-green-900/30 bg-green-950/10 p-3 font-mono">
               <Txt variant="ui-xs" className="mb-1 text-green-400">
                 + Added block
               </Txt>
@@ -222,7 +222,10 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (prevBlock && !currBlock) {
           return (
-            <div key={idx} className="relative rounded-md border border-red-900/30 bg-red-950/10 p-3 font-mono text-sm">
+            <div
+              key={idx}
+              className="text-ui-md relative rounded-md border border-red-900/30 bg-red-950/10 p-3 font-mono"
+            >
               <div className="absolute top-2 right-2">
                 <BlockCopyButton block={prevBlock} />
               </div>
@@ -253,7 +256,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         const diffLines = computeLineDiff(oldStr, newStr);
         return (
-          <div key={idx} className="border-border1 relative overflow-hidden rounded-md border font-mono text-sm">
+          <div key={idx} className="border-border1 text-ui-md relative overflow-hidden rounded-md border font-mono">
             {prevBlock && (
               <div className="absolute top-2 right-2 z-10">
                 <BlockCopyButton block={prevBlock} />
@@ -395,12 +398,12 @@ function ToolsDiffView({
               {tool}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="error" className="ml-auto">
+              <Badge variant="red" className="ml-auto">
                 removed in latest
               </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="success" className="ml-auto">
+              <Badge variant="green" className="ml-auto">
                 added in latest
               </Badge>
             )}
@@ -495,12 +498,12 @@ function VariablesDiffView({
               {`{{${name}}}`}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="error" className="ml-auto">
+              <Badge variant="red" className="ml-auto">
                 removed in latest
               </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="success" className="ml-auto">
+              <Badge variant="green" className="ml-auto">
                 added in latest
               </Badge>
             )}
@@ -531,7 +534,7 @@ function ReadOnlyVariables({ variables }: { variables: Record<string, unknown> |
             {`{{${name}}}`}
           </Txt>
           {(schema as Record<string, unknown>)?.type ? (
-            <Badge variant="default">{String((schema as Record<string, unknown>).type)}</Badge>
+            <Badge>{String((schema as Record<string, unknown>).type)}</Badge>
           ) : null}
         </div>
       ))}
@@ -579,26 +582,26 @@ function ReadOnlyConfigWithDiff({
   const variablesDiff = diffMap.get('requestContextSchema');
 
   const instructionsBadge = instructionsDiff ? (
-    <Badge variant="warning" size="sm">
+    <Badge variant="yellow" size="sm">
       modified
     </Badge>
   ) : null;
   const toolsBadge = toolsDiff ? (
-    <Badge variant="warning" size="sm">
+    <Badge variant="yellow" size="sm">
       modified
     </Badge>
   ) : toolCount > 0 ? (
-    <Badge variant="default" size="sm">{`${toolCount}`}</Badge>
+    <Badge size="sm">{`${toolCount}`}</Badge>
   ) : null;
   const variablesBadge = variablesDiff ? (
-    <Badge variant="warning" size="sm">
+    <Badge variant="yellow" size="sm">
       modified
     </Badge>
   ) : null;
 
   if (isLoadingCompare) {
     return (
-      <div className="flex items-center justify-center py-8">
+      <div className="flex items-center justify-center py-5">
         <Spinner className="h-5 w-5" />
       </div>
     );
@@ -700,7 +703,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                 <ConfigTabLabel
                   title="Tools"
                   icon={<Wrench />}
-                  badge={toolCount > 0 ? <Badge variant="default" size="sm">{`${toolCount}`}</Badge> : undefined}
+                  badge={toolCount > 0 ? <Badge size="sm">{`${toolCount}`}</Badge> : undefined}
                 />
               </Tab>
             </TabList>

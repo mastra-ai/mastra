@@ -7,7 +7,7 @@ import type { GithubIssue, GithubPullRequest } from '../../factory/services/fact
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
 import { stageLabel } from '../../factory/stages';
-import type { FactoryUserSession } from '../../workspaces/services/github';
+import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import {
   getFactorySessionKind,
   getReviewBranchIdentifier,

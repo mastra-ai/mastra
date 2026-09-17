@@ -1,3 +1,4 @@
+import '../../../../new-theme.css';
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
@@ -36,10 +37,8 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
   const isHidden = isCollapsed && collapsedWidth === 0;
 
   const draggedRef = useRef(false);
-  // Tracks active drag so unmount mid-gesture can restore body styles.
   const dragCleanupRef = useRef<(() => void) | null>(null);
 
-  // Restore global state if the component unmounts mid-drag.
   useEffect(() => {
     return () => {
       dragCleanupRef.current?.();
@@ -53,24 +52,18 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
       event.preventDefault();
 
       draggedRef.current = false;
-      // Active styles on press, not after drag threshold.
       setGestureActive(true);
 
       const startX = event.clientX;
-
       const handle = event.currentTarget;
       const pointerId = event.pointerId;
 
-      // Capture pointer: keeps :hover + col-resize cursor on handle for the
-      // whole drag, even when cursor leaves the hotzone (collapsed snap-zone).
       try {
         handle.setPointerCapture(pointerId);
       } catch {
-        // Pointer already gone.
+        // The pointer may have ended before capture.
       }
 
-      // WYSIWYG resize: sidebar width = cursor X relative to sidebar's left edge.
-      // Captured once — sidebar is `shrink-0`, left edge is stable during the gesture.
       const sidebarEl = handle.parentElement;
       const sidebarLeft = sidebarEl ? sidebarEl.getBoundingClientRect().left : 0;
 
@@ -87,7 +80,6 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
           document.body.style.userSelect = 'none';
         }
 
-        // Single rule, no started-state branch: cursor position alone defines state.
         const cursorWidth = ev.clientX - sidebarLeft;
 
         if (collapseBelow > 0 && cursorWidth < collapseBelow) {
@@ -109,8 +101,6 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
         dragCleanupRef.current = null;
       };
       dragCleanupRef.current = () => cleanup();
-      // Window-level listeners: pointer moves off the narrow handle fire reliably,
-      // cursor leaving the window still gets `pointerup`.
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', cleanup);
       window.addEventListener('pointercancel', cleanup);
@@ -172,17 +162,14 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
     [isCollapsed, width, minWidth, maxWidth, setWidth, expand, commit, toggleSidebar],
   );
 
-  // Mobile: render as an off-canvas drawer via Base UI Drawer.
-  // Auto-close on link navigation (standard drawer UX). Don't gate on
-  // `defaultPrevented` — client-side router links call `preventDefault()` for
-  // SPA navigation, and we still want to close the drawer when they do.
+  // Client-side routers preventDefault but should still close the drawer.
   const closeOnAnchor = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       const anchor = (event.target as HTMLElement).closest('a');
       if (!anchor || !anchor.hasAttribute('href')) return;
-      // Skip non-primary clicks and modifier-clicks (open in new tab/window).
+
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      // Skip explicit external/download targets.
+
       if (anchor.target === '_blank' || anchor.hasAttribute('download')) return;
       setOpenMobile(false);
     },
@@ -194,7 +181,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
       <Drawer side="left" open={openMobile} onOpenChange={setOpenMobile}>
         <DrawerContent
           className={cn(
-            'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none border-0 bg-surface2 shadow-xl',
+            'new-theme w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none border-0 bg-sidebar text-foreground shadow-xl',
             className,
           )}
         >
@@ -204,7 +191,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
           <VisuallyHidden asChild>
             <DrawerDescription>Primary site navigation drawer</DrawerDescription>
           </VisuallyHidden>
-          <div onClick={closeOnAnchor} className="flex h-full min-h-0 flex-col overflow-hidden px-4 py-2">
+          <div onClick={closeOnAnchor} className="flex h-full min-h-0 flex-col overflow-hidden px-3 py-2">
             {children}
           </div>
         </DrawerContent>
@@ -212,18 +199,17 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
     );
   }
 
-  // Desktop: in-flow sidebar with resize handle.
   const currentWidth = isCollapsed ? collapsedWidth : width;
   return (
     <div
       className={cn(
-        'sidebar-layout group/sidebar relative min-h-0 shrink-0 self-stretch',
+        'new-theme sidebar-layout group/sidebar relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
         'w-(--sidebar-width)',
         'transition-[width] duration-220 ease-[cubic-bezier(0.32,0.72,0,1)]',
         'motion-reduce:transition-none',
         'in-data-[sidebar-gesture=active]:transition-none',
         className,
-        // Order matters for tailwind-merge: these win over consumer-supplied border classes.
+
         isHidden && 'border-r-0 border-transparent',
       )}
     >
@@ -239,13 +225,9 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
       </div>
 
       <div
-        // Focusable window-splitter pattern (WAI-ARIA APG): `separator` with
-        // value props + keyboard semantics. Click toggles; Arrow keys resize.
         role="separator"
         aria-orientation="vertical"
-        // Collapsed: omit the numeric range so AT doesn't see contradictory
-        // values (valuenow=0/64 inside valuemin=200..valuemax=480). `valuetext`
-        // still describes the state.
+
         aria-valuenow={isCollapsed ? undefined : currentWidth}
         aria-valuemin={isCollapsed ? undefined : minWidth}
         aria-valuemax={isCollapsed ? undefined : maxWidth}
@@ -263,9 +245,9 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
       >
         <ResizeHandleIndicator
           className={cn(
-            'group-hover:opacity-100',
+            'via-foreground/25 group-hover:opacity-100',
             'group-focus-visible:via-accent1 group-focus-visible:opacity-100',
-            'in-data-[sidebar-gesture=active]:via-neutral6/45 in-data-[sidebar-gesture=active]:opacity-100',
+            'in-data-[sidebar-gesture=active]:via-foreground/45 in-data-[sidebar-gesture=active]:opacity-100',
           )}
         />
       </div>

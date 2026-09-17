@@ -46,7 +46,7 @@ export interface ExecutionResult {
   output: unknown;
   /** Structured error if execution failed */
   error: { message: string; stack?: string; code?: string } | null;
-  /** Trace ID from agent/workflow execution (null for scorers or errors) */
+  /** Trace ID from agent/workflow execution (null when execution has no trace identity) */
   traceId: string | null;
   /** Root span ID from agent/workflow execution (null when not traced) */
   spanId?: string | null;
@@ -132,6 +132,8 @@ export async function executeTarget(
     unmockedToolPolicy?: UnmockedToolPolicy;
   },
 ): Promise<ExecutionResult> {
+  let traceId: string | null = null;
+
   try {
     const signal = options?.signal;
 
@@ -152,6 +154,9 @@ export async function executeTarget(
           options?.versions,
           options?.toolMocks,
           options?.unmockedToolPolicy,
+          assignedTraceId => {
+            traceId = assignedTraceId;
+          },
         );
         break;
       case 'workflow':
@@ -180,7 +185,7 @@ export async function executeTarget(
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       },
-      traceId: null,
+      traceId,
     };
   }
 }
@@ -226,19 +231,16 @@ async function executeAgent(
   versions?: VersionOverrides,
   toolMocks?: ItemToolMock[],
   unmockedToolPolicy?: UnmockedToolPolicy,
+  onTraceIdAssigned?: (traceId: string) => void,
 ): Promise<ExecutionResult> {
-  const model = await agent.getModel();
+  const reqCtx: RequestContext | undefined = requestContext
+    ? new RequestContext(Object.entries(requestContext))
+    : undefined;
+  const model = await agent.getModel({ requestContext: reqCtx });
 
   // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
   const input = item.input as MessageListInput;
-
-  const reqCtx: RequestContext | undefined = requestContext
-    ? new RequestContext(Object.entries(requestContext))
-    : undefined;
-
-  // Pass experimentId as tracing metadata so it appears on the AGENT_RUN span
-  const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
 
   // Memory-enabled experiment runs need a thread even when the caller provides no
   // memory identifiers. Use the caller's resource when present; otherwise isolate
@@ -299,6 +301,13 @@ async function executeAgent(
   // consumption of repeated (toolName, args) mocks. No cost for mock-free runs.
   const mockConcurrency = shouldInterceptTools ? { toolCallConcurrency: 1 } : undefined;
 
+  const assignedTraceId = randomUUID().replaceAll('-', '');
+  onTraceIdAssigned?.(assignedTraceId);
+  const tracingOptions = {
+    traceId: assignedTraceId,
+    ...(experimentId ? { metadata: { experimentId } } : {}),
+  };
+
   let rawResult: unknown;
   try {
     rawResult = isSupportedLanguageModel(model)
@@ -308,7 +317,7 @@ async function executeAgent(
           abortSignal: generateSignal,
           ...memoryOption,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
-          ...(tracingOptions ? { tracingOptions } : {}),
+          tracingOptions,
           ...(versions ? { versions } : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),
           ...(mockConcurrency ?? {}),
@@ -319,7 +328,7 @@ async function executeAgent(
           abortSignal: generateSignal,
           ...memoryOption,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
-          ...(tracingOptions ? { tracingOptions } : {}),
+          tracingOptions,
           ...(mockHooks ? { hooks: mockHooks } : {}),
           ...(mockConcurrency ?? {}),
         });
@@ -328,7 +337,7 @@ async function executeAgent(
     // error instead of the raw abort. Any other error rethrows unchanged.
     const mockReport = shouldInterceptTools ? matcher.report() : undefined;
     if (mockReport?.failure) {
-      return toolMockFailureResult(mockReport, null);
+      return toolMockFailureResult(mockReport, assignedTraceId);
     }
     throw error;
   }
@@ -345,7 +354,7 @@ async function executeAgent(
   // propagates: the matcher still recorded the first failure, so fail the item
   // deterministically with the coded error. The mis-called tool never ran live.
   if (toolMockReport?.failure) {
-    return toolMockFailureResult(toolMockReport, traceId);
+    return toolMockFailureResult(toolMockReport, traceId ?? assignedTraceId);
   }
 
   // Only persist fields relevant to experiment evaluation — drop provider metadata,
@@ -524,19 +533,27 @@ async function executeWorkflow(
       const suspendedPaths: string[][] = result.suspended ?? [];
       if (suspendedPaths.length === 0) break;
 
-      // For each suspended step, look up resume data
-      const firstSuspendedStep = suspendedPaths[0]?.[0];
-      if (!firstSuspendedStep) break;
+      // An earlier branch without data must not block a later branch with data.
+      // Prefer per-step data over the flat fallback, preserving falsy payloads.
+      let stepToResume: string | undefined;
+      let stepResumeData: unknown;
+      for (const suspendedPath of suspendedPaths) {
+        const suspendedStep = suspendedPath?.[0];
+        if (!suspendedStep) continue;
 
-      // Resolve resume data: per-step map takes precedence, then flat fallback.
-      // Use explicit undefined check so falsy values (null, false, 0) are forwarded.
-      const perStepValue = perStep?.[firstSuspendedStep];
-      const stepResumeData = perStepValue !== undefined ? perStepValue : flat;
-      if (stepResumeData === undefined) break; // No data for this step, stop resuming
+        const perStepValue = perStep?.[suspendedStep];
+        const candidate = perStepValue !== undefined ? perStepValue : flat;
+        if (candidate === undefined) continue;
+
+        stepToResume = suspendedStep;
+        stepResumeData = candidate;
+        break;
+      }
+      if (stepToResume === undefined) break; // No data for any suspended step, stop resuming
 
       result = await run.resume({
         resumeData: stepResumeData,
-        step: firstSuspendedStep,
+        step: stepToResume,
         ...(reqCtx ? { requestContext: reqCtx } : {}),
         ...observabilityContext,
       });

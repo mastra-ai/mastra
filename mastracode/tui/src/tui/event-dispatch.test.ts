@@ -14,7 +14,7 @@ function createMockAgentController(initialState: Record<string, unknown> = {}, p
     state,
     loadOMProgress: vi.fn().mockResolvedValue(undefined),
     session: {
-      thread: { list: vi.fn().mockResolvedValue([]) },
+      thread: { getId: vi.fn(() => 'current-thread'), list: vi.fn().mockResolvedValue([]) },
       state: {
         get: () => ({ ...state }),
         set: setState,
@@ -43,7 +43,8 @@ function createMockTUIState(controller: ReturnType<typeof createMockAgentControl
     allToolComponents: [],
     chatContainer: { children: [] },
     taskToolInsertIndex: 5,
-    ui: { requestRender: vi.fn() },
+    ui: { requestRender: vi.fn(), terminal: { setTitle: vi.fn() } },
+    options: { appName: 'Mastra Code' },
     projectInfo: { rootPath: '/tmp/test', gitBranch: 'main' },
     currentThreadTitle: 'Old thread',
     editor: { escapeEnabled: false },
@@ -65,6 +66,8 @@ function createMockEctx(): EventHandlerContext {
     renderClearedTasksInline: vi.fn(),
     renderCompletedTasksInline: vi.fn(),
     renderTaskDeltaInline: vi.fn(),
+    addUserMessage: vi.fn(),
+    updateStatusLine: vi.fn(),
   } as unknown as EventHandlerContext;
 }
 
@@ -84,13 +87,112 @@ describe('dispatchEvent thread lifecycle', () => {
     ectx = createMockEctx();
   });
 
-  it('clears tasks, activePlan, and sandboxAllowedPaths on thread_changed', async () => {
+  it('ignores live messages targeted at a different thread', async () => {
+    await dispatchEvent(
+      {
+        type: 'message_start',
+        message: {
+          id: 'origin-thread-signal',
+          threadId: 'origin-thread',
+          role: 'user',
+          createdAt: new Date('2026-07-27T11:47:32.908Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'thread-scoped message' }] },
+        },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(ectx.addUserMessage).not.toHaveBeenCalled();
+  });
+
+  it('renders live messages targeted at the current thread', async () => {
+    await dispatchEvent(
+      {
+        type: 'message_start',
+        message: {
+          id: 'current-thread-signal',
+          threadId: 'current-thread',
+          role: 'user',
+          createdAt: new Date('2026-07-27T11:47:32.908Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'thread-scoped message' }] },
+        },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(ectx.addUserMessage).toHaveBeenCalledOnce();
+  });
+
+  it('ignores thread-scoped live messages while waiting to create a new thread', async () => {
+    state.pendingNewThread = true;
+
+    await dispatchEvent(
+      {
+        type: 'message_start',
+        message: {
+          id: 'stale-current-thread-signal',
+          threadId: 'current-thread',
+          role: 'user',
+          createdAt: new Date('2026-07-27T11:47:32.908Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'origin-thread completion' }] },
+        },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(ectx.addUserMessage).not.toHaveBeenCalled();
+  });
+
+  it('updates the active and terminal titles when a generated title arrives', async () => {
+    await dispatchEvent(
+      { type: 'thread_title_updated', threadId: 'current-thread', title: 'Generated demo title' } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Generated demo title');
+    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - Generated demo title');
+    expect(ectx.updateStatusLine).toHaveBeenCalledOnce();
+  });
+
+  it('ignores generated titles from another thread', async () => {
+    await dispatchEvent(
+      { type: 'thread_title_updated', threadId: 'thread-2', title: 'Wrong thread' } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Old thread');
+    expect(state.ui.terminal.setTitle).not.toHaveBeenCalled();
+  });
+
+  it('strips terminal escape sequences and control characters from generated titles', async () => {
+    await dispatchEvent(
+      {
+        type: 'thread_title_updated',
+        threadId: 'current-thread',
+        title: 'Safe\x07\x1b]0;unsafe\x07Visible \x1b[31mRed\x1b[0m',
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Safe Visible Red');
+    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - Safe Visible Red');
+  });
+
+  it('clears per-thread state on thread_changed', async () => {
+    state.latestRequestPromptTokens = 90_000;
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,
       ectx,
       state,
     );
 
+    expect(state.latestRequestPromptTokens).toBeUndefined();
     expect(state.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
         tasks: [],
@@ -100,13 +202,16 @@ describe('dispatchEvent thread lifecycle', () => {
     );
   });
 
-  it('clears tasks, activePlan, and sandboxAllowedPaths on thread_created', async () => {
+  it('clears per-thread state on thread_created', async () => {
+    state.latestRequestPromptTokens = 90_000;
+
     await dispatchEvent(
       { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New' } } as any,
       ectx,
       state,
     );
 
+    expect(state.latestRequestPromptTokens).toBeUndefined();
     expect(state.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
         tasks: [],
@@ -184,6 +289,16 @@ describe('dispatchEvent thread lifecycle', () => {
     );
 
     expect((state.taskProgress as any).updateTasks).toHaveBeenCalledWith([]);
+  });
+
+  it('leaves the status line alone when the observer renames another thread of the session', async () => {
+    await dispatchEvent(
+      { type: 'om_thread_title_updated', cycleId: 'cycle-1', threadId: 'other-thread', newTitle: 'Log parser rewrite' },
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Old thread');
   });
 
   it('does not clear non-ephemeral state like currentModelId', async () => {

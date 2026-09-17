@@ -292,7 +292,7 @@ export class AgentsDSQL extends AgentsStorage {
       values.push(id);
 
       await withRetry(() =>
-        this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = ${paramIndex}`, values),
+        this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values),
       );
 
       // Return the updated agent
