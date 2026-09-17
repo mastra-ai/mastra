@@ -4890,6 +4890,17 @@ type Shared_Type_102 =
   | {
       kind: 'custom';
       provider: string;
+      modelId?: string | undefined;
+    }
+  | {
+      provider: string;
+      modelId?: string | undefined;
+    };
+
+type Shared_Type_91 =
+  | {
+      kind: 'custom';
+      provider: string;
       modelId: string;
     }
   | {
