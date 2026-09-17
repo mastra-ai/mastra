@@ -1,5 +1,146 @@
 # @mastra/playground-ui
 
+## 56.0.0-alpha.4
+
+### Minor Changes
+
+- Align `DataPanel.Header` with the page `Header` (same padding, gap, 40px minimum height, `ui-md` heading) and add compounds for richer panel headers: ([#24283](https://github.com/mastra-ai/mastra/pull/24283))
+
+  - `DataPanel.HeaderContent` — left block for a heading plus metadata; right-side actions are vertically centered against the whole block.
+  - `DataPanel.HeaderActions` — right-aligned action slot (replaces hand-rolled `ButtonsGroup className="ml-auto …"`).
+  - `DataPanel.Metadata` / `DataPanel.Meta` — a row of breadcrumb-style pills under the heading, with optional icon, tooltip, and link rendering via `as`.
+
+  ```tsx
+  <DataPanel.Header>
+    <DataPanel.HeaderContent>
+      <DataPanel.Heading>Trace</DataPanel.Heading>
+      <DataPanel.Metadata>
+        <DataPanel.Meta as={Link} href="/agents/weather-agent" icon={<AgentIcon />} tooltip="Agent">
+          weather-agent
+        </DataPanel.Meta>
+        <DataPanel.Meta icon={<TimerIcon />} tooltip="Duration 1.2s">
+          1.2s
+        </DataPanel.Meta>
+      </DataPanel.Metadata>
+    </DataPanel.HeaderContent>
+    <DataPanel.HeaderActions>
+      <DataPanel.CloseButton onClick={onClose} />
+    </DataPanel.HeaderActions>
+  </DataPanel.Header>
+  ```
+
+  `TraceSummaryDescription` and `SpanSummaryDescription` now render on these primitives.
+
+- Added shared Status and StatusDot components for consistent semantic status indicators. ([#24277](https://github.com/mastra-ai/mastra/pull/24277))
+
+  ```tsx
+  import { Status } from '@mastra/playground-ui/components/StatusIndicators';
+
+  <Status presentation={{ label: 'Running', tone: 'success', description: 'The server is live.' }} />;
+  ```
+
+- Added shared tool approval cards and actions for Factory and Studio, with consumer-controlled decisions and pending states. ([#24263](https://github.com/mastra-ai/mastra/pull/24263))
+
+  Use `ToolApproval` for standalone requests or `ToolApprovalActions` inside existing tool details. Both are exported from `@mastra/playground-ui/components/ai/tool-approval`.
+
+  ```tsx
+  <ToolApproval
+    toolName="write_file"
+    disabled={isSubmitting}
+    onApprove={() => approve(toolCallId)}
+    onDecline={() => decline(toolCallId)}
+  >
+    <pre>{JSON.stringify(args, null, 2)}</pre>
+  </ToolApproval>
+  ```
+
+  Pass `status="approved"` or `status="declined"` to display a recorded decision and disable both actions. Approval requests and their lifecycle stay in the consuming app.
+
+- Added shared tool argument and output components so Studio and Factory use consistent edit previews, result styling, and full-value copying. ([#24259](https://github.com/mastra-ai/mastra/pull/24259))
+
+  Before, output previews required separate display and copy values:
+
+  ```tsx
+  <ToolCallMono copyText={result}>{result.length > 800 ? `${result.slice(0, 800)}…` : result}</ToolCallMono>
+  ```
+
+  Now, use the shared components to render arguments or file edits and optionally limit output previews. Copying still includes the complete output:
+
+  ```tsx
+  import { ToolCallArguments, ToolCallOutput } from '@mastra/playground-ui/components/ai/tool-call';
+
+  <ToolCallArguments toolName="view" args={{ path: 'src/agent.ts' }} />;
+  <ToolCallOutput text={result} maxLength={800} />;
+  ```
+
+### Patch Changes
+
+- DataPanel now renders as a Base UI Drawer dialog: it slides in from the right, traps focus, and animates on open/close. It gains `size` (`md` | `half` | `wide` | `full`) and `depth` (1–3) props so sibling panels stack with the parent peeking out; `collapsed` is removed since drawers do not collapse. `TracesLayout` is removed — pages render panels directly as drawers. ([#24269](https://github.com/mastra-ai/mastra/pull/24269))
+
+- Fixed workflow controls remaining available while an operation is pending and added paused and canceled step status rendering. ([#24184](https://github.com/mastra-ai/mastra/pull/24184))
+
+- Trace filtering in the `domains/traces` module now builds on the typeahead `FilterBar` instead of `PropertyFilter`. `createTraceFilterBarFields`, `traceTokensToFilterBarItems`, `filterBarItemsToTraceTokens` and `TRACE_FILTER_BAR_OPERATORS` adapt the existing `filterX` URL tokens to FilterBar items, so existing trace filter URLs keep working. A new `TraceTimeRangeChip` renders the date range as an always-present, non-removable `Time is …` chip (default Last 7 days). `useTraceUrlState` gains `handleDateRangeChange(from, to)` to write a custom range atomically. `TracesToolbar`, `createTracePropertyFilterFields` and `neutralizeFilterTokens` are removed. `TraceColumnsMenu` now renders a ghost button. FilterBar popups size to their content and fields with a single operator skip the operator step. ([#24208](https://github.com/mastra-ai/mastra/pull/24208))
+
+  New public options:
+
+  - `FilterBarField.hidden` — exclude a field from the FilterBar input's field step while chips for it still render.
+
+    ```tsx
+    const fields: FilterBarField[] = [{ id: 'entityId', label: 'Primitive ID', operators: ['is'], hidden: true }];
+    ```
+
+  - `FilterBar.Chip` `removable` (default `true`) — when `false` the chip has no remove button and ignores Backspace/Delete.
+
+    ```tsx
+    <FilterBar.Chip item={item} removable={false} />
+    ```
+
+  - `DateTimeRangePicker` `renderTrigger` and `onDateRangeChange` — render a custom element as the preset menu trigger (it receives the menu's props via Base UI `render`) and receive both ends of a custom range in one call.
+
+    ```tsx
+    <DateTimeRangePicker
+      preset={preset}
+      onPresetChange={setPreset}
+      dateFrom={from}
+      dateTo={to}
+      onDateRangeChange={(from, to) => setRange({ from, to })}
+      renderTrigger={({ label, disabled }) => (
+        <button type="button" disabled={disabled}>
+          {label}
+        </button>
+      )}
+    />
+    ```
+
+- Removed the UI components and their types from the root `@mastra/react` entrypoint. Import them from `@mastra/react/ui` instead. ([#24256](https://github.com/mastra-ai/mastra/pull/24256))
+
+  **Why**
+
+  The root entrypoint re-exported everything from `./ui`, which pulled `shiki`, `@radix-ui/react-tooltip`, `lucide-react` and `react-dom` into every consumer, even those only using the headless hooks. This made `@mastra/react` unusable in React Native / Expo (see https://github.com/mastra-ai/mastra/issues/20964) and inflated bundles for web apps that do not render Mastra UI. The root entrypoint now only contains hooks, the provider and the client helpers.
+
+  **Before**
+
+  ```ts
+  import { MessageFactory, useChat } from '@mastra/react';
+  import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react';
+  ```
+
+  **After**
+
+  ```ts
+  import { useChat } from '@mastra/react';
+  import { MessageFactory } from '@mastra/react/ui';
+  import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react/ui';
+  ```
+
+  Affected exports: `Entity`, `Code`, `Icon`, `IconButton`, `Icons`, `Tooltip`, `Message`, `MessageFactory` and all their associated types (`MessageRenderers`, `MessageStatusRenderers`, `TextPart`, `ReasoningPart`, `FilePart`, `ToolInvocationPart`, `DynamicToolPart`, `DataPart`, `MessageFactoryPart`, …).
+
+- Updated dependencies [[`b636716`](https://github.com/mastra-ai/mastra/commit/b636716f266cfaca183937918650d2f72f0fb22b), [`b5413ae`](https://github.com/mastra-ai/mastra/commit/b5413aefbdca30e4f697011b83610ecb82e6ea15), [`b2f412a`](https://github.com/mastra-ai/mastra/commit/b2f412ae77fa5379471d103ebcc1ba69b22dd353), [`2480359`](https://github.com/mastra-ai/mastra/commit/248035940aa048c7bcd8cfe7845915dc4734b571), [`697fecc`](https://github.com/mastra-ai/mastra/commit/697feccaa4ad5df913c22e47bf16f493dd7956a8), [`0bf287c`](https://github.com/mastra-ai/mastra/commit/0bf287c36ec14b45f5a4fdd0d279698694f592dd), [`6249741`](https://github.com/mastra-ai/mastra/commit/6249741f8463bdc5a05ded2b35b143f92f33afbf), [`725c307`](https://github.com/mastra-ai/mastra/commit/725c307db7d422a7b1881e0a58a5cec963258ddd), [`2480359`](https://github.com/mastra-ai/mastra/commit/248035940aa048c7bcd8cfe7845915dc4734b571), [`51bbcef`](https://github.com/mastra-ai/mastra/commit/51bbcef0b56a4b1b8f363d3cbf85f04293d4c4ea), [`4f940d7`](https://github.com/mastra-ai/mastra/commit/4f940d74bbc1a6c97f018f3a4ce0965ba380ea6c), [`b26e528`](https://github.com/mastra-ai/mastra/commit/b26e5288891641044a3c26a498c06259985fed10), [`b2f412a`](https://github.com/mastra-ai/mastra/commit/b2f412ae77fa5379471d103ebcc1ba69b22dd353), [`6e19038`](https://github.com/mastra-ai/mastra/commit/6e1903872f2e0d66d9ef47dc10f8ae4a7b52901f)]:
+  - @mastra/client-js@1.47.0-alpha.4
+  - @mastra/react@1.6.0-alpha.4
+  - @mastra/memory@1.31.0-alpha.3
+  - @mastra/core@1.68.0-alpha.4
+
 ## 56.0.0-alpha.3
 
 ### Minor Changes

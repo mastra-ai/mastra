@@ -1,5 +1,26 @@
 # @mastra/server
 
+## 1.68.0-alpha.4
+
+### Patch Changes
+
+- Accept A2A v1 PascalCase JSON-RPC method names when the `A2A-Version: 1.0` header is present. Normalize method names before dispatch and streaming response selection while preserving legacy slash-style methods. ([#24260](https://github.com/mastra-ai/mastra/pull/24260))
+
+  For example, retrieve an existing task with `GetTask` (replace the agent and task IDs with your own):
+
+  ```http
+  POST /api/a2a/my-agent HTTP/1.1
+  Content-Type: application/json
+  A2A-Version: 1.0
+
+  {"jsonrpc":"2.0","id":"request-1","method":"GetTask","params":{"id":"task-1"}}
+  ```
+
+- Fixed A2A v1 task push notification configuration requests to use the protocol-defined wire format and return paginated list responses. ([#24275](https://github.com/mastra-ai/mastra/pull/24275))
+
+- Updated dependencies [[`697fecc`](https://github.com/mastra-ai/mastra/commit/697feccaa4ad5df913c22e47bf16f493dd7956a8), [`0bf287c`](https://github.com/mastra-ai/mastra/commit/0bf287c36ec14b45f5a4fdd0d279698694f592dd), [`6249741`](https://github.com/mastra-ai/mastra/commit/6249741f8463bdc5a05ded2b35b143f92f33afbf), [`2480359`](https://github.com/mastra-ai/mastra/commit/248035940aa048c7bcd8cfe7845915dc4734b571), [`b26e528`](https://github.com/mastra-ai/mastra/commit/b26e5288891641044a3c26a498c06259985fed10), [`b2f412a`](https://github.com/mastra-ai/mastra/commit/b2f412ae77fa5379471d103ebcc1ba69b22dd353)]:
+  - @mastra/core@1.68.0-alpha.4
+
 ## 1.68.0-alpha.3
 
 ### Patch Changes

@@ -273,7 +273,7 @@ export const agentExecutionBodySchema = z.discriminatedUnion('method', [
 ]);
 
 // Response schemas
-export const agentCardResponseSchema = z.object({
+const legacyAgentCardResponseSchema = z.object({
   additionalInterfaces: z.array(z.unknown()).optional(),
   name: z.string(),
   description: z.string(),
@@ -315,6 +315,48 @@ export const agentCardResponseSchema = z.object({
     }),
   ),
 });
+
+export const agentCardV1ResponseSchema = legacyAgentCardResponseSchema
+  .omit({
+    additionalInterfaces: true,
+    url: true,
+    protocolVersion: true,
+    security: true,
+    supportsAuthenticatedExtendedCard: true,
+  })
+  .extend({
+    description: z.string().optional(),
+    supportedInterfaces: z.array(
+      z.object({
+        url: z.string(),
+        protocolBinding: z.literal('JSONRPC'),
+        protocolVersion: z.enum(['0.3', '1.0']),
+      }),
+    ),
+    capabilities: z.object({
+      streaming: z.boolean().optional(),
+      pushNotifications: z.boolean().optional(),
+      extendedAgentCard: z.boolean().optional(),
+      extensions: z.array(z.unknown()).optional(),
+    }),
+    defaultInputModes: z.array(z.string()).optional(),
+    defaultOutputModes: z.array(z.string()).optional(),
+    skills: z
+      .array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          description: z.string().optional(),
+          tags: z.array(z.string()).optional(),
+          examples: z.array(z.string()).optional(),
+          inputModes: z.array(z.string()).optional(),
+          outputModes: z.array(z.string()).optional(),
+        }),
+      )
+      .optional(),
+  });
+
+export const agentCardResponseSchema = z.union([legacyAgentCardResponseSchema, agentCardV1ResponseSchema]);
 
 export const taskResponseSchema = z.unknown(); // Complex task state structure
 

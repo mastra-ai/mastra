@@ -19,6 +19,7 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
 import { signAgentCard } from '../a2a/agent-card-signing';
+import { createV1AgentCard, type AgentCardV1 } from '../a2a/agent-card-v1';
 import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../a2a/protocol';
 import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
@@ -362,6 +363,19 @@ function createAgentCardDefaults({
   };
 }
 
+type AgentCardOptions = Context & {
+  requestContext: RequestContext;
+  agentId: string;
+  executionUrl?: string;
+  version?: string;
+  provider?: { organization: string; url: string };
+  pushNotifications?: boolean;
+  protocolVersion?: A2AProtocolVersion;
+};
+
+export function getAgentCardByIdHandler(options: AgentCardOptions & { protocolVersion: '1.0' }): Promise<AgentCardV1>;
+export function getAgentCardByIdHandler(options: AgentCardOptions & { protocolVersion?: '0.3' }): Promise<AgentCard>;
+export function getAgentCardByIdHandler(options: AgentCardOptions): Promise<AgentCard | AgentCardV1>;
 export async function getAgentCardByIdHandler({
   mastra,
   agentId,
@@ -373,18 +387,9 @@ export async function getAgentCardByIdHandler({
   version = '1.0',
   pushNotifications = false,
   requestContext,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: keyof ReturnType<typeof mastra.listAgents>;
-  executionUrl?: string;
-  version?: string;
-  provider?: {
-    organization: string;
-    url: string;
-  };
-  pushNotifications?: boolean;
-}): Promise<AgentCard> {
-  const agent = await getAgentFromSystem({ mastra, agentId: agentId });
+  protocolVersion = '0.3',
+}: AgentCardOptions): Promise<AgentCard | AgentCardV1> {
+  const agent = await getAgentFromSystem({ mastra, agentId });
 
   const [instructions, tools]: [
     Awaited<ReturnType<typeof agent.getInstructions>>,
@@ -409,13 +414,14 @@ export async function getAgentCardByIdHandler({
     })),
   };
 
+  const card = protocolVersion === '1.0' ? createV1AgentCard(agentCard) : agentCard;
   const signing = mastra.getServer?.()?.a2a?.agentCardSigning;
   if (!signing) {
-    return agentCard;
+    return card;
   }
 
   return signAgentCard({
-    agentCard,
+    agentCard: card,
     signing,
   });
 }
@@ -2407,7 +2413,7 @@ export function resolveA2AProtocolVersion(request?: Request): A2AProtocolVersion
 export const GET_AGENT_CARD_ROUTE = createRoute({
   method: 'GET',
   path: '/.well-known/:agentId/agent-card.json',
-  responseType: 'json',
+  responseType: 'datastream-response',
   pathParamSchema: a2aAgentIdPathParams,
   responseSchema: agentCardResponseSchema,
   summary: 'Get agent card',
@@ -2421,13 +2427,23 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
       routePrefix: ctx.routePrefix,
     });
 
-    return getAgentCardByIdHandler({
-      mastra: ctx.mastra,
-      requestContext: ctx.requestContext,
-      agentId: ctx.agentId,
-      executionUrl,
-      pushNotifications: true,
-    });
+    const headers = { Vary: 'A2A-Version' };
+    try {
+      const card = await getAgentCardByIdHandler({
+        mastra: ctx.mastra,
+        requestContext: ctx.requestContext,
+        agentId: ctx.agentId,
+        executionUrl,
+        pushNotifications: true,
+        protocolVersion: resolveA2AProtocolVersion(ctx.request),
+      });
+      return Response.json(card, { headers });
+    } catch (error) {
+      if (error instanceof MastraA2AError) {
+        return Response.json(normalizeError(error, null), { status: 400, headers });
+      }
+      throw error;
+    }
   },
 });
 
