@@ -1,5 +1,17 @@
 import z from 'zod';
 
+const responseAgentVersionSelectorSchema = z.union([
+  z.object({ versionId: z.string(), label: z.never().optional(), status: z.never().optional() }),
+  z.object({ label: z.string(), versionId: z.never().optional(), status: z.never().optional() }),
+  z.object({ status: z.enum(['draft', 'published']), versionId: z.never().optional(), label: z.never().optional() }),
+]);
+
+const responseAgentVersionOverridesSchema = z.object({
+  self: responseAgentVersionSelectorSchema.optional(),
+  agents: z.record(z.string(), responseAgentVersionSelectorSchema).optional(),
+  defaultStatus: z.enum(['draft', 'published']).optional(),
+});
+
 export const responseIdPathParams = z.object({
   responseId: z.string().describe('Unique identifier for the stored response'),
 });
@@ -81,6 +93,7 @@ export const createResponseBodySchema = z
     stream: z.boolean().optional().default(false),
     store: z.boolean().optional().default(false),
     previous_response_id: z.string().min(1).optional(),
+    versions: responseAgentVersionOverridesSchema.optional(),
   })
   .passthrough()
   .refine(data => data.agent_id || data.previous_response_id, {

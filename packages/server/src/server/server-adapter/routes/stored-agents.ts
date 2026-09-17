@@ -1,4 +1,9 @@
 import {
+  DELETE_AGENT_VERSION_LABEL_ROUTE,
+  LIST_AGENT_VERSION_LABELS_ROUTE,
+  SET_AGENT_VERSION_LABEL_ROUTE,
+} from '../../handlers/agent-version-labels';
+import {
   LIST_AGENT_VERSIONS_ROUTE,
   CREATE_AGENT_VERSION_ROUTE,
   GET_AGENT_VERSION_ROUTE,
@@ -37,6 +42,15 @@ export const STORED_AGENTS_ROUTES: readonly ServerRoute[] = [
   GET_STORED_AGENT_DEPENDENTS_ROUTE, // Must be before GET_STORED_AGENT_ROUTE (longer literal)
   EXPORT_STORED_AGENT_ROUTE, // Must be before GET_STORED_AGENT_ROUTE
   OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE, // Must be before GET_STORED_AGENT_ROUTE
+
+  // ============================================================================
+  // Agent Version Label Routes
+  // These longer paths must be registered before /:storedAgentId.
+  // ============================================================================
+  LIST_AGENT_VERSION_LABELS_ROUTE,
+  SET_AGENT_VERSION_LABEL_ROUTE,
+  DELETE_AGENT_VERSION_LABEL_ROUTE,
+
   GET_STORED_AGENT_ROUTE,
   CREATE_STORED_AGENT_ROUTE,
   UPDATE_STORED_AGENT_ROUTE,
@@ -72,6 +86,9 @@ export type StoredAgentRoutes = readonly [
   typeof GET_STORED_AGENT_DEPENDENTS_ROUTE,
   typeof EXPORT_STORED_AGENT_ROUTE,
   typeof OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE,
+  typeof LIST_AGENT_VERSION_LABELS_ROUTE,
+  typeof SET_AGENT_VERSION_LABEL_ROUTE,
+  typeof DELETE_AGENT_VERSION_LABEL_ROUTE,
   typeof GET_STORED_AGENT_ROUTE,
   typeof CREATE_STORED_AGENT_ROUTE,
   typeof UPDATE_STORED_AGENT_ROUTE,

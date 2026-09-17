@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import type { ResponsesStreamEvent } from '../types';
+import type { Body } from '../route-types.generated';
+import type { CreateResponseParams, ResponsesStreamEvent, VersionOverrides } from '../types';
 
 global.fetch = vi.fn();
 
@@ -165,6 +166,47 @@ describe('Responses Resource', () => {
         body: JSON.stringify({
           agent_id: 'support-agent',
           input: 'Summarize this ticket',
+        }),
+      }),
+    );
+  });
+
+  it('serializes canonical version overrides for a new response', async () => {
+    mockJsonResponse({
+      id: 'resp_versioned',
+      object: 'response',
+      created_at: 1234567890,
+      model: 'openai/gpt-5',
+      status: 'completed',
+      output: [],
+      usage: null,
+      instructions: null,
+      previous_response_id: null,
+      store: false,
+    });
+    const versions: VersionOverrides = {
+      self: { label: 'pr-101' },
+      agents: { researcher: { versionId: 'researcher-v2' } },
+      defaultStatus: 'draft',
+    };
+    const params: CreateResponseParams = {
+      agent_id: 'support-agent',
+      input: 'Summarize this ticket',
+      versions,
+    };
+
+    await client.responses.create(params);
+
+    expectTypeOf(params.versions).toEqualTypeOf<VersionOverrides | undefined>();
+    expectTypeOf<VersionOverrides>().toMatchTypeOf<NonNullable<Body<'POST /v1/responses'>['versions']>>();
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:4111/api/v1/responses',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          agent_id: 'support-agent',
+          input: 'Summarize this ticket',
+          versions,
         }),
       }),
     );

@@ -277,7 +277,7 @@ export function assertWriteAccess(args: {
   requestContext: RequestContext;
   resource: string;
   resourceId?: string;
-  action: 'edit' | 'delete' | 'write';
+  action: 'edit' | 'delete' | 'write' | 'publish';
   record: OwnedRecord;
 }): void {
   const { requestContext, resource, resourceId, action, record } = args;

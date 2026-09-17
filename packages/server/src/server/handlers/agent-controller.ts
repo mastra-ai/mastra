@@ -10,7 +10,7 @@ import type {
   TokenUsage,
   WireDisplayState,
 } from '@mastra/core/agent-controller';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
 // resolution at runtime goes through mastra.getAgentController?.(), never a
@@ -19,10 +19,20 @@ import { z } from 'zod/v4';
 
 import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
+import { agentVersionOverridesSchema } from '../schemas/agents';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import {
+  ensureDefaultVersionStatus,
+  getAgentFromSystem,
+  normalizeRequestContextVersionOverrides,
+  normalizeVersionOverrides,
+  resolveExecutionVersioning,
+  stashVersionOverrides,
+} from './agents';
 import { handleError } from './error';
 import { enforceThreadAccess } from './utils';
+import { createVersionLabelApiError, handleVersionLabelError } from './version-label-errors';
 
 /**
  * AgentController session routes.
@@ -123,6 +133,75 @@ async function getExistingSession(
   return getSession(controller, resourceId, { scope }, requestContext);
 }
 
+type ControllerVersionOverrides = Parameters<typeof normalizeVersionOverrides>[0];
+
+/**
+ * Resolve a controller's current mode agent before an acknowledged background
+ * turn starts, then pass only the immutable root id into the Session. This
+ * closes the label-move race between the HTTP response and `sendMessage`'s
+ * asynchronous stream setup while preserving dependency overrides.
+ */
+async function prepareControllerExecutionContext({
+  mastra,
+  controller,
+  session,
+  versions,
+  requestContext,
+  rejectSelectorsWhileActive = false,
+}: {
+  mastra: Parameters<typeof getAgentFromSystem>[0]['mastra'];
+  controller: AgentController<any>;
+  session: Session<any>;
+  versions?: ControllerVersionOverrides;
+  requestContext?: RequestContext;
+  rejectSelectorsWhileActive?: boolean;
+}): Promise<RequestContext> {
+  const executionContext = requestContext ?? new RequestContext();
+  const normalized = normalizeVersionOverrides(versions);
+  const contextVersions = normalizeRequestContextVersionOverrides(executionContext);
+  const currentAgent = controller.getCurrentAgent(session);
+
+  // An active session routes a message/notification into its already-pinned
+  // stream without consuming fresh stream options. Reject selectors instead
+  // of acknowledging an override that would be silently ignored.
+  if (rejectSelectorsWhileActive && session.stream.isActive()) {
+    if (normalized || contextVersions) {
+      throw createVersionLabelApiError(
+        'INVALID_VERSION_SELECTOR',
+        'Active controller session signals cannot replace the running agent version.',
+        { controllerId: controller.id, agentId: currentAgent.id },
+      );
+    }
+    return executionContext;
+  }
+
+  const { versionOptions: explicitRoot, delegatedVersions } = resolveExecutionVersioning({
+    agentId: currentAgent.id,
+    versions: normalized,
+    requestContext: executionContext,
+  });
+  const resolutionSelector = explicitRoot ?? { status: delegatedVersions?.defaultStatus ?? 'published' };
+  const resolvedAgent = await getAgentFromSystem({
+    mastra,
+    agentId: currentAgent.id,
+    versionOptions: resolutionSelector,
+    requestContext: executionContext,
+  });
+  const resolvedVersionId = resolvedAgent.toRawConfig()?.resolvedVersionId;
+  let executionVersions = delegatedVersions;
+  if (typeof resolvedVersionId === 'string' && resolvedVersionId.length > 0) {
+    executionVersions = { ...executionVersions, self: { versionId: resolvedVersionId } };
+  }
+
+  stashVersionOverrides(executionContext, executionVersions);
+  ensureDefaultVersionStatus(executionContext, explicitRoot ?? resolutionSelector);
+  return executionContext;
+}
+
+function handleControllerRouteError(error: unknown, fallbackMessage: string): never {
+  return handleVersionLabelError(error, fallbackMessage);
+}
+
 /**
  * Acknowledges a session operation that keeps running after the response is
  * sent.
@@ -218,11 +297,13 @@ const sendMessageBodySchema = z.object({
   message: z.string(),
   requestContext: bodyRequestContextSchema,
   files: messageFilesSchema,
+  versions: agentVersionOverridesSchema.optional(),
 });
 const steerBodySchema = z.object({
   message: z.string(),
   requestContext: bodyRequestContextSchema,
   files: messageFilesSchema,
+  versions: agentVersionOverridesSchema.optional(),
 });
 const toolApprovalBodySchema = z.object({
   toolCallId: z.string(),
@@ -302,6 +383,7 @@ const followUpBodySchema = z.object({
   message: z.string(),
   requestContext: bodyRequestContextSchema,
   files: messageFilesSchema,
+  versions: agentVersionOverridesSchema.optional(),
 });
 
 const sendNotificationBodySchema = z.object({
@@ -315,6 +397,7 @@ const sendNotificationBodySchema = z.object({
   coalesceKey: z.string().optional(),
   attributes: z.record(z.string(), z.unknown()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  versions: agentVersionOverridesSchema.optional(),
 });
 
 const listAgentControllersResponseSchema = z.object({
@@ -680,10 +763,18 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, versions, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const executionContext = await prepareControllerExecutionContext({
+        mastra,
+        controller,
+        session,
+        versions,
+        requestContext,
+        rejectSelectorsWhileActive: true,
+      });
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
       // plain agent message route).
@@ -692,7 +783,7 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
         work: session.sendMessage({
           content: message,
           files,
-          requestContext,
+          requestContext: executionContext,
           ...(author ? { author } : {}),
         }),
         session,
@@ -701,7 +792,7 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
       });
       return { ok: true };
     } catch (error) {
-      return handleError(error, 'error sending controller message');
+      return handleControllerRouteError(error, 'error sending controller message');
     }
   },
 });
@@ -850,20 +941,32 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, versions, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       const author = getRequestMessageAuthor(requestContext);
+      const executionContext = await prepareControllerExecutionContext({
+        mastra,
+        controller,
+        session,
+        versions,
+        requestContext,
+      });
       ackBackgroundSessionWork({
-        work: session.steer({ content: message, files, requestContext, ...(author ? { author } : {}) }),
+        work: session.steer({
+          content: message,
+          files,
+          requestContext: executionContext,
+          ...(author ? { author } : {}),
+        }),
         session,
         mastra,
         operation: 'steer',
       });
       return { ok: true };
     } catch (error) {
-      return handleError(error, 'error steering controller session');
+      return handleControllerRouteError(error, 'error steering controller session');
     }
   },
 });
@@ -1191,11 +1294,20 @@ export const SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE = createRoute({
     coalesceKey,
     attributes,
     metadata,
+    versions,
     requestContext,
   }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const executionContext = await prepareControllerExecutionContext({
+        mastra,
+        controller,
+        session,
+        versions,
+        requestContext,
+        rejectSelectorsWhileActive: true,
+      });
       const result = await session.sendNotificationSignal(
         {
           source,
@@ -1209,7 +1321,7 @@ export const SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE = createRoute({
           attributes: attributes as Record<string, string | number | boolean | null | undefined> | undefined,
           metadata,
         },
-        { requestContext },
+        { requestContext: executionContext },
       );
       return {
         accepted: result.accepted !== undefined,
@@ -1218,7 +1330,7 @@ export const SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE = createRoute({
         runId: result.runId,
       };
     } catch (error) {
-      return handleError(error, 'error sending controller notification');
+      return handleControllerRouteError(error, 'error sending controller notification');
     }
   },
 });
@@ -1449,19 +1561,26 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, versions, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const executionContext = await prepareControllerExecutionContext({
+        mastra,
+        controller,
+        session,
+        versions,
+        requestContext,
+      });
       ackBackgroundSessionWork({
-        work: session.followUp({ content: message, files, requestContext }),
+        work: session.followUp({ content: message, files, requestContext: executionContext }),
         session,
         mastra,
         operation: 'followUp',
       });
       return { ok: true };
     } catch (error) {
-      return handleError(error, 'error queuing controller follow-up');
+      return handleControllerRouteError(error, 'error queuing controller follow-up');
     }
   },
 });
