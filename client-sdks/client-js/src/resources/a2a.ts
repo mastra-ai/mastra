@@ -25,6 +25,11 @@ import type {
 import {
   AgentCard as AgentCardV1Codec,
   CancelTaskRequest as CancelTaskRequestV1Codec,
+  DeleteTaskPushNotificationConfigRequest as DeleteTaskPushNotificationConfigRequestV1Codec,
+  GetTaskPushNotificationConfigRequest as GetTaskPushNotificationConfigRequestV1Codec,
+  ListTaskPushNotificationConfigsRequest as ListTaskPushNotificationConfigsRequestV1Codec,
+  ListTaskPushNotificationConfigsResponse as ListTaskPushNotificationConfigsResponseV1Codec,
+  TaskPushNotificationConfig as TaskPushNotificationConfigV1Codec,
   GetTaskRequest as GetTaskRequestV1Codec,
   ListTasksRequest as ListTasksRequestV1Codec,
   ListTasksResponse as ListTasksResponseV1Codec,
@@ -37,6 +42,11 @@ import {
 import type {
   AgentCard as AgentCardV1,
   CancelTaskRequest as CancelTaskRequestV1,
+  DeleteTaskPushNotificationConfigRequest as DeleteTaskPushNotificationConfigRequestV1,
+  GetTaskPushNotificationConfigRequest as GetTaskPushNotificationConfigRequestV1,
+  ListTaskPushNotificationConfigsRequest as ListTaskPushNotificationConfigsRequestV1,
+  ListTaskPushNotificationConfigsResponse as ListTaskPushNotificationConfigsResponseV1,
+  TaskPushNotificationConfig as TaskPushNotificationConfigV1,
   GetTaskRequest as GetTaskRequestV1,
   ListTasksRequest as ListTasksRequestV1,
   ListTasksResponse as ListTasksResponseV1,
@@ -378,6 +388,41 @@ export class A2AV1 extends BaseResource {
     });
 
     return unwrapA2AResult<TResult>(response);
+  }
+
+  async createTaskPushNotificationConfig(params: TaskPushNotificationConfigV1): Promise<TaskPushNotificationConfigV1> {
+    const result = await this.rpc<unknown>(
+      'CreateTaskPushNotificationConfig',
+      TaskPushNotificationConfigV1Codec.toJSON(params),
+    );
+    return TaskPushNotificationConfigV1Codec.fromJSON(result);
+  }
+
+  async getTaskPushNotificationConfig(
+    params: GetTaskPushNotificationConfigRequestV1,
+  ): Promise<TaskPushNotificationConfigV1> {
+    const result = await this.rpc<unknown>(
+      'GetTaskPushNotificationConfig',
+      GetTaskPushNotificationConfigRequestV1Codec.toJSON(params),
+    );
+    return TaskPushNotificationConfigV1Codec.fromJSON(result);
+  }
+
+  async listTaskPushNotificationConfigs(
+    params: ListTaskPushNotificationConfigsRequestV1,
+  ): Promise<ListTaskPushNotificationConfigsResponseV1> {
+    const result = await this.rpc<unknown>(
+      'ListTaskPushNotificationConfigs',
+      ListTaskPushNotificationConfigsRequestV1Codec.toJSON(params),
+    );
+    return ListTaskPushNotificationConfigsResponseV1Codec.fromJSON(result);
+  }
+
+  async deleteTaskPushNotificationConfig(params: DeleteTaskPushNotificationConfigRequestV1): Promise<void> {
+    await this.rpc<unknown>(
+      'DeleteTaskPushNotificationConfig',
+      DeleteTaskPushNotificationConfigRequestV1Codec.toJSON(params),
+    );
   }
 
   async getAgentCard(): Promise<AgentCardV1> {
