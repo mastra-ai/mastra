@@ -2,7 +2,7 @@ import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { resolveModelConfig } from '@mastra/core/llm';
+import { modelSupportsTemperature, resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -236,6 +236,7 @@ import { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange as hasProviderChanged } from './model-context';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
+import { resolveThreadTitleUpdate } from './observation-strategies/thread-title';
 import type { ObservationRunResult } from './observation-strategies/types';
 import { ObservationTurn } from './observation-turn/index';
 import type { ObservationTurnHooks } from './observation-turn/types';
@@ -521,21 +522,51 @@ export class ObservationalMemory {
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
 
-    const isDefaultModelSelection = (model: WidenedObservationalMemoryModel | undefined) =>
+    const supportsDefaultTemperature = (model: WidenedObservationalMemoryModel) => {
+      if (model instanceof ModelByInputTokens || typeof model === 'function') return false;
+
+      if (typeof model === 'string') {
+        return modelSupportsTemperature(model) === true;
+      }
+
+      if (
+        model &&
+        typeof model === 'object' &&
+        'provider' in model &&
+        'modelId' in model &&
+        typeof model.provider === 'string' &&
+        typeof model.modelId === 'string'
+      ) {
+        return modelSupportsTemperature(`${model.provider.split('.')[0]}/${model.modelId}`) === true;
+      }
+
+      return false;
+    };
+    const usesDefaultOutputTokenBudget = (model: WidenedObservationalMemoryModel | undefined) =>
       model === undefined || model === 'default' || model instanceof ModelByInputTokens;
 
     const observationSelectedModel = topLevelModel ?? observationConfigModel ?? reflectionConfigModel;
     const reflectionSelectedModel = topLevelModel ?? reflectionConfigModel ?? observationConfigModel;
 
+    const observationTemperature =
+      config.observation?.modelSettings?.temperature ??
+      (supportsDefaultTemperature(observationModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature
+        : undefined);
     const observationDefaultMaxOutputTokens =
       config.observation?.modelSettings?.maxOutputTokens ??
-      (isDefaultModelSelection(observationSelectedModel)
+      (usesDefaultOutputTokenBudget(observationSelectedModel)
         ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens
         : undefined);
 
+    const reflectionTemperature =
+      config.reflection?.modelSettings?.temperature ??
+      (supportsDefaultTemperature(reflectionModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature
+        : undefined);
     const reflectionDefaultMaxOutputTokens =
       config.reflection?.modelSettings?.maxOutputTokens ??
-      (isDefaultModelSelection(reflectionSelectedModel)
+      (usesDefaultOutputTokenBudget(reflectionSelectedModel)
         ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens
         : undefined);
 
@@ -586,9 +617,7 @@ export class ObservationalMemory {
       messageTokens: isSharedBudget ? { min: messageTokens, max: totalBudget } : messageTokens,
       shareTokenBudget: isSharedBudget,
       modelSettings: {
-        temperature:
-          config.observation?.modelSettings?.temperature ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature,
+        ...(observationTemperature !== undefined ? { temperature: observationTemperature } : {}),
         ...(observationDefaultMaxOutputTokens !== undefined
           ? { maxOutputTokens: observationDefaultMaxOutputTokens }
           : {}),
@@ -637,9 +666,7 @@ export class ObservationalMemory {
       observationTokens: observationTokens,
       shareTokenBudget: isSharedBudget,
       modelSettings: {
-        temperature:
-          config.reflection?.modelSettings?.temperature ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature,
+        ...(reflectionTemperature !== undefined ? { temperature: reflectionTemperature } : {}),
         ...(reflectionDefaultMaxOutputTokens !== undefined
           ? { maxOutputTokens: reflectionDefaultMaxOutputTokens }
           : {}),
@@ -3575,9 +3602,8 @@ ${formattedMessages}
           currentTask: lastActivated.currentTask,
           threadTitle: chunkThreadTitle,
         });
-        const oldTitle = thread.title?.trim();
-        const newTitle = chunkThreadTitle?.trim();
-        const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+        const newTitle = resolveThreadTitleUpdate(thread, chunkThreadTitle);
+        const shouldUpdateThreadTitle = newTitle !== undefined;
         await this.storage.patchThread({
           id: threadId,
           ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),

@@ -306,6 +306,12 @@ export const traceQueryTraceSchema = z
   .object({
     traceId: z.string(),
     rootSpanId: z.string(),
+    name: z.string(),
+    entityId: z.string().nullable(),
+    parentSpanId: z.string().nullable(),
+    createdAt: z.string().datetime({ offset: true }),
+    metadata: z.record(z.string(), z.unknown()).nullable(),
+    inputPreview: z.string().nullable(),
     threadId: z.string().nullable(),
     resourceId: z.string().nullable(),
     startedAt: z.string().datetime({ offset: true }),
@@ -637,6 +643,15 @@ export class TraceQueryExecutionError extends Error {
   constructor() {
     super('The trace query exceeded its execution timeout');
     this.name = 'TraceQueryExecutionError';
+  }
+}
+
+export class TraceQueryResourceLimitError extends Error {
+  readonly code = 'TRACE_QUERY_RESOURCE_LIMIT';
+
+  constructor() {
+    super('The trace query exceeded its resource limit');
+    this.name = 'TraceQueryResourceLimitError';
   }
 }
 

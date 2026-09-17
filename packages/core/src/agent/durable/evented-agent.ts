@@ -152,11 +152,11 @@ export class EventedAgent<
             await this.deleteRunSnapshots(runId);
           }
         })
-        .catch(async error => {
-          await this.emitError(runId, error instanceof Error ? error : new Error(String(error)));
+        .catch(error => {
+          this.emitErrorInBackground(runId, error instanceof Error ? error : new Error(String(error)));
         });
     } catch (error) {
-      await this.emitError(runId, error instanceof Error ? error : new Error(String(error)));
+      this.emitErrorInBackground(runId, error instanceof Error ? error : new Error(String(error)));
     }
   }
 }

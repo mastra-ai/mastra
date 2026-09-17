@@ -3348,7 +3348,9 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "data"
+      "data",
+      "resumeData",
+      "suspendPayload"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -6057,6 +6059,7 @@ export const API_ROUTE_METADATA = {
       "prompt",
       "providerOptions",
       "requestContext",
+      "resourceId",
       "signalType",
       "status",
       "tagName",

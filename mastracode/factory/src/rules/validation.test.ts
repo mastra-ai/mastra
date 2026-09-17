@@ -384,6 +384,60 @@ describe('Factory rule validation', () => {
     ).toThrow(/cancelInFlight must be a boolean/i);
   });
 
+  it('accepts and normalizes the optional resume flag on invokeSkill decisions', () => {
+    expect(
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'skill-5',
+        role: 'review',
+        skillName: 'factory-review',
+        resume: true,
+      }),
+    ).toEqual({
+      type: 'invokeSkill',
+      idempotencyKey: 'skill-5',
+      role: 'review',
+      skillName: 'factory-review',
+      resume: true,
+    });
+    // false is the default and is dropped so persisted decisions stay minimal.
+    expect(
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'skill-6',
+        role: 'review',
+        skillName: 'factory-review',
+        resume: false,
+      }),
+    ).toEqual({
+      type: 'invokeSkill',
+      idempotencyKey: 'skill-6',
+      role: 'review',
+      skillName: 'factory-review',
+    });
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'skill-7',
+        role: 'review',
+        skillName: 'factory-review',
+        resume: 'yes',
+      }),
+    ).toThrow(/resume must be a boolean/i);
+  });
+
+  it('rejects resume on a prompt invokeSkill decision', () => {
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'skill-8',
+        role: 'review',
+        prompt: 'do the thing',
+        resume: true,
+      }),
+    ).toThrow(/resume requires skillName/i);
+  });
+
   it('requires unique decision idempotency keys', () => {
     expect(() =>
       validateFactoryRuleDecisions([

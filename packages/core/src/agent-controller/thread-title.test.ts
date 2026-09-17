@@ -188,4 +188,32 @@ describe('AgentController thread titles', () => {
       'Thread not found: missing-thread',
     );
   });
+
+  it('pins the thread title on rename and un-pins it on explicit regenerate', async () => {
+    const { controller, session, memory } = await startNamedThread();
+    const threadId = session.thread.getId()!;
+
+    await session.thread.rename({ title: 'My custom name' });
+    let thread = await memory.getThreadById({ threadId });
+    expect(thread?.metadata?.titlePinned).toBe(true);
+
+    // The explicit regenerate is the escape hatch: it un-pins and applies
+    // the freshly generated title.
+    const title = await controller.generateThreadTitle({
+      threadId,
+      resourceId: session.identity.getResourceId(),
+    });
+    expect(title).toBe('Log parser rewrite');
+    thread = await memory.getThreadById({ threadId });
+    expect(thread?.metadata?.titlePinned).toBe(false);
+    expect(thread?.title).toBe('Log parser rewrite');
+  });
+
+  it('does not pin when a programmatic rename opts out', async () => {
+    const { session, memory } = await startNamedThread();
+    await session.thread.rename({ title: 'Initial title', pin: false });
+    const thread = await memory.getThreadById({ threadId: session.thread.getId()! });
+    expect(thread?.metadata?.titlePinned).toBe(false);
+    expect(thread?.title).toBe('Initial title');
+  });
 });

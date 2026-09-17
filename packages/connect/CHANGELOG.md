@@ -1,5 +1,59 @@
 # @mastra/connect
 
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- Added the generated Linear provider with 46 tools for issues, projects, cycles, teams, users, workflow states, comments, attachments, relations, and labels. ([#23527](https://github.com/mastra-ai/mastra/pull/23527))
+
+  `connect()` now automatically exposes the Linear toolset when the project has a matching `linear` connection. Set `MASTRA_LINEAR_CONNECTION_ID` or pass `integrations.linear.connectionId` when the project has multiple Linear connections.
+
+- Added automatic discovery of MCP-backed integrations from the Mastra Platform catalog. Connected MCP providers require no checked-in provider registration: `connect()` discovers their tools through Platform, keeps provider credentials outside the application process, and preserves Platform proxy analytics. Discovered MCP tools require tool approval unless the application lists them in `autoApproveTools`. ([#23996](https://github.com/mastra-ai/mastra/pull/23996))
+
+  ```ts
+  import { connect } from '@mastra/connect';
+
+  const tools = connect({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    client: { accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN },
+    integrations: {
+      // An MCP-backed integration attached to the project; tools are discovered at runtime.
+      neon: { autoApproveTools: ['neon_list_projects', 'neon_describe_project'] },
+    },
+  });
+  ```
+
+- Added broad Resend and incident.io tool coverage backed by Platform connections. Resend covers email operations and account resources such as domains, templates, audiences, contacts, broadcasts, and webhooks. incident.io covers incident response, alerts, on-call data, teams, users, postmortems, and catalog reads. ([#23631](https://github.com/mastra-ai/mastra/pull/23631))
+
+  ```ts
+  import { connect } from '@mastra/connect';
+
+  const tools = connect({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    client: { accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN },
+    integrations: {
+      resend: { allowTools: ['resend_send_email', 'resend_get_email'] },
+      'incident-io': { allowTools: ['incident_io_list_incidents'] },
+    },
+  });
+  ```
+
+- Added built-in Clerk and WorkOS providers with 42 and 40 tools respectively for identity, organization, directory, connection, invitation, membership, and domain administration. Provider tools can now forward repeated query parameters for multi-value filters. ([#23527](https://github.com/mastra-ai/mastra/pull/23527))
+
+- Added built-in Anthropic, Notion, OpenAI, and Supabase providers. Generated tools can now read safe connection configuration and metadata through the platform proxy, enabling providers with connection-specific API hosts. ([#23527](https://github.com/mastra-ai/mastra/pull/23527))
+
+### Patch Changes
+
+- Fixed OpenAI image generation tools to send base64 images to models as multimodal image content instead of JSON text, preventing generated images from consuming the text context window. Updated the generated OpenAI tools to the current API parameters. ([#23527](https://github.com/mastra-ai/mastra/pull/23527))
+
+- Removed warnings for providers that do not have project connections. Connect now silently skips unavailable providers while continuing to report actionable connection problems. ([#23527](https://github.com/mastra-ai/mastra/pull/23527))
+
+- Validate `baseUrlOverride` on the connection-proxy client before it is forwarded as a request header. Only absolute HTTPS URLs without embedded credentials are accepted; unparseable values, non-HTTPS schemes, and userinfo-bearing URLs are rejected with `invalid_options` so a compromised connection config cannot redirect authenticated proxy traffic to an unintended origin. ([#23527](https://github.com/mastra-ai/mastra/pull/23527))
+
+- Updated dependencies [[`81ccd7b`](https://github.com/mastra-ai/mastra/commit/81ccd7b93040952fe9c7168a2757c43a217f0a87), [`a46385d`](https://github.com/mastra-ai/mastra/commit/a46385dc1b773d1e1453627b1d62e7b6ebe93cf1), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`25d940a`](https://github.com/mastra-ai/mastra/commit/25d940add25504daebe65bc5cc02f268d6eba07c), [`d7f0579`](https://github.com/mastra-ai/mastra/commit/d7f0579a0445469430b9eadbf9c28ed3fa009839), [`b483910`](https://github.com/mastra-ai/mastra/commit/b48391034dee9a19396c1b3ec084ecf20faf550e), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`fa4c366`](https://github.com/mastra-ai/mastra/commit/fa4c3664c5446ae13d991204275883b2d7f00690), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`1670091`](https://github.com/mastra-ai/mastra/commit/16700919c35dadb9737dc7fe7e5feb67cc209494), [`b8e3ee5`](https://github.com/mastra-ai/mastra/commit/b8e3ee5da5cbc46b182ca75214acda667bac5205), [`d777788`](https://github.com/mastra-ai/mastra/commit/d7777889d72b4f37a3d50b830f8208c736ee0e7a), [`56680bf`](https://github.com/mastra-ai/mastra/commit/56680bfff71e7cdad71721b424b160bdd5de6e02), [`93a3425`](https://github.com/mastra-ai/mastra/commit/93a342569d592d0449eee7b4b4f7555dc001081b), [`b130872`](https://github.com/mastra-ai/mastra/commit/b130872508e95f17894c2ed4932d4952db0a2d3c), [`1853f3d`](https://github.com/mastra-ai/mastra/commit/1853f3d9331e3131930581556df781cca85f2d2d), [`fdb59c6`](https://github.com/mastra-ai/mastra/commit/fdb59c6a4c3d9aea19159886aac8d80602763f04)]:
+  - @mastra/core@1.68.0-alpha.1
+  - @mastra/mcp@1.18.1-alpha.0
+
 ## 0.1.0
 
 ### Minor Changes
