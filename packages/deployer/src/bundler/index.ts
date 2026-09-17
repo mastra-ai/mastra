@@ -407,13 +407,9 @@ export abstract class Bundler extends MastraBundler {
       pnpmNodeLinker: this.pnpmNodeLinker,
     };
 
-    this.logger.info('Preparing dependency lockfile');
-    await deps.prepareLockfile(installOptions);
-    this.logger.info('Done preparing dependency lockfile');
-
-    this.logger.info('Installing dependencies');
+    this.logger.info('Updating dependency lockfile and installing dependencies');
     await deps.install(installOptions);
-    this.logger.info('Done installing dependencies');
+    this.logger.info('Done updating dependency lockfile and installing dependencies');
   }
 
   protected async copyPublic(mastraDir: string, outputDirectory: string) {
@@ -778,9 +774,7 @@ export const tools = [${toolsExports.join(', ')}]`,
     } catch (error) {
       if (
         error instanceof MastraError &&
-        (error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' ||
-          error.id === 'DEPLOYER_PNPM_IGNORED_BUILDS' ||
-          error.id === 'DEPLOYER_YARN_CLASSIC_LOCKFILE_UNSUPPORTED')
+        (error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' || error.id === 'DEPLOYER_PNPM_IGNORED_BUILDS')
       ) {
         throw error;
       }

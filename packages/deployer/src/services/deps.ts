@@ -295,69 +295,23 @@ export class Deps extends MastraBase {
    * Depending on whether we want to install or add a package, this function returns the appropriate commands.
    * All package managers support both commands (e.g. npm install has an alias on "add")
    */
-  private getPackageManagerCommand(pm: PackageManager, type: 'install' | 'add', lockfileOnly = false): string {
+  private getPackageManagerCommand(
+    pm: PackageManager,
+    type: 'install' | 'add',
+    { yarnClassic = false }: { yarnClassic?: boolean } = {},
+  ): string {
     const cmd = type === 'install' ? 'install' : 'add';
-    const lockfileFlag =
-      type === 'install' && lockfileOnly
-        ? pm === 'npm'
-          ? ' --package-lock-only'
-          : pm === 'yarn'
-            ? ' --mode=update-lockfile'
-            : ' --lockfile-only'
-        : '';
-    const ignoreScriptsFlag = type === 'install' && lockfileOnly && pm !== 'yarn' ? ' --ignore-scripts' : '';
 
     switch (pm) {
       case 'npm':
-        return `${cmd}${lockfileFlag}${ignoreScriptsFlag} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
+        return `${cmd} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
       case 'yarn':
-        return `${cmd}${lockfileFlag}`;
+        return type === 'install' && !yarnClassic ? `${cmd} --no-immutable` : cmd;
       case 'pnpm':
-        return `${cmd}${lockfileFlag}${ignoreScriptsFlag} --loglevel=error`;
-      case 'bun':
-        return `${cmd}${lockfileFlag}${ignoreScriptsFlag}`;
+        return type === 'install' ? `${cmd} --no-frozen-lockfile --loglevel=error` : `${cmd} --loglevel=error`;
       default:
-        return `${cmd}${lockfileFlag}${ignoreScriptsFlag}`;
+        return cmd;
     }
-  }
-
-  public async prepareLockfile({
-    dir = this.rootDir,
-    architecture,
-    pnpmOverrides,
-    pnpmNodeLinker,
-  }: {
-    dir?: string;
-    architecture?: ArchitectureOptions;
-    pnpmOverrides?: Record<string, string>;
-    pnpmNodeLinker?: 'hoisted';
-  } = {}) {
-    if (this.lockFile) {
-      if (this.lockFile.packageManager === 'yarn') {
-        const lockfileContents = await fsPromises.readFile(this.lockFile.path, 'utf-8');
-        if (/^# yarn lockfile v1\r?$/m.test(lockfileContents)) {
-          throw new MastraError({
-            id: 'DEPLOYER_YARN_CLASSIC_LOCKFILE_UNSUPPORTED',
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-            text: 'Yarn Classic lockfiles cannot be updated without installing dependencies. Upgrade the project to Yarn 2 or newer before building.',
-          });
-        }
-      }
-
-      const destination = path.join(dir, this.lockFile.filename);
-      if (path.resolve(this.lockFile.path) !== path.resolve(destination)) {
-        await fsPromises.copyFile(this.lockFile.path, destination);
-      }
-    }
-
-    return this.install({
-      dir,
-      architecture,
-      pnpmOverrides,
-      pnpmNodeLinker,
-      lockfileOnly: true,
-    });
   }
 
   public async install({
@@ -365,16 +319,27 @@ export class Deps extends MastraBase {
     architecture,
     pnpmOverrides,
     pnpmNodeLinker,
-    lockfileOnly = false,
   }: {
     dir?: string;
     architecture?: ArchitectureOptions;
     pnpmOverrides?: Record<string, string>;
     pnpmNodeLinker?: 'hoisted';
-    lockfileOnly?: boolean;
   } = {}) {
     const pm = this.packageManager;
-    const installCommand = this.getPackageManagerCommand(pm, 'install', lockfileOnly);
+    let yarnClassic = false;
+    if (this.lockFile) {
+      const destination = path.join(dir, this.lockFile.filename);
+      if (path.resolve(this.lockFile.path) !== path.resolve(destination)) {
+        await fsPromises.copyFile(this.lockFile.path, destination);
+      }
+
+      if (pm === 'yarn') {
+        const lockfileContents = await fsPromises.readFile(destination, 'utf-8');
+        yarnClassic = /^# yarn lockfile v1\r?$/m.test(lockfileContents);
+      }
+    }
+
+    const installCommand = this.getPackageManagerCommand(pm, 'install', { yarnClassic });
     let args: string[] = [];
 
     switch (pm) {

@@ -626,7 +626,7 @@ export const environmentRoute = registerApiRoute('/environment', {
       );
     });
 
-    it('should reuse the source pnpm lockfile when installing output dependencies', async () => {
+    it('should update the source pnpm lockfile while installing output dependencies', async () => {
       const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
       const outputFiles = await readdir(outputDir);
       expect(outputFiles).toContain('pnpm-lock.yaml');

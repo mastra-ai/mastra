@@ -7,14 +7,12 @@ import { Bundler, applySourceDependencyRange, getSourceDependencyConstraints, is
 
 const depsMocks = vi.hoisted(() => ({
   setLogger: vi.fn(),
-  prepareLockfile: vi.fn(),
   install: vi.fn(),
 }));
 
 vi.mock('../services/deps', () => ({
   DepsService: class {
     __setLogger = depsMocks.setLogger;
-    prepareLockfile = depsMocks.prepareLockfile;
     install = depsMocks.install;
   },
 }));
@@ -90,7 +88,7 @@ afterEach(async () => {
 });
 
 describe('Bundler.installDependencies', () => {
-  it('prepares the selected lockfile before installing packed workspace dependencies', async () => {
+  it('updates the selected lockfile and installs packed workspace dependencies in one operation', async () => {
     const bundler = new TestBundler('Test');
     const pnpmOverrides = {
       '@inner/transitive-c': 'file:./workspace-module/inner-transitive-c-1.0.0.tgz',
@@ -98,16 +96,12 @@ describe('Bundler.installDependencies', () => {
 
     await bundler.installForTest('/tmp/build', '/tmp/source', pnpmOverrides);
 
-    const expectedOptions = {
+    expect(depsMocks.install).toHaveBeenCalledTimes(1);
+    expect(depsMocks.install).toHaveBeenCalledWith({
       dir: join('/tmp/build', 'output'),
       pnpmOverrides,
       pnpmNodeLinker: undefined,
-    };
-    expect(depsMocks.prepareLockfile).toHaveBeenCalledWith(expectedOptions);
-    expect(depsMocks.install).toHaveBeenCalledWith(expectedOptions);
-    expect(depsMocks.prepareLockfile.mock.invocationCallOrder[0]).toBeLessThan(
-      depsMocks.install.mock.invocationCallOrder[0]!,
-    );
+    });
   });
 });
 
