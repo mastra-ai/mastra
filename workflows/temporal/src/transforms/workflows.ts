@@ -330,11 +330,31 @@ function rewriteChainMethod(
       if (!t.isArrayExpression(arg)) {
         throw new Error(`.parallel() in ${workflowName} (${filePath}) requires an array literal argument`);
       }
-      const names = arg.elements.map(el => getWorkflowStepName(el, stepBindings));
-      if (names.some(n => !n)) {
-        throw new Error(`Unable to determine step names inside .parallel() in ${workflowName} (${filePath})`);
-      }
-      return rewritten([t.arrayExpression(names.map(n => t.stringLiteral(n!)))]);
+      const entries = arg.elements.map(element => {
+        if (t.isIdentifier(element)) {
+          const workflowType = workflowBindings.get(element.name);
+          if (workflowType) {
+            return t.objectExpression([
+              t.objectProperty(t.identifier('type'), t.stringLiteral('childWorkflow')),
+              t.objectProperty(t.identifier('workflowType'), t.stringLiteral(workflowType)),
+            ]);
+          }
+        }
+
+        const stepId = getWorkflowStepName(element, stepBindings);
+        if (!stepId) {
+          throw new Error(`Unable to determine step names inside .parallel() in ${workflowName} (${filePath})`);
+        }
+
+        return t.objectExpression([
+          t.objectProperty(t.identifier('type'), t.stringLiteral('step')),
+          t.objectProperty(
+            t.identifier('step'),
+            t.objectExpression([t.objectProperty(t.identifier('id'), t.stringLiteral(stepId))]),
+          ),
+        ]);
+      });
+      return rewritten([t.arrayExpression(entries)]);
     }
 
     case 'branch': {

@@ -94,7 +94,12 @@ describe('temporal workflow runtime helper module', () => {
     proxyActivities.mockReturnValue({ first, second });
 
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
-    const workflow = createWorkflow('parallel-workflow').parallel(['first', 'second']).commit();
+    const workflow = createWorkflow('parallel-workflow')
+      .parallel([
+        { type: 'step', step: { id: 'first' } },
+        { type: 'step', step: { id: 'second' } },
+      ])
+      .commit();
     const result = await workflow({ inputData: { value: 1 } });
 
     expect(first).toHaveBeenCalledWith({ inputData: { value: 1 } });
@@ -110,6 +115,62 @@ describe('temporal workflow runtime helper module', () => {
       steps: {
         first: { first: 2 },
         second: { second: 3 },
+      },
+    });
+  });
+
+  it('executes parallel child workflow entries through executeChild', async () => {
+    proxyActivities.mockReturnValue({});
+    executeChild.mockResolvedValue({ result: { value: 'child-output' } });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('parallel-child-workflow')
+      .parallel([{ type: 'childWorkflow', workflowType: 'childWorkflow' }])
+      .commit();
+    const result = await workflow({ inputData: { value: 'parent-input' } });
+
+    expect(executeChild).toHaveBeenCalledWith('childWorkflow', {
+      args: [{ inputData: { value: 'parent-input' } }],
+    });
+    expect(result).toEqual({
+      status: 'success',
+      input: { value: 'parent-input' },
+      result: {
+        childWorkflow: { value: 'child-output' },
+      },
+      state: undefined,
+      steps: {
+        childWorkflow: { value: 'child-output' },
+      },
+    });
+  });
+
+  it('executes mixed parallel step and child workflow entries', async () => {
+    const activity = vi.fn(async ({ inputData }) => ({ value: `${inputData.value}-activity` }));
+    proxyActivities.mockReturnValue({ activity });
+    executeChild.mockResolvedValue({ result: { value: 'child-output' } });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('mixed-parallel-workflow')
+      .parallel([
+        { type: 'step', step: { id: 'activity' } },
+        { type: 'childWorkflow', workflowType: 'childWorkflow' },
+      ])
+      .commit();
+    const result = await workflow({ inputData: { value: 'parent-input' } });
+
+    expect(activity).toHaveBeenCalledWith({ inputData: { value: 'parent-input' } });
+    expect(executeChild).toHaveBeenCalledWith('childWorkflow', {
+      args: [{ inputData: { value: 'parent-input' } }],
+    });
+    expect(result).toMatchObject({
+      result: {
+        activity: { value: 'parent-input-activity' },
+        childWorkflow: { value: 'child-output' },
+      },
+      steps: {
+        activity: { value: 'parent-input-activity' },
+        childWorkflow: { value: 'child-output' },
       },
     });
   });

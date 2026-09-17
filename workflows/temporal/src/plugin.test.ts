@@ -183,11 +183,14 @@ describe('Temporal prebuild integration', () => {
     ]);
     const activityBindings = JSON.parse(activityBindingsSource) as { exportName: string; stepId: string }[];
 
+    const normalizedWorkflowSource = workflowSource.replace(/\s+/g, ' ');
     expect(workflowSource).toContain('const complexWorkflow =');
     expect(workflowSource).toContain('const innerWorkflow =');
     expect(workflowSource).toContain('.then("step1")');
     expect(workflowSource).toContain('.thenWorkflow("innerWorkflow")');
-    expect(workflowSource).toContain('.parallel(["step2", "step3"])');
+    expect(normalizedWorkflowSource).toContain(
+      '.parallel([{ type: "step", step: { id: "step2" } }, { type: "step", step: { id: "step3" } }])',
+    );
     expect(workflowSource).toContain('.sleep(1000)');
     expect(workflowSource).toContain('.then("step4")');
     expect(workflowSource).not.toContain('export const mastra');

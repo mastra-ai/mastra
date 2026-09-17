@@ -76,6 +76,20 @@ describe('workflow transform', () => {
     expect(result).not.toContain('.then("subWorkflow")');
   });
 
+  it('preserves child workflows passed directly to parallel', async () => {
+    const result = await transform(`
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      const childStep = createStep({ id: 'child-step', execute: async () => ({}) });
+      const child = createWorkflow({ id: 'child' }).then(childStep).commit();
+      export const parent = createWorkflow({ id: 'parent' }).parallel([child]).commit();
+    `);
+
+    expect(result).toContain('type: "childWorkflow"');
+    expect(result).toContain('workflowType: "childWorkflow"');
+    expect(result).not.toContain('.parallel(["child"])');
+  });
+
   it('resolves steps returned by factory functions', async () => {
     const result = await transform(`
       import { createStep, createWorkflow } from '@mastra/core/workflows';
