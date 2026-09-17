@@ -149,17 +149,17 @@ export function WorkflowTrigger({
   if (!workflow) return null;
 
   const isSuspendedSteps = suspendedSteps.length > 0;
-  const showsCancelButton = streamResultToUse?.status === 'running' || isSuspendedSteps;
+  const showsCancelButton = streamResultToUse?.status === 'running';
 
   const isViewingRun = !!activeRunId;
   const runStatus = streamResultToUse?.status ?? paramsRunStatus ?? (isStreamingWorkflow ? 'running' : 'pending');
   const cancelAction = (
     <WorkflowCancelButton
-      status={isSuspendedSteps ? 'suspended' : streamResultToUse?.status}
+      status={streamResultToUse?.status}
       cancelMessage={currentCancellation?.message ?? null}
       isCancelling={isCancellingWorkflowRun}
       onCancel={handleCancelWorkflowRun}
-      disabled={isSuspendedSteps || !canExecuteWorkflow}
+      disabled={!canExecuteWorkflow}
     />
   );
   const headingSlot = isViewingRun ? (
