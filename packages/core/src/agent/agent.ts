@@ -244,12 +244,7 @@ import type {
   ModelWithRetries,
   ZodSchema,
 } from './types';
-import {
-  isSupportedLanguageModel,
-  resolveSuspendedToolRunId,
-  resolveThreadIdFromArgs,
-  supportedLanguageModelSpecifications,
-} from './utils';
+import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
@@ -5425,19 +5420,11 @@ export class Agent<
                 resourceId,
               });
 
-              // The model authors this schema field, and some models emit sentinel strings like
-              // "null" for it on fresh calls. Normalize at the trust boundary so junk never
-              // reaches the resume gate below or resumeStream/resumeGenerate (#23739).
-              const suspendedToolRunId = resolveSuspendedToolRunId((inputData as any).suspendedToolRunId);
+              const { resumeData, suspendedToolRunId, suspend } = context?.agent ?? {};
 
-              const { resumeData, suspend } = context?.agent ?? {};
-
-              // A delegation only resumes when the suspended-tool lookup actually found a run to
-              // resume. `resumeData` alone is model-authored and is present whenever the model
-              // decides to fill the always-exposed schema field, so branching on it would send an
-              // undefined runId into resumeGenerate/resumeStream and throw
-              // AGENT_RESUME_NO_SNAPSHOT_FOUND before the sub-agent ever runs. See issue #21608.
-              const shouldResumeSubAgent = !!resumeData && !!suspendedToolRunId;
+              // Only the framework-resolved context marker can select a suspended sub-agent run.
+              // Model-authored resumeData and suspendedToolRunId arguments are not provenance.
+              const shouldResumeSubAgent = resumeData !== undefined && !!suspendedToolRunId;
 
               // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
@@ -6155,23 +6142,13 @@ export class Agent<
             const savedMastraMemory = requestContext.get('MastraMemory');
             let runIdToUse: string | undefined;
             try {
-              const {
-                initialState,
-                inputData: workflowInputData,
-                suspendedToolRunId: rawSuspendedToolRunId,
-              } = inputData as any;
-              const { resumeData, suspend } = context?.agent ?? {};
-              // The model authors this schema field, and some models emit sentinel strings like
-              // "null" for it on fresh calls. Normalize at the trust boundary (#23739).
-              const suspendedToolRunId = resolveSuspendedToolRunId(rawSuspendedToolRunId);
-              // Use a unique runId for each workflow tool call to prevent parallel calls
-              // from sharing the same cached Run instance (see #13473).
-              // For resume cases, suspendedToolRunId is injected into inputData by
-              // tool-call-step (from metadata stored during suspension).
-              // A supplied id is only trusted alongside resumeData: on fresh calls any
-              // echoed id — model-authored or hook-pinned — is replaced with a unique id,
-              // otherwise two independent calls collide on one cached Run (#23739).
-              runIdToUse = resumeData && suspendedToolRunId ? suspendedToolRunId : randomUUID();
+              const { initialState, inputData: workflowInputData } = inputData as any;
+              const { resumeData, suspendedToolRunId, suspend } = context?.agent ?? {};
+              // Use a unique runId for every fresh workflow delegation. Only a run ID
+              // resolved by the framework from persisted suspension state may select an
+              // existing run; model-authored arguments never control run identity.
+              const shouldResumeWorkflow = resumeData !== undefined && !!suspendedToolRunId;
+              runIdToUse = shouldResumeWorkflow ? suspendedToolRunId : randomUUID();
               this.logger.debug('Executing workflow as tool', {
                 agent: this.name,
                 workflow: workflowName,
@@ -6187,7 +6164,7 @@ export class Agent<
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
               if (methodType === 'generate' || methodType === 'generateLegacy') {
-                if (resumeData) {
+                if (shouldResumeWorkflow) {
                   result = await run.resume({
                     resumeData,
                     requestContext,
@@ -6221,7 +6198,7 @@ export class Agent<
 
                 result = await streamResult.getWorkflowState();
               } else if (methodType === 'stream') {
-                const streamResult = resumeData
+                const streamResult = shouldResumeWorkflow
                   ? run.resumeStream({
                       resumeData,
                       requestContext,

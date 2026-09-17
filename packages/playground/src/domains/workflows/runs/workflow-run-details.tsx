@@ -48,13 +48,11 @@ export const WorkflowRunDetail = ({
           </div>
         </div>
 
-        {/* "Run input" label + Form/JSON toggle */}
         <div className="flex items-center justify-between">
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-7 w-28 rounded-md" />
         </div>
 
-        {/* Form fields */}
         <div className="space-y-3">
           <Skeleton className="h-9 w-full rounded-md" />
           <Skeleton className="h-9 w-full rounded-md" />
@@ -75,15 +73,13 @@ export const WorkflowRunDetail = ({
   }
 
   return (
-    <div className="grid h-full grid-rows-[1fr_auto]">
-      <WorkflowTrigger
-        key={`${workflowId}:${runId}`}
-        {...triggerProps}
-        paramsRunId={runId}
-        paramsRunStatus={runSnapshot.status}
-        workflowId={workflowId}
-        observeWorkflowStream={observeSelectedRun}
-      />
-    </div>
+    <WorkflowTrigger
+      key={`${workflowId}:${runId}`}
+      {...triggerProps}
+      paramsRunId={runId}
+      paramsRunStatus={runSnapshot.status}
+      workflowId={workflowId}
+      observeWorkflowStream={observeSelectedRun}
+    />
   );
 };

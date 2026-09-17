@@ -1,0 +1,365 @@
+@property --belt-pitch {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 9px;
+}
+
+@property --belt-sway {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --belt-hue {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: currentcolor;
+}
+
+@property --wick-fill {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --wick-drift {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
+.session-working {
+  --belt-pitch: 9px;
+  --belt-sway: 0;
+  --wick-fill: 0;
+  --wick-drift: 1;
+  --belt-hue: var(--positive1);
+}
+
+.session-initializing {
+  --belt-pitch: 9px;
+  --belt-sway: 0;
+  --wick-fill: 0;
+  --wick-drift: 1;
+  --belt-hue: var(--warning1);
+}
+
+.session-ready {
+  --belt-pitch: 0px;
+  --belt-sway: 1;
+  --wick-fill: 1;
+  --wick-drift: 0;
+  --belt-hue: var(--accent3);
+}
+
+.session-belt {
+  --belt-beat: 1.4s;
+
+  transition:
+    --belt-pitch 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-sway 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-hue 520ms ease;
+}
+
+.session-belt {
+  position: absolute;
+  inset-block: 4px;
+  left: 3px;
+  width: 6px;
+  overflow: hidden;
+  mask: linear-gradient(to bottom, transparent, #000 16%, #000 84%, transparent);
+}
+
+.session-belt-sway {
+  position: absolute;
+  inset: 0;
+  animation: session-belt-sway calc(var(--belt-beat) * 4) ease-in-out infinite;
+}
+
+.session-belt-sway i {
+  position: absolute;
+  top: calc(var(--belt-k) * 9px - 9px);
+  left: 50%;
+  width: 2px;
+  height: 6px;
+  margin-left: -1px;
+  border-radius: 999px;
+  background: var(--belt-hue);
+  animation: session-belt-flow calc(var(--belt-beat) * 0.9) linear infinite;
+}
+
+.session-belt-sway i:nth-child(1) {
+  --belt-k: 0;
+}
+
+.session-belt-sway i:nth-child(2) {
+  --belt-k: 1;
+}
+
+.session-belt-sway i:nth-child(3) {
+  --belt-k: 2;
+}
+
+.session-belt-sway i:nth-child(4) {
+  --belt-k: 3;
+}
+
+.session-belt-sway i:nth-child(5) {
+  --belt-k: 4;
+}
+
+@keyframes session-belt-flow {
+  to {
+    transform: translateY(var(--belt-pitch));
+  }
+}
+
+@keyframes session-belt-sway {
+  0%,
+  100% {
+    transform: translateY(calc(-3px * var(--belt-sway)));
+  }
+
+  50% {
+    transform: translateY(calc(3px * var(--belt-sway)));
+  }
+}
+
+@property --wick-a {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.5;
+}
+
+@property --wick-b {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.5;
+}
+
+@property --wick-c {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.5;
+}
+
+.session-wick {
+  --belt-beat: 1.4s;
+  --wick-phase: 0s;
+
+  --wick-hot: white;
+  --wick-lit: 1;
+  --wick-halo: 0.26;
+
+  position: absolute;
+
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+
+  animation:
+    session-wick-a 5.2s ease-in-out calc(-1.2s + var(--wick-phase)) infinite,
+    session-wick-b 6.8s ease-in-out calc(-4.7s + var(--wick-phase)) infinite,
+    session-wick-c 8.6s ease-in-out calc(-6.3s + var(--wick-phase)) infinite,
+    session-wick-breathe calc(var(--belt-beat) * 4) ease-in-out var(--wick-phase) infinite;
+  transition:
+    --wick-fill 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --wick-drift 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-sway 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-hue 520ms ease;
+}
+
+.session-wick::before,
+.session-wick::after {
+  --wick-ka: calc((var(--wick-a) - 0.5) * var(--wick-drift));
+  --wick-kb: calc((var(--wick-b) - 0.5) * var(--wick-drift));
+  --wick-kc: calc((var(--wick-c) - 0.5) * var(--wick-drift));
+
+  --wick-beam:
+    radial-gradient(
+      ellipse calc(30% * (1 + 0.5 * var(--wick-ka))) calc(11% * (1 + 0.4 * var(--wick-ka))) at
+        calc(27% + var(--wick-ka) * 58px) 0%,
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 62%, var(--belt-hue)) calc(92% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(26% * (1 + 0.5 * var(--wick-kb))) calc(8% * (1 + 0.4 * var(--wick-kb))) at
+        calc(72% + var(--wick-kb) * 52px) 0%,
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 45%, var(--belt-hue)) calc(62% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(7% * (1 + 0.5 * var(--wick-kc))) calc(26% * (1 + 0.4 * var(--wick-kc))) at 100%
+        calc(34% + var(--wick-kc) * 44px),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 55%, var(--belt-hue)) calc(82% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(6% * (1 + 0.5 * var(--wick-ka))) calc(20% * (1 + 0.4 * var(--wick-ka))) at 100%
+        calc(74% + var(--wick-ka) * 38px),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 40%, var(--belt-hue)) calc(58% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(31% * (1 + 0.5 * var(--wick-kb))) calc(9% * (1 + 0.4 * var(--wick-kb))) at
+        calc(66% + var(--wick-kb) * 58px) 100%,
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 58%, var(--belt-hue)) calc(88% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(22% * (1 + 0.5 * var(--wick-kc))) calc(7% * (1 + 0.4 * var(--wick-kc))) at
+        calc(24% + var(--wick-kc) * 48px) 100%,
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 42%, var(--belt-hue)) calc(55% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(7% * (1 + 0.5 * var(--wick-kc))) calc(23% * (1 + 0.4 * var(--wick-kc))) at 0%
+        calc(62% + var(--wick-kc) * 42px),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 50%, var(--belt-hue)) calc(78% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(6% * (1 + 0.5 * var(--wick-kb))) calc(17% * (1 + 0.4 * var(--wick-kb))) at 0%
+        calc(28% + var(--wick-kb) * 38px),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 38%, var(--belt-hue)) calc(52% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    );
+}
+
+.session-wick::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background:
+    var(--wick-beam),
+    linear-gradient(
+      color-mix(in oklab, var(--belt-hue) calc(var(--wick-fill) * 62% * var(--wick-lit)), transparent) 0 0
+    ),
+    linear-gradient(color-mix(in oklab, var(--border1) 50%, transparent) 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.session-wick::before {
+  --wick-drift: 0;
+
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  background: var(--wick-beam);
+  opacity: var(--wick-halo);
+  filter: blur(9px);
+}
+
+html.light .session-wick {
+  --wick-hot: color-mix(in oklab, black 30%, var(--belt-hue));
+  --wick-lit: 1.15;
+  --wick-halo: 0.16;
+}
+
+:nth-child(2n) > .session-wick {
+  --wick-phase: -1.7s;
+}
+
+:nth-child(3n) > .session-wick {
+  --wick-phase: -3.4s;
+}
+
+:nth-child(5n) > .session-wick {
+  --wick-phase: -0.9s;
+}
+
+@keyframes session-wick-a {
+  0%,
+  100% {
+    --wick-a: 0;
+  }
+
+  50% {
+    --wick-a: 1;
+  }
+}
+
+@keyframes session-wick-b {
+  0%,
+  100% {
+    --wick-b: 0;
+  }
+
+  50% {
+    --wick-b: 1;
+  }
+}
+
+@keyframes session-wick-c {
+  0%,
+  100% {
+    --wick-c: 0;
+  }
+
+  50% {
+    --wick-c: 1;
+  }
+}
+
+@keyframes session-wick-breathe {
+  0%,
+  100% {
+    opacity: calc(1 - 0.5 * var(--belt-sway));
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-wick,
+  .session-belt,
+  .session-belt-sway,
+  .session-belt-sway i {
+    transition: none;
+    animation: none;
+  }
+
+  .session-wick.session-initializing {
+    --wick-fill: 0.4;
+  }
+}

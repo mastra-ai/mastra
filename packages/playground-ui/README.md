@@ -23,9 +23,7 @@ export function SaveButton() {
 
 ### Opt-in semantic theme
 
-`MainSidebar` and `SidebarNew` use the same root, which imports `new-theme.css` and applies `new-theme`, including in the mobile drawer. Their navigation uses semantic utilities directly; no legacy token aliases are needed. Mobile triggers and portalled tooltips apply their own scope. Keep importing `style.css` once in the app: it provides the compiled utilities. The theme import only adds scoped token values.
-
-For other components, import the theme and apply its scope where semantic colors are needed:
+`new-theme.css` provides scoped semantic color tokens. Import it and apply `new-theme` to the root of the content using those tokens. Keep importing `style.css` once in the app for the compiled utilities.
 
 ```tsx
 import '@mastra/playground-ui/new-theme.css';
@@ -39,7 +37,7 @@ The scope limits token defaults, not utility selectors. Classes such as `bg-card
 
 Semantic values follow the existing `html.light` mode; dark mode is the default. Override `--card`, `--foreground`, or another semantic variable on the themed element to customize it.
 
-Portalled content using semantic colors also needs `new-theme` on its popup root, since it renders outside the component's DOM subtree. The class supplies default values; custom overrides on the trigger's ancestors must also be applied to the popup.
+Portalled content using semantic colors also needs `new-theme` on its portal root, since it renders outside the themed DOM subtree. Apply custom overrides to that root too; values inherited from the trigger's ancestors do not cross the portal.
 
 If your app generates additional semantic utilities, import `@mastra/playground-ui/new-theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings.
 

@@ -10,7 +10,7 @@ import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowTrigger } from '../workflow-trigger';
 import { twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
-import { pausedRunAfterFirstStepState } from './fixtures/workflow-run-states';
+import { pausedRunAfterFirstStepState, suspendedRunState } from './fixtures/workflow-run-states';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -31,8 +31,8 @@ function RunPanel({ onSelectRun, observed }: { onSelectRun: () => void; observed
   );
 }
 
-function RunSelection({ observed }: { observed: boolean }) {
-  const [runId, selectRun] = useState(run.runId);
+function RunSelection({ observed, initialRunId }: { observed: boolean; initialRunId: string }) {
+  const [runId, selectRun] = useState(initialRunId);
   return (
     <WorkflowRunProvider workflowId="two-step-workflow" initialRunId={runId}>
       <RunPanel onSelectRun={() => selectRun('another-run')} observed={observed} />
@@ -54,7 +54,7 @@ const pausedReplay: StreamVNextChunkType[] = [
   },
 ];
 
-function renderPausedRun({ observed = false } = {}) {
+function renderRun({ run = pausedRunAfterFirstStepState, observed = false } = {}) {
   server.use(
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({})),
     http.get(`${BASE_URL}/api/workflows/two-step-workflow`, () => HttpResponse.json(twoStepWorkflow)),
@@ -68,13 +68,27 @@ function renderPausedRun({ observed = false } = {}) {
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={client}>
-        <RunSelection observed={observed} />
+        <RunSelection observed={observed} initialRunId={run.runId} />
       </QueryClientProvider>
     </MastraReactProvider>,
   );
 }
 
 describe('WorkflowTrigger cancellation', () => {
+  describe('when the server confirms cancellation of a suspended run', () => {
+    it('replaces the suspended status with canceled', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/runs/${suspendedRunState.runId}/cancel`, () =>
+          HttpResponse.json({ message: 'Workflow run cancelled' }),
+        ),
+      );
+      renderRun({ run: suspendedRunState });
+      await screen.findByText('Suspended');
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel workflow run' }));
+      await screen.findByText('Canceled');
+      expect(screen.queryByRole('button', { name: 'Cancel workflow run' })).toBeNull();
+    });
+  });
   describe('when the server confirms cancellation of a paused run', () => {
     it('replaces the paused controls with the canceled status', async () => {
       server.use(
@@ -82,8 +96,8 @@ describe('WorkflowTrigger cancellation', () => {
           HttpResponse.json({ message: 'Workflow run cancelled' }),
         ),
       );
-      renderPausedRun();
-      const cancel = await screen.findByRole('button', { name: /Cancel workflow run/i });
+      renderRun();
+      const cancel = await screen.findByRole('button', { name: 'Cancel workflow run' });
       fireEvent.click(cancel);
       await screen.findByText('Canceled');
       expect(screen.queryByRole('button', { name: 'Run next step' })).toBeNull();
@@ -101,7 +115,7 @@ describe('WorkflowTrigger cancellation', () => {
           HttpResponse.json({ message: 'Workflow run cancelled' }),
         ),
       );
-      renderPausedRun({ observed: true });
+      renderRun({ observed: true });
       await waitFor(() => expect(observed).toBe(true));
       await waitFor(() =>
         expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Run next step' }).disabled).toBe(false),
@@ -122,17 +136,13 @@ describe('WorkflowTrigger cancellation', () => {
           return HttpResponse.json({ message: 'Workflow run cancelled' });
         }),
       );
-      renderPausedRun();
-      fireEvent.click(await screen.findByRole('button', { name: /Cancel workflow run/i }));
-      await waitFor(() =>
-        expect(screen.getByRole<HTMLButtonElement>('button', { name: /Cancel workflow run/i }).disabled).toBe(true),
-      );
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Run next step' }).disabled).toBe(true);
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Continue full run' }).disabled).toBe(true);
+      renderRun();
+      fireEvent.click(await screen.findByRole('button', { name: 'Cancel workflow run' }));
+      await screen.findByRole('button', { name: 'Cancelling run…' });
       fireEvent.click(screen.getByRole('button', { name: 'View another run' }));
       finishCancellation();
       await waitFor(() =>
-        expect(screen.getByRole<HTMLButtonElement>('button', { name: /Cancel workflow run/i }).disabled).toBe(false),
+        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel workflow run' }).disabled).toBe(false),
       );
       expect(screen.getByText('another-run')).not.toBeNull();
       expect(screen.getByText('Paused')).not.toBeNull();

@@ -7,8 +7,10 @@ import { useContext, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { convertWorkflowRunStateToStreamResult } from '../../utils';
 import { twoStepWorkflow } from '../../workflow/__tests__/fixtures/workflow-debug-step-controls';
+import { WorkflowTimeline } from '../../workflow/workflow-timeline';
 import { WorkflowRunContext } from '../workflow-run-context';
 import { WorkflowRunProvider } from '../workflow-run-provider';
+import { WorkflowSelectedStepProvider } from '../workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '../workflow-step-detail-provider';
 import {
   completedIterationArray,
@@ -487,7 +489,7 @@ describe('WorkflowRunProvider', () => {
   });
 
   describe('when a newly streamed run completes', () => {
-    it('retains streamed child results while persisted steps arrive', async () => {
+    it('keeps its timeline after the stream closes and persisted steps arrive', async () => {
       let finishLoading = () => {};
       const loading = new Promise<void>(resolve => {
         finishLoading = resolve;
@@ -512,19 +514,26 @@ describe('WorkflowRunProvider', () => {
           });
         }),
       );
-      renderProvider();
+      renderProvider(
+        undefined,
+        <WorkflowSelectedStepProvider>
+          <WorkflowTimeline />
+        </WorkflowSelectedStepProvider>,
+      );
       fireEvent.click(screen.getByRole('button', { name: 'Stream run' }));
       await waitFor(() => expect(screen.getByLabelText('Stream completion').textContent).toBe('Finished'));
       expect(screen.getByLabelText('Streaming state').textContent).toBe('false');
       expect(screen.getByLabelText('Run state').textContent).toBe('success');
-      expect(screen.getByLabelText('Child output').textContent).toBe('{"words":2}');
+      const timeline = screen.getByTestId('workflow-timeline');
+      fireEvent.click(screen.getByRole('button', { name: 'Expand timeline' }));
+      expect(await screen.findByText('count-words')).not.toBeNull();
+      expect(screen.getByTestId('workflow-timeline-bar')).not.toBeNull();
       finishLoading();
-      await waitFor(() =>
-        expect(screen.getByLabelText('Step IDs').textContent).toContain('analyze-document[0].extract-excerpt'),
-      );
-      expect(screen.getByLabelText('Child output').textContent).toBe('{"words":2}');
+      expect(await screen.findByText('extract-excerpt')).not.toBeNull();
+      expect(screen.getByTestId('workflow-timeline')).toBe(timeline);
+      expect(screen.getAllByTestId('workflow-timeline-bar')).toHaveLength(2);
       fireEvent.click(screen.getByRole('button', { name: 'New run' }));
-      expect(screen.getByLabelText('Step IDs').textContent).toBe('[]');
+      expect(screen.queryByTestId('workflow-timeline')).toBeNull();
     });
 
     it('loads persisted child states without requiring route navigation', async () => {

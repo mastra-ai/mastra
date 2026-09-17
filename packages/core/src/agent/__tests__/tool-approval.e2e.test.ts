@@ -23,6 +23,11 @@ function normalizeDynamicRunIds({ url, body }: { url: string; body: unknown }): 
     /\\"suspendedToolRunId\\":\\"[^"]+\\"/g,
     '\\"suspendedToolRunId\\":\\"NORMALIZED\\"',
   );
+  stringifiedBody = stringifiedBody.replaceAll(/"suspendedToolCallId":"[^"]+"/g, '"suspendedToolCallId":"NORMALIZED"');
+  stringifiedBody = stringifiedBody.replaceAll(
+    /\\"suspendedToolCallId\\":\\"[^"]+\\"/g,
+    '\\"suspendedToolCallId\\":\\"NORMALIZED\\"',
+  );
 
   return { url, body: JSON.parse(stringifiedBody) };
 }

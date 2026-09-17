@@ -1308,7 +1308,11 @@ export class Agent extends BaseResource {
     stream: ReadableStream<Uint8Array>;
     update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
     onToolCall?: UseChatOptions['onToolCall'];
-    onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
+    onFinish?: (options: {
+      message: UIMessage | undefined;
+      finishReason: string;
+      usage: string;
+    }) => void | Promise<void>;
     generateId?: () => string;
     getCurrentDate?: () => Date;
     lastMessage: UIMessage | undefined;
@@ -1676,7 +1680,7 @@ export class Agent extends BaseResource {
       },
     });
 
-    onFinish?.({ message, finishReason, usage });
+    await onFinish?.({ message, finishReason, usage });
   }
 
   /**
@@ -1757,7 +1761,11 @@ export class Agent extends BaseResource {
     stream: ReadableStream<Uint8Array>;
     update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
     onToolCall?: UseChatOptions['onToolCall'];
-    onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
+    onFinish?: (options: {
+      message: UIMessage | undefined;
+      finishReason: string;
+      usage: string;
+    }) => void | Promise<void>;
     onStreamChunk?: (chunk: any) => void;
     generateId?: () => string;
     getCurrentDate?: () => Date;
@@ -2149,7 +2157,7 @@ export class Agent extends BaseResource {
       },
     });
 
-    onFinish?.({ message, finishReason, usage });
+    await onFinish?.({ message, finishReason, usage });
   }
 
   /**
