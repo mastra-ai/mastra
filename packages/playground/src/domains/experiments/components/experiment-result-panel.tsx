@@ -30,7 +30,7 @@ import { useLinkComponent } from '@/lib/framework';
 export type ExperimentResultPanelResult = Pick<DatasetExperimentResult, 'id' | 'itemId' | 'input' | 'output'> &
   Partial<Pick<DatasetExperimentResult, 'createdAt' | 'status' | 'groundTruth' | 'toolMockReport' | 'traceId'>> & {
     error?: unknown;
-    tags: string[] | null;
+    tags?: string[] | null;
   };
 
 export type ExperimentResultPanelScore = { id: string; scorerId: string; score: number };

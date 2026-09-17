@@ -1,5 +1,4 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
-import type { ScoreRowData } from '@mastra/core/evals';
 import { ScoresDataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -17,14 +16,6 @@ type ScoresListProps = {
   errorMsg?: string;
   columnsState: ScoresColumnsState;
 };
-
-function mapScore(score: ClientScoreRowData): ScoreRowData {
-  return {
-    ...score,
-    createdAt: new Date(score.createdAt),
-    updatedAt: new Date(score.updatedAt),
-  };
-}
 
 export function ScoresList({
   scores,
@@ -152,12 +143,7 @@ export function ScoresList({
 
       {selectedScore && (
         <div className="grid h-full max-h-full min-h-0 grid-rows-[1fr] overflow-hidden">
-          <ScoreDataPanel
-            score={mapScore(selectedScore)}
-            onClose={handleClose}
-            onPrevious={handlePrevious}
-            onNext={handleNext}
-          />
+          <ScoreDataPanel score={selectedScore} onClose={handleClose} onPrevious={handlePrevious} onNext={handleNext} />
         </div>
       )}
     </div>

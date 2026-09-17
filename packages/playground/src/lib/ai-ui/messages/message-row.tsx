@@ -2,7 +2,7 @@ import type { MastraDBMessage, MastraErrorPart } from '@mastra/core/agent/messag
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { ToolCallGroup } from '@mastra/playground-ui/components/ai/tool-call';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Message, MessageActions, MessageCopyButton } from '@mastra/playground-ui/components/Message';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChatRunningContext, useChatRunning } from '@mastra/playground-ui/domains/chat/context/chat-context';
@@ -25,60 +25,37 @@ import {
 import { badgeStatus, isSettledState } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
 import type { ToolCardContext } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
 import { collectToolGroups } from '@mastra/playground-ui/domains/chat/tools/tool-groups';
-import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageFactory } from '@mastra/react';
-import type { MessageRenderers } from '@mastra/react';
-import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
+import { MessageFactory } from '@mastra/react/ui';
+import type { MessageRenderers } from '@mastra/react/ui';
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { ToolCallEffects } from '../tools/tool-call-effects';
 import { ToolCard } from '../tools/tool-card';
 import type { DataMessagePart } from '../tools/tool-card';
+import { AssistantMessageActions } from './assistant-message-actions';
 import { DatasetSaveAction } from './dataset-save-action';
-import { ProviderLogo } from '@/domains/llm/components/provider-logo';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 
 export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> {
   message: MastraDBMessage;
   hasModelList?: boolean;
-  /** Whether the read-aloud voice is currently speaking this message. */
   isSpeaking?: boolean;
-  /** Read the assistant message aloud. Receives the message text. */
   onReadAloud?: (text: string) => void;
-  /** Stop the current read-aloud playback. */
   onStopSpeaking?: () => void;
-  /** Render historical tool calls without actions or chat/session side effects. */
   readOnly?: boolean;
-  /** Extra controls rendered under the message, alongside the assistant action bar. */
   footer?: ReactNode;
 }
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
 
-/** Read an optional field off a loosely-typed message part or nested value. */
 const readField = (value: unknown, key: string): unknown => (isRecord(value) ? value[key] : undefined);
 
-/**
- * Normalize the stored message role for display. A `signal`+`type:'user'` row
- * renders as a user message; a non-user (reactive) `signal` row is folded onto
- * an assistant message as a `data-signal` badge (see `toReactiveSignalMessage`);
- * messages without a displayable role are dropped.
- */
 const getMessageDisplayRole = (message: MastraDBMessage): MastraDBMessage['role'] | null => {
   if (message.role === 'assistant' || message.role === 'user' || message.role === 'system') return message.role;
   if (message.role === 'signal') return isUserSignalType(getSignalType(message)) ? 'user' : 'assistant';
   return null;
 };
 
-/**
- * Convert a persisted reactive (non-user) `signal` row into an assistant message
- * carrying a single `data-signal` part, so the existing `SignalBadge` renderer
- * shows it on read-back. Restores 1.41.0 behavior lost in the chat renderer
- * rewrite (PR #17774). Returns `null` when the signal payload is not a shape the
- * `SignalBadge` can render, so the row is dropped instead of leaving an empty
- * assistant bubble.
- */
 const toReactiveSignalMessage = (message: MastraDBMessage): MastraDBMessage | null => {
   const data = toReactiveSignalData(message);
   if (!isSignalData(data)) return null;
@@ -102,7 +79,6 @@ const NO_PARTS: MessagePart[] = [];
 
 const isStreaming = (parts: MessagePart[]): boolean => parts.some(part => readField(part, 'state') === 'streaming');
 
-/** A notice (tripwire, error, completion check) is a status, so it is handed over whole rather than paced. */
 const isProse = (parts: MessagePart[], metadata: Record<string, unknown> | undefined): boolean =>
   parts.every(part => {
     if (part.type !== 'text') return true;
@@ -113,10 +89,6 @@ const isProse = (parts: MessagePart[], metadata: Record<string, unknown> | undef
 const getMessageMetadata = (message: MastraDBMessage): Record<string, unknown> | undefined =>
   isRecord(message.content.metadata) ? message.content.metadata : undefined;
 
-/**
- * Collect `data-*` parts from the message so badges (file-tree, sandbox) can read
- * live streaming metadata without reaching into assistant-ui state.
- */
 const getDataParts = (message: MastraDBMessage): DataMessagePart[] =>
   message.content.parts
     .filter(
@@ -138,10 +110,6 @@ const getTextFromParts = (message: MastraDBMessage): string =>
     .map(part => part.text)
     .join('\n');
 
-/**
- * Whether an assistant message has user-visible prose worth showing the action
- * bar for. Tool calls, reasoning, and completion-check text do not count.
- */
 const hasVisibleAssistantText = (message: MastraDBMessage, metadata: Record<string, unknown> | undefined): boolean =>
   message.content.parts.some(part => {
     if (part.type !== 'text') return false;
@@ -160,76 +128,10 @@ const getModelMetadata = (metadata: Record<string, unknown> | undefined) => {
   return { modelId, modelProvider };
 };
 
-/**
- * Read part-level optimistic `pending` status, stamped onto user text parts.
- */
 const isPendingMessage = (message: MastraDBMessage): boolean => {
   if (message.content.metadata?.status === 'pending') return true;
   return message.content.parts.some(part => readField(readField(part, 'metadata'), 'status') === 'pending');
 };
-
-const CopyButton = ({ text, className }: { text: string; className?: string }) => {
-  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      tooltip="Copy"
-      aria-label="Copy"
-      className={className}
-      onClick={() => copyToClipboard(text)}
-    >
-      {isCopied ? <CheckIcon /> : <CopyIcon />}
-    </Button>
-  );
-};
-
-const AssistantActionBar = ({
-  text,
-  modelMetadata,
-  isSpeaking,
-  onReadAloud,
-  onStopSpeaking,
-  className,
-}: {
-  text: string;
-  modelMetadata?: { modelId: string; modelProvider: string };
-  isSpeaking?: boolean;
-  onReadAloud?: (text: string) => void;
-  onStopSpeaking?: () => void;
-  className?: string;
-}) => (
-  <div className={cn('relative flex items-center gap-1 transition-all', className)}>
-    {modelMetadata && (
-      <div className="text-icon5 text-ui-xs leading-ui-xs flex items-center gap-1 pr-2">
-        <ProviderLogo providerId={modelMetadata.modelProvider} size={14} />
-        <span>
-          {modelMetadata.modelProvider}/{modelMetadata.modelId}
-        </span>
-      </div>
-    )}
-    {(onReadAloud || onStopSpeaking) &&
-      (isSpeaking ? (
-        <Button variant="ghost" size="icon-xs" tooltip="Stop" aria-label="Stop" onClick={() => onStopSpeaking?.()}>
-          <StopCircleIcon />
-        </Button>
-      ) : (
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          tooltip="Read aloud"
-          aria-label="Read aloud"
-          onClick={() => onReadAloud?.(text)}
-        >
-          <AudioLinesIcon />
-        </Button>
-      ))}
-    <CopyButton text={text} />
-  </div>
-);
-
-// Memoized: a stream chunk hands the thread a new array while every settled message in it is the same object.
 export const MessageRow = memo(function MessageRow({
   message,
   hasModelList,
@@ -248,8 +150,6 @@ export const MessageRow = memo(function MessageRow({
   const running = useChatRunning();
   const isRunning = running.isRunning && running.activeRunId !== undefined && metadata?.runId === running.activeRunId;
   const { data: mcpAppTools } = useMcpAppTools();
-
-  // One clock for the whole message, so a tool row waits behind the sentence written before it.
   const parts = dbMessage?.content.parts ?? NO_PARTS;
   const revealed = useRevealedParts(parts, isStreaming(parts));
   const shownParts = isProse(parts, metadata) ? revealed : parts;
@@ -348,14 +248,6 @@ export const MessageRow = memo(function MessageRow({
   );
 
   if (dbMessage === null) return null;
-
-  // Revealed on hover/focus like the copy button; always visible on touch devices where there is no hover.
-  const hoverRevealClassName = 'group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0';
-
-  // Same inset as a tool badge's trailing slot, so a user message's action lines up with the tool below it.
-  const footerSlot = footer ? <div className={cn('pr-1', hoverRevealClassName)}>{footer}</div> : null;
-
-  // Same object once caught up, so the factory keeps the part it is filling in mounted.
   const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;
   const displayRole = dbMessage.role;
 
@@ -365,60 +257,53 @@ export const MessageRow = memo(function MessageRow({
     const canCopy = text.trim().length > 0;
 
     return (
-      <div
-        className={cn('group w-full flex items-end pb-4 pt-2 flex-col', className)}
+      <Message
         {...rootProps}
+        from="user"
+        className={className}
         data-message-id={message.id}
-        data-message-pending={isPending ? 'true' : undefined}
+        pending={isPending}
+        footer={
+          <MessageActions>
+            {canCopy && <MessageCopyButton text={text} />}
+            <DatasetSaveAction messageText={text} />
+            {footer}
+          </MessageActions>
+        }
       >
-        <DatasetSaveAction messageText={getTextFromParts(message)} />
-        <div
-          className={cn(
-            'max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-md leading-ui-md rounded-xl bg-surface3',
-            isPending && 'opacity-60 animate-pulse',
-          )}
-        >
-          <MessageFactory message={shownMessage} {...userRenderers} status={messageStatusRenderers} />
-        </div>
-        {(canCopy || footerSlot) && (
-          <div className="mt-1 flex items-center gap-2">
-            {canCopy && (
-              <div className={hoverRevealClassName}>
-                <CopyButton text={text} className="pointer-coarse:min-h-11 pointer-coarse:min-w-11" />
-              </div>
-            )}
-            {footerSlot}
-          </div>
-        )}
-      </div>
+        <MessageFactory message={shownMessage} {...userRenderers} status={messageStatusRenderers} />
+      </Message>
     );
   }
 
   const showActionBar = hasVisibleAssistantText(message, metadata);
 
   return (
-    <div className={cn('group max-w-full', className)} {...rootProps} data-message-id={message.id}>
-      <div className="text-neutral6 text-ui-md leading-ui-md pt-2">
-        <ChatRunningContext.Provider value={{ ...running, isRunning }}>
-          <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
-        </ChatRunningContext.Provider>
-      </div>
-      {(showActionBar || footerSlot) && (
-        <div className="mt-4 flex min-h-6 items-center gap-2">
-          {showActionBar && (
-            // In the live chat the assistant's actions stay visible; in read-only (trace) views they appear on hover.
-            <AssistantActionBar
-              className={readOnly ? hoverRevealClassName : undefined}
-              text={getTextFromParts(message)}
-              modelMetadata={modelMetadata}
-              isSpeaking={isSpeaking}
-              onReadAloud={onReadAloud}
-              onStopSpeaking={onStopSpeaking}
-            />
-          )}
-          {footerSlot}
-        </div>
-      )}
-    </div>
+    <Message
+      {...rootProps}
+      from="assistant"
+      className={className}
+      data-message-id={message.id}
+      footer={
+        (showActionBar || footer) && (
+          <MessageActions visibility={readOnly ? 'hover' : 'always'}>
+            {showActionBar && (
+              <AssistantMessageActions
+                text={getTextFromParts(message)}
+                modelMetadata={modelMetadata}
+                isSpeaking={isSpeaking}
+                onReadAloud={onReadAloud}
+                onStopSpeaking={onStopSpeaking}
+              />
+            )}
+            {footer && <MessageActions>{footer}</MessageActions>}
+          </MessageActions>
+        )
+      }
+    >
+      <ChatRunningContext.Provider value={{ ...running, isRunning }}>
+        <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
+      </ChatRunningContext.Provider>
+    </Message>
   );
 });

@@ -229,6 +229,10 @@ jobs:
             file.startsWith('packages/playground-ui/') ||
             file.startsWith('server-adapters/hono/') ||
             file.startsWith('packages/server/') ||
+            // e2e-mcp-compat: the core MCP/tool contract must keep published @mastra/mcp 1.x working.
+            file.startsWith('packages/core/src/mcp/') ||
+            file.startsWith('packages/core/src/tools/') ||
+            file.startsWith('packages/mcp/integration-tests/') ||
             file === '.github/workflows/e2e-tests.yml' ||
             file === 'pnpm-lock.yaml'
           );

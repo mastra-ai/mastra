@@ -20,6 +20,8 @@ import { SignalProvider } from '@mastra/core/signals';
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
+import { GithubAppOwnerResolver } from './github-app-owner.js';
+
 // Lazy-init execFileAsync to avoid vitest mock issues when only
 // constants/types are imported from this module.
 let _execFileAsync: ((...a: any[]) => Promise<{ stdout: string; stderr: string }>) | undefined;
@@ -1182,12 +1184,12 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
       html_url?: string;
       updated_at?: string;
     }>(`select c.author_login, c.author_type, c.is_bot, c.body, json_extract(c.raw_json, '$.html_url') as html_url,
-                 coalesce(c.updated_at_gh, c.created_at_gh) as updated_at
+                 coalesce(c.updated_at_gh, c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) as updated_at
             from comments c
             join threads t on t.id=c.thread_id
             join repositories r on r.id=t.repo_id
            where r.owner=${owner} and r.name=${repo} and t.number=${number}
-           order by coalesce(c.updated_at_gh, c.created_at_gh) desc
+           order by coalesce(c.updated_at_gh, c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) desc
            limit 20`);
     const latestComment = latestComments[0];
 
@@ -1329,6 +1331,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly #options: GithubSignalsOptions;
   readonly #syncClient: GithubSignalsSyncClient;
   readonly #repositoryResolver: GithubRepositoryResolver;
+  readonly #appOwnerResolver: GithubAppOwnerResolver;
   readonly #polling = new Map<string, GithubPollingState>();
   readonly #pollingThreadGenerations = new Map<string, number>();
   #pollingGeneration = 0;
@@ -1343,6 +1346,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     this.#options = options;
     this.#syncClient = options.syncClient ?? new GitcrawlSyncClient({ command: options.gitcrawlCommand });
     this.#repositoryResolver = options.repositoryResolver ?? new GitRemoteRepositoryResolver();
+    this.#appOwnerResolver = new GithubAppOwnerResolver();
     if (options.getNotificationStreamOptions) {
       this.#agentOptions = { getNotificationStreamOptions: options.getNotificationStreamOptions };
     }
@@ -2160,7 +2164,17 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       const ignoredBots = this.#options.ignoredBots ?? [];
       if (ignoredBots.some(bot => bot.toLowerCase() === normalizedUser)) return false;
       const authorizedBots = this.#options.authorizedBots ?? DEFAULT_AUTHORIZED_BOTS;
-      return authorizedBots.some(bot => bot.toLowerCase() === normalizedUser);
+      if (authorizedBots.some(bot => bot.toLowerCase() === normalizedUser)) return true;
+
+      const appOwner = await this.#appOwnerResolver.getOwner(user, isCurrentGeneration);
+      if (!appOwner || (isCurrentGeneration && !isCurrentGeneration())) return false;
+      if (appOwner.type === 'Organization') return appOwner.login.toLowerCase() === owner.toLowerCase();
+      if (appOwner.type !== 'User') return false;
+
+      const permission = await this.#loadAuthorPermission(owner, repo, appOwner.login, isCurrentGeneration);
+      if (isCurrentGeneration && !isCurrentGeneration()) return false;
+      const authorizedPermissions = this.#options.authorizedPermissions ?? DEFAULT_AUTHORIZED_PERMISSIONS;
+      return !!permission && authorizedPermissions.includes(permission);
     }
     const permission = await this.#loadAuthorPermission(owner, repo, user, isCurrentGeneration);
     if (isCurrentGeneration && !isCurrentGeneration()) return false;

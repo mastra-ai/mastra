@@ -7,7 +7,7 @@ description: "Browse Privatemode AI model IDs, capabilities, context windows, an
 
 # <img src="https://models.dev/logos/privatemode-ai.svg" alt="Privatemode AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Privatemode AI
 
-Access 9 Privatemode AI models through Mastra's model router. Authentication is handled automatically using the `PRIVATEMODE_API_KEY` environment variable.
+Access 11 Privatemode AI models through Mastra's model router. Authentication is handled automatically using the `PRIVATEMODE_API_KEY` environment variable.
 
 Learn more in the [Privatemode AI documentation](https://docs.privatemode.ai).
 
@@ -70,6 +70,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 8.9436
   },
   {
+    "model": "privatemode-ai/glm-5.3-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 131072,
+    "inputCost": 0.8897,
+    "outputCost": 4.4718
+  },
+  {
+    "model": "privatemode-ai/glm-flash-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 131072,
+    "inputCost": 0.8897,
+    "outputCost": 4.4718
+  },
+  {
     "model": "privatemode-ai/glm-latest",
     "imageInput": false,
     "audioInput": false,
@@ -92,30 +116,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.4969,
     "outputCost": 1.9644
-  },
-  {
-    "model": "privatemode-ai/kimi-k2.6",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 262144,
-    "inputCost": 1.791,
-    "outputCost": 8.9436
-  },
-  {
-    "model": "privatemode-ai/kimi-latest",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 262144,
-    "inputCost": 1.791,
-    "outputCost": 8.9436
   },
   {
     "model": "privatemode-ai/qwen3-embedding-4b",

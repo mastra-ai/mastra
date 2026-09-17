@@ -10,7 +10,6 @@ export type MainSidebarNavHeaderProps = Omit<ComponentPropsWithoutRef<'header'>,
   state?: SidebarState;
   href?: string;
   isActive?: boolean;
-  /** Override the Provider-level LinkComponent. Defaults to `<a>` when neither is set. */
   LinkComponent?: LinkComponent;
 };
 export function MainSidebarNavHeader({
@@ -34,16 +33,16 @@ export function MainSidebarNavHeader({
         <header
           {...props}
           className={cn('max-w-full min-w-0 truncate pl-3 text-ui-sm font-medium', {
-            'text-neutral5': isActive,
-            'text-neutral3/70': !isActive,
+            'text-foreground': isActive,
+            'text-muted-foreground/70': !isActive,
           })}
         >
           {href ? (
             <Link
               href={href}
-              className={cn('duration-normal block min-w-0 truncate transition-colors', {
-                'hover:text-neutral5': !isActive,
-                'text-neutral5': isActive,
+              className={cn('block min-w-0 truncate transition-colors duration-normal', {
+                'hover:text-foreground': !isActive,
+                'text-foreground': isActive,
               })}
             >
               {children}
@@ -54,12 +53,10 @@ export function MainSidebarNavHeader({
         </header>
       ) : (
         <>
-          {/* Keep header in DOM (visually hidden) so consumers' `id` still resolves
-              for `MainSidebarSections`' `aria-labelledby`. */}
           <VisuallyHidden asChild>
             <header {...props}>{children}</header>
           </VisuallyHidden>
-          <div aria-hidden="true" className="bg-border1 mx-3 h-px flex-1" />
+          <div aria-hidden="true" className="bg-border mx-3 h-px flex-1" />
         </>
       )}
     </div>

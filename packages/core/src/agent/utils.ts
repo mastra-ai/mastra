@@ -170,6 +170,29 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
   }
 }
 
+/**
+ * Sentinel strings some models emit for the optional `suspendedToolRunId` auto-resume
+ * field when they mean "no value". These are serialization artifacts, not run ids —
+ * treating them as real ids defeats every falsy-based guard downstream (#23739).
+ */
+const SUSPENDED_TOOL_RUN_ID_SENTINELS = new Set(['null', 'undefined', 'none', 'nil']);
+
+/**
+ * Normalizes a model-supplied `suspendedToolRunId` at the LLM trust boundary.
+ * Returns `undefined` for non-strings, empty/whitespace-only strings, and known
+ * serialization sentinels (`"null"`, `"undefined"`, `"none"`, `"nil"`, case-insensitive)
+ * so callers can treat them exactly as if the model had omitted the field.
+ * Any other string is returned unchanged (it may be a framework-persisted or
+ * hook-supplied run id, which are not required to be UUIDs).
+ */
+export function resolveSuspendedToolRunId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (SUSPENDED_TOOL_RUN_ID_SENTINELS.has(trimmed.toLowerCase())) return undefined;
+  return value;
+}
+
 export function resolveThreadIdFromArgs(args: {
   memory?: { thread?: string | { id: string } };
   threadId?: string;

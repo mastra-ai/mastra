@@ -11,11 +11,9 @@ import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-pan
 import { ThreadTracesToggle } from '@/domains/agents/components/thread-traces-toggle';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
-import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
-import { GenerationProvider } from '@/domains/datasets/context/generation-context';
 import { cleanProviderId } from '@/domains/llm/utils';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
@@ -47,11 +45,9 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
     ? 'chat'
     : location.pathname.includes('/editor')
       ? 'versions'
-      : location.pathname.includes('/evaluate')
-        ? 'evaluate'
-        : location.pathname.includes('/traces')
-          ? 'traces'
-          : 'none';
+      : location.pathname.includes('/traces')
+        ? 'traces'
+        : 'none';
 
   const content = (
     <KeyboardScope>
@@ -84,9 +80,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           defaultProvider={defaultProvider}
           defaultModel={defaultModel}
         >
-          <GenerationProvider>
-            <ReviewQueueProvider>{content}</ReviewQueueProvider>
-          </GenerationProvider>
+          {content}
         </PlaygroundModelProvider>
       </SchemaRequestContextProvider>
     </TracingSettingsProvider>

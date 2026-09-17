@@ -4,6 +4,7 @@ import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
+import { TITLE_PINNED_THREAD_METADATA_KEY } from '@mastra/core/memory';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { createSkill } from '@mastra/core/skills';
 import { InMemoryMemory, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
@@ -4507,6 +4508,7 @@ _range: \`ignored-by-reconciler\`_
 
       const result = parseReflectorOutput(output, sourceObservations);
 
+      const sourceRange = parseObservationGroups(sourceObservations)[0]!.range;
       expect(result.observations)
         .toBe(`<observation-group id="message-saving-debug" range="7250b0a4-9d0a-4504-99ff-35762ec557a5:a172fe73-2e02-4d19-9b68-8025a50f1b95" kind="reflection">
 Date: Mar 25, 2026
@@ -4526,6 +4528,11 @@ Date: Mar 25, 2026
 * 🟡 Investigation centered on savePerStep and finish-time assembly.`,
         },
       ]);
+
+      // The bloated legacy range must come back as one compact segment, not the 64-segment list.
+      const compactedRange = parseObservationGroups(result.observations)[0]!.range;
+      expect(compactedRange).not.toContain(',');
+      expect(compactedRange.length).toBeLessThan(sourceRange.length / 10);
     });
 
     it('should extract continuation hint from XML suggested-response tag', () => {
@@ -9721,7 +9728,7 @@ describe('Model Requirement', () => {
 });
 
 describe('Model Settings Defaults', () => {
-  it('should default maxOutputTokens when using model: "default"', () => {
+  it('should default model settings when using model: "default"', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9730,11 +9737,17 @@ describe('Model Settings Defaults', () => {
       reflection: { observationTokens: 20000 },
     });
 
-    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBe(100_000);
-    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBe(100_000);
+    expect((om as any).observationConfig.modelSettings).toEqual({
+      temperature: 0.3,
+      maxOutputTokens: 100_000,
+    });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({
+      temperature: 0,
+      maxOutputTokens: 100_000,
+    });
   });
 
-  it('should not default maxOutputTokens for non-default models', () => {
+  it('should not default model settings for non-default models', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9743,8 +9756,64 @@ describe('Model Settings Defaults', () => {
       reflection: { observationTokens: 20000 },
     });
 
-    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBeUndefined();
-    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBeUndefined();
+    expect((om as any).observationConfig.modelSettings).toEqual({});
+    expect((om as any).reflectionConfig.modelSettings).toEqual({});
+  });
+
+  it('should omit temperature while preserving the output budget for ModelByInputTokens', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new ModelByInputTokens({ upTo: { 1000: 'custom/provider-model' } }),
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings).toEqual({ maxOutputTokens: 100_000 });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({ maxOutputTokens: 100_000 });
+  });
+
+  it('should default temperature for a model instance known to support it', () => {
+    const model = createStreamCapableMockModel({
+      provider: 'google.generative-ai',
+      modelId: 'gemini-2.5-flash',
+    });
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model,
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings).toEqual({ temperature: 0.3 });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({ temperature: 0 });
+  });
+
+  it('should preserve explicit model settings for ModelByInputTokens', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new ModelByInputTokens({ upTo: { 1000: 'custom/provider-model' } }),
+      observation: { messageTokens: 50000, modelSettings: { temperature: 0.2, maxOutputTokens: 5000 } },
+      reflection: { observationTokens: 20000, modelSettings: { temperature: 0.1, maxOutputTokens: 6000 } },
+    });
+
+    expect((om as any).observationConfig.modelSettings).toEqual({ temperature: 0.2, maxOutputTokens: 5000 });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({ temperature: 0.1, maxOutputTokens: 6000 });
+  });
+
+  it('should preserve explicit model settings for non-default models', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: 'openai/gpt-5.1-codex-mini',
+      observation: { messageTokens: 50000, modelSettings: { temperature: 0.2, maxOutputTokens: 5000 } },
+      reflection: { observationTokens: 20000, modelSettings: { temperature: 0.1, maxOutputTokens: 6000 } },
+    });
+
+    expect((om as any).observationConfig.modelSettings).toEqual({ temperature: 0.2, maxOutputTokens: 5000 });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({ temperature: 0.1, maxOutputTokens: 6000 });
   });
 });
 
@@ -17750,6 +17819,66 @@ describe('Observer output threadTitle propagation', () => {
     expect(omMetadata.threadTitle).toBe('React Dashboard Project');
     expect(omMetadata.currentTask).toBe('Building the dashboard');
     expect(omMetadata.suggestedResponse).toBe('Let me help with that.');
+  });
+
+  it('should not overwrite a user-pinned title when activating buffered chunks', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'buf-pinned-title-thread';
+    const resourceId = 'buf-pinned-title-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'My custom name',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: { [TITLE_PINNED_THREAD_METADATA_KEY]: true },
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+      observation: {
+        messageTokens: 50000,
+        bufferTokens: 10000,
+        bufferActivation: 1,
+        threadTitle: true,
+      },
+      reflection: { observationTokens: 100000 },
+    });
+
+    const record = await storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: '- User building a React dashboard',
+        tokenCount: 100,
+        messageIds: ['msg-1', 'msg-2'],
+        messageTokens: 45000,
+        lastObservedAt: new Date('2025-01-01T10:00:00Z'),
+        cycleId: 'cycle-pinned-title-1',
+        threadTitle: 'React Dashboard Project',
+        currentTask: 'Building the dashboard',
+        suggestedContinuation: 'Let me help with that.',
+      },
+    });
+
+    const result = await om.activate({ threadId, resourceId });
+    expect(result.activated).toBe(true);
+
+    // The pinned title survives, but OM metadata still advances.
+    const thread = await storage.getThreadById({ threadId });
+    expect(thread?.title).toBe('My custom name');
+    expect(((thread?.metadata as any)?.mastra?.om ?? {}).threadTitle).toBe('React Dashboard Project');
   });
 });
 
