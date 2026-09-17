@@ -137,6 +137,6 @@ export class MastraController {
     }
 
     // JSON body is already parsed by JsonBodyMiddleware
-    return req.body;
+    return req.body === undefined ? {} : req.body;
   }
 }
