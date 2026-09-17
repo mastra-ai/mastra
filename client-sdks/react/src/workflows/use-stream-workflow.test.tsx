@@ -99,12 +99,12 @@ afterEach(cleanup);
 
 describe('useStreamWorkflow stream ownership', () => {
   it('marks a live per-step run paused when only the paused chunk arrives', async () => {
-    const { result, streams } = renderWorkflow();
+    const { result, streams, invoke } = renderWorkflow();
     const remote = streamResponse();
     streams.set('stepped', remote.response);
     let run!: Promise<void>;
     act(() => {
-      run = result.current.streamWorkflow.mutateAsync({ workflowId: 'workflow', runId: 'stepped', inputData: {} });
+      run = invoke('start', 'stepped');
     });
     await act(async () => {
       remote.send('workflow-start', {});
