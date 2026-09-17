@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { initialStudioModelSelection } from '../../model-picker/models';
 import type { ModelControlState } from '../../model-picker/models';
 import { StudioModelControls, StudioModelWarnings } from '../../model-picker/studio-model-controls';
 import type { ChatFile, Phase } from '../data';
@@ -37,6 +38,7 @@ export function StudioConversationComposer({
 }) {
   const streaming = phase === 'streaming';
   const draft = useConversationDraft({ disabled: busy && !(streaming && canInterject), onSend });
+  const [selection, setSelection] = useState(initialStudioModelSelection);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [listening, setListening] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceCallStatus>('idle');
@@ -53,9 +55,9 @@ export function StudioConversationComposer({
               inputRef={draft.fileInput}
             />
             <ComposerInput {...draft.inputProps} aria-label="Message" placeholder="Enter your message..." />
-            <StudioModelWarnings state={modelState} />
+            <StudioModelWarnings state={modelState} provider={selection.provider} />
             <ComposerActions>
-              <StudioModelControls state={modelState} />
+              <StudioModelControls state={modelState} selection={selection} onSelectionChange={setSelection} />
               <div className="ml-auto flex shrink-0 items-center gap-1.5">
                 <ButtonsGroup spacing="close">
                   <ComposerAttachmentPicker
