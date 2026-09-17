@@ -75,7 +75,7 @@ export function WorkflowConditionCardView({
           {type === 'else' ? 'When no other branch matches' : 'Condition expression unavailable'}
         </p>
       )}
-      {actionBar && <div className="nodrag nopan flex justify-end px-2.5 py-1.5">{actionBar}</div>}
+      {actionBar && <div className="nodrag nopan flex justify-end px-2.5 py-1.5 empty:hidden">{actionBar}</div>}
     </div>
   );
 }
