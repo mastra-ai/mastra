@@ -809,13 +809,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * Gets the effective FGA provider for the current request based on auth mode.
    */
   protected getEffectiveFGAProvider(requestContext: RequestContext) {
-    const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
-
-    if (authMode === 'studio') {
-      return this.mastra.getStudio?.()?.fga ?? this.mastra.getServer()?.fga;
-    }
-
-    return this.mastra.getServer()?.fga;
+    return getFGAProvider(this.mastra, requestContext);
   }
 
   /**

@@ -29,6 +29,14 @@ export {
 
 type CustomRouteAuthDecision = 'protected' | 'public' | 'none';
 
+export function getFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
+  const authMode = requestContext?.get(MASTRA_AUTH_MODE_KEY);
+  if (authMode === 'studio') {
+    return mastra?.getStudio?.()?.fga ?? mastra?.getServer?.()?.fga;
+  }
+  return mastra?.getServer?.()?.fga;
+}
+
 /**
  * Decide auth for a request from the custom route the custom-route app will dispatch
  * it to (see `CustomRouteMatcher`), not from whichever pattern happens to match.
