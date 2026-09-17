@@ -12,7 +12,13 @@ import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
-import { coreAuthMiddleware, findMatchingCustomRoute, isCustomRoutePublic, pathMatchesPattern } from '../auth/helpers';
+import {
+  coreAuthMiddleware,
+  findMatchingCustomRoute,
+  getFGAProvider,
+  isCustomRoutePublic,
+  pathMatchesPattern,
+} from '../auth/helpers';
 import {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
@@ -194,19 +200,6 @@ type HonoCustomApiRoute = Exclude<ApiRoute, SchemaCustomApiRoute>;
 
 function isSchemaApiRoute(route: ApiRoute): route is SchemaCustomApiRoute {
   return '_mastraSchemaRoute' in route && route._mastraSchemaRoute === true;
-}
-
-function getFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
-  // If we have request context, check auth mode to determine which FGA provider to use
-  if (requestContext) {
-    const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY);
-    if (authMode === 'studio') {
-      const studioFga = mastra?.getStudio?.()?.fga;
-      if (studioFga) return studioFga as IFGAProvider;
-    }
-  }
-  // Fall back to server FGA
-  return mastra?.getServer?.()?.fga as IFGAProvider | undefined;
 }
 
 function getFGARouteInfo(route: ServerRoute): FGARouteInfo {
@@ -615,13 +608,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * Gets the effective FGA provider for the current request based on auth mode.
    */
   protected getEffectiveFGAProvider(requestContext: RequestContext) {
-    const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
-
-    if (authMode === 'studio') {
-      return this.mastra.getStudio?.()?.fga ?? this.mastra.getServer()?.fga;
-    }
-
-    return this.mastra.getServer()?.fga;
+    return getFGAProvider(this.mastra, requestContext);
   }
 
   /**
