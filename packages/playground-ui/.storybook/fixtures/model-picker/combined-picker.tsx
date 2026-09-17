@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { models, packs } from './models';
+import { CommandGroup } from '@/ds/components/Command';
 import {
   ModelPicker,
   ModelPickerTrigger,
@@ -9,7 +10,6 @@ import {
   ModelPickerModels,
   ModelPickerPacks,
 } from '@/ds/components/ModelPicker';
-import { CommandGroup } from '@/ds/components/Command';
 
 export function CombinedPicker({
   busy = false,
