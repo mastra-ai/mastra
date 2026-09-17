@@ -123,11 +123,26 @@ afterEach(() => {
   agentThreadStreamRuntime.resetForTests();
 });
 
+function expectOnlyCompletedIdentity(entries: any[], sourceRunId: string) {
+  expect(entries.filter(event => event.runId === sourceRunId)).toEqual([]);
+  expect(entries.filter(event => event.data?.type === 'stream-part')).toEqual([]);
+  expect(entries).toHaveLength(1);
+  expect(entries[0].data).toEqual({
+    type: 'run-version-identity',
+    sourceRunId,
+    agentId: 'restart-agent',
+    expiresAt: expect.any(Number),
+    versionPins: undefined,
+  });
+  expect(entries[0].data.expiresAt).toBeGreaterThan(Date.now());
+}
+
 describe('thread history across a restart', () => {
-  it('a completed run loads once from history and leaves nothing on the stream', async () => {
+  it('a completed run loads once from history and leaves only its compact continuation identity on the stream', async () => {
     const env = backend();
-    await drain(await env.boot().stream('hello', { memory }));
-    expect(env.runEntries()).toEqual([]);
+    const completed = await env.boot().stream('hello', { memory });
+    await drain(completed);
+    expectOnlyCompletedIdentity(env.runEntries(), completed.runId);
 
     const chunks = await reload(env.restart());
 
@@ -156,8 +171,9 @@ describe('thread history across a restart', () => {
 
     expect(env.executed).toEqual(['lookup']);
     expect((await restarted.listSuspendedRuns({ threadId, resourceId })).runs).toEqual([]);
-    // Both halves of the run — before and after the restart — leave the stream.
-    expect(env.runEntries()).toEqual([]);
+    // Both halves' messages and controls leave the stream. Only the short-lived
+    // continuation identity remains; it must not replay a message or approval.
+    expectOnlyCompletedIdentity(env.runEntries(), run!.runId);
 
     // Restart again: no card, no replay.
     expect((await reload(env.restart())).map(chunk => chunk.type)).toEqual(['thread-history']);

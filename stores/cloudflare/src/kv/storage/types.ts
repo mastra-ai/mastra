@@ -14,6 +14,7 @@ import type {
   TABLE_SPANS,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
+  TABLE_VERSION_LABELS,
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_VERSIONS,
@@ -153,6 +154,7 @@ export type RecordTypes = {
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
   [TABLE_AGENT_VERSIONS]: AgentVersion;
+  [TABLE_VERSION_LABELS]: Record<string, any>;
   [TABLE_DATASETS]: Record<string, any>;
   [TABLE_DATASET_ITEMS]: Record<string, any>;
   [TABLE_DATASET_VERSIONS]: Record<string, any>;

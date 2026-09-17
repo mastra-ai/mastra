@@ -111,9 +111,14 @@ export function isReservedRequestContextKey(key: string): boolean {
   return key.startsWith('mastra__') || key.startsWith('__mastra_');
 }
 
-export type VersionSelector = { versionId: string } | { status: 'draft' | 'published' };
+export type VersionSelector =
+  | { versionId: string; label?: never; status?: never }
+  | { label: string; versionId?: never; status?: never }
+  | { status: 'draft' | 'published'; versionId?: never; label?: never };
 
 export type VersionOverrides = {
+  /** Selects the version of the root agent receiving the execution request. */
+  self?: VersionSelector;
   agents?: Record<string, VersionSelector>;
   /** Fallback status for sub-agents (and future primitives) without an explicit entry. */
   defaultStatus?: 'draft' | 'published';

@@ -10,13 +10,12 @@
  *
  * These tests pin the exact version resolved at run start into the persisted
  * workflow input (`agentVersionId`) and assert `DurableAgent.resume()`
- * re-resolves to that exact id on cold rehydration, honoring the explicit
- * call-site escape hatch and falling back gracefully when the pinned version is
- * gone. Mirrors main's `root-version-resume.test.ts` spec.
+ * re-resolves to that exact id on cold rehydration. A conflicting call-site
+ * selector or missing pinned version fails closed rather than switching an
+ * existing run to a different definition.
  *
  * The recover-path block asserts the same pin on `DurableAgent.recover()` —
- * the unattended crash-recovery path, which unlike resume has no call-site
- * version selector, so the pin must always win there.
+ * the unattended crash-recovery path. The stored identity wins on both paths.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -27,6 +26,7 @@ import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
+import { getAgentVersionPins } from '../../version-pins';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
@@ -59,6 +59,7 @@ async function seedSuspendedRun(
   memory: { threadId: string; resourceId: string },
   agentVersionId?: string,
   status: 'suspended' | 'running' = 'suspended',
+  spanVersionId?: string,
 ) {
   const workflows = (await store.getStore('workflows'))!;
   await workflows.persistWorkflowSnapshot({
@@ -75,6 +76,7 @@ async function seedSuspendedRun(
           runId,
           agentId,
           ...(agentVersionId ? { agentVersionId } : {}),
+          ...(spanVersionId ? { agentSpanData: { metadata: { entityVersionId: spanVersionId } } } : {}),
           messageListState: { memoryInfo: memory },
           state: memory,
         },
@@ -164,10 +166,13 @@ describe('durable agent version pinning across suspend/resume', () => {
     // The resume must re-resolve to the exact started version, not a status selector.
     expect(resolveSpy).toHaveBeenCalledTimes(1);
     expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), { versionId: 'v1' });
-    // The pinned fork (not the original instance) rehydrated and owns the run.
-    const fork = (await resolveSpy.mock.results[0]!.value) as DurableAgent;
-    expect(fork.runRegistry.has(runId)).toBe(true);
-    expect(durableAgent.runRegistry.has(runId)).toBe(false);
+    // Preparation rebuilds the original registry from the selected fork's
+    // definition and retains the immutable identity for later continuations.
+    expect(durableAgent.runRegistry.has(runId)).toBe(true);
+    expect(getAgentVersionPins(durableAgent.runRegistry.get(runId)?.requestContext)?.root).toEqual({
+      agentId: durableAgent.id,
+      versionId: 'v1',
+    });
     expect(result.runId).toBe(runId);
     result.cleanup();
   });
@@ -184,24 +189,24 @@ describe('durable agent version pinning across suspend/resume', () => {
     result.cleanup();
   });
 
-  it('keeps an explicit call-site versionId as the operator escape hatch', async () => {
+  it('rejects an explicit call-site versionId that differs from the persisted legacy pin', async () => {
     const { store, durableAgent, resolveSpy } = setup();
     const runId = 'explicit-version-cold-run';
     await seedSuspendedRun(store, runId, durableAgent.id, { threadId: 't-1', resourceId: 'r-1' }, 'v1');
 
-    const result = await durableAgent.resume(
-      runId,
-      { approved: true },
-      { versions: { agents: { [durableAgent.id]: { versionId: 'v9' } } } },
-    );
+    await expect(
+      durableAgent.resume(
+        runId,
+        { approved: true },
+        { versions: { agents: { [durableAgent.id]: { versionId: 'v9' } } } },
+      ),
+    ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
 
-    // The explicitly chosen agent is left alone — no re-pin to v1.
     expect(resolveSpy).not.toHaveBeenCalled();
-    expect(durableAgent.runRegistry.has(runId)).toBe(true);
-    result.cleanup();
+    expect(durableAgent.runRegistry.has(runId)).toBe(false);
   });
 
-  it('skips the pin when this instance already resolved to the pinned version', async () => {
+  it('retains the pin when this instance already resolved to the pinned version', async () => {
     const { store, durableAgent, resolveSpy } = setup();
     durableAgent.__setRawConfig({ resolvedVersionId: 'v1' });
     const runId = 'already-pinned-cold-run';
@@ -209,39 +214,58 @@ describe('durable agent version pinning across suspend/resume', () => {
 
     const result = await durableAgent.resume(runId, { approved: true });
 
-    expect(resolveSpy).not.toHaveBeenCalled();
+    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), { versionId: 'v1' });
     expect(durableAgent.runRegistry.has(runId)).toBe(true);
     result.cleanup();
   });
 
-  it('skips the pin on forks that already carry an applied stored version', async () => {
+  it('does not bypass the pin on forks that already carry an applied stored version', async () => {
     const { store, durableAgent, resolveSpy } = setup();
     // e.g. the server explicitly resolved a version before calling resume.
     durableAgent.__markStoredVersionApplied();
+    durableAgent.__setRawConfig({ resolvedVersionId: 'v9' });
     const runId = 'marked-fork-cold-run';
     await seedSuspendedRun(store, runId, durableAgent.id, { threadId: 't-1', resourceId: 'r-1' }, 'v1');
 
     const result = await durableAgent.resume(runId, { approved: true });
 
-    expect(resolveSpy).not.toHaveBeenCalled();
+    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), { versionId: 'v1' });
+    expect(getAgentVersionPins(durableAgent.runRegistry.get(runId)?.requestContext)?.root?.versionId).toBe('v1');
     expect(durableAgent.runRegistry.has(runId)).toBe(true);
     result.cleanup();
   });
 
-  it('falls back to the current definition when the pinned version can no longer be resolved', async () => {
+  it('fails closed when the pinned version can no longer be resolved', async () => {
     const { store, durableAgent, resolveSpy } = setup();
-    // The pinned version was deleted while the run sat suspended: the resume
-    // must still complete rather than throwing at the approver.
+    // Continuing with today's definition would change the approved behavior.
     resolveSpy.mockRejectedValueOnce(new Error('version v1 not found'));
     const runId = 'deleted-version-cold-run';
     await seedSuspendedRun(store, runId, durableAgent.id, { threadId: 't-1', resourceId: 'r-1' }, 'v1');
 
-    const result = await durableAgent.resume(runId, { approved: true });
+    await expect(durableAgent.resume(runId, { approved: true })).rejects.toThrow('version v1 not found');
 
     expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), { versionId: 'v1' });
-    expect(durableAgent.runRegistry.has(runId)).toBe(true);
-    expect(result.runId).toBe(runId);
-    result.cleanup();
+    expect(durableAgent.runRegistry.has(runId)).toBe(false);
+  });
+
+  it('rejects contradictory legacy input and observability root version IDs', async () => {
+    const { store, durableAgent, resolveSpy } = setup();
+    const runId = 'conflicting-legacy-pins';
+    await seedSuspendedRun(
+      store,
+      runId,
+      durableAgent.id,
+      { threadId: 't-1', resourceId: 'r-1' },
+      'v1',
+      'suspended',
+      'v2',
+    );
+
+    await expect(durableAgent.resume(runId, { approved: true })).rejects.toMatchObject({
+      id: 'PINNED_VERSION_CONFLICT',
+    });
+    expect(resolveSpy).not.toHaveBeenCalled();
+    expect(durableAgent.runRegistry.has(runId)).toBe(false);
   });
 });
 
@@ -280,10 +304,8 @@ describe('durable agent version pinning across crash/recover', () => {
     const mastra = new Mastra({ agents: { versionedDurableAgent: durableAgent }, storage: store, logger: false });
     stubWorkflow(durableAgent as DurableAgent);
 
-    // Same shape as the resume harness's resolveVersionedAgent mock, but also
-    // stubs the fork's workflow: a delegated recover() re-drives the run on
-    // the fork, and the real durable workflow would hang the background
-    // restart on a fabricated snapshot.
+    // Model the editor's per-request fork. Recovery uses this fork's definition
+    // while the original wrapper keeps the run's lease and registry ownership.
     const forks: DurableAgent[] = [];
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockImplementation(async (agent, selector) => {
       const fork = agent.__fork();
@@ -316,12 +338,14 @@ describe('durable agent version pinning across crash/recover', () => {
     // The unattended path must re-resolve to the exact crashed version.
     expect(resolveSpy).toHaveBeenCalledTimes(1);
     expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), { versionId: 'v1' });
-    // The pinned fork (not the original instance) rehydrated and owns the run.
+    // Live dependencies come from the pinned fork, while the original wrapper
+    // owns the recovery lease and registry for this run.
     const fork = forks[0]!;
-    expect(fork.runRegistry.has(runId)).toBe(true);
-    expect(durableAgent.runRegistry.has(runId)).toBe(false);
+    expect(fork.runRegistry.has(runId)).toBe(false);
+    expect(durableAgent.runRegistry.has(runId)).toBe(true);
+    expect(getAgentVersionPins(durableAgent.runRegistry.get(runId)?.requestContext)?.root?.versionId).toBe('v1');
     expect(result.runId).toBe(runId);
-    await fork.runRegistry.get(runId)?.workflowExecution;
+    await durableAgent.runRegistry.get(runId)?.workflowExecution;
     result.cleanup();
   });
 
@@ -345,10 +369,9 @@ describe('durable agent version pinning across crash/recover', () => {
     result.cleanup();
   });
 
-  it('falls back to the current definition when the pinned version can no longer be resolved', async () => {
+  it("fails closed when the crashed run's pinned version can no longer be resolved", async () => {
     const { store, durableAgent, resolveSpy } = setupRecover();
-    // The pinned version was deleted while the run sat crashed: recovery is
-    // unattended, so it must proceed on the current definition, not fail.
+    // Unattended recovery must not silently execute a different definition.
     resolveSpy.mockRejectedValueOnce(new Error('version v1 not found'));
     const runId = 'deleted-version-recover-run';
     await seedSuspendedRun(
@@ -360,12 +383,9 @@ describe('durable agent version pinning across crash/recover', () => {
       'running',
     );
 
-    const result = await durableAgent.recover(runId);
+    await expect(durableAgent.recover(runId)).rejects.toThrow('version v1 not found');
 
     expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), { versionId: 'v1' });
-    expect(durableAgent.runRegistry.has(runId)).toBe(true);
-    expect(result.runId).toBe(runId);
-    await durableAgent.runRegistry.get(runId)?.workflowExecution;
-    result.cleanup();
+    expect(durableAgent.runRegistry.has(runId)).toBe(false);
   });
 });

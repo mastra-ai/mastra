@@ -163,6 +163,19 @@ describe('mergeVersionOverrides', () => {
     const result = mergeVersionOverrides(base, overrides);
     expect(result?.defaultStatus).toBe('published');
   });
+
+  it('overrides the root selector while preserving sub-agent selectors', () => {
+    const base: VersionOverrides = {
+      self: { label: 'staging' },
+      agents: { reviewer: { status: 'published' } },
+    };
+    const overrides: VersionOverrides = { self: { versionId: 'version-2' } };
+
+    expect(mergeVersionOverrides(base, overrides)).toEqual({
+      self: { versionId: 'version-2' },
+      agents: { reviewer: { status: 'published' } },
+    });
+  });
 });
 
 describe('Sub-agent version resolution', () => {
@@ -236,6 +249,38 @@ describe('Sub-agent version resolution', () => {
     expect(resolveSpy).toHaveBeenCalledWith(sub, { versionId: 'call-v2' });
   });
 
+  it('does not propagate the labeled root selector to a delegated sub-agent', async () => {
+    const sub = new Agent({
+      id: 'sub-agent',
+      name: 'sub',
+      instructions: 'sub',
+      model: makeMockModel('sub response'),
+    });
+
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'You delegate.',
+      model: makeSupervisorModel('sub', 'hello'),
+      agents: { sub },
+    });
+
+    const mastra = new Mastra({ agents: { supervisor, sub } });
+    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockImplementation(async agent => agent);
+
+    await supervisor.generate('Do something', {
+      maxSteps: 3,
+      versions: {
+        self: { label: 'root-staging' },
+        agents: { 'sub-agent': { label: 'sub-staging' } },
+      },
+    });
+
+    expect(resolveSpy).toHaveBeenCalledWith(supervisor, { label: 'root-staging' });
+    expect(resolveSpy).toHaveBeenCalledWith(sub, { label: 'sub-staging' });
+    expect(resolveSpy).not.toHaveBeenCalledWith(sub, { label: 'root-staging' });
+  });
+
   it('does not call resolveVersionedAgent when no version override for sub-agent', async () => {
     const versions: VersionOverrides = { agents: { 'other-agent': { versionId: 'v1' } } };
 
@@ -266,8 +311,8 @@ describe('Sub-agent version resolution', () => {
     expect(resolveSpy).not.toHaveBeenCalled();
   });
 
-  it('falls back to code-defined agent when version resolution fails', async () => {
-    const versions: VersionOverrides = { agents: { 'sub-agent': { versionId: 'nonexistent' } } };
+  it('falls back to code-defined agent when status-based version resolution fails', async () => {
+    const versions: VersionOverrides = { agents: { 'sub-agent': { status: 'draft' } } };
 
     const sub = new Agent({
       id: 'sub-agent',
@@ -299,6 +344,36 @@ describe('Sub-agent version resolution', () => {
 
     // Verify the code-defined sub-agent was invoked (fallback)
     expect(generateSpy).toHaveBeenCalled();
+  });
+
+  it('fails closed when an exact labeled sub-agent selector cannot be resolved', async () => {
+    const versions: VersionOverrides = { agents: { 'sub-agent': { label: 'missing' } } };
+
+    const sub = new Agent({
+      id: 'sub-agent',
+      name: 'sub',
+      instructions: 'sub',
+      model: makeMockModel('code-defined response'),
+    });
+    const generateSpy = vi.spyOn(sub, 'generate');
+
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'You delegate.',
+      model: makeSupervisorModel('sub', 'hello'),
+      agents: { sub },
+    });
+
+    const mastra = new Mastra({
+      agents: { supervisor, sub },
+      versions,
+    });
+
+    vi.spyOn(mastra, 'resolveVersionedAgent').mockRejectedValue(new Error('VERSION_LABEL_NOT_FOUND'));
+
+    await expect(supervisor.generate('Do something', { maxSteps: 3 })).rejects.toThrow('VERSION_LABEL_NOT_FOUND');
+    expect(generateSpy).not.toHaveBeenCalled();
   });
 
   it('uses resolved agent for generation when version override succeeds', async () => {
@@ -571,7 +646,7 @@ describe('direct agent call version resolution', () => {
     expect(result.text).toBe('versioned response');
   });
 
-  it('resolves versioned self when call-site versions select the agent', async () => {
+  it('resolves a labeled self selector supplied at the call site', async () => {
     const agent = new Agent({
       id: 'my-agent',
       name: 'my-agent',
@@ -589,10 +664,10 @@ describe('direct agent call version resolution', () => {
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(versionedAgent);
 
     const result = await agent.generate('hello', {
-      versions: { agents: { 'my-agent': { status: 'published' } } },
+      versions: { self: { label: 'staging' } },
     });
 
-    expect(resolveSpy).toHaveBeenCalledWith(agent, { status: 'published' });
+    expect(resolveSpy).toHaveBeenCalledWith(agent, { label: 'staging' });
     expect(result.text).toBe('versioned response');
   });
 
@@ -636,7 +711,7 @@ describe('direct agent call version resolution', () => {
     expect(result.text).toBe('code response');
   });
 
-  it('falls back to the code-defined agent when self resolution fails', async () => {
+  it('falls back to the code-defined agent when a status-based self resolution fails', async () => {
     const agent = new Agent({
       id: 'my-agent',
       name: 'my-agent',
@@ -644,12 +719,46 @@ describe('direct agent call version resolution', () => {
       model: makeMockModel('code response'),
     });
 
-    const mastra = new Mastra({ agents: { agent }, versions: { agents: { 'my-agent': { versionId: 'v1' } } } });
+    const mastra = new Mastra({ agents: { agent }, versions: { self: { status: 'published' } } });
     vi.spyOn(mastra, 'resolveVersionedAgent').mockRejectedValue(new Error('Editor not configured'));
 
     const result = await agent.generate('hello');
 
     expect(result.text).toBe('code response');
+  });
+
+  it('fails closed when an exact labeled self selector cannot be resolved', async () => {
+    const agent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'code instructions',
+      model: makeMockModel('code response'),
+    });
+
+    const mastra = new Mastra({ agents: { agent } });
+    vi.spyOn(mastra, 'resolveVersionedAgent').mockRejectedValue(new Error('Label not found'));
+
+    await expect(agent.generate('hello', { versions: { self: { label: 'missing' } } })).rejects.toThrow(
+      'Label not found',
+    );
+  });
+
+  it('requires an editor for label selectors while allowing status defaults without one', async () => {
+    const agent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'code instructions',
+      model: makeMockModel('code response'),
+    });
+    const mastra = new Mastra({ agents: { agent } });
+
+    await expect(mastra.resolveVersionedAgent(agent, { label: 'production' })).rejects.toMatchObject({
+      id: 'MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP',
+    });
+    await expect(mastra.resolveVersionedAgent(agent, { status: 'published' })).resolves.toBe(agent);
+    await expect(agent.generate('hello', { versions: { self: { label: 'production' } } })).rejects.toMatchObject({
+      id: 'MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP',
+    });
   });
 
   it('does not warn when a stamped defaultStatus meets a project without the editor', async () => {

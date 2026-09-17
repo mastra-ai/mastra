@@ -7,12 +7,16 @@ import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
 import { DEFAULT_TOOL_DECLINE_REASON, resolveDeclineReason } from '../../agent/tool-approval';
 import type { StructuredOutputOptions } from '../../agent/types';
+import { getAgentVersionPins } from '../../agent/version-pins';
+import type { AgentVersionPins } from '../../agent/version-pins';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import { noopLogger } from '../../logger';
+import type { VersionOverrides } from '../../mastra/types';
 import type { ObservabilityContext } from '../../observability';
 import { createObservabilityContext, InternalSpans, resolveObservabilityContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
+import { MASTRA_VERSIONS_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import type { PublicSchema } from '../../schema';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
@@ -892,6 +896,28 @@ export async function createNetworkLoop({
       }
 
       const agentId = agentForStep.id;
+      const networkPins = getAgentVersionPins(requestContext);
+      const inheritedVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+      const { self: _rootSelector, ...dependencyVersions } = inheritedVersions ?? {};
+      const inferredDefaultStatus =
+        dependencyVersions.defaultStatus ??
+        (_rootSelector ? ('versionId' in _rootSelector ? 'draft' : 'published') : undefined);
+      const exactAgentSelectors = Object.fromEntries(
+        Object.entries(networkPins?.agents ?? {}).map(([id, pin]) => [id, { versionId: pin.versionId }]),
+      );
+      const selectedAgentPin = networkPins?.agents?.[agentId];
+      const delegatedVersions: VersionOverrides = {
+        ...dependencyVersions,
+        ...(inferredDefaultStatus ? { defaultStatus: inferredDefaultStatus } : {}),
+        ...(Object.keys(exactAgentSelectors).length > 0
+          ? { agents: { ...dependencyVersions.agents, ...exactAgentSelectors } }
+          : {}),
+        ...(selectedAgentPin
+          ? { self: { versionId: selectedAgentPin.versionId } }
+          : inferredDefaultStatus
+            ? { self: { status: inferredDefaultStatus } }
+            : {}),
+      };
       const stepId = generateId({
         idType: 'step',
         source: 'agent',
@@ -944,6 +970,7 @@ export async function createNetworkLoop({
             onError,
             abortSignal,
             onAbort,
+            versions: delegatedVersions,
           })
         : agentForStep.stream(messagesForSubAgent, {
             requestContext: requestContext,
@@ -959,6 +986,7 @@ export async function createNetworkLoop({
             onError,
             abortSignal,
             onAbort,
+            versions: delegatedVersions,
           }));
 
       let requireApprovalMetadata: Record<string, any> | undefined;
@@ -2132,6 +2160,7 @@ export async function networkLoop<OUTPUT = undefined>({
   onError,
   onAbort,
   abortSignal,
+  agentVersionPins,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -2179,6 +2208,7 @@ export async function networkLoop<OUTPUT = undefined>({
   onError?: NetworkOptions<OUTPUT>['onError'];
   onAbort?: NetworkOptions<OUTPUT>['onAbort'];
   abortSignal?: NetworkOptions<OUTPUT>['abortSignal'];
+  agentVersionPins?: AgentVersionPins;
 }): Promise<MastraAgentNetworkStream<OUTPUT>> {
   // Validate that memory is available before starting the network
   const memoryToUse = await routingAgent.getMemory({ requestContext });
@@ -2672,6 +2702,7 @@ export async function networkLoop<OUTPUT = undefined>({
       threadResourceId: z.string().optional(),
       isOneOff: z.boolean(),
       verboseIntrospection: z.boolean(),
+      agentVersionPins: z.custom<AgentVersionPins>().optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -2749,6 +2780,7 @@ export async function networkLoop<OUTPUT = undefined>({
           threadId: thread?.id,
           isOneOff: false,
           verboseIntrospection: true,
+          agentVersionPins,
         },
         requestContext,
       }).fullStream;

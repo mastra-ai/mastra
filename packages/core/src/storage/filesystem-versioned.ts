@@ -122,6 +122,9 @@ export class FilesystemVersionedHelpers<
    */
   private versions = new Map<string, TVersion>();
 
+  /** Entity IDs whose exact state is currently owned by an adapter registry. */
+  private retainedEntityIds = new Set<string>();
+
   /**
    * Whether we've loaded from disk yet.
    */
@@ -144,6 +147,67 @@ export class FilesystemVersionedHelpers<
    * after the git history.
    */
   private gitVersionCounts = new Map<string, number>();
+
+  /**
+   * Restore exact entities and immutable versions retained by an adapter-owned
+   * hard-reference registry (currently custom agent labels).
+   */
+  replaceRetainedState(entities: TEntity[], versions: TVersion[]): void {
+    this.hydrate();
+
+    const nextEntityIds = new Set(entities.map(entity => entity.id));
+    const releasedEntityIds = Array.from(this.retainedEntityIds).filter(entityId => !nextEntityIds.has(entityId));
+    const entityIdsToReplace = new Set([...this.retainedEntityIds, ...nextEntityIds]);
+
+    for (const entityId of entityIdsToReplace) {
+      this.entities.delete(entityId);
+      for (const [versionId, version] of this.versions) {
+        if (
+          (version as Record<string, unknown>)[this.parentIdField] === entityId &&
+          !FilesystemVersionedHelpers.isGitVersion(versionId)
+        ) {
+          this.versions.delete(versionId);
+        }
+      }
+    }
+
+    for (const entity of entities) {
+      // A published disk snapshot is normally assigned a synthetic ID on hydrate.
+      // Exact retained state supersedes that reconstruction so labels and active
+      // versions keep their original immutable identity after restart.
+      const syntheticId = `hydrated-${entity.id}-v1`;
+      if (entity.activeVersionId && entity.activeVersionId !== syntheticId) {
+        this.versions.delete(syntheticId);
+      }
+      this.entities.set(entity.id, structuredClone(entity));
+    }
+
+    for (const version of versions) {
+      this.versions.set(version.id, structuredClone(version));
+    }
+
+    for (const entityId of releasedEntityIds) {
+      this.rehydrateEntityFromDisk(entityId);
+    }
+
+    this.retainedEntityIds = nextEntityIds;
+  }
+
+  /** Mark state successfully captured by an adapter registry as authoritative. */
+  markRetainedState(entities: TEntity[]): void {
+    for (const entity of entities) this.retainedEntityIds.add(entity.id);
+  }
+
+  /** Stop registry tracking without removing the still-live local entity. */
+  releaseRetainedState(entityIds: Iterable<string>): void {
+    for (const entityId of entityIds) this.retainedEntityIds.delete(entityId);
+  }
+
+  /** Flush current published snapshots before releasing registry authority. */
+  persistCurrentState(): void {
+    this.hydrate();
+    this.persistToDisk();
+  }
 
   constructor(config: FilesystemVersionedConfig) {
     this.db = config.db;
@@ -176,6 +240,47 @@ export class FilesystemVersionedHelpers<
     return id.startsWith(GIT_VERSION_PREFIX);
   }
 
+  private hydrateSnapshot(entityId: string, snapshotConfig: Record<string, unknown>): void {
+    const versionId = `hydrated-${entityId}-v1`;
+    const now = new Date();
+
+    const entity = {
+      id: entityId,
+      status: 'published',
+      activeVersionId: versionId,
+      createdAt: now,
+      updatedAt: now,
+    } as unknown as TEntity;
+    this.entities.set(entityId, entity);
+
+    const version = {
+      id: versionId,
+      [this.parentIdField]: entityId,
+      versionNumber: 1,
+      ...snapshotConfig,
+      createdAt: now,
+    } as TVersion;
+    this.versions.set(versionId, version);
+  }
+
+  private rehydrateEntityFromDisk(entityId: string): void {
+    this.db.invalidateCache(this.entitiesFile);
+    const sharedSnapshot = this.db.readDomain<Record<string, unknown>>(this.entitiesFile)[entityId];
+    if (sharedSnapshot && typeof sharedSnapshot === 'object') {
+      this.hydrateSnapshot(entityId, sharedSnapshot);
+      return;
+    }
+
+    if (!this.perEntityFilesDir) return;
+    const filename = this.perEntityFilename(entityId);
+    this.db.invalidateCache(filename);
+    if (!this.db.domainFileExists(filename)) return;
+    const perEntitySnapshot = this.db.readDomain(filename);
+    if (perEntitySnapshot && typeof perEntitySnapshot === 'object') {
+      this.hydrateSnapshot(entityId, perEntitySnapshot);
+    }
+  }
+
   /**
    * Hydrate in-memory state from the on-disk JSON file.
    * For each entry on disk, creates an in-memory entity (status: 'published')
@@ -189,39 +294,11 @@ export class FilesystemVersionedHelpers<
     if (this.hydrated) return;
     this.hydrated = true;
 
-    const hydrateSnapshot = (entityId: string, snapshotConfig: Record<string, unknown>) => {
-      const versionId = `hydrated-${entityId}-v1`;
-      const now = new Date();
-
-      // Create a synthetic entity record
-      const entity = {
-        id: entityId,
-        status: 'published',
-        activeVersionId: versionId,
-        createdAt: now,
-        updatedAt: now,
-      } as unknown as TEntity;
-
-      this.entities.set(entityId, entity);
-
-      // Create a synthetic version with the snapshot config.
-      // Version number starts at 1 but may be bumped after git history loads.
-      const version = {
-        id: versionId,
-        [this.parentIdField]: entityId,
-        versionNumber: 1,
-        ...snapshotConfig,
-        createdAt: now,
-      } as TVersion;
-
-      this.versions.set(versionId, version);
-    };
-
     const diskData = this.db.readDomain<Record<string, unknown>>(this.entitiesFile);
 
     for (const [entityId, snapshotConfig] of Object.entries(diskData)) {
       if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
-      hydrateSnapshot(entityId, snapshotConfig);
+      this.hydrateSnapshot(entityId, snapshotConfig);
     }
 
     if (this.perEntityFilesDir) {
@@ -229,7 +306,7 @@ export class FilesystemVersionedHelpers<
         const entityId = this.entityIdFromPerEntityFilename(filename);
         const snapshotConfig = this.db.readDomain(filename);
         if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
-        hydrateSnapshot(entityId, snapshotConfig);
+        this.hydrateSnapshot(entityId, snapshotConfig);
       }
     }
 
@@ -758,6 +835,7 @@ export class FilesystemVersionedHelpers<
   async dangerouslyClearAll(): Promise<void> {
     this.entities.clear();
     this.versions.clear();
+    this.retainedEntityIds.clear();
     this.gitVersionCounts.clear();
     this.gitHistoryPromise = null;
     this.hydrated = false;
