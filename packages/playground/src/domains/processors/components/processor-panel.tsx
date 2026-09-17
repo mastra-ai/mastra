@@ -33,6 +33,7 @@ const PHASE_LABELS: Record<ProcessorPhase, string> = {
   outputStream: 'Output Stream - Process streaming chunks',
   outputResult: 'Output Result - Process complete output after streaming',
   outputStep: 'Output Step - Process after each LLM response (before tools)',
+  toolResult: 'Tool Result - Process tool output before it is added to the message list',
 };
 
 export function ProcessorPanel({ processorId }: ProcessorPanelProps) {

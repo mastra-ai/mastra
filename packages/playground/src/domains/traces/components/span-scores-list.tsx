@@ -1,4 +1,4 @@
-import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
+import type { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { getShortId } from '@mastra/playground-ui/components/Text';
@@ -11,7 +11,7 @@ type SpanScoresListProps = {
   scoresData?: ListScoresResponse | null;
   isLoadingScoresData?: boolean;
   onPageChange?: (page: number) => void;
-  onScoreSelect?: (score: ScoreRowData) => void;
+  onScoreSelect?: (score: ClientScoreRowData) => void;
 };
 
 export function SpanScoresList({ scoresData, isLoadingScoresData, onPageChange, onScoreSelect }: SpanScoresListProps) {
@@ -42,7 +42,7 @@ export function SpanScoresList({ scoresData, isLoadingScoresData, onPageChange, 
           <DataList.TopCell>Scorer</DataList.TopCell>
         </DataList.Top>
 
-        {scoresData.scores.map((score: ScoreRowData, index) => {
+        {scoresData.scores.map((score: ClientScoreRowData, index) => {
           const createdAtDate = new Date(score.createdAt);
           const isTodayDate = isToday(createdAtDate);
 

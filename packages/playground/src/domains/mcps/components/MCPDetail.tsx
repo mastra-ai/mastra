@@ -186,7 +186,12 @@ const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) 
   const linkRef = useRef<HTMLAnchorElement>(null);
   const { Link, paths } = useLinkComponent();
 
-  const ToolIconComponent = ToolIconMap[tool.toolType || 'tool'];
+  const ToolIconComponent =
+    tool.toolType === 'agent'
+      ? ToolIconMap.agent
+      : tool.toolType === 'workflow'
+        ? ToolIconMap.workflow
+        : ToolIconMap.tool;
   const isAppTool = hasAppUi(tool._meta);
 
   return (
@@ -198,8 +203,8 @@ const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) 
       <EntityContent>
         <EntityName>
           <span className="flex items-center gap-2">
-            <Link ref={linkRef} href={paths.mcpServerToolLink(serverId, tool.id)}>
-              {tool.id}
+            <Link ref={linkRef} href={paths.mcpServerToolLink(serverId, tool.name)}>
+              {tool.name}
             </Link>
             {isAppTool && <Badge size="xs">App</Badge>}
           </span>
