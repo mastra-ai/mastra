@@ -91,19 +91,31 @@ describe('CustomZodProvider.validateSchema', () => {
   });
 
   describe('when explicit empty values satisfy the schema', () => {
-    it('preserves empty collections, required strings, and nullable values', () => {
+    it('preserves empty collections, cleared defaults, and nullable values', () => {
       const provider = new CustomZodProvider(
         z.object({
           documents: z.array(z.string()),
           options: z.object({}).optional(),
-          details: z.object({ label: z.string() }).optional(),
-          note: z.string(),
+          note: z.string().default('Default note'),
           choice: z.string().nullable().optional(),
         }),
       );
-      const input = { documents: [], options: {}, details: { label: '' }, note: '', choice: null };
+      const input = { documents: [], options: {}, note: '', choice: null };
 
       expect(provider.validateSchema(input)).toEqual({ success: true, data: input });
+    });
+  });
+
+  describe('when a required text field is left blank', () => {
+    it('reports it as missing instead of submitting an empty string', () => {
+      const provider = new CustomZodProvider(
+        z.object({ note: z.string(), details: z.object({ label: z.string() }).optional() }),
+      );
+
+      expect(provider.validateSchema({ note: '', details: { label: '' } })).toEqual({
+        success: false,
+        errors: [{ path: ['note'], message: 'Required' }],
+      });
     });
   });
 

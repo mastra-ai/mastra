@@ -194,9 +194,7 @@ function normalizeFormValues(value: unknown, schema: AnySchema): unknown {
   }
 
   const blankControl = value === '' || (value === null && !schema.safeParse(null).success);
-  if (blankControl && isOptional(schema) && getDefaultValueInZodStack(schema) === undefined) {
-    return undefined;
-  }
+  if (blankControl && getDefaultValueInZodStack(schema) === undefined) return undefined;
 
   return value;
 }

@@ -173,6 +173,29 @@ describe('Workflow input views', () => {
     });
   });
 
+  describe('when a required text field is left blank', () => {
+    it('blocks the Form view with Required while JSON still submits an explicit empty string', async () => {
+      const onSubmit = vi.fn();
+      render(
+        <WorkflowInputData
+          schema={z.object({ query: z.string() })}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+      await screen.findByText('Required');
+      expect(onSubmit).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
+      expect(JSON.parse(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Code editor' }).value)).toEqual({
+        query: '',
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+      expect(onSubmit).toHaveBeenCalledWith({ query: '' });
+    });
+  });
+
   describe('when optional fields are left untouched', () => {
     it('submits without the keys the user never filled in', async () => {
       const onSubmit = vi.fn();
