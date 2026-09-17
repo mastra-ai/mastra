@@ -42,7 +42,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Studio approval controls with their real provider. Callbacks are Storybook spies; these stories verify dispatch and disabled states, not API success, retry, or session recovery. Factory owns a separate ApprovalCard.',
+          'Studio uses the shared ToolApprovalActions with its real provider. Factory uses the same actions inside ToolApproval. Callbacks here are Storybook spies; these stories verify dispatch and disabled states, not API success, retry, or session recovery. See AI/Tool Approval for the shared presentation.',
       },
     },
   },

@@ -1,7 +1,6 @@
-import { Check, X } from 'lucide-react';
 import { SectionLabel } from '../../components/section-label';
 import { useToolCall } from '../../context/tool-call-context';
-import { Button } from '@/ds/components/Button';
+import { ToolApprovalActions } from '@/ds/components/ai/tool-approval';
 
 export interface ToolApprovalButtonsProps {
   toolCallId: string;
@@ -68,24 +67,12 @@ export const ToolApprovalButtons = ({
     return (
       <div>
         <SectionLabel>Approval required</SectionLabel>
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={handleApprove}
-            disabled={isRunning || !!toolCallApprovalStatus}
-            className={toolCallApprovalStatus === 'approved' ? 'text-accent1!' : ''}
-            icon={<Check />}
-          >
-            Approve
-          </Button>
-          <Button
-            onClick={handleDecline}
-            disabled={isRunning || !!toolCallApprovalStatus}
-            className={toolCallApprovalStatus === 'declined' ? 'text-accent2!' : ''}
-            icon={<X />}
-          >
-            Decline
-          </Button>
-        </div>
+        <ToolApprovalActions
+          onApprove={handleApprove}
+          onDecline={handleDecline}
+          disabled={isRunning}
+          status={toolCallApprovalStatus}
+        />
       </div>
     );
   }
