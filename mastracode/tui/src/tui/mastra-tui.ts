@@ -42,10 +42,7 @@ import { LoginDialogComponent } from './components/login-dialog.js';
 import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
-import { NotificationSummaryComponent } from './components/notification-summary.js';
-import { NotificationComponent } from './components/notification.js';
 import { GradientAnimator } from './components/obi-loader.js';
-import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
 import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
@@ -58,6 +55,7 @@ import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
+import { applyQuietModeToRenderedComponents } from './quiet-mode.js';
 import {
   addPendingUserMessage,
   addUserMessage,
@@ -1561,22 +1559,9 @@ export class MastraTUI {
     this.state.quietModeMaxToolPreviewLines = previewLineLimit;
     this.state.taskProgress?.setQuietMode(enabled);
 
-    const tools = this.state.allToolComponents.filter(
-      (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
-    );
     const color = this.state.session?.mode.resolve().metadata?.color;
     const modeColor = typeof color === 'string' ? color : undefined;
-    for (const tool of tools) {
-      tool.setCompactToolModeColor?.(modeColor);
-      tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
-      tool.setQuietPreviewLineLimit?.(previewLineLimit);
-    }
-    for (const component of this.state.messageComponentsById.values()) {
-      if (component instanceof NotificationComponent || component instanceof NotificationSummaryComponent) {
-        component.setQuietModeDisplay(enabled ? 'quiet' : 'normal');
-      }
-      if (component instanceof NotificationComponent) component.setQuietPreviewLineLimit(previewLineLimit);
-    }
+    applyQuietModeToRenderedComponents(this.state, enabled, previewLineLimit, modeColor);
     flushRender(this.state);
   }
 
