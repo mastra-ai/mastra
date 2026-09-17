@@ -230,6 +230,9 @@ export class LocalSandbox extends MastraSandbox<string> {
   constructor(options: LocalSandboxOptions = {}) {
     // Validate isolation backend before super (fail fast)
     const requestedIsolation = options.isolation ?? 'none';
+    if (requestedIsolation === 'seatbelt' && process.platform === 'win32') {
+      throw new IsolationUnavailableError('seatbelt', 'Seatbelt isolation is only supported on macOS, not Windows.');
+    }
     if (requestedIsolation !== 'none' && !isIsolationAvailable(requestedIsolation)) {
       const detection = detectIsolation();
       throw new IsolationUnavailableError(requestedIsolation, detection.message);
