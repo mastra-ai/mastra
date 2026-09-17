@@ -1319,7 +1319,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // A tool that already ran is the one thing the discard cannot undo. Committing
         // the call and its result into the conversation is what keeps eager execution
         // observably equal to the default: the replacement attempt sees the work as
-        // done, so the tool runs once rather than once per attempt.
+        // done, so it is not asked to call the tool again.
         //
         // Written under the id the starting attempt is using. On a fallback that is the
         // dead attempt's own id, so the result merges into the assistant message that
