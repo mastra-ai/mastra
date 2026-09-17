@@ -596,29 +596,27 @@ describe('Traces page filter bar', () => {
   describe('when the page is scoped to an agent', () => {
     const renderScoped = async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
-      const result = renderPage('/traces', { scopedEntityId: 'weather-agent', scopedEntityType: EntityType.AGENT });
-      await waitFor(() => expect(getFilterChips()).toHaveLength(3));
+      const result = renderPage('/traces?filterTraceId=trace-a', {
+        scopedEntityId: 'weather-agent',
+        scopedEntityType: EntityType.AGENT,
+      });
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent'));
       await waitFor(() => expect(result.queryClient.isFetching()).toBe(0));
       return result;
     };
 
-    it('renders Primitive Type and Primitive ID as read-only chips', async () => {
+    it('does not render chips for the scope fields', async () => {
       await renderScoped();
 
-      const chips = [...getFilterChips()].slice(1);
-      expect(chips.map(chip => chip.textContent)).toEqual([
-        expect.stringContaining('Primitive Type'),
-        expect.stringContaining('Primitive ID'),
-      ]);
-      expect(chips.every(chip => within(chip).queryByRole('button', { name: /remove/i }) === null)).toBe(true);
+      expect([...getFilterChips()].slice(1).map(chip => chip.textContent)).toEqual(['Trace IDtrace-a']);
     });
 
-    it('keeps the scoped chips after Clear filters', async () => {
+    it('keeps the scope in the URL after Clear filters', async () => {
       await renderScoped();
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
 
-      await waitFor(() => expect(getFilterChips()).toHaveLength(3));
+      await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('filterTraceId'));
       expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent');
       expect(screen.getByTestId('location').textContent).toContain('rootEntityType=agent');
     });

@@ -125,23 +125,17 @@ test.describe('Agent observability tabs', () => {
   });
 
   test.describe('when the agent traces tab renders the scope filter', () => {
-    test('locks the scope pills and hides them from the creator dropdown', async ({ page }) => {
+    test('hides the scope fields from the chips and the creator dropdown', async ({ page }) => {
       await mockSystemPackages(page, true);
 
       await mockTraceLists(page);
 
       await page.goto('/agents/weather-agent/traces');
 
-      // Scope chips render as locked — read-only, no Remove (×) affordance.
-      // Single-operator fields omit the operator from the chip label.
-      const rootTypeChip = page.getByRole('group', { name: /^Primitive Type Agent$/ });
-      const entityIdChip = page.getByRole('group', { name: /^Primitive ID weather-agent$/ });
-      await expect(rootTypeChip).toBeVisible();
-      await expect(entityIdChip).toBeVisible();
-      await expect(rootTypeChip).toHaveAttribute('data-readonly', 'true');
-      await expect(entityIdChip).toHaveAttribute('data-readonly', 'true');
-      await expect(rootTypeChip.getByRole('button', { name: /Remove/i })).toHaveCount(0);
-      await expect(entityIdChip.getByRole('button', { name: /Remove/i })).toHaveCount(0);
+      // The scope is applied through the URL but never surfaces as chips.
+      await expect(page).toHaveURL(/filterEntityId=weather-agent/);
+      await expect(page.getByRole('group', { name: /^Primitive Type/ })).toHaveCount(0);
+      await expect(page.getByRole('group', { name: /^Primitive ID/ })).toHaveCount(0);
 
       // The filter input's field step must not expose the scope-controlled fields,
       // so users cannot recreate the filter and conflict with the scoped view.

@@ -95,7 +95,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   }
   const url = useTraceUrlState(querySearchParams, setPersistedSearchParams);
 
-  const lockedFieldIds = useMemo(() => new Set(isScoped ? ['rootEntityType', 'entityId'] : []), [isScoped]);
+  // Scope fields live in the URL (set by the scoping effect above) but never surface as chips.
+  const scopedFieldIds = useMemo(() => new Set(isScoped ? ['rootEntityType', 'entityId'] : []), [isScoped]);
   const hiddenFieldIds = useMemo<readonly string[]>(
     () => (isScoped ? ['rootEntityType', 'entityId', 'entityName'] : []),
     [isScoped],
@@ -158,21 +159,23 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     ],
     [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds],
   );
-  const filterBarItems = useMemo(() => traceTokensToFilterBarItems(url.filterTokens), [url.filterTokens]);
+  const allFilterBarItems = useMemo(() => traceTokensToFilterBarItems(url.filterTokens), [url.filterTokens]);
+  const filterBarItems = useMemo(
+    () => allFilterBarItems.filter(item => !scopedFieldIds.has(item.fieldId)),
+    [allFilterBarItems, scopedFieldIds],
+  );
   // The time-range chip is a synthetic, always-present item so it takes part in keyboard
   // navigation; it never round-trips to filter tokens (its state lives in the date params).
   const filterBarValue = useMemo(() => [TRACE_TIME_RANGE_ITEM, ...filterBarItems], [filterBarItems]);
-  // Scoped chips are read-only; re-inject them so `FilterBar.Clear` (which emits `[]`)
-  // and any other edit can never drop the scope.
+  // Re-inject the hidden scope items so `FilterBar.Clear` (which emits `[]`) and any other
+  // edit can never drop the scope from the URL.
   const handleFilterBarChange = useCallback(
     (items: FilterBarItem[]) => {
-      const locked = filterBarItems.filter(item => lockedFieldIds.has(item.fieldId));
-      const rest = items.filter(
-        item => !lockedFieldIds.has(item.fieldId) && item.fieldId !== TRACE_TIME_RANGE_FIELD_ID,
-      );
-      url.handleFilterTokensChange(filterBarItemsToTraceTokens([...locked, ...rest]));
+      const scoped = allFilterBarItems.filter(item => scopedFieldIds.has(item.fieldId));
+      const rest = items.filter(item => item.fieldId !== TRACE_TIME_RANGE_FIELD_ID);
+      url.handleFilterTokensChange(filterBarItemsToTraceTokens([...scoped, ...rest]));
     },
-    [filterBarItems, lockedFieldIds, url],
+    [allFilterBarItems, scopedFieldIds, url],
   );
 
   const {
@@ -276,7 +279,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
         />
         {filterBarItems.map(item => (
-          <FilterBar.Chip key={item.id} item={item} readOnly={lockedFieldIds.has(item.fieldId)} />
+          <FilterBar.Chip key={item.id} item={item} />
         ))}
         <FilterBar.Input placeholder="Filter traces…" />
         {filterBarItems.length > 0 && <FilterBar.Clear />}
