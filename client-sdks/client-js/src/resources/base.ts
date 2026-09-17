@@ -30,6 +30,9 @@ export class BaseResource {
     } = this.options;
     const { retries: requestRetries, ...fetchOptions } = options;
     const retries = requestRetries ?? defaultRetries;
+    if (!Number.isSafeInteger(retries) || retries < 0) {
+      throw new RangeError('retries must be a non-negative safe integer');
+    }
     const fetchFn = customFetch || fetch;
 
     let delay = backoffMs;

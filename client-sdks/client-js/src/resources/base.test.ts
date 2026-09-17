@@ -96,6 +96,25 @@ describe('BaseResource', () => {
     expect(requestCount).toBe(1);
   });
 
+  it.each([-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'should reject an invalid request retry count of %s before fetching',
+    async retries => {
+      await expect(resource.request('/test', { retries })).rejects.toThrow(
+        new RangeError('retries must be a non-negative safe integer'),
+      );
+      expect(requestCount).toBe(0);
+    },
+  );
+
+  it('should reject an invalid client retry count before fetching', async () => {
+    const customResource = new BaseResource({ baseUrl: serverUrl, retries: Number.NaN });
+
+    await expect(customResource.request('/test')).rejects.toThrow(
+      new RangeError('retries must be a non-negative safe integer'),
+    );
+    expect(requestCount).toBe(0);
+  });
+
   it('should prefer a request abort signal over the client abort signal', async () => {
     const clientSignal = new AbortController().signal;
     const requestSignal = new AbortController().signal;
