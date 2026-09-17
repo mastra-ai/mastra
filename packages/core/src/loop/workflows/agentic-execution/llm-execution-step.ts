@@ -1300,8 +1300,35 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
        * error processor answers with a retry.
        */
       const discardAttemptEagerWork = () => {
-        eagerCoordinator?.stop({ cancelRunning: true });
+        const completed = eagerCoordinator?.stop({ cancelRunning: true });
         eagerCoordinator?.beginTurn();
+        if (!completed?.length) return;
+
+        // A tool that already ran is the one thing the discard cannot undo. Committing
+        // the call and its result into the conversation is what keeps eager execution
+        // observably equal to the default: the replacement attempt sees the work as
+        // done, so the tool runs once rather than once per attempt.
+        const generateId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId');
+        const messages = buildMessagesFromChunks({
+          chunks: completed.flatMap(work => [
+            { type: 'tool-call', payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args } },
+            {
+              type: 'tool-result',
+              payload: {
+                toolCallId: work.toolCallId,
+                toolName: work.toolName,
+                args: work.args,
+                result: work.result,
+              },
+            },
+          ]),
+          messageId: generateId?.() ?? crypto.randomUUID(),
+          // No tool set needed: it is only consulted to infer provider execution, and
+          // the eligibility whitelist never dispatches a provider-executed call.
+        });
+        for (const message of messages) {
+          messageList.add(message, 'response');
+        }
       };
 
       if (eagerCoordinator) {
@@ -2029,31 +2056,36 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       return;
                     }
 
-                    eagerCoordinator.start(toolCall.toolCallId, eagerAbortSignal =>
-                      eagerToolCallStep.execute({
-                        inputData: toolCall,
-                        runId,
-                        mastra,
-                        requestContext,
-                        // The coordinator's own signal, combined with the run's inside the
-                        // step, so eager work can be cancelled when its attempt is discarded
-                        // without the caller having aborted anything.
-                        [EAGER_TOOL_ABORT_SIGNAL]: eagerAbortSignal,
-                        writer: outputWriter,
-                        // The eligibility whitelist excludes every tool shape that can
-                        // suspend or bail, so neither of these should be reachable. They
-                        // stay as a loud, fail-safe assertion: raising "did not run" hands
-                        // the call back to the foreach rather than half-completing it here.
-                        suspend: async () => {
-                          throw new EagerToolExecutionNotRun(`"${toolCall.toolName}" requested suspension`);
-                        },
-                        bail: async () => {
-                          throw new EagerToolExecutionNotRun(`"${toolCall.toolName}" bailed`);
-                        },
-                        resumeData: undefined,
-                        tracingContext,
-                        [EAGER_TOOL_EXECUTION_MARKER]: true,
-                      }),
+                    eagerCoordinator.start(
+                      toolCall.toolCallId,
+                      eagerAbortSignal =>
+                        eagerToolCallStep.execute({
+                          inputData: toolCall,
+                          runId,
+                          mastra,
+                          requestContext,
+                          // The coordinator's own signal, combined with the run's inside the
+                          // step, so eager work can be cancelled when its attempt is discarded
+                          // without the caller having aborted anything.
+                          [EAGER_TOOL_ABORT_SIGNAL]: eagerAbortSignal,
+                          writer: outputWriter,
+                          // The eligibility whitelist excludes every tool shape that can
+                          // suspend or bail, so neither of these should be reachable. They
+                          // stay as a loud, fail-safe assertion: raising "did not run" hands
+                          // the call back to the foreach rather than half-completing it here.
+                          suspend: async () => {
+                            throw new EagerToolExecutionNotRun(`"${toolCall.toolName}" requested suspension`);
+                          },
+                          bail: async () => {
+                            throw new EagerToolExecutionNotRun(`"${toolCall.toolName}" bailed`);
+                          },
+                          resumeData: undefined,
+                          tracingContext,
+                          [EAGER_TOOL_EXECUTION_MARKER]: true,
+                        }),
+                      // Enough to write the call back into the conversation if this
+                      // attempt is discarded after the tool has already run.
+                      { toolName: toolCall.toolName, args: toolCall.args },
                     );
                   }
                 : undefined,

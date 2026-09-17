@@ -897,6 +897,99 @@ describe('eager tool dispatch — discarded model attempt', () => {
     return events;
   }
 
+  it('hands the replacement attempt work the discarded attempt already finished', async () => {
+    // Cancellation only answers for work still running. A tool that *finished* before its
+    // attempt was thrown away has already had its side effect, and the replacement model
+    // call must be told about it — otherwise the only way it can learn the answer is to
+    // ask for the same tool again, and the side effect happens twice.
+    const executions: string[] = [];
+    const prompts: any[][] = [];
+    let attempt = 0;
+
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        attempt += 1;
+        prompts.push(prompt as any[]);
+        const failing = attempt === 1;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `response-${attempt}`,
+                modelId: 'mock-model',
+                timestamp: new Date(0),
+              });
+              if (failing) {
+                controller.enqueue({
+                  type: 'tool-call',
+                  toolCallId: 'call-finished',
+                  toolName: 'tool-a',
+                  input: JSON.stringify({ value: 'finished' }),
+                });
+                // Long enough that the eager execution below has certainly settled before
+                // the attempt is discarded, which is the whole point of the case.
+                await new Promise(resolve => setTimeout(resolve, 80));
+                controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
+                controller.close();
+                return;
+              }
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'recovered' });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'eager-finished-work-agent',
+      name: 'Eager finished work agent',
+      instructions: 'Call tool-a.',
+      model,
+      errorProcessors: [
+        {
+          id: 'retry-once',
+          processAPIError: async ({ retryCount }: { retryCount: number }) => ({ retry: retryCount < 1 }),
+        },
+      ] as never,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Finishes immediately',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ answer: z.string() }),
+          execute: async ({ value }) => {
+            executions.push(value);
+            return { answer: `answered-${value}` };
+          },
+        }),
+      },
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution: true })).catch(() => {});
+
+    expect(attempt).toBe(2);
+    // The tool ran once, eagerly, during the attempt that was then discarded.
+    expect(executions).toEqual(['finished']);
+
+    // The replacement attempt is shown the completed call and its result, so it has no
+    // reason to ask for the work again.
+    const retryPrompt = JSON.stringify(prompts[1]);
+    expect(retryPrompt).toContain('call-finished');
+    expect(retryPrompt).toContain('answered-finished');
+  });
+
   it('cancels eager work when an error chunk is answered with a retry', async () => {
     const withoutEager = await runErrorChunkRetryScenario(false);
     const withEager = await runErrorChunkRetryScenario(true);

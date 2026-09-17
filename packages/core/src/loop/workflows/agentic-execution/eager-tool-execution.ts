@@ -25,6 +25,19 @@ type RunningExecution = {
   releasePermit: () => void;
 };
 
+/**
+ * A tool call that ran to completion eagerly but was never adopted, because the model
+ * attempt it belonged to was thrown away. The side effect already happened, so the
+ * caller commits this into the conversation rather than letting the replacement
+ * attempt run the same tool a second time.
+ */
+export type CompletedEagerWork = {
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  result: unknown;
+};
+
 type QueuedExecution = {
   toolCallId: string;
   run: () => void;
@@ -45,6 +58,12 @@ export class EagerToolExecutionCoordinator {
   readonly #executions = new Map<string, Promise<EagerToolResult>>();
   readonly #queued: QueuedExecution[] = [];
   readonly #controllers = new Map<string, RunningExecution>();
+  /**
+   * Results of executions that finished but have not been adopted yet. Held so that an
+   * attempt thrown away mid-stream can still surrender the work it already did, instead
+   * of the side effect happening twice.
+   */
+  readonly #completed = new Map<string, CompletedEagerWork>();
   #running = 0;
   #stopped = false;
   #stoppedPermanently = false;
@@ -60,6 +79,7 @@ export class EagerToolExecutionCoordinator {
   take(toolCallId: string) {
     const execution = this.#executions.get(toolCallId);
     this.#executions.delete(toolCallId);
+    this.#completed.delete(toolCallId);
     return execution;
   }
 
@@ -68,7 +88,11 @@ export class EagerToolExecutionCoordinator {
    * coordinator is stopped or the id is already in flight, so a replayed or duplicate
    * id within the same step can never execute twice.
    */
-  start(toolCallId: string, execute: (abortSignal: AbortSignal) => Promise<EagerToolResult>) {
+  start(
+    toolCallId: string,
+    execute: (abortSignal: AbortSignal) => Promise<EagerToolResult>,
+    call?: { toolName: string; args: unknown },
+  ) {
     if (this.#stopped || this.#executions.has(toolCallId)) return false;
 
     // Its own controller, so work started for an attempt the pipeline later discards can
@@ -92,7 +116,16 @@ export class EagerToolExecutionCoordinator {
         holdsPermit = true;
         this.#controllers.set(toolCallId, { controller, releasePermit });
         void execute(controller.signal)
-          .then(resolve, reject)
+          .then(result => {
+            // Recorded before resolving, so a discard racing the settlement still sees
+            // work that is done rather than work it is entitled to abandon. Only success
+            // counts: a failed execution left no side effect worth preserving, and the
+            // replacement attempt is free to try it again.
+            if (call && !controller.signal.aborted) {
+              this.#completed.set(toolCallId, { toolCallId, toolName: call.toolName, args: call.args, result });
+            }
+            resolve(result);
+          }, reject)
           .finally(() => {
             // Identity-checked: a discarded attempt and its retry can carry the same
             // toolCallId, so the late settlement of the old one must not evict the
@@ -141,7 +174,10 @@ export class EagerToolExecutionCoordinator {
    * released at the same moment: abort is cooperative, and a tool that declines to
    * observe it must not stall the attempt that replaced it.
    */
-  stop({ permanent = false, cancelRunning = false }: { permanent?: boolean; cancelRunning?: boolean } = {}) {
+  stop({
+    permanent = false,
+    cancelRunning = false,
+  }: { permanent?: boolean; cancelRunning?: boolean } = {}): CompletedEagerWork[] {
     this.#stopped = true;
     this.#stoppedPermanently ||= permanent;
     for (const queued of this.#queued.splice(0)) {
@@ -153,7 +189,15 @@ export class EagerToolExecutionCoordinator {
     // entirely (a model failing mid-stream, then retried or failed over): the normal
     // pipeline never runs those calls, so neither may we. After an unsafe *finish* the
     // foreach still runs and adopts, so running work is left alone there.
-    if (cancelRunning) {
+    if (!cancelRunning) return [];
+
+    // Work that already finished is the one thing a discard must not throw away: the
+    // tool has run, and the replacement attempt would otherwise run it again. Handed
+    // back so the caller can commit it into the conversation the replacement sees.
+    const completed = [...this.#completed.values()];
+    this.#completed.clear();
+
+    {
       const cancelled = [...this.#controllers];
       // Cleared first: releasing a permit can start queued work, which must not observe
       // a controller map that still holds the executions being abandoned.
@@ -167,6 +211,8 @@ export class EagerToolExecutionCoordinator {
         running.releasePermit();
       }
     }
+
+    return completed;
   }
 
   /**
@@ -178,6 +224,7 @@ export class EagerToolExecutionCoordinator {
   beginTurn() {
     if (this.#stoppedPermanently) return;
     this.#stopped = false;
+    this.#completed.clear();
     // Anything the previous turn's foreach never adopted is unreachable now, so drop it
     // rather than let the map grow across a long loop. Entries belonging to a cancelled
     // attempt are already gone; these are merely unclaimed.
