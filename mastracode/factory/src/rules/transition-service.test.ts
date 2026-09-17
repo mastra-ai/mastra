@@ -902,6 +902,50 @@ describe('FactoryTransitionService', () => {
     warn.mockRestore();
   });
 
+  it('isolates a synchronous acceptance-hook failure after the transition commits', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const item = await createItem(storage);
+    const onAccepted = vi.fn(() => {
+      throw new Error('label sync threw');
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      audit: seed.audit,
+      onAccepted,
+    });
+    const classified = await service.transition({
+      ...request(item, { stage: 'intake', identity: 'classify' }),
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'classify' },
+      triageType: 'feature request',
+    });
+    const acceptRequest = {
+      ...request({ id: item.id, revision: (classified as { revision: number }).revision }, { stage: 'planning' }),
+      cause: 'board_drag',
+    };
+    const accepted = await service.transition(acceptRequest);
+    expect(accepted).toMatchObject({ status: 'accepted', stage: 'planning' });
+
+    const stored = await storage.get({ orgId: 'org-1', factoryProjectId: PROJECT_ID, id: item.id });
+    expect(stored).toMatchObject({ stages: ['planning'], acceptedAt: expect.any(Date) });
+
+    await vi.waitFor(() => expect(onAccepted).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(warn.mock.calls[0]?.[0]).toBe(`[factory] acceptance hook failed for work item ${item.id}:`);
+
+    const { events } = await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(events.filter(event => event.action === 'factory.work_item.stage_moved')).toMatchObject([
+      { metadata: { transitionId: accepted.transitionId, to: 'planning' } },
+    ]);
+
+    expect(await service.transition(acceptRequest)).toEqual(accepted);
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
   it('keeps bugs autonomous and leaves grandfathered work and terminal transitions unaffected', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const bug = await createItem(storage, { metadata: { authorTrusted: true } });

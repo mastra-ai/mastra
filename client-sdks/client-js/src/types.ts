@@ -195,6 +195,10 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
+  /** Overrides the client's configured retry count for this request. */
+  retries?: number;
+  /** Overrides the client's configured abort signal for this request. */
+  signal?: AbortSignal;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
 }

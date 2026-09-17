@@ -37,6 +37,17 @@ export type { QueryTraceThreadsInput, QueryTraceThreadsResult, QueryTracesInput 
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
 export type { GetMetricTimeSeriesResponse } from './types';
 export type {
+  GetTraceQueryFieldsArgs,
+  GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesArgs,
+  GetTraceQueryValuesResponse,
+  TraceQueryCanonicalFieldDescriptor,
+  TraceQueryObservedFieldDescriptor,
+  TraceQueryOperator,
+  TraceQueryPredicateScope,
+  TraceQueryValueKind,
+} from './resources/observability-route-types';
+export type {
   Body,
   Client,
   ClientMethod,
