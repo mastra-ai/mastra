@@ -1913,6 +1913,9 @@ export class MessageList {
             this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
             return this;
           }
+          // The replaced object must not linger in its old source set, otherwise a
+          // client-echoed input message replaced by its stored copy would be re-persisted.
+          this.stateManager.removeMessage(existingMessage);
           this.messages[existingIndex] = messageV2;
         }
       } else if (!exists) {

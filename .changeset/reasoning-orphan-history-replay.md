@@ -2,15 +2,14 @@
 '@mastra/core': patch
 ---
 
-Strip orphaned OpenAI reasoning/message-item pairs during history replay.
+Keep stored reasoning when a client resends an assistant message.
 
-Previously, when a memory-backed multi-turn thread replayed an assistant turn whose reasoning item (`rs_*`) had not been persisted, `@mastra/core` sent the paired `message` item (`msg_*`) to the OpenAI Responses API by reference. The API rejected this with:
+Chat clients such as `useChat` echo the assistant messages they have received back to the server on the next turn, keyed by message id. That echo is lossy: reasoning parts are gone and provider metadata (OpenAI `itemId`s) is often dropped. Previously the echo replaced the message Memory had already persisted, so on reasoning-capable OpenAI models the next request contained the assistant `msg_*` item without its `rs_*` reasoning item and the Responses API rejected it:
 
 > Item 'msg_*' of type 'message' was provided without its required 'reasoning' item.
 
-Now:
+The lossy echo was then also written back to storage, permanently removing the reasoning from the thread.
 
-- Orphaned `msg_*` items are sent by value instead of by reference, so reasoning-capable OpenAI models work with Memory multi-turn threads without requiring `sendReasoning: true`.
-- itemIds are still preserved when the reasoning partner is present in the same assistant turn, so native reasoning replay is unaffected.
+Now the stored copy is authoritative for what the echo lost. Reasoning parts and provider metadata are restored from storage, client-side updates the echo does carry (for example tool output added with `addToolResult`) are kept, and the echo is no longer re-persisted over the stored message. Request bodies for turns that had no stored reasoning are unchanged.
 
-Follow-up to the client-stream fix in #23323; fixes #24052.
+Fixes #24052.
