@@ -441,6 +441,23 @@ describe('pruneAgentLoopSnapshot span instructions strip', () => {
     expect(countInstructionEchoes((pruned.context as Record<string, any>)['durable-tool-call'])).toBe(0);
   });
 
+  it('strips the instructions echo from a carried-over prevOutput copy too', () => {
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: snapshotWith({
+        'durable-tool-call': {
+          status: 'running',
+          payload: { agentSpanData: spanData() },
+          output: { agentSpanData: spanData() },
+          prevOutput: { agentSpanData: spanData() },
+        },
+      }),
+    });
+
+    expect(
+      countInstructionEchoes((pruned.context as Record<string, any>)['durable-tool-call'].prevOutput),
+    ).toBe(0);
+  });
+
   it('keeps the span itself and every other attribute', () => {
     const pruned = pruneAgentLoopSnapshot({
       snapshot: snapshotWith({

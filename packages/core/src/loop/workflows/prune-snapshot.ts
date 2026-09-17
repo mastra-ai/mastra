@@ -195,9 +195,10 @@ function stripTerminalPayloadState<T>(value: T): T {
  * Drops `agentSpanData.attributes.instructions`: the agent's entire system
  * prompt, exported into the span payload the loop carries forward and stored
  * on BOTH sides of every step result, rewritten at every step boundary. The
- * copies are never read back. The two `rebuildSpan` call sites that resume a
- * run's agent span (`create-durable-agentic-workflow.ts`, `tool-call.ts`)
- * both read `initData.agentSpanData`, i.e. `context.input`, which the pruner
+ * copies are never read back. The `rebuildSpan` call sites that end a run's
+ * agent span (`create-durable-agentic-workflow.ts`, `tool-call.ts`) all read
+ * `initData.agentSpanData` or the resume-registry override of it — never a
+ * step-level copy — and `initData` is `context.input`, which the pruner
  * leaves whole, so a resumed run still rebuilds its span from a complete
  * copy and the trace loses nothing. The live span was already exported with
  * its attributes while the run was streaming. Measured over 300 real
@@ -225,6 +226,7 @@ function pruneStepResult(
   if ('output' in pruned) pruned.output = stripStepResultRequest(pruned.output);
   pruned.payload = stripSpanInstructions(pruned.payload);
   if ('output' in pruned) pruned.output = stripSpanInstructions(pruned.output);
+  if ('prevOutput' in pruned) pruned.prevOutput = stripSpanInstructions(pruned.prevOutput);
   pruned.payload = stripHeavyIterationFields(pruned.payload);
   if ('prevOutput' in pruned) pruned.prevOutput = stripHeavyIterationFields(pruned.prevOutput);
 
