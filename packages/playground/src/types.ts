@@ -1,8 +1,8 @@
 import type { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import type { GetAgentResponse } from '@mastra/client-js';
-import type { LLMStepResult } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { AiMessageType } from '@mastra/core/memory';
+import type { ModelSettingsValues } from '@mastra/playground-ui/components/ModelSettings';
 
 /**
  * Local alias for the AI SDK v5 UIMessage shape that `toAISdkV5Messages` produces.
@@ -53,22 +53,11 @@ export type ReadonlyJSONObject = {
 
 export type ReadonlyJSONArray = readonly ReadonlyJSONValue[];
 
-export interface ModelSettings {
-  frequencyPenalty?: number;
-  presencePenalty?: number;
-  maxRetries?: number;
-  maxSteps?: number;
-  maxTokens?: number;
-  temperature?: number;
-  topK?: number;
-  topP?: number;
-  seed?: number;
-  providerOptions?: LLMStepResult['providerMetadata'];
+export interface ModelSettings extends ModelSettingsValues {
   chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;
   chatWithLegacyStream?: boolean;
   chatWithNetwork?: boolean;
-  requireToolApproval?: boolean;
 }
 
 export interface AgentSettingsType {
