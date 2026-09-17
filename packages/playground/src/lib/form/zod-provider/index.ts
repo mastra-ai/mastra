@@ -9,6 +9,7 @@ import {
   getLiteralValues,
   getUnionOptions,
   getIntersection,
+  getRecordValueSchema,
   isOptional,
 } from './compat';
 import { getDefaultValues, getDefaultValueInZodStack } from './default-values';
@@ -157,11 +158,12 @@ function getMemberSchemas(baseSchema: AnySchema): AnySchema[] | undefined {
   return intersection ? [intersection.left, intersection.right] : getUnionOptions(baseSchema);
 }
 
-function normalizeObjectFields(value: Record<string, unknown>, shape: Record<string, AnySchema>) {
+function normalizeEntries(value: Record<string, unknown>, schemaOf: (key: string) => AnySchema | undefined) {
   const normalized: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value)) {
-    const fieldValue = shape[key] ? normalizeFormValues(child, shape[key]) : child;
-    if (fieldValue !== undefined) normalized[key] = fieldValue;
+    const schema = schemaOf(key);
+    const childValue = schema ? normalizeFormValues(child, schema) : child;
+    if (childValue !== undefined) normalized[key] = childValue;
   }
   return normalized;
 }
@@ -184,9 +186,12 @@ function normalizeFormValues(value: unknown, schema: AnySchema): unknown {
 
   const shape = getShape(baseSchema);
   if (shape && isPlainObject(value)) {
-    const group = normalizeObjectFields(value, shape);
+    const group = normalizeEntries(value, key => shape[key]);
     return omitsBlankGroup(schema, group) ? undefined : group;
   }
+
+  const recordValueSchema = getRecordValueSchema(baseSchema);
+  if (recordValueSchema && isPlainObject(value)) return normalizeEntries(value, () => recordValueSchema);
 
   if (Array.isArray(value)) {
     const element = getArrayElement(baseSchema);

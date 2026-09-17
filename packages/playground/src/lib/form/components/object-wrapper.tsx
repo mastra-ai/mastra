@@ -1,19 +1,33 @@
 import type { ObjectWrapperProps } from '@autoform/react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Braces, ChevronRight } from 'lucide-react';
-import { ROOT_FIELD_KEY } from '../field-context';
+import { useContext } from 'react';
+import { FieldPathContext, ROOT_FIELD_KEY } from '../field-context';
+import { useSectionDisclosure } from '../use-section-disclosure';
 
 export function ObjectWrapper({ label, children }: ObjectWrapperProps) {
   if (label === ROOT_FIELD_KEY || label === '') return <div className="flex flex-col gap-2">{children}</div>;
 
+  return <ObjectGroup label={label}>{children}</ObjectGroup>;
+}
+
+function ObjectGroup({ label, children }: Pick<ObjectWrapperProps, 'label' | 'children'>) {
+  const path = useContext(FieldPathContext);
+  const { expanded, invalid, setExpanded } = useSectionDisclosure(path, false);
+
   return (
-    <Collapsible className="motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none">
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
+    >
       <CollapsibleTrigger className="text-ui-sm text-neutral3 flex min-h-11 w-full items-center gap-2 text-left">
         <ChevronRight aria-hidden className="size-3.5 shrink-0" />
         <span className="flex min-w-0 items-center gap-1.5">
           <Braces aria-hidden className="size-3.5" />
           {label}
         </span>
+        {invalid && <span className="text-ui-xs text-accent2 ml-auto shrink-0">Needs input</span>}
       </CollapsibleTrigger>
       <CollapsibleContent keepMounted className="border-border1 border-l pt-2 pl-4">
         {children}

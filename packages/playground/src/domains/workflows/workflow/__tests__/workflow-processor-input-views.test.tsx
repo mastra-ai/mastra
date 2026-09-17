@@ -3,24 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { WorkflowInputData } from '../workflow-input-data';
 
-vi.mock('@uiw/react-codemirror', () => ({
-  default: ({
-    value,
-    onChange,
-    editable,
-  }: {
-    value: string;
-    onChange?: (value: string) => void;
-    editable?: boolean;
-  }) => (
-    <textarea
-      aria-label="Code editor"
-      value={value}
-      onChange={event => onChange?.(event.target.value)}
-      readOnly={editable === false}
-    />
-  ),
-}));
+vi.mock('@uiw/react-codemirror', () => import('@/test/mock-code-editor'));
 
 afterEach(cleanup);
 

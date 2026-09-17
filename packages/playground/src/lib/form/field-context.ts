@@ -1,7 +1,7 @@
 import { createContext } from 'react';
 import type { RefObject } from 'react';
 
-export const ArrayItemPathContext = createContext('');
+export const FieldPathContext = createContext('');
 export const FormReadOnlyContext = createContext(false);
 
 export const ArrayAddButtonContext = createContext<RefObject<HTMLButtonElement | null> | undefined>(undefined);

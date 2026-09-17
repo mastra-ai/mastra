@@ -119,6 +119,17 @@ describe('CustomZodProvider.validateSchema', () => {
     });
   });
 
+  describe('when a record entry is left blank', () => {
+    it('omits the entry instead of rejecting the blank string', () => {
+      const provider = new CustomZodProvider(z.object({ limits: z.record(z.string(), z.number().optional()) }));
+
+      expect(provider.validateSchema({ limits: { threshold: '', retries: 3 } })).toEqual({
+        success: true,
+        data: { limits: { retries: 3 } },
+      });
+    });
+  });
+
   describe('when an array item has a cleared default', () => {
     it('submits the cleared value rather than restoring the nested default', () => {
       const provider = new CustomZodProvider(
