@@ -15,6 +15,7 @@ import {
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
+import { ModelPickerGroup } from '@mastra/playground-ui/components/ModelPicker';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
 import {
   buildThreadRailTurns,
@@ -23,7 +24,6 @@ import {
   ThreadRail,
 } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
-import { ModelPickerGroup } from '@mastra/playground-ui/components/ModelPicker';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useSpeechRecognition } from '@mastra/react';
 import type { MessageFactoryPart } from '@mastra/react/ui';

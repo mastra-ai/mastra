@@ -4,8 +4,8 @@ import { CombinedPicker, PickerWithPacks } from '../../../../.storybook/fixtures
 import { SegmentedPicker } from '../../../../.storybook/fixtures/model-picker/segmented-picker';
 import { ModelPicker } from './model-picker';
 import { ModelPickerLocked, ModelPickerWarning, ModelPickerWarnings, ModelProviderIcon } from './model-picker-group';
-import { OpenAIIcon } from '@/ds/icons/OpenAIIcon';
 import { ModelPickerLoading, ModelPickerUnavailable, ModelPickerReadOnly } from './model-picker-status';
+import { OpenAIIcon } from '@/ds/icons/OpenAIIcon';
 
 const meta = {
   title: 'Inputs/Model picker',
@@ -91,7 +91,7 @@ export const WithPacksAndActions: Story = {
   play: async ({ canvasElement }) => {
     const page = within(canvasElement.ownerDocument.body);
     await userEvent.click(page.getByRole('button', { name: 'Session model, Balanced' }));
-    await expect(page.getByText('Choose a model or a group of models.')).toBeVisible();
+    await waitFor(() => expect(page.getByText('Choose a model or a group of models.')).toBeVisible());
     await userEvent.click(await page.findByRole('option', { name: 'Model pack Review' }));
     await userEvent.click(page.getByRole('button', { name: 'Session model, Review' }));
     await userEvent.click(await page.findByRole('option', { name: 'Reset selection' }));
