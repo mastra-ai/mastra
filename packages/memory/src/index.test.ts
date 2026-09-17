@@ -124,6 +124,26 @@ describe('Memory', () => {
       expect(memory.listTools()).toHaveProperty('updateWorkingMemory');
     });
 
+    it('automatically includes direct recall when observation archive mode is enabled', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { observationalMemory: { observation: { archive: {} } } },
+      });
+
+      expect(memory.listTools()).toHaveProperty('recall');
+    });
+
+    it('rejects archive plus explicit reflection in the Memory constructor type', () => {
+      const acceptConfig = (_config: ConstructorParameters<typeof Memory>[0]) => undefined;
+
+      // @ts-expect-error Archive and explicit reflection are mutually exclusive.
+      acceptConfig({
+        storage: new InMemoryStore(),
+        options: { observationalMemory: { observation: { archive: {} }, reflection: {} } },
+      });
+      expect(true).toBe(true);
+    });
+
     it('uses manageWorkingMemory to add the working memory extractor and disable agent-managed tools by default', () => {
       const memory = new Memory({
         storage: new InMemoryStore(),

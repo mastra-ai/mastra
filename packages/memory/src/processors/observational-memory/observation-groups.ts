@@ -7,6 +7,15 @@ export interface ObservationGroup {
   kind?: string;
 }
 
+export interface ObservationGroupSpan extends ObservationGroup {
+  /** UTF-16 code-unit offset of the opening tag. */
+  start: number;
+  /** Exclusive UTF-16 code-unit offset after the closing tag. */
+  end: number;
+  /** Exact stored text, including the observation-group tags. */
+  text: string;
+}
+
 interface ReflectionObservationGroupSection {
   heading: string;
   body: string;
@@ -71,20 +80,19 @@ export function wrapInObservationGroup(
   return `<observation-group id="${id}" range="${range}"${kindAttr}>\n${content}\n</observation-group>`;
 }
 
-export function parseObservationGroups(observations: string): ObservationGroup[] {
+export function parseObservationGroupSpans(observations: string): ObservationGroupSpan[] {
   if (!observations) {
     return [];
   }
 
-  const groups: ObservationGroup[] = [];
-  let match: RegExpExecArray | null;
-
-  while ((match = OBSERVATION_GROUP_PATTERN.exec(observations)) !== null) {
+  const groups: ObservationGroupSpan[] = [];
+  for (const match of observations.matchAll(OBSERVATION_GROUP_PATTERN)) {
     const attributes = parseObservationGroupAttributes(match[1] ?? '');
     const id = attributes.id;
     const range = attributes.range;
+    const start = match.index;
 
-    if (!id || !range) {
+    if (!id || !range || start === undefined) {
       continue;
     }
 
@@ -93,10 +101,22 @@ export function parseObservationGroups(observations: string): ObservationGroup[]
       range,
       kind: attributes.kind,
       content: match[2]!.trim(),
+      start,
+      end: start + match[0].length,
+      text: match[0],
     });
   }
 
   return groups;
+}
+
+export function parseObservationGroups(observations: string): ObservationGroup[] {
+  return parseObservationGroupSpans(observations).map(({ id, range, kind, content }) => ({
+    id,
+    range,
+    kind,
+    content,
+  }));
 }
 
 export function stripObservationGroups(observations: string): string {

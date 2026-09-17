@@ -1,9 +1,11 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { MessageHistory } from '@mastra/core/processors';
-import type { MemoryStorage } from '@mastra/core/storage';
+import type { MemoryStorage, ObservationGroupMetadata } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../../..';
+import { createArchiveCatalogLabel } from '../archive-lifecycle';
+import { ARCHIVE_SUMMARY_EXTRACTOR_SLUG } from '../built-in-extractors';
 import { omDebug, omError } from '../debug';
 import { formatOmError } from '../error';
 import { getObservableMessages, stripThreadTags } from '../message-utils';
@@ -111,7 +113,7 @@ export abstract class ObservationStrategy {
       await this.persist(processed);
       await this.emitEndMarkers(cycleId, processed);
 
-      if (this.needsReflection) {
+      if (this.needsReflection && !this.observationConfig.archive) {
         await this.deps.reflector.maybeReflect({
           record: { ...record, activeObservations: processed.observations },
           observationTokens: processed.observationTokens,
@@ -202,6 +204,66 @@ export abstract class ObservationStrategy {
       }
     }
     return maxTime > 0 ? new Date(maxTime) : new Date();
+  }
+
+  protected getArchiveSummary(output: ObserverOutput): string | undefined {
+    const value = output.extractedValues?.[ARCHIVE_SUMMARY_EXTRACTOR_SLUG];
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  protected createObservationGroupMetadata(
+    observations: string,
+    messages: MastraDBMessage[],
+    summary: string | undefined,
+    sourceThreadId?: string,
+  ): ObservationGroupMetadata[] {
+    const groups = parseObservationGroups(observations);
+    if (groups.length === 0) return [];
+
+    const timestamps = messages
+      .map(message => (message.createdAt ? new Date(message.createdAt).getTime() : Number.NaN))
+      .filter(Number.isFinite);
+    const observedAt =
+      timestamps.length > 0
+        ? { from: new Date(Math.min(...timestamps)), to: new Date(Math.max(...timestamps)) }
+        : undefined;
+
+    return groups.map(group => {
+      const label = createArchiveCatalogLabel(summary, group.range, observedAt);
+      return {
+        groupId: group.id,
+        summary: label.persisted,
+        searchText: `${label.searchable}\n${group.content}`.normalize('NFKC').toLowerCase(),
+        messageRange: group.range,
+        kind: group.kind === 'reflection' ? 'reflection' : 'observation',
+        sourceThreadId,
+        observedAt,
+        tokenCount: this.tokenCounter.countObservations(group.content),
+      };
+    });
+  }
+
+  protected mergeObservationGroupMetadata(
+    observations: string,
+    newGroups: ObservationGroupMetadata[],
+  ): ObservationGroupMetadata[] {
+    const metadata = new Map(
+      [...(this.opts.record.observationGroups ?? []), ...newGroups].map(group => [group.groupId, group]),
+    );
+    return parseObservationGroups(observations).map(group => {
+      const existing = metadata.get(group.id);
+      if (existing) return existing;
+      const label = createArchiveCatalogLabel(undefined, group.range);
+      return {
+        groupId: group.id,
+        summary: label.persisted,
+        searchText: `${label.searchable}\n${group.content}`.normalize('NFKC').toLowerCase(),
+        messageRange: group.range,
+        sourceUnavailable: true,
+        kind: group.kind === 'reflection' ? 'reflection' : 'observation',
+        tokenCount: this.tokenCounter.countObservations(group.content),
+      };
+    });
   }
 
   // ── Observation formatting ──────────────────────────────────

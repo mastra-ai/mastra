@@ -862,6 +862,46 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(updated?.totalTokensObserved).toBe(250); // Accumulated
       });
 
+      it('should preserve stored observationGroups when omitted from the update', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        const observedAt = { from: new Date(), to: new Date() };
+        const groups = [
+          {
+            groupId: `group-${randomUUID()}`,
+            summary: 'Persisted summary',
+            searchText: 'persisted summary observations',
+            sourceThreadId: `source-thread-${randomUUID()}`,
+            messageRange: 'message-a:message-b',
+            observedAt,
+            tokenCount: 3,
+            textStart: 0,
+            textEnd: 10,
+          },
+        ];
+
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: 'first observations',
+          tokenCount: 10,
+          lastObservedAt: observedAt.to,
+          observationGroups: groups,
+        });
+
+        // Archive mode turned off: later observation writes omit observationGroups
+        // and must not erase the persisted group sidecars (InMemory behavior).
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: 'second observations',
+          tokenCount: 20,
+          lastObservedAt: observedAt.to,
+        });
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.activeObservations).toBe('second observations');
+        expect(updated?.observationGroups).toEqual(groups);
+      });
+
       it('should throw error for non-existent record', async () => {
         await expect(
           memoryStorage.updateActiveObservations({

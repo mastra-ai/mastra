@@ -18,6 +18,11 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
     },
     maxTokensPerBatch: 10_000,
     observeAttachments: ['image/*', 'application/pdf'],
+    archive: {
+      afterTokens: 40_000,
+      keepTokens: 8_000,
+      maxCatalogTokens: 2_000,
+    },
     // Async buffering defaults (enabled by default)
     bufferTokens: 0.2 as number | undefined, // Buffer every 20% of messageTokens
     bufferActivation: 0.8 as number | undefined, // Activate to retain 20% of threshold
@@ -40,6 +45,8 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
     bufferActivation: 0.5 as number | undefined, // Start buffering at 50% of observationTokens
   },
 } as const;
+
+export const ARCHIVE_CATALOG_SUMMARY_MAX_CHARS = 240;
 
 /**
  * Continuation hint injected after observations to guide the model's behavior.

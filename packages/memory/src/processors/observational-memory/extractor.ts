@@ -52,7 +52,7 @@ export interface ExtractorConfig<T = unknown> {
   retryStructuredExtractionOnEmptyObject?: boolean;
 }
 
-const BUILT_IN_SLUGS = new Set(['current-task', 'suggested-response', 'thread-title']);
+const BUILT_IN_SLUGS = new Set(['current-task', 'suggested-response', 'thread-title', 'archive-catalog-summary']);
 
 const EXTRACTED_VALUES_TAG = 'extracted-values';
 

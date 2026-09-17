@@ -315,7 +315,9 @@ export async function handleObservationalMemoryOperation(
 
       await ctx.db.patch(doc._id, {
         activeObservations: request.observations,
-        observationGroups: request.observationGroups ? JSON.stringify(request.observationGroups) : null,
+        // Omitted observationGroups preserves the stored sidecars (matching
+        // InMemory): Convex patch only touches provided fields.
+        ...(request.observationGroups ? { observationGroups: JSON.stringify(request.observationGroups) } : {}),
         lastObservedAt: request.lastObservedAt,
         // Reset pending tokens since we've now observed them
         pendingMessageTokens: 0,

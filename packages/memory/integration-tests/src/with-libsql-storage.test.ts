@@ -7,6 +7,7 @@ import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { verifyObservationArchiveRecallAfterRestart } from './shared/observation-archive-recall';
 import {
   assertCreatedAtMonotonic,
   assertToolInvocationBeforeFinalText,
@@ -72,6 +73,20 @@ describe('Memory with LibSQL Integration', () => {
         },
       },
     };
+  });
+
+  it('persists observation labels across restart and recalls archived text with raw-message pointers', async () => {
+    const url = `file:${join(dbStoragePath, 'observation-archive-recall.db')}`;
+    await verifyObservationArchiveRecallAfterRestart(async () => {
+      const storage = new LibSQLStore({ id: randomUUID(), url });
+      return {
+        memory: new Memory({
+          storage,
+          options: { observationalMemory: { scope: 'thread', observation: { archive: {} } } },
+        }),
+        close: () => storage.close(),
+      };
+    });
   });
 
   describe('lastMessages should return newest messages, not oldest', () => {

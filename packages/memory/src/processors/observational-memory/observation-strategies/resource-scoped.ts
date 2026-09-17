@@ -74,7 +74,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     return true;
   }
   get needsReflection() {
-    return true;
+    return !this.observationConfig.archive;
   }
   get rethrowOnFailure() {
     return true;
@@ -349,6 +349,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     let currentObservations = existingObservations;
     let cycleObservationTokens = 0;
+    const cycleGroups: NonNullable<ProcessedObservation['observationGroups']> = [];
     const threadMetadataUpdates: ProcessedObservation['threadMetadataUpdates'] = [];
 
     for (const obsResult of this.observationResults) {
@@ -358,6 +359,16 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
       const messageRange = this.retrieval ? buildMessageRange(threadMessages) : undefined;
       const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
+      if (this.observationConfig.archive) {
+        cycleGroups.push(
+          ...this.createObservationGroupMetadata(
+            threadSection,
+            threadMessages,
+            this.getArchiveSummary(result),
+            threadId,
+          ),
+        );
+      }
       const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
       currentObservations = this.replaceOrAppendThreadSection(
         currentObservations,
@@ -400,11 +411,15 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     const existingIds = record.observedMessageIds ?? [];
     const observedMessageIds = [...new Set([...existingIds, ...newMessageIds])];
     const observationTokens = this.tokenCounter.countObservations(currentObservations);
+    const observationGroups = this.observationConfig.archive
+      ? this.mergeObservationGroupMetadata(currentObservations, cycleGroups)
+      : undefined;
 
     return {
       observations: currentObservations,
       observationTokens,
       cycleObservationTokens,
+      observationGroups,
       observedMessageIds,
       lastObservedAt,
       threadMetadataUpdates,
@@ -466,6 +481,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       id: record.id,
       expectedWriteEpoch: record.writeEpoch ?? 0,
       observations: processed.observations,
+      observationGroups: processed.observationGroups,
       tokenCount: processed.observationTokens,
       lastObservedAt: processed.lastObservedAt,
       observedMessageIds: processed.observedMessageIds,

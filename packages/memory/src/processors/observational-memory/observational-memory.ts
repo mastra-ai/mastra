@@ -9,13 +9,20 @@ import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
+import type {
+  MemoryStorage,
+  ObservationArchiveEntry,
+  ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
+} from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { resolveActivationTTL } from './activation-ttl';
+import { canRenderObservationArchiveCatalog, renderObservationArchiveCatalog } from './archive-catalog';
+import { planObservationArchive } from './archive-lifecycle';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
 import {
@@ -268,6 +275,7 @@ import type {
   ObserveHooks,
   ObserveLifecycleHooks,
   ObserveTrigger,
+  ResolvedObservationArchiveConfig,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
   ThresholdRange,
@@ -462,6 +470,34 @@ export class ObservationalMemory {
   }
 
   constructor(config: ObservationalMemoryConfig) {
+    const archiveInput = (config.observation as { archive?: unknown } | undefined)?.archive;
+    if (archiveInput !== undefined) {
+      if (!archiveInput || typeof archiveInput !== 'object' || Array.isArray(archiveInput)) {
+        throw new Error('observation.archive must be an object.');
+      }
+      if (config.reflection !== undefined) {
+        throw new Error('observation.archive cannot be combined with explicit reflection configuration.');
+      }
+      for (const field of ['afterTokens', 'keepTokens', 'maxCatalogTokens'] as const) {
+        const value = (archiveInput as Record<string, unknown>)[field];
+        if (
+          value !== undefined &&
+          (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0)
+        ) {
+          throw new Error(`observation.archive.${field} must be a positive finite integer.`);
+        }
+      }
+      const afterTokens =
+        (archiveInput as { afterTokens?: number }).afterTokens ??
+        OBSERVATIONAL_MEMORY_DEFAULTS.observation.archive.afterTokens;
+      const keepTokens =
+        (archiveInput as { keepTokens?: number }).keepTokens ??
+        OBSERVATIONAL_MEMORY_DEFAULTS.observation.archive.keepTokens;
+      if (keepTokens >= afterTokens) {
+        throw new Error('observation.archive.keepTokens must be less than observation.archive.afterTokens.');
+      }
+    }
+
     if (!coreFeatures.has('request-response-id-rotation')) {
       throw new Error(
         'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
@@ -483,8 +519,14 @@ export class ObservationalMemory {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
-    this.retrieval = Boolean(config.retrieval);
-    this.retrievalScope = typeof config.retrieval === 'object' ? (config.retrieval.scope ?? 'resource') : 'resource';
+    const archiveEnabled = archiveInput !== undefined;
+    this.retrieval = Boolean(config.retrieval) || archiveEnabled;
+    this.retrievalScope =
+      typeof config.retrieval === 'object'
+        ? (config.retrieval.scope ?? 'resource')
+        : archiveEnabled
+          ? this.scope
+          : 'resource';
     this.retrievalInstructions = typeof config.retrieval === 'object' ? config.retrieval.instructions : undefined;
     this.retrievalSearch = typeof config.retrieval === 'object' && Boolean(config.retrieval.vector);
     this.onIndexObservations = config.onIndexObservations;
@@ -579,9 +621,24 @@ export class ObservationalMemory {
     const observationActivateAfterIdlePath =
       config.observation?.activateAfterIdle !== undefined ? 'observation.activateAfterIdle' : 'activateAfterIdle';
 
+    const archive = archiveEnabled
+      ? {
+          afterTokens:
+            (archiveInput as { afterTokens?: number }).afterTokens ??
+            OBSERVATIONAL_MEMORY_DEFAULTS.observation.archive.afterTokens,
+          keepTokens:
+            (archiveInput as { keepTokens?: number }).keepTokens ??
+            OBSERVATIONAL_MEMORY_DEFAULTS.observation.archive.keepTokens,
+          maxCatalogTokens:
+            (archiveInput as { maxCatalogTokens?: number }).maxCatalogTokens ??
+            OBSERVATIONAL_MEMORY_DEFAULTS.observation.archive.maxCatalogTokens,
+        }
+      : undefined;
+
     // Resolve observation config with defaults
     this.observationConfig = {
       model: observationModel,
+      archive,
       // When shared budget, store as range: min = base threshold, max = total budget
       // This allows messages to expand into unused observation space
       messageTokens: isSharedBudget ? { min: messageTokens, max: totalBudget } : messageTokens,
@@ -627,6 +684,7 @@ export class ObservationalMemory {
       ],
       extractors: composeObservationExtractors({
         threadTitle: config.observation?.threadTitle ?? false,
+        archive,
         extract: config.observation?.extract,
         continuationHints: config.observation?.continuationHints,
       }),
@@ -646,20 +704,24 @@ export class ObservationalMemory {
           : {}),
       },
       providerOptions: config.reflection?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.providerOptions,
-      bufferActivation: asyncBufferingDisabled
+      bufferActivation:
+        asyncBufferingDisabled || archiveEnabled
+          ? undefined
+          : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
+      activateAfterIdle: archiveEnabled
         ? undefined
-        : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
-      activateAfterIdle: parseActivationTTL(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
-      activateOnProviderChange: config.reflection?.activateOnProviderChange ?? false,
-      blockAfter: asyncBufferingDisabled
-        ? undefined
-        : resolveBlockAfter(
-            config.reflection?.blockAfter ??
-              ((config.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation)
-                ? 1.2
-                : undefined),
-            config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
-          ),
+        : parseActivationTTL(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
+      activateOnProviderChange: archiveEnabled ? false : (config.reflection?.activateOnProviderChange ?? false),
+      blockAfter:
+        asyncBufferingDisabled || archiveEnabled
+          ? undefined
+          : resolveBlockAfter(
+              config.reflection?.blockAfter ??
+                ((config.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation)
+                  ? 1.2
+                  : undefined),
+              config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
+            ),
       instruction: config.reflection?.instruction,
       extractors: composeReflectionExtractors({
         extract: config.reflection?.extract,
@@ -735,6 +797,7 @@ export class ObservationalMemory {
     observation: {
       messageTokens: number | ThresholdRange;
       previousObserverTokens: number | false | undefined;
+      archive?: { afterTokens: number; keepTokens: number; maxCatalogTokens: number };
     };
     reflection: {
       observationTokens: number | ThresholdRange;
@@ -746,6 +809,7 @@ export class ObservationalMemory {
       observation: {
         messageTokens: this.observationConfig.messageTokens,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
+        archive: this.observationConfig.archive,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
@@ -936,6 +1000,7 @@ export class ObservationalMemory {
       messageTokens: number | ThresholdRange;
       model: string;
       previousObserverTokens: number | false | undefined;
+      archive?: ResolvedObservationArchiveConfig;
       routing?: Array<{ upTo: number; model: string }>;
     };
     reflection: {
@@ -955,6 +1020,7 @@ export class ObservationalMemory {
         messageTokens: this.observationConfig.messageTokens,
         model: observationResolved.model,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
+        archive: this.observationConfig.archive,
         routing: observationResolved.routing,
       },
       reflection: {
@@ -1731,6 +1797,7 @@ export class ObservationalMemory {
     unobservedContextBlocks?: string,
     currentDate?: Date,
     retrieval = false,
+    archivedObservations?: string,
   ): string[] {
     // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
     let optimized = retrieval
@@ -1751,6 +1818,10 @@ export class ObservationalMemory {
       messages.push(
         `The following content is from OTHER conversations different from the current conversation, they're here for reference,  but they're not necessarily your focus:\nSTART_OTHER_CONVERSATIONS_BLOCK\n${unobservedContextBlocks}\nEND_OTHER_CONVERSATIONS_BLOCK`,
       );
+    }
+
+    if (archivedObservations) {
+      messages.push(archivedObservations);
     }
 
     const observationChunks = this.splitObservationContextChunks(optimized);
@@ -2639,6 +2710,120 @@ ${formattedMessages}
     }
   }
 
+  private hasBufferedReflectionState(record: ObservationalMemoryRecord): boolean {
+    return Boolean(
+      record.bufferedReflection ||
+      record.bufferedReflectionTokens ||
+      record.bufferedReflectionInputTokens ||
+      record.reflectedObservationLineCount ||
+      record.isReflecting ||
+      record.isBufferingReflection,
+    );
+  }
+
+  private async prepareRecordForArchive(
+    threadId: string,
+    resourceId: string | undefined,
+    record: ObservationalMemoryRecord,
+  ): Promise<ObservationalMemoryRecord> {
+    if (!this.observationConfig.archive) return record;
+
+    await BufferingCoordinator.awaitBuffering(threadId, resourceId ?? null, this.scope);
+    let freshRecord = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
+    if (!this.hasBufferedReflectionState(freshRecord)) return freshRecord;
+
+    freshRecord = await this.storage.clearBufferedReflection({
+      id: freshRecord.id,
+      expectedWriteEpoch: freshRecord.writeEpoch ?? 0,
+    });
+    return freshRecord;
+  }
+
+  private async archiveActiveRecord(
+    threadId: string,
+    resourceId: string | undefined,
+    record: ObservationalMemoryRecord,
+  ): Promise<ObservationalMemoryRecord> {
+    const archiveConfig = this.observationConfig.archive;
+    if (!archiveConfig) return record;
+
+    const freshRecord = await this.prepareRecordForArchive(threadId, resourceId, record);
+    const plan = planObservationArchive(freshRecord, archiveConfig, text => this.tokenCounter.countObservations(text));
+    if (plan.status === 'below-threshold') return freshRecord;
+    if (plan.status === 'no-progress') {
+      omDebug(`[OM:archive] no complete group can be retired (key=${plan.key})`);
+      return freshRecord;
+    }
+
+    try {
+      return await this.storage.createObservationArchiveGeneration(plan.input);
+    } catch (error) {
+      const currentRecord = await this.storage.getObservationalMemory(freshRecord.threadId, freshRecord.resourceId);
+      if (currentRecord && currentRecord.id !== freshRecord.id) {
+        omDebug(`[OM:archive] generation ${freshRecord.generationCount} was superseded before archive commit`);
+        return currentRecord;
+      }
+      throw error;
+    }
+  }
+
+  private async buildArchivedObservationsCatalog({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<string | undefined> {
+    const archiveConfig = this.observationConfig.archive;
+    if (!archiveConfig) return undefined;
+
+    const countTokens = (text: string) => this.tokenCounter.countObservations(text);
+    if (!canRenderObservationArchiveCatalog(archiveConfig.maxCatalogTokens, countTokens)) {
+      return undefined;
+    }
+
+    let representThreadId: ((threadId: string) => string) | undefined;
+    if (this.shouldObscureThreadIds) {
+      const hasher = await this.hasher;
+      representThreadId = (threadId: string) => hasher.h32ToString(threadId);
+    }
+
+    const limits = [20, 20, 10] as const;
+    const archives: ObservationArchiveEntry[] = [];
+    let cursor: string | undefined;
+
+    for (const limit of limits) {
+      const page = await this.storage.listObservationArchives({
+        scope: this.retrievalScope,
+        threadId: this.retrievalScope === 'thread' ? threadId : undefined,
+        resourceId,
+        cursor,
+        limit,
+      });
+      archives.push(...page.archives);
+
+      const rendered = renderObservationArchiveCatalog({
+        archives,
+        hasMore: Boolean(page.nextCursor),
+        maxTokens: archiveConfig.maxCatalogTokens,
+        countTokens,
+        representThreadId,
+      });
+      if (rendered.budgetFull || !page.nextCursor) {
+        return rendered.text;
+      }
+      cursor = page.nextCursor;
+    }
+
+    return renderObservationArchiveCatalog({
+      archives,
+      hasMore: Boolean(cursor),
+      maxTokens: archiveConfig.maxCatalogTokens,
+      countTokens,
+      representThreadId,
+    }).text;
+  }
+
   /**
    * Build the observation system message string for injection into an LLM prompt.
    *
@@ -2683,8 +2868,12 @@ ${formattedMessages}
   }): Promise<string[] | undefined> {
     const { threadId, resourceId, unobservedContextBlocks } = opts;
     const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
+    const archivedObservations = await this.buildArchivedObservationsCatalog({
+      threadId,
+      resourceId: resourceId ?? record.resourceId,
+    });
 
-    if (!record.activeObservations) {
+    if (!record.activeObservations && !archivedObservations) {
       // Resource-scoped recall can browse and search other threads even before any
       // observation group exists, so the actor still needs to know how to use it.
       if (this.retrieval && this.retrievalScope === 'resource') {
@@ -2708,13 +2897,14 @@ ${formattedMessages}
     const currentDate = opts.currentDate ?? new Date();
 
     return this.formatObservationsForContext(
-      record.activeObservations,
+      record.activeObservations ?? '',
       currentTask,
       suggestedResponse,
       omMetadata?.extracted,
       unobservedContextBlocks,
       currentDate,
       this.retrieval,
+      archivedObservations,
     );
   }
 
@@ -2956,7 +3146,7 @@ ${formattedMessages}
 
     // Should reflect? (use per-record override if set)
     const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
-    const shouldReflect = currentObservationTokens >= reflectThreshold;
+    const shouldReflect = !this.observationConfig.archive && currentObservationTokens >= reflectThreshold;
 
     // Can activate?
     const canActivate = bufferedChunkCount > 0;
@@ -2984,7 +3174,7 @@ ${formattedMessages}
       bufferedChunkTokens,
       canActivate,
       asyncObservationEnabled,
-      asyncReflectionEnabled: this.buffering.isAsyncReflectionEnabled(),
+      asyncReflectionEnabled: !this.observationConfig.archive && this.buffering.isAsyncReflectionEnabled(),
       scope: this.scope,
     };
   }
@@ -3040,7 +3230,11 @@ ${formattedMessages}
       reflected = refResult.reflected;
     }
 
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    let record = await this.getOrCreateRecord(threadId, resourceId);
+    if (this.observationConfig.archive) {
+      const lockKey = this.buffering.getLockKey(threadId, resourceId);
+      record = await this.withLock(lockKey, () => this.archiveActiveRecord(threadId, resourceId, record));
+    }
     return { activated, observed, reflected, record };
   }
 
@@ -3596,7 +3790,11 @@ ${formattedMessages}
       }
     }
 
-    const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
+    let updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
+    if (this.observationConfig.archive) {
+      const lockKey = this.buffering.getLockKey(threadId, resourceId);
+      updatedRecord = await this.withLock(lockKey, () => this.archiveActiveRecord(threadId, resourceId, updatedRecord));
+    }
     return {
       activated: true,
       record: updatedRecord,
@@ -3791,6 +3989,11 @@ ${formattedMessages}
         observed = result.observed;
         observationUsage = result.usage;
         observationProviderMetadata = result.providerMetadata;
+        if (observed && this.observationConfig.archive) {
+          const committedRecord =
+            (await this.storage.getObservationalMemory(freshRecord.threadId, freshRecord.resourceId)) ?? freshRecord;
+          await this.archiveActiveRecord(threadId, resourceId, committedRecord);
+        }
       });
     } catch (error) {
       lifecycleError = error;
@@ -3816,7 +4019,8 @@ ${formattedMessages}
 
     // Fetch the latest record after lock release
     const record = await this.getOrCreateRecord(threadId, resourceId);
-    const reflected = record.generationCount > generationBefore && generationBefore >= 0;
+    const reflected =
+      record.originType === 'reflection' && record.generationCount > generationBefore && generationBefore >= 0;
 
     return { observed, reflected, record };
   }
@@ -3844,6 +4048,10 @@ ${formattedMessages}
     usage?: ObserveHookUsage;
   }> {
     const record = await this.getOrCreateRecord(threadId, resourceId);
+
+    if (this.observationConfig.archive) {
+      return { reflected: false, record, usage: undefined };
+    }
 
     if (!record.activeObservations) {
       return { reflected: false, record, usage: undefined };

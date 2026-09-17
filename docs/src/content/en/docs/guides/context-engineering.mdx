@@ -201,7 +201,7 @@ Message history works well for shorter conversations where recent turns contain 
 
 Conversation history grows with every user message, response, and tool call. Even before it reaches the model's hard context limit, a long transcript can increase cost and make relevant details harder for the model to find. Compression replaces old, verbose history with a smaller representation.
 
-[Observational Memory](/docs/memory/observational-memory) handles this continuously. An Observer turns older messages and tool interactions into dense observations, while periodic reflection reorganizes and compresses those observations.
+[Observational Memory](/docs/memory/observational-memory) handles this continuously. An Observer turns older messages and tool interactions into dense observations. By default, periodic reflection reorganizes and compresses those observations. You can instead enable rolling archives, which keep a bounded live tail and retrieve retired observations on demand without invoking the Reflector.
 
 You don't need to configure `lastMessages` when Observational Memory is enabled. Observational Memory manages history itself, keeping recent unobserved messages in context and replacing older messages with observations.
 

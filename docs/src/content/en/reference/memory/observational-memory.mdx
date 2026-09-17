@@ -100,7 +100,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     name: 'retrieval',
     type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string }",
     description:
-      "Let the agent look up the raw message history behind its observations. Observation groups keep durable pointers to the original messages, and a `recall` tool is registered so the agent can browse them. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`. `{ instructions: '...' }` appends application-specific recall guidance after Mastra's built-in retrieval instructions.",
+      "Let the agent look up the raw message history behind its observations. Observation groups keep durable pointers to the original messages, and a `recall` tool is registered so the agent can browse them. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`. `{ instructions: '...' }` appends application-specific recall guidance after Mastra's built-in retrieval instructions. Archive mode registers direct recall automatically when this option is omitted; its default recall scope then matches the OM scope.",
     isOptional: true,
     defaultValue: 'false',
   },
@@ -120,6 +120,44 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
       {
         type: 'ObservationalMemoryObservationConfig',
         parameters: [
+          {
+            name: 'archive',
+            type: 'ObservationArchiveConfig',
+            description:
+              'Opt into rolling observation archives. When active observations reach `afterTokens`, OM retires complete oldest groups into durable archive generations, keeps the newest live tail, and renders a bounded archive catalog. This option must be an object; there is no boolean shorthand. It cannot be combined with an explicit `reflection` configuration. Archive mode disables all Reflector calls and automatically enables the recall tool with `mode: "observations"`.',
+            isOptional: true,
+            properties: [
+              {
+                type: 'ObservationArchiveConfig',
+                parameters: [
+                  {
+                    name: 'afterTokens',
+                    type: 'number',
+                    description:
+                      'Positive finite integer token threshold for retiring complete old observation groups.',
+                    isOptional: true,
+                    defaultValue: '40000',
+                  },
+                  {
+                    name: 'keepTokens',
+                    type: 'number',
+                    description:
+                      'Positive finite integer target for the newest observation tokens kept in the active live tail. Must be less than `afterTokens`. OM only retires complete groups, so the retained size is approximate.',
+                    isOptional: true,
+                    defaultValue: '8000',
+                  },
+                  {
+                    name: 'maxCatalogTokens',
+                    type: 'number',
+                    description:
+                      'Positive finite integer hard ceiling for the rendered `<archived-observations>` catalog included in actor context. If the minimum catalog wrapper and hidden-range marker cannot fit, OM omits the catalog and keeps the live tail.',
+                    isOptional: true,
+                    defaultValue: '2000',
+                  },
+                ],
+              },
+            ],
+          },
           {
             name: 'model',
             type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
@@ -406,6 +444,16 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
 ]}
 />
+
+### Rolling archive behavior
+
+`observation.archive` is opt-in. Supplying an empty object uses `afterTokens: 40_000`, `keepTokens: 8_000`, and `maxCatalogTokens: 2_000`. JavaScript and untyped callers receive an error when the value isn't an object, a field isn't a positive finite integer, `keepTokens` is greater than or equal to `afterTokens`, or an explicit `reflection` configuration is also present.
+
+Archive mode suppresses synchronous reflection, background reflection buffering and activation, reflection hooks, and manual `reflect()` model calls. It adds no archive-time model call because the existing Observer generates catalog summaries inline. When the retirement threshold is crossed, OM retires only complete oldest observation groups and keeps the newest groups as the live active record.
+
+The actor receives the live observation tail plus a separate `<archived-observations>` catalog. `maxCatalogTokens` is a hard ceiling for the complete rendered catalog, including wrappers and hidden-range markers. If even the minimum catalog representation doesn't fit, OM omits the catalog rather than exceeding the limit.
+
+Archive mode automatically registers the `recall` tool and enables `mode: "observations"` when `retrieval` is omitted. Its default recall scope matches the OM `scope`. An explicit `retrieval.scope` controls browsing within the same authorized resource. Thread-scoped recall returns only the current thread's visible groups, including when the archive record is resource-scoped. Resource-scoped recall can access authorized thread-owned archives and resource-owned archives.
 
 ### Token estimate metadata cache
 
@@ -1171,9 +1219,11 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 
 ## Recall tool
 
-When `retrieval` is truthy, Mastra registers a `recall` tool that pages through raw messages behind observation group ranges. With the default resource scope, the tool can list threads (`mode: "threads"`) and browse another thread through `threadId`. It also supports cross-thread search. Set `retrieval: { vector: true }` for semantic search (`mode: "search"`), or use `scope: 'thread'` to restrict the tool to the current thread. The tool is automatically added to the agent.
+When `retrieval` is truthy, Mastra registers a `recall` tool that pages through raw messages behind observation group ranges. With the default resource scope, the tool can list threads (`mode: "threads"`) and browse another thread through `threadId`. Set `retrieval: { vector: true }` for semantic search (`mode: "search"`), or use `scope: 'thread'` to restrict the tool to the current thread. Archive mode registers the same tool automatically and adds `mode: "observations"` for retired observation groups.
 
-Mastra also injects scope-aware usage instructions into the agent's context. For resource scope with `vector: true`, these cover routing between `search`, `threads`, and `messages`, including fallback to thread discovery when search results are unsuitable. Without `vector: true`, the instructions only cover `threads` and `messages` browsing, so the agent isn't steered toward a search mode that isn't configured. Resource-scoped instructions are injected even before any observation group exists, so the agent can browse other threads from the first message. Use `retrieval: { instructions: '...' }` to append application-specific guidance after the built-in instructions.
+Mastra omits unavailable modes and their mode-specific fields from the tool schema. For example, `search` is present only with vector retrieval, and `observations` is present only with archive mode. Stale calls to an unavailable mode return configuration guidance instead of reading data.
+
+Mastra also injects scope-aware usage instructions into the agent's context. For resource scope with `vector: true`, these cover routing between `search`, `threads`, and `messages`, including fallback to thread discovery when search results are unsuitable. Archive instructions direct the agent to retrieve retired observation text first, then use returned message cursors for raw-message drill-down. Use `retrieval: { instructions: '...' }` to append application-specific guidance after the built-in instructions.
 
 ### Parameters
 
@@ -1181,32 +1231,53 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
   content={[
   {
     name: 'mode',
-    type: "'messages' | 'threads' | 'search'",
+    type: "'messages' | 'threads' | 'search' | 'observations'",
     isOptional: true,
     defaultValue: "'messages'",
     description:
-      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists all threads for the current user. `"search"` finds messages by semantic similarity across all threads (requires vector store and embedder).',
+      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists threads. `"search"` finds messages by semantic similarity and is available with vector retrieval. `"observations"` retrieves retired observation groups and is available in archive mode.',
   },
   {
     name: 'query',
     type: 'string',
     isOptional: true,
     description:
-      'Search query for `mode: "search"`. Finds messages semantically similar to this text across all threads for the current user.',
+      'Semantic query for `mode: "search"` or `mode: "observations"`. Observation search resolves at most 20 indexed group hits to archives visible in the current recall scope. Requires vector retrieval.',
+  },
+  {
+    name: 'archiveId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Stable archive ID for direct `mode: "observations"` lookup. Pass it with `groupId` and `charOffset` to continue reading one retired group.',
+  },
+  {
+    name: 'groupId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Observation group within `archiveId`. Required with `charOffset` for exact retired-text continuation.',
+  },
+  {
+    name: 'text',
+    type: 'string',
+    isOptional: true,
+    description:
+      'For `mode: "observations"`, an NFKC-normalized, case-insensitive substring filter. Date, thread, and text filters must match the same visible group.',
   },
   {
     name: 'cursor',
     type: 'string',
     isOptional: true,
     description:
-      'A message ID to anchor the recall query. Extract the start or end ID from an observation group range (e.g. from `_range: \\`startId:endId\\`_`, use either `startId` or `endId`). If a range string is passed directly, the tool returns a hint explaining how to extract the correct ID. When both `cursor` and `threadId` are omitted for `mode: "messages"`, the tool browses the current thread from the position set by `anchor`.',
+      'Pagination cursor. For `mode: "messages"`, pass one message ID, not a range. For `mode: "observations"`, pass the opaque `nextCursor` returned by the previous observation page. When both `cursor` and `threadId` are omitted for messages, the tool browses the current thread from the position set by `anchor`.',
   },
   {
     name: 'threadId',
     type: 'string',
     isOptional: true,
     description:
-      'Browse a different thread by its ID, or pass `"current"` for the active thread. Use `mode: "threads"` first to discover thread IDs. When provided without a `cursor`, reading starts from the beginning of the thread.',
+      'Browse or filter to a different thread by its ID, or pass `"current"` for the active thread. Resource-scoped observation recall requires the thread to belong to the authorized resource. Thread-scoped recall remains limited to the current thread.',
   },
   {
     name: 'anchor',
@@ -1214,7 +1285,7 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     isOptional: true,
     defaultValue: "'start'",
     description:
-      'For `mode: "messages"` without a `cursor`, page from the start (oldest-first) or end (newest-first) of the thread.',
+      'For `mode: "messages"` without a `cursor`, page from the start (oldest-first) or end (newest-first) of the thread. Observation archives are always newest-first.',
   },
   {
     name: 'page',
@@ -1229,7 +1300,7 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     type: 'number',
     isOptional: true,
     defaultValue: '20',
-    description: 'Maximum number of items to return per page.',
+    description: 'Maximum number of items to return per page. Must be between 1 and 20.',
   },
   {
     name: 'detail',
@@ -1265,21 +1336,94 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     isOptional: true,
     defaultValue: '0',
     description:
-      'Character position to continue reading a truncated single part. Only applies with `cursor` and `partIndex`. When a part is larger than the token budget, the result includes `nextCharOffset` — pass that exact value here in the next call to read the following chunk. The chunks concatenate to the original part text.',
+      'Character position for exact continuation. With messages, this applies to `cursor` plus `partIndex`. With observations, it requires `archiveId` plus `groupId`. Pass the exact returned `nextCharOffset`; offsets count JavaScript UTF-16 code units, and an offset between surrogate-pair halves is rejected.',
   },
   {
     name: 'before',
     type: 'string',
     isOptional: true,
     description:
-      'For `mode: "threads"` only. Filter to threads created before this date. Accepts ISO 8601 format (e.g. `"2026-03-15"`, `"2026-03-10T00:00:00Z"`).',
+      'ISO 8601 upper date bound. For threads, filters creation time. For search and observations, filters observed dates. Observation bounds are inclusive.',
   },
   {
     name: 'after',
     type: 'string',
     isOptional: true,
     description:
-      'For `mode: "threads"` only. Filter to threads created after this date. Accepts ISO 8601 format (e.g. `"2026-03-01"`, `"2026-03-10T00:00:00Z"`).',
+      'ISO 8601 lower date bound. For threads, filters creation time. For search and observations, filters observed dates. Observation bounds are inclusive.',
+  },
+]}
+/>
+
+### Returns (observations mode)
+
+Observation recall returns retired observation text before raw-message pointers. For a paginated browse or semantic query, `observations` contains the first visible group's first bounded chunk. Use `groupIds` to select other groups in the archive. Continue a truncated group with the exact returned `archiveId`, `groupId`, and `nextCharOffset`, then use `source.messageCursorStart` or `source.messageCursorEnd` in a separate `mode: "messages"` call when raw details are needed.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'observations',
+    type: 'string',
+    description:
+      'Exact stored text chunk from the selected retired observation group. When no match exists, contains a short status message.',
+  },
+  {
+    name: 'archiveId',
+    type: 'string',
+    isOptional: true,
+    description: 'Stable ID of the selected archive.',
+  },
+  {
+    name: 'groupId',
+    type: 'string',
+    isOptional: true,
+    description: 'Stable ID of the selected observation group.',
+  },
+  {
+    name: 'groupIds',
+    type: 'string[]',
+    description: 'Ordered visible group IDs in the selected archive.',
+  },
+  {
+    name: 'charOffset',
+    type: 'number',
+    description: 'UTF-16 code-unit offset where this observation chunk starts.',
+  },
+  {
+    name: 'nextCharOffset',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Present when more text remains in the selected group. Pass this exact value with the same archive and group IDs.',
+  },
+  {
+    name: 'truncated',
+    type: 'boolean',
+    description: 'Whether more text remains in the selected observation group.',
+  },
+  {
+    name: 'source',
+    type: '{ threadId?: string; messageRange?: string; messageCursorStart?: string; messageCursorEnd?: string; sourceUnavailable: boolean }',
+    isOptional: true,
+    description:
+      'Raw-message provenance for the selected group. Legacy observations can set `sourceUnavailable: true` and omit message cursors.',
+  },
+  {
+    name: 'archives',
+    type: 'ObservationRecallArchive[]',
+    description:
+      'Archive metadata for this page, including archive time, generation, visible group summaries, observed date ranges, and source pointers.',
+  },
+  {
+    name: 'count',
+    type: 'number',
+    description: 'Number of archives returned in this page.',
+  },
+  {
+    name: 'nextCursor',
+    type: 'string',
+    isOptional: true,
+    description: 'Opaque newest-first cursor for the next page of archived observations.',
   },
 ]}
 />

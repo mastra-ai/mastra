@@ -2611,7 +2611,7 @@ export class MemoryPG extends MemoryStorage {
           "observedMessageIds" = $6,
           "updatedAt" = $7,
           "updatedAtZ" = $8,
-          "observationGroups" = $9
+          "observationGroups" = COALESCE($9::jsonb, "observationGroups")
         WHERE id = $10 AND COALESCE("recordState", 'active') = 'active'
           AND COALESCE("writeEpoch", 0) = $11`,
         [

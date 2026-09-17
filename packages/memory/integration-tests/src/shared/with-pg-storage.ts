@@ -13,6 +13,7 @@ import { afterAll, describe, it, expect, beforeAll, beforeEach, onTestFinished }
 import { z } from 'zod';
 import { transformRequest } from '../transform-request';
 
+import { verifyObservationArchiveRecallAfterRestart } from './observation-archive-recall';
 import { getResuableTests } from './reusable-tests';
 
 // Helper function to extract text content from MastraDBMessage
@@ -215,6 +216,19 @@ export function getPgStorageTests(connectionString: string) {
         },
       }),
     };
+  });
+
+  it('persists observation labels across restart and recalls archived text with raw-message pointers', async () => {
+    await verifyObservationArchiveRecallAfterRestart(async () => {
+      const storage = new PostgresStore({ id: randomUUID(), ...config, ...poolLimits });
+      return {
+        memory: new Memory({
+          storage,
+          options: { observationalMemory: { scope: 'thread', observation: { archive: {} } } },
+        }),
+        close: () => storage.close(),
+      };
+    });
   });
 
   describe('Memory with PostgresStore Integration', () => {

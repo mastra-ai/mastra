@@ -414,17 +414,45 @@ If you enable `observation.threadTitle`, the Observer can also suggest a short t
 
 Example: An agent using Playwright MCP might see 50,000+ tokens per page snapshot. With OM, the Observer watches the interaction and creates a few hundred tokens of observations about what was on the page and what actions were taken. The agent stays on task without carrying every raw snapshot.
 
-### Reflections
+### Choose reflection or rolling archives
 
-When observations exceed their threshold (default: 40,000 tokens), the Reflector condenses them and combines related items, plus reflects on patterns.
+By default, OM uses reflection when observations exceed their threshold (default: 40,000 tokens). The Reflector combines related items, condenses older information, and rewrites the observation log. New observations append after the rewritten log, and later reflections process the complete log again.
 
-Reflections don't accumulate as a separate, ever-growing layer. Each reflection rewrites the entire observation log. The Reflector's output becomes the new log, and new observations append after it. When the log next hits the threshold, the Reflector re-processes everything, including earlier reflections. It condenses older information more aggressively while keeping recent detail. Memory stays bounded around the reflection threshold no matter how long the conversation runs.
+Use rolling archives instead when you want the actor to keep a smaller live observation tail and retrieve older observations on demand. Archive mode retires complete old observation groups without calling the Reflector. The original raw messages remain in memory storage.
+
+| Mode | Actor context | Older information | Model work |
+| - | - | - | - |
+| Reflection (default) | Rewritten observation log plus recent messages | Condensed into the active log | Reflector calls at the configured threshold |
+| Rolling archives | Bounded archive catalog, live observation tail, and recent messages | Retired observation text remains directly recallable | No Reflector calls; catalog summaries come from the existing Observer call |
+
+Configure archive mode under `observation.archive`:
+
+```typescript title="src/mastra/agents/agent.ts"
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      observation: {
+        archive: {
+          afterTokens: 40_000,
+          keepTokens: 8_000,
+          maxCatalogTokens: 2_000,
+        },
+      },
+    },
+  },
+})
+```
+
+When live observations reach `afterTokens`, OM retires complete oldest groups and keeps about `keepTokens` of the newest observations live. It never splits an observation group. The actor receives the live tail and an `<archived-observations>` catalog whose rendered size never exceeds `maxCatalogTokens`. Each catalog entry includes a stable archive ID and source metadata for later recall.
+
+All three fields are optional inside the `archive` object and use the values shown above by default. The object itself is opt-in. Don't configure `reflection` on the same OM instance because archive mode and explicit reflection are mutually exclusive.
 
 The result is a three-tier system:
 
 1. **Recent messages**: Exact conversation history for the current task
-1. **Observations**: A log of what the Observer has seen
-1. **Reflections**: Condensed observations when memory becomes too long
+1. **Live observations**: The newest information recorded by the Observer
+1. **Reflections or archives**: Condensed observations in reflection mode, or retired observations available through recall in archive mode
 
 ### How context changes over time
 
@@ -444,6 +472,10 @@ With [`shareTokenBudget`](/reference/memory/observational-memory#shared-token-bu
 ### Retrieval mode
 
 Normal OM compresses messages into observations, which is great for staying on task, but the original wording is gone. Retrieval mode fixes this by keeping each observation group linked to the raw messages that produced it. The agent can call a `recall` tool to recover source details compressed by the summary, including exact wording and tool output as well as chronology.
+
+Archive mode enables direct recall automatically, even when you omit `retrieval`. The agent first calls `recall` with `mode: "observations"` to read the retired observation text. Results include the archive ID, group ID, and raw-message source pointers. If exact wording or tool output is needed, the agent follows those pointers with a second `mode: "messages"` call.
+
+Long retired groups are returned in bounded chunks. The result's `nextCharOffset` continues the same group when passed back with its `archiveId` and `groupId`. Archive browsing is newest-first and returns an opaque `nextCursor` for the next page. Resource and thread scope rules still apply, so projected results never include sibling-thread group text.
 
 #### Browsing only
 
@@ -528,7 +560,8 @@ With retrieval mode enabled, OM:
   - Page through the raw messages behind any observation group range
   - Search by semantic similarity (`mode: "search"` with a `query` string); requires `vector: true`
   - List all threads (`mode: "threads"`), browse other threads (`threadId`), and search across all threads (default `scope: 'resource'`)
-  - When `scope: 'thread'`: restrict browsing and search to the current thread only
+  - Read retired observation groups (`mode: "observations"`) when archive mode is enabled
+  - When `scope: 'thread'`: restrict browsing, search, and archived observations to the current thread only
 
 See the [recall tool reference](/reference/memory/observational-memory#recall-tool) for the full API (detail levels, part indexing, pagination, cross-thread browsing, and token limiting).
 

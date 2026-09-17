@@ -1170,7 +1170,19 @@ export class InMemoryMemory extends MemoryStorage {
 
     const key = this.getObservationalMemoryKey(record.threadId, record.resourceId);
     const successorId = crypto.randomUUID();
-    const mutableSnapshot = structuredClone(record);
+    // Config snapshots can contain live model instances and callbacks. Copy mutable
+    // record collections without trying to structured-clone those runtime values.
+    const mutableSnapshot: ObservationalMemoryRecord = {
+      ...record,
+      observedMessageIds: record.observedMessageIds ? [...record.observedMessageIds] : undefined,
+      observationGroups: record.observationGroups?.map(group => ({ ...group })),
+      bufferedObservationChunks: record.bufferedObservationChunks?.map(chunk => ({
+        ...chunk,
+        messageIds: [...chunk.messageIds],
+        observationGroups: chunk.observationGroups?.map(group => ({ ...group })),
+      })),
+      metadata: record.metadata ? { ...record.metadata } : undefined,
+    };
     const archiveMetadata = {
       archiveId: input.archiveId,
       archivedAt: input.archivedAt,

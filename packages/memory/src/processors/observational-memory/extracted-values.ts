@@ -26,14 +26,13 @@ export interface ExtractedBuiltInValues {
 type BuiltInMetadataField = Exclude<keyof ExtractedValueMetadata, 'extracted'>;
 type ExtractedBuiltInField = keyof ExtractedBuiltInValues;
 
-const BUILT_IN_METADATA_FIELDS: Record<
-  BuiltInExtractorSlug,
-  { metadataField: BuiltInMetadataField; builtInField: ExtractedBuiltInField }
-> = {
+const BUILT_IN_METADATA_FIELDS = {
   'current-task': { metadataField: 'currentTask', builtInField: 'currentTask' },
   'suggested-response': { metadataField: 'suggestedResponse', builtInField: 'suggestedContinuation' },
   'thread-title': { metadataField: 'threadTitle', builtInField: 'threadTitle' },
-};
+} as const satisfies Partial<
+  Record<BuiltInExtractorSlug, { metadataField: BuiltInMetadataField; builtInField: ExtractedBuiltInField }>
+>;
 
 function isPresentExtractedValue(value: unknown): boolean {
   return value !== undefined && value !== null && value !== '';
@@ -126,8 +125,10 @@ function setValueAtPath(metadata: ExtractedValueMetadata, keyPath: string | fals
 function readBuiltInMetadataValues(metadata: ExtractedValueMetadata): Partial<Record<BuiltInExtractorSlug, unknown>> {
   const values: Partial<Record<BuiltInExtractorSlug, unknown>> = {};
   for (const slug of BUILT_IN_EXTRACTOR_SLUGS) {
-    const { metadataField } = BUILT_IN_METADATA_FIELDS[slug]!;
-    values[slug] = metadata[metadataField];
+    const fields = BUILT_IN_METADATA_FIELDS[slug as keyof typeof BUILT_IN_METADATA_FIELDS];
+    if (fields) {
+      values[slug] = metadata[fields.metadataField];
+    }
   }
   return values;
 }
@@ -186,8 +187,10 @@ function getStringExtractedValue(values: Record<string, unknown> | undefined, sl
 export function getBuiltInExtractedValues(values?: Record<string, unknown>): ExtractedBuiltInValues {
   const builtIns: ExtractedBuiltInValues = {};
   for (const slug of BUILT_IN_EXTRACTOR_SLUGS) {
-    const { builtInField } = BUILT_IN_METADATA_FIELDS[slug]!;
-    builtIns[builtInField] = getStringExtractedValue(values, slug);
+    const fields = BUILT_IN_METADATA_FIELDS[slug as keyof typeof BUILT_IN_METADATA_FIELDS];
+    if (fields) {
+      builtIns[fields.builtInField] = getStringExtractedValue(values, slug);
+    }
   }
   return builtIns;
 }

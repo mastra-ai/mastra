@@ -20,9 +20,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { Extractor } from '../extractor';
 import { ModelByInputTokens } from '../model-by-input-tokens';
+import { wrapInObservationGroup } from '../observation-groups';
 import { ObservationalMemory } from '../observational-memory';
 import { ObserverRunner } from '../observer-runner';
-import type { ContinuationHintsConfig, ObserveHooks } from '../types';
+import type { ContinuationHintsConfig, ObservationalMemoryConfig, ObserveHooks } from '../types';
 
 // =============================================================================
 // Helpers
@@ -2591,6 +2592,159 @@ describe('getHistory()', () => {
 });
 
 // =============================================================================
+// archive catalog labels
+// =============================================================================
+
+describe('archive catalog labels', () => {
+  const observationOutput = `<observations>
+* User chose OAuth for admin access
+</observations>
+<archive-catalog-summary>Archive <Auth> & "Keys"</archive-catalog-summary>`;
+
+  it('persists the Observer-generated summary on synchronous observation groups', async () => {
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      model: createMockObserverModel(observationOutput),
+      observation: {
+        messageTokens: 100,
+        bufferTokens: false,
+        archive: { afterTokens: 1_000, keepTokens: 100, maxCatalogTokens: 200 },
+      },
+    });
+    const threadId = 'archive-summary-sync';
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    const result = await om.observe({ threadId });
+
+    expect(result.observed).toBe(true);
+    const groups = Object.values(result.record.observationGroups ?? {});
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toEqual(
+      expect.objectContaining({
+        summary: 'Archive &lt;Auth&gt; &amp; &quot;Keys&quot;',
+        searchText: expect.stringContaining('archive <auth> & "keys"'),
+        messageRange: `${threadId}-msg-0:${threadId}-msg-4`,
+      }),
+    );
+  });
+
+  it('persists the Observer-generated summary on resource-scoped observation groups', async () => {
+    const storage = createInMemoryStorage();
+    const resourceId = 'archive-summary-resource';
+    const threadId = 'archive-summary-resource-thread';
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Archive',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const messages = createBulkMessages(5, threadId).map(message => ({ ...message, resourceId }));
+    await storage.saveMessages({ messages });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      model: createMockObserverModel(`<observations>
+<thread id="${threadId}">
+* User chose OAuth for admin access
+<archive-catalog-summary>Archive <Auth> & "Keys"</archive-catalog-summary>
+</thread>
+</observations>`),
+      observation: {
+        messageTokens: 100,
+        bufferTokens: false,
+        archive: { afterTokens: 1_000, keepTokens: 100, maxCatalogTokens: 200 },
+      },
+    });
+
+    const result = await om.observe({ threadId, resourceId, messages });
+
+    expect(result.observed).toBe(true);
+    const groups = Object.values(result.record.observationGroups ?? {});
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toEqual(
+      expect.objectContaining({
+        summary: 'Archive &lt;Auth&gt; &amp; &quot;Keys&quot;',
+        sourceThreadId: threadId,
+        messageRange: `${threadId}-msg-0:${threadId}-msg-4`,
+      }),
+    );
+  });
+
+  it('bounds escaped summaries and falls back deterministically when the summary is missing', async () => {
+    const runObservation = async (threadId: string, output: string) => {
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        model: createMockObserverModel(output),
+        observation: {
+          messageTokens: 100,
+          bufferTokens: false,
+          archive: { afterTokens: 1_000, keepTokens: 100, maxCatalogTokens: 200 },
+        },
+      });
+      const messages = createBulkMessages(5, threadId);
+      await storage.saveMessages({ messages });
+      const result = await om.observe({ threadId });
+      return Object.values(result.record.observationGroups ?? {})[0]!;
+    };
+
+    const bounded = await runObservation(
+      'archive-summary-bounded',
+      `<observations>\n* Durable fact\n</observations>\n<archive-catalog-summary>${'&'.repeat(300)}</archive-catalog-summary>`,
+    );
+    expect(bounded.summary.length).toBeLessThanOrEqual(240);
+    expect(bounded.summary).toMatch(/^(?:&amp;)+\.\.\.$/);
+
+    const fallback = await runObservation(
+      'archive-summary-fallback',
+      '<observations>\n* Durable fact\n</observations>',
+    );
+    expect(fallback.summary).toMatch(
+      /^Conversation observed on \d{4}-\d{2}-\d{2} \(archive-summary-fallback-msg-0:archive-summary-fallback-msg-4\)$/,
+    );
+  });
+
+  it('persists the Observer-generated summary on buffered observation groups', async () => {
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      model: createMockObserverModel(observationOutput),
+      observation: {
+        messageTokens: 500,
+        bufferTokens: 0.2,
+        archive: { afterTokens: 1_000, keepTokens: 100, maxCatalogTokens: 200 },
+      },
+    });
+    const threadId = 'archive-summary-buffered';
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    const result = await om.buffer({ threadId });
+    expect(result.buffered).toBe(true);
+    await om.waitForBuffering(threadId, undefined, 5_000);
+
+    const record = await om.getRecord(threadId);
+    const groups = Object.values(record?.bufferedObservationChunks?.[0]?.observationGroups ?? {});
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toEqual(
+      expect.objectContaining({
+        summary: 'Archive &lt;Auth&gt; &amp; &quot;Keys&quot;',
+        searchText: expect.stringContaining('user chose oauth for admin access'),
+        messageRange: `${threadId}-msg-0:${threadId}-msg-4`,
+      }),
+    );
+
+    const activated = await om.activate({ threadId });
+    expect(activated.activated).toBe(true);
+    expect(activated.record.observationGroups).toEqual(groups);
+  });
+});
+
+// =============================================================================
 // getResolvedConfig()
 // =============================================================================
 
@@ -2631,6 +2785,91 @@ describe('getResolvedConfig()', () => {
       { upTo: 1000, model: 'openai/gpt-4o-mini' },
       { upTo: 5000, model: 'openai/gpt-4o' },
     ]);
+  });
+
+  it('resolves archive defaults and suppresses reflection', async () => {
+    const storage = createInMemoryStorage();
+    const model = createMockObserverModel();
+    const om = new ObservationalMemory({
+      storage,
+      model,
+      observation: {
+        archive: {},
+      },
+    });
+    const maybeReflect = vi.spyOn((om as any).reflector, 'maybeReflect');
+    const callReflector = vi.spyOn((om as any).reflector, 'call');
+
+    const config = await om.getResolvedConfig();
+    expect(config.observation.archive).toEqual({
+      afterTokens: 40_000,
+      keepTokens: 8_000,
+      maxCatalogTokens: 2_000,
+    });
+
+    const threadId = 'archive-defaults';
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+    await om.observe({ threadId });
+    await om.updateRecordConfig(threadId, undefined, { reflection: { observationTokens: 1 } });
+    const additionalMessages = createBulkMessages(5, threadId).map((message, index) => ({
+      ...message,
+      id: `${threadId}-additional-${index}`,
+      createdAt: new Date(Date.now() + 10_000 + index),
+    }));
+    await storage.saveMessages({ messages: additionalMessages });
+    await om.observe({ threadId });
+
+    const status = await om.getStatus({ threadId });
+    expect(status.shouldReflect).toBe(false);
+    expect(status.asyncReflectionEnabled).toBe(false);
+
+    const reflection = await om.reflect(threadId);
+    expect(reflection.reflected).toBe(false);
+    expect(maybeReflect).not.toHaveBeenCalled();
+    expect(callReflector).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ archive: true }, /observation\.archive must be an object/],
+    [{ archive: { afterTokens: 0 } }, /afterTokens must be a positive finite integer/],
+    [{ archive: { keepTokens: 1.5 } }, /keepTokens must be a positive finite integer/],
+    [
+      { archive: { afterTokens: 100, keepTokens: 100 } },
+      /observation\.archive\.keepTokens must be less than observation\.archive\.afterTokens/,
+    ],
+  ])('rejects invalid archive configuration %#', (observation, error) => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          model: createMockObserverModel(),
+          observation: observation as any,
+        }),
+    ).toThrow(error);
+  });
+
+  it('rejects archive mode with explicit reflection configuration', () => {
+    const model = createMockObserverModel();
+    const archiveConfig: ObservationalMemoryConfig = {
+      model,
+      observation: { archive: {} },
+    };
+    expect(archiveConfig.observation?.archive).toEqual({});
+
+    // @ts-expect-error Archive and explicit reflection are mutually exclusive.
+    const invalidConfig: ObservationalMemoryConfig = {
+      model,
+      observation: { archive: {} },
+      reflection: { observationTokens: 100 },
+    };
+
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          ...invalidConfig,
+        }),
+    ).toThrow(/cannot be combined with explicit reflection configuration/);
   });
 });
 
@@ -2950,6 +3189,257 @@ describe('edge cases', () => {
     // All should report the same shouldObserve state
     const allShouldObserve = results.every(r => r.shouldObserve === results[0]!.shouldObserve);
     expect(allShouldObserve).toBe(true);
+  });
+});
+
+// =============================================================================
+// Archive retirement lifecycle and actor catalog
+// =============================================================================
+
+describe('archive retirement lifecycle', () => {
+  it('atomically retires complete groups and clears stale reflection state', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'archive-lifecycle-thread';
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: {
+        model: createMockObserverModel(),
+        messageTokens: 1_000,
+        bufferTokens: false,
+        archive: { afterTokens: 100, keepTokens: 20, maxCatalogTokens: 500 },
+      },
+    });
+    const record = await om.getOrCreateRecord(threadId);
+    const oldGroup = wrapInObservationGroup('Old cataloged fact '.repeat(20), 'old-a:old-b', 'old-group');
+    const recentGroup = wrapInObservationGroup('Recent retained fact '.repeat(5), 'new-a:new-b', 'new-group');
+    const observations = `${oldGroup}\n\n${recentGroup}`;
+
+    await storage.updateActiveObservations({
+      id: record.id,
+      expectedWriteEpoch: record.writeEpoch,
+      observations,
+      tokenCount: 500,
+      lastObservedAt: new Date('2026-01-02T03:04:05.000Z'),
+      observedMessageIds: ['old-a', 'old-b', 'new-a', 'new-b'],
+      observationGroups: [
+        {
+          groupId: 'old-group',
+          summary: 'Old catalog summary',
+          searchText: 'old catalog summary',
+          messageRange: 'old-a:old-b',
+          kind: 'observation',
+          tokenCount: 100,
+        },
+        {
+          groupId: 'new-group',
+          summary: 'Recent catalog summary',
+          searchText: 'recent catalog summary',
+          messageRange: 'new-a:new-b',
+          kind: 'observation',
+          tokenCount: 25,
+        },
+      ],
+    });
+    await storage.updateBufferedReflection({
+      id: record.id,
+      expectedWriteEpoch: record.writeEpoch,
+      reflection: 'stale reflection',
+      tokenCount: 10,
+      inputTokenCount: 500,
+      reflectedObservationLineCount: 1,
+    });
+
+    const result = await om.finalize({ threadId });
+
+    expect(result.record.originType).toBe('archive');
+    expect(result.record.generationCount).toBe(1);
+    expect(result.record.activeObservations).toContain('Recent retained fact');
+    expect(result.record.activeObservations).not.toContain('Old cataloged fact');
+    expect(result.record.bufferedReflection).toBeUndefined();
+    expect(result.record.observedMessageIds).toEqual(['old-a', 'old-b', 'new-a', 'new-b']);
+
+    const archives = await storage.listObservationArchives({
+      scope: 'thread',
+      threadId,
+      resourceId: threadId,
+      limit: 20,
+    });
+    expect(archives.archives).toHaveLength(1);
+    expect(archives.archives[0]?.groups.some(group => group.groupId === 'old-group')).toBe(true);
+  });
+
+  it('archives after synchronous observation without reporting reflection', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'archive-sync-thread';
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: {
+        model: createMockObserverModel(
+          `<observations>\n* Newly observed fact with enough detail to remain in the live tail\n</observations>`,
+        ),
+        messageTokens: 10,
+        bufferTokens: false,
+        archive: { afterTokens: 100, keepTokens: 20, maxCatalogTokens: 500 },
+      },
+    });
+    const record = await om.getOrCreateRecord(threadId);
+    const oldGroup = wrapInObservationGroup('Old synchronous fact '.repeat(20), 'old-a:old-b', 'old-group');
+    await storage.updateActiveObservations({
+      id: record.id,
+      expectedWriteEpoch: record.writeEpoch,
+      observations: oldGroup,
+      tokenCount: 90,
+      lastObservedAt: new Date('2026-01-02T03:04:05.000Z'),
+      observationGroups: [
+        {
+          groupId: 'old-group',
+          summary: 'Old synchronous summary',
+          searchText: 'old synchronous summary',
+          messageRange: 'old-a:old-b',
+          kind: 'observation',
+          tokenCount: 90,
+        },
+      ],
+    });
+    await storage.saveMessages({ messages: createBulkMessages(2, threadId, Date.now() + 10_000) });
+
+    const result = await om.observe({ threadId });
+
+    expect(result.observed).toBe(true);
+    expect(result.reflected).toBe(false);
+    expect(result.record.originType).toBe('archive');
+    expect(result.record.activeObservations).toContain('Newly observed fact');
+    expect(result.record.activeObservations).not.toContain('Old synchronous fact');
+  });
+
+  it('archives after buffered activation and preserves activation state', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'archive-activation-thread';
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: {
+        model: createMockObserverModel(),
+        messageTokens: 1_000,
+        bufferTokens: false,
+        archive: { afterTokens: 100, keepTokens: 20, maxCatalogTokens: 500 },
+      },
+    });
+    const record = await om.getOrCreateRecord(threadId);
+    const oldGroup = wrapInObservationGroup('Old active fact '.repeat(20), 'old-a:old-b', 'old-group');
+    const bufferedGroup = wrapInObservationGroup('New buffered fact '.repeat(10), 'new-a:new-b', 'new-group');
+    const lastObservedAt = new Date('2026-01-03T03:04:05.000Z');
+
+    await storage.updateActiveObservations({
+      id: record.id,
+      expectedWriteEpoch: record.writeEpoch,
+      observations: oldGroup,
+      tokenCount: 90,
+      lastObservedAt: new Date('2026-01-02T03:04:05.000Z'),
+      observationGroups: [
+        {
+          groupId: 'old-group',
+          summary: 'Old active summary',
+          searchText: 'old active summary',
+          messageRange: 'old-a:old-b',
+          kind: 'observation',
+          tokenCount: 90,
+        },
+      ],
+    });
+    await storage.updateBufferedObservations({
+      id: record.id,
+      expectedWriteEpoch: record.writeEpoch,
+      chunk: {
+        cycleId: 'archive-buffer-cycle',
+        observations: bufferedGroup,
+        tokenCount: 50,
+        messageIds: ['new-a', 'new-b'],
+        messageTokens: 200,
+        lastObservedAt,
+        currentTask: 'Continue buffered task',
+        observationGroups: [
+          {
+            groupId: 'new-group',
+            summary: 'New buffered summary',
+            searchText: 'new buffered summary',
+            messageRange: 'new-a:new-b',
+            kind: 'observation',
+            tokenCount: 50,
+          },
+        ],
+      },
+    });
+
+    const result = await om.activate({ threadId });
+
+    expect(result.activated).toBe(true);
+    expect(result.record.originType).toBe('archive');
+    expect(result.record.activeObservations).toContain('New buffered fact');
+    expect(result.record.activeObservations).not.toContain('Old active fact');
+    expect(result.record.lastObservedAt).toEqual(lastObservedAt);
+    expect(result.activatedMessageIds).toEqual(['new-a', 'new-b']);
+    expect(result.record.bufferedObservationChunks).toBeUndefined();
+  });
+
+  it('retries the same stable archive transition after an atomic storage failure', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'archive-retry-thread';
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: {
+        model: createMockObserverModel(),
+        messageTokens: 1_000,
+        bufferTokens: false,
+        archive: { afterTokens: 100, keepTokens: 20, maxCatalogTokens: 500 },
+      },
+    });
+    const record = await om.getOrCreateRecord(threadId);
+    const oldGroup = wrapInObservationGroup('Old retry fact '.repeat(20), 'old-a:old-b', 'old-group');
+    const recentGroup = wrapInObservationGroup('Recent retry fact '.repeat(5), 'new-a:new-b', 'new-group');
+    await storage.updateActiveObservations({
+      id: record.id,
+      expectedWriteEpoch: record.writeEpoch,
+      observations: `${oldGroup}\n\n${recentGroup}`,
+      tokenCount: 500,
+      lastObservedAt: new Date('2026-01-02T03:04:05.000Z'),
+      observationGroups: [
+        {
+          groupId: 'old-group',
+          summary: 'Old retry summary',
+          searchText: 'old retry summary',
+          messageRange: 'old-a:old-b',
+          kind: 'observation',
+          tokenCount: 100,
+        },
+        {
+          groupId: 'new-group',
+          summary: 'Recent retry summary',
+          searchText: 'recent retry summary',
+          messageRange: 'new-a:new-b',
+          kind: 'observation',
+          tokenCount: 25,
+        },
+      ],
+    });
+    const createArchiveGeneration = storage.createObservationArchiveGeneration.bind(storage);
+    const transition = vi
+      .spyOn(storage, 'createObservationArchiveGeneration')
+      .mockRejectedValueOnce(new Error('simulated atomic failure'))
+      .mockImplementation(createArchiveGeneration);
+
+    await expect(om.finalize({ threadId })).rejects.toThrow('simulated atomic failure');
+    const unchanged = await storage.getObservationalMemory(threadId, threadId);
+    expect(unchanged?.id).toBe(record.id);
+    expect(unchanged?.recordState).toBe('active');
+
+    const retried = await om.finalize({ threadId });
+    expect(retried.record.originType).toBe('archive');
+    expect(transition).toHaveBeenCalledTimes(2);
+    expect(transition.mock.calls[0]?.[0].archiveId).toBe(transition.mock.calls[1]?.[0].archiveId);
   });
 });
 

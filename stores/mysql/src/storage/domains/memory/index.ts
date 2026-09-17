@@ -2226,7 +2226,7 @@ export class MemoryMySQL extends MemoryStorage {
       const [result] = await this.pool.execute(
         `UPDATE ${OM_TABLE_QUOTED} SET
           ${omCol('activeObservations')} = ?,
-          ${omCol('observationGroups')} = ?,
+          ${omCol('observationGroups')} = COALESCE(?, ${omCol('observationGroups')}),
           ${omCol('lastObservedAt')} = ?,
           ${omCol('pendingMessageTokens')} = 0,
           ${omCol('observationTokenCount')} = ?,

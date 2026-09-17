@@ -2043,7 +2043,7 @@ export class MemoryLibSQL extends MemoryStorage {
         this.#client.execute({
           sql: `UPDATE "${OM_TABLE}" SET
             "activeObservations" = ?,
-            "observationGroups" = ?,
+            "observationGroups" = COALESCE(?, "observationGroups"),
             "lastObservedAt" = ?,
             "pendingMessageTokens" = 0,
             "observationTokenCount" = ?,
