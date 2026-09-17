@@ -2,7 +2,6 @@
 title: "Confident AI | Observability"
 description: "Export Mastra traces to Confident AI for LLM observability and online evals, using environment credentials or explicit exporter configuration."
 packages:
-  - "@mastra/core"
   - "@mastra/observability"
 ---
 
@@ -80,7 +79,7 @@ export const mastra = new Mastra({
 })
 ```
 
-### Complete Configuration
+These options are available to you:
 
 ```typescript
 new ConfidentMastraExporter({
@@ -122,19 +121,6 @@ const result = await mastra.getAgent('assistant').generate('How do you make the 
 
 Your metadata is merged with the fields Mastra sets itself, such as `runId`. Tags apply to the root span, so they land on the trace rather than on individual spans.
 
-## Online evals
-
-Configure what happens to your incoming traces on Confident AI's [workflows page](https://www.confident-ai.com/docs/llm-tracing/workflows):
-
-![Confident AI workflows page](https://confident-docs.s3.us-east-1.amazonaws.com/confident-trace-workflows.png)
-
-- **Evaluation rules**: Evaluate incoming traces against a [metric collection](https://www.confident-ai.com/docs/metrics/metric-collections).
-- **Classifiers**: Label your traces by issue, sentiment, or any dimension you define, so you can group or filter them later.
-- **Queue ingestion**: Route production traces into annotation queues for your internal review team.
-- **Dataset ingestion**: Collect production traces into datasets to reuse as test cases.
-
-Traces, spans, and threads each get their own workflows.
-
 ## Lifecycle
 
 Mastra owns this exporter. It creates its own OTLP processor and never registers, replaces, or shuts down the global OpenTelemetry provider, so there is no `init()` call to make and no preload to add to your start command.
@@ -161,4 +147,3 @@ Choose one or the other. Do not use both at once.
 - [Mastra integration guide](https://www.confident-ai.com/docs/integrations/third-party/mastra)
 - [Online evals](https://www.confident-ai.com/docs/llm-tracing/online-evals)
 - [confident-trace on GitHub](https://github.com/confident-ai/confident-trace)
-- **Need help integrating?** [Talk to a human.](https://www.confident-ai.com/book-a-demo)
