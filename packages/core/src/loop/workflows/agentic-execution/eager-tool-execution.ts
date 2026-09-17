@@ -281,25 +281,36 @@ export class EagerToolExecutionCoordinator {
   readonly #carried: CompletedEagerWork[] = [];
 
   /**
-   * The last batch written into the conversation, and the message id it was written
-   * under. Held so that a path which deletes that message can hand the work back to the
-   * carry buffer instead of destroying the only record of a side effect that happened.
+   * What has been written into the conversation, by the message id it was written under.
+   * Held so that a path which deletes that message can hand the work back to the carry
+   * buffer instead of destroying the only record of a side effect that happened.
+   *
+   * Accumulated per id rather than kept as "the last batch": a chain of failing attempts
+   * commits under the same id more than once, and forgetting the earlier batch would let
+   * a single `removeByIds` delete work nothing could recover.
    */
-  #lastCommitted: { messageId: string; work: CompletedEagerWork[] } | undefined;
+  readonly #committed = new Map<string, CompletedEagerWork[]>();
 
-  /** Hold a discarded attempt's finished work until a replacement attempt starts. */
+  /**
+   * Hold a discarded attempt's finished work until a replacement attempt starts. Sorted
+   * into model-call order here, per attempt: `sequence` counts calls within one attempt,
+   * so batches from successive discarded attempts stay in the order they were discarded
+   * rather than interleaving by each attempt's own numbering.
+   */
   carryDiscardedWork(work: CompletedEagerWork[]) {
-    this.#carried.push(...work);
+    this.#carried.push(...[...work].sort((a, b) => a.sequence - b.sequence));
   }
 
-  /** Drain the carried work, in model-call order, for committing into the conversation. */
+  /** Drain the carried work for committing into the conversation. */
   takeCarriedWork(): CompletedEagerWork[] {
-    return this.#carried.splice(0).sort((a, b) => a.sequence - b.sequence);
+    return this.#carried.splice(0);
   }
 
   /** Remember what was written where, so a later removal of that message can undo it. */
   recordCommittedWork(messageId: string, work: CompletedEagerWork[]) {
-    this.#lastCommitted = { messageId, work };
+    const existing = this.#committed.get(messageId);
+    if (existing) existing.push(...work);
+    else this.#committed.set(messageId, [...work]);
   }
 
   /**
@@ -309,9 +320,10 @@ export class EagerToolExecutionCoordinator {
    * tool already ran, and the tool would run a second time.
    */
   recarryCommittedWork(messageId: string) {
-    if (this.#lastCommitted?.messageId !== messageId) return false;
-    this.#carried.push(...this.#lastCommitted.work);
-    this.#lastCommitted = undefined;
+    const committed = this.#committed.get(messageId);
+    if (!committed) return false;
+    this.#committed.delete(messageId);
+    this.#carried.push(...committed);
     return true;
   }
 

@@ -1414,14 +1414,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         activeFallbackModelIndex,
       )(async (modelConfig, isLastModel) => {
         activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
-
-        // An attempt is starting, which is the only proof a replacement for a discarded
-        // one exists. Every replacement route arrives here — the next fallback model, and
-        // a retry re-entering the step as a fresh invocation — so this is the single place
-        // a dead attempt's finished tool work is written into the conversation the new
-        // attempt will see. Before the request, so the model gets it.
-        commitCarriedEagerWork(currentMessageId);
-
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
 
@@ -1469,6 +1461,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             safeEnqueue(controller, signalForTranscript.toDataPart());
           }
         }
+
+        // An attempt is starting, which is the only proof a replacement for a discarded
+        // one exists. Every replacement route arrives here — the next fallback model, and
+        // a retry re-entering the step as a fresh invocation — so this is the single place
+        // a dead attempt's finished tool work is written into the conversation the new
+        // attempt will see. Before the request, so the model gets it, and after the
+        // pre-run signal drain above, so the id it is recorded under is the id this
+        // attempt actually streams into rather than one rotated out from under it.
+        commitCarriedEagerWork(currentMessageId);
 
         const currentStep: {
           messageId: string;

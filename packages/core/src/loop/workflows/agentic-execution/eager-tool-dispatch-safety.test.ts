@@ -1518,12 +1518,36 @@ describe('EagerToolExecutionCoordinator', () => {
     expect(coordinator.carriedWork).toEqual(work);
   });
 
-  it('keeps carried work in model-call order regardless of when it settled', () => {
+  it('takes back every batch committed under a removed id, not just the last one', () => {
+    // A chain of failing attempts commits under the same id more than once: each
+    // replacement writes what the previous one had finished. Keeping only the newest
+    // batch would let one `removeByIds` delete an earlier tool's only record, and the
+    // attempt after that would run it a second time.
     const coordinator = new EagerToolExecutionCoordinator(() => 1);
-    coordinator.carryDiscardedWork([{ toolCallId: 'call-b', toolName: 'tool-b', args: {}, result: 'b', sequence: 1 }]);
-    coordinator.carryDiscardedWork([{ toolCallId: 'call-a', toolName: 'tool-a', args: {}, result: 'a', sequence: 0 }]);
+    const first = { toolCallId: 'call-a', toolName: 'tool-a', args: {}, result: 'a', sequence: 0 };
+    const second = { toolCallId: 'call-b', toolName: 'tool-b', args: {}, result: 'b', sequence: 0 };
 
-    expect(coordinator.takeCarriedWork().map(work => work.toolCallId)).toEqual(['call-a', 'call-b']);
+    coordinator.recordCommittedWork('message-1', [first]);
+    coordinator.recordCommittedWork('message-1', [second]);
+
+    expect(coordinator.recarryCommittedWork('message-1')).toBe(true);
+    expect(coordinator.carriedWork).toEqual([first, second]);
+  });
+
+  it('keeps each discarded attempt in model-call order, and attempts in discard order', () => {
+    // `sequence` numbers calls within one attempt and restarts with the next, so it
+    // orders a batch but says nothing across batches. Calls inside one batch keep the
+    // order the model emitted them; batches keep the order they were discarded in.
+    const coordinator = new EagerToolExecutionCoordinator(() => 1);
+    coordinator.carryDiscardedWork([
+      { toolCallId: 'first-b', toolName: 'tool-b', args: {}, result: 'b', sequence: 1 },
+      { toolCallId: 'first-a', toolName: 'tool-a', args: {}, result: 'a', sequence: 0 },
+    ]);
+    coordinator.carryDiscardedWork([
+      { toolCallId: 'second-a', toolName: 'tool-a', args: {}, result: 'a', sequence: 0 },
+    ]);
+
+    expect(coordinator.takeCarriedWork().map(work => work.toolCallId)).toEqual(['first-a', 'first-b', 'second-a']);
   });
 
   it('dispatches a given toolCallId at most once', async () => {
