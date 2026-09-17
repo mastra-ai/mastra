@@ -198,7 +198,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(body).toEqual({ message: 'Hello, POST!' });
     });
 
-    it('should resolve transitive workspace dependencies', async () => {
+    it('should resolve scoped transitive workspace dependencies', async () => {
       const res = await fetch(`http://localhost:${port}/transitive-workspace`);
       const body = await res.json();
       expect(res.status).toBe(200);

@@ -700,7 +700,7 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
-    const transitiveWorkspaceDependencies = collectTransitiveWorkspaceDependencies({
+    const transitiveWorkspaceDependencies = await collectTransitiveWorkspaceDependencies({
       workspaceMap: analyzedBundleInfo.workspaceMap,
       initialDependencies: initialWorkspaceDependencies,
       logger: this.logger,
