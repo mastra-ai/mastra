@@ -15,8 +15,10 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
+import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { createDurableAgent } from '../create-durable-agent';
 
 /** @param onCall - invoked as soon as the model starts streaming, to synchronize on a live run. */
@@ -439,6 +441,140 @@ describe('DurableAgent abort signal', () => {
       cleanup();
     },
   );
+
+  it.each(['absent', 'disconnected'] as const)(
+    'handles durable remote cancellation with thread observer %s',
+    async observerState => {
+      const scope = { threadId: 'durable-cancel-thread', resourceId: 'durable-cancel-resource' };
+      let streaming!: () => void;
+      const modelCalled = new Promise<void>(resolve => {
+        streaming = resolve;
+      });
+      const blocking = createAbortableModel(streaming);
+      let calls = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async options => {
+          if (++calls === 1) return blocking.doStream(options);
+          return {
+            stream: new ReadableStream({
+              start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'text-start', id: 'survivor' });
+                controller.enqueue({ type: 'text-delta', id: 'survivor', delta: 'survivor answer' });
+                controller.enqueue({ type: 'text-end', id: 'survivor' });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      });
+      const baseAgent = new Agent({
+        id: 'durable-cancel',
+        name: 'Durable cancel',
+        instructions: 'Test',
+        model,
+        pubsub,
+      });
+      const agent = createDurableAgent({ agent: baseAgent, pubsub });
+      new Mastra({ agents: { agent }, pubsub, logger: false });
+      const observer = observerState === 'disconnected' ? await agent.subscribeToThread(scope) : undefined;
+      const result = await agent.stream('initial', { memory: { thread: scope.threadId, resource: scope.resourceId } });
+      try {
+        await modelCalled;
+        observer?.unsubscribe();
+        const removed = agent.sendSignal({ type: 'user-message', contents: 'cancelled durable input' }, scope);
+        await removed.accepted;
+        await agent.queueMessage('surviving durable input', scope).accepted;
+        await pubsub.publish(
+          `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`,
+          {
+            type: 'signals-cancelled',
+            data: { type: 'signals-cancelled', signalIds: [removed.signal.id] },
+          },
+        );
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(agent.cancelQueuedMessages({ ...scope, signalIds: [removed.signal.id] })).toEqual({
+          cancelledSignalIds: [],
+        });
+        expect(agent.abortThreadStream(scope)).toBe(true);
+        await result.output.consumeStream();
+        await vi.waitFor(() => expect(calls).toBe(2));
+        await vi.waitFor(() =>
+          expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, agent.getPubSub())).toBeUndefined(),
+        );
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('surviving durable input');
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).not.toContain('cancelled durable input');
+      } finally {
+        observer?.unsubscribe();
+        agent.abortThreadStream({ ...scope, clearPendingSignals: true });
+        result.cleanup();
+      }
+    },
+  );
+
+  it.each(['local', 'remote'] as const)('clears pending durable input on %s abort without observers', async origin => {
+    const scope = { threadId: 'durable-clear-thread', resourceId: 'durable-clear-resource' };
+    let streaming!: () => void;
+    const modelCalled = new Promise<void>(resolve => {
+      streaming = resolve;
+    });
+    const model = createAbortableModel(streaming);
+    const baseAgent = new Agent({ id: 'durable-clear', name: 'Durable clear', instructions: 'Test', model, pubsub });
+    const agent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({ agents: { agent }, pubsub, logger: false });
+    const publish = vi.spyOn(pubsub, 'publish');
+    let aborted = false;
+    const result = await agent.stream('initial', {
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+      onAbort: () => {
+        aborted = true;
+      },
+    });
+    try {
+      await modelCalled;
+      const pending = agent.sendSignal({ type: 'user-message', contents: 'clear pending durable' }, scope);
+      await pending.accepted;
+      const idle = agent.queueMessage('clear queued durable', scope);
+      await idle.accepted;
+      if (origin === 'local') {
+        expect(agent.abortThreadStream({ ...scope, clearPendingSignals: true })).toBe(true);
+      } else {
+        const registration = publish.mock.calls
+          .map(([, event]) => event.data)
+          .find(data => data?.type === 'run-registered');
+        await pubsub.publish(
+          `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`,
+          {
+            type: 'run-abort-requested',
+            data: {
+              type: 'run-abort-requested',
+              runId: result.runId,
+              streamId: registration?.streamId,
+              clearPendingSignals: true,
+            },
+          },
+        );
+      }
+      await vi.waitFor(() => expect(aborted).toBe(true));
+      await result.output.consumeStream();
+      expect(agent.cancelQueuedMessages({ ...scope, signalIds: [pending.signal.id, idle.signal.id] })).toEqual({
+        cancelledSignalIds: [],
+      });
+      expect(model.doStreamCalls).toHaveLength(1);
+      await vi.waitFor(() =>
+        expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, agent.getPubSub())).toBeUndefined(),
+      );
+    } finally {
+      agent.abortThreadStream({ ...scope, clearPendingSignals: true });
+      result.cleanup();
+      publish.mockRestore();
+    }
+  });
 
   it('abortRunStream stops a durable run that is already executing', async () => {
     let streaming: () => void;

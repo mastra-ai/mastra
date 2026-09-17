@@ -132,7 +132,7 @@ subscription.abort({ clearPendingSignals: true })
 
 Without a subscription, use `agent.abortThreadStream({ ...thread, clearPendingSignals: true })`. Existing listeners stay subscribed after cancellation, and later messages can still start a new run.
 
-Cross-process cancellation requires a shared PubSub backend. Clear-on-abort sends the clear flag to a remote active owner through PubSub, but it doesn't clear every process's local queues. Neither operation cancels continuations created by `continueWithMessages()`.
+With a shared PubSub backend, the runtime receives remote signals, cancellation, and abort requests independently of `subscribeToThread()` observers. Clear-on-abort sends the clear flag to a remote active owner through PubSub, but it doesn't clear every process's local queues. Neither operation cancels continuations created by `continueWithMessages()`.
 
 ## Signal context
 
