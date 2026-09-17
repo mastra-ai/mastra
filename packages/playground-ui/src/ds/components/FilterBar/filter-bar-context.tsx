@@ -5,6 +5,9 @@ import type { FilterBarField, FilterBarItem, FilterBarOperator, FilterBarSegment
 
 type SegmentKey = `${string}:${FilterBarSegment}`;
 
+const SEGMENTS_LEFT_TO_RIGHT: FilterBarSegment[] = ['field', 'operator', 'value', 'remove'];
+const SEGMENTS_RIGHT_TO_LEFT: FilterBarSegment[] = [...SEGMENTS_LEFT_TO_RIGHT].reverse();
+
 export type FilterBarContextValue = {
   fields: FilterBarField[];
   operators: FilterBarOperator[];
@@ -132,13 +135,19 @@ export function FilterBarProvider({
 
   const focusChip = useCallback((fromIndex: number, direction: -1 | 1, segment: FilterBarSegment) => {
     const items = itemsRef.current;
+    // Custom chips may register only some segments (e.g. just `value`): when the
+    // requested one is missing, land on the chip's outermost segment on the side
+    // we arrive from.
+    const fallbacks: FilterBarSegment[] = direction === -1 ? SEGMENTS_RIGHT_TO_LEFT : SEGMENTS_LEFT_TO_RIGHT;
     for (let i = fromIndex; i >= 0 && i < items.length; i += direction) {
       const item = items[i];
       if (!item) break;
-      const el = segments.current.get(`${item.id}:${segment}`) ?? segments.current.get(`${item.id}:field`);
-      if (el) {
-        el.focus();
-        return true;
+      for (const candidate of [segment, ...fallbacks]) {
+        const el = segments.current.get(`${item.id}:${candidate}`);
+        if (el) {
+          el.focus();
+          return true;
+        }
       }
     }
     return false;

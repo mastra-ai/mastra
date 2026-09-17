@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
+import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from './types';
 
 // eslint-friendly access to mock call arguments (avoids non-null assertions).
@@ -546,6 +547,57 @@ describe('FilterBar', () => {
         fireEvent.keyDown(value, { key: 'Delete' });
         expect(onChange).not.toHaveBeenCalled();
         expect(getChips()).toHaveLength(INITIAL.length);
+      });
+
+      it('ArrowLeft from the next chip lands on its value segment', () => {
+        render(<Harness initial={INITIAL} nonRemovableIds={['a']} />);
+        const field = screen.getByRole('combobox', { name: 'Field: Trace ID' });
+        field.focus();
+        fireEvent.keyDown(field, { key: 'ArrowLeft' });
+        expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Value: Running' }));
+      });
+    });
+
+    describe('when a custom chip registers only a value segment', () => {
+      function ValueOnlyChip({ item }: { item: FilterBarItem }) {
+        const ctx = useFilterBarContext();
+        return (
+          <FilterBar.Chip item={item} removable={false}>
+            <span>Time</span>
+            <button
+              type="button"
+              data-filter-bar-segment=""
+              aria-label="Value: Last 7 days"
+              ref={el => ctx.registerSegment(item.id, 'value', el)}
+            />
+          </FilterBar.Chip>
+        );
+      }
+      const TIME: FilterBarItem = { id: 'time', fieldId: 'time', operatorId: 'is', value: '' };
+      const FIELDS_WITH_TIME: FilterBarField[] = [...FIELDS, { id: 'time', label: 'Time', operators: ['is'] }];
+
+      function CustomHarness() {
+        const [items, setItems] = useState<FilterBarItem[]>([TIME, ...INITIAL]);
+        return (
+          <FilterBar fields={FIELDS_WITH_TIME} operators={OPERATORS} value={items} onValueChange={setItems}>
+            {items.map(item =>
+              item.id === TIME.id ? (
+                <ValueOnlyChip key={item.id} item={item} />
+              ) : (
+                <FilterBar.Chip key={item.id} item={item} />
+              ),
+            )}
+            <FilterBar.Input placeholder="Filter…" />
+          </FilterBar>
+        );
+      }
+
+      it('ArrowLeft from the next chip focuses that value segment', () => {
+        render(<CustomHarness />);
+        const field = screen.getByRole('combobox', { name: 'Field: Status' });
+        field.focus();
+        fireEvent.keyDown(field, { key: 'ArrowLeft' });
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Value: Last 7 days' }));
       });
     });
 
