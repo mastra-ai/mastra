@@ -1113,7 +1113,13 @@ export interface StorageIndexStats extends IndexInfo {
 export type ObservationalMemoryScope = 'thread' | 'resource';
 
 /**
- * How the observational memory record was created
+ * How the observational memory record was created.
+ *
+ * Note: the server API schema (`observationalMemoryRecordSchema`) accepts one
+ * additional value, `'observation'`, as deliberate output tolerance for rows
+ * persisted by older framework versions. Current framework code only emits
+ * `'initial'`, `'reflection'`, and `'archive'`; do not narrow either side to
+ * match the other without a migration for legacy `'observation'` rows.
  */
 export type ObservationalMemoryOriginType = 'initial' | 'reflection' | 'archive';
 
