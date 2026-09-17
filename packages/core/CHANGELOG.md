@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.68.0-alpha.4
+
+### Patch Changes
+
+- Fix durable agents dropping `writer.custom()` / `writer.write()` emissions from tools. The durable tool-call step now provides a `writer` (`ToolStream`) in the tool execution context, so tools resolved from the Mastra registry on cross-process runs (e.g. an `@mastra/inngest` worker) receive a working writer instead of `undefined`. Fixes #24196. ([#24229](https://github.com/mastra-ai/mastra/pull/24229))
+
+- Fixed attachment download failures bypassing error processors in regular agent runs. Processors can now repair the message context and retry when a historical attachment becomes unavailable. ([#23988](https://github.com/mastra-ai/mastra/pull/23988))
+
+- Fixed completed workflow runs remaining in memory after resume. ([#24267](https://github.com/mastra-ai/mastra/pull/24267))
+
+- CommonJS consumers can now use core token counting, slug generation, and workspace operations without ESM loading errors. ([#24272](https://github.com/mastra-ai/mastra/pull/24272))
+
+- Throw a clear isolation error when LocalSandbox is configured to use macOS Seatbelt on Windows. ([#24273](https://github.com/mastra-ai/mastra/pull/24273))
+
+- Fixed unrecorded conditional arms appearing successful when time-travelling past them. Preserve explicit replacement output for recorded failed arms. ([#24184](https://github.com/mastra-ai/mastra/pull/24184))
+
 ## 1.68.0-alpha.3
 
 ### Minor Changes
