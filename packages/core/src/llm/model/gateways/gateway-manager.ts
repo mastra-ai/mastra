@@ -1,7 +1,25 @@
 import { MastraError } from '../../../error/index.js';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import type { GatewayAuthRequest, GatewayAuthResult, MastraModelGatewayInterface, ProviderConfig } from './base.js';
-import { findGatewayForModel, getGatewayId, hasAuthCredentials, shouldEnableGateway } from './gateway-helpers.js';
+import {
+  findGatewayForModel,
+  findPrefixedGateway,
+  getGatewayId,
+  hasAuthCredentials,
+  shouldEnableGateway,
+} from './gateway-helpers.js';
+
+function readProviderCredentials(gateway: MastraModelGatewayInterface, providerId: string): boolean | undefined {
+  try {
+    return gateway.hasProviderCredentials?.(providerId);
+  } catch (error) {
+    console.warn(
+      `Failed to read credentials for provider "${providerId}" from gateway "${getGatewayId(gateway)}":`,
+      error,
+    );
+    return false;
+  }
+}
 
 /**
  * MastraError IDs that represent expected "auth not available" states —
@@ -185,6 +203,20 @@ export class GatewayManager {
       }
       throw error;
     }
+  }
+
+  hasProviderCredentials(providerKey: string): boolean | undefined {
+    const prefixedGateway = findPrefixedGateway(providerKey, this.gateways);
+    if (prefixedGateway) {
+      const gatewayId = getGatewayId(prefixedGateway);
+      const providerId = providerKey === gatewayId ? providerKey : providerKey.slice(gatewayId.length + 1);
+      return readProviderCredentials(prefixedGateway, providerId);
+    }
+
+    for (const gateway of this.gateways) {
+      if (readProviderCredentials(gateway, providerKey)) return true;
+    }
+    return undefined;
   }
 
   /**

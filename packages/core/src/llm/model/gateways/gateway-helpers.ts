@@ -9,6 +9,13 @@ export function shouldEnableGateway(gateway: MastraModelGatewayInterface): boole
   return gateway.shouldEnable?.() ?? true;
 }
 
+export function findPrefixedGateway(routerId: string, gateways: MastraModelGatewayInterface[]) {
+  return gateways.find(gateway => {
+    const id = getGatewayId(gateway);
+    return id !== 'models.dev' && (routerId === id || routerId.startsWith(`${id}/`));
+  });
+}
+
 export function hasAuthCredentials(auth?: GatewayAuthResult): auth is GatewayAuthResult {
   return Boolean(auth?.apiKey || auth?.bearerToken || (auth?.headers && Object.keys(auth.headers).length > 0));
 }
@@ -29,10 +36,7 @@ export function findGatewayForModel(
   gateways: MastraModelGatewayInterface[],
 ): MastraModelGatewayInterface {
   // First, check for gateways whose ID matches the prefix (true gateways like netlify, openrouter, vercel)
-  const prefixedGateway = gateways.find(g => {
-    const id = getGatewayId(g);
-    return id !== 'models.dev' && (id === gatewayId || gatewayId.startsWith(`${id}/`));
-  });
+  const prefixedGateway = findPrefixedGateway(gatewayId, gateways);
   if (prefixedGateway) {
     return prefixedGateway;
   }

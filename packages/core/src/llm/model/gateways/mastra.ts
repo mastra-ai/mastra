@@ -45,6 +45,10 @@ export class MastraGateway extends MastraModelGateway {
     return !!(this.config?.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY']);
   }
 
+  hasProviderCredentials(providerId: string): boolean {
+    return providerId === this.id && this.shouldEnable();
+  }
+
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     if (!this.shouldEnable()) {
       return {};

@@ -10,6 +10,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CredentialStore } from '../auth/types.js';
 
 // The gateway constructs a module-level AuthStorage at import time, binding its
 // auth.json path from MASTRA_APP_DATA_DIR. Set the env var (in a hoisted block
@@ -62,6 +63,64 @@ describe('MastraCodeGateway', () => {
 
   afterAll(() => {
     rmSync(appDataDir, { recursive: true, force: true });
+  });
+
+  describe('hasProviderCredentials', () => {
+    it('follows OAuth login and logout without depending on the model catalog', () => {
+      const gateway = createGateway();
+      expect(gateway.hasProviderCredentials('openai')).toBe(false);
+
+      writeAuthJson({
+        'openai-codex': { type: 'oauth', access: 'a', refresh: 'r', expires: 0 },
+      });
+      expect(gateway.hasProviderCredentials('openai')).toBe(true);
+      expect(gateway.handlesModel('openai/a-new-model')).toBe(true);
+
+      writeAuthJson({});
+      expect(gateway.hasProviderCredentials('openai')).toBe(false);
+    });
+
+    it('keeps connection status scoped to the gateway credential store without refreshing tokens', () => {
+      writeAuthJson({
+        'openai-codex': { type: 'oauth', access: 'global', refresh: 'r', expires: 0 },
+      });
+      const getApiKey = vi.fn();
+      const credentials: CredentialStore = {
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey,
+      };
+      const tenantGateway = new MastraCodeGateway({
+        mastraGatewayBaseUrl: 'https://gateway.example.com',
+        routeThroughMastraGateway: false,
+        customProviders: [],
+        credentialStore: credentials,
+      });
+
+      expect(createGateway().hasProviderCredentials('openai')).toBe(true);
+      expect(tenantGateway.hasProviderCredentials('openai')).toBe(false);
+      expect(getApiKey).not.toHaveBeenCalled();
+    });
+
+    it('uses the same custom-provider credentials for status and execution', () => {
+      const gateway = new MastraCodeGateway({
+        mastraGatewayBaseUrl: 'https://gateway.example.com',
+        routeThroughMastraGateway: false,
+        customProviders: [{ name: 'Acme', url: 'https://acme.example/v1', apiKey: 'custom-key' }],
+      });
+
+      expect(gateway.hasProviderCredentials('acme')).toBe(true);
+      expect(
+        gateway.resolveAuth({
+          gatewayId: gateway.id,
+          providerId: 'acme',
+          modelId: 'new-model',
+          routerId: 'acme/new-model',
+        }),
+      ).toEqual({ apiKey: 'custom-key', source: 'gateway' });
+    });
   });
 
   describe('handlesModel', () => {

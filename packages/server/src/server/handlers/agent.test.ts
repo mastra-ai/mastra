@@ -970,7 +970,7 @@ describe('Agent Handlers', () => {
 
   describe('enhanceInstructionsHandler', () => {
     it('should enhance instructions and return structured output', async () => {
-      // Set OPENAI_API_KEY so isProviderConnected returns true
+      // Set OPENAI_API_KEY so the agent's openai model resolves as usable
       const originalEnv = process.env.OPENAI_API_KEY;
       process.env.OPENAI_API_KEY = 'test-key';
 

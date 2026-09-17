@@ -346,7 +346,7 @@ const createMockWorkflowStream = () => {
  * This provides everything needed for adapter integration tests.
  */
 export async function createDefaultTestContext(): Promise<AdapterTestContext> {
-  // Mock OPENAI_API_KEY so that isProviderConnected('openai') returns true
+  // Mock OPENAI_API_KEY so the openai provider resolves as connected
   // This is needed for routes like ENHANCE_INSTRUCTIONS_ROUTE that check provider connectivity
   vi.stubEnv('OPENAI_API_KEY', 'test-api-key');
 

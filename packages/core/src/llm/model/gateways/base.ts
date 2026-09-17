@@ -113,6 +113,9 @@ export interface MastraModelGatewayInterface {
    */
   handlesModel?(modelId: string): boolean;
 
+  /** Local credential presence only; no token refresh or model-access check. */
+  hasProviderCredentials?(providerId: string): boolean;
+
   /**
    * Fetch provider configurations from the gateway.
    * Should return providers in the standard format.

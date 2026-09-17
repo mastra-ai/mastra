@@ -282,6 +282,11 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     };
   }
 
+  hasAuth(): Promise<boolean> {
+    if (this.config.url || this.config.apiKey) return Promise.resolve(true);
+    return this.#manager.hasAuth(this.config.routerId);
+  }
+
   private getGatewayCache(): GatewayModelCache {
     let cache = ModelRouterLanguageModel.gatewayCaches.get(this.gateway);
 
