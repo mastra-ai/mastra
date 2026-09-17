@@ -20,7 +20,6 @@ import { TraceSpanTimeline } from './trace-span-timeline';
 import { TraceSpanTree } from './trace-span-tree';
 import { TraceSummaryDescription } from './trace-summary-description';
 import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
@@ -113,8 +112,6 @@ export interface TraceDataPanelViewProps {
    * typically the span detail.
    */
   spanPanelSlot?: ReactNode;
-  /** Extra classes applied to the panel root (e.g. `h-full` on the trace page). */
-  className?: string;
 }
 
 export function TraceDataPanelView({
@@ -149,7 +146,6 @@ export function TraceDataPanelView({
   featuredSpanIds,
   messagesPanelSlot,
   spanPanelSlot,
-  className,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
 
@@ -226,7 +222,7 @@ export function TraceDataPanelView({
     <DropdownMenu>
       <DropdownMenu.Trigger
         render={
-          <Button size="md" variant="ghost" tooltip="Trace actions" aria-label="Trace actions">
+          <Button size="sm" variant="ghost" tooltip="Trace actions" aria-label="Trace actions">
             <MoreHorizontalIcon />
           </Button>
         }
@@ -265,7 +261,6 @@ export function TraceDataPanelView({
       title={title ?? (isOnTracePage ? 'Trace Timeline' : `Trace ${traceId ?? ''}`)}
       size={size}
       depth={depth}
-      className={className}
     >
       {traceId && (
         <>
@@ -274,12 +269,12 @@ export function TraceDataPanelView({
             {isOnTracePage ? (
               <>
                 <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
-                <ButtonsGroup className="ml-auto shrink-0">{traceActionsMenu}</ButtonsGroup>
+                <DataPanel.HeaderActions>{traceActionsMenu}</DataPanel.HeaderActions>
               </>
             ) : (
               <>
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <DataPanel.Heading className="items-center">
+                <DataPanel.HeaderContent>
+                  <DataPanel.Heading>
                     Trace
                     <TraceIdButton id={traceId} />
                   </DataPanel.Heading>
@@ -291,10 +286,10 @@ export function TraceDataPanelView({
                       LinkComponent={LinkComponent}
                     />
                   )}
-                </div>
-                <ButtonsGroup className="ml-auto shrink-0 self-start">
+                </DataPanel.HeaderContent>
+                <DataPanel.HeaderActions>
                   {onEvaluateTrace && (
-                    <Button variant="primary" size="md" onClick={onEvaluateTrace} disabled={!rootSpan}>
+                    <Button variant="primary" size="sm" onClick={onEvaluateTrace} disabled={!rootSpan}>
                       <CircleGaugeIcon />
                       Score trace
                     </Button>
@@ -302,15 +297,14 @@ export function TraceDataPanelView({
                   {traceActionsMenu}
                   {(onPrevious || onNext) && (
                     <DataPanel.NextPrevNav
-                      variant="ghost"
                       onPrevious={onPrevious}
                       onNext={onNext}
                       previousLabel="Previous trace"
                       nextLabel="Next trace"
                     />
                   )}
-                  <DataPanel.CloseButton variant="ghost" onClick={onClose} />
-                </ButtonsGroup>
+                  <DataPanel.CloseButton onClick={onClose} />
+                </DataPanel.HeaderActions>
               </>
             )}
           </DataPanel.Header>
@@ -355,7 +349,7 @@ export function TraceDataPanelView({
                     onValueChange={handleTabChange}
                     className="grid h-full min-h-0 grid-rows-[auto_1fr]"
                   >
-                    <DataPanel.Header className="min-h-0 px-2 py-1">
+                    <DataPanel.Header>
                       <TabList variant="pill-ghost">
                         <Tab value="details">Spans</Tab>
                         <Tab value="timeline">Timeline</Tab>
@@ -368,7 +362,7 @@ export function TraceDataPanelView({
 
                     {/* Tab contents share the tab list's horizontal padding so their edges line up. */}
                     <TabContent value="details" className="min-h-0 py-0">
-                      <DataPanel.Content className="px-2">
+                      <DataPanel.Content>
                         {!isOnTracePage &&
                           !onEvaluateTrace &&
                           !onSaveAsDatasetItem &&
@@ -398,7 +392,7 @@ export function TraceDataPanelView({
                       </DataPanel.Content>
                     </TabContent>
                     <TabContent value="timeline" className="min-h-0 py-0">
-                      <DataPanel.Content className="px-2">
+                      <DataPanel.Content>
                         {/* Same selection + expansion state as the Spans tab, so switching views keeps context. */}
                         <TraceSpanTimeline
                           hierarchicalSpans={hierarchicalSpans}
@@ -414,12 +408,12 @@ export function TraceDataPanelView({
                     </TabContent>
                     {feedbackTabSlot && (
                       <TabContent value="feedback" className="h-full min-h-0 py-0">
-                        <DataPanel.Content className="px-2">{feedbackTabSlot({ traceId })}</DataPanel.Content>
+                        <DataPanel.Content>{feedbackTabSlot({ traceId })}</DataPanel.Content>
                       </TabContent>
                     )}
                     {scoresTabSlot && (
                       <TabContent value="scores" className="h-full min-h-0 py-0">
-                        <DataPanel.Content className="px-2">
+                        <DataPanel.Content>
                           {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
                         </DataPanel.Content>
                       </TabContent>

@@ -153,39 +153,55 @@ describe('A2A method names through the HTTP adapter', () => {
   );
 
   const additionalMethods = [
-    { alias: 'ListTasks', legacy: 'tasks/list', params: {} },
-    { alias: 'CancelTask', legacy: 'tasks/cancel', params: { id: 'task-1' } },
+    { alias: 'ListTasks', legacy: 'tasks/list', aliasParams: {}, legacyParams: {} },
+    { alias: 'CancelTask', legacy: 'tasks/cancel', aliasParams: { id: 'task-1' }, legacyParams: { id: 'task-1' } },
     {
       alias: 'CreateTaskPushNotificationConfig',
       legacy: 'tasks/pushNotificationConfig/set',
-      params: { taskId: 'missing-task', pushNotificationConfig: { url: 'https://example.com/push' } },
+      aliasParams: { taskId: 'missing-task', url: 'https://example.com/push' },
+      legacyParams: { taskId: 'missing-task', pushNotificationConfig: { url: 'https://example.com/push' } },
     },
     {
       alias: 'GetTaskPushNotificationConfig',
       legacy: 'tasks/pushNotificationConfig/get',
-      params: { id: 'task-1', pushNotificationConfigId: 'push-1' },
+      aliasParams: { taskId: 'task-1', id: 'push-1' },
+      legacyParams: { id: 'task-1', pushNotificationConfigId: 'push-1' },
     },
-    { alias: 'ListTaskPushNotificationConfigs', legacy: 'tasks/pushNotificationConfig/list', params: { id: 'task-1' } },
+    {
+      alias: 'ListTaskPushNotificationConfigs',
+      legacy: 'tasks/pushNotificationConfig/list',
+      aliasParams: { taskId: 'task-1' },
+      legacyParams: { id: 'task-1' },
+    },
     {
       alias: 'DeleteTaskPushNotificationConfig',
       legacy: 'tasks/pushNotificationConfig/delete',
-      params: { id: 'task-1', pushNotificationConfigId: 'push-1' },
+      aliasParams: { taskId: 'task-1', id: 'push-1' },
+      legacyParams: { id: 'task-1', pushNotificationConfigId: 'push-1' },
     },
-    { alias: 'GetExtendedAgentCard', legacy: 'agent/getAuthenticatedExtendedCard', params: undefined },
+    {
+      alias: 'GetExtendedAgentCard',
+      legacy: 'agent/getAuthenticatedExtendedCard',
+      aliasParams: undefined,
+      legacyParams: undefined,
+    },
   ];
 
-  it.each(additionalMethods)('dispatches $alias identically to $legacy', async ({ alias, legacy, params }) => {
-    const response = await request(alias, params);
-    const control = await request(legacy, params);
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.error?.code).not.toBe(-32601);
-    expect(body).toEqual(await control.json());
-    for (const version of ['', '0.3']) {
-      const rejected = await request(alias, params, version);
-      expect(await rejected.json()).toMatchObject({ jsonrpc: '2.0', id: 0, error: { code: -32601 } });
-    }
-  });
+  it.each(additionalMethods)(
+    'dispatches $alias identically to $legacy',
+    async ({ alias, legacy, aliasParams, legacyParams }) => {
+      const response = await request(alias, aliasParams);
+      const control = await request(legacy, legacyParams);
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.error?.code).not.toBe(-32601);
+      expect(body).toEqual(await control.json());
+      for (const version of ['', '0.3']) {
+        const rejected = await request(alias, aliasParams, version);
+        expect(await rejected.json()).toMatchObject({ jsonrpc: '2.0', id: 0, error: { code: -32601 } });
+      }
+    },
+  );
 
   it.each(['', '0.3'])('rejects a v1 method without v1 negotiation (header %j)', async version => {
     const generate = vi.spyOn(agent, 'generate');

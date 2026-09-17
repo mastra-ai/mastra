@@ -22,28 +22,47 @@ describe('a2a schemas', () => {
       alias: 'CreateTaskPushNotificationConfig',
       legacy: 'tasks/pushNotificationConfig/set',
       params: { taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com/push' } },
+      aliasParams: { taskId: 'task-1', id: 'push-1', url: 'https://example.com/push' },
     },
     {
       alias: 'GetTaskPushNotificationConfig',
       legacy: 'tasks/pushNotificationConfig/get',
       params: { id: 'task-1', pushNotificationConfigId: 'push-1' },
+      aliasParams: { taskId: 'task-1', id: 'push-1' },
     },
-    { alias: 'ListTaskPushNotificationConfigs', legacy: 'tasks/pushNotificationConfig/list', params: { id: 'task-1' } },
+    {
+      alias: 'ListTaskPushNotificationConfigs',
+      legacy: 'tasks/pushNotificationConfig/list',
+      params: { id: 'task-1' },
+      aliasParams: { taskId: 'task-1', pageSize: 10, pageToken: '0' },
+    },
     {
       alias: 'DeleteTaskPushNotificationConfig',
       legacy: 'tasks/pushNotificationConfig/delete',
       params: { id: 'task-1', pushNotificationConfigId: 'push-1' },
+      aliasParams: { taskId: 'task-1', id: 'push-1' },
     },
     { alias: 'GetExtendedAgentCard', legacy: 'agent/getAuthenticatedExtendedCard', params: undefined },
   ] as const;
 
-  it.each(methodCases)('accepts $alias and $legacy without changing their spelling', ({ alias, legacy, params }) => {
-    expect(a2aV1MethodMap[alias]).toBe(legacy);
-    for (const method of [alias, legacy]) {
-      const parsed = agentExecutionBodySchema.parse({ jsonrpc: '2.0', id: 'req-1', method, params });
-      expect(parsed.method).toBe(method);
-    }
-  });
+  it.each(methodCases)(
+    'accepts $alias and $legacy without changing their spelling',
+    ({ alias, legacy, params, ...testCase }) => {
+      expect(a2aV1MethodMap[alias]).toBe(legacy);
+      const aliasParams = 'aliasParams' in testCase ? testCase.aliasParams : params;
+
+      const parsedAlias = agentExecutionBodySchema.parse({
+        jsonrpc: '2.0',
+        id: 'req-1',
+        method: alias,
+        params: aliasParams,
+      });
+      expect(parsedAlias.method).toBe(alias);
+
+      const parsedLegacy = agentExecutionBodySchema.parse({ jsonrpc: '2.0', id: 'req-1', method: legacy, params });
+      expect(parsedLegacy.method).toBe(legacy);
+    },
+  );
 
   it.each(methodCases.filter(({ params }) => params !== undefined))(
     'rejects malformed params for $alias and $legacy',
@@ -54,6 +73,20 @@ describe('a2a schemas', () => {
             .success,
         ).toBe(false);
       }
+    },
+  );
+
+  it.each(['2junk', '-1', '01', String(Number.MAX_SAFE_INTEGER + 1)])(
+    'rejects invalid v1 push notification page token %s',
+    pageToken => {
+      expect(
+        agentExecutionBodySchema.safeParse({
+          jsonrpc: '2.0',
+          id: 'req-1',
+          method: 'ListTaskPushNotificationConfigs',
+          params: { taskId: 'task-1', pageToken },
+        }).success,
+      ).toBe(false);
     },
   );
 

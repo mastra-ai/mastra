@@ -68,52 +68,48 @@ describe('WorkflowInputData', () => {
     });
   });
 
-  it('renders processor default values in the simple read-only input', async () => {
-    render(
-      <WorkflowInputData
-        schema={processorSchema}
-        defaultValues={{
-          messages: [
-            {
-              id: 'message-1',
-              role: 'assistant',
-              createdAt: '2026-06-08T00:00:00.000Z',
-              content: {
-                format: 2,
-                parts: [{ type: 'text', text: 'Stored processor run input' }],
-              },
+  describe('when a stored processor input is edited', () => {
+    it('submits the new message while preserving its identity and phase', () => {
+      const onSubmit = vi.fn();
+      const input = {
+        messages: [
+          {
+            id: 'message-1',
+            role: 'assistant',
+            createdAt: '2026-06-08T00:00:00.000Z',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Stored processor run input' }],
             },
-          ],
-          phase: 'outputResult',
-        }}
-        isSubmitLoading={false}
-        submitButtonLabel="Run"
-        onSubmit={() => {}}
-        withoutSubmit
-        isReadOnly
-        isProcessorWorkflow
-      />,
-    );
+          },
+        ],
+        phase: 'outputResult',
+      };
+      render(
+        <WorkflowInputData
+          schema={processorSchema}
+          defaultValues={input}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={onSubmit}
+          isProcessorWorkflow
+        />,
+      );
 
-    const messageInput = await screen.findByDisplayValue('Stored processor run input');
-    expect(messageInput).toHaveProperty('disabled', true);
-    await waitFor(() => expect(screen.getByText('outputResult')).not.toBeNull());
-  });
-
-  it('keeps processor fallback values for new simple inputs', async () => {
-    render(
-      <WorkflowInputData
-        schema={processorSchema}
-        isSubmitLoading={false}
-        submitButtonLabel="Run"
-        onSubmit={() => {}}
-        isProcessorWorkflow
-      />,
-    );
-
-    const messageInput = await screen.findByDisplayValue('Hello, this is a test message.');
-    expect(messageInput).toHaveProperty('disabled', false);
-    await waitFor(() => expect(screen.getByText('input')).not.toBeNull());
+      fireEvent.change(screen.getByRole('textbox', { name: 'Test Message' }), {
+        target: { value: 'Edited processor input' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+      expect(onSubmit).toHaveBeenCalledWith({
+        ...input,
+        messages: [
+          {
+            ...input.messages[0],
+            content: { format: 2, parts: [{ type: 'text', text: 'Edited processor input' }] },
+          },
+        ],
+      });
+    });
   });
 
   describe('when a stored processor input is edited', () => {

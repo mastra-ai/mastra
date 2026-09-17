@@ -48,10 +48,10 @@ describe('DataPanel', () => {
       const wide = screen.getByRole('dialog', { name: 'Wide', hidden: true });
       const full = screen.getByRole('dialog', { name: 'Full', hidden: true });
       expect(wide.className).toContain('w-4/5');
-      expect(wide.className).not.toContain('w-sm');
+      expect(wide.className).not.toContain('w-lg');
       expect(wide.getAttribute('data-depth')).toBe('2');
       expect(full.className).toContain('w-full');
-      expect(full.className).not.toContain('w-xs');
+      expect(full.className).not.toContain('w-md');
       // Deeper same-size panels are trimmed so the parent peeks out beneath.
       expect(wide.style.width).toBe('calc(80% - 1.5rem)');
       expect(full.style.width).toBe('calc(100% - 3rem)');
@@ -202,6 +202,65 @@ describe('DataPanel', () => {
 
       expect(onCloseScore).toHaveBeenCalledTimes(1);
       expect(onCloseResult).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the header has metadata', () => {
+    const renderHeader = () =>
+      render(
+        <TooltipProvider>
+          <DataPanel open title="Trace">
+            <DataPanel.Header>
+              <DataPanel.HeaderContent>
+                <DataPanel.Heading>Trace</DataPanel.Heading>
+                <DataPanel.Metadata>
+                  <DataPanel.Meta as="a" href="/agents/weather" tooltip="Agent">
+                    weather-agent
+                  </DataPanel.Meta>
+                  <DataPanel.Meta tooltip="Started at 2024-01-01">2 min ago</DataPanel.Meta>
+                  <DataPanel.Meta>plain</DataPanel.Meta>
+                </DataPanel.Metadata>
+              </DataPanel.HeaderContent>
+            </DataPanel.Header>
+          </DataPanel>
+        </TooltipProvider>,
+      );
+
+    it('renders each meta as a list item', () => {
+      renderHeader();
+      expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    });
+
+    it('renders a link meta with its href and keeps its text as the accessible name', () => {
+      renderHeader();
+      expect(screen.getByRole('link', { name: 'weather-agent' }).getAttribute('href')).toBe('/agents/weather');
+    });
+
+    it('exposes the tooltip as the accessible name of a static meta', () => {
+      renderHeader();
+      expect(screen.getByLabelText('Started at 2024-01-01').textContent).toBe('2 min ago');
+      expect(screen.getByText('plain').closest('[aria-label]')).toBeNull();
+    });
+  });
+
+  describe('when the header has actions', () => {
+    it('renders actions after the heading', () => {
+      render(
+        <TooltipProvider>
+          <DataPanel open title="Trace">
+            <DataPanel.Header>
+              <DataPanel.Heading>Trace</DataPanel.Heading>
+              <DataPanel.HeaderActions>
+                <DataPanel.CloseButton onClick={() => {}} />
+              </DataPanel.HeaderActions>
+            </DataPanel.Header>
+          </DataPanel>
+        </TooltipProvider>,
+      );
+
+      const heading = screen.getByRole('heading', { name: 'Trace' });
+      const close = screen.getByRole('button', { name: 'Close Panel' });
+      expect(heading.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
   });
 });

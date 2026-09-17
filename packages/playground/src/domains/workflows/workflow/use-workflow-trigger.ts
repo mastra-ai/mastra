@@ -80,8 +80,6 @@ export function useWaitingStepKey(): string | undefined {
   );
 
   const steps = result?.steps;
-
-  // Only per-step runs pause, so a paused run stays steppable when debugMode starts false on its :runId page.
   const isPaused = result?.status === 'paused';
 
   const isStepResolved = useCallback(
@@ -98,15 +96,6 @@ export function useWaitingStepKey(): string | undefined {
       isPaused ? selectNextStepKey({ stepNodesInOrder, isStepSuccess: isStepResolved, isStepBypassed }) : undefined,
     [isPaused, stepNodesInOrder, isStepResolved, isStepBypassed],
   );
-}
-
-export function useSuspendedStepKey(): string | undefined {
-  const { result } = useContext(WorkflowRunContext);
-
-  return useMemo(() => {
-    const entry = Object.entries(result?.steps || {}).find(([_, { status }]) => status === 'suspended');
-    return entry?.[0];
-  }, [result?.steps]);
 }
 
 export function useNextPerStep() {
@@ -133,7 +122,6 @@ export function useNextPerStep() {
   const stepPayload = useMemo(() => {
     const input = buildNextStepInput({ nextStepKey, stepsFlow, steps, isStepBypassed });
     if (input) return input;
-    // The first step has no upstream output; seed it from the run input so the paused run can advance.
     if (nextStepKey && (stepsFlow[nextStepKey]?.length ?? 0) === 0) {
       return { hasMultiSteps: false, input: result?.input !== undefined ? result.input : payload };
     }
@@ -150,8 +138,6 @@ export function useNextPerStep() {
   const runStep = useCallback(
     (isContinueRun: boolean) => {
       if (!nextStepKey || !stepPayload) return;
-
-      // Nested workflows are atomic and the last step must end the run, so both skip the per-step pause.
       const isNestedWorkflowStep = nestedWorkflowStepIds.has(nextStepKey);
       const runToFinish = isContinueRun || isNestedWorkflowStep || isLastStep;
 
@@ -161,7 +147,6 @@ export function useNextPerStep() {
         step: nextStepKey,
         inputData: stepPayload.hasMultiSteps ? undefined : stepPayload.input,
         requestContext,
-        // Explicit, because debugMode starts false on the :runId page and would default to a full run.
         perStep: !runToFinish,
         ...(stepPayload.hasMultiSteps
           ? {
@@ -197,6 +182,7 @@ export function useNextPerStep() {
 
   return {
     canRunNextStep,
+    nextStepLabel: nextStepKey && conditionalStepIds.has(nextStepKey) ? 'Evaluate branch conditions' : nextStepKey,
     runNextStep: useCallback(() => runStep(false), [runStep]),
     continueFullRun: useCallback(() => runStep(true), [runStep]),
   };
