@@ -130,8 +130,10 @@ async function createSetup({
   onSessionStart,
   resolveSession,
   onStaleToolApproval,
+  instructions,
 }: {
   responseText?: string;
+  instructions?: () => Promise<string>;
   model?: MockLanguageModelV2;
   tools?: Record<string, any>;
   toolDisplay?: 'text';
@@ -147,7 +149,7 @@ async function createSetup({
     id: 'mode-agent',
     name: 'mode-agent',
     model: model ?? createTextStreamModel(responseText),
-    instructions: 'You are a test agent.',
+    instructions: instructions ?? 'You are a test agent.',
     ...(tools ? { tools } : {}),
     ...(agentMemory ? { memory: agentMemory } : {}),
   });
@@ -542,6 +544,29 @@ describe('AgentControllerChannels', () => {
       );
 
       expect(chatThread.post).toHaveBeenCalledWith('❌ Error: engine exploded');
+    }, 30_000);
+
+    it('reports a stream-setup failure to the channel instead of treating the message as sent', async () => {
+      // Stream setup (instructions, workspace, tools, model resolution) runs
+      // before the run span opens and before the user message is persisted.
+      // A throw there must reach the sender: with a fire-and-forget signal the
+      // rejection lands after the next tick and the message silently vanishes.
+      const { adapter, mastra, channels } = await createSetup({
+        instructions: async () => {
+          await new Promise(resolve => setTimeout(resolve, 20));
+          throw new Error('workspace exploded');
+        },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-setup-broken');
+
+      await (channels as any).handleChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+
+      expect(chatThread.post).toHaveBeenCalledWith('❌ Error: workspace exploded');
     }, 30_000);
 
     it('runs on approval continuations with the action requestContext, so routing can be revalidated', async () => {
