@@ -152,7 +152,7 @@ export function FilterBarChip({ item, readOnly = false, removable = true, classN
         data-slot="filter-bar-chip"
         data-readonly={readOnly || undefined}
         className={cn(
-          'flex h-form-sm max-w-full items-stretch divide-x divide-border1 rounded-md border border-border1 bg-surface4 text-neutral5',
+          'flex h-form-sm max-w-full items-stretch divide-x divide-border1 rounded-md border border-border1 bg-surface5 text-neutral5',
           className,
         )}
         onKeyDown={handleKeyDown}
