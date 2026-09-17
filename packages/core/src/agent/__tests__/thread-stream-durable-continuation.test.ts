@@ -169,6 +169,50 @@ describe('durable thread continuation', () => {
     await h.pubsub.close();
   });
 
+  it('lets only the source or current segment close continuation', async () => {
+    const h = setup();
+    const first = h.makeStream();
+    await first.ready;
+    await h.runtime.registerRun(h.agent, first.output, h.options, h.pubsub, {
+      continuation: 'across-suspension',
+    });
+    await h.chunk('tool-call-approval', { toolCallId: 'call-1', toolName: 'read_page', args: {} });
+    await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
+
+    const resumed = h.makeStream();
+    await resumed.ready;
+    expect(
+      h.runtime.continueRun(h.agent, resumed.output, { ...h.options, toolCallId: 'call-1' } as any, h.pubsub),
+    ).toBe(true);
+    await h.chunk('tool-call-approval', { toolCallId: 'call-2', toolName: 'read_page', args: {} });
+    await vi.waitFor(() => expect(resumed.output.status).toBe('suspended'));
+
+    const latest = h.makeStream();
+    await latest.ready;
+    expect(h.runtime.continueRun(h.agent, latest.output, { ...h.options, toolCallId: 'call-2' } as any, h.pubsub)).toBe(
+      true,
+    );
+    await h.chunk('tool-call-approval', { toolCallId: 'call-3', toolName: 'read_page', args: {} });
+    await vi.waitFor(() => expect(latest.output.status).toBe('suspended'));
+
+    expect(h.runtime.closeRunContinuation(resumed.output, h.pubsub)).toBe(false);
+    expect(h.runtime.closeRunContinuation(latest.output, h.pubsub)).toBe(true);
+
+    const replacement = h.makeStream();
+    await replacement.ready;
+    expect(h.runtime.continueRun(h.agent, replacement.output, h.options, h.pubsub)).toBe(false);
+    await h.runtime.registerRun(h.agent, replacement.output, h.options, h.pubsub, {
+      continuation: 'across-suspension',
+    });
+    expect(h.registrations()).toHaveLength(2);
+
+    first.cleanup();
+    resumed.cleanup();
+    latest.cleanup();
+    replacement.cleanup();
+    await h.pubsub.close();
+  });
+
   it('does not continue a registration that was not declared suspension-spanning', async () => {
     const h = setup();
     const first = h.makeStream({ closeOnSuspend: true });

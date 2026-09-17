@@ -1878,9 +1878,14 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
-  closeRunContinuation<OUTPUT>(sourceOutput: MastraModelOutput<OUTPUT>, pubsub?: PubSub): boolean {
-    const record = this.#getState(pubsub).threadRunsById.get(sourceOutput.runId);
-    if (record?.continuation?.sourceOutput !== sourceOutput) return false;
+  closeRunContinuation<OUTPUT>(ownerOutput: MastraModelOutput<OUTPUT>, pubsub?: PubSub): boolean {
+    const record = this.#getState(pubsub).threadRunsById.get(ownerOutput.runId);
+    if (
+      !record?.continuation ||
+      (record.continuation.sourceOutput !== ownerOutput && record.currentSegmentOutput !== ownerOutput)
+    ) {
+      return false;
+    }
     record.continuation = undefined;
     return true;
   }
