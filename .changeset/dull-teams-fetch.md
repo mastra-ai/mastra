@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed agent and workflow delegation so model-driven resumes are correlated by framework-persisted suspended tool-call identity and cannot select sibling runs by supplying a run ID. Genuine resumes continue using IDs recovered from framework suspension state.
+Fixed agent and workflow delegation so model-driven resumes use framework-persisted suspended tool-call identity, including falsy resume payloads, and cannot select sibling runs by supplying a run ID. Successful resumes now retire every persisted representation of only the selected suspension.

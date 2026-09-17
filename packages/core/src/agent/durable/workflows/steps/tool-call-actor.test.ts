@@ -44,6 +44,83 @@ describe('durable tool-call context forwarding', () => {
     }
   });
 
+  it('retires both persisted representations of only the selected delegated suspension', async () => {
+    const runId = 'durable-tool-resume-run';
+    const execute = vi.fn().mockResolvedValue('ok');
+    const message = {
+      id: 'assistant-suspended',
+      role: 'assistant',
+      createdAt: new Date(0),
+      content: {
+        format: 2,
+        metadata: {
+          suspendedTools: {
+            'call-a': {
+              toolCallId: 'call-a',
+              toolName: 'workflow-sub',
+              delegatedRunId: 'inner-a',
+            },
+            'call-b': {
+              toolCallId: 'call-b',
+              toolName: 'workflow-sub',
+              delegatedRunId: 'inner-b',
+            },
+          },
+        },
+        parts: [
+          {
+            type: 'data-tool-call-suspended',
+            data: { toolCallId: 'call-a', toolName: 'workflow-sub', runId: 'inner-a' },
+          },
+          {
+            type: 'data-tool-call-suspended',
+            data: { toolCallId: 'call-b', toolName: 'workflow-sub', runId: 'inner-b' },
+          },
+        ],
+      },
+    };
+    const messageList = {
+      add: vi.fn(),
+      get: {
+        response: { db: () => [message] },
+        all: { db: () => [message] },
+      },
+    };
+    globalRunRegistry.set(runId, { tools: { 'workflow-sub': { execute } }, messageList } as any);
+
+    try {
+      await (createDurableToolCallStep() as any).execute({
+        inputData: {
+          toolCallId: 'resume-call',
+          toolName: 'workflow-sub',
+          args: {
+            resumeData: false,
+            suspendedToolCallId: 'call-b',
+            suspendedToolRunId: 'inner-b',
+          },
+        },
+        mastra: { getLogger: () => undefined },
+        suspend: vi.fn(),
+        getInitData: () => ({ runId, agentId: 'agent-1', options: {}, state: {} }),
+      });
+
+      expect(execute).toHaveBeenCalledWith(
+        expect.objectContaining({ suspendedToolRunId: 'inner-b' }),
+        expect.objectContaining({ resumeData: false }),
+      );
+      expect(message.content.metadata.suspendedTools).toEqual({
+        'call-a': expect.objectContaining({ delegatedRunId: 'inner-a' }),
+      });
+      expect(message.content.parts).toEqual([
+        expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'call-a' }) }),
+        expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'call-b', resumed: true }) }),
+      ]);
+      expect(messageList.add).toHaveBeenCalledWith([message], 'response');
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
   it('forwards MCP protocol context from the run registry', async () => {
     const runId = 'durable-tool-mcp-run';
     const execute = vi.fn().mockResolvedValue('ok');

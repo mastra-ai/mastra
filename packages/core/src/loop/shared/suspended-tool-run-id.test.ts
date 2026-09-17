@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
-import { resolveFrameworkSuspendedToolRunId } from './suspended-tool-run-id';
+import { resolveFrameworkSuspendedToolIdentity, resolveFrameworkSuspendedToolRunId } from './suspended-tool-run-id';
 
 function assistantMessage({
   suspendedTools,
@@ -253,5 +253,76 @@ describe('resolveFrameworkSuspendedToolRunId', () => {
 
     expect(resolve({ messages, modelSuppliedSuspendedToolCallId: 'call-b' })).toBe('repeated-run');
     expect(resolve({ messages, modelSuppliedSuspendedToolCallId: 'unknown-call' })).toBeUndefined();
+  });
+});
+
+describe('resolveFrameworkSuspendedToolIdentity', () => {
+  it('returns the original persisted identity selected by a model resume', () => {
+    const identity = resolveFrameworkSuspendedToolIdentity({
+      toolCallId: 'new-model-call',
+      toolName: 'agent-researcher',
+      resumeSource: 'model',
+      modelSuppliedSuspendedToolCallId: 'original-call',
+      modelSuppliedSuspendedToolRunId: 'inner-run',
+      messages: [
+        assistantMessage({
+          suspendedTools: {
+            'original-call': {
+              toolName: 'agent-researcher',
+              delegatedRunId: 'inner-run',
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(identity).toEqual({
+      toolCallId: 'original-call',
+      toolName: 'agent-researcher',
+      runId: 'inner-run',
+      type: 'suspension',
+    });
+  });
+
+  it('returns the exact framework-targeted approval identity', () => {
+    const identity = resolveFrameworkSuspendedToolIdentity({
+      toolCallId: 'approval-call',
+      toolName: 'agent-researcher',
+      resumeSource: 'framework',
+      messages: [
+        assistantMessage({
+          pendingToolApprovals: {
+            'approval-call': {
+              parentToolName: 'agent-researcher',
+              delegatedRunId: 'inner-run',
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(identity).toEqual({
+      toolCallId: 'approval-call',
+      toolName: 'agent-researcher',
+      runId: 'inner-run',
+      type: 'approval',
+    });
+  });
+
+  it('returns the framework-targeted identity carried in suspend data', () => {
+    expect(
+      resolveFrameworkSuspendedToolIdentity({
+        toolCallId: 'call-1',
+        toolName: 'agent-researcher',
+        resumeSource: 'framework',
+        suspendData: { suspendedToolRunId: 'inner-run' },
+        messages: [],
+      }),
+    ).toEqual({
+      toolCallId: 'call-1',
+      toolName: 'agent-researcher',
+      runId: 'inner-run',
+      type: 'suspension',
+    });
   });
 });

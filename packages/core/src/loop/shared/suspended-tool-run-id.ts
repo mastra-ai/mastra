@@ -20,6 +20,8 @@ export type ResolveSuspendedToolRunIdOptions = {
   messages: ReadonlyArray<MastraDBMessage>;
 };
 
+export type ResolvedSuspendedToolIdentity = SuspendedToolCandidate;
+
 function candidateFromEntry(
   entry: unknown,
   fallbackToolCallId: string | undefined,
@@ -111,7 +113,7 @@ function uniqueCandidate(candidates: SuspendedToolCandidate[]): SuspendedToolCan
  * Model-driven resumes identify an original suspended tool call; the framework
  * derives its delegated run ID from the matching persisted suspension.
  */
-export function resolveFrameworkSuspendedToolRunId({
+export function resolveFrameworkSuspendedToolIdentity({
   toolCallId,
   toolName,
   resumeSource,
@@ -119,21 +121,31 @@ export function resolveFrameworkSuspendedToolRunId({
   modelSuppliedSuspendedToolRunId,
   suspendData,
   messages,
-}: ResolveSuspendedToolRunIdOptions): string | undefined {
+}: ResolveSuspendedToolRunIdOptions): ResolvedSuspendedToolIdentity | undefined {
   const suspendPayloadRunId = resolveSuspendedToolRunId(
     suspendData && typeof suspendData === 'object'
       ? (suspendData as { suspendedToolRunId?: unknown }).suspendedToolRunId
       : undefined,
   );
-  if (resumeSource === 'framework' && suspendPayloadRunId) return suspendPayloadRunId;
+  if (resumeSource === 'framework' && suspendPayloadRunId) {
+    return {
+      toolCallId,
+      toolName,
+      runId: suspendPayloadRunId,
+      type:
+        suspendData && typeof suspendData === 'object' && (suspendData as { type?: unknown }).type === 'approval'
+          ? 'approval'
+          : 'suspension',
+    };
+  }
 
   const candidates = collectCandidates(messages).filter(candidate => candidate.toolName === toolName);
 
   if (resumeSource === 'framework') {
     const exactCandidate = uniqueCandidate(candidates.filter(candidate => candidate.toolCallId === toolCallId));
-    if (exactCandidate) return exactCandidate.runId;
+    if (exactCandidate) return exactCandidate;
 
-    return uniqueCandidate(candidates)?.runId;
+    return uniqueCandidate(candidates);
   }
 
   const suspendedToolCallId = resolveSuspendedToolRunId(modelSuppliedSuspendedToolCallId)?.trim();
@@ -147,5 +159,9 @@ export function resolveFrameworkSuspendedToolRunId({
   const modelRunIdClaim = resolveSuspendedToolRunId(modelSuppliedSuspendedToolRunId);
   if (modelRunIdClaim && modelRunIdClaim !== matchingSuspension.runId) return undefined;
 
-  return matchingSuspension.runId;
+  return matchingSuspension;
+}
+
+export function resolveFrameworkSuspendedToolRunId(options: ResolveSuspendedToolRunIdOptions): string | undefined {
+  return resolveFrameworkSuspendedToolIdentity(options)?.runId;
 }

@@ -3,7 +3,8 @@ import { createBackgroundTask } from '../../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../../background-tasks/resolve-config';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
-import { resolveFrameworkSuspendedToolRunId } from '../../../../loop/shared/suspended-tool-run-id';
+import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
+import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
@@ -619,49 +620,54 @@ export function createDurableToolCallStep() {
         });
       };
 
-      // Remove suspended-tool / pending-approval metadata from the last
-      // assistant message when a tool is being resumed. This mirrors the
-      // regular agent's `removeToolMetadata()`.
-      const removeToolMetadata = async (type: 'suspension' | 'approval') => {
+      const removeToolMetadata = async (
+        target: { toolCallId?: string; toolName: string; runId?: string },
+        type: 'suspension' | 'approval',
+      ) => {
         if (!messageList) return;
+
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
-        const allMessages = messageList.get.all.db();
-        const lastAssistantMessage = [...allMessages].reverse().find(msg => {
-          const content = msg.content;
-          if (!content) return false;
-          const meta =
-            typeof content.metadata === 'object' && content.metadata !== null
-              ? (content.metadata as Record<string, any>)
+        const expectedPartType = type === 'suspension' ? 'data-tool-call-suspended' : 'data-tool-call-approval';
+        const entryMatches = (entry: any, fallbackToolCallId?: string): boolean => {
+          const entryToolCallId = typeof entry?.toolCallId === 'string' ? entry.toolCallId : fallbackToolCallId;
+          const entryToolName = entry?.parentToolName ?? entry?.toolName;
+          const entryRunId = type === 'approval' ? entry?.delegatedRunId : (entry?.delegatedRunId ?? entry?.runId);
+          if (target.toolCallId) return entryToolCallId === target.toolCallId;
+          return entryToolName === target.toolName && !!target.runId && entryRunId === target.runId;
+        };
+
+        const changedMessages = [];
+        for (const message of messageList.get.all.db()) {
+          if (message.role !== 'assistant') continue;
+
+          let messageChanged = false;
+          const metadata =
+            typeof message.content.metadata === 'object' && message.content.metadata !== null
+              ? (message.content.metadata as Record<string, any>)
               : undefined;
-          return (
-            !!meta?.[metadataKey]?.[toolCallId] ||
-            Object.values(meta?.[metadataKey] ?? {}).some(
-              (e: any) => e?.toolCallId === toolCallId || e?.parentToolName === toolName || e?.toolName === toolName,
-            )
-          );
-        });
-        if (!lastAssistantMessage?.content) return;
-        const meta =
-          typeof lastAssistantMessage.content.metadata === 'object' && lastAssistantMessage.content.metadata !== null
-            ? (lastAssistantMessage.content.metadata as Record<string, any>)
-            : undefined;
-        if (!meta?.[metadataKey]) return;
-        // Resolve key: exact toolCallId, then by entry toolCallId, then by toolName
-        const entries = meta[metadataKey] as Record<string, any>;
-        const key = entries[toolCallId]
-          ? toolCallId
-          : (Object.keys(entries).find(k => entries[k]?.toolCallId === toolCallId) ??
-            Object.keys(entries).find(
-              k => entries[k]?.parentToolName === toolName || entries[k]?.toolName === toolName,
-            ) ??
-            (entries[toolName] ? toolName : undefined));
-        if (key) {
-          delete entries[key];
-          if (Object.keys(entries).length === 0) {
-            delete meta[metadataKey];
+          const entries = metadata?.[metadataKey] as Record<string, any> | undefined;
+          if (entries) {
+            for (const [key, entry] of Object.entries(entries)) {
+              if (entryMatches(entry, key)) {
+                delete entries[key];
+                messageChanged = true;
+              }
+            }
+            if (Object.keys(entries).length === 0) delete metadata![metadataKey];
           }
+
+          message.content.parts = message.content.parts?.map(part => {
+            if (part.type !== expectedPartType || !entryMatches(part.data)) return part;
+            if ((part.data as { resumed?: boolean }).resumed) return part;
+            messageChanged = true;
+            return { ...part, data: { ...(part.data as any), resumed: true } };
+          });
+
+          if (messageChanged) changedMessages.push(message);
         }
-        // Flush to persist the metadata removal
+
+        if (changedMessages.length === 0) return;
+        messageList.add(changedMessages, 'response');
         await doFlush();
       };
 
@@ -733,7 +739,7 @@ export function createDurableToolCallStep() {
       // context.agent.suspend()) would be misinterpreted as an approval response.
       if (approvalGated && approvalDecision) {
         // Remove approval metadata since we're resuming (either approved or declined)
-        await removeToolMetadata('approval');
+        await removeToolMetadata({ toolCallId, toolName }, 'approval');
 
         if (!approvalDecision.approved) {
           // Return the approval decision (not a `result` string) so it persists as
@@ -796,12 +802,6 @@ export function createDurableToolCallStep() {
       // resolved, all later resume data belongs to the tool's own suspension schema.
       const isResumingFromSuspension = resumeData !== undefined && !approvalGated;
 
-      // Remove suspension metadata when resuming from an in-execution (non-approval-decision) suspension.
-      // `isResumingFromSuspension` already excludes the approval-decision case above.
-      if (isResumingFromSuspension) {
-        await removeToolMetadata('suspension');
-      }
-
       // 3. Check for background task execution
       const bgManager = registryEntry?.backgroundTaskManager;
       const bgConfig = registryEntry?.backgroundTasksConfig;
@@ -835,8 +835,8 @@ export function createDurableToolCallStep() {
       // suspension state. The suspend payload remains the primary per-tool-call source.
       const isResumableTool = toolName?.startsWith('agent-') || toolName?.startsWith('workflow-');
       const needsRunIdLookup = isResumableTool && (resumeData !== undefined || !!approvalGrant);
-      const suspendedToolRunId = needsRunIdLookup
-        ? resolveFrameworkSuspendedToolRunId({
+      const resolvedSuspensionIdentity: ResolvedSuspendedToolIdentity | undefined = needsRunIdLookup
+        ? resolveFrameworkSuspendedToolIdentity({
             toolCallId,
             toolName,
             resumeSource: resumeDataFromArgs !== undefined ? 'model' : 'framework',
@@ -848,6 +848,7 @@ export function createDurableToolCallStep() {
             messages: messageList?.get.all.db() ?? [],
           })
         : undefined;
+      const suspendedToolRunId = resolvedSuspensionIdentity?.runId;
       // When the delegation tool is itself approval-gated, an `{ approved: true }`
       // resume is ambiguous: it can answer this step's pre-execution gate (execute
       // fresh) or a delegated approval raised mid-execution by the sub-agent. A
@@ -855,6 +856,13 @@ export function createDurableToolCallStep() {
       const isDelegatedApprovalResume = !!approvalGrant && !!suspendedToolRunId;
       if ((isResumingFromSuspension || isDelegatedApprovalResume) && suspendedToolRunId) {
         cleanedArgs.suspendedToolRunId = suspendedToolRunId;
+      }
+
+      if (isResumingFromSuspension) {
+        const cleanupTarget = isResumableTool ? resolvedSuspensionIdentity : { toolCallId, toolName };
+        if (cleanupTarget) {
+          await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension');
+        }
       }
 
       // Fire onInputAvailable lifecycle hook before execution (matches non-durable path).
