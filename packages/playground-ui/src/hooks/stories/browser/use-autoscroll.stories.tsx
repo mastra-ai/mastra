@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useRef, useState } from 'react';
-import { Button } from '@/ds/components/Button';
-import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
+import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { useAutoscroll } from '@/hooks/use-autoscroll';
 
 function AutoscrollDemo({ enabled }: { enabled: boolean }) {
   const viewport = useRef<HTMLDivElement>(null);
@@ -17,7 +17,7 @@ function AutoscrollDemo({ enabled }: { enabled: boolean }) {
         tabIndex={0}
         role="log"
         aria-label="Streaming log"
-        className="border-border1 h-60 overflow-y-auto rounded-lg border p-4"
+        className="h-60 overflow-y-auto rounded-lg border border-border1 p-4"
       >
         {Array.from({ length: lineCount }, (_, index) => (
           <Txt key={index} font="mono">

@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { Input } from '@/ds/components/Input';
-import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
+import { Input } from '@/ds/components/Input';
 import { Txt } from '@/ds/components/Txt';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 function DebouncedValueDemo({ delay }: { delay: number }) {
   const [query, setQuery] = useState('');

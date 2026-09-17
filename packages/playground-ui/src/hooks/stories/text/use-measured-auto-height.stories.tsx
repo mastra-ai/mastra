@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { Button } from '@/ds/components/Button';
-import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
+import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 
 function MeasuredAutoHeightDemo() {
   const [expanded, setExpanded] = useState(false);
@@ -13,7 +13,7 @@ function MeasuredAutoHeightDemo() {
       <Button onClick={() => setExpanded(value => !value)}>{expanded ? 'Collapse details' : 'Expand details'}</Button>
       <div
         style={heightStyle}
-        className="border-border1 overflow-hidden rounded-lg border motion-safe:transition-[height] motion-safe:duration-200"
+        className="overflow-hidden rounded-lg border border-border1 motion-safe:transition-[height] motion-safe:duration-200"
       >
         <div ref={ref} className="space-y-4 p-4">
           <Txt>Workflow run details</Txt>

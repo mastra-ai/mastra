@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
+import { Txt } from '@/ds/components/Txt';
 import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
 import { useTextHighlight } from '@/hooks/use-text-highlight';
-import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Txt } from '@/ds/components/Txt';
 
 function ScrollToFirstHighlightDemo() {
   const [search, setSearch] = useState('');
@@ -26,7 +26,7 @@ function ScrollToFirstHighlightDemo() {
         tabIndex={0}
         role="region"
         aria-label="Search results"
-        className="border-border1 h-60 overflow-y-auto rounded-lg border p-4"
+        className="h-60 overflow-y-auto rounded-lg border border-border1 p-4"
       >
         <div ref={highlightRef} className="space-y-4">
           {Array.from({ length: 30 }, (_, index) => (

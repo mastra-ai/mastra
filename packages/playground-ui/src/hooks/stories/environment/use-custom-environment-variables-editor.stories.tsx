@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
 import { EnvironmentVariablesEditor } from '@/ds/components/EnvironmentVariablesEditor';
 import { TooltipProvider } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { useCustomEnvironmentVariablesEditor } from '@/hooks/use-environment-variables-editor';
 import type { EnvironmentVariableRow } from '@/hooks/use-environment-variables-editor';
-import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Txt } from '@/ds/components/Txt';
 
 type ScopedVariable = EnvironmentVariableRow & { scope: 'preview' };
 

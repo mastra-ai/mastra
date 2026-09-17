@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useRef } from 'react';
-import { useIsomorphicLayoutEffect } from '@/hooks/use-isomorphic-layout-effect';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
 import { Txt } from '@/ds/components/Txt';
+import { useIsomorphicLayoutEffect } from '@/hooks/use-isomorphic-layout-effect';
 
 function IsomorphicLayoutEffectDemo({ progress }: { progress: number }) {
   const progressBar = useRef<HTMLProgressElement>(null);

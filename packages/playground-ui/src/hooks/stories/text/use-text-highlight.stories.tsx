@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { Input } from '@/ds/components/Input';
-import { useTextHighlight } from '@/hooks/use-text-highlight';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
+import { Input } from '@/ds/components/Input';
 import { Txt } from '@/ds/components/Txt';
+import { useTextHighlight } from '@/hooks/use-text-highlight';
 
 function TextHighlightDemo() {
   const [search, setSearch] = useState('agent');

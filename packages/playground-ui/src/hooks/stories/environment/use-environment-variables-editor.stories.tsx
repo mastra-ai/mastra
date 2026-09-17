@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
 import { Button } from '@/ds/components/Button';
 import { EnvironmentVariablesEditor } from '@/ds/components/EnvironmentVariablesEditor';
 import { TooltipProvider } from '@/ds/components/Tooltip';
-import { useEnvironmentVariablesEditor } from '@/hooks/use-environment-variables-editor';
-import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
 import { Txt } from '@/ds/components/Txt';
+import { useEnvironmentVariablesEditor } from '@/hooks/use-environment-variables-editor';
 
 const initialRows = [{ key: 'PUBLIC_BASE_URL', value: 'https://example.com' }];
 

@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Kbd } from '@/ds/components/Kbd';
-import { useKeyboardShortcutLabel } from '@/hooks/use-keyboard-shortcut-label';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
+import { Kbd } from '@/ds/components/Kbd';
 import { Txt } from '@/ds/components/Txt';
+import { useKeyboardShortcutLabel } from '@/hooks/use-keyboard-shortcut-label';
 
 function KeyboardShortcutLabelDemo({ shortcutKey }: { shortcutKey: string }) {
   const label = useKeyboardShortcutLabel(shortcutKey);

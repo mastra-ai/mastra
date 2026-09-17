@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { Button } from '@/ds/components/Button';
-import { useIsClamped } from '@/hooks/use-is-clamped';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
+import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { useIsClamped } from '@/hooks/use-is-clamped';
 
 function IsClampedDemo() {
   const [expanded, setExpanded] = useState(false);
@@ -11,7 +11,7 @@ function IsClampedDemo() {
   return (
     <HookDemo>
       <div className="max-w-80">
-        <p ref={ref} className={expanded ? 'text-ui-md' : 'text-ui-md line-clamp-2'}>
+        <p ref={ref} className={expanded ? 'text-ui-md' : 'line-clamp-2 text-ui-md'}>
           A trace can contain many spans, tool calls, and model responses. Keep the summary compact until someone wants
           to read every detail. Expanding this paragraph reveals the rest without losing the collapse control.
         </p>

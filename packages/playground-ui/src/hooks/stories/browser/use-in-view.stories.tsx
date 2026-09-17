@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useRef } from 'react';
-import { useInView } from '@/hooks/use-in-view';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
 import { Txt } from '@/ds/components/Txt';
+import { useInView } from '@/hooks/use-in-view';
 
 function InViewDemo() {
   const root = useRef<HTMLDivElement>(null);
@@ -15,7 +15,7 @@ function InViewDemo() {
         tabIndex={0}
         role="region"
         aria-label="Visibility scroll area"
-        className="border-border1 h-60 overflow-y-auto rounded-lg border p-4"
+        className="h-60 overflow-y-auto rounded-lg border border-border1 p-4"
       >
         <div className="flex h-80 items-start">
           <Txt>Scroll down to reveal the target.</Txt>
