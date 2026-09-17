@@ -57,6 +57,21 @@ describe('SubagentExecutionComponent', () => {
     expect(lines.some(l => l.includes('subagent explore fork'))).toBe(false);
   });
 
+  it('matches ordinary tool background lifecycle indicators', () => {
+    const comp = new SubagentExecutionComponent('alexandria', 'Inspect architecture', mockTui);
+    comp.setBackgroundTaskId('task-1');
+
+    expect(renderPlain(comp).join('\n')).toContain('◌ background · task-1');
+
+    comp.finish(false, 1000, 'done');
+    expect(renderPlain(comp).join('\n')).toContain('✓ background · task-1');
+
+    const failed = new SubagentExecutionComponent('alexandria', 'Inspect architecture', mockTui);
+    failed.setBackgroundTaskId('task-2');
+    failed.finish(true, 1000, 'failed');
+    expect(renderPlain(failed).join('\n')).toContain('✗ background · task-2');
+  });
+
   it('renders tool call activity while running', () => {
     const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
     comp.addToolStart('search_content', { pattern: 'foo' });

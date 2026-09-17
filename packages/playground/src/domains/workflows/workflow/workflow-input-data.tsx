@@ -25,16 +25,10 @@ export interface WorkflowInputDataProps {
   isSubmitLoading: boolean;
   submitButtonLabel: string;
   onSubmit: (data: any) => void;
-  withoutSubmit?: boolean;
-  isReadOnly?: boolean;
-  disableSubmit?: boolean;
   children?: React.ReactNode;
   isProcessorWorkflow?: boolean;
   submitActions?: React.ReactNode;
   leftActions?: React.ReactNode;
-  heading?: string;
-  headingClassName?: string;
-  submitButtonClassName?: string;
   headingSlot?: ReactNode;
   collapsible?: boolean;
   submitButtonIcon?: ReactNode;
@@ -85,9 +79,6 @@ function getFormShapeError(schema: ZodSchema, value: unknown) {
 export const WorkflowInputData = ({
   schema,
   defaultValues,
-  withoutSubmit,
-  isReadOnly,
-  disableSubmit,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
@@ -95,9 +86,6 @@ export const WorkflowInputData = ({
   isProcessorWorkflow,
   submitActions,
   leftActions,
-  heading,
-  headingClassName,
-  submitButtonClassName,
   headingSlot,
   collapsible = true,
   submitButtonIcon = defaultSubmitIcon,
@@ -145,17 +133,19 @@ export const WorkflowInputData = ({
   }
 
   const defaultHeading = (
-    <Txt as="span" variant="ui-md" className={cn('text-neutral5 font-semibold', headingClassName)}>
-      {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
+    <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold">
+      Trigger a run
     </Txt>
   );
+  const toggleSitsInLabelRow = !collapsible && !hideHeading;
+  const toggleSitsAboveInput = collapsible || hideHeading || hideInputTypeLabel;
   const inputTypeToggle = (
     <WorkflowInputTypeToggle
       value={draft.type}
       onChange={changeInputType}
       disabled={isSubmitLoading}
       includeSimple={isProcessorWorkflow}
-      compact={!collapsible && !hideHeading}
+      compact={toggleSitsInLabelRow}
     />
   );
 
@@ -166,12 +156,12 @@ export const WorkflowInputData = ({
           <Txt as="p" variant="ui-sm" className="text-neutral3">
             {inputTypeLabel}
           </Txt>
-          {!collapsible && !hideHeading && <div className="shrink-0">{inputTypeToggle}</div>}
+          {toggleSitsInLabelRow && <div className="shrink-0">{inputTypeToggle}</div>}
         </div>
       )}
 
       <div className="px-5">
-        {(collapsible || hideHeading || hideInputTypeLabel) && <div className="pb-4">{inputTypeToggle}</div>}
+        {toggleSitsAboveInput && <div className="pb-4">{inputTypeToggle}</div>}
 
         <div
           className={cn('pb-4', {
@@ -188,10 +178,6 @@ export const WorkflowInputData = ({
               errors={errors}
               isSubmitLoading={isSubmitLoading}
               submitButtonLabel={submitButtonLabel}
-              withoutSubmit={withoutSubmit}
-              isReadOnly={isReadOnly}
-              disableSubmit={disableSubmit}
-              submitButtonClassName={submitButtonClassName}
               submitButtonIcon={submitButtonIcon}
               submitButtonVariant={submitButtonVariant}
               submitButtonFullWidth={submitButtonFullWidth}
@@ -208,10 +194,6 @@ export const WorkflowInputData = ({
               onChange={value => setDraft({ type: 'simple', value })}
               isSubmitLoading={isSubmitLoading}
               submitButtonLabel={submitButtonLabel}
-              withoutSubmit={withoutSubmit}
-              isReadOnly={isReadOnly}
-              disableSubmit={disableSubmit}
-              submitButtonClassName={submitButtonClassName}
               submitButtonIcon={submitButtonIcon}
               submitButtonVariant={submitButtonVariant}
               submitButtonFullWidth={submitButtonFullWidth}
@@ -230,10 +212,6 @@ export const WorkflowInputData = ({
               defaultValues={draft.value}
               isSubmitLoading={isSubmitLoading}
               submitButtonLabel={submitButtonLabel}
-              withoutSubmit={withoutSubmit}
-              isReadOnly={isReadOnly}
-              disableSubmit={disableSubmit}
-              submitButtonClassName={submitButtonClassName}
               submitButtonIcon={submitButtonIcon}
               submitButtonVariant={submitButtonVariant}
               submitButtonFullWidth={submitButtonFullWidth}
@@ -276,10 +254,6 @@ const WorkflowFormInput = ({
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
-  withoutSubmit,
-  isReadOnly,
-  disableSubmit,
-  submitButtonClassName,
   children,
   submitActions,
   leftActions,
@@ -294,13 +268,11 @@ const WorkflowFormInput = ({
     onValuesChange={onValuesChange}
     isSubmitLoading={isSubmitLoading}
     submitButtonLabel={submitButtonLabel}
-    submitButtonClassName={submitButtonClassName}
-    disableSubmit={disableSubmit}
     submitButtonIcon={submitButtonIcon}
     submitButtonVariant={submitButtonVariant}
     submitButtonFullWidth={submitButtonFullWidth}
-    onSubmit={withoutSubmit ? undefined : onSubmit}
-    readOnly={isReadOnly || isSubmitLoading}
+    onSubmit={onSubmit}
+    readOnly={isSubmitLoading}
     submitActions={submitActions}
     leftActions={leftActions}
   >

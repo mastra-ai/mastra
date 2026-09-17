@@ -124,6 +124,31 @@ while (true) {
 }
 ```
 
+#### Cancelling a stream
+
+Cancelling the response body aborts the underlying HTTP request and stops any pending client tool executions and follow-up requests:
+
+```typescript
+const response = await agent.stream('Tell me a story')
+const reader = response.body.getReader()
+
+const { value } = await reader.read()
+await reader.cancel('user navigated away')
+```
+
+You can also pass an `abortSignal` to cancel from outside the stream. The same option is available on `streamUntilIdle()`, `resumeStream()`, `resumeStreamUntilIdle()`, `approveToolCall()`, `declineToolCall()`, `generate()`, and `generateLegacy()`:
+
+```typescript
+const controller = new AbortController()
+
+const response = await agent.stream('Tell me a story', {
+  abortSignal: controller.signal,
+})
+
+// Later
+controller.abort()
+```
+
 #### AI SDK compatible format
 
 To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and use `toAISdkStream`:

@@ -26,10 +26,6 @@ export const WorkflowProcessorInput = ({
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
-  withoutSubmit,
-  isReadOnly,
-  disableSubmit,
-  submitButtonClassName,
   children,
   submitActions,
   leftActions,
@@ -79,7 +75,7 @@ export const WorkflowProcessorInput = ({
             setErrors([]);
             onChange(withPhaseRole({ ...value, phase }));
           }}
-          disabled={isReadOnly || isSubmitLoading}
+          disabled={isSubmitLoading}
         >
           <SelectTrigger id={phaseId} className="w-full">
             <SelectValue placeholder="Select phase" />
@@ -110,27 +106,23 @@ export const WorkflowProcessorInput = ({
           }}
           placeholder="Enter a test message..."
           rows={4}
-          disabled={isReadOnly || isSubmitLoading}
+          disabled={isSubmitLoading}
           className="border-border1 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:ring-accent1 w-full rounded-md border bg-transparent p-3 focus:ring-2 focus:outline-hidden disabled:opacity-50"
         />
       </div>
 
       {children}
 
-      {!withoutSubmit && (
-        <FormSubmitRow
-          isSubmitLoading={isSubmitLoading}
-          submitButtonLabel={submitButtonLabel}
-          disableSubmit={disableSubmit}
-          submitButtonClassName={submitButtonClassName}
-          submitActions={submitActions}
-          leftActions={leftActions}
-          submitButtonIcon={submitButtonIcon}
-          submitButtonVariant={submitButtonVariant}
-          submitButtonFullWidth={submitButtonFullWidth}
-          onSubmit={handleSubmit}
-        />
-      )}
+      <FormSubmitRow
+        isSubmitLoading={isSubmitLoading}
+        submitButtonLabel={submitButtonLabel}
+        submitActions={submitActions}
+        leftActions={leftActions}
+        submitButtonIcon={submitButtonIcon}
+        submitButtonVariant={submitButtonVariant}
+        submitButtonFullWidth={submitButtonFullWidth}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 };

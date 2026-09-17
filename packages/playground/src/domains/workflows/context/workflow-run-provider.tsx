@@ -38,7 +38,7 @@ export function WorkflowRunProvider({
   initialRunId?: string;
   withoutTimeTravel?: boolean;
 }) {
-  const closeStepDetail = useContext(WorkflowStepDetailContext)?.closeStepDetail;
+  const resetStepDetail = useContext(WorkflowStepDetailContext)?.resetStepDetail;
   const [debugMode, setDebugMode] = useState(false);
   const { data: workflow, isLoading, error } = useWorkflow(workflowId);
   const { settings } = useTracingSettings();
@@ -89,16 +89,16 @@ export function WorkflowRunProvider({
 
   const setRunId = useCallback(
     (runId: string) => {
-      closeStepDetail?.();
+      resetStepDetail?.();
       selectLocalRun(runId);
     },
-    [closeStepDetail, selectLocalRun],
+    [resetStepDetail, selectLocalRun],
   );
   const clearData = useCallback(() => {
-    closeStepDetail?.();
+    resetStepDetail?.();
     closeStreamsAndReset();
     resetLocalRun();
-  }, [closeStepDetail, closeStreamsAndReset, resetLocalRun]);
+  }, [resetStepDetail, closeStreamsAndReset, resetLocalRun]);
 
   // Cleanup on route change instead of a key remount, so the canvas stays mounted.
   useEffect(() => clearData, [workflowId, initialRunId, clearData]);

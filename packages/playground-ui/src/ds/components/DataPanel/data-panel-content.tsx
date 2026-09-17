@@ -14,7 +14,7 @@ export interface DataPanelContentProps {
 // selecting text inside the panel body doesn't start a swipe-to-dismiss.
 export function DataPanelContent({ children, ref, className }: DataPanelContentProps) {
   return (
-    <DrawerPrimitive.Content ref={ref} className={cn('min-h-0 flex-1 overflow-y-auto p-3', className)}>
+    <DrawerPrimitive.Content ref={ref} className={cn('min-h-0 flex-1 overflow-y-auto px-2 py-3', className)}>
       {children}
     </DrawerPrimitive.Content>
   );

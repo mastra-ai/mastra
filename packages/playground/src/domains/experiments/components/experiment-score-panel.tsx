@@ -2,7 +2,6 @@
 
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { GaugeIcon, ReceiptText } from 'lucide-react';
@@ -15,8 +14,6 @@ export type ExperimentScorePanelProps = {
   onClose: () => void;
   /** When provided, a Trace button appears in the header; hidden when `score.traceId` is absent. */
   onShowTrace?: () => void;
-  /** Extra classes applied to the panel root. */
-  className?: string;
 };
 
 function isCodeBasedScorer(score: ClientScoreRowData): boolean {
@@ -26,22 +23,9 @@ function isCodeBasedScorer(score: ClientScoreRowData): boolean {
   return !score.preprocessPrompt && !score.analyzePrompt && !score.generateScorePrompt && !score.generateReasonPrompt;
 }
 
-export function ExperimentScorePanel({
-  score,
-  onNext,
-  onPrevious,
-  onClose,
-  onShowTrace,
-  className,
-}: ExperimentScorePanelProps) {
+export function ExperimentScorePanel({ score, onNext, onPrevious, onClose, onShowTrace }: ExperimentScorePanelProps) {
   return (
-    <DataPanel
-      open={!!score}
-      onClose={onClose}
-      title={score ? `Score ${score.scorerId}` : 'Score'}
-      depth={2}
-      className={className}
-    >
+    <DataPanel open={!!score} onClose={onClose} title={score ? `Score ${score.scorerId}` : 'Score'} depth={2}>
       {score && (
         <ExperimentScorePanelBody
           score={score}
@@ -61,7 +45,7 @@ function ExperimentScorePanelBody({
   onPrevious,
   onClose,
   onShowTrace,
-}: Omit<ExperimentScorePanelProps, 'score' | 'className'> & { score: ClientScoreRowData }) {
+}: Omit<ExperimentScorePanelProps, 'score'> & { score: ClientScoreRowData }) {
   const isCodeBased = isCodeBasedScorer(score);
   const naText = isCodeBased ? 'N/A — code-based scorer' : 'N/A — step not configured';
 
@@ -71,7 +55,7 @@ function ExperimentScorePanelBody({
         <DataPanel.Heading>
           Score <b>{score.scorerId}</b>
         </DataPanel.Heading>
-        <ButtonsGroup className="ml-auto shrink-0">
+        <DataPanel.HeaderActions>
           {(onPrevious || onNext) && (
             <DataPanel.NextPrevNav
               onPrevious={onPrevious}
@@ -81,12 +65,12 @@ function ExperimentScorePanelBody({
             />
           )}
           {onShowTrace && score.traceId && (
-            <Button size="md" onClick={onShowTrace} icon={<TraceIcon />}>
+            <Button size="sm" variant="ghost" onClick={onShowTrace} icon={<TraceIcon />}>
               Trace
             </Button>
           )}
           <DataPanel.CloseButton onClick={onClose} tooltip="Close score panel" />
-        </ButtonsGroup>
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
 
       <DataPanel.Content>

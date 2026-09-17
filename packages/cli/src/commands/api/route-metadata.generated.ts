@@ -2051,6 +2051,42 @@ export const API_ROUTE_METADATA = {
       "paginationProperty": "page"
     }
   },
+  "POST /observability/traces/query/fields": {
+    "method": "POST",
+    "path": "/observability/traces/query/fields",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "limit",
+      "predicateScope",
+      "search",
+      "timeRange"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /observability/traces/query/values": {
+    "method": "POST",
+    "path": "/observability/traces/query/values",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "limit",
+      "path",
+      "predicateScope",
+      "search",
+      "timeRange"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "values"
+    }
+  },
   "GET /observability/metrics": {
     "method": "GET",
     "path": "/observability/metrics",
@@ -2875,20 +2911,6 @@ export const API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "embedders"
-    }
-  },
-  "GET /.well-known/:agentId/agent-card.json": {
-    "method": "GET",
-    "path": "/.well-known/:agentId/agent-card.json",
-    "pathParams": [
-      "agentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
     }
   },
   "GET /workspaces": {

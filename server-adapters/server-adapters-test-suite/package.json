@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server-adapters-test-suite",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Reusable conformance test suite for Mastra server adapters",
   "type": "module",
   "main": "dist/index.js",

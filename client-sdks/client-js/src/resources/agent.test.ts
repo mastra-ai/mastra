@@ -106,6 +106,57 @@ describe('Agent signal routes', () => {
     });
   });
 
+  it('does not throw when the consumer cancels the stream after the finish chunk', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const chunks = [
+      { type: 'start', payload: {} },
+      { type: 'text-delta', payload: { id: '1', text: 'hi' } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, output: { usage: {} } } },
+    ];
+    agent['request'] = vi.fn().mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (const chunk of chunks) {
+              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+            }
+            // Close after the consumer has had a chance to cancel so onFinish fires against a cancelled stream
+            setTimeout(() => {
+              try {
+                controller.close();
+              } catch {
+                // Cancelling the outer stream now cancels this underlying body too
+              }
+            }, 20);
+          },
+        }),
+        { headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    ) as (typeof agent)['request'];
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const response = await agent.stream([{ role: 'user', content: 'hi' }]);
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (decoder.decode(value, { stream: true }).includes('"type":"finish"')) {
+          await reader.cancel();
+          break;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+
+    expect(unhandled).toEqual([]);
+  });
+
   it('sends messages to the send-message route with object payloads unchanged', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });
