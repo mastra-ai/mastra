@@ -21,6 +21,17 @@ export const Default: Story = {
   ),
 };
 
+export const WithButtonTrigger: Story = {
+  render: () => (
+    <HoverCard>
+      <HoverCardTrigger render={<button type="button" />} className="text-ui-md text-neutral6 cursor-help underline">
+        Agent details
+      </HoverCardTrigger>
+      <HoverCardContent>Details are available on hover or keyboard focus.</HoverCardContent>
+    </HoverCard>
+  ),
+};
+
 export const WithRichContent: Story = {
   render: () => (
     <HoverCard>
