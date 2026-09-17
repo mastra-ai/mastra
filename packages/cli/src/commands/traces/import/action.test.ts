@@ -1,4 +1,4 @@
-import { access, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -208,6 +208,30 @@ describe('runTraceImport', () => {
     });
     expect(platform.upload).toHaveBeenCalledOnce();
     expect(platform.readTrace).toHaveBeenCalledOnce();
+  });
+
+  it('retries local cleanup when resuming an already-complete import', async () => {
+    const platform = target();
+    const deps = await dependencies({ createTarget: () => platform });
+    const completed = await runTraceImport({ provider: 'langfuse', yes: true }, deps);
+    const preparedFile = join(completed.report.stateDirectory, 'traces.jsonl');
+    await writeFile(preparedFile, 'leftover prepared data');
+
+    const createProvider = vi.fn(() => {
+      throw new Error('source should not be read');
+    });
+    const createTarget = vi.fn(() => {
+      throw new Error('target should not be created');
+    });
+    const resumed = await runTraceImport(
+      { provider: 'langfuse', resume: completed.report.importId, yes: true },
+      { ...deps, createProvider, createTarget },
+    );
+
+    expect(resumed).toEqual(completed);
+    await expect(access(preparedFile)).rejects.toThrow();
+    expect(createProvider).not.toHaveBeenCalled();
+    expect(createTarget).not.toHaveBeenCalled();
   });
 
   it('pauses after timed-out verification and keeps prepared data for resume', async () => {
