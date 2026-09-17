@@ -44,7 +44,7 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
         }
       />
 
-      <TooltipContent className="new-theme border-border bg-popover text-foreground">
+      <TooltipContent>
         <span className="inline-flex items-center gap-1.5">
           Toggle Sidebar
           <Kbd size="xs" className="border-border bg-muted text-muted-foreground">
