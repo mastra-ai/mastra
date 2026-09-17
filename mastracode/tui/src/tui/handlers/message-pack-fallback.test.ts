@@ -207,7 +207,8 @@ describe('handlePackFallbackState', () => {
     });
     expect(threadSetSetting).toHaveBeenLastCalledWith({ threadId: 'thread-1', key: KEY, value: undefined });
     expect(stateSet).toHaveBeenLastCalledWith({ [KEY]: null });
-    expect(mocks.saveSettings).toHaveBeenCalledOnce();
+    // Thread-scoped: the landed pack never reaches shared settings.
+    expect(mocks.saveSettings).not.toHaveBeenCalled();
     expect(ectx.state.fallbackStatus).toEqual({ usingPack: 'OpenAI', failedPack: 'Anthropic' });
   });
 });

@@ -2,7 +2,7 @@ import type { ModelWithRetries } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import { getRequestAccountSelection } from '../auth/account-routing-context.js';
+import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { listBuiltinModePacks, resolveModePackFallbackChain } from '../onboarding/packs.js';
 import {
@@ -78,18 +78,27 @@ export function createRequestScopedCredentialStore(
       ? base.listAccounts?.(providerId).find(account => account.id === accountInstanceId)
       : undefined;
   };
+  // Routing rejected every account for this provider on this request. Fail
+  // closed on every credential read: falling through to `base` would use the
+  // provider's active account — the exhausted one routing just refused.
+  const rejectAll = (providerId: string) => isRequestAccountRoutingExhausted(requestContext, providerId);
 
   return {
     allowEnvironmentFallback: base.allowEnvironmentFallback,
     reload: () => base.reload(),
     get: providerId => {
+      if (rejectAll(providerId)) return undefined;
       const selected = selectedAccount(providerId);
       return selected ? accountCredential(selected) : base.get(providerId);
     },
-    getStoredApiKey: providerId => base.getStoredApiKey(providerId),
-    getApiKey: providerId => base.getApiKey(providerId, selectedId(providerId)),
+    getStoredApiKey: providerId => (rejectAll(providerId) ? undefined : base.getStoredApiKey(providerId)),
+    getApiKey: providerId =>
+      rejectAll(providerId) ? Promise.resolve(undefined) : base.getApiKey(providerId, selectedId(providerId)),
     getOAuthCredential: base.getOAuthCredential
-      ? providerId => base.getOAuthCredential!(providerId, selectedId(providerId))
+      ? providerId =>
+          rejectAll(providerId)
+            ? Promise.resolve(undefined)
+            : base.getOAuthCredential!(providerId, selectedId(providerId))
       : undefined,
     listAccounts: base.listAccounts ? providerId => base.listAccounts!(providerId) : undefined,
     getActiveAccount: base.getActiveAccount ? providerId => base.getActiveAccount!(providerId) : undefined,

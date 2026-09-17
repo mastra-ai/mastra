@@ -31,7 +31,12 @@ import {
   resolveModePackModels,
   THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
 } from '../onboarding/settings.js';
-import { getRequestAccountSelection, setRequestAccountSelection } from './account-routing-context.js';
+import {
+  getRequestAccountSelection,
+  isRequestAccountRoutingExhausted,
+  markRequestAccountRoutingExhausted,
+  setRequestAccountSelection,
+} from './account-routing-context.js';
 import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provider-auth-error.js';
 import { getOAuthProviders } from './storage.js';
 import type { CredentialStore } from './types.js';
@@ -450,11 +455,6 @@ type RoutingControllerContext = {
 };
 
 const exhaustedAccountPersistenceQueues = new Map<string, Promise<void>>();
-const EXHAUSTED_ACCOUNT_SELECTION_SUFFIX = ':all-exhausted';
-
-function exhaustedAccountSelectionId(providerId: string): string {
-  return `${providerId}${EXHAUSTED_ACCOUNT_SELECTION_SUFFIX}`;
-}
 
 async function serializeExhaustedAccountPersistence(key: string, operation: () => Promise<void>): Promise<void> {
   const previous = exhaustedAccountPersistenceQueues.get(key) ?? Promise.resolve();
@@ -604,7 +604,7 @@ async function applyPreferredAccountRoute(
   const selected = ordered.find(account => !unavailable.has(account.id));
   for (const accountId of unavailable) tried.add(accountId);
   if (!selected) {
-    setRequestAccountSelection(args.requestContext, route.providerId, exhaustedAccountSelectionId(route.providerId));
+    markRequestAccountRoutingExhausted(args.requestContext, route.providerId);
     return false;
   }
 
@@ -1030,11 +1030,7 @@ export class AccountStartNoticeProcessor implements Processor {
       }
     }
 
-    if (
-      route &&
-      getRequestAccountSelection(args.requestContext, route.providerId) ===
-        exhaustedAccountSelectionId(route.providerId)
-    ) {
+    if (route && isRequestAccountRoutingExhausted(args.requestContext, route.providerId)) {
       throw new ProviderAuthRequiredError(
         `All saved ${route.providerId} subscriptions are exhausted for ${route.packId} · ${route.modelId}.`,
       );

@@ -16,7 +16,6 @@ import {
   loadSettings,
   resolveDefaultThinkingLevel,
   resolveModePackModels,
-  saveSettings,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   THREAD_FALLBACK_STATUS_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
@@ -379,20 +378,23 @@ export async function handlePackFallbackState(
 
   const currentModeId = ectx.state.session.mode.get();
   const currentModeModel = packModels[currentModeId] ?? pending.toModelId;
-  if (pending.toPackId.startsWith('custom:')) {
-    settings.models.modeDefaults = { ...packModels };
-  } else {
-    settings.models.modeDefaults = {};
-  }
-  settings.models.activeModelPackId = pending.toPackId;
-  settings.models.subagentModels = {};
+
+  // Fallback state is thread-scoped: the landed pack, its mode models, and any
+  // thinking adjustment are persisted to the originating thread (above) and to
+  // session state — never to shared settings. Writing them globally would make
+  // a hop in this thread change the defaults of every other thread, including
+  // ones that never hopped.
+  const runtimeSettings = {
+    ...settings,
+    models: { ...settings.models, activeModelPackId: pending.toPackId },
+  };
 
   // OpenAI thinking fixups — same rules as applyPack.
   const hasOpenAI = Object.values(packModels).some(modelId => modelId.startsWith('openai/'));
   const sessionOverride = (ectx.state.session.state.get() as Record<string, unknown>)?.thinkingLevel as
     | string
     | undefined;
-  const defaultThinking = resolveDefaultThinkingLevel(settings, currentModeId);
+  const defaultThinking = resolveDefaultThinkingLevel(runtimeSettings, currentModeId);
   const effectiveThinking = sessionOverride ?? defaultThinking.level;
   const stateUpdates: Record<string, unknown> = { activeModelPackId: pending.toPackId, ...subagentState };
   if (
@@ -401,7 +403,7 @@ export async function handlePackFallbackState(
     defaultThinking.source === 'global' &&
     defaultThinking.level === 'off'
   ) {
-    settings.preferences.thinkingLevel = 'low';
+    stateUpdates.thinkingLevel = 'low';
   } else if (currentModeModel.startsWith('openai/') && effectiveThinking === 'max') {
     stateUpdates.thinkingLevel = 'xhigh';
   }
@@ -422,7 +424,6 @@ export async function handlePackFallbackState(
     });
   }
   ectx.state.fallbackStatus = fallbackStatus;
-  saveSettings(settings);
   ectx.updateStatusLine();
   await ectx.refreshModelAuthStatus();
   // Clear only after every durable/session write succeeds. While this remains

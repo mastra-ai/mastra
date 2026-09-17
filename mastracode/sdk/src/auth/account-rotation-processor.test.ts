@@ -21,6 +21,7 @@ vi.hoisted(() => {
 });
 
 import { setCredentialStoreProvider } from '../agents/credential-resolver.js';
+import { createRequestScopedCredentialStore } from '../agents/model.js';
 import { THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY } from '../onboarding/settings.js';
 import {
   ACCOUNT_SWITCH_PART_TYPE,
@@ -33,7 +34,12 @@ import {
   providerFromError,
   providerFromModelId,
 } from './account-rotation-processor.js';
-import { getRequestAccountSelection, setRequestAccountSelection } from './account-routing-context.js';
+import {
+  getRequestAccountSelection,
+  isRequestAccountRoutingExhausted,
+  markRequestAccountRoutingExhausted,
+  setRequestAccountSelection,
+} from './account-routing-context.js';
 import { ProviderAuthRequiredError } from './provider-auth-error.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { AuthStorage } from './storage.js';
@@ -1057,8 +1063,30 @@ describe('pack-fallback parts', () => {
     expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: true });
     expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: false });
 
-    expect(getRequestAccountSelection(args.requestContext, PROVIDER)).toBe('anthropic:all-exhausted');
+    // Exhaustion is recorded as a flag, not a sentinel id: a sentinel would
+    // reach credential lookup and make `get()` fall back to the active
+    // (exhausted) account. The only recorded selection is the real account the
+    // fallback pack's routing landed on.
+    expect(isRequestAccountRoutingExhausted(args.requestContext, PROVIDER)).toBe(true);
+    expect(getRequestAccountSelection(args.requestContext, PROVIDER)).toBe(seeded.accountB.id);
     expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
+  });
+
+  it('fails every credential read once routing marks the provider exhausted', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const requestContext = new RequestContext();
+    markRequestAccountRoutingExhausted(requestContext, PROVIDER);
+    const scoped = createRequestScopedCredentialStore(seeded.storage, requestContext);
+
+    // Falling through to the base store would hand back the active account —
+    // the one routing just rejected.
+    expect(scoped.get(PROVIDER)).toBeUndefined();
+    expect(scoped.getStoredApiKey(PROVIDER)).toBeUndefined();
+    expect(await scoped.getApiKey(PROVIDER)).toBeUndefined();
+    expect(await scoped.getOAuthCredential?.(PROVIDER)).toBeUndefined();
+    // A different provider on the same request is unaffected.
+    seeded.storage.setStoredApiKey('openai-codex', 'sk-other');
+    expect(scoped.getStoredApiKey('openai-codex')).toBe('sk-other');
   });
 
   it('persists exhausted accounts per pack/model so later requests do not retry the preference', async () => {
