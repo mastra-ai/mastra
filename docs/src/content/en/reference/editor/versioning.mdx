@@ -48,6 +48,16 @@ Selecting a label resolves its current target for that request. A later request 
 
 For an agent execution, Mastra resolves the root selector and every explicit `versions.agents` selector before behavior begins. It records the resulting immutable version IDs with the run, so suspension, tool approval, retry, and recovery continue on the same versions even if a label moves. A later, separate execution resolves the label again and can therefore use its new target.
 
+### Storage and deployment limits
+
+Custom labels apply to agents only, not prompt blocks, skills, or other versioned resources. Built-in InMemory storage supports labels for the lifetime of the process. Filesystem storage retains labeled versions across restarts, but coordinates writes only within one process. Use one writer process for each filesystem storage path.
+
+LibSQL, Turso, PostgreSQL, and PostgreSQL VNext persist custom labels. PostgreSQL resolves explicit labels and version IDs against the primary database so read-replica lag can't change the selected target. ClickHouse and Cloudflare table mappings provide build compatibility only, without custom-label persistence.
+
+Upgrade core, editor, and the selected storage adapter together before enabling labels, and update server and client packages before using their label APIs. Mixing older database writers with label-aware writers can bypass labeled-version deletion protection.
+
+Run pinning doesn't add persisted trace or evaluation provenance, or a historical evaluation interface.
+
 ## Code source
 
 With `source: 'code'`, active agent overrides are serialized as deterministic JSON under `<codePath>/agents/<encodedAgentId>.json`. The default `codePath` is `./mastra/editor`.
@@ -59,6 +69,8 @@ See [`MastraEditor`](/reference/editor/mastra-editor#source) for source options.
 ## Select an agent version
 
 Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a selector returns the registered code-defined agent. Pass exactly one of `status`, `versionId`, or `label` to apply a stored override. See [Select a version](/docs/studio/editor#select-a-version) for a TypeScript example.
+
+Direct editor namespace lookups also reject conflicting selectors. Exact version lookups verify that the version belongs to the requested resource, including non-agent resources. This doesn't enable custom labels for those resources.
 
 ```typescript title="Select an agent by label"
 const candidate = await mastra.getAgentById('support-agent', {

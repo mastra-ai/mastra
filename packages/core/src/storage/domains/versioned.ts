@@ -167,8 +167,14 @@ export abstract class VersionedStorageDomain<
    */
   protected abstract readonly versionMetadataFields: string[];
 
-  /** Name of the version row field that identifies its owning entity. */
-  protected abstract readonly versionParentIdField: string;
+  /**
+   * Optional version row field that identifies its owning entity.
+   * Existing custom domains can omit this: exact resolution verifies ownership
+   * through `getVersionByNumber(entityId, versionNumber)` instead. A missing or
+   * mismatched scoped result fails closed. Set this field to avoid that extra
+   * read and verify ownership directly from the consistently read version row.
+   */
+  protected readonly versionParentIdField?: string;
 
   /**
    * Entity discriminator allowed to use computed labels in this release.
@@ -411,7 +417,13 @@ export abstract class VersionedStorageDomain<
       });
     }
 
-    const parentId = (version as Record<string, unknown>)[this.versionParentIdField];
+    let parentId: unknown;
+    if (this.versionParentIdField !== undefined) {
+      parentId = (version as Record<string, unknown>)[this.versionParentIdField];
+    } else {
+      const scopedVersion = await this.getVersionByNumber(entity.id, version.versionNumber);
+      parentId = scopedVersion?.id === versionId && version.id === versionId ? entity.id : undefined;
+    }
     if (parentId !== entity.id) {
       throw createVersionLabelError(
         options.integrityError ? 'VERSION_LABEL_INTEGRITY_ERROR' : 'VERSION_NOT_OWNED_BY_ENTITY',
