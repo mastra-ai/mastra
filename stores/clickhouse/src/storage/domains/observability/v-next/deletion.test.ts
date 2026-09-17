@@ -59,7 +59,11 @@ describe('ClickHouse deletion lifecycle', () => {
         },
       ],
       format: 'JSONEachRow',
-      clickhouse_settings: expect.objectContaining({ insert_quorum: 'auto', insert_quorum_parallel: 1 }),
+      clickhouse_settings: expect.objectContaining({
+        insert_quorum: 'auto',
+        insert_quorum_parallel: 0,
+        async_insert: 0,
+      }),
     });
     const deleteCommand = {
       query_params: {
@@ -153,7 +157,7 @@ describe('ClickHouse deletion lifecycle', () => {
       expect(insert.mock.invocationCallOrder[1]).toBeGreaterThan(command.mock.invocationCallOrder[0]!);
     }
     expect(feedbackClient.insert.mock.calls[1]?.[0].clickhouse_settings).toEqual(
-      expect.objectContaining({ insert_quorum: 'auto', insert_quorum_parallel: 1 }),
+      expect.objectContaining({ insert_quorum: 'auto', insert_quorum_parallel: 0, async_insert: 0 }),
     );
     expect(scoresClient.insert.mock.calls[1]?.[0].clickhouse_settings).not.toHaveProperty('insert_quorum');
   });
@@ -209,22 +213,10 @@ describe('ClickHouse deletion lifecycle', () => {
         query_params: { feedbackIds: ['feedback-1'] },
       }),
     );
-    expect(insert).toHaveBeenCalledTimes(3);
-    expect(insert).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        table: TABLE_DELETION_REQUESTS,
-        values: [
-          expect.objectContaining({
-            organizationId: 'org-1',
-            resourceId: 'resource-1',
-            signal: 'feedback',
-            predicateType: 'itemIds',
-            predicateValues: ['feedback-1'],
-          }),
-        ],
-      }),
-    );
+    // The applied request already covers this id: re-hiding writes no new audit
+    // row, so the only insert is the review-status write itself.
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(insert.mock.calls.map(([call]) => call.table)).not.toContain(TABLE_DELETION_REQUESTS);
     expect(command).toHaveBeenCalledWith({
       query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId IN ({fid_0:String}) AND organizationId = {delOrganizationId:String} AND resourceId = {delResourceId:String}`,
       query_params: {
@@ -234,7 +226,8 @@ describe('ClickHouse deletion lifecycle', () => {
       },
       clickhouse_settings: { lightweight_deletes_sync: '2' },
     });
-    expect(insert.mock.invocationCallOrder[1]).toBeLessThan(command.mock.invocationCallOrder[0]!);
+    expect(command).toHaveBeenCalledTimes(1);
+    expect(insert.mock.invocationCallOrder[0]).toBeLessThan(command.mock.invocationCallOrder[0]!);
   });
 
   it('reads the guard without sequential consistency when replication is not configured', async () => {

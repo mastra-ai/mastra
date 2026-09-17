@@ -71,7 +71,8 @@ describe('recordDeletionRequest', () => {
       expect.objectContaining({
         clickhouse_settings: expect.objectContaining({
           insert_quorum: 'auto',
-          insert_quorum_parallel: 1,
+          insert_quorum_parallel: 0,
+          async_insert: 0,
         }),
       }),
     );
@@ -133,7 +134,11 @@ describe('markDeletionRequestApplied', () => {
 
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
-        clickhouse_settings: expect.objectContaining({ insert_quorum: 'auto', insert_quorum_parallel: 1 }),
+        clickhouse_settings: expect.objectContaining({
+          insert_quorum: 'auto',
+          insert_quorum_parallel: 0,
+          async_insert: 0,
+        }),
       }),
     );
   });

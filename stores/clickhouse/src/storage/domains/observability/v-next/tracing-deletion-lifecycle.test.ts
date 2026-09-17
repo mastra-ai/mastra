@@ -98,7 +98,11 @@ describe('batchDeleteTraces deletion requests', () => {
     await batchDeleteTraces(client, { traceIds: ['trace-1'] }, { cluster: 'test_cluster' });
 
     expect(insert.mock.calls[0]?.[0]).toMatchObject({
-      clickhouse_settings: expect.objectContaining({ insert_quorum: 'auto', insert_quorum_parallel: 1 }),
+      clickhouse_settings: expect.objectContaining({
+        insert_quorum: 'auto',
+        insert_quorum_parallel: 0,
+        async_insert: 0,
+      }),
     });
     const queries = command.mock.calls.map(([call]) => (call as { query: string }).query);
     expect(queries.every(query => query.startsWith('DELETE FROM'))).toBe(true);

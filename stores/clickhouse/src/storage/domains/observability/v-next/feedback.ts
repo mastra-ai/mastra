@@ -237,24 +237,16 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
  * on the table's configured retention TTL. The delta table is intentionally not
  * touched and expires through its fixed two-day TTL.
  */
-export async function deleteFeedback(
+/**
+ * Scoped lightweight DELETE for feedback rows. Shared by the delete API and by
+ * the post-write guard in `updateFeedbackReviewStatus`, which re-hides a row
+ * that an already-applied request covers and therefore needs no new audit row.
+ */
+async function hideFeedbackRows(
   client: ClickHouseClient,
   args: DeleteFeedbackArgs,
   replication?: ClickhouseReplicationConfig,
 ): Promise<void> {
-  if (args.feedbackIds.length === 0) return;
-
-  const request = await recordDeletionRequest(client, {
-    requestId: randomUUID(),
-    organizationId: args.organizationId,
-    resourceId: args.resourceId,
-    signal: 'feedback',
-    predicateType: 'itemIds',
-    predicateValues: [...args.feedbackIds],
-    requestedAt: new Date().toISOString(),
-    replication,
-  });
-
   const params: Record<string, string> = {};
   const idPlaceholders: string[] = [];
   for (let i = 0; i < args.feedbackIds.length; i++) {
@@ -273,16 +265,34 @@ export async function deleteFeedback(
     params.delResourceId = args.resourceId;
   }
 
-  const hideRows = () =>
-    client.command({
-      query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE ${conditions.join(' AND ')}`,
-      query_params: params,
-      clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
-    });
+  await client.command({
+    query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE ${conditions.join(' AND ')}`,
+    query_params: params,
+    clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
+  });
+}
 
-  await hideRows();
+export async function deleteFeedback(
+  client: ClickHouseClient,
+  args: DeleteFeedbackArgs,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+
+  const request = await recordDeletionRequest(client, {
+    requestId: randomUUID(),
+    organizationId: args.organizationId,
+    resourceId: args.resourceId,
+    signal: 'feedback',
+    predicateType: 'itemIds',
+    predicateValues: [...args.feedbackIds],
+    requestedAt: new Date().toISOString(),
+    replication,
+  });
+
+  await hideFeedbackRows(client, args, replication);
   await markDeletionRequestApplied(client, request, replication);
-  await hideRows();
+  await hideFeedbackRows(client, args, replication);
 }
 
 // ============================================================================
@@ -375,7 +385,9 @@ export async function updateFeedbackReviewStatus(
       replication,
     )
   ) {
-    await deleteFeedback(
+    // The applied request already covers this id, so re-hide without recording
+    // another audit row.
+    await hideFeedbackRows(
       client,
       {
         feedbackIds: [feedbackId],

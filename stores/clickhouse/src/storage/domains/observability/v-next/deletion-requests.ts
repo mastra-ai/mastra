@@ -33,6 +33,22 @@ export interface RecordDeletionRequestArgs {
 
 const EPOCH = '1970-01-01T00:00:00.000Z';
 
+/**
+ * Quorum settings for deletion-request writes on replicated clusters.
+ *
+ * `select_sequential_consistency` on the mutation guard only holds when quorum
+ * inserts are serialized: parallel quorum inserts can land on different replica
+ * sets, so no single replica is guaranteed to hold every write. ClickHouse also
+ * rejects quorum inserts that are async (`async_insert` defaults to 1 on recent
+ * servers), so the audit write is pinned synchronous here. Both are required
+ * together; relaxing either silently drops the guard's read guarantee.
+ */
+const QUORUM_INSERT_SETTINGS = {
+  insert_quorum: 'auto',
+  insert_quorum_parallel: 0,
+  async_insert: 0,
+} as const;
+
 export async function recordDeletionRequest(
   client: ClickHouseClient,
   args: RecordDeletionRequestArgs,
@@ -56,7 +72,7 @@ export async function recordDeletionRequest(
     values: [row],
     format: 'JSONEachRow',
     clickhouse_settings: isReplicationConfigured(args.replication)
-      ? { ...CH_INSERT_SETTINGS, insert_quorum: 'auto', insert_quorum_parallel: 1 }
+      ? { ...CH_INSERT_SETTINGS, ...QUORUM_INSERT_SETTINGS }
       : CH_INSERT_SETTINGS,
   });
 
@@ -86,7 +102,7 @@ export async function markDeletionRequestApplied(
     values: [applied],
     format: 'JSONEachRow',
     clickhouse_settings: isReplicationConfigured(replication)
-      ? { ...CH_INSERT_SETTINGS, insert_quorum: 'auto', insert_quorum_parallel: 1 }
+      ? { ...CH_INSERT_SETTINGS, ...QUORUM_INSERT_SETTINGS }
       : CH_INSERT_SETTINGS,
   });
 
