@@ -42,6 +42,8 @@ export type ExperimentResultPanelProps = {
   itemId?: string;
   /** Rendered instead of the result body while `itemId` is set but `result` is missing (loading / not found). */
   fallback?: ReactNode;
+  /** Accessible dialog name. Defaults to `Experiment item <itemId>` when opened by item, else `Result <id>`. */
+  title?: string;
   scores?: ExperimentResultPanelScore[];
   className?: string;
   onPrevious?: () => void;
@@ -71,13 +73,14 @@ export function ExperimentResultPanel({
   result,
   itemId,
   fallback,
+  title,
   className,
   onClose,
   ...bodyProps
 }: ExperimentResultPanelProps) {
-  const title = result ? `Result ${result.id}` : `Experiment item ${itemId ?? ''}`;
+  const dialogTitle = title ?? (itemId ? `Experiment item ${itemId}` : `Result ${result?.id ?? ''}`);
   return (
-    <DataPanel open={!!(result ?? itemId)} onClose={onClose} title={title} depth={1} className={className}>
+    <DataPanel open={!!(result ?? itemId)} onClose={onClose} title={dialogTitle} depth={1} className={className}>
       {result ? (
         <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
       ) : itemId ? (

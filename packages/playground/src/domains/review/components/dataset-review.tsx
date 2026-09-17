@@ -509,6 +509,7 @@ export function DatasetReview({
   const detailPanel = (
     <ExperimentResultDetail
       result={featuredItem ?? undefined}
+      title={`Review item ${featuredItem?.id ?? ''}`}
       scores={featuredItem ? featuredScoresByItemId?.[featuredItem.itemId] : undefined}
       experimentLink={
         featuredItem?.experimentId

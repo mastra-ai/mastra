@@ -75,10 +75,14 @@ const renderExperimentRoute = (initialPath = `/experiments/${EXPERIMENT_ID}`) =>
 };
 
 /**
- * The route shows a loading drawer until the result is in the list, then swaps in the
- * result drawer (`Result <id>`). Wait for the latter so assertions target the live node.
+ * The route's drawer is named `Experiment item <itemId>` throughout; it shows a loading
+ * body until the result is in the list. Wait for the result body so assertions target it.
  */
-const findResultDialog = (resultId: string) => screen.findByRole('dialog', { name: `Result ${resultId}` });
+const findResultDialog = async (resultId: string) => {
+  const dialog = await screen.findByRole('dialog', { name: `Experiment item ${resultId.replace('res-', 'item-')}` });
+  await within(dialog).findByRole('heading', { name: `Result # ${resultId}` });
+  return dialog;
+};
 
 let metricRequests: GetMetricAggregateArgs[] = [];
 

@@ -245,7 +245,7 @@ describe('Review Queue page', () => {
     it('opens that result in the review dialog', async () => {
       renderPage(`?experiment=${EXPERIMENT_ID}&review=res-3`);
 
-      const dialog = await screen.findByRole('dialog', { name: 'Result res-3' });
+      const dialog = await screen.findByRole('dialog', { name: 'Review item res-3' });
       expect(dialog.textContent).toContain('third question');
     });
   });
