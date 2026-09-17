@@ -18,6 +18,7 @@ import type {
 
 import { TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
 import { CH_SETTINGS } from './helpers';
+import { currentScoresRelation } from './scores';
 
 type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 'UTC')";
 type FieldDefinition = { sql: string; parameterType: ClickHouseParameterType };
@@ -330,6 +331,13 @@ function compileClickHouseTraceScope(
   )`);
   }
   if (relationCollections.has('scores')) {
+    ctes.push(`score_ids_in_root_scope AS (
+    SELECT scoreId
+    FROM ${TABLE_SCORE_EVENTS} FINAL
+    WHERE isNotNull(traceId)
+      AND traceId IN (SELECT traceId FROM root_scope)
+    GROUP BY scoreId
+  )`);
     ctes.push(`current_scores AS (
     SELECT
       traceId,
@@ -342,11 +350,9 @@ function compileClickHouseTraceScope(
       entityVersionId,
       parentEntityVersionId,
       rootEntityVersionId
-    FROM ${TABLE_SCORE_EVENTS}
-    WHERE isNotNull(traceId)
-      AND traceId IN (SELECT traceId FROM root_scope)
-    ORDER BY scoreId, timestamp DESC
-    LIMIT 1 BY scoreId
+    FROM ${currentScoresRelation('scoreId IN (SELECT scoreId FROM score_ids_in_root_scope)')} AS current
+    WHERE isNotNull(current.traceId)
+      AND current.traceId IN (SELECT traceId FROM root_scope)
   )`);
   }
   if (relationCollections.has('feedback')) {

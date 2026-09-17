@@ -88,16 +88,35 @@ function pushScoreIdentity(
 // Writes
 // ---------------------------------------------------------------------------
 
+function scoreRewriteConflict(row: Record<string, unknown>): string {
+  const replacementColumns = Object.keys(row).filter(column => column !== 'scoreId' && column !== 'timestamp');
+  return `ON CONFLICT ("scoreId", "timestamp") DO UPDATE SET ${[
+    ...replacementColumns.map(column => `"${column}" = EXCLUDED."${column}"`),
+    '"cursorId" = EXCLUDED."cursorId"',
+    '"xactId" = EXCLUDED."xactId"',
+  ].join(', ')}`;
+}
+
+function collapseExactScoreConflicts(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const records = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const key = `${String(row.scoreId)}\u0000${String(row.timestamp)}`;
+    records.delete(key);
+    records.set(key, row);
+  }
+  return [...records.values()];
+}
+
 export async function createScore(client: DbClient, schema: string, args: CreateScoreArgs): Promise<void> {
   const row = scoreRecordToRow(args.score);
-  const insert = buildInsert(schema, TABLE_SCORE_EVENTS, [row]);
+  const insert = buildInsert(schema, TABLE_SCORE_EVENTS, [row], scoreRewriteConflict(row));
   if (insert) await client.query(insert.text, insert.values);
 }
 
 export async function batchCreateScores(client: DbClient, schema: string, args: BatchCreateScoresArgs): Promise<void> {
   if (args.scores.length === 0) return;
-  const rows = args.scores.map(scoreRecordToRow);
-  const insert = buildInsert(schema, TABLE_SCORE_EVENTS, rows);
+  const rows = collapseExactScoreConflicts(args.scores.map(scoreRecordToRow));
+  const insert = buildInsert(schema, TABLE_SCORE_EVENTS, rows, scoreRewriteConflict(rows[0]!));
   if (insert) await client.query(insert.text, insert.values);
 }
 
@@ -128,8 +147,14 @@ export async function deleteScores(client: DbClient, schema: string, args: Delet
 }
 
 // ---------------------------------------------------------------------------
-// List
+// Current-score projection and page reads
 // ---------------------------------------------------------------------------
+
+export function currentScoresRelation(table: string, alias: 'current_scores' | 's' = 'current_scores'): string {
+  return `(SELECT DISTINCT ON ("scoreId") *
+           FROM ${table}
+           ORDER BY "scoreId", "cursorId" DESC, "timestamp" DESC) AS ${alias}`;
+}
 
 export async function listScores(client: DbClient, schema: string, args: ListScoresArgs): Promise<ListScoresResponse> {
   const { mode, filters, pagination, orderBy, after, limit } = listScoresArgsSchema.parse(args);
@@ -140,16 +165,23 @@ export async function listScores(client: DbClient, schema: string, args: ListSco
     return listScoresDelta(client, table, filters, after, limit);
   }
 
-  return listScoresPage(client, table, filters, pagination.page, pagination.perPage, orderBy.field, orderBy.direction);
+  return listScoresPage(
+    client,
+    currentScoresRelation(table),
+    filters,
+    pagination.page,
+    pagination.perPage,
+    orderBy.field,
+    orderBy.direction,
+  );
 }
 
 export async function getScoreById(client: DbClient, schema: string, scoreId: string): Promise<ScoreRecord | null> {
+  const table = qualifiedTable(schema, TABLE_SCORE_EVENTS);
   const row = await client.oneOrNone<Record<string, any>>(
     `SELECT ${SCORE_SELECT_COLUMNS}
-     FROM ${qualifiedTable(schema, TABLE_SCORE_EVENTS)}
-     WHERE "scoreId" = $1
-     ORDER BY "timestamp" DESC
-     LIMIT 1`,
+     FROM ${currentScoresRelation(table)}
+     WHERE "scoreId" = $1`,
     [scoreId],
   );
   return row ? rowToScoreRecord(row) : null;
@@ -216,7 +248,7 @@ async function runScoreAggregateQuery(
 
   const sql = `
     SELECT ${aggregationSql(args.aggregation, '"score"')} AS "value"
-    FROM ${qualifiedTable(schema, TABLE_SCORE_EVENTS)}
+    FROM ${currentScoresRelation(qualifiedTable(schema, TABLE_SCORE_EVENTS))}
     ${whereOrEmpty(acc)}
   `;
   const row = await client.oneOrNone<{ value: unknown }>(sql, acc.params);
@@ -268,7 +300,7 @@ export async function getScoreBreakdown(
   const sql = `
     SELECT ${resolved.map(e => e.selectSql).join(', ')},
            ${aggregationSql(args.aggregation, '"score"')} AS "value"
-    FROM ${qualifiedTable(schema, TABLE_SCORE_EVENTS)}
+    FROM ${currentScoresRelation(qualifiedTable(schema, TABLE_SCORE_EVENTS))}
     ${whereOrEmpty(acc)}
     GROUP BY ${resolved.map(e => e.alias).join(', ')}
     ORDER BY "value" DESC NULLS LAST
@@ -307,7 +339,7 @@ export async function getScoreTimeSeries(
       SELECT ${bucket} AS bucket,
              ${resolved.map(e => e.selectSql).join(', ')},
              ${aggregationSql(args.aggregation, '"score"')} AS "value"
-      FROM ${qualifiedTable(schema, TABLE_SCORE_EVENTS)}
+      FROM ${currentScoresRelation(qualifiedTable(schema, TABLE_SCORE_EVENTS))}
       ${whereOrEmpty(acc)}
       GROUP BY bucket, ${resolved.map(e => e.alias).join(', ')}
       ORDER BY bucket
@@ -339,7 +371,7 @@ export async function getScoreTimeSeries(
   const sql = `
     SELECT ${bucket} AS bucket,
            ${aggregationSql(args.aggregation, '"score"')} AS "value"
-    FROM ${qualifiedTable(schema, TABLE_SCORE_EVENTS)}
+    FROM ${currentScoresRelation(qualifiedTable(schema, TABLE_SCORE_EVENTS))}
     ${whereOrEmpty(acc)}
     GROUP BY bucket
     ORDER BY bucket
@@ -380,7 +412,7 @@ export async function getScorePercentiles(
 
   const sql = `
     SELECT ${bucket} AS bucket, ${percentileSelect}
-    FROM ${qualifiedTable(schema, TABLE_SCORE_EVENTS)}
+    FROM ${currentScoresRelation(qualifiedTable(schema, TABLE_SCORE_EVENTS))}
     ${whereOrEmpty(acc)}
     GROUP BY bucket
     ORDER BY bucket

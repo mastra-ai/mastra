@@ -67,7 +67,14 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params)).toContain("factuality' OR 1");
     expect(compiled.query.match(/EXISTS \(/g)).toHaveLength(1);
     expect(compiled.query).toContain('s.traceId = r.traceId');
+    expect(compiled.query).toContain('FROM mastra_score_events FINAL');
+    expect(compiled.query).toContain(
+      'ORDER BY scoreId, writeVersion DESC, timestamp DESC, _currentScoreFingerprint DESC',
+    );
     expect(compiled.query).toContain('LIMIT 1 BY scoreId');
+    expect(compiled.query.indexOf('LIMIT 1 BY scoreId')).toBeLessThan(
+      compiled.query.indexOf('current.traceId IN (SELECT traceId FROM root_scope)'),
+    );
     expect(compiled.query).toContain('scorerVersion,');
     expect(compiled.query).toContain('scoreSource,');
     expect(compiled.query).toContain('timestamp,');
@@ -191,8 +198,9 @@ describe('ClickHouse advanced trace query', () => {
     expect(spanOnly.match(/FROM mastra_span_events/g)).toHaveLength(1);
     expect(spanOnly).not.toContain('current_scores AS');
     expect(spanOnly).not.toContain('mastra_score_events');
+    expect(scoreOnly.match(/score_ids_in_root_scope AS/g)).toHaveLength(1);
     expect(scoreOnly.match(/current_scores AS/g)).toHaveLength(1);
-    expect(scoreOnly.match(/FROM mastra_score_events/g)).toHaveLength(1);
+    expect(scoreOnly.match(/FROM mastra_score_events/g)).toHaveLength(2);
     expect(scoreOnly).not.toContain('current_spans AS');
     expect(scoreOnly).not.toContain('mastra_span_events');
     expect(repeated.match(/current_spans AS/g)).toHaveLength(1);

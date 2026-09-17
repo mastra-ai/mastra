@@ -17,6 +17,7 @@ import type {
 
 import type { DbClient, TxClient } from '../../../client';
 import { qualifiedTable, TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import { currentScoresRelation } from './scores';
 
 type SqlFragment = { sql: string; values: unknown[] };
 type FieldRegistry<TField extends string> = Record<TField, string>;
@@ -224,14 +225,6 @@ function latestSpanPredicate(spanTable: string): string {
   )`;
 }
 
-function latestScorePredicate(scoreTable: string): string {
-  return `NOT EXISTS (
-    SELECT 1 FROM ${scoreTable} newer
-    WHERE newer."scoreId" = s."scoreId"
-      AND newer."cursorId" > s."cursorId"
-  )`;
-}
-
 function latestFeedbackPredicate(feedbackTable: string): string {
   return `NOT EXISTS (
     SELECT 1 FROM ${feedbackTable} newer
@@ -415,10 +408,9 @@ function compilePostgresTraceScope(
       s."entityVersionId",
       s."parentEntityVersionId",
       s."rootEntityVersionId"
-    FROM ${scoreTable} s
+    FROM ${currentScoresRelation(scoreTable, 's')}
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
-      AND ${latestScorePredicate(scoreTable)}
   )`);
   }
   if (relationCollections.has('feedback')) {

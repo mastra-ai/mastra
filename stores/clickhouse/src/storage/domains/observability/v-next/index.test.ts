@@ -37,7 +37,7 @@ import {
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
 } from './ddl';
-import { feedbackRecordToRow } from './helpers';
+import { feedbackRecordToRow, scoreRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
 import { compileClickHouseTraceQuery, runWithClickHouseTraceQueryTimeout } from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
@@ -232,6 +232,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         request: Record<string, unknown>,
         expectedTable: string,
         expectPrimaryKey = true,
+        expectedIndex?: string,
       ) => {
         const plan = planTraceQuery(
           parseTraceQueryRequest({
@@ -251,6 +252,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         const explain = await explainResult.text();
         expect(explain).toContain(expectedTable);
         if (expectPrimaryKey) expect(explain).toContain('PrimaryKey');
+        if (expectedIndex) expect(explain).toContain(expectedIndex);
 
         const queryId = `trace-query-perf-${randomUUID()}`;
         await runWithClickHouseTraceQueryTimeout(client, 15_000, compiled, queryId);
@@ -280,6 +282,8 @@ LIMIT 1`,
       const scoreReadRows = await executeAndReadRows(
         { where: { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } } },
         TABLE_SCORE_EVENTS,
+        true,
+        'idx_scoreId',
       );
       const repeatedSpanReadRows = await executeAndReadRows(
         {
@@ -304,6 +308,8 @@ LIMIT 1`,
           },
         },
         TABLE_SCORE_EVENTS,
+        true,
+        'idx_scoreId',
       );
       const mixedReadRows = await executeAndReadRows(
         {
@@ -316,18 +322,18 @@ LIMIT 1`,
           },
         },
         TABLE_SPAN_EVENTS,
+        true,
+        'idx_scoreId',
       );
       const groupedReadRows = await executeAndReadRows({ group: { by: ['threadId'] } }, TABLE_TRACE_ROOTS, false);
 
-      for (const readRows of [
-        spanReadRows,
-        scoreReadRows,
-        repeatedSpanReadRows,
-        repeatedScoreReadRows,
-        mixedReadRows,
-      ]) {
-        expect(readRows).toBeLessThan(fixtureSize);
-      }
+      expect(spanReadRows).toBeLessThan(fixtureSize);
+      expect(repeatedSpanReadRows).toBeLessThan(fixtureSize);
+      // Score predicates need one trace-key lookup to discover candidate score IDs and
+      // one score-ID lookup to select each candidate's global current version.
+      expect(scoreReadRows).toBeLessThan(fixtureSize * 2);
+      expect(repeatedScoreReadRows).toBeLessThan(fixtureSize * 2);
+      expect(mixedReadRows).toBeLessThan(fixtureSize * 3);
       expect(groupedReadRows).toBeLessThan(10);
     } finally {
       await client.close();
@@ -1974,6 +1980,212 @@ LIMIT 1`,
         await expect(storage.listScores({ filters: { source: 'manual' } as any })).rejects.toThrow(
           'Deprecated `source` filter is not supported for scores; use `scoreSource or executionSource` instead.',
         );
+      });
+
+      it('allocates increasing write versions across separate writes regardless of timestamp', async () => {
+        const score = {
+          scoreId: 'score-physical-supersession',
+          timestamp: new Date('2026-01-02T00:00:00Z'),
+          traceId: 'score-physical-trace',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        };
+        await storage.createScore({ score });
+        await storage.createScore({
+          score: {
+            ...score,
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            score: 0.8,
+          },
+        });
+
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        try {
+          const result = await client.query({
+            query: `SELECT score, toString(writeVersion) AS writeVersion FROM ${TABLE_SCORE_EVENTS} FINAL WHERE scoreId = {scoreId:String} ORDER BY writeVersion`,
+            query_params: { scoreId: score.scoreId },
+            format: 'JSONEachRow',
+          });
+          expect(await result.json<{ score: number; writeVersion: string }>()).toEqual([
+            { score: 0.2, writeVersion: '1' },
+            { score: 0.8, writeVersion: '2' },
+          ]);
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('allocates increasing write versions for repeated score IDs within one batch', async () => {
+        const score = {
+          scoreId: 'score-batch-write-version',
+          timestamp: new Date('2026-01-02T00:00:00Z'),
+          traceId: 'score-batch-version-trace',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        };
+        await storage.batchCreateScores({
+          scores: [
+            score,
+            {
+              ...score,
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              traceId: 'score-batch-version-current-trace',
+              score: 0.8,
+            },
+          ],
+        });
+
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        try {
+          const result = await client.query({
+            query: `SELECT traceId, score, toString(writeVersion) AS writeVersion FROM ${TABLE_SCORE_EVENTS} FINAL WHERE scoreId = {scoreId:String} ORDER BY writeVersion`,
+            query_params: { scoreId: score.scoreId },
+            format: 'JSONEachRow',
+          });
+          expect(await result.json<{ traceId: string; score: number; writeVersion: string }>()).toEqual([
+            { traceId: 'score-batch-version-trace', score: 0.2, writeVersion: '1' },
+            { traceId: 'score-batch-version-current-trace', score: 0.8, writeVersion: '2' },
+          ]);
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('selects equal-version legacy score rows independently of insertion order', async () => {
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        const first = scoreRecordToRow({
+          scoreId: 'score-equal-write-version',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-equal-a',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        });
+        const second = scoreRecordToRow({
+          scoreId: 'score-equal-write-version',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-equal-b',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.8,
+          reason: null,
+          metadata: null,
+        });
+
+        try {
+          await client.insert({ table: TABLE_SCORE_EVENTS, values: [first, second], format: 'JSONEachRow' });
+          const forwardWinner = await storage.getScoreById('score-equal-write-version');
+
+          await storage.dangerouslyClearAll();
+          await client.insert({ table: TABLE_SCORE_EVENTS, values: [second, first], format: 'JSONEachRow' });
+          const reverseWinner = await storage.getScoreById('score-equal-write-version');
+
+          expect(reverseWinner).toEqual(forwardWinner);
+          expect([0.2, 0.8]).toContain(forwardWinner?.score);
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('keeps the same current score before and after physical merges', async () => {
+        const score = {
+          scoreId: 'score-current-across-merge',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'score-merge-old-trace',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        };
+        await storage.createScore({ score });
+        await storage.createScore({
+          score: { ...score, traceId: 'score-merge-current-trace', score: 0.8 },
+        });
+
+        expect(await storage.getScoreById(score.scoreId)).toMatchObject({
+          traceId: 'score-merge-current-trace',
+          score: 0.8,
+        });
+
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        try {
+          await client.command({ query: `OPTIMIZE TABLE ${TABLE_SCORE_EVENTS} FINAL` });
+          expect(await storage.getScoreById(score.scoreId)).toMatchObject({
+            traceId: 'score-merge-current-trace',
+            score: 0.8,
+          });
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('starts post-migration score replacements at version 1 above legacy version-0 rows', async () => {
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        const legacyScore = {
+          scoreId: 'score-legacy-write-version',
+          timestamp: new Date('2026-01-02T00:00:00Z'),
+          traceId: 'score-legacy-trace',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        };
+        try {
+          await client.insert({
+            table: TABLE_SCORE_EVENTS,
+            values: [scoreRecordToRow(legacyScore)],
+            format: 'JSONEachRow',
+          });
+          await storage.createScore({
+            score: {
+              ...legacyScore,
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              score: 0.8,
+            },
+          });
+
+          const result = await client.query({
+            query: `SELECT score, toString(writeVersion) AS writeVersion FROM ${TABLE_SCORE_EVENTS} FINAL WHERE scoreId = {scoreId:String} ORDER BY writeVersion`,
+            query_params: { scoreId: legacyScore.scoreId },
+            format: 'JSONEachRow',
+          });
+          expect(await result.json<{ score: number; writeVersion: string }>()).toEqual([
+            { score: 0.2, writeVersion: '0' },
+            { score: 0.8, writeVersion: '1' },
+          ]);
+        } finally {
+          await client.close();
+        }
       });
     });
 
@@ -4659,19 +4871,65 @@ LIMIT 1`,
   describe('init idempotence', () => {
     // --- Unit tests for ALL_MIGRATIONS shape ---
 
-    it('includes durable feedback write versions in fresh and migrated schemas', () => {
-      const tableDdl = buildAllTableDDL().find(ddl =>
-        ddl.includes(`CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS}`),
-      );
+    it.each([
+      ['score', TABLE_SCORE_EVENTS],
+      ['feedback', TABLE_FEEDBACK_EVENTS],
+    ])('includes durable %s write versions in fresh and migrated schemas', (_signal, table) => {
+      const tableDdl = buildAllTableDDL().find(ddl => ddl.includes(`CREATE TABLE IF NOT EXISTS ${table}`));
       expect(tableDdl).toContain('writeVersion       UInt64 DEFAULT 0');
       expect(
         ALL_MIGRATIONS.find(
-          migration =>
-            migration.kind === 'column' &&
-            migration.table === TABLE_FEEDBACK_EVENTS &&
-            migration.name === 'writeVersion',
+          migration => migration.kind === 'column' && migration.table === table && migration.name === 'writeVersion',
         )?.sql,
       ).toContain('ADD COLUMN IF NOT EXISTS writeVersion UInt64 DEFAULT 0');
+    });
+
+    it('additively upgrades legacy score rows without losing source or delta data', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const score = {
+        scoreId: 'legacy-score-write-version-migration',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'legacy-score-migration-trace',
+        spanId: null,
+        scorerId: 'quality',
+        score: 0.4,
+        reason: null,
+        metadata: null,
+      };
+
+      try {
+        await client.command({ query: `ALTER TABLE ${TABLE_SCORE_EVENTS} DROP COLUMN IF EXISTS writeVersion` });
+        await client.insert({
+          table: TABLE_SCORE_EVENTS,
+          values: [scoreRecordToRow(score)],
+          format: 'JSONEachRow',
+        });
+
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+
+        const sourceResult = await client.query({
+          query: `SELECT scoreId, score, toString(writeVersion) AS writeVersion FROM ${TABLE_SCORE_EVENTS} FINAL WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+          format: 'JSONEachRow',
+        });
+        expect(await sourceResult.json<{ scoreId: string; score: number; writeVersion: string }>()).toEqual([
+          { scoreId: score.scoreId, score: 0.4, writeVersion: '0' },
+        ]);
+
+        const deltaResult = await client.query({
+          query: `SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+          format: 'JSONEachRow',
+        });
+        expect(await deltaResult.json<{ scoreId: string }>()).toEqual([{ scoreId: score.scoreId }]);
+      } finally {
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        await client.close();
+      }
     });
 
     it('ALL_MIGRATIONS entries carry table + name consistent with their SQL', () => {

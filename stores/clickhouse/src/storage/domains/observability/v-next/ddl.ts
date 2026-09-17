@@ -658,7 +658,7 @@ FROM (
 }
 
 // ---------------------------------------------------------------------------
-// score_events — ReplacingMergeTree with scoreId dedup
+// score_events — ReplacingMergeTree history with durable per-score write order
 // ---------------------------------------------------------------------------
 
 export const SCORE_EVENTS_DDL = `
@@ -668,6 +668,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
 
   -- IDs
   scoreId            String,
+  writeVersion       UInt64 DEFAULT 0,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -715,7 +716,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
 
   -- Information-only JSON payloads
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  INDEX idx_scoreId scoreId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
@@ -1127,11 +1130,11 @@ const addColumn = (table: string, name: string, type: string): MigrationEntry =>
   sql: `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${name} ${type}`,
 });
 
-const addBloomIndex = (table: string, name: string, column: string): MigrationEntry => ({
+const addBloomIndex = (table: string, name: string, column: string, granularity = 2): MigrationEntry => ({
   kind: 'index',
   table,
   name,
-  sql: `ALTER TABLE ${table} ADD INDEX IF NOT EXISTS ${name} ${column} TYPE bloom_filter(0.01) GRANULARITY 2`,
+  sql: `ALTER TABLE ${table} ADD INDEX IF NOT EXISTS ${name} ${column} TYPE bloom_filter(0.01) GRANULARITY ${granularity}`,
 });
 
 export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
@@ -1152,9 +1155,11 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_LOG_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_LOG_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Scores
+  addColumn(TABLE_SCORE_EVENTS, 'writeVersion', 'UInt64 DEFAULT 0'),
   addColumn(TABLE_SCORE_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SCORE_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
+  addBloomIndex(TABLE_SCORE_EVENTS, 'idx_scoreId', 'scoreId', 1),
   // Feedback
   addColumn(TABLE_FEEDBACK_EVENTS, 'writeVersion', 'UInt64 DEFAULT 0'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'entityVersionId', 'Nullable(String)'),
