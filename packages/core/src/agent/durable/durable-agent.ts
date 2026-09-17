@@ -286,6 +286,14 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * fresh signal on each segment if you need abortability post-resume.
    */
   abortSignal?: AbortSignal;
+  /**
+   * Maximum idle time in milliseconds before the durable stream is
+   * terminated. When set, the stream auto-terminates if no events are
+   * produced within this period, which prevents hangs when the producing
+   * process crashes. Opt-in — leave undefined to keep the existing
+   * behavior (no idle timeout in stream()/generate()).
+   */
+  idleTimeoutMs?: number;
 }
 
 type DurableAgentResumeOptions<OUTPUT = undefined> = DurableAgentStreamOptions<OUTPUT> & {
@@ -2104,10 +2112,10 @@ export class DurableAgent<
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
-      // Pass idleTimeoutMs through to enable auto-termination for crashed producers.
-      // observe() already passes this option; stream() does not expose it yet, but
-      // we pass the default timeout from the agent's cleanup timeout config.
-      idleTimeoutMs: options?.idleTimeoutMs ?? this.#cleanupTimeoutMs,
+      // Pass idleTimeoutMs through only when explicitly set by the caller,
+      // keeping the idle-timeout opt-in so long-running model and tool calls
+      // are not prematurely terminated.
+      ...(options?.idleTimeoutMs ? { idleTimeoutMs: options.idleTimeoutMs } : {}),
     });
     streamCleanup = createdStreamCleanup;
 
@@ -3058,8 +3066,10 @@ export class DurableAgent<
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
-      // Pass idleTimeoutMs through to enable auto-termination for crashed producers.
-      idleTimeoutMs: options?.idleTimeoutMs ?? this.#cleanupTimeoutMs,
+      // Pass idleTimeoutMs through only when explicitly set by the caller,
+      // keeping the idle-timeout opt-in so long-running model and tool calls
+      // are not prematurely terminated.
+      ...(options?.idleTimeoutMs ? { idleTimeoutMs: options.idleTimeoutMs } : {}),
     });
 
     // 4. Wait for subscription to be ready, then execute workflow
