@@ -2,6 +2,7 @@ import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { SpanRecord } from '../types';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
+import { SpanErrorRenderer, SpanInputRenderer, SpanOutputRenderer, SpanPayloadSection } from './span-payload';
 import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
@@ -148,6 +149,10 @@ function SpanDataPanelContent({
         </div>
       )}
 
+      <SpanPayloadSection title="Error" raw={span.error} className="mb-3">
+        <SpanErrorRenderer span={span} />
+      </SpanPayloadSection>
+
       {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
 
       <DataKeysAndValues>
@@ -218,18 +223,12 @@ function SpanDataPanelContent({
       </DataKeysAndValues>
 
       <div className="mt-3 grid gap-3">
-        <DataPanel.CodeSection
-          title="Input"
-          dialogTitle={buildDialogTitle('Input', <FileInputIcon />, { spanId, traceId })}
-          icon={<FileInputIcon />}
-          codeStr={JSON.stringify(span.input ?? null, null, 2)}
-        />
-        <DataPanel.CodeSection
-          title="Output"
-          dialogTitle={buildDialogTitle('Output', <FileOutputIcon />, { spanId, traceId })}
-          icon={<FileOutputIcon />}
-          codeStr={JSON.stringify(span.output ?? null, null, 2)}
-        />
+        <SpanPayloadSection title="Input" icon={<FileInputIcon />} raw={span.input}>
+          <SpanInputRenderer span={span} />
+        </SpanPayloadSection>
+        <SpanPayloadSection title="Output" icon={<FileOutputIcon />} raw={span.output}>
+          <SpanOutputRenderer span={span} />
+        </SpanPayloadSection>
         <DataPanel.CodeSection
           title="Metadata"
           dialogTitle={buildDialogTitle('Metadata', <BracesIcon />, { spanId, traceId })}

@@ -1,5 +1,6 @@
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { SpanRecord } from '../types';
+import { SpanErrorRenderer, SpanInputRenderer, SpanOutputRenderer, SpanPayloadSection } from './span-payload';
 import { SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
@@ -49,16 +50,16 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             </>
           )}
 
-          <DataDetailsPanel.CodeSection
-            title="Input"
-            icon={<FileInputIcon />}
-            codeStr={JSON.stringify(span.input ?? null, null, 2)}
-          />
-          <DataDetailsPanel.CodeSection
-            title="Output"
-            icon={<FileOutputIcon />}
-            codeStr={JSON.stringify(span.output ?? null, null, 2)}
-          />
+          <SpanPayloadSection title="Error" raw={span.error} layout="details" className="mb-3">
+            <SpanErrorRenderer span={span} />
+          </SpanPayloadSection>
+
+          <SpanPayloadSection title="Input" icon={<FileInputIcon />} raw={span.input} layout="details">
+            <SpanInputRenderer span={span} />
+          </SpanPayloadSection>
+          <SpanPayloadSection title="Output" icon={<FileOutputIcon />} raw={span.output} layout="details">
+            <SpanOutputRenderer span={span} />
+          </SpanPayloadSection>
           <DataDetailsPanel.CodeSection
             title="Metadata"
             icon={<BracesIcon />}

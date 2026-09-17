@@ -19,6 +19,11 @@ const config: StorybookConfig = {
   },
   viteFinal: config =>
     mergeConfig(config, {
+      // Workspace-linked core dist files are otherwise served as source and fed to
+      // react-docgen, which cannot parse them; pre-bundling skips that transform.
+      optimizeDeps: {
+        include: ['@mastra/core/observability'],
+      },
       resolve: {
         alias: [
           {
