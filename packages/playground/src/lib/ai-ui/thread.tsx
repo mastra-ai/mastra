@@ -297,7 +297,9 @@ export const Thread = ({
                     refreshThreadList={refreshThreadList}
                   />
                 </div>
-                {landingShown ? <SuggestedPromptList prompts={suggestedPrompts ?? EMPTY_SUGGESTED_PROMPTS} /> : null}
+                {landingShown ? (
+                  <SuggestedPromptList prompts={suggestedPrompts ?? EMPTY_SUGGESTED_PROMPTS} agentId={agentId} />
+                ) : null}
               </ChatShell.Column>
             </ChatShell.Dock>
           </ChatShell.Viewport>
@@ -358,10 +360,26 @@ const AgentComposer = ({
   const [preparationError, setPreparationError] = useState<string>();
   const send = useChatSend();
   const { attachments, toCoreUserMessages, clear, isAddingAttachments } = useComposerAttachments();
-  const { isRunning, canSendWhileStreaming, cancelRun } = useChatRunning();
+  const {
+    isRunning,
+    canSendWhileStreaming,
+    canStartRun,
+    runBlockedReason,
+    canContinueRun,
+    continuationBlockedReason,
+    isContinuationBlocked,
+    cancelRun,
+  } = useChatRunning();
   const [sendPulseKey, setSendPulseKey] = useState(0);
-  const { canExecute } = usePermissions();
-  const canExecuteAgent = canExecute('agents');
+  const { hasPermission } = usePermissions();
+  const hasExecutePermission = agentId ? hasPermission(`agents:execute:${agentId}`) : hasPermission('agents:execute');
+  const canExecuteAgent = hasExecutePermission && !isContinuationBlocked && (isRunning ? canContinueRun : canStartRun);
+  const currentRunBlockedReason = isContinuationBlocked
+    ? continuationBlockedReason
+    : isRunning
+      ? continuationBlockedReason
+      : runBlockedReason;
+
   const inputDisabled = !canExecuteAgent || Boolean(draftStatus?.restoring);
   useComposerAutofocus(textareaRef, { threadId, disabled: inputDisabled });
   // On a brand-new chat, starting the call must transition the page out of its
@@ -414,12 +432,12 @@ const AgentComposer = ({
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
       {(preparationError || draftStatus?.error) && (
-        <p role="alert" className="text-ui-sm">
+        <p role="alert" className="text-caption">
           {preparationError || draftStatus?.error}
         </p>
       )}
       {draftStatus?.restoring && (
-        <p role="status" className="text-ui-sm">
+        <p role="status" className="text-caption">
           Restoring draft…
         </p>
       )}
@@ -439,7 +457,11 @@ const AgentComposer = ({
               <ComposerInput
                 ref={textareaRef}
                 value={text}
-                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+                placeholder={
+                  canExecuteAgent
+                    ? 'Enter your message...'
+                    : currentRunBlockedReason || "You don't have permission to execute agents"
+                }
                 onChange={event => {
                   setThreadInput(event.target.value);
                 }}
@@ -532,7 +554,7 @@ const ComposerActionRow = ({
   return (
     <>
       {((showModelSwitcher && agentId) || runOptionsSlot) && (
-        <div className="flex max-w-full shrink-0 items-center gap-1.5">
+        <div className="flex max-w-full shrink-0 flex-wrap items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
               <ComposerModelSwitcher />

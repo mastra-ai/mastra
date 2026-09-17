@@ -37,7 +37,10 @@ const pendingProps: SubmitPlanToolProps = {
 
 function renderSubmitPlan(
   props: SubmitPlanToolProps,
-  { toolCallApprovals = {} }: { toolCallApprovals?: Record<string, { status: 'approved' | 'declined' }> } = {},
+  {
+    toolCallApprovals = {},
+    isContinuationBlocked = false,
+  }: { toolCallApprovals?: Record<string, { status: 'approved' | 'declined' }>; isContinuationBlocked?: boolean } = {},
 ) {
   const approveToolcall = vi.fn<(toolCallId: string, resumeData?: unknown) => void>();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -54,6 +57,7 @@ function renderSubmitPlan(
           declineNetworkToolcall={vi.fn()}
           isRunning={false}
           toolCallApprovals={toolCallApprovals}
+          isContinuationBlocked={isContinuationBlocked}
           networkToolCallApprovals={{}}
         >
           <SubmitPlanTool {...props} />
@@ -123,6 +127,27 @@ describe('SubmitPlanTool', () => {
       expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan' }).disabled).toBe(true);
       await screen.findByRole('heading', { name: 'Add dark mode' });
       expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan' }).disabled).toBe(false);
+    });
+
+    it('disables both plan decisions when the run continuation is fatally blocked', async () => {
+      usePlanFileHandler();
+
+      renderSubmitPlan(pendingProps, { isContinuationBlocked: true });
+
+      await screen.findByRole('heading', { name: 'Add dark mode' });
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan' }).disabled).toBe(true);
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Reject the plan' }).disabled).toBe(true);
+    });
+
+    it('does not submit either plan decision when the run continuation is fatally blocked', async () => {
+      usePlanFileHandler();
+      const { approveToolcall } = renderSubmitPlan(pendingProps, { isContinuationBlocked: true });
+
+      await screen.findByRole('heading', { name: 'Add dark mode' });
+      fireEvent.click(screen.getByRole('button', { name: 'Approve the plan' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Reject the plan' }));
+
+      expect(approveToolcall).not.toHaveBeenCalled();
     });
 
     it('keeps the approval action on one line without shrinking', async () => {

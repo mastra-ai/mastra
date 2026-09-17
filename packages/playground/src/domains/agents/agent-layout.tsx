@@ -1,10 +1,13 @@
 import { coreFeatures } from '@mastra/core/features';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { SlidersHorizontal } from 'lucide-react';
 import { useParams, useLocation, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-detail-header-actions';
@@ -14,6 +17,7 @@ import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-panel-shortcuts';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useAgentVersionAccess } from '@/domains/auth/hooks/use-agent-version-access';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
@@ -33,6 +37,8 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { isCmsAvailable } = useIsCmsAvailable();
   const { hasObservability } = useHasObservability();
+  const { Link: FrameworkLink, paths } = useLinkComponent();
+  const versionAccess = useAgentVersionAccess(agentId);
 
   const isExperimentalFeatures = coreFeatures.has('datasets');
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
@@ -51,6 +57,9 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         ? 'traces'
         : 'none';
 
+  const fullConfigurationPath = agentId ? paths.cmsAgentEditLink(agentId) : '';
+  const showFullConfiguration = isCmsAvailable && versionAccess.canRead && Boolean(fullConfigurationPath);
+
   return (
     <PlaygroundModelProvider
       key={`${agentId}:${defaultProvider}/${defaultModel}`}
@@ -68,12 +77,27 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         >
           <h1 className="sr-only">{agentId}</h1>
           <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
-            <AgentPageTabs
-              agentId={agentId!}
-              activeTab={activeTab}
-              showPlayground={showPlayground}
-              showObservability={showObservability}
-            />
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 pr-1.5">
+              <div className="min-w-0 flex-1 basis-full sm:basis-0">
+                <AgentPageTabs
+                  agentId={agentId!}
+                  activeTab={activeTab}
+                  showPlayground={showPlayground}
+                  showObservability={showObservability}
+                />
+              </div>
+              {showFullConfiguration ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto"
+                  render={<FrameworkLink href={fullConfigurationPath} />}
+                  icon={<SlidersHorizontal />}
+                >
+                  Full configuration
+                </Button>
+              ) : null}
+            </div>
             {children}
           </div>
         </PageLayout>
