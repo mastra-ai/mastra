@@ -9,6 +9,7 @@ import { TooltipProvider } from '@/ds/components/Tooltip';
 type ProviderOverrides = {
   approveToolcall?: (toolCallId: string, resumeData?: unknown) => void;
   isRunning?: boolean;
+  isContinuationBlocked?: boolean;
   toolCallApprovals?: { [toolCallId: string]: { status: 'approved' | 'declined' } };
 };
 
@@ -27,6 +28,7 @@ const renderBadge = (
         approveNetworkToolcall={vi.fn()}
         declineNetworkToolcall={vi.fn()}
         isRunning={overrides.isRunning ?? false}
+        isContinuationBlocked={overrides.isContinuationBlocked ?? false}
         toolCallApprovals={overrides.toolCallApprovals ?? {}}
         networkToolCallApprovals={{}}
       >
@@ -204,6 +206,36 @@ describe('AskUserBadge', () => {
       );
 
       fireEvent.click(within(badge()).getByRole<HTMLInputElement>('radio', { name: 'Apple' }));
+
+      expect(approveToolcall).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the run continuation is fatally blocked', () => {
+    it('disables the answer controls', () => {
+      renderBadge(
+        {
+          toolCallId: 'call-blocked',
+          suspendPayload: { question: 'Pick a fruit', options: [{ label: 'Apple' }], selectionMode: 'single_select' },
+          result: undefined,
+        },
+        { isContinuationBlocked: true },
+      );
+
+      expect(within(badge()).getByRole('radio', { name: 'Apple' }).getAttribute('aria-disabled')).toBe('true');
+    });
+
+    it('does not submit when a disabled answer is clicked', () => {
+      const { approveToolcall } = renderBadge(
+        {
+          toolCallId: 'call-blocked',
+          suspendPayload: { question: 'Pick a fruit', options: [{ label: 'Apple' }], selectionMode: 'single_select' },
+          result: undefined,
+        },
+        { isContinuationBlocked: true },
+      );
+
+      fireEvent.click(within(badge()).getByRole('radio', { name: 'Apple' }));
 
       expect(approveToolcall).not.toHaveBeenCalled();
     });
