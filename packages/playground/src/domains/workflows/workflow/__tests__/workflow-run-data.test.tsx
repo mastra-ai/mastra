@@ -60,6 +60,22 @@ describe('Workflow run data', () => {
     });
   });
 
+  describe('when the output arrives while the input tab is showing', () => {
+    it('moves to the output unless a tab was picked by hand', async () => {
+      const running = { status: 'running', input: {}, steps: {} } as const;
+      const { rerender } = render(<WorkflowRunData input={{}} result={running} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Run data' }));
+      expect(screen.getByRole('tab', { name: 'Input' }).getAttribute('aria-selected')).toBe('true');
+
+      rerender(<WorkflowRunData input={{}} result={{ ...running, status: 'success', result: { ok: true } }} />);
+      expect(screen.getByRole('tab', { name: 'Output' }).getAttribute('aria-selected')).toBe('true');
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Execution' }));
+      rerender(<WorkflowRunData input={{}} result={{ ...running, status: 'success', result: { ok: false } }} />);
+      expect(screen.getByRole('tab', { name: 'Execution' }).getAttribute('aria-selected')).toBe('true');
+    });
+  });
+
   describe('when a saved run produced a falsy output', () => {
     it('keeps the actual output available in a read-only view', async () => {
       render(<WorkflowRunData input={{}} result={{ status: 'success', input: {}, result: false, steps: {} }} />);

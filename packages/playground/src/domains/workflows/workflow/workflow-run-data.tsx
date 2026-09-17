@@ -4,7 +4,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowDownToLine, ArrowUpFromLine, Braces, ChevronRight, Database } from 'lucide-react';
+import { useState } from 'react';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
+
+type RunDataTab = 'input' | 'output' | 'execution';
 
 function RunDataValue({ value }: { value: unknown }) {
   if (value === undefined) {
@@ -27,6 +30,8 @@ function RunDataValue({ value }: { value: unknown }) {
 export function WorkflowRunData({ input, result }: { input: unknown; result: WorkflowRunStreamResult }) {
   const output = 'result' in result ? result.result : undefined;
   const hasOutput = output !== undefined;
+  const [selectedTab, setSelectedTab] = useState<RunDataTab>();
+  const tab = selectedTab ?? (hasOutput ? 'output' : 'input');
 
   return (
     <Collapsible className="border-border1/50 border-t" data-testid="workflow-run-data">
@@ -36,7 +41,7 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
         <ChevronRight aria-hidden className="text-neutral3 ml-auto size-4" />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <Tabs defaultTab={hasOutput ? 'output' : 'input'} className="min-w-0 px-5 pb-4">
+        <Tabs defaultTab={tab} value={tab} onValueChange={setSelectedTab} className="min-w-0 px-5 pb-4">
           <TabList variant="pill" className="mb-3">
             <Tab value="input">
               <ArrowDownToLine aria-hidden className="size-3.5" />
