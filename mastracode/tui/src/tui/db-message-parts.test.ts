@@ -47,6 +47,60 @@ describe('getAssistantRenderParts', () => {
     expect(getAssistantRenderParts(message)).toEqual([{ kind: 'text', text: 'hi' }]);
   });
 
+  it('renders a persisted account-switch part with a malformed to endpoint as unknown, not pool exhaustion', () => {
+    const message = assistantMessage([
+      {
+        type: 'data-mastracode-account-switch',
+        data: {
+          provider: 'kimi-for-coding',
+          from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+          to: { id: 'kimi-for-coding:bbbb' }, // label lost to schema drift
+          reason: 'rate-limit',
+          at: '2026-09-17T00:00:00.000Z',
+        },
+      } as never,
+    ]);
+
+    const parts = getAssistantRenderParts(message);
+    expect(parts).toEqual([
+      {
+        kind: 'account-switch',
+        provider: 'kimi-for-coding',
+        from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+        to: { id: 'unknown', label: 'unknown' },
+        reason: 'rate-limit',
+        at: '2026-09-17T00:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('keeps an explicit null to endpoint rendering as pool exhaustion', () => {
+    const message = assistantMessage([
+      {
+        type: 'data-mastracode-account-switch',
+        data: {
+          provider: 'kimi-for-coding',
+          from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+          to: null,
+          reason: 'rate-limit',
+          at: '2026-09-17T00:00:00.000Z',
+        },
+      } as never,
+    ]);
+
+    const parts = getAssistantRenderParts(message);
+    expect(parts).toEqual([
+      {
+        kind: 'account-switch',
+        provider: 'kimi-for-coding',
+        from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+        to: null,
+        reason: 'rate-limit',
+        at: '2026-09-17T00:00:00.000Z',
+      },
+    ]);
+  });
+
   it('maps a reasoning part to a thinking render item', () => {
     const message = assistantMessage([{ type: 'reasoning', reasoning: 'why', details: [] } as never]);
     expect(getAssistantRenderParts(message)).toEqual([{ kind: 'thinking', text: 'why' }]);

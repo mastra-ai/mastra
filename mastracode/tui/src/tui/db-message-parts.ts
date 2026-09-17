@@ -88,11 +88,19 @@ function accountSwitchRenderPart(data: unknown): AccountSwitchRenderPart | null 
     if (typeof entry.id !== 'string' || typeof entry.label !== 'string') return null;
     return { id: entry.id, label: entry.label };
   };
+  // A malformed persisted `to` (schema drift) must not collapse to `null` —
+  // that renders as "All accounts unavailable", misreporting a rotation as
+  // pool exhaustion. Fall back to an unknown endpoint instead.
+  const toEndpoint = (value: unknown): { id: string; label: string } | null => {
+    const parsed = endpoint(value);
+    if (parsed || !value || typeof value !== 'object') return parsed;
+    return { id: 'unknown', label: 'unknown' };
+  };
   return {
     kind: 'account-switch',
     provider: record.provider,
     from: endpoint(record.from),
-    to: endpoint(record.to),
+    to: toEndpoint(record.to),
     reason: record.reason,
     at: typeof record.at === 'string' ? record.at : '',
   };
