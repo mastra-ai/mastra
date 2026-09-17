@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState } from 'react';
+import { Button } from '../Button';
 import { TooltipProvider } from '../Tooltip';
 import { DataPanel } from './data-panel';
 import type { DataPanelProps } from './data-panel-root';
@@ -9,23 +11,23 @@ const meta: Meta<typeof DataPanel> = {
   decorators: [
     Story => (
       <TooltipProvider>
-        <div className="h-125 w-100">
-          <Story />
-        </div>
+        <Story />
       </TooltipProvider>
     ),
   ],
   parameters: {
-    layout: 'centered',
+    layout: 'fullscreen',
     docs: {
       description: {
         component: [
-          'Non-modal panel that lives inside the page layout — no overlay, no Portal, no focus trap.',
-          'It is a layout region, not a dialog: clicking an item reveals its detail in place.',
+          'Detail panel rendered as a Base UI Drawer dialog: portaled to the right edge of the page,',
+          'with backdrop, focus trap, Escape / backdrop-click / swipe dismissal.',
+          'The Drawer is an implementation detail — the visible chrome is the DataPanel itself.',
+          '',
+          'Rendering a `DataPanel` inside another one stacks them natively (Base UI nested drawers).',
           '',
           'This is the pattern behind the observability trace / span / log detail views, shared by',
-          'both the local Studio and Cloud Studio. For a modal panel that slides in over the page',
-          'with a backdrop, see `Layout/SideDialog`.',
+          'both the local Studio and Cloud Studio. For a wide modal with a hidden close tab, see `Layout/SideDialog`.',
         ].join('\n'),
       },
     },
@@ -37,7 +39,7 @@ type Story = StoryObj<DataPanelProps>;
 
 export const Default: Story = {
   render: () => (
-    <DataPanel>
+    <DataPanel open title="Span details">
       <DataPanel.Header>
         <DataPanel.Heading>Span Details</DataPanel.Heading>
         <DataPanel.CloseButton onClick={() => {}} />
@@ -51,7 +53,7 @@ export const Default: Story = {
 
 export const WithNavigation: Story = {
   render: () => (
-    <DataPanel>
+    <DataPanel open title="Trace abc123">
       <DataPanel.Header>
         <DataPanel.Heading>
           <b>Trace</b> abc123
@@ -70,7 +72,7 @@ export const WithNavigation: Story = {
 
 export const NoData: Story = {
   render: () => (
-    <DataPanel>
+    <DataPanel open title="Empty panel">
       <DataPanel.Header>
         <DataPanel.Heading>Empty Panel</DataPanel.Heading>
         <DataPanel.CloseButton onClick={() => {}} />
@@ -82,7 +84,7 @@ export const NoData: Story = {
 
 export const Loading: Story = {
   render: () => (
-    <DataPanel>
+    <DataPanel open title="Loading panel">
       <DataPanel.Header>
         <DataPanel.Heading>Loading Panel</DataPanel.Heading>
         <DataPanel.CloseButton onClick={() => {}} />
@@ -94,13 +96,13 @@ export const Loading: Story = {
 
 export const Collapsed: Story = {
   render: () => (
-    <DataPanel collapsed>
+    <DataPanel open title="Collapsed panel" collapsed>
       <DataPanel.Header>
         <DataPanel.Heading>Collapsed Panel</DataPanel.Heading>
         <DataPanel.CloseButton onClick={() => {}} />
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-neutral3">This panel uses h-auto instead of h-full.</p>
+        <p className="text-ui-sm text-neutral3">This panel uses h-auto instead of max-h-full.</p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -108,7 +110,7 @@ export const Collapsed: Story = {
 
 export const DisabledNav: Story = {
   render: () => (
-    <DataPanel>
+    <DataPanel open title="First item">
       <DataPanel.Header>
         <DataPanel.Heading>
           <b>First Item</b> (no previous)
@@ -123,4 +125,54 @@ export const DisabledNav: Story = {
       </DataPanel.Content>
     </DataPanel>
   ),
+};
+
+const StackedDemo = () => {
+  const [outerOpen, setOuterOpen] = useState(false);
+  const [innerOpen, setInnerOpen] = useState(false);
+
+  return (
+    <div className="p-8">
+      <Button onClick={() => setOuterOpen(true)}>Open span details</Button>
+
+      <DataPanel open={outerOpen} onClose={() => setOuterOpen(false)} title="Span details">
+        <DataPanel.Header>
+          <DataPanel.Heading>
+            <b>Span</b> agent.generate
+          </DataPanel.Heading>
+          <DataPanel.CloseButton onClick={() => setOuterOpen(false)} />
+        </DataPanel.Header>
+        <DataPanel.Content className="flex flex-col gap-3">
+          <p className="text-ui-sm text-neutral3">
+            Escape, backdrop click or the close button dismiss this panel. Open a nested panel to stack a second one on
+            top.
+          </p>
+          <Button onClick={() => setInnerOpen(true)}>Open nested panel</Button>
+
+          <DataPanel
+            open={innerOpen}
+            onClose={() => setInnerOpen(false)}
+            title="Score details"
+            className="ml-auto w-80"
+          >
+            <DataPanel.Header>
+              <DataPanel.Heading>
+                <b>Score</b> answer-relevancy
+              </DataPanel.Heading>
+              <DataPanel.CloseButton onClick={() => setInnerOpen(false)} />
+            </DataPanel.Header>
+            <DataPanel.Content>
+              <p className="text-ui-sm text-neutral3">
+                Escape only closes this top-most panel; the parent stays open underneath.
+              </p>
+            </DataPanel.Content>
+          </DataPanel>
+        </DataPanel.Content>
+      </DataPanel>
+    </div>
+  );
+};
+
+export const Stacked: Story = {
+  render: () => <StackedDemo />,
 };
