@@ -27,23 +27,25 @@ export const useWorkflowGraphRuntime = ({
 }) => {
   const { steps } = useCurrentRun();
   const workflowRun = useContext(WorkflowRunContext);
-  // For a nested graph the End edge should light when that nested workflow's own
-  // step succeeds, not when the entire parent run finishes. For the top-level graph
-  // there is no `workflowName`, so fall back to the overall run status.
+  // A nested graph ends with its own step, not with the parent run.
   const workflowSucceeded = workflowName
     ? steps[workflowName]?.status === 'success'
     : workflowRun.result?.status === 'success';
   const stepsFlow = useMemo(() => buildStepsFlow(edges), [edges]);
-  // A conditional resolves to a single arm; the other arms never enter run state
-  // (their status stays `undefined`, not `skipped`). To keep their edges neutral
-  // we detect bypassed arms from the static graph the same way the step controls do.
+  // Un-taken conditional arms never enter run state, so bypass is read from the static graph.
   const isArmBypassed = useMemo(() => {
     const stepSuccessors = buildStepSuccessors(stepsFlow);
     const { conditionalStepIds } = collectGraphStepFlags(stepGraph ?? workflowRun.workflow?.stepGraph);
-    const isStepSuccess = (stepId: string) => steps[getScopedStepId(stepId, workflowName) ?? '']?.status === 'success';
+    const scopedSteps = workflowName
+      ? Object.fromEntries(
+          Object.entries(steps)
+            .filter(([stepId]) => stepId.startsWith(`${workflowName}.`))
+            .map(([stepId, step]) => [stepId.slice(workflowName.length + 1), step]),
+        )
+      : steps;
     return (stepId: string | undefined) =>
-      Boolean(stepId) &&
-      isBranchArmBypassed({ stepId: stepId!, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess });
+      stepId !== undefined &&
+      isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, steps: scopedSteps });
   }, [stepsFlow, stepGraph, workflowRun.workflow?.stepGraph, steps, workflowName]);
   const nodeTypes = useMemo(
     () => ({

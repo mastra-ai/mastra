@@ -159,60 +159,74 @@ const requestBaseSchema = {
   id: z.union([z.string(), z.number()]),
 } as const;
 
+export const a2aV1MethodMap = {
+  SendMessage: 'message/send',
+  SendStreamingMessage: 'message/stream',
+  GetTask: 'tasks/get',
+  ListTasks: 'tasks/list',
+  CancelTask: 'tasks/cancel',
+  SubscribeToTask: 'tasks/resubscribe',
+  CreateTaskPushNotificationConfig: 'tasks/pushNotificationConfig/set',
+  GetTaskPushNotificationConfig: 'tasks/pushNotificationConfig/get',
+  ListTaskPushNotificationConfigs: 'tasks/pushNotificationConfig/list',
+  DeleteTaskPushNotificationConfig: 'tasks/pushNotificationConfig/delete',
+  GetExtendedAgentCard: 'agent/getAuthenticatedExtendedCard',
+} as const;
+
 export const agentExecutionBodySchema = z.discriminatedUnion('method', [
   z.object({
     ...requestBaseSchema,
-    method: z.literal('message/send'),
+    method: z.enum([a2aV1MethodMap.SendMessage, 'SendMessage']),
     params: messageSendParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('message/stream'),
+    method: z.enum([a2aV1MethodMap.SendStreamingMessage, 'SendStreamingMessage']),
     params: messageSendParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/get'),
+    method: z.enum([a2aV1MethodMap.GetTask, 'GetTask']),
     params: taskQueryParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/list'),
+    method: z.enum([a2aV1MethodMap.ListTasks, 'ListTasks']),
     params: listTasksParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/cancel'),
+    method: z.enum([a2aV1MethodMap.CancelTask, 'CancelTask']),
     params: taskIdParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/resubscribe'),
+    method: z.enum([a2aV1MethodMap.SubscribeToTask, 'SubscribeToTask']),
     params: taskResubscribeParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/pushNotificationConfig/set'),
+    method: z.enum([a2aV1MethodMap.CreateTaskPushNotificationConfig, 'CreateTaskPushNotificationConfig']),
     params: setPushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/pushNotificationConfig/get'),
+    method: z.enum([a2aV1MethodMap.GetTaskPushNotificationConfig, 'GetTaskPushNotificationConfig']),
     params: getPushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/pushNotificationConfig/list'),
+    method: z.enum([a2aV1MethodMap.ListTaskPushNotificationConfigs, 'ListTaskPushNotificationConfigs']),
     params: listPushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/pushNotificationConfig/delete'),
+    method: z.enum([a2aV1MethodMap.DeleteTaskPushNotificationConfig, 'DeleteTaskPushNotificationConfig']),
     params: deletePushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('agent/getAuthenticatedExtendedCard'),
+    method: z.enum([a2aV1MethodMap.GetExtendedAgentCard, 'GetExtendedAgentCard']),
   }),
 ]);
 

@@ -1,39 +1,41 @@
-import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core';
-import { expect, Mock, vi } from 'vitest';
-import { Workflow, createWorkflow, createStep } from '@mastra/core/workflows';
-import { createScorer } from '@mastra/core/evals';
-import { SpanType } from '@mastra/core/observability';
-import { CompositeVoice } from '@mastra/core/voice';
-import { MockMemory } from '@mastra/core/memory';
-import { MastraVector } from '@mastra/core/vector';
-import { InMemoryStore } from '@mastra/core/storage';
-import { createTool } from '@mastra/core/tools';
-import { UnknownToolProviderError } from '@mastra/core/tool-provider';
-import type { ZodTypeAny } from 'zod';
-import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
-import { BaseLogMessage, IMastraLogger, LogLevel } from '@mastra/core/logger';
-import { generateValidDataFromSchema, getDefaultValidPathParams, normalizeRoutePath } from './route-test-utils';
-import { MCPServer } from '@mastra/mcp';
-import type { Tool } from '@mastra/core/tools';
-import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
 import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { Mastra } from '@mastra/core';
+import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
+import { createScorer } from '@mastra/core/evals';
+import { LogLevel, type BaseLogMessage, type IMastraLogger } from '@mastra/core/logger';
+import { MockMemory } from '@mastra/core/memory';
+import { SpanType } from '@mastra/core/observability';
 import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
+import { InMemoryStore, type MemoryStorage } from '@mastra/core/storage';
+import { UnknownToolProviderError } from '@mastra/core/tool-provider';
+import { createTool, type Tool } from '@mastra/core/tools';
 import { getZodDef, getZodTypeName } from '@mastra/core/utils';
-vi.mock('@mastra/core/vector');
+import { MastraVector } from '@mastra/core/vector';
+import { CompositeVoice } from '@mastra/core/voice';
+import { Workflow, createWorkflow, createStep } from '@mastra/core/workflows';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { MCPServer } from '@mastra/mcp';
+import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { WorkflowRegistry, type ServerRoute } from '@mastra/server/server-adapter';
+import { expect, vi, type Mock } from 'vitest';
+import * as zod from 'zod';
+import type { ZodTypeAny } from 'zod';
+import { generateValidDataFromSchema, getDefaultValidPathParams, normalizeRoutePath } from './route-test-utils';
+if (process.env.VITEST) {
+  vi.mock('@mastra/core/vector');
 
-vi.mock('zod', async importOriginal => {
-  const actual: {} = await importOriginal();
-  return {
-    ...actual,
-  };
-});
+  vi.mock('zod', async importOriginal => {
+    const actual: {} = await importOriginal();
+    return {
+      ...actual,
+    };
+  });
+}
 
-const z = require('zod');
+const z: any = zod;
 
 /**
  * Test context for adapter integration tests
@@ -414,12 +416,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   const weatherTool = createTool({
     id: 'getWeather',
     description: 'Gets the current weather for a location',
-    inputSchema: z.object({
-      location: z.string().describe('The location to get weather for'),
+    inputSchema: zod.z.object({
+      location: zod.z.string().describe('The location to get weather for'),
     }),
-    outputSchema: z.object({
-      temperature: z.number(),
-      condition: z.string(),
+    outputSchema: zod.z.object({
+      temperature: zod.z.number(),
+      condition: zod.z.string(),
     }),
     execute: async ({ location }) => ({
       temperature: 72,
@@ -430,13 +432,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   const calculatorTool = createTool({
     id: 'calculate',
     description: 'Performs basic calculations',
-    inputSchema: z.object({
-      operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
-      a: z.number(),
-      b: z.number(),
+    inputSchema: zod.z.object({
+      operation: zod.z.enum(['add', 'subtract', 'multiply', 'divide']),
+      a: zod.z.number(),
+      b: zod.z.number(),
     }),
-    outputSchema: z.object({
-      result: z.number(),
+    outputSchema: zod.z.object({
+      result: zod.z.number(),
     }),
     execute: async ({ operation, a, b }) => {
       let result = 0;
@@ -642,7 +644,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     const observability = await storage.getStore('observability');
     if (observability) {
       vi.spyOn(observability, 'getFeatures').mockReturnValue([
-        ...observability.getFeatures(),
+        ...(observability.getFeatures() ?? []),
         'trace-query',
         'thread-query',
       ]);
@@ -866,7 +868,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
-    const saveStoredResponseFixtures = async (memoryStore: Awaited<ReturnType<InMemoryStore['getStore']>>) => {
+    const saveStoredResponseFixtures = async (memoryStore: MemoryStorage | undefined) => {
       if (!memoryStore) {
         return;
       }
@@ -937,7 +939,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   };
 }
 
-async function mockWorkflowRun(workflow: Workflow) {
+async function mockWorkflowRun(workflow: Workflow<any, any, any, any, any, any, any, any>) {
   // Mock getWorkflowRunById to return a mock WorkflowState object
   // This is the unified format that includes both metadata and processed execution state
   // Only 'test-run' exists; unknown runIds resolve to null so stream routes can
@@ -1154,7 +1156,7 @@ export function createTestWorkflow(
     description?: string;
   } = {},
 ) {
-  const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+  const execute = vi.fn(async (_args: unknown) => ({ result: 'success' }));
   const stepA = createStep({
     id: 'test-step',
     inputSchema: z.object({}),
@@ -1167,7 +1169,7 @@ export function createTestWorkflow(
     id: 'test-step2',
     inputSchema: z.object({ name: z.string() }),
     outputSchema: z.object({ result: z.string() }),
-    execute,
+    execute: async args => execute(args),
   });
 
   return createWorkflow({
@@ -1222,9 +1224,13 @@ function schemaExpectsDate(schema: any, path: string[] = []): boolean {
 
   // If we have a path, navigate to that field
   if (path.length > 0) {
+    const [fieldName] = path;
+    if (!fieldName) {
+      return false;
+    }
     if (typeName === 'ZodObject') {
       const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
-      const fieldSchema = shape[path[0]];
+      const fieldSchema = shape[fieldName];
       return schemaExpectsDate(fieldSchema, path.slice(1));
     } else if (typeName === 'ZodArray') {
       // For arrays, check the element type (ignore the array index in path)
@@ -1271,7 +1277,10 @@ export function parseDatesInResponse(data: any, schema?: any, currentPath: strin
   return data;
 }
 
-async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, mastra: Mastra) {
+async function setupWorkflowRegistryMocks(
+  workflows: Record<string, Workflow<any, any, any, any, any, any, any, any>>,
+  mastra: Mastra,
+) {
   for (const workflow of Object.values(workflows)) {
     workflow.__registerMastra(mastra);
     workflow.__registerPrimitives({

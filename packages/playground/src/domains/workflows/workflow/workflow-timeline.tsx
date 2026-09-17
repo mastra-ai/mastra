@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { getNodeIndicators, WorkflowCardBadges } from '@mastra/playground-ui/components/Workflow';
 
 import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
 import { CheckIcon } from '@mastra/playground-ui/icons/CheckIcon';
@@ -11,6 +10,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   ChevronDown,
   CirclePause,
+  CircleSlash,
   HourglassIcon,
   Loader2,
   SquareArrowOutUpRight,
@@ -30,7 +30,8 @@ const StepStatusIcon = ({ status }: { status: Step['status'] }) => (
   <Icon>
     {status === 'success' && <CheckIcon className="text-accent1" />}
     {status === 'failed' && <CrossIcon className="text-accent2" />}
-    {status === 'suspended' && <CirclePause className="text-accent3" />}
+    {status === 'canceled' && <CircleSlash className="text-neutral3" />}
+    {(status === 'suspended' || status === 'paused') && <CirclePause className="text-accent3" />}
     {status === 'waiting' && <HourglassIcon className="text-accent5" />}
     {status === 'skipped' && <HourglassIcon className="text-icon3" />}
     {status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
@@ -40,7 +41,9 @@ const StepStatusIcon = ({ status }: { status: Step['status'] }) => (
 const BAR_TINT: Record<Step['status'], string> = {
   success: 'bg-accent1',
   failed: 'bg-accent2',
+  canceled: 'bg-border1',
   suspended: 'bg-accent3',
+  paused: 'bg-accent3',
   waiting: 'bg-accent5',
   skipped: 'bg-border1',
   running: 'bg-accent6',
@@ -68,28 +71,6 @@ const toDialogData = (value: unknown): Record<string, unknown> => {
   return { value };
 };
 
-const getTimelineIndicators = (step: Step) => {
-  const stepWithMetadata = step as Step & {
-    duration?: number;
-    date?: Date;
-    isForEach?: boolean;
-    mapConfig?: string;
-    canSuspend?: boolean;
-    isParallel?: boolean;
-    stepGraph?: unknown;
-  };
-
-  return getNodeIndicators({
-    duration: stepWithMetadata.duration,
-    date: stepWithMetadata.date,
-    isForEach: stepWithMetadata.isForEach,
-    mapConfig: stepWithMetadata.mapConfig,
-    canSuspend: stepWithMetadata.canSuspend,
-    isParallel: stepWithMetadata.isParallel,
-    stepGraph: stepWithMetadata.stepGraph,
-  });
-};
-
 interface WorkflowTimelineRowProps {
   row: TimelineRow;
   index: number;
@@ -111,7 +92,6 @@ const WorkflowTimelineRow = ({
   onOpenInput,
   onOpenOutput,
 }: WorkflowTimelineRowProps) => {
-  const indicators = getTimelineIndicators(row.step);
   const isInProgress = row.status === 'running';
   const canSelect = !row.isNestedEntry;
 
@@ -180,9 +160,7 @@ const WorkflowTimelineRow = ({
           <SquareArrowRight />
         </Button>
       </div>
-      <div className="flex overflow-hidden">
-        <WorkflowCardBadges indicators={indicators} className="shrink-0" />
-      </div>
+      <div className="flex overflow-hidden"></div>
       <Txt
         as="span"
         variant="ui-sm"

@@ -2520,6 +2520,7 @@ export class EventedRun<
       .then(result => {
         if (result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
+          this.cleanup?.();
         }
 
         return result;
