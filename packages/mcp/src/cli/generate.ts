@@ -19,11 +19,15 @@ function isClient(value: unknown): value is MCPClient {
   return value instanceof CommonJSClient!;
 }
 
+function missing(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
 async function canonical(path: string): Promise<string> {
   try {
     return await realpath(path);
   } catch (error) {
-    if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
+    if (!missing(error)) throw error;
     // A dangling symlink must not become a new, unrelated output file.
     const entry = await lstat(path).catch(() => undefined);
     if (entry?.isSymbolicLink()) throw new GenerationError('Output path contains a dangling symlink');
@@ -76,7 +80,7 @@ function convert(
 /** Internal command runner. Errors are deliberately independent of imported error messages. */
 export async function generate(files: string[], cwd = process.cwd()): Promise<void> {
   const clients = new Set<MCPClient>();
-  const staged: string[] = [];
+  const staged: { temporary: string; output: string }[] = [];
   const abort = new AbortController();
   const cleanup = new Map<MCPClient, Promise<void>>();
   const disconnect = () => {
@@ -123,8 +127,8 @@ export async function generate(files: string[], cwd = process.cwd()): Promise<vo
       if (inputs.has(output)) throw new GenerationError('Output overlaps a supplied client file');
       if (outputs.has(output)) throw new GenerationError('Multiple clients target the same output file');
       const existing = await stat(output).catch(error => {
-        if (error.code === 'ENOENT') return undefined;
-        throw error;
+        if (!missing(error)) throw error;
+        return undefined;
       });
       if (existing && !existing.isFile()) throw new GenerationError('Output must be a file');
       outputs.set(output, client);
@@ -148,12 +152,12 @@ export async function generate(files: string[], cwd = process.cwd()): Promise<vo
       abort.signal.throwIfAborted();
       await mkdir(dirname(output), { recursive: true });
       const temporary = join(dirname(output), `.mastra-mcp-${randomUUID()}.tmp`);
-      staged.push(temporary);
+      staged.push({ temporary, output });
       await writeFile(temporary, source, { flag: 'wx' });
     }
-    for (const [index, { output }] of prepared.entries()) {
+    for (const { temporary, output } of staged) {
       abort.signal.throwIfAborted();
-      await rename(staged[index]!, output);
+      await rename(temporary, output);
     }
     console.log(`Generated ${prepared.length} MCP type file(s).`);
     if (warnings) console.warn(`${warnings} unsupported schema portion(s) widened to unknown.`);
@@ -164,7 +168,7 @@ export async function generate(files: string[], cwd = process.cwd()): Promise<vo
         : new GenerationError('MCP generation failed; check client modules, permissions, and server availability');
   } finally {
     const results = await disconnect();
-    const removed = await Promise.allSettled(staged.map(path => rm(path, { force: true })));
+    const removed = await Promise.allSettled(staged.map(({ temporary }) => rm(temporary, { force: true })));
     process.removeListener('SIGINT', interrupt);
     process.removeListener('SIGTERM', interrupt);
     await unregister();
