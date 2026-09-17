@@ -8,6 +8,10 @@ import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
+import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
+import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
+import type { PlatformConnectProviderId } from '../../factory/services/platformConnect';
+import { ProviderConnectControl, ProviderConnectionsList } from './PlatformProviderConnections';
 import { useLinearProjectsQuery, useLinearStatusQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
 import { isJiraAuthError } from '../../factory/services/jira';
 import type { JiraProject, JiraStatus } from '../../factory/services/jira';
@@ -181,14 +185,14 @@ function JiraIntakeSection({
   const configured = Boolean(status?.enabled && status.configured);
   const platformManaged = status?.mode === 'platform' || status?.connections !== undefined;
   const description = reauthRequired
-    ? 'A Jira account needs to be reconnected in Mastra Platform.'
+    ? 'A connected Jira account needs to be reconnected.'
     : !configured
       ? platformManaged
-        ? 'Connect Jira in Mastra Platform to sync issues from this organization.'
+        ? 'Connect a Jira account to sync issues from this organization.'
         : 'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.'
       : authError
         ? platformManaged
-          ? 'Jira rejected a connected account. Reconnect it in Mastra Platform.'
+          ? 'Jira rejected a connected account. Reconnect it to resume syncing.'
           : 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.'
         : 'Active issues from the selected projects.';
   const sites = status?.sites ?? (status?.site ? [status.site] : []);
@@ -201,21 +205,35 @@ function JiraIntakeSection({
     connectionLabel = 'Connected through Mastra Platform';
   }
   const needsReconnect = reauthRequired || authError;
-  const manageUrl = platformManaged ? status?.manageUrl : undefined;
-  const manageButton = manageUrl ? (
-    <Button as="a" href={manageUrl} size={configured ? 'xs' : 'sm'} variant={configured ? 'ghost' : 'default'}>
-      {needsReconnect ? 'Reconnect Jira' : configured ? 'Manage Jira' : 'Connect Jira'}
-    </Button>
-  ) : undefined;
+  const connections = status?.connections ?? [];
+  const reconnectTarget =
+    needsReconnect && platformManaged
+      ? (connections.find(connection => connection.status === 'needs_reauth') ?? connections[0])
+      : undefined;
+  const actionButton = !platformManaged ? undefined : reconnectTarget ? (
+    <ProviderConnectControl
+      provider="jira"
+      reconnectConnectionId={reconnectTarget.id}
+      label="Reconnect Jira"
+      size={configured ? 'xs' : 'sm'}
+    />
+  ) : (
+    <ProviderConnectControl
+      provider="jira"
+      label={configured ? 'Connect another site' : 'Connect Jira'}
+      size={configured ? 'xs' : 'sm'}
+      variant={configured ? 'ghost' : 'default'}
+    />
+  );
   const action = configured ? (
     <span className="flex items-center gap-2">
       <Txt as="span" variant="ui-sm" className="text-icon3">
         {connectionLabel}
       </Txt>
-      {manageButton}
+      {actionButton}
     </span>
   ) : (
-    manageButton
+    actionButton
   );
 
   return (
@@ -229,6 +247,10 @@ function JiraIntakeSection({
             onCheckedChange={enabled => update({ ...config, jira: { ...config.jira, enabled } })}
           />
         </SettingsRow>
+
+        {platformManaged && connections.length > 1 && (
+          <ProviderConnectionsList provider="jira" connections={connections} />
+        )}
 
         {showPickers && (
           <SourcePicker
@@ -246,6 +268,56 @@ function JiraIntakeSection({
           />
         )}
       </SettingsContainer>
+    </SettingsSubsection>
+  );
+}
+
+/**
+ * Connection management for a Platform-managed provider that has no intake
+ * source picker yet (GitLab, incident.io). Hidden entirely when the server
+ * has no Platform credentials or the caller cannot list connections — the
+ * query then errors and there is nothing actionable to show.
+ */
+function PlatformProviderIntakeSection({
+  provider,
+  description,
+}: {
+  provider: PlatformConnectProviderId;
+  description: string;
+}) {
+  const meta = PLATFORM_CONNECT_PROVIDERS[provider];
+  const connectionsQuery = usePlatformConnectionsQuery(provider);
+  if (connectionsQuery.isError || connectionsQuery.isPending) return null;
+  const connections = connectionsQuery.data;
+  const active = connections.filter(connection => connection.status === 'active');
+  const needsReauth = connections.some(connection => connection.status === 'needs_reauth');
+
+  const action =
+    connections.length === 0 ? (
+      <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
+    ) : (
+      <span className="flex items-center gap-2">
+        <Txt as="span" variant="ui-sm" className="text-icon3">
+          {active.length === 1
+            ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
+            : `${active.length} ${meta.displayName} accounts connected`}
+        </Txt>
+        <ProviderConnectControl provider={provider} label="Connect another" size="xs" variant="ghost" />
+      </span>
+    );
+
+  return (
+    <SettingsSubsection
+      scope="org"
+      title={`${meta.displayName} issues`}
+      description={needsReauth ? `A ${meta.displayName} account needs to be reconnected to keep syncing.` : description}
+      action={action}
+    >
+      {connections.length > 0 && (
+        <SettingsContainer>
+          <ProviderConnectionsList provider={provider} connections={connections} />
+        </SettingsContainer>
+      )}
     </SettingsSubsection>
   );
 }
@@ -382,6 +454,14 @@ export function IntakeSection() {
           </SettingsContainer>
         </SettingsSubsection>
       )}
+      <PlatformProviderIntakeSection
+        provider="gitlab"
+        description="Open issues from connected GitLab accounts feed every member's board."
+      />
+      <PlatformProviderIntakeSection
+        provider="incident-io"
+        description="Incidents and follow-ups from connected incident.io accounts feed every member's board."
+      />
     </div>
   );
 }

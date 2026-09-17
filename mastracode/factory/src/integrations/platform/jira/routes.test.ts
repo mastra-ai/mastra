@@ -59,13 +59,11 @@ function buildApp(
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
       appDbConfigured: options.appDbConfigured ?? true,
-      platformDashboardUrl: PLATFORM_DASHBOARD_URL,
     }),
   );
   return app;
 }
 
-const PLATFORM_DASHBOARD_URL = 'https://projects.mastra.ai';
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 beforeEach(async () => {
@@ -76,7 +74,7 @@ beforeEach(async () => {
   vi.spyOn(jira, 'listConnections').mockResolvedValue([
     {
       id: 'a1b_acme',
-      integrationId: 'factory-jira',
+      integrationId: 'jira',
       status: 'active',
       accountLabel: 'acme.atlassian.net',
     },
@@ -97,7 +95,6 @@ describe('status route', () => {
       auth: fakeRouteAuth({ enabled: false }),
       intake: seed.intake,
       appDbConfigured: true,
-      platformDashboardUrl: PLATFORM_DASHBOARD_URL,
     });
     expect(routes).toHaveLength(1);
     const app = buildApp(org1(), { authEnabled: false });
@@ -137,12 +134,11 @@ describe('status route', () => {
       connections: [
         {
           id: 'a1b_acme',
-          integrationId: 'factory-jira',
+          integrationId: 'jira',
           status: 'active',
           accountLabel: 'acme.atlassian.net',
         },
       ],
-      manageUrl: 'https://projects.mastra.ai/orgs/org1/settings/general',
       reason: 'ready',
       diagnostics: { jiraConfigured: true, factoryAuthEnabled: true, appDbConfigured: true },
     });
@@ -156,7 +152,6 @@ describe('status route', () => {
       configured: false,
       mode: 'platform',
       connections: [],
-      manageUrl: 'https://projects.mastra.ai/orgs/org1/settings/general',
       reason: 'not_connected',
     });
   });

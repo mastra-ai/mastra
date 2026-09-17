@@ -66,18 +66,11 @@ const ISSUE_COMMENTS_MAX_PAGES = 20;
 /** Hard stop for project pagination so a misbehaving `isLast` can't loop forever. */
 const PROJECT_SEARCH_MAX_PAGES = 50;
 const ISSUE_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
-const PLATFORM_JIRA_PROVIDER_CONFIG_KEY = 'factory-jira';
+const PLATFORM_JIRA_PROVIDER_CONFIG_KEY = 'jira';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const JIRA_CONNECTION_TOKEN_PREFIX = 'jira-connection:';
 const JIRA_ISSUE_REF_PREFIX = 'jira-issue:';
 const JIRA_SOURCE_PREFIX = 'jira-project:';
-const DEFAULT_PLATFORM_DASHBOARD_URL = 'https://projects.mastra.ai';
-
-export function resolvePlatformDashboardUrl(configuredUrl?: string): string {
-  const url =
-    configuredUrl?.trim() || process.env.MASTRA_PLATFORM_DASHBOARD_URL?.trim() || DEFAULT_PLATFORM_DASHBOARD_URL;
-  return url.replace(/\/+$/, '');
-}
 
 const STATE_TYPE_TO_CATEGORY: Record<'unstarted' | 'started' | 'completed', string> = {
   unstarted: 'new',
@@ -100,7 +93,6 @@ function stateTypeFromCategory(key: string | undefined): string | null {
 
 export interface PlatformJiraIntegrationConfig {
   clientConfig?: PlatformApiClientConfig;
-  platformDashboardUrl?: string;
 }
 
 export class PlatformJiraIntegration implements FactoryIntegration {
@@ -108,7 +100,6 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   readonly #clientConfig: PlatformApiClientConfig;
   readonly #platformClient: PlatformApiClient;
   readonly #endpointHost: string;
-  readonly #platformDashboardUrl: string;
   readonly #cloudIdByConnectionId = new Map<string, string>();
   readonly #siteUrlByConnectionId = new Map<string, string>();
   #projects: FactoryProjectsStorage | undefined;
@@ -119,7 +110,6 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     this.#clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
     this.#platformClient = new PlatformApiClient(this.#clientConfig);
     this.#endpointHost = new URL(this.#clientConfig.baseUrl).host;
-    this.#platformDashboardUrl = resolvePlatformDashboardUrl(config.platformDashboardUrl);
   }
 
   initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth: RouteAuth }): void {
@@ -488,7 +478,6 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       auth: ctx.auth,
       intake: ctx.storage.intake,
       appDbConfigured: Boolean(ctx.factoryStorage),
-      platformDashboardUrl: this.#platformDashboardUrl,
     });
   }
 

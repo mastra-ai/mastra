@@ -53,7 +53,10 @@ import {
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
 import { isValidGitRef } from './integrations/github/sandbox.js';
+import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
+import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
+import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integration.js';
 import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.js';
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
@@ -207,7 +210,7 @@ export interface MastraFactoryConfig {
    * system. When Platform credentials are configured, missing `github` and
    * `linear` integrations default to their Platform-backed implementations.
    * A missing `jira` integration also defaults to Platform Jira, which
-   * discovers visible `factory-jira` connections at runtime.
+   * discovers visible `jira` connections at runtime.
    */
   integrations?: FactoryIntegration[];
   /**
@@ -402,10 +405,10 @@ export class MastraFactory {
       if (!integrations.some(integration => integration.id === 'github')) {
         integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
       }
-      if (
-        process.env.MASTRA_INCIDENT_IO_CONNECTION_ID?.trim() &&
-        !integrations.some(integration => integration.id === 'incidentio')
-      ) {
+      if (!integrations.some(integration => integration.id === 'gitlab')) {
+        integrations.push(new PlatformGitLabIntegration());
+      }
+      if (!integrations.some(integration => integration.id === 'incidentio')) {
         integrations.push(new PlatformIncidentioIntegration());
       }
       if (!integrations.some(integration => integration.id === 'jira')) {
@@ -1036,6 +1039,15 @@ export class MastraFactory {
           ...projectRoutes.routes(),
           ...auditDomain.routes(),
           ...commentsDomain.routes(),
+          // Connect/reconnect session minting for Platform-managed providers.
+          // Server-side because only the deploy holds Platform machine
+          // credentials; the SPA runs the OAuth popup with the minted token.
+          ...(hasPlatformCredentials()
+            ? buildPlatformConnectRoutes({
+                auth: routeAuth,
+                client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+              })
+            : []),
         ],
         buildServerConfig: () => {
           const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};

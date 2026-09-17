@@ -46,6 +46,7 @@ export const queryKeys = {
   linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueId: string | undefined) =>
     ['linear', 'issue', factoryProjectId ?? null, identifier ?? null, issueId ?? null] as const,
   jiraStatus: () => ['jira', 'status'] as const,
+  platformConnections: (provider: string) => ['platform-connections', provider] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
   jiraIssuesAll: () => ['jira', 'issues'] as const,
   jiraIssues: (factoryProjectId: string | undefined) =>

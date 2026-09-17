@@ -9,7 +9,6 @@ import {
   encodeIssueReference,
   encodeSourceId,
   PlatformJiraIntegration,
-  resolvePlatformDashboardUrl,
 } from './integration.js';
 
 const PLATFORM_BASE = 'https://integrations.example.com';
@@ -20,19 +19,19 @@ const connection = { type: 'oauth' as const, accessToken: 'platform-managed' };
 const connections = [
   {
     id: 'a1b_acme',
-    integrationId: 'factory-jira',
+    integrationId: 'jira',
     status: 'active' as const,
     accountLabel: 'acme.atlassian.net',
   },
   {
     id: 'a1b_beta',
-    integrationId: 'factory-jira',
+    integrationId: 'jira',
     status: 'active' as const,
     accountLabel: 'beta.atlassian.net',
   },
   {
     id: 'a1b_reauth',
-    integrationId: 'factory-jira',
+    integrationId: 'jira',
     status: 'needs_reauth' as const,
     accountLabel: null,
   },
@@ -81,7 +80,7 @@ function stubRoutes(
   const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
     const target = String(input);
     const method = init?.method ?? 'GET';
-    if (target.endsWith('/v2/connections?providerKey=factory-jira')) {
+    if (target.endsWith('/v2/connections?providerKey=jira')) {
       return json({ connections: visibleConnections });
     }
     const contextMatch = target.match(/\/v2\/connections\/([^/]+)\/context$/);
@@ -103,22 +102,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe('resolvePlatformDashboardUrl', () => {
-  it('defaults integration management links to the Platform UI', () => {
-    vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.mastra.ai/v1');
-    vi.stubEnv('MASTRA_PLATFORM_DASHBOARD_URL', '');
-
-    expect(resolvePlatformDashboardUrl()).toBe('https://projects.mastra.ai');
-  });
-
-  it('uses and normalizes an explicit dashboard URL override', () => {
-    vi.stubEnv('MASTRA_PLATFORM_DASHBOARD_URL', 'https://platform-ui.example.com///');
-
-    expect(resolvePlatformDashboardUrl()).toBe('https://platform-ui.example.com');
-    expect(resolvePlatformDashboardUrl('https://configured.example.com/')).toBe('https://configured.example.com');
-  });
-});
-
 describe('PlatformJiraIntegration discovery', () => {
   it('constructs without a connection ID and logs initialization without connection details', async () => {
     const infoLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
@@ -132,12 +115,12 @@ describe('PlatformJiraIntegration discovery', () => {
     expect(logged).not.toContain('a1b_acme');
   });
 
-  it('discovers connections by the factory-jira provider configuration key', async () => {
+  it('discovers connections by the jira provider configuration key', async () => {
     const fetchMock = stubRoutes([]);
 
     await expect(integration().listConnections()).resolves.toEqual(connections);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections?providerKey=factory-jira`);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections?providerKey=jira`);
   });
 
   it('reports active connections only when a discovered connection is active', async () => {
@@ -154,7 +137,7 @@ describe('PlatformJiraIntegration discovery', () => {
     } satisfies Partial<JiraApiError>);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections?providerKey=factory-jira`);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections?providerKey=jira`);
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections/a1b_acme/context`);
   });
 });
@@ -283,7 +266,7 @@ describe('PlatformJiraIntegration over integrations v2', () => {
     expect(detail?.comments[0]?.body).toBe('Details');
   });
 
-  it('rejects a connection that was not discovered as active factory-jira', async () => {
+  it('rejects a connection that was not discovered as active jira', async () => {
     const fetchMock = stubRoutes([]);
     const reference = encodeIssueReference({ connectionId: 'a1b_gitlab', issueId: 'OPS-7', projectId: '2' });
 

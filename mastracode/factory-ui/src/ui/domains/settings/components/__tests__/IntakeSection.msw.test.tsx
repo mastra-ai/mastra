@@ -2,7 +2,7 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
@@ -11,6 +11,36 @@ import type { JiraProject, JiraStatus } from '../../../factory/services/jira';
 import type { LinearProject, LinearStatus } from '../../../factory/services/linear';
 import { IntakeSection } from '../IntakeSection';
 
+// Headless Nango auth is the browser boundary the SPA drives after the
+// server mints a connect/reconnect session. The SDK opens the provider's
+// consent popup (a real window), so tests stub the SDK and assert the
+// session token and integration id it receives — everything up to that
+// point (session minting, connection polling) stays on the MSW network.
+const nangoAuthCalls: Array<{ integrationId: string; options: Record<string, unknown> }> = [];
+const nangoConstructorOptions: Array<Record<string, unknown>> = [];
+
+vi.mock('@nangohq/frontend', () => {
+  class MockNango {
+    win = { close: vi.fn() };
+    constructor(options: Record<string, unknown>) {
+      nangoConstructorOptions.push(options);
+    }
+    auth(integrationId: string, options: Record<string, unknown>) {
+      nangoAuthCalls.push({ integrationId, options });
+      return Promise.resolve({ connectionId: 'nango-conn', providerConfigKey: integrationId });
+    }
+  }
+  class AuthError extends Error {
+    type = 'unknown';
+  }
+  return { default: MockNango, AuthError };
+});
+
+beforeEach(() => {
+  nangoAuthCalls.length = 0;
+  nangoConstructorOptions.length = 0;
+});
+
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
 const BINDINGS_URL = `${TEST_BASE_URL}/web/intake/bindings`;
 const LINEAR_STATUS_URL = `${TEST_BASE_URL}/web/linear/status`;
@@ -18,7 +48,42 @@ const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
 const LINEAR_TEAMS_URL = `${TEST_BASE_URL}/web/linear/teams`;
 const JIRA_STATUS_URL = `${TEST_BASE_URL}/web/jira/status`;
 const JIRA_PROJECTS_URL = `${TEST_BASE_URL}/web/jira/projects`;
-const JIRA_MANAGE_URL = 'https://platform.mastra.ai/orgs/org-1/settings/general';
+const JIRA_CONNECT_SESSION_URL = `${TEST_BASE_URL}/web/integrations/platform/jira/connect-session`;
+const JIRA_CONNECTIONS_URL = `${TEST_BASE_URL}/web/integrations/platform/jira/connections`;
+
+/**
+ * Stub the platform connect seam: session minting plus the connection list
+ * the mutation polls after the popup resolves. Returns the mint log so specs
+ * can assert which session (connect vs reconnect) was requested.
+ */
+function usePlatformConnectHandlers({
+  connections = [{ id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' }],
+}: {
+  connections?: Array<{ id: string; integrationId: string; status: string; accountLabel: string | null }>;
+} = {}) {
+  const minted: Array<{ kind: 'connect' | 'reconnect'; connectionId: string }> = [];
+  const session = (connectionId: string) => ({
+    connectionId,
+    integrationId: 'jira',
+    connectUrl: 'https://connect.nango.dev/session-token',
+    sessionToken: 'session-token',
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  server.use(
+    http.get(JIRA_CONNECTIONS_URL, () => HttpResponse.json({ connections })),
+    http.post(JIRA_CONNECT_SESSION_URL, () => {
+      const connectionId = connections[0]?.id ?? 'a1b_new';
+      minted.push({ kind: 'connect', connectionId });
+      return HttpResponse.json(session(connectionId), { status: 201 });
+    }),
+    http.post(`${JIRA_CONNECTIONS_URL}/:connectionId/reconnect-session`, ({ params }) => {
+      const connectionId = String(params.connectionId);
+      minted.push({ kind: 'reconnect', connectionId });
+      return HttpResponse.json(session(connectionId), { status: 201 });
+    }),
+  );
+  return minted;
+}
 
 const FACTORY_A = '11111111-1111-4111-8111-111111111111';
 const FACTORY_B = '22222222-2222-4222-8222-222222222222';
@@ -109,18 +174,17 @@ const jiraReadyStatus: JiraStatus = {
   connections: [
     {
       id: 'a1b_acme',
-      integrationId: 'factory-jira',
+      integrationId: 'jira',
       status: 'active',
       accountLabel: 'acme.atlassian.net',
     },
     {
       id: 'a1b_beta',
-      integrationId: 'factory-jira',
+      integrationId: 'jira',
       status: 'active',
       accountLabel: 'beta.atlassian.net',
     },
   ],
-  manageUrl: JIRA_MANAGE_URL,
   reason: 'ready',
 };
 
@@ -501,8 +565,9 @@ describe('IntakeSection', () => {
   });
 
   describe('given the organization has no connected Jira account', () => {
-    it('points to Mastra Platform with a disabled toggle', async () => {
+    it('connects Jira headlessly through a minted platform session', async () => {
       useIntakeHandlers();
+      const minted = usePlatformConnectHandlers();
       server.use(
         http.get(JIRA_STATUS_URL, () =>
           HttpResponse.json({
@@ -512,7 +577,6 @@ describe('IntakeSection', () => {
             site: null,
             sites: [],
             connections: [],
-            manageUrl: JIRA_MANAGE_URL,
             reason: 'not_connected',
           } satisfies JiraStatus),
         ),
@@ -521,15 +585,28 @@ describe('IntakeSection', () => {
       renderIntakeSection();
 
       expect(
-        await screen.findByText('Connect Jira in Mastra Platform to sync issues from this organization.'),
+        await screen.findByText('Connect a Jira account to sync issues from this organization.'),
       ).toBeInTheDocument();
       expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeDisabled();
       expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).not.toBeChecked();
-      expect(screen.getByRole('link', { name: 'Connect Jira' })).toHaveAttribute('href', JIRA_MANAGE_URL);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Connect Jira' }));
+
+      // The SPA runs the provider's OAuth popup itself, keyed by the
+      // server-minted session token — no Platform round trip.
+      await waitFor(() => expect(nangoAuthCalls).toHaveLength(1));
+      expect(minted).toEqual([{ kind: 'connect', connectionId: 'a1b_acme' }]);
+      expect(nangoConstructorOptions[0]).toEqual({ connectSessionToken: 'session-token' });
+      expect(nangoAuthCalls[0]).toEqual({
+        integrationId: 'jira',
+        options: { detectClosedAuthWindow: true },
+      });
+      expect(await screen.findByText('Jira connected')).toBeInTheDocument();
     });
 
-    it('links directly to Platform settings when Jira needs reauthorization', async () => {
+    it('reconnects the rejected account headlessly when Jira needs reauthorization', async () => {
       useIntakeHandlers();
+      const minted = usePlatformConnectHandlers();
       server.use(
         http.get(JIRA_STATUS_URL, () =>
           HttpResponse.json({
@@ -541,12 +618,11 @@ describe('IntakeSection', () => {
             connections: [
               {
                 id: 'a1b_acme',
-                integrationId: 'factory-jira',
+                integrationId: 'jira',
                 status: 'needs_reauth',
                 accountLabel: 'acme.atlassian.net',
               },
             ],
-            manageUrl: JIRA_MANAGE_URL,
             reason: 'not_connected',
           } satisfies JiraStatus),
         ),
@@ -554,9 +630,14 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      expect(await screen.findByText('A Jira account needs to be reconnected in Mastra Platform.')).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Reconnect Jira' })).toHaveAttribute('href', JIRA_MANAGE_URL);
+      expect(await screen.findByText('A connected Jira account needs to be reconnected.')).toBeInTheDocument();
       expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeDisabled();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Reconnect Jira' }));
+
+      await waitFor(() => expect(nangoAuthCalls).toHaveLength(1));
+      expect(minted).toEqual([{ kind: 'reconnect', connectionId: 'a1b_acme' }]);
+      expect(nangoConstructorOptions[0]).toEqual({ connectSessionToken: 'session-token' });
     });
   });
 
@@ -607,8 +688,12 @@ describe('IntakeSection', () => {
       renderIntakeSection();
 
       expect(await screen.findByText('2 Jira sites connected')).toBeInTheDocument();
-      expect(await screen.findByText('acme.atlassian.net')).toBeInTheDocument();
-      expect(await screen.findByText('beta.atlassian.net')).toBeInTheDocument();
+      // Each site appears both as a connection row (with its own reconnect
+      // affordance) and as a project group label in the picker.
+      expect(await screen.findAllByText('acme.atlassian.net')).not.toHaveLength(0);
+      expect(await screen.findAllByText('beta.atlassian.net')).not.toHaveLength(0);
+      const jiraSection = screen.getByRole('region', { name: 'Jira issues' });
+      expect(within(jiraSection).getAllByRole('button', { name: 'Reconnect' })).toHaveLength(2);
 
       const projects = await screen.findByRole('group', { name: 'Jira projects' });
       await userEvent.click(within(projects).getByRole('checkbox', { name: 'ENG · Engineering' }));
@@ -676,10 +761,109 @@ describe('IntakeSection', () => {
       renderIntakeSection();
 
       expect(
-        await screen.findByText('Jira rejected a connected account. Reconnect it in Mastra Platform.'),
+        await screen.findByText('Jira rejected a connected account. Reconnect it to resume syncing.'),
       ).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Reconnect Jira' })).toHaveAttribute('href', JIRA_MANAGE_URL);
+      expect(screen.getByRole('button', { name: 'Reconnect Jira' })).toBeInTheDocument();
       expect(screen.queryByRole('group', { name: 'Jira projects' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('given Platform-managed provider connect routes are mounted', () => {
+    // The ambient handlers 404 `/web/integrations/platform/:provider/connections`
+    // (no Platform credentials), which hides these sections entirely.
+    it('hides the GitLab and incident.io sections when the server has no Platform credentials', async () => {
+      useIntakeHandlers();
+
+      renderIntakeSection();
+
+      await screen.findByRole('switch', { name: 'Sync Jira issues' });
+      expect(screen.queryByRole('region', { name: 'GitLab issues' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'incident.io issues' })).not.toBeInTheDocument();
+    });
+
+    it('offers a headless GitLab connect when no account is connected yet', async () => {
+      useIntakeHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/gitlab/connections`, () =>
+          HttpResponse.json({ connections: [] }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      const section = await screen.findByRole('region', { name: 'GitLab issues' });
+      expect(within(section).getByRole('button', { name: 'Connect GitLab' })).toBeInTheDocument();
+    });
+
+    it('lists connected GitLab accounts across catalog variants with per-connection reconnect', async () => {
+      useIntakeHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/gitlab/connections`, () =>
+          HttpResponse.json({
+            connections: [
+              { id: 'gl-1', integrationId: 'gitlab', status: 'active', accountLabel: 'gitlab.com/acme' },
+              { id: 'gl-2', integrationId: 'gitlab-group', status: 'needs_reauth', accountLabel: 'gitlab.com/beta' },
+            ],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      const section = await screen.findByRole('region', { name: 'GitLab issues' });
+      // The single active account doubles as the summary label, so it can render twice.
+      expect(within(section).getAllByText('gitlab.com/acme')).not.toHaveLength(0);
+      expect(within(section).getAllByText('gitlab.com/beta')).not.toHaveLength(0);
+      expect(within(section).getByText('Needs reauthorization')).toBeInTheDocument();
+      expect(within(section).getAllByRole('button', { name: 'Reconnect' })).toHaveLength(2);
+      expect(within(section).getByRole('button', { name: 'Connect another' })).toBeInTheDocument();
+    });
+
+    it('collects an incident.io API key in a dialog and submits it without a popup', async () => {
+      useIntakeHandlers();
+      const connections: Array<{
+        id: string;
+        integrationId: string;
+        status: string;
+        accountLabel: string | null;
+      }> = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`, () =>
+          HttpResponse.json({ connections }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connect-session`, () => {
+          // Activate on the poll that follows a successful credential submission.
+          connections.push({ id: 'inc-1', integrationId: 'incident-io', status: 'active', accountLabel: 'Acme' });
+          return HttpResponse.json(
+            {
+              connectionId: 'inc-1',
+              integrationId: 'incident-io',
+              connectUrl: 'https://connect.nango.dev/session-token',
+              sessionToken: 'incident-session-token',
+              expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            },
+            { status: 201 },
+          );
+        }),
+      );
+
+      renderIntakeSection();
+
+      const section = await screen.findByRole('region', { name: 'incident.io issues' });
+      await userEvent.click(within(section).getByRole('button', { name: 'Connect incident.io' }));
+
+      // API-key providers collect the credential in our own dialog — no popup.
+      const dialog = await screen.findByRole('dialog');
+      await userEvent.type(within(dialog).getByLabelText('incident.io API key'), 'inc-api-key');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));
+
+      await waitFor(() => expect(nangoAuthCalls).toHaveLength(1));
+      expect(nangoConstructorOptions[0]).toEqual({ connectSessionToken: 'incident-session-token' });
+      expect(nangoAuthCalls[0]).toEqual({
+        integrationId: 'incident-io',
+        options: { credentials: { apiKey: 'inc-api-key' } },
+      });
+      expect(await screen.findByText('incident.io connected')).toBeInTheDocument();
     });
   });
 

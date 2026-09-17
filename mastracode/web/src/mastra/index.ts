@@ -185,7 +185,7 @@ const linear =
 
 // Jira Cloud intake. A complete direct Basic-auth credential group takes
 // precedence. Otherwise Platform credentials enable automatic discovery of
-// visible `factory-jira` connections. Partial direct configuration falls back
+// visible `jira` connections. Partial direct configuration falls back
 // to Platform Jira when Platform credentials are available.
 const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
 const jiraEmail = process.env.JIRA_EMAIL?.trim();

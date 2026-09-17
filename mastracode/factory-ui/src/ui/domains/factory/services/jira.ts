@@ -4,7 +4,7 @@
  * All requests go to the server's `/web/jira/*` routes, which sit behind the
  * WorkOS auth gate and scope stored intake selections to the caller's
  * organization. Provider requests use visible Platform connections discovered
- * by filtering for the `factory-jira` provider configuration key.
+ * by filtering for the `jira` provider configuration key.
  */
 
 export type JiraStatusReason = 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
@@ -25,8 +25,6 @@ export interface JiraStatus {
     status: 'active' | 'needs_reauth';
     accountLabel: string | null;
   }>;
-  /** Mastra Platform organization settings page for connecting or reauthorizing Jira. */
-  manageUrl?: string;
   reason?: JiraStatusReason;
 }
 
