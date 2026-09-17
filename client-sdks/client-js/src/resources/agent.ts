@@ -58,7 +58,7 @@ import type {
   ToolInvocationUIPartWithMeta,
 } from '../types';
 
-import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
+import { mergeAbortSignals, parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
@@ -1156,8 +1156,12 @@ export class Agent extends BaseResource {
     Output extends JSONSchema7 | ZodSchema | undefined = undefined,
     _StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
   >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
+    // `abortSignal` is forwarded to fetch and must never be serialized into the request body
+    const { abortSignal: perCallSignal, ...bodyParams } = params;
+    // Continuation guards must honor the client-wide signal too, not just the per-call one.
+    const abortSignal = mergeAbortSignals(this.options.abortSignal, perCallSignal);
     const processedParams = {
-      ...params,
+      ...bodyParams,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
@@ -1169,9 +1173,13 @@ export class Agent extends BaseResource {
     const response: GenerateReturn<any, any, any> = await this.request(`/agents/${this.agentId}/generate-legacy`, {
       method: 'POST',
       body: processedParams,
+      signal: abortSignal,
     });
 
     if (response.finishReason === 'tool-calls') {
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+      }
       const toolCalls = (
         response as unknown as {
           toolCalls: { toolName: string; args: any; toolCallId: string }[];
@@ -1255,8 +1263,12 @@ export class Agent extends BaseResource {
       messages: messages,
     } as StreamParams<OUTPUT>;
     const resolvedClientTools = params.clientToolsResolver?.() ?? params.clientTools;
+    // `abortSignal` is forwarded to fetch and must never be serialized into the request body
+    // Continuation guards must honor the client-wide signal too, not just the per-call one.
+    const abortSignal = mergeAbortSignals(this.options.abortSignal, params.abortSignal);
     const processedParams = {
       ...params,
+      abortSignal: undefined,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(resolvedClientTools),
       structuredOutput: params.structuredOutput
@@ -1277,10 +1289,15 @@ export class Agent extends BaseResource {
       {
         method: 'POST',
         body: processedParams,
+        signal: abortSignal,
       },
     );
 
     if (response.finishReason === 'tool-calls') {
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+      }
+      // params still carries abortSignal, so the continuation request inherits it
       return executeToolCallAndRespond<OUTPUT>({
         response,
         // Dispatch from the resolved tools so resolver-only calls execute; the
@@ -1704,10 +1721,30 @@ export class Agent extends BaseResource {
     };
 
     // Create a readable stream that will handle the response processing
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const { readable: innerReadable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+
+    // Wrap the readable so cancelling it aborts the underlying request and any
+    // client-tool continuations, instead of only detaching the consumer.
+    const abortController = new AbortController();
+    const signal = mergeAbortSignals(abortController.signal, params.abortSignal, this.options.abortSignal);
+    const innerReader = innerReadable.getReader();
+    const readable = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const { done, value } = await innerReader.read();
+        if (done) {
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      },
+      cancel(reason) {
+        abortController.abort(reason);
+        return innerReader.cancel(reason).catch(() => {});
+      },
+    });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponseLegacy(processedParams, writable);
+    const response = await this.processStreamResponseLegacy(processedParams, writable, signal);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -2140,10 +2177,34 @@ export class Agent extends BaseResource {
     await onFinish?.({ message, finishReason, usage });
   }
 
+  /**
+   * Creates the consumer-facing stream for the streaming methods. Cancelling the
+   * returned stream (or aborting `externalSignal`) aborts the underlying request
+   * and stops any client-tool continuations.
+   */
+  private createCancellableStream(externalSignal?: AbortSignal) {
+    const abortController = new AbortController();
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+      cancel(reason) {
+        abortController.abort(reason);
+      },
+    });
+    return {
+      readable,
+      controller: readableController!,
+      signal: mergeAbortSignals(abortController.signal, externalSignal, this.options.abortSignal)!,
+    };
+  }
+
   async processStreamResponse(
     processedParams: any,
     controller: ReadableStreamDefaultController<Uint8Array>,
     route: string = 'stream',
+    signal?: AbortSignal,
   ) {
     // Extract threadId from memory config if present (matching generate() behavior)
     const { memory } = processedParams ?? {};
@@ -2151,9 +2212,11 @@ export class Agent extends BaseResource {
     const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
     const resourceId = processedParams.resourceId ?? resource;
 
-    let requestBody = processedParams;
+    // `abortSignal` is consumed locally and must never be serialized into the request body
+    const { abortSignal: _abortSignal, ...serializableParams } = processedParams;
+    let requestBody = serializableParams;
     if (route === 'resume-stream') {
-      const { messages: _messages, ...resumeStreamBody } = processedParams;
+      const { messages: _messages, ...resumeStreamBody } = serializableParams;
       requestBody = resumeStreamBody;
     }
 
@@ -2165,11 +2228,26 @@ export class Agent extends BaseResource {
       method: 'POST',
       body: requestBody,
       stream: true,
+      signal,
     });
 
     if (!response.body) {
       throw new Error('No response body');
     }
+
+    const isAborted = () => Boolean(signal?.aborted);
+    const isAbortError = (error: unknown) => isAborted() || (error as Error)?.name === 'AbortError';
+    const safeClose = () => {
+      try {
+        controller.close();
+      } catch {
+        // Already closed or cancelled
+      }
+    };
+    const safeEnqueue = (chunk: Uint8Array) => {
+      if (isAborted()) return;
+      controller.enqueue(chunk);
+    };
 
     try {
       let messages: UIMessage[] = [];
@@ -2189,11 +2267,12 @@ export class Agent extends BaseResource {
           .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
           .join('\n\n');
         if (readableLines) {
-          controller.enqueue(new TextEncoder().encode(`${readableLines}\n\n`));
+          safeEnqueue(new TextEncoder().encode(`${readableLines}\n\n`));
         }
       };
 
-      // Pipe one branch directly to the controller
+      // Pipe one branch directly to the controller. Aborting the signal cancels this
+      // branch; the tee source is released once both branches are cancelled/errored.
       const pipePromise = streamForController
         .pipeTo(
           new WritableStream<Uint8Array>({
@@ -2203,26 +2282,41 @@ export class Agent extends BaseResource {
                 enqueueReadableText(decoder.decode(chunk, { stream: true }));
               } catch (error) {
                 console.error('Error enqueueing to controller:', error);
-                controller.enqueue(chunk);
+                safeEnqueue(chunk);
               }
             },
             close() {
               enqueueReadableText(decoder.decode(), true);
             },
           }),
+          { signal },
         )
         .catch(error => {
-          console.error('Error piping to controller:', error);
-          try {
-            controller.close();
-          } catch {
-            // Already closed
+          if (!isAbortError(error)) {
+            console.error('Error piping to controller:', error);
           }
+          safeClose();
         });
 
-      // Process the other branch for chat response handling
+      // Surface the abort to a consumer that is still reading (e.g. when a caller-provided
+      // abortSignal fires rather than the stream itself being cancelled).
+      const onAbort = () => {
+        try {
+          controller.error(signal?.reason);
+        } catch {
+          // Stream already cancelled/closed by the consumer
+        }
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+
+      // Process the other branch for chat response handling. Routing it through an
+      // abortable pipe lets the abort signal cancel this branch too, releasing the
+      // underlying response body once both tee branches are cancelled.
+      const processingStream = signal
+        ? streamForProcessing.pipeThrough(new TransformStream<Uint8Array, Uint8Array>(), { signal })
+        : streamForProcessing;
       this.processChatResponse_vNext({
-        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
+        stream: processingStream as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -2233,6 +2327,11 @@ export class Agent extends BaseResource {
           }
         },
         onFinish: async ({ finishReason, message }) => {
+          // The consumer cancelled: skip client-tool execution and any continuation request.
+          if (isAborted()) {
+            return;
+          }
+
           if (finishReason === 'tool-calls') {
             const toolInvocationsById = new Map<string, ToolInvocation>();
 
@@ -2300,6 +2399,10 @@ export class Agent extends BaseResource {
               const toolResultContents: Array<Record<string, unknown>> = [];
 
               for (const toolCall of executableToolCalls) {
+                // Re-check between tools so an abort mid-batch stops the remaining executions.
+                if (isAborted()) {
+                  return;
+                }
                 const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
 
                 const runId: string = streamRunId ?? toolCall.toolCallId;
@@ -2385,6 +2488,10 @@ export class Agent extends BaseResource {
                 // pipePromise already has its own .catch; ignore here.
               }
 
+              if (isAborted()) {
+                return;
+              }
+
               for (const synthetic of syntheticChunks) {
                 try {
                   const errorForSerialization = synthetic.type === 'tool-error' ? synthetic.payload.error : undefined;
@@ -2401,7 +2508,7 @@ export class Agent extends BaseResource {
                       ? { ...synthetic, payload: { ...synthetic.payload, error: serializedError } }
                       : synthetic;
                   const sseLine = `data: ${JSON.stringify(payloadForWire)}\n\n`;
-                  controller.enqueue(new TextEncoder().encode(sseLine));
+                  safeEnqueue(new TextEncoder().encode(sseLine));
                 } catch (enqueueErr) {
                   console.error('Failed to enqueue synthetic tool-result chunk:', enqueueErr);
                 }
@@ -2432,6 +2539,10 @@ export class Agent extends BaseResource {
                   : route === 'resume-stream-until-idle'
                     ? 'stream-until-idle'
                     : route;
+              if (isAborted()) {
+                return;
+              }
+
               try {
                 await this.processStreamResponse(
                   {
@@ -2443,28 +2554,23 @@ export class Agent extends BaseResource {
                   },
                   controller,
                   recursionRoute,
+                  signal,
                 );
               } catch (error) {
-                console.error('Error processing recursive stream response:', error);
+                if (!isAbortError(error)) {
+                  console.error('Error processing recursive stream response:', error);
+                }
               }
             } else {
               // Close the controller after all processing is complete
               // Wait for current pipe to finish before closing
               await pipePromise;
-              try {
-                controller.close();
-              } catch {
-                // Consumer already cancelled the stream
-              }
+              safeClose();
             }
           } else {
             // No tool calls - wait for pipe to complete then close the stream
             await pipePromise;
-            try {
-              controller.close();
-            } catch {
-              // Consumer already cancelled the stream
-            }
+            safeClose();
           }
         },
         onStreamChunk: chunk => {
@@ -2473,18 +2579,26 @@ export class Agent extends BaseResource {
           }
         },
         lastMessage: undefined,
-      }).catch(async error => {
-        console.error('Error processing stream response:', error);
-        // On error, wait for pipe to complete then close the controller
-        try {
-          await pipePromise;
-          controller.close();
-        } catch {
-          // Already closed
-        }
-      });
+      })
+        .catch(async error => {
+          if (!isAbortError(error)) {
+            console.error('Error processing stream response:', error);
+          }
+          // On error, wait for pipe to complete then close the controller
+          try {
+            await pipePromise;
+          } catch {
+            // pipePromise already has its own .catch; ignore here.
+          }
+          safeClose();
+        })
+        .finally(() => {
+          signal?.removeEventListener('abort', onAbort);
+        });
     } catch (error) {
-      console.error('Error processing stream response:', error);
+      if (!isAbortError(error)) {
+        console.error('Error processing stream response:', error);
+      }
     }
 
     return response;
@@ -2727,16 +2841,11 @@ export class Agent extends BaseResource {
     };
 
     // Create a manually controlled readable stream
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
     // Start processing the response in the background
     // This returns immediately with response metadata and continues streaming in background
-    const response = await this.processStreamResponse(processedParams, readableController!);
+    const response = await this.processStreamResponse(processedParams, readableController, 'stream', signal);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -2849,16 +2958,11 @@ export class Agent extends BaseResource {
     };
 
     // Create a manually controlled readable stream
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
     // Start processing the response in the background
     // This returns immediately with response metadata and continues streaming in background
-    const response = await this.processStreamResponse(processedParams, readableController!, 'stream-until-idle');
+    const response = await this.processStreamResponse(processedParams, readableController, 'stream-until-idle', signal);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -2917,6 +3021,8 @@ export class Agent extends BaseResource {
     runId: string;
     toolCallId: string;
     model?: string;
+    /** Aborts the underlying request and any client-tool continuations. */
+    abortSignal?: AbortSignal;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2931,15 +3037,10 @@ export class Agent extends BaseResource {
     const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
 
     // Create a manually controlled readable stream
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, readableController!, 'approve-tool-call');
+    const response = await this.processStreamResponse(processedParams, readableController, 'approve-tool-call', signal);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -2990,6 +3091,8 @@ export class Agent extends BaseResource {
     runId: string;
     toolCallId: string;
     model?: string;
+    /** Aborts the underlying request and any client-tool continuations. */
+    abortSignal?: AbortSignal;
     /** Optional explanation surfaced to the model in place of the default decline message. */
     reason?: string;
     requestContext?: RequestContext | Record<string, any>;
@@ -3006,15 +3109,10 @@ export class Agent extends BaseResource {
     const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
 
     // Create a manually controlled readable stream
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, readableController!, 'decline-tool-call');
+    const response = await this.processStreamResponse(processedParams, readableController, 'decline-tool-call', signal);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -3139,14 +3237,9 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(options.abortSignal);
 
-    const response = await this.processStreamResponse(processedParams, readableController!, 'resume-stream');
+    const response = await this.processStreamResponse(processedParams, readableController, 'resume-stream', signal);
 
     const streamResponse = new Response(readable, {
       status: response.status,
@@ -3261,14 +3354,14 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(options.abortSignal);
 
-    const response = await this.processStreamResponse(processedParams, readableController!, 'resume-stream-until-idle');
+    const response = await this.processStreamResponse(
+      processedParams,
+      readableController,
+      'resume-stream-until-idle',
+      signal,
+    );
 
     const streamResponse = new Response(readable, {
       status: response.status,
@@ -3331,19 +3424,29 @@ export class Agent extends BaseResource {
   /**
    * Processes the stream response and handles tool calls
    */
-  private async processStreamResponseLegacy(processedParams: any, writable: WritableStream<Uint8Array>) {
+  private async processStreamResponseLegacy(
+    processedParams: any,
+    writable: WritableStream<Uint8Array>,
+    signal?: AbortSignal,
+  ) {
     // Extract threadId from memory config if present (matching generate() behavior)
     const { memory } = processedParams ?? {};
     const { resource, thread } = memory ?? {};
     const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
     const resourceId = processedParams.resourceId ?? resource;
 
+    // The signal is not serializable; keep it out of the request body.
+    const { abortSignal: _abortSignal, ...bodyParams } = processedParams ?? {};
+    const isAborted = () => signal?.aborted === true;
+    const isAbortError = (error: unknown) => isAborted() || (error as Error)?.name === 'AbortError';
+
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
     } = await this.request(this.routeOverrides?.stream ?? `/agents/${this.agentId}/stream-legacy`, {
       method: 'POST',
-      body: processedParams,
+      body: bodyParams,
       stream: true,
+      signal,
     });
 
     if (!response.body) {
@@ -3357,18 +3460,25 @@ export class Agent extends BaseResource {
       // Use tee() to split the stream into two branches
       const [streamForWritable, streamForProcessing] = response.body.tee();
 
-      // Pipe one branch to the writable stream
+      // Pipe one branch to the writable stream. Passing the signal lets an abort
+      // cancel this tee branch so the underlying response body is released.
       streamForWritable
         .pipeTo(writable, {
           preventClose: true,
+          signal,
         })
         .catch(error => {
-          console.error('Error piping to writable stream:', error);
+          if (!isAbortError(error)) {
+            console.error('Error piping to writable stream:', error);
+          }
         });
 
       // Process the other branch for chat response handling
+      const processingStream = signal
+        ? streamForProcessing.pipeThrough(new TransformStream<Uint8Array, Uint8Array>(), { signal })
+        : streamForProcessing;
       this.processChatResponse({
-        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
+        stream: processingStream as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -3379,6 +3489,10 @@ export class Agent extends BaseResource {
           }
         },
         onFinish: async ({ finishReason, message }) => {
+          // Consumer cancelled: skip client-tool side effects and continuations.
+          if (isAborted()) {
+            return;
+          }
           if (finishReason === 'tool-calls') {
             const toolCall = [...(message?.parts ?? [])]
               .reverse()
@@ -3418,6 +3532,10 @@ export class Agent extends BaseResource {
                     },
                   },
                 });
+
+                if (isAborted()) {
+                  return;
+                }
 
                 // write the tool result part to the stream
                 const writer = writable.getWriter();
@@ -3470,25 +3588,31 @@ export class Agent extends BaseResource {
                     messages: updatedMessages,
                   },
                   writable,
+                  signal,
                 ).catch(error => {
-                  console.error('Error processing stream response:', error);
+                  if (!isAbortError(error)) {
+                    console.error('Error processing stream response:', error);
+                  }
                 });
               }
             }
           } else {
             setTimeout(() => {
               // We can't close the stream in this function, we have to wait until it's done
-              // eslint-disable-next-line @typescript-eslint/no-floating-promises
-              writable.close();
+              writable.close().catch(() => {});
             }, 0);
           }
         },
         lastMessage: undefined,
       }).catch(error => {
-        console.error('Error processing stream response:', error);
+        if (!isAbortError(error)) {
+          console.error('Error processing stream response:', error);
+        }
       });
     } catch (error) {
-      console.error('Error processing stream response:', error);
+      if (!isAbortError(error)) {
+        console.error('Error processing stream response:', error);
+      }
     }
     return response;
   }

@@ -119,7 +119,13 @@ describe('Agent signal routes', () => {
               controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
             }
             // Close after the consumer has had a chance to cancel so onFinish fires against a cancelled stream
-            setTimeout(() => controller.close(), 20);
+            setTimeout(() => {
+              try {
+                controller.close();
+              } catch {
+                // Cancelling the outer stream now cancels this underlying body too
+              }
+            }, 20);
           },
         }),
         { headers: { 'Content-Type': 'text/event-stream' } },
