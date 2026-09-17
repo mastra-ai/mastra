@@ -1,4 +1,4 @@
-import { Text, visibleWidth } from '@earendil-works/pi-tui';
+import { Text, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -120,7 +120,9 @@ export class NotificationComponent extends WidthAwareContainer {
     );
     const titleLines = wrapText(titleText, maxContentWidth);
     const detailLines = details ? wrapText(details, maxContentWidth) : [];
-    const messageLines = message ? this.limitMessageLines(wrapText(message, maxContentWidth), quiet) : [];
+    const messageLines = message
+      ? this.limitMessageLines(wrapText(message, maxContentWidth), quiet, maxContentWidth)
+      : [];
     const allLines = [...titleLines, ...detailLines, ...messageLines];
     const contentWidth = Math.max(...allLines.map(line => visibleWidth(line)), 1);
     const borderColor = chalk.hex(mastra.blue);
@@ -155,11 +157,14 @@ export class NotificationComponent extends WidthAwareContainer {
     this.addChild(new Text(borderColor(bottom), BOX_INDENT, 0));
   }
 
-  private limitMessageLines(lines: string[], quiet: boolean): string[] {
+  private limitMessageLines(lines: string[], quiet: boolean, maxWidth: number): string[] {
     if (!quiet || lines.length <= this.quietPreviewLineLimit) return lines;
     const shown = lines.slice(0, this.quietPreviewLineLimit);
     if (shown.length === 0) return shown;
-    shown[shown.length - 1] = `${shown[shown.length - 1]}…`;
+    // The ellipsis must fit inside the content width or the box border overflows by a column.
+    const last = shown[shown.length - 1]!;
+    shown[shown.length - 1] =
+      visibleWidth(last) < maxWidth ? `${last}…` : `${truncateToWidth(last, maxWidth - 1, '')}…`;
     return shown;
   }
 

@@ -1,4 +1,4 @@
-import { Container } from '@earendil-works/pi-tui';
+import { Container, visibleWidth } from '@earendil-works/pi-tui';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
@@ -467,6 +467,33 @@ describe('addUserMessage', () => {
     expect(full).toContain('high · ci-status · delivered');
     expect(full).toContain('detail line 6');
     expect(stripAnsi(summary.render(100).join('\n'))).toContain('notification_inbox');
+  });
+
+  it('keeps the quiet notification ellipsis inside the terminal width', () => {
+    const state = createState();
+    state.quietMode = true;
+    state.quietModeMaxToolPreviewLines = 1;
+    // A single long word wraps into lines that fill the content width exactly.
+    const longMessage = 'x'.repeat(200);
+
+    addUserMessage(
+      state,
+      createNotificationMessage(
+        { message: longMessage, source: 'github', kind: 'ci-status', priority: 'high', status: 'delivered' },
+        'notification-narrow',
+      ),
+    );
+
+    const width = 60;
+    const notification = state.messageComponentsById.get('notification-narrow') as NotificationComponent;
+    const rendered = notification.render(width).map(line => stripAnsi(line));
+    expect(rendered).toHaveLength(4);
+    expect(rendered[2]).toContain('…');
+    expect(rendered[2]).toContain('x'.repeat(55));
+    expect(rendered[2]).not.toContain('x'.repeat(56));
+    for (const line of rendered) {
+      expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+    }
   });
 
   it('dedupes echoed slash command messages against the optimistic slash component', () => {
