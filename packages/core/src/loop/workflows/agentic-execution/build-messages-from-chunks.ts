@@ -127,6 +127,7 @@ export function buildMessagesFromChunks({
             },
             providerMetadata: result.providerMetadata ?? providerMetadata,
             providerExecuted: resultProviderExecuted,
+            ...(p.title ? { title: p.title } : {}),
           } as MastraMessagePart);
         } else {
           // No result yet — emit as 'call' state
@@ -140,6 +141,7 @@ export function buildMessagesFromChunks({
             },
             providerMetadata,
             providerExecuted,
+            ...(p.title ? { title: p.title } : {}),
           } as MastraMessagePart);
         }
         break;

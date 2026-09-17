@@ -208,6 +208,9 @@ export class Tool<
   /** Description of what the tool does */
   description: string;
 
+  /** Optional human-readable display label, snapshotted onto tool invocations */
+  title?: string;
+
   /** Schema for validating input parameters */
   inputSchema?: StandardSchemaWithJSON<TSchemaIn>;
 
@@ -399,6 +402,7 @@ export class Tool<
     (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
     this.description = opts.description;
+    this.title = opts.title;
     this.inputSchema = opts.inputSchema ? toStandardSchema(opts.inputSchema) : undefined;
     this.outputSchema = opts.outputSchema ? toStandardSchema(opts.outputSchema) : undefined;
     this.suspendSchema = opts.suspendSchema ? toStandardSchema(opts.suspendSchema) : undefined;

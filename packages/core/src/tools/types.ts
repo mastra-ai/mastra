@@ -435,6 +435,8 @@ export interface MCPToolProperties {
  */
 export type CoreTool = {
   description?: string;
+  /** Human-readable display label, resolved from `ToolAction.title` or `mcp.annotations.title`. */
+  title?: string;
   parameters: FlexibleSchema<any> | Schema;
   outputSchema?: FlexibleSchema<any> | Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
@@ -493,6 +495,8 @@ export type CoreTool = {
  */
 export type InternalCoreTool = {
   description?: string;
+  /** Human-readable display label, resolved from `ToolAction.title` or `mcp.annotations.title`. */
+  title?: string;
   parameters: Schema;
   outputSchema?: Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
@@ -638,6 +642,13 @@ export interface ToolAction<
 > {
   id: TId;
   description: string;
+  /**
+   * Optional human-readable display label for the tool (e.g. "Search the web").
+   * Snapshotted onto tool-call stream chunks and the persisted tool-invocation part at
+   * invocation time, so UIs can render a stable label that survives approval, denial,
+   * result and error transitions. Falls back to `mcp.annotations.title` when omitted.
+   */
+  title?: string;
   inputSchema?: PublicSchema<TSchemaIn>;
   outputSchema?: PublicSchema<TSchemaOut>;
   suspendSchema?: PublicSchema<TSuspend>;

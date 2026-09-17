@@ -1188,6 +1188,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // any tool-level `transformToolPayload` added or replaced for the
                 // current step is honoured, instead of being silently skipped.
                 const transformTools = currentTools as unknown as Record<string, CoreTool> | undefined;
+
+                // Snapshot the tool's display title onto the chunk before the client
+                // transform so both the wire chunk and the collected chunks carry it.
+                if (
+                  (rawChunk.type === 'tool-call-input-streaming-start' || rawChunk.type === 'tool-call') &&
+                  !rawChunk.payload.title
+                ) {
+                  const title = resolveToolDef(rawChunk.payload.toolName)?.title;
+                  if (title) rawChunk.payload.title = title;
+                }
+
                 const clientChunk =
                   registryEntry?.toolPayloadTransform || transformTools
                     ? await applyToolPayloadTransformToChunk(rawChunk, {

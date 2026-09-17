@@ -196,6 +196,8 @@ export interface MastraMetadata {
 export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   toolCallId: string;
   toolName: string;
+  /** Human-readable display label snapshotted from the tool definition at invocation time. */
+  title?: string;
   args?: TArgs & {
     __mastraMetadata?: MastraMetadata;
   };
@@ -218,6 +220,8 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
 export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   toolCallId: string;
   toolName: string;
+  /** Human-readable display label snapshotted from the tool definition at invocation time. */
+  title?: string;
   result: TResult;
   isError?: boolean;
   providerExecuted?: boolean;
@@ -232,6 +236,8 @@ export type DynamicToolResultPayload = ToolResultPayload<any, any>;
 interface ToolCallInputStreamingStartPayload {
   toolCallId: string;
   toolName: string;
+  /** Human-readable display label snapshotted from the tool definition at invocation time. */
+  title?: string;
   providerExecuted?: boolean;
   providerMetadata?: ProviderMetadata;
   dynamic?: boolean;

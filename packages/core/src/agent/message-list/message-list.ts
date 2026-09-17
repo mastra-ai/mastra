@@ -1428,6 +1428,8 @@ export class MessageList {
       ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
         ? { providerExecuted: originalPart.providerExecuted }
         : {}),
+      // Preserve the display title snapshotted on the original call if the result omits it
+      ...(part.title !== undefined && inputPart.title === undefined ? { title: part.title } : {}),
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
 

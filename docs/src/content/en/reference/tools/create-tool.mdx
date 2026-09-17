@@ -1,12 +1,12 @@
 ---
-title: "Reference: createTool() | Tools and MCP"
-description: "The createTool() function is used to define custom tools that your Mastra agents can execute."
+title: 'Reference: createTool() | Tools and MCP'
+description: 'The createTool() function is used to define custom tools that your Mastra agents can execute.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # createTool()
 
@@ -56,6 +56,13 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     type: 'string',
     description: 'A description of what the tool does. This is used by the agent to decide when to use the tool.',
     isOptional: false,
+  },
+  {
+    name: 'title',
+    type: 'string',
+    description:
+      'A human-readable display label for the tool. It is not sent to the model; it is snapshotted onto `tool-call` and `tool-result` stream chunks (`payload.title`) and onto persisted `tool-invocation` message parts, so UIs can show a friendly name instead of the tool `id`. Falls back to `mcp.annotations.title` when not set.',
+    isOptional: true,
   },
   {
     name: 'inputSchema',

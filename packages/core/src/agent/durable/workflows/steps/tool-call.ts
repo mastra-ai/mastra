@@ -1102,6 +1102,7 @@ export function createDurableToolCallStep() {
                           toolCallId: chunk.payload.toolCallId,
                           toolName: chunk.payload.toolName,
                           args: cleanedArgs,
+                          ...(tool?.title ? { title: tool.title } : {}),
                         },
                       });
                     }
@@ -1116,6 +1117,7 @@ export function createDurableToolCallStep() {
                           toolName: chunk.payload.toolName,
                           args: cleanedArgs,
                           result: chunk.payload.result,
+                          ...(tool?.title ? { title: tool.title } : {}),
                         },
                       });
                     } else if (chunk.type === 'background-task-failed') {
@@ -1396,7 +1398,7 @@ export function createDurableToolCallStep() {
                 type: 'tool-result' as const,
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, result },
+                payload: { toolCallId, toolName, args, result, ...(tool?.title ? { title: tool.title } : {}) },
               },
               {
                 policy: registryEntry?.toolPayloadTransform,

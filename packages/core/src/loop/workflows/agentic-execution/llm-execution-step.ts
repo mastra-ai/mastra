@@ -57,7 +57,7 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
-import { getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
+import { getProviderToolName, isMastraTool, isProviderTool, resolveToolTitle } from '../../../tools/toolchecks';
 import { createMastraProxy, makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
@@ -828,6 +828,10 @@ async function processOutputStream<OUTPUT = undefined>({
 
       case 'tool-call-input-streaming-start': {
         const tool = toolInputStartToolDef || resolveDirectOrIdTool(chunk.payload.toolName);
+        const title = resolveToolTitle(tool);
+        if (title && !chunk.payload.title) {
+          chunk.payload.title = title;
+        }
 
         if (tool && 'onInputStart' in tool) {
           try {
@@ -1090,6 +1094,10 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'tool-call': {
+        const title = resolveToolTitle(resolveDirectOrIdTool(chunk.payload.toolName));
+        if (title && !chunk.payload.title) {
+          chunk.payload.title = title;
+        }
         safeEnqueue(controller, chunk);
         break;
       }

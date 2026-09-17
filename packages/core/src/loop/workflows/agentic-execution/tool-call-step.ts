@@ -21,7 +21,7 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
-import { getNeedsApprovalFn } from '../../../tools/toolchecks';
+import { getNeedsApprovalFn, resolveToolTitle } from '../../../tools/toolchecks';
 import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
@@ -995,6 +995,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             if (!resolvedTool?.execute) {
               throw new ToolNotFoundError(inputData.toolName);
             }
+            const resolvedToolTitle = resolveToolTitle(resolvedTool);
             let backgroundChunkTransformQueue: Promise<void> = Promise.resolve();
             const emittedReplayedToolCalls = new Set<string>();
             let resolveReconciliation!: (outcome: { error?: unknown }) => void;
@@ -1098,6 +1099,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 args: inputData.args,
                                 providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
                                 providerExecuted: inputData.providerExecuted,
+                                ...(resolvedToolTitle ? { title: resolvedToolTitle } : {}),
                               },
                             },
                             'input-available',
@@ -1121,6 +1123,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 result: chunk.payload.result,
                                 providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
                                 providerExecuted: inputData.providerExecuted,
+                                ...(resolvedToolTitle ? { title: resolvedToolTitle } : {}),
                               },
                             },
                             'output-available',

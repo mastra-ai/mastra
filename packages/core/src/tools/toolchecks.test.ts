@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isProviderTool } from './toolchecks';
+import { isProviderTool, resolveToolTitle } from './toolchecks';
 
 describe('isProviderTool', () => {
   it('should return true for provider-defined and provider type tools with a string id', () => {
@@ -24,5 +24,23 @@ describe('isProviderTool', () => {
     expect(isProviderTool(undefined)).toBe(false);
     expect(isProviderTool(42)).toBe(false);
     expect(isProviderTool({})).toBe(false);
+  });
+});
+
+describe('resolveToolTitle', () => {
+  it('returns the explicit top-level title when present', () => {
+    expect(resolveToolTitle({ title: 'Search Web', mcp: { annotations: { title: 'MCP Title' } } })).toBe('Search Web');
+  });
+
+  it('falls back to mcp.annotations.title when no top-level title', () => {
+    expect(resolveToolTitle({ mcp: { annotations: { title: 'MCP Title' } } })).toBe('MCP Title');
+  });
+
+  it('returns undefined for empty, missing, or non-string titles', () => {
+    expect(resolveToolTitle({ title: '' })).toBeUndefined();
+    expect(resolveToolTitle({ title: 42 })).toBeUndefined();
+    expect(resolveToolTitle({})).toBeUndefined();
+    expect(resolveToolTitle(null)).toBeUndefined();
+    expect(resolveToolTitle(undefined)).toBeUndefined();
   });
 });

@@ -549,6 +549,52 @@ describe('Provider-defined Tool Handling', () => {
   });
 });
 
+describe('CoreToolBuilder title', () => {
+  const build = (tool: any) =>
+    new CoreToolBuilder({
+      originalTool: tool,
+      options: {
+        name: tool.id,
+        logger: console as any,
+        description: tool.description,
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    }).build();
+
+  it('passes through an explicit title', () => {
+    const tool = createTool({
+      id: 'titled-tool',
+      title: 'Search the Web',
+      description: 'Searches',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async () => ({}),
+    });
+    expect(build(tool).title).toBe('Search the Web');
+  });
+
+  it('falls back to mcp.annotations.title', () => {
+    const tool = createTool({
+      id: 'mcp-tool',
+      description: 'MCP',
+      mcp: { annotations: { title: 'MCP Display' } },
+      inputSchema: z.object({ q: z.string() }),
+      execute: async () => ({}),
+    });
+    expect(build(tool).title).toBe('MCP Display');
+  });
+
+  it('omits title when none is defined', () => {
+    const tool = createTool({
+      id: 'plain-tool',
+      description: 'Plain',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async () => ({}),
+    });
+    expect(build(tool).title).toBeUndefined();
+  });
+});
+
 describe('CoreToolBuilder strict', () => {
   it('should pass through strict when building a tool', () => {
     const strictTool = createTool({

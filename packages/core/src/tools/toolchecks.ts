@@ -79,3 +79,18 @@ export function getNeedsApprovalFn(tool: unknown): NeedsApprovalFn | undefined {
   const fn = (tool as { needsApprovalFn?: unknown }).needsApprovalFn;
   return typeof fn === 'function' ? (fn as NeedsApprovalFn) : undefined;
 }
+
+/**
+ * Resolves the human-readable display title for a tool-like value.
+ *
+ * An explicit top-level `title` wins; otherwise the MCP `annotations.title` is used as a
+ * fallback. Returns `undefined` when neither is a non-empty string so callers can omit the
+ * field from stream payloads entirely.
+ */
+export function resolveToolTitle(tool: unknown): string | undefined {
+  if (typeof tool !== 'object' || tool === null) return undefined;
+  const t = tool as { title?: unknown; mcp?: { annotations?: { title?: unknown } } };
+  if (typeof t.title === 'string' && t.title.length > 0) return t.title;
+  const mcpTitle = t.mcp?.annotations?.title;
+  return typeof mcpTitle === 'string' && mcpTitle.length > 0 ? mcpTitle : undefined;
+}

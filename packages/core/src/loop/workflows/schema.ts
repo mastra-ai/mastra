@@ -169,6 +169,8 @@ export const toolCallInputSchema = z.object({
   args: z.record(z.string(), z.any()),
   providerMetadata: z.record(z.string(), z.any()).optional(),
   providerExecuted: z.boolean().optional(),
+  // Display label snapshotted from the tool definition; must be declared or Zod strips it.
+  title: z.string().optional(),
   output: z.any().optional(),
 });
 
