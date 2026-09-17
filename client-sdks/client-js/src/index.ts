@@ -24,6 +24,7 @@ export type {
   AgentControllerEvent,
   KnownAgentControllerEvent,
   OtherAgentControllerEvent,
+  AgentControllerExecutionOptions,
   AgentControllerRequestOptions,
   SubscribeAgentControllerSessionOptions,
   AgentControllerSubscription,

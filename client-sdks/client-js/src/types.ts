@@ -22,7 +22,11 @@ import type {
   StorageThreadType,
 } from '@mastra/core/memory';
 import type { TracingOptions } from '@mastra/core/observability';
-import type { RequestContext } from '@mastra/core/request-context';
+import type {
+  RequestContext,
+  VersionOverrides as CoreVersionOverrides,
+  VersionSelector as CoreVersionSelector,
+} from '@mastra/core/request-context';
 
 import type {
   AgentInstructionBlock,
@@ -125,7 +129,19 @@ export interface ClientOptions {
   fetch?: typeof fetch;
 }
 
-export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
+/** Selects the immutable agent version used for a read or new execution. */
+export type VersionSelector = CoreVersionSelector;
+
+/** Selects versions for the root agent and its agent dependencies during a new execution. */
+export type VersionOverrides = CoreVersionOverrides;
+
+/** Backward-compatible name for the canonical agent version selector. */
+export type AgentVersionIdentifier = VersionSelector;
+
+/** Stored-agent details additionally retain their existing archived snapshot read. */
+export type StoredAgentVersionIdentifier =
+  | Exclude<AgentVersionIdentifier, { status: 'draft' | 'published' }>
+  | { status?: 'draft' | 'published' | 'archived'; versionId?: never; label?: never };
 
 export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
 
@@ -355,6 +371,14 @@ export type GetAgentResponse = GeneratedResponse<'GET /agents/:agentId'> & {
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
   requestContextSchema?: string;
+  source?: 'code' | 'stored';
+  status?: 'draft' | 'published' | 'archived';
+  activeVersionId?: string;
+  /** Immutable version selected for this resolved response. */
+  resolvedVersionId?: string;
+  /** Label supplied by the caller, when label selection was used. */
+  selectedVersionLabel?: string;
+  hasDraft?: boolean;
   editor?: AgentEditorConfig;
 };
 
@@ -1291,22 +1315,32 @@ export interface AgentVersionResponse {
   createdAt: string;
 }
 
-export interface ListAgentVersionsParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'versionNumber' | 'createdAt';
-    direction?: 'ASC' | 'DESC';
+/** A custom or computed pointer to an immutable stored-agent version. */
+export type AgentVersionLabel = GeneratedResponse<'PUT /stored/agents/:agentId/labels/:label'>;
+
+export type ListAgentVersionLabelsParams = GeneratedRequest<QueryParams<'GET /stored/agents/:agentId/labels'>>;
+
+export type ListAgentVersionLabelsResponse = GeneratedResponse<'GET /stored/agents/:agentId/labels'>;
+
+export type SetAgentVersionLabelInput = GeneratedRequest<Body<'PUT /stored/agents/:agentId/labels/:label'>>;
+
+export type DeleteAgentVersionLabelInput = GeneratedRequest<
+  QueryParams<'DELETE /stored/agents/:agentId/labels/:label'>
+>;
+
+export type DeleteAgentVersionLabelResponse = GeneratedResponse<'DELETE /stored/agents/:agentId/labels/:label'>;
+
+export interface VersionLabelApiError {
+  error: {
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
   };
 }
 
-export interface ListAgentVersionsResponse {
-  versions: AgentVersionResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListAgentVersionsParams = GeneratedRequest<QueryParams<'GET /stored/agents/:agentId/versions'>>;
+
+export type ListAgentVersionsResponse = GeneratedResponse<'GET /stored/agents/:agentId/versions'>;
 
 export interface CreateAgentVersionParams {
   changeMessage?: string;
@@ -1322,11 +1356,14 @@ export interface CreateAgentVersionResponse {
   version: AgentVersionResponse;
 }
 
-export interface ActivateAgentVersionResponse {
-  success: boolean;
-  message: string;
-  activeVersionId: string;
-}
+export type ActivateAgentVersionOptions = GeneratedRequest<
+  Body<'POST /stored/agents/:agentId/versions/:versionId/activate'>
+>;
+
+export type ActivateAgentVersionInput = ActivateAgentVersionOptions & { versionId: string };
+
+export type ActivateAgentVersionResponse =
+  GeneratedResponse<'POST /stored/agents/:agentId/versions/:versionId/activate'>;
 
 export interface RestoreAgentVersionResponse {
   success: boolean;
