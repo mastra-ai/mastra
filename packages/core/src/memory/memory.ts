@@ -2,7 +2,7 @@ import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sd
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
 import { MastraFGAPermissions } from '../auth/ee';
-import type { MastraFGAPermissionInput, ActorSignal } from '../auth/ee';
+import type { IFGAProvider, MastraFGAPermissionInput, ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
@@ -685,6 +685,7 @@ https://mastra.ai/en/docs/memory/overview`,
     requestContext?: RequestContext;
     permission?: MastraFGAPermissionInput;
     actor?: ActorSignal;
+    fgaProvider?: IFGAProvider;
   }): Promise<void> {
     const {
       mastra,
@@ -694,8 +695,9 @@ https://mastra.ai/en/docs/memory/overview`,
       requestContext,
       permission = MastraFGAPermissions.MEMORY_READ,
       actor,
+      fgaProvider: providedFGAProvider,
     } = options;
-    const fgaProvider = mastra?.getServer()?.fga;
+    const fgaProvider = providedFGAProvider ?? mastra?.getServer()?.fga;
     if (!fgaProvider) return;
 
     const { requireFGA } = await import('../auth/ee/fga-check');
