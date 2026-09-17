@@ -57,7 +57,12 @@ export const Combined: Story = {
     await waitFor(() => expect(screen.queryByRole('combobox')).not.toBeInTheDocument());
   },
 };
-export const Loading: Story = { render: () => <ModelPickerLoading /> };
+export const Loading: Story = {
+  render: () => <ModelPickerLoading />,
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByRole('status', { name: 'Loading model' })).toBeVisible();
+  },
+};
 export const Unavailable: Story = {
   render: () => <ModelPickerUnavailable error="The model catalog could not be loaded." />,
 };
