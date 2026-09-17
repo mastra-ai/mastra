@@ -161,6 +161,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ainetcafe',
+          label: 'ainetcafe',
+        },
+        {
+          type: 'doc',
           id: 'providers/aixy',
           label: 'Aixy',
         },

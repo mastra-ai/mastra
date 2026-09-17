@@ -33,6 +33,20 @@ export function normalizeRoutePath(path: string): string {
 }
 
 /**
+ * Provide valid schema values for routes whose fields have cross-field constraints.
+ */
+export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+} {
+  if (route.path === '/observability/traces/query/values') {
+    return { body: { predicateScope: 'trace', path: 'entityName' } };
+  }
+
+  return {};
+}
+
+/**
  * Generate context-aware test value based on field name
  */
 export function generateContextualValue(fieldName?: string): string {
@@ -121,7 +135,7 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   // through to `undefined` for any query schema that uses a top-level
   // preprocess (e.g. legacy-shape back-compat shims).
   while (typeName === 'ZodPipe' && def?.out) {
-    schema = def.out;
+    schema = getZodTypeName(def.out) === 'ZodTransform' ? def.in : def.out;
     typeName = getZodTypeName(schema);
     def = getZodDef(schema);
   }

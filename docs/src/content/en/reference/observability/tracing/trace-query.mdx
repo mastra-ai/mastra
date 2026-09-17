@@ -136,6 +136,106 @@ curl --request POST \
   }'
 ```
 
+## Discover fields and values
+
+Use trace-query discovery to build field and value autocomplete without scanning trace payloads or copying the query grammar into your client. The configured observability store must support `trace-query-discovery`.
+
+Call `getTraceQueryFields()` for one predicate scope:
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+
+const fields = await mastraClient.getTraceQueryFields({
+  timeRange,
+  predicateScope: 'trace',
+  search: 'region',
+  limit: 25,
+})
+```
+
+The response separates canonical fields from observed metadata fields:
+
+```json
+{
+  "canonicalFields": [],
+  "observedFields": [
+    {
+      "path": "metadata.region",
+      "valueKind": "string",
+      "operators": ["eq", "ne", "in", "notIn", "exists", "notExists"],
+      "valueSuggestions": true,
+      "occurrences": 125
+    }
+  ],
+  "observedFieldsTruncated": false
+}
+```
+
+Canonical fields come from the same registry used to validate trace queries. They don't consume `limit`. The canonical order follows that registry. `observedFields` contains top-level string `metadata.<key>` paths found on qualifying current root spans. These fields are ordered by `occurrences` descending, then by path. Nested metadata, keys containing `.`, empty keys, non-string values, and oversized paths are omitted.
+
+`predicateScope` selects the local predicate grammar. It isn't an authorization scope:
+
+| `predicateScope` | Example returned path | Query usage |
+| - | - | - |
+| `trace` | `environment` or `metadata.region` | Root `where` predicate |
+| `spans` | `model` | Inside `spans.some` or `spans.none` |
+| `scores` | `scorerId` | Inside `scores.some` or `scores.none` |
+| `feedback` | `feedbackType` | Inside `feedback.some` or `feedback.none` |
+
+A global field picker can request all four scopes in parallel and qualify display labels locally. Every returned path is directly accepted by `queryTraces()` in its matching scope. `metadata` by itself isn't a field. A user interface can offer manual metadata-key entry separately.
+
+After a user selects one field with `valueSuggestions: true`, call `getTraceQueryValues()`:
+
+```typescript
+const abortController = new AbortController()
+const suggestions = await mastraClient.getTraceQueryValues(
+  {
+    timeRange,
+    predicateScope: 'trace',
+    path: 'metadata.region',
+    search: 'west',
+    limit: 25,
+  },
+  { signal: abortController.signal },
+)
+```
+
+```json
+{
+  "values": [
+    { "value": "eu-west-1", "count": 82 },
+    { "value": "us-west-2", "count": 43 }
+  ],
+  "valuesTruncated": false
+}
+```
+
+Discovery returns string values only. Missing values, empty strings, and strings larger than 4,096 UTF-8 bytes are omitted. Values are ordered by `count` descending, then by value. Suggestions are advisory: `queryTraces()` continues to accept valid manual literals that discovery doesn't return.
+
+Value suggestions are available for these canonical fields:
+
+| Scope | Fields |
+| - | - |
+| Trace | `entityName`, `entityType`, `environment`, `status` |
+| Spans | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityName` |
+| Scores | `scorerId`, `scorerVersion`, `scoreSource` |
+| Feedback | `feedbackType`, `feedbackSource` |
+
+Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, numeric score or feedback values, comments, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
+
+Both discovery requests require a half-open time range of at most 31 days. They use the same current-record semantics as `queryTraces()`: qualifying completed roots satisfy `from <= startedAt < to`, and related values come only from current records joined to those roots by `traceId`. Discovery doesn't accept or apply a draft `where` predicate.
+
+`search` defaults to the empty string, is trimmed, and matches case-insensitive literal substrings. Characters such as `%` and `_` have no wildcard meaning. An empty search returns the most frequent results. `limit` defaults to 25 and has a maximum of 100. Both endpoints fetch one extra result to set their truncation flag, but don't provide a cursor. When a flag is `true`, refine `search`. It doesn't imply that a next page is available. No matches return an empty array and `false` truncation.
+
+If discovery exceeds its execution timeout, the route returns `504 TRACE_QUERY_EXECUTION_TIMEOUT`. If the backend exceeds a memory or resource budget, it returns `503 TRACE_QUERY_RESOURCE_LIMIT`. Neither failure returns partial suggestions or sets a truncation flag. Truncation only means a complete ranking was cut to the requested response limit.
+
+ClickHouse discovery requests default to a 5-second timeout and a 256 MiB per-query memory limit. Configure these with `observability.traceQuery.discovery.timeoutMs` and `observability.traceQuery.discovery.memoryLimitBytes` on `ClickhouseStoreVNext`. Discovery falls back to `observability.traceQuery.timeoutMs` when its timeout isn't configured, without changing ordinary `queryTraces()` execution limits.
+
+Both routes require `observability:read` and use the configured observability storage boundary. Don't send organization or project authorization fields in the request. Treat discovered paths, values, and counts as observability data.
+
 ## Request fields
 
 ### Trace queries
@@ -351,7 +451,7 @@ const messageTrace = {
 
 The key must name one top-level property. Empty keys and nested paths are rejected. Metadata keys aren't trimmed, so leading and trailing whitespace remains part of the exact key identity. When metadata duplicates a canonical trace field, such as `resourceId`, `threadId`, or `environment`, prefer the canonical field because it uses the dedicated storage column. The `metadata.<key>` form remains available when you specifically need the value from the metadata object. Metadata and canonical values may differ.
 
-Metadata fields aren't available for grouping or field discovery.
+Metadata fields aren't available for grouping. Trace-query discovery returns executable top-level string metadata fields observed in the selected time range.
 
 ### Filter by feedback
 
@@ -442,9 +542,10 @@ PostgreSQL and ClickHouse stop advanced trace and thread queries after 15 second
 | `400` | Malformed JSON or malformed cursor. |
 | `409` | The cursor doesn't match the query. |
 | `413` | The request body exceeds 256 KiB. |
-| `422` | The JSON is well formed, but the request is structurally or semantically invalid. The response includes stable issue codes and paths. |
-| `501` | The configured observability store doesn't support the requested trace or thread query. |
-| `504` | A PostgreSQL or ClickHouse query exceeded its configured database execution timeout. |
+| `422` | The JSON is well formed, but the request is structurally or semantically invalid. The response includes stable issue codes and paths. Discovery validation uses `TRACE_QUERY_INVALID`. |
+| `501` | The installed Core or configured observability store doesn't support the requested operation. Discovery returns `TRACE_QUERY_DISCOVERY_UNSUPPORTED` unless Core provides the discovery contract and the store implements both field and value discovery. |
+| `503` | Discovery exceeded a backend memory or resource budget and returned `TRACE_QUERY_RESOURCE_LIMIT`. |
+| `504` | A PostgreSQL or ClickHouse query exceeded its configured database execution timeout. Discovery returns `TRACE_QUERY_EXECUTION_TIMEOUT`. |
 
 ## Limitations
 

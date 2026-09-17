@@ -180,6 +180,26 @@ describe('CustomEditor image paste handling', () => {
     expect(queueFollowUp).toHaveBeenCalledTimes(1);
   });
 
+  it('routes Ctrl+G to the read-only activity center and Alt+G to clear finished tasks', () => {
+    mocks.matchesKey.mockImplementation(
+      (data: string, key: string) => (data === '\x07' && key === 'ctrl+g') || (data === '\u001bg' && key === 'alt+g'),
+    );
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const open = vi.fn();
+    const clear = vi.fn();
+    editor.onAction('openBackgroundActivityCenter', open);
+    editor.onAction('clearFinishedBackgroundActivities', clear);
+
+    editor.handleInput('\x07');
+    expect(open).toHaveBeenCalledOnce();
+    expect(clear).not.toHaveBeenCalled();
+
+    editor.handleInput('\u001bg');
+    expect(clear).toHaveBeenCalledOnce();
+    expect(mocks.superHandleInput).not.toHaveBeenCalled();
+  });
+
   it('routes Ctrl+Z to suspend and Alt+Z to undo without falling through to the base editor', () => {
     mocks.matchesKey.mockImplementation(
       (data: string, key: string) => (data === '\x1a' && key === 'ctrl+z') || (data === '\u001bz' && key === 'alt+z'),

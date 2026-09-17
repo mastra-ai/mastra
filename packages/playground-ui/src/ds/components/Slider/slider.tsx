@@ -71,7 +71,7 @@ const Slider = ({
             key={index}
             index={index}
             aria-label={ariaLabel}
-            aria-labelledby={getAriaLabel ? undefined : ariaLabelledBy}
+            aria-labelledby={ariaLabelledBy}
             getAriaLabel={getAriaLabel}
             className={cn(
               'relative block h-5 w-2.5 shrink-0 rounded-full border-2 border-neutral6 bg-neutral2 outline-hidden select-none',

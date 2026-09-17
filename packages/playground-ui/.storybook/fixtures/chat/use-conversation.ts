@@ -1,21 +1,16 @@
 import { useEffect, useState } from 'react';
 import { createInitialTurns, reply } from './data';
-import type { ChatFile, ChatPresentation, Phase, Scenario } from './data';
+import type { ChatFile, Phase, Scenario } from './data';
 
-export function useStoryConversation(
-  scenario: Scenario,
-  presentation: ChatPresentation,
-  canSendWhileStreaming: boolean,
-) {
-  const [turns, setTurns] = useState(() => createInitialTurns(scenario, presentation));
-  const [playback, setPlayback] = useState(scenario !== 'streaming');
+export function useStoryConversation(scenario: Scenario) {
+  const [turns, setTurns] = useState(() => createInitialTurns(scenario));
   const activeTurn = turns.at(-1);
   const activeId = activeTurn?.id;
   const phase = activeTurn?.phase;
   const busy = phase === 'streaming' || phase === 'approval' || phase === 'question';
 
   useEffect(() => {
-    if (phase !== 'streaming' || !playback) return;
+    if (phase !== 'streaming') return;
     const timer = window.setInterval(() => {
       setTurns(current =>
         current.map(turn => {
@@ -26,10 +21,9 @@ export function useStoryConversation(
       );
     }, 80);
     return () => window.clearInterval(timer);
-  }, [activeId, phase, playback]);
+  }, [activeId, phase]);
 
   function transitionTurn(id: string, from: Phase, to: Phase, answer?: string) {
-    setPlayback(true);
     setTurns(current =>
       current.map(turn =>
         turn.id === id && turn.phase === from ? { ...turn, phase: to, answer: answer ?? turn.answer } : turn,
@@ -38,12 +32,11 @@ export function useStoryConversation(
   }
 
   function sendMessage(prompt: string, files: ChatFile[]) {
-    if ((busy && !(phase === 'streaming' && canSendWhileStreaming)) || (!prompt.trim() && files.length === 0)) return;
-    setPlayback(true);
+    if (busy || (!prompt.trim() && files.length === 0)) return;
     const messageId = crypto.randomUUID();
     setTurns(current => {
-      const settled = current.map(turn => (turn.phase === 'streaming' ? { ...turn, phase: 'stopped' as const } : turn));
-      return [...settled, { id: messageId, prompt: prompt.trim(), files, phase: 'streaming', text: '' }];
+      if (current.at(-1)?.phase === 'streaming') return current;
+      return [...current, { id: messageId, prompt: prompt.trim(), files, phase: 'streaming', text: '' }];
     });
   }
 

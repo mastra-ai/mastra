@@ -1,53 +1,25 @@
 import { MessageSquare, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
-import type { ChatPresentation, Scenario, ChatFile, Phase } from './data';
-import { ConversationContext } from './presentation/events';
-import { ConversationResponse } from './presentation/response';
+import { ConversationComposer } from './composer';
+import type { Scenario } from './data';
+import { ConversationResponse } from './response';
 import { useStoryConversation } from './use-conversation';
 import { UserFilePartRenderer } from '@/domains/chat/messages/renderers/user-file-part-renderer';
 import { UserTextPartRenderer } from '@/domains/chat/messages/renderers/user-text-part-renderer';
 import type { TaskListItem } from '@/ds/components/ai/task-list';
 import { TaskList } from '@/ds/components/ai/task-list';
+import { Avatar } from '@/ds/components/Avatar';
 import { Button } from '@/ds/components/Button';
 import { ChatShell } from '@/ds/components/ChatShell';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Message, MessageActions, MessageCopyButton, MessageTimestamp } from '@/ds/components/Message';
 import { MessageScrollerItem } from '@/ds/components/MessageScroller';
 import { ThreadRail } from '@/ds/components/ThreadRail';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 
-export interface StoryComposerControls {
-  phase?: Phase;
-  busy: boolean;
-  onSend: (text: string, files: ChatFile[]) => void;
-  onStop: () => void;
-}
-
-interface ChatConversationProps {
-  scenario: Scenario;
-  presentation: ChatPresentation;
-  canInterject?: boolean;
-  children: (controls: StoryComposerControls) => ReactNode;
-}
-
-function Conversation({
-  scenario,
-  presentation,
-  canInterject = false,
-  children,
-  onReset,
-}: ChatConversationProps & { onReset: () => void }) {
-  const { turns, phase, busy, sendMessage, transitionTurn } = useStoryConversation(
-    scenario,
-    presentation,
-    canInterject,
-  );
+function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () => void }) {
+  const { turns, phase, busy, sendMessage, transitionTurn } = useStoryConversation(scenario);
   const activeTurn = turns.at(-1);
-  function stopResponse() {
-    if (activeTurn) transitionTurn(activeTurn.id, 'streaming', 'stopped');
-  }
   let verificationStatus: TaskListItem['status'] = 'pending';
   if (phase === 'complete') verificationStatus = 'completed';
   if (phase === 'streaming') verificationStatus = 'in_progress';
@@ -57,7 +29,7 @@ function Conversation({
         <ChatShell.Bar>
           <ChatShell.Column className="flex-row items-center justify-between gap-3 py-3">
             <Txt as="h1" variant="header-xs">
-              {presentation === 'factory' ? 'Factory' : 'Studio'} · Composer review
+              Composer review
             </Txt>
             <Button size="sm" variant="ghost" onClick={onReset}>
               <RotateCcw />
@@ -86,27 +58,28 @@ function Conversation({
                     restored={turn.id === 'review'}
                     className="gap-6"
                   >
-                    <MessageScrollerItem messageId={turn.id} scrollAnchor>
-                      <Message
-                        from="user"
-                        footer={
-                          <MessageActions>
-                            {turn.prompt && <MessageCopyButton text={turn.prompt} />}
-                            {presentation === 'factory' && <MessageTimestamp value="2026-09-17T12:00:00Z" />}
-                          </MessageActions>
-                        }
-                      >
-                        {turn.prompt && <UserTextPartRenderer part={{ type: 'text', text: turn.prompt }} />}
-                        <div className="flex max-w-full flex-wrap justify-end gap-2">
-                          {turn.files.map((file, fileIndex) => (
-                            <UserFilePartRenderer key={`${file.filename}-${fileIndex}`} part={file} />
-                          ))}
-                        </div>
-                      </Message>
+                    <MessageScrollerItem
+                      messageId={turn.id}
+                      scrollAnchor
+                      className="ml-auto flex max-w-[85%] min-w-0 flex-col items-end gap-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Txt variant="ui-sm">You</Txt>
+                        <Avatar name="You" size="sm" />
+                      </div>
+                      {turn.prompt && <UserTextPartRenderer part={{ type: 'text', text: turn.prompt }} />}
+                      <div className="flex max-w-full flex-wrap justify-end gap-2">
+                        {turn.files.map((file, fileIndex) => (
+                          <UserFilePartRenderer key={`${file.filename}-${fileIndex}`} part={file} />
+                        ))}
+                      </div>
                     </MessageScrollerItem>
                     <MessageScrollerItem messageId={`${turn.id}-reply`} className="flex min-w-0 flex-col gap-3">
-                      {turn.review && <ConversationContext presentation={presentation} />}
-                      <ConversationResponse turn={turn} presentation={presentation} transitionTurn={transitionTurn} />
+                      <div className="flex items-center gap-2">
+                        <Avatar name="Assistant" size="sm" />
+                        <Txt variant="ui-sm">Assistant</Txt>
+                      </div>
+                      <ConversationResponse turn={turn} transitionTurn={transitionTurn} />
                     </MessageScrollerItem>
                   </ChatShell.Turn>
                 ))}
@@ -137,7 +110,14 @@ function Conversation({
                     ]}
                   />
                 )}
-                {children({ phase, busy, onSend: sendMessage, onStop: stopResponse })}
+                <ConversationComposer
+                  phase={phase}
+                  busy={busy}
+                  onSend={sendMessage}
+                  onStop={() => {
+                    if (activeTurn) transitionTurn(activeTurn.id, 'streaming', 'stopped');
+                  }}
+                />
               </ChatShell.Column>
             </ChatShell.Dock>
           </ChatShell.Viewport>
@@ -157,12 +137,12 @@ function Conversation({
   );
 }
 
-export function ChatConversation(props: ChatConversationProps) {
+export function ChatConversation({ scenario }: { scenario: Scenario }) {
   const [revision, setRevision] = useState(0);
   return (
     <Conversation
-      {...props}
-      key={`${props.scenario}-${props.presentation}-${revision}`}
+      key={`${scenario}-${revision}`}
+      scenario={scenario}
       onReset={() => setRevision(current => current + 1)}
     />
   );

@@ -590,16 +590,20 @@ export class FactoryTransitionService {
       committed.item?.acceptedAt
     ) {
       const item = committed.item;
-      void Promise.resolve(
-        this.#onAccepted({
-          orgId: request.orgId,
-          factoryProjectId: request.factoryProjectId,
-          workItemId: request.workItemId,
-          item,
-        }),
-      ).catch(error => {
-        console.warn(`[factory] acceptance hook failed for work item ${request.workItemId}:`, error);
-      });
+      const onAccepted = this.#onAccepted;
+      // Invoke inside the chain so a synchronous throw is isolated the same way an async rejection is.
+      void Promise.resolve()
+        .then(() =>
+          onAccepted({
+            orgId: request.orgId,
+            factoryProjectId: request.factoryProjectId,
+            workItemId: request.workItemId,
+            item,
+          }),
+        )
+        .catch(error => {
+          console.warn(`[factory] acceptance hook failed for work item ${request.workItemId}:`, error);
+        });
     }
     // Only an installed board's declaration releases resources; an unknown board or phase never does.
     if (

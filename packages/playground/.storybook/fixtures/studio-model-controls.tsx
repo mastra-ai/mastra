@@ -1,32 +1,13 @@
-import {
-  ModelPickerCombobox,
-  ModelPickerDivider,
-  ModelPickerGroup,
-  ModelPickerLocked,
-  ModelProviderIcon,
-} from '@mastra/playground-ui/components/ModelPicker';
-import { ModelSettings } from '@mastra/playground-ui/components/ModelSettings';
-import type { ModelSettingsValues } from '@mastra/playground-ui/components/ModelSettings';
+import { ModelPickerCombobox, ModelPickerGroup, ModelProviderIcon } from '@mastra/playground-ui/components/ModelPicker';
 import { AnthropicMessagesIcon } from '@mastra/playground-ui/icons/AnthropicMessagesIcon';
 import { OpenAIIcon } from '@mastra/playground-ui/icons/OpenAIIcon';
 import { useState } from 'react';
 import type { ModelControlState } from '../../../playground-ui/.storybook/fixtures/model-picker/models';
 import { models, initialStudioModelSelection } from '../../../playground-ui/.storybook/fixtures/model-picker/models';
+import { ComposerModelPickerView } from '../../src/domains/agents/components/composer-model-picker-view';
 import { ComposerModelWarnings } from '../../src/domains/agents/components/composer-model-warnings';
-import { ComposerRunSettings } from '../../src/domains/agents/components/composer-run-settings';
 
-const methods = [
-  { value: 'generate', label: 'Generate' },
-  { value: 'streamSubscription', label: 'Stream subscription (default)' },
-  { value: 'stream', label: 'Stream' },
-  {
-    value: 'network',
-    label: 'Network',
-    unavailable: 'Network is not available. Please make sure you have at least one sub-agent.',
-  },
-];
-
-export function StudioModelControls({
+export function StudioModelPicker({
   state,
   selection,
   onSelectionChange,
@@ -36,9 +17,6 @@ export function StudioModelControls({
   onSelectionChange: (selection: typeof initialStudioModelSelection) => void;
 }) {
   const [modelOpen, setModelOpen] = useState(false);
-  const [requireToolApproval, setRequireToolApproval] = useState(false);
-  const [method, setMethod] = useState('streamSubscription');
-  const [settings, setSettings] = useState<ModelSettingsValues>({});
   const providers = [
     {
       value: 'openai',
@@ -59,14 +37,13 @@ export function StudioModelControls({
       ),
     },
   ];
-  if (state === 'loading') return null;
   return (
     <div className="flex max-w-full shrink-0 items-center gap-1.5">
       <ModelPickerGroup>
-        {state === 'locked' ? (
-          <ModelPickerLocked label={`${selection.provider}/${selection.model}`} />
-        ) : (
-          <>
+        <ComposerModelPickerView
+          loading={state === 'loading'}
+          lockedLabel={state === 'locked' ? `${selection.provider}/${selection.model}` : undefined}
+          provider={
             <ModelPickerCombobox
               segment="provider"
               aria-label="Provider"
@@ -82,7 +59,8 @@ export function StudioModelControls({
               searchPlaceholder="Search providers..."
               emptyText="No providers found"
             />
-            <ModelPickerDivider />
+          }
+          model={
             <ModelPickerCombobox
               segment="model"
               aria-label="Model"
@@ -100,26 +78,9 @@ export function StudioModelControls({
               searchPlaceholder="Search models..."
               emptyText="No models found"
             />
-          </>
-        )}
-      </ModelPickerGroup>
-      <ModelSettings
-        value={settings}
-        onChange={setSettings}
-        onReset={() => {
-          setSettings({});
-          setMethod('streamSubscription');
-          setRequireToolApproval(false);
-        }}
-      >
-        <ComposerRunSettings
-          method={method}
-          methods={methods}
-          onMethodChange={setMethod}
-          requireToolApproval={requireToolApproval}
-          onToolApprovalChange={setRequireToolApproval}
+          }
         />
-      </ModelSettings>
+      </ModelPickerGroup>
     </div>
   );
 }
@@ -134,7 +95,7 @@ export function StudioModelExample({ state }: { state: ModelControlState }) {
   return (
     <div>
       <StudioModelWarnings state={state} provider={selection.provider} />
-      <StudioModelControls state={state} selection={selection} onSelectionChange={setSelection} />
+      <StudioModelPicker state={state} selection={selection} onSelectionChange={setSelection} />
     </div>
   );
 }

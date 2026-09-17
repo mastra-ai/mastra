@@ -23,7 +23,12 @@ import { WorkflowRegistry, type ServerRoute } from '@mastra/server/server-adapte
 import { expect, vi, type Mock } from 'vitest';
 import * as zod from 'zod';
 import type { ZodTypeAny } from 'zod';
-import { generateValidDataFromSchema, getDefaultValidPathParams, normalizeRoutePath } from './route-test-utils';
+import {
+  generateValidDataFromSchema,
+  getDefaultValidPathParams,
+  getRouteSpecificSchemaDefaults,
+  normalizeRoutePath,
+} from './route-test-utils';
 if (process.env.VITEST) {
   vi.mock('@mastra/core/vector');
 
@@ -646,9 +651,15 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       vi.spyOn(observability, 'getFeatures').mockReturnValue([
         ...(observability.getFeatures() ?? []),
         'trace-query',
+        'trace-query-discovery',
         'thread-query',
       ]);
       vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
+      vi.spyOn(observability, 'getTraceQueryObservedFields').mockResolvedValue({
+        observedFields: [],
+        observedFieldsTruncated: false,
+      });
+      vi.spyOn(observability, 'getTraceQueryValues').mockResolvedValue({ values: [], valuesTruncated: false });
       vi.spyOn(observability, 'queryThreads').mockResolvedValue({ threads: [], page: { next: null } });
       await observability.createSpan({
         span: {
@@ -1418,13 +1429,18 @@ export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOve
     }
   }
 
-  // Get route-specific path defaults
-  const routeDefaults = getRouteSpecificPathDefaults(route);
+  const pathDefaults = getRouteSpecificPathDefaults(route);
+  const schemaDefaults = getRouteSpecificSchemaDefaults(route);
 
   let query: Record<string, string | string[]> | undefined;
   if (route.queryParamSchema) {
     const generated = generateValidDataFromSchema(route.queryParamSchema) as Record<string, unknown>;
-    query = convertQueryValues({ ...generated, ...(routeDefaults.query ?? {}), ...(overrides.query ?? {}) });
+    query = convertQueryValues({
+      ...generated,
+      ...(schemaDefaults.query ?? {}),
+      ...(pathDefaults.query ?? {}),
+      ...(overrides.query ?? {}),
+    });
   } else if (overrides.query) {
     query = convertQueryValues(overrides.query);
   }
@@ -1432,7 +1448,12 @@ export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOve
   let body: Record<string, unknown> | undefined;
   if (route.bodySchema) {
     const generated = generateValidDataFromSchema(route.bodySchema) as Record<string, unknown>;
-    body = { ...generated, ...(routeDefaults.body ?? {}), ...(overrides.body ?? {}) };
+    body = {
+      ...generated,
+      ...(schemaDefaults.body ?? {}),
+      ...(pathDefaults.body ?? {}),
+      ...(overrides.body ?? {}),
+    };
   } else if (overrides.body) {
     body = { ...overrides.body };
   }

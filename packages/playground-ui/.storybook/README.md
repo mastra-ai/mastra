@@ -1,9 +1,9 @@
 # Chat composition stories
 
-Run `pnpm --filter @mastra/playground-ui storybook` for the shared components and the application compositions in one catalog. `pnpm --filter @mastra/playground-ui typecheck:storybook` checks those compositions together.
+Run `pnpm --filter @mastra/playground-ui storybook` for shared component stories and application-owned compositions in one catalog. `pnpm --filter @mastra/playground-ui typecheck:storybook` checks those stories together.
 
-`src/ds/components` contains the published UI: composer surfaces and actions, model menu parts, segmented comboboxes, settings fields, and warning containers. These components receive values, content, and callbacks. They do not fetch catalogs, choose a provider, apply a model pack, persist settings, or start a voice call.
+Playground UI provides the composer surface and Send, Stop, attachment and settings buttons. Studio and Factory retain their action-row composition, permission checks, streaming behavior and callbacks. Their action-row stories import the same components used by production.
 
-Studio compositions live in `packages/playground/.storybook`; Factory compositions live in `mastracode/factory-ui/.storybook`. They import their own production presentation and the shared UI. Studio owns voice, dictation, execution methods, approval settings, and policy messages. Factory owns mode icons and pack actions. The Storybook resolver points public Playground UI imports at source so app compositions and shared primitives use the same contexts.
+Application stories live beside each app. They use local values and callbacks; transport, persistence and live audio are verified separately by application tests.
 
-Fixtures use a small catalog and local state to exercise visual states. Their callbacks are demonstrations, not production transport or persistence tests. Production behavior is covered separately by each application's MSW suites. Keep draft simulations and preset selectors in Storybook fixtures; they are not a shared chat controller.
+Model picker stories use the same shared menu primitives and application-owned layouts as production. Factory mounts its `ModelPicker` and `ModesSelection` with fixture catalogs; Studio supplies controls to its `ComposerModelPickerView`. Provider discovery, model packs, permissions, credentials and persisted selections remain application-owned.

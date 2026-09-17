@@ -145,12 +145,7 @@ function NavRowTooltip({ label, children }: { label?: string; children: React.Re
   return (
     <Tooltip>
       <TooltipTrigger render={children} />
-      <TooltipContent
-        side="right"
-        align="center"
-        sideOffset={16}
-        className="new-theme border-border bg-popover text-foreground"
-      >
+      <TooltipContent side="right" align="center" sideOffset={16}>
         {label}
       </TooltipContent>
     </Tooltip>

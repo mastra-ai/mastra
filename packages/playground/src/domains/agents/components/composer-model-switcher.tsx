@@ -1,6 +1,6 @@
-import { ModelPickerDivider, ModelPickerLocked } from '@mastra/playground-ui/components/ModelPicker';
 import { useState } from 'react';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
+import { ComposerModelPickerView } from './composer-model-picker-view';
 import { ComposerModelWarnings } from './composer-model-warnings';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
@@ -13,7 +13,7 @@ export const ComposerModelSwitcher = () => {
 
   const [modelOpen, setModelOpen] = useState(false);
 
-  if (providersLoading || !selection) return null;
+  if (!selection) return null;
 
   const { provider: selectedProvider, model: selectedModel, setProvider, setModel } = selection;
   const providers = dataProviders?.providers || [];
@@ -35,25 +35,28 @@ export const ComposerModelSwitcher = () => {
     }
   };
 
-  if (policy.active && policy.pickerVisible === false) {
-    const lockedLabel = selectedProvider && selectedModel ? `${selectedProvider}/${selectedModel}` : 'Locked by admin';
-    return <ModelPickerLocked label={lockedLabel} />;
-  }
+  const modelLabel = selectedProvider && selectedModel ? `${selectedProvider}/${selectedModel}` : 'Locked by admin';
+  const lockedLabel = policy.active && policy.pickerVisible === false ? modelLabel : undefined;
 
   return (
-    <div className="inline-flex max-w-full items-stretch">
-      <LLMProviders value={currentModelProvider} onValueChange={handleProviderSelect} size="md" segment="provider" />
-      <ModelPickerDivider />
-      <LLMModels
-        llmId={currentModelProvider}
-        value={selectedModel}
-        onValueChange={handleModelSelect}
-        open={modelOpen}
-        onOpenChange={setModelOpen}
-        size="md"
-        segment="model"
-      />
-    </div>
+    <ComposerModelPickerView
+      loading={providersLoading}
+      lockedLabel={lockedLabel}
+      provider={
+        <LLMProviders value={currentModelProvider} onValueChange={handleProviderSelect} size="md" segment="provider" />
+      }
+      model={
+        <LLMModels
+          llmId={currentModelProvider}
+          value={selectedModel}
+          onValueChange={handleModelSelect}
+          open={modelOpen}
+          onOpenChange={setModelOpen}
+          size="md"
+          segment="model"
+        />
+      }
+    />
   );
 };
 
