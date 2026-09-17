@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
 import { parseFieldValue } from './types';
@@ -15,16 +15,14 @@ export type UseValueStepOptions = {
 
 const toStrings = (value: FilterBarValue | undefined): string[] => (Array.isArray(value) ? value.map(String) : []);
 
-/**
- * Shared value-editing logic for the typeahead value step and the chip value
- * editor. Single arity: picking an option (or Enter on free text) commits.
- * Many arity: Enter/click toggles the highlighted option; Ctrl/Meta+Enter (or
- * `commitSelection`) commits the selection. List navigation itself is owned by
- * the surrounding `ComboboxPrimitive.Root`.
- */
+function getNumberValidationMessage(type: FilterBarField['type'], text: string) {
+  if (type !== 'number' || text.length === 0) return undefined;
+  return Number.isFinite(Number(text)) ? undefined : 'Enter a number.';
+}
+
 export function useValueStep({ field, operator, query, enabled, initialValue, onCommit }: UseValueStepOptions) {
+  const validationMessageId = useId();
   const isMany = operator?.arity === 'many';
-  // Selection is tracked as option strings; values are parsed to the field type on commit.
   const [selected, setSelected] = useState<string[]>(() => toStrings(initialValue));
   const initialValueRef = useRef(initialValue);
   initialValueRef.current = initialValue;
@@ -37,6 +35,8 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
   const suggestions = useValueSuggestions({ field, operatorId: operator?.id ?? '', query, enabled });
   const type = field?.type;
   const allowFreeText = !field?.strict && type !== 'boolean';
+  const canValidateQuery =
+    enabled && !suggestions.isLoading && suggestions.error === undefined && suggestions.options.length === 0;
 
   const toggle = useCallback((value: string) => {
     setSelected(current => (current.includes(value) ? current.filter(v => v !== value) : [...current, value]));
@@ -63,7 +63,7 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
   }, [selected, commit]);
 
   const canCommitFreeText = useCallback(
-    (text: string) => allowFreeText && text.length > 0 && (type !== 'number' || Number.isFinite(Number(text))),
+    (text: string) => allowFreeText && text.length > 0 && getNumberValidationMessage(type, text) === undefined,
     [allowFreeText, type],
   );
 
@@ -74,11 +74,6 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
     return true;
   }, [canCommitFreeText, query, isMany, selected, commit]);
 
-  /**
-   * Enter handling that Base UI does not cover: Ctrl/Meta+Enter commits a
-   * multi-selection; plain Enter with nothing highlighted commits free text.
-   * Returns `true` when the event was consumed.
-   */
   const handleKeyDown = useCallback(
     (event: KeyboardEvent, highlighted: FilterBarOption | null): boolean => {
       if (event.key !== 'Enter') return false;
@@ -104,7 +99,8 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
     error: suggestions.error,
     hasSuggestions: suggestions.hasSuggestions,
     allowFreeText,
-    /** True when the current query can be committed as free text (non-empty, numeric when the field is a number). */
+    validationMessage: canValidateQuery ? getNumberValidationMessage(type, query.trim()) : undefined,
+    validationMessageId,
     canCommitQuery: canCommitFreeText(query.trim()),
     handleSelect,
     handleKeyDown,

@@ -116,7 +116,6 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
     target: 'esnext',
     minify: false,
     rollupOptions: {
-      external: ['motion/react'],
       output: {
         hoistTransitiveImports: false,
       },

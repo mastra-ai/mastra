@@ -22,6 +22,7 @@ import { getFieldSuggestions } from './use-value-suggestions';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Kbd } from '@/ds/components/Kbd/kbd';
+import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
@@ -29,8 +30,8 @@ import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
 export const segmentClass = cn(
-  'flex max-w-48 min-w-0 items-center gap-1 px-2 text-ui-sm leading-ui-sm whitespace-nowrap outline-none',
-  'first:rounded-l-lg last:rounded-r-lg',
+  'flex max-w-48 min-w-0 items-center gap-1 px-2 leading-ui-sm whitespace-nowrap outline-none',
+  'first:rounded-l-[var(--filter-radius)] last:rounded-r-[var(--filter-radius)]',
 );
 
 export const editableSegmentClass = cn(
@@ -39,7 +40,6 @@ export const editableSegmentClass = cn(
   'focus-visible:bg-neutral6/10 focus-visible:text-neutral6 data-[popup-open]:bg-neutral6/10 data-[popup-open]:text-neutral6',
 );
 
-/** Field label with its optional leading icon — used by chips, the draft chip and field option lists. */
 export function FilterBarFieldLabel({ field, label }: { field: FilterBarField | undefined; label?: string }) {
   const Icon = field?.icon;
   return (
@@ -50,7 +50,6 @@ export function FilterBarFieldLabel({ field, label }: { field: FilterBarField | 
   );
 }
 
-/** Inline style carrying a field's accent onto its field segment (text + icon). */
 export const fieldSegmentAccentStyle = (field: FilterBarField | undefined) =>
   field?.color ? { color: field.color } : undefined;
 
@@ -69,7 +68,6 @@ type ChipContext = {
   openSegment: FilterBarSegment | null;
   setOpenSegment: (segment: FilterBarSegment | null) => void;
   readOnly: boolean;
-  /** The field allows a single operator, so the operator segment is not shown. */
   operatorImplied: boolean;
 };
 
@@ -168,13 +166,17 @@ export function FilterBarChip({ item, readOnly = false, removable = true, classN
   return (
     <ChipContext.Provider value={chipValue}>
       <div
-        ref={rootRef}
+        ref={element => {
+          rootRef.current = element;
+          ctx.animation.registerChipSegment(item.id, 'surface', element);
+        }}
         role="group"
         aria-label={label}
         data-slot="filter-bar-chip"
         data-readonly={readOnly || undefined}
         className={cn(
-          'flex max-w-full items-stretch divide-x divide-border1 rounded-lg border border-border1 bg-surface5 text-neutral5',
+          controlSizeClasses.md,
+          'flex max-w-full items-stretch divide-x divide-border1 border border-border1 bg-surface5 text-neutral5',
           className,
         )}
         onKeyDown={handleKeyDown}
@@ -199,13 +201,11 @@ type SegmentComboboxProps<T> = {
   itemToString: (item: T) => string;
   /** `null` when `items` are already filtered. */
   filter: null | ((item: T, query: string, itemToString?: (item: T) => string) => boolean);
-  /** Current selection, surfaced through Base UI's `ItemIndicator`. */
   value?: T | null;
   query: string;
   onQueryChange: (query: string) => void;
   onSelect: (item: T) => void;
   onOpen?: () => void;
-  /** Popup content: typically a `SegmentSearchInput` followed by a `FilterBarOptionList`. */
   children: ReactNode;
 };
 
@@ -217,14 +217,17 @@ type SegmentSearchInputProps<T> = {
   /** Leading icon. Defaults to a search glass; free-text editing uses a pencil. */
   icon?: LucideIcon;
   inputMode?: ComponentProps<'input'>['inputMode'];
+  validationMessage?: string;
+  validationMessageId?: string;
   onKeyDown?: (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>, highlighted: T | null) => void;
 };
 
-/** The search/free-text input at the top of a segment popup. */
 function SegmentSearchInput<T>({
   placeholder,
   icon: Icon = SearchIcon,
   inputMode,
+  validationMessage,
+  validationMessageId,
   onKeyDown,
 }: SegmentSearchInputProps<T>) {
   const { highlighted } = useContext(SegmentPopupContext);
@@ -235,17 +238,14 @@ function SegmentSearchInput<T>({
         className={comboboxStyles.searchInput}
         placeholder={placeholder}
         inputMode={inputMode}
+        aria-invalid={validationMessage ? true : undefined}
+        aria-describedby={validationMessage ? validationMessageId : undefined}
         onKeyDown={event => onKeyDown?.(event, highlighted as T | null)}
       />
     </div>
   );
 }
 
-/**
- * A chip segment: a button trigger that opens an option popup. The editor
- * owning the segment supplies items, filtering, selection routing and the
- * popup content.
- */
 function SegmentCombobox<T>({
   segment,
   label,
@@ -485,7 +485,6 @@ type ValueInputProps = {
   onCancel: () => void;
 };
 
-/** Suggestion list + multi-select footer, shared by every value input. */
 function ValueOptions({ step, onCancel }: ValueInputProps) {
   const chip = useChip();
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
@@ -500,7 +499,11 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           isSelected={o => (step.isMany ? step.selected.includes(o.value) : String(chip.item.value) === o.value)}
           isLoading={step.isLoading}
           error={step.error}
-          emptyText={step.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'}
+          emptyTextId={step.validationMessageId}
+          emptyText={
+            step.validationMessage ??
+            (step.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.')
+          }
         />
       )}
       {step.isMany && (
@@ -518,7 +521,6 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
   );
 }
 
-/** Free-text (optionally suggestion-backed) value input; text and number share it. */
 function FreeTextValueInput({
   step,
   onCancel,
@@ -530,6 +532,8 @@ function FreeTextValueInput({
       <SegmentSearchInput<FilterBarOption>
         icon={step.hasSuggestions ? SearchIcon : PencilIcon}
         inputMode={inputMode}
+        validationMessage={step.validationMessage}
+        validationMessageId={step.validationMessageId}
         placeholder={
           step.hasSuggestions
             ? step.allowFreeText
@@ -544,6 +548,11 @@ function FreeTextValueInput({
           if (handled || (event.key === 'Enter' && highlightedOption === null)) event.preventBaseUIHandler();
         }}
       />
+      {!step.hasSuggestions && step.validationMessage && (
+        <ComboboxPrimitive.Status id={step.validationMessageId} className="text-ui-sm text-error px-3 py-1">
+          {step.validationMessage}
+        </ComboboxPrimitive.Status>
+      )}
       <ValueOptions step={step} onCancel={onCancel} />
     </>
   );
@@ -557,7 +566,6 @@ function NumberValueInput(props: ValueInputProps) {
   return <FreeTextValueInput {...props} inputMode="decimal" noun="number" />;
 }
 
-/** Select-like: no search input, just the True/False (or custom) options. */
 function BooleanValueInput(props: ValueInputProps) {
   return <ValueOptions {...props} />;
 }

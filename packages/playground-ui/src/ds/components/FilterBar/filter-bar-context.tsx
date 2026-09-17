@@ -1,6 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useFilterBarLayout } from './animation/use-filter-bar-layout';
+import type { FilterBarLayout } from './animation/use-filter-bar-layout';
+import type { FilterBarProps } from './filter-bar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator, FilterBarSegment } from './types';
 
 type SegmentKey = `${string}:${FilterBarSegment}`;
@@ -9,36 +12,28 @@ const SEGMENTS_LEFT_TO_RIGHT: FilterBarSegment[] = ['field', 'operator', 'value'
 const SEGMENTS_RIGHT_TO_LEFT: FilterBarSegment[] = [...SEGMENTS_LEFT_TO_RIGHT].reverse();
 
 export type FilterBarContextValue = {
+  animation: FilterBarLayout;
   fields: FilterBarField[];
   operators: FilterBarOperator[];
   items: FilterBarItem[];
   addItem: (item: Omit<FilterBarItem, 'id'>) => void;
   updateItem: (id: string, patch: Partial<Omit<FilterBarItem, 'id'>>) => void;
   removeItem: (id: string) => void;
-  /** Removes every removable item (chips rendered with `removable={false}` stay). */
   clear: () => void;
-  /** Whether at least one item can be removed, i.e. whether Clear has anything to do. */
   hasRemovableItems: boolean;
-  /** Called by chips so `clear` and the Clear button know which items are pinned. */
   registerNonRemovable: (itemId: string, nonRemovable: boolean) => void;
   getField: (fieldId: string) => FilterBarField | undefined;
   getOperator: (operatorId: string) => FilterBarOperator | undefined;
-  /** Operators allowed for a field (`field.operators` or every root operator). */
   getFieldOperators: (field: FilterBarField) => FilterBarOperator[];
   registerSegment: (itemId: string, segment: FilterBarSegment, el: HTMLElement | null) => void;
-  registerInput: (el: HTMLInputElement | null) => void;
-  /**
-   * Focus a segment of the nearest editable chip starting at `fromIndex` and
-   * walking in `direction` (read-only chips register no segments and are skipped).
-   * Returns false if nothing was focused.
-   */
+  registerInput: (el: HTMLInputElement | HTMLButtonElement | null) => void;
   focusChip: (fromIndex: number, direction: -1 | 1, segment: FilterBarSegment) => boolean;
   focusInput: () => void;
-  /** Called by chips to move focus after a removal. */
   focusAfterRemove: (removedIndex: number) => void;
   announce: (message: string) => void;
   announcement: string;
   ariaLabel: string;
+  variant: NonNullable<FilterBarProps['variant']>;
 };
 
 const FilterBarContext = createContext<FilterBarContextValue | null>(null);
@@ -66,6 +61,7 @@ export type FilterBarProviderProps = {
   value: FilterBarItem[];
   onValueChange: (items: FilterBarItem[]) => void;
   ariaLabel: string;
+  variant: NonNullable<FilterBarProps['variant']>;
   children: ReactNode;
 };
 
@@ -75,10 +71,12 @@ export function FilterBarProvider({
   value,
   onValueChange,
   ariaLabel,
+  variant,
   children,
 }: FilterBarProviderProps) {
+  const animation = useFilterBarLayout(value);
   const segments = useRef(new Map<SegmentKey, HTMLElement>());
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLButtonElement | null>(null);
   const itemsRef = useRef(value);
   itemsRef.current = value;
   const [announcement, setAnnouncement] = useState('');
@@ -99,31 +97,36 @@ export function FilterBarProvider({
 
   const addItem = useCallback(
     (item: Omit<FilterBarItem, 'id'>) => {
-      onValueChange([...itemsRef.current, { ...item, id: createFilterId() }]);
+      const id = createFilterId();
+      animation.capture(id);
+      onValueChange([...itemsRef.current, { ...item, id }]);
       announce('Filter added');
     },
-    [onValueChange, announce],
+    [onValueChange, announce, animation],
   );
 
   const updateItem = useCallback(
     (id: string, patch: Partial<Omit<FilterBarItem, 'id'>>) => {
+      animation.capture();
       onValueChange(itemsRef.current.map(item => (item.id === id ? { ...item, ...patch } : item)));
     },
-    [onValueChange],
+    [onValueChange, animation],
   );
 
   const removeItem = useCallback(
     (id: string) => {
+      animation.capture();
       onValueChange(itemsRef.current.filter(item => item.id !== id));
       announce('Filter removed');
     },
-    [onValueChange, announce],
+    [onValueChange, announce, animation],
   );
 
   const clear = useCallback(() => {
+    animation.capture();
     onValueChange(itemsRef.current.filter(item => nonRemovableIds.has(item.id)));
     announce('All filters removed');
-  }, [onValueChange, announce, nonRemovableIds]);
+  }, [onValueChange, announce, nonRemovableIds, animation]);
 
   const hasRemovableItems = value.some(item => !nonRemovableIds.has(item.id));
 
@@ -137,15 +140,23 @@ export function FilterBarProvider({
     });
   }, []);
 
-  const registerSegment = useCallback((itemId: string, segment: FilterBarSegment, el: HTMLElement | null) => {
-    const key: SegmentKey = `${itemId}:${segment}`;
-    if (el) segments.current.set(key, el);
-    else segments.current.delete(key);
-  }, []);
+  const registerSegment = useCallback(
+    (itemId: string, segment: FilterBarSegment, el: HTMLElement | null) => {
+      animation.registerChipSegment(itemId, segment, el);
+      const key: SegmentKey = `${itemId}:${segment}`;
+      if (el) segments.current.set(key, el);
+      else segments.current.delete(key);
+    },
+    [animation],
+  );
 
-  const registerInput = useCallback((el: HTMLInputElement | null) => {
-    inputRef.current = el;
-  }, []);
+  const registerInput = useCallback(
+    (el: HTMLInputElement | HTMLButtonElement | null) => {
+      inputRef.current = el;
+      animation.register('input', el);
+    },
+    [animation],
+  );
 
   const focusInput = useCallback(() => {
     inputRef.current?.focus();
@@ -153,9 +164,6 @@ export function FilterBarProvider({
 
   const focusChip = useCallback((fromIndex: number, direction: -1 | 1, segment: FilterBarSegment) => {
     const items = itemsRef.current;
-    // Custom chips may register only some segments (e.g. just `value`): when the
-    // requested one is missing, land on the chip's outermost segment on the side
-    // we arrive from.
     const fallbacks: FilterBarSegment[] = direction === -1 ? SEGMENTS_RIGHT_TO_LEFT : SEGMENTS_LEFT_TO_RIGHT;
     for (let i = fromIndex; i >= 0 && i < items.length; i += direction) {
       const item = items[i];
@@ -173,8 +181,6 @@ export function FilterBarProvider({
 
   const focusAfterRemove = useCallback(
     (removedIndex: number) => {
-      // Called synchronously after `removeItem`, before React re-renders: itemsRef still
-      // holds the pre-removal list and every neighbour's DOM node is still mounted.
       const next = itemsRef.current[removedIndex + 1] ?? itemsRef.current[removedIndex - 1];
       if (next) {
         const el = segments.current.get(`${next.id}:value`) ?? segments.current.get(`${next.id}:field`);
@@ -190,6 +196,7 @@ export function FilterBarProvider({
 
   const ctx = useMemo<FilterBarContextValue>(
     () => ({
+      animation,
       fields,
       operators,
       items: value,
@@ -210,8 +217,10 @@ export function FilterBarProvider({
       announce,
       announcement,
       ariaLabel,
+      variant,
     }),
     [
+      animation,
       fields,
       operators,
       value,
@@ -232,6 +241,7 @@ export function FilterBarProvider({
       announce,
       announcement,
       ariaLabel,
+      variant,
     ],
   );
 

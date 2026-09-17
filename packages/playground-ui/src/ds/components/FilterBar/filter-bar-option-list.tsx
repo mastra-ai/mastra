@@ -12,14 +12,11 @@ export type FilterBarOptionListProps<T> = {
   isLoading?: boolean;
   error?: unknown;
   emptyText?: string;
+  emptyTextId?: string;
   'aria-label': string;
   'aria-multiselectable'?: boolean;
 };
 
-/**
- * List/status/empty rows for a `ComboboxPrimitive.Root`. Items come from the
- * root's `items`; highlight and keyboard navigation are owned by Base UI.
- */
 export function FilterBarOptionList<T>({
   getKey,
   renderOption,
@@ -27,6 +24,7 @@ export function FilterBarOptionList<T>({
   isLoading,
   error,
   emptyText = 'No results.',
+  emptyTextId,
   'aria-label': ariaLabel,
   'aria-multiselectable': multiselectable,
 }: FilterBarOptionListProps<T>) {
@@ -42,7 +40,9 @@ export function FilterBarOptionList<T>({
       {!isLoading && error !== undefined && (
         <ComboboxPrimitive.Status className={comboboxStyles.empty}>Couldn't load values.</ComboboxPrimitive.Status>
       )}
-      <ComboboxPrimitive.Empty className={comboboxStyles.empty}>{idle ? emptyText : null}</ComboboxPrimitive.Empty>
+      <ComboboxPrimitive.Empty id={emptyTextId} className={comboboxStyles.empty}>
+        {idle ? emptyText : null}
+      </ComboboxPrimitive.Empty>
       <ComboboxPrimitive.List
         aria-label={ariaLabel}
         aria-multiselectable={multiselectable}

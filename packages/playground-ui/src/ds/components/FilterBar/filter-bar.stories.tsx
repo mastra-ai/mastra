@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
+import type { FilterBarProps } from './filter-bar';
 import type { FilterBarField, FilterBarItem } from './types';
 import { Txt } from '@/ds/components/Txt';
 import { themedHueColor } from '@/lib/colors';
@@ -71,11 +72,11 @@ const meta: Meta = {
     docs: {
       description: {
         component: [
-          'Braintrust-style filter bar. Type in the input to pick a **field → operator → value**; each committed filter becomes an inline chip whose segments open their own editor on click or Enter.',
+          'Type in the compact rounded input to pick a **field → operator → value**, or use `variant="button"` to start from **Add filter +**. The input stands alone when empty and sits beside the filters as they are added, without an enclosing bar. Each choice morphs the input capsule into the selected tag while revealing the next input; suggestions follow the active input. Capsules share the standard input height and fully rounded ends. Both variants keep pending segments separate, join them after selection, preview checked values, and finish with one accent-colored shimmer. Each committed filter becomes an inline chip whose segments open their own editor on click or Enter. Removal and wrapped rows move together. All animations respect reduced motion.',
           '',
           '**Keyboard**: `↑/↓` move the highlight, `Enter`/`Tab` pick, `Esc`/`Backspace` step back. Empty input: `←` focuses the last chip, `Backspace` removes it. On a chip: `←/→` move across segments and chips, `Enter` edits, `Delete` removes. Multi-value (`in`): `Enter` toggles, `Ctrl/⌘+Enter` or **Done** commits.',
           '',
-          'Values are plain strings; the component has no business typing. `suggestions` can be a static list or a lazy resolver invoked only once the value step opens.',
+          'Values follow the field type (text, number, or boolean); multi-value operators produce arrays. `suggestions` can be a static list or a lazy resolver invoked only once the value step opens.',
         ].join('\n'),
       },
     },
@@ -88,21 +89,33 @@ type Story = StoryObj;
 function Demo({
   fields = FIELDS,
   initial = [],
+  variant = 'input',
   children,
 }: {
   fields?: FilterBarField[];
   initial?: FilterBarItem[];
+  variant?: FilterBarProps['variant'];
   children?: (items: FilterBarItem[]) => React.ReactNode;
 }) {
   const [items, setItems] = useState<FilterBarItem[]>(initial);
   return (
     <div className="grid w-full max-w-3xl gap-3">
-      <FilterBar fields={fields} operators={DEFAULT_FILTER_OPERATORS} value={items} onValueChange={setItems}>
+      <FilterBar
+        fields={fields}
+        operators={DEFAULT_FILTER_OPERATORS}
+        value={items}
+        onValueChange={setItems}
+        variant={variant}
+      >
         <FilterBar.Chips />
         <FilterBar.Input placeholder="Filter traces…" />
       </FilterBar>
       {children?.(items)}
-      <pre className="bg-surface3 text-ui-xs text-neutral4 rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
+      {variant === 'input' && (
+        <pre className="bg-surface3 text-ui-xs text-neutral4 min-w-0 overflow-x-auto rounded-lg p-3">
+          {JSON.stringify(items, null, 2)}
+        </pre>
+      )}
     </div>
   );
 }
@@ -111,13 +124,38 @@ export const Default: Story = {
   render: () => <Demo />,
 };
 
+export const Button: Story = {
+  render: () => <Demo variant="button" />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Set `variant="button"` on `FilterBar` to use an **Add filter +** button. Keep the same `FilterBar.Chips` and `FilterBar.Input` children: search moves into the popover. Picking a field and operator advances automatically, revealing each segment. Applying a value returns focus to a compact ghost **+**. Filters are removed individually. Escape steps back; dismissing discards the draft. Validation keeps the selected labels in place and finishes with one accent-colored shimmer. Native transitions and staggered options respect reduced motion.',
+      },
+    },
+  },
+};
+
+export const ButtonWithFilters: Story = {
+  render: () => (
+    <Demo
+      variant="button"
+      initial={[
+        { id: '1', fieldId: 'status', operatorId: 'is', value: 'error' },
+        { id: '2', fieldId: 'tags', operatorId: 'in', value: ['production', 'canary'] },
+        { id: '3', fieldId: 'duration', operatorId: 'gt', value: 1500 },
+      ]}
+    />
+  ),
+};
+
 export const WithPrefilledFilters: Story = {
   render: () => (
     <Demo
       initial={[
         { id: '1', fieldId: 'status', operatorId: 'is', value: 'error' },
         { id: '2', fieldId: 'tags', operatorId: 'in', value: ['production', 'canary'] },
-        { id: '3', fieldId: 'duration', operatorId: 'gt', value: '1500' },
+        { id: '3', fieldId: 'duration', operatorId: 'gt', value: 1500 },
         { id: '4', fieldId: 'traceId', operatorId: 'is-empty', value: '' },
       ]}
     />
@@ -204,26 +242,24 @@ export const CustomLayout: Story = {
       { id: '1', fieldId: 'status', operatorId: 'is-not', value: 'success' },
     ]);
     return (
-      <div className="grid gap-2">
-        <FilterBar
-          fields={FIELDS}
-          operators={DEFAULT_FILTER_OPERATORS}
-          value={items}
-          onValueChange={setItems}
-          className="rounded-lg"
-        >
+      <FilterBar
+        fields={FIELDS}
+        operators={DEFAULT_FILTER_OPERATORS}
+        value={items}
+        onValueChange={setItems}
+        className="gap-2"
+      >
+        <div className="flex w-full">
           <FilterBar.Input placeholder="Add a filter…" />
-        </FilterBar>
-        <div className="flex flex-wrap items-center gap-1">
-          {items.map(item => (
-            <FilterBar.Chip key={item.id} item={item}>
-              <FilterBar.Chip.Field />
-              <FilterBar.Chip.Value />
-              <FilterBar.Chip.Remove />
-            </FilterBar.Chip>
-          ))}
         </div>
-      </div>
+        {items.map(item => (
+          <FilterBar.Chip key={item.id} item={item}>
+            <FilterBar.Chip.Field />
+            <FilterBar.Chip.Value />
+            <FilterBar.Chip.Remove />
+          </FilterBar.Chip>
+        ))}
+      </FilterBar>
     );
   },
 };
@@ -232,22 +268,18 @@ export const KeyboardOnly: Story = {
   name: 'Keyboard-only walkthrough (play)',
   render: () => <Demo />,
   play: async ({ canvasElement }) => {
-    // Small delay between keystrokes so popover steps have re-rendered before the next key.
     const user = userEvent.setup({ delay: 80 });
     const input = within(canvasElement).getByRole('combobox', { name: 'Add filter' });
     await user.click(input);
-    // Status › is not › Error
     await user.type(input, 'stat');
     await user.keyboard('{Enter}');
     await user.keyboard('{ArrowDown}{Enter}');
     await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
-    // Trace ID › contains › abc
     await user.type(input, 'trace');
     await user.keyboard('{Enter}');
     await user.keyboard('{ArrowDown}{Enter}');
     await user.type(input, 'abc');
     await user.keyboard('{Enter}');
-    // Walk back into the chips (remove button, then value), open the last value editor, close it, then remove that chip.
     await user.keyboard('{ArrowLeft}');
     await user.keyboard('{ArrowLeft}');
     await user.keyboard('{Enter}');
