@@ -1,25 +1,54 @@
 import { MessageSquare, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
-import { ConversationComposer } from './composer';
-import type { Scenario } from './data';
-import { ConversationResponse } from './response';
+import type { ModelControlState } from '../model-picker/models';
+import { FactoryConversationComposer } from './composer/factory-composer';
+import { StudioConversationComposer } from './composer/studio-composer';
+import type { ChatPresentation, Scenario } from './data';
+import { ConversationContext } from './presentation/events';
+import { ConversationResponse } from './presentation/response';
 import { useStoryConversation } from './use-conversation';
 import { UserFilePartRenderer } from '@/domains/chat/messages/renderers/user-file-part-renderer';
 import { UserTextPartRenderer } from '@/domains/chat/messages/renderers/user-text-part-renderer';
 import type { TaskListItem } from '@/ds/components/ai/task-list';
 import { TaskList } from '@/ds/components/ai/task-list';
-import { Avatar } from '@/ds/components/Avatar';
 import { Button } from '@/ds/components/Button';
 import { ChatShell } from '@/ds/components/ChatShell';
+import type { ComposerTone } from '@/ds/components/Composer';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { Message, MessageActions, MessageCopyButton, MessageTimestamp } from '@/ds/components/Message';
 import { MessageScrollerItem } from '@/ds/components/MessageScroller';
 import { ThreadRail } from '@/ds/components/ThreadRail';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 
-function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () => void }) {
-  const { turns, phase, busy, sendMessage, transitionTurn } = useStoryConversation(scenario);
+interface ChatConversationProps {
+  scenario: Scenario;
+  presentation?: ChatPresentation;
+  tone?: ComposerTone;
+  factorySession?: 'work-item' | 'personal';
+  modelState?: ModelControlState;
+  canSendWhileStreaming?: boolean;
+}
+
+function Conversation({
+  scenario,
+  presentation = 'studio',
+  tone = 'green',
+  factorySession = 'work-item',
+  modelState = 'ready',
+  canSendWhileStreaming = false,
+  onReset,
+}: ChatConversationProps & { onReset: () => void }) {
+  const canInterject = presentation === 'factory' || canSendWhileStreaming;
+  const { turns, phase, busy, sendMessage, transitionTurn } = useStoryConversation(
+    scenario,
+    presentation,
+    canInterject,
+  );
   const activeTurn = turns.at(-1);
+  function stopResponse() {
+    if (activeTurn) transitionTurn(activeTurn.id, 'streaming', 'stopped');
+  }
   let verificationStatus: TaskListItem['status'] = 'pending';
   if (phase === 'complete') verificationStatus = 'completed';
   if (phase === 'streaming') verificationStatus = 'in_progress';
@@ -29,7 +58,7 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
         <ChatShell.Bar>
           <ChatShell.Column className="flex-row items-center justify-between gap-3 py-3">
             <Txt as="h1" variant="header-xs">
-              Composer review
+              {presentation === 'factory' ? 'Factory' : 'Studio'} · Composer review
             </Txt>
             <Button size="sm" variant="ghost" onClick={onReset}>
               <RotateCcw />
@@ -58,28 +87,27 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
                     restored={turn.id === 'review'}
                     className="gap-6"
                   >
-                    <MessageScrollerItem
-                      messageId={turn.id}
-                      scrollAnchor
-                      className="ml-auto flex max-w-[85%] min-w-0 flex-col items-end gap-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Txt variant="ui-sm">You</Txt>
-                        <Avatar name="You" size="sm" />
-                      </div>
-                      {turn.prompt && <UserTextPartRenderer part={{ type: 'text', text: turn.prompt }} />}
-                      <div className="flex max-w-full flex-wrap justify-end gap-2">
-                        {turn.files.map((file, fileIndex) => (
-                          <UserFilePartRenderer key={`${file.filename}-${fileIndex}`} part={file} />
-                        ))}
-                      </div>
+                    <MessageScrollerItem messageId={turn.id} scrollAnchor>
+                      <Message
+                        from="user"
+                        footer={
+                          <MessageActions>
+                            {turn.prompt && <MessageCopyButton text={turn.prompt} />}
+                            {presentation === 'factory' && <MessageTimestamp value="2026-09-17T12:00:00Z" />}
+                          </MessageActions>
+                        }
+                      >
+                        {turn.prompt && <UserTextPartRenderer part={{ type: 'text', text: turn.prompt }} />}
+                        <div className="flex max-w-full flex-wrap justify-end gap-2">
+                          {turn.files.map((file, fileIndex) => (
+                            <UserFilePartRenderer key={`${file.filename}-${fileIndex}`} part={file} />
+                          ))}
+                        </div>
+                      </Message>
                     </MessageScrollerItem>
                     <MessageScrollerItem messageId={`${turn.id}-reply`} className="flex min-w-0 flex-col gap-3">
-                      <div className="flex items-center gap-2">
-                        <Avatar name="Assistant" size="sm" />
-                        <Txt variant="ui-sm">Assistant</Txt>
-                      </div>
-                      <ConversationResponse turn={turn} transitionTurn={transitionTurn} />
+                      {turn.review && <ConversationContext presentation={presentation} />}
+                      <ConversationResponse turn={turn} presentation={presentation} transitionTurn={transitionTurn} />
                     </MessageScrollerItem>
                   </ChatShell.Turn>
                 ))}
@@ -110,14 +138,26 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
                     ]}
                   />
                 )}
-                <ConversationComposer
-                  phase={phase}
-                  busy={busy}
-                  onSend={sendMessage}
-                  onStop={() => {
-                    if (activeTurn) transitionTurn(activeTurn.id, 'streaming', 'stopped');
-                  }}
-                />
+                {presentation === 'factory' ? (
+                  <FactoryConversationComposer
+                    phase={phase}
+                    busy={busy}
+                    personal={factorySession === 'personal'}
+                    tone={tone}
+                    modelState={modelState}
+                    onSend={sendMessage}
+                    onStop={stopResponse}
+                  />
+                ) : (
+                  <StudioConversationComposer
+                    phase={phase}
+                    busy={busy}
+                    modelState={modelState}
+                    canInterject={canSendWhileStreaming}
+                    onSend={sendMessage}
+                    onStop={stopResponse}
+                  />
+                )}
               </ChatShell.Column>
             </ChatShell.Dock>
           </ChatShell.Viewport>
@@ -137,12 +177,24 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
   );
 }
 
-export function ChatConversation({ scenario }: { scenario: Scenario }) {
+export function ChatConversation({
+  scenario,
+  presentation,
+  tone,
+  factorySession,
+  modelState,
+  canSendWhileStreaming,
+}: ChatConversationProps) {
   const [revision, setRevision] = useState(0);
   return (
     <Conversation
-      key={`${scenario}-${revision}`}
+      key={`${scenario}-${presentation}-${factorySession}-${modelState}-${revision}`}
       scenario={scenario}
+      presentation={presentation}
+      tone={tone}
+      factorySession={factorySession}
+      modelState={modelState}
+      canSendWhileStreaming={canSendWhileStreaming}
       onReset={() => setRevision(current => current + 1)}
     />
   );
