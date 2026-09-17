@@ -29,7 +29,7 @@ export const goalDurationToolApprovalScenario: McE2eScenario = {
   aimockFixture: 'goal-duration-tool-approval.json',
   prepare: context => {
     dbPath = context.dbPath;
-    const settingsPath = join(context.appDataDir, 'settings.json');
+    const settingsPath = join(context.appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.models = {
       ...settings.models,

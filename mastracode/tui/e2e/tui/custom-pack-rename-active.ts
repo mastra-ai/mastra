@@ -10,7 +10,7 @@ export const customPackRenameActiveScenario = {
   description: 'renames an active saved custom model pack through /models and preserves active/onboarding settings',
   testName: 'renames an active custom pack and persists the new active pack id',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -78,7 +78,7 @@ export const customPackRenameActiveScenario = {
     await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const names=s.customModelPacks.map(p=>p.name).join("|"); const pack=s.customModelPacks.find(p=>p.name==="${renamedName}"); console.log("RENAME_ACTIVE="+s.models.activeModelPackId); console.log("RENAME_ONBOARDING="+s.onboarding.modePackId); console.log("RENAME_NAMES="+names); console.log("RENAME_PLAN="+pack?.models.plan); console.log("RENAME_BUILD="+pack?.models.build); console.log("RENAME_FAST="+pack?.models.fast); console.log("RENAME_OLD_PRESENT="+s.customModelPacks.some(p=>p.name==="${originalName}"));'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s={...JSON.parse(fs.readFileSync(app+"/config.json","utf8")),...JSON.parse(fs.readFileSync(app+"/state.json","utf8"))}; const names=s.customModelPacks.map(p=>p.name).join("|"); const pack=s.customModelPacks.find(p=>p.name==="${renamedName}"); console.log("RENAME_ACTIVE="+s.models.activeModelPackId); console.log("RENAME_ONBOARDING="+s.onboarding.modePackId); console.log("RENAME_NAMES="+names); console.log("RENAME_PLAN="+pack?.models.plan); console.log("RENAME_BUILD="+pack?.models.build); console.log("RENAME_FAST="+pack?.models.fast); console.log("RENAME_OLD_PRESENT="+s.customModelPacks.some(p=>p.name==="${originalName}"));'`,
     );
     await runtime.waitForScreenText(/RENAME_ACTIVE=custom:Renamed Active E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/RENAME_ONBOARDING=custom:Renamed Active E2E/i, terminal, 8_000);

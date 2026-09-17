@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { McE2eScenario } from './types.js';
 
 const readViewport = (label: string) =>
-  `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const v=s.browser.viewport; console.log("${label}="+(typeof v==="string"?v:(v?v.width+"x"+v.height:"missing")));'`;
+  `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const v=s.browser.viewport; console.log("${label}="+(typeof v==="string"?v:(v?v.width+"x"+v.height:"missing")));'`;
 
 /**
  * Covers configuring the browser viewport through the real TUI: explicit
@@ -15,7 +15,7 @@ export const browserViewportScenario = {
   description: 'Sets the browser viewport through /browser set viewport and the preset picker.',
   testName: 'configures the browser viewport through explicit sizes, presets, and the picker',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,

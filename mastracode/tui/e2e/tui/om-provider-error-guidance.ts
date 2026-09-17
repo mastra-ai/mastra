@@ -11,7 +11,7 @@ export const omProviderErrorGuidanceScenario = {
   description: 'Explains how to recover when the configured OM provider cannot authenticate.',
   testName: 'names the active OM model and recommends /memory or /connect',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = readMutableSettingsFixture(settingsPath);
     settings.onboarding = {
       ...settings.onboarding,

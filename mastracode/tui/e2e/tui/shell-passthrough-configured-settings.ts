@@ -21,7 +21,7 @@ export const shellPassthroughConfiguredSettingsScenario: McE2eScenario = {
     );
     chmodSync(wrapperPath, 0o755);
 
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.shellPassthrough = {
       mode: 'path',

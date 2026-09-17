@@ -10,7 +10,7 @@ export const settingsStartupModelRestoreScenario = {
   description: 'restores a persisted custom model pack from settings during TUI startup',
   testName: 'boots with the persisted active custom model pack defaults',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -60,7 +60,7 @@ export const settingsStartupModelRestoreScenario = {
     await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
     terminal.submit(
-      '!node -e \'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("STARTUP_ACTIVE="+s.models.activeModelPackId); console.log("STARTUP_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("STARTUP_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("STARTUP_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("STARTUP_PACKS="+s.customModelPacks.map(p=>p.name).join("|"));\'',
+      '!node -e \'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); console.log("STARTUP_ACTIVE="+s.models.activeModelPackId); console.log("STARTUP_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("STARTUP_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("STARTUP_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("STARTUP_PACKS="+s.customModelPacks.map(p=>p.name).join("|"));\'',
     );
     await runtime.waitForScreenText(/STARTUP_ACTIVE=custom:Startup Restore E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/STARTUP_DEFAULT_PLAN=stale-mode-defaults\/plan/i, terminal, 8_000);

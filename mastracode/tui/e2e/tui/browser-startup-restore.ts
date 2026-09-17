@@ -29,7 +29,7 @@ export const browserStartupRestoreScenario = {
   useOpenAIModel: true,
   aimockFixture: 'browser-startup-restore.json',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
     settings.onboarding = {
       ...((typeof settings.onboarding === 'object' && settings.onboarding !== null
@@ -100,7 +100,7 @@ export const browserStartupRestoreScenario = {
     await runtime.waitForScreenText(/Browser startup restore confirmed\./i, terminal, 10_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_STARTUP_ENABLED="+b.enabled); console.log("BROWSER_STARTUP_PROVIDER="+b.provider); console.log("BROWSER_STARTUP_CDP_OK="+((b.cdpUrl||"").includes("browser-startup-restore-e2e")));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const b=s.browser||{}; console.log("BROWSER_STARTUP_ENABLED="+b.enabled); console.log("BROWSER_STARTUP_PROVIDER="+b.provider); console.log("BROWSER_STARTUP_CDP_OK="+((b.cdpUrl||"").includes("browser-startup-restore-e2e")));'`,
     );
     await runtime.waitForScreenText(/BROWSER_STARTUP_ENABLED=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSER_STARTUP_PROVIDER=agent-browser/i, terminal, 8_000);

@@ -13,7 +13,7 @@ export const subagentsCommandScenario = {
     return { '302AI_API_KEY': 'sk-subagent-config-e2e' };
   },
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.preferences = {
       ...settings.preferences,
@@ -36,7 +36,7 @@ export const subagentsCommandScenario = {
     await runtime.waitForScreenText(/Subagents enabled\. Restart MastraCode for this to take effect\./i, terminal);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("SUBAGENTS_ENABLED="+s.preferences.subagentsEnabled);'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); console.log("SUBAGENTS_ENABLED="+s.preferences.subagentsEnabled);'`,
     );
     await runtime.waitForScreenText(/SUBAGENTS_ENABLED=true/i, terminal, 8_000);
 
@@ -62,7 +62,7 @@ export const subagentsCommandScenario = {
     );
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("SUBAGENT_EXPLORE_MODEL="+(s.models.subagentModels.explore||"missing"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); console.log("SUBAGENT_EXPLORE_MODEL="+(s.models.subagentModels.explore||"missing"));'`,
     );
     await runtime.waitForScreenText(/SUBAGENT_EXPLORE_MODEL=302ai\/subagent-config-e2e-model/i, terminal, 8_000);
 
@@ -72,7 +72,7 @@ export const subagentsCommandScenario = {
     await runtime.waitForScreenText(/Subagents disabled\. Restart MastraCode for this to take effect\./i, terminal);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("SUBAGENTS_ENABLED_AFTER_DISABLE="+s.preferences.subagentsEnabled);'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); console.log("SUBAGENTS_ENABLED_AFTER_DISABLE="+s.preferences.subagentsEnabled);'`,
     );
     await runtime.waitForScreenText(/SUBAGENTS_ENABLED_AFTER_DISABLE=false/i, terminal, 8_000);
 

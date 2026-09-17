@@ -17,7 +17,7 @@ export const githubSignalsLegacyUpgradeScenario = {
   aimockFixture: 'github-signals-command.json',
   prepare(context) {
     mkdirSync(context.projectDir, { recursive: true });
-    settingsPath = join(context.appDataDir, 'settings.json');
+    settingsPath = join(context.appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as { signals?: Record<string, unknown> };
     settings.signals = {
       ...settings.signals,

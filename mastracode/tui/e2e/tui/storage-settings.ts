@@ -12,7 +12,7 @@ export const storageSettingsScenario: McE2eScenario = {
   testName: 'sets PostgreSQL storage backend with masked connection input in the real TUI',
   env({ appDataDir }) {
     return {
-      MC_E2E_STORAGE_SETTINGS_PATH: join(appDataDir, 'settings.json'),
+      MC_E2E_STORAGE_SETTINGS_PATH: join(appDataDir, 'config.json'),
     };
   },
   async run({ terminal, runtime }) {

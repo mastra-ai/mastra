@@ -11,7 +11,7 @@ export const browserWizardBrowserbaseScenario = {
     BROWSERBASE_PROJECT_ID: 'mc-e2e-browserbase-project',
   }),
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -62,7 +62,7 @@ export const browserWizardBrowserbaseScenario = {
     await runtime.waitForScreenText(/Environment:\s+BROWSERBASE/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; const sh=b.stagehand||{}; console.log("BROWSERBASE_PROVIDER="+b.provider); console.log("BROWSERBASE_ENABLED="+b.enabled+":"+b.headless); console.log("BROWSERBASE_ENV="+sh.env); console.log("BROWSERBASE_LOCAL_OPTS="+(b.cdpUrl||"missing")+":"+(b.profile||"missing")+":"+(b.executablePath||"missing")+":"+(sh.preserveUserDataDir ?? "missing")); console.log("BROWSERBASE_CREDS_PERSISTED="+Boolean(sh.apiKey||sh.projectId));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const b=s.browser||{}; const sh=b.stagehand||{}; console.log("BROWSERBASE_PROVIDER="+b.provider); console.log("BROWSERBASE_ENABLED="+b.enabled+":"+b.headless); console.log("BROWSERBASE_ENV="+sh.env); console.log("BROWSERBASE_LOCAL_OPTS="+(b.cdpUrl||"missing")+":"+(b.profile||"missing")+":"+(b.executablePath||"missing")+":"+(sh.preserveUserDataDir ?? "missing")); console.log("BROWSERBASE_CREDS_PERSISTED="+Boolean(sh.apiKey||sh.projectId));'`,
     );
     await runtime.waitForScreenText(/BROWSERBASE_PROVIDER=stagehand/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSERBASE_ENABLED=true:false/i, terminal, 8_000);

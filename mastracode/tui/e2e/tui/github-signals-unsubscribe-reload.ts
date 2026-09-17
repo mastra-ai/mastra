@@ -80,7 +80,7 @@ export const githubSignalsUnsubscribeReloadScenario = {
   prepare(context) {
     mkdirSync(context.projectDir, { recursive: true });
 
-    const settingsPath = join(context.appDataDir, 'settings.json');
+    const settingsPath = join(context.appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as { signals?: Record<string, unknown> };
     settings.signals = {
       ...settings.signals,

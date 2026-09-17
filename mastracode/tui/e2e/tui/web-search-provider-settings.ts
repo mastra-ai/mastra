@@ -13,7 +13,7 @@ export const webSearchProviderSettingsScenario = {
     };
   },
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.preferences = {
       ...settings.preferences,

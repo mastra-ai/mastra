@@ -25,7 +25,7 @@ export const apiKeyMultiProviderDeleteScenario = {
   description: 'Keeps API key provider ordering stable and deletes only the selected stored provider key.',
   testName: 'sorts providers and deletes one stored key without affecting another provider',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,

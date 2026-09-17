@@ -106,7 +106,7 @@ export const goalApiErrorStopsLoopScenario = {
   useOpenAIModel: true,
   aimockFixture: 'goal-api-error-stops-loop.json',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.models = {
       ...settings.models,

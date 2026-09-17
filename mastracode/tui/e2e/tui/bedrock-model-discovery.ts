@@ -8,7 +8,7 @@ export const bedrockModelDiscoveryScenario = {
   description: 'Bedrock model selection excludes transport overrides while retaining Converse siblings.',
   testName: 'offers only Converse-compatible Bedrock catalog entries in the model picker',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
     settings.onboarding = {
       ...settings.onboarding,

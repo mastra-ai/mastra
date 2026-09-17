@@ -91,7 +91,7 @@ values
     execFileSync('sqlite3', [dbPath], { input: sql });
   },
   inProcessApp({ appDataDir, env, startMastraCodeApp }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as {
       customProviders?: unknown;
       models?: { modeDefaults?: Record<string, string> };

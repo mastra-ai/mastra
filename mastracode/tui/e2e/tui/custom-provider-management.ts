@@ -7,7 +7,7 @@ export const customProviderManagementScenario = {
   description: 'manages a configured OpenAI-compatible provider through the real TUI custom-providers modal flow',
   testName: 'adds a model to a custom provider through the real TUI',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.customProviders = [
       {

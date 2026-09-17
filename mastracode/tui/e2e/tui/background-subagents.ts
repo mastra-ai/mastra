@@ -52,7 +52,7 @@ export const backgroundSubagentsScenario = {
   useOpenAIModel: true,
   aimockFixture: 'background-subagents.json',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
     settings.backgroundTools = { enabled: true };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));

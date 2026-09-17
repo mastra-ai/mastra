@@ -23,7 +23,7 @@ export const setupCustomPackCompletionScenario = {
     '302AI_API_KEY': 'sk-setup-custom-pack-e2e',
   }),
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -100,7 +100,7 @@ export const setupCustomPackCompletionScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("SETUP_CUSTOM_DONE="+Boolean(s.onboarding.completedAt)); console.log("SETUP_CUSTOM_ONBOARDING="+s.onboarding.modePackId); console.log("SETUP_CUSTOM_ACTIVE="+s.models.activeModelPackId); console.log("SETUP_CUSTOM_PLAN="+p?.models?.plan); console.log("SETUP_CUSTOM_BUILD="+p?.models?.build); console.log("SETUP_CUSTOM_FAST="+p?.models?.fast); console.log("SETUP_CUSTOM_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("SETUP_CUSTOM_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("SETUP_CUSTOM_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("SETUP_CUSTOM_OM_ONBOARDING="+s.onboarding.omPackId); console.log("SETUP_CUSTOM_OM_ACTIVE="+s.models.activeOmPackId); console.log("SETUP_CUSTOM_OM_MODEL="+s.models.omModelOverride); console.log("SETUP_CUSTOM_OVERRIDES="+Object.keys(s.models.subagentModels||{}).length+":"+s.preferences.yolo);'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s={...JSON.parse(fs.readFileSync(app+"/config.json","utf8")),...JSON.parse(fs.readFileSync(app+"/state.json","utf8"))}; const p=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("SETUP_CUSTOM_DONE="+Boolean(s.onboarding.completedAt)); console.log("SETUP_CUSTOM_ONBOARDING="+s.onboarding.modePackId); console.log("SETUP_CUSTOM_ACTIVE="+s.models.activeModelPackId); console.log("SETUP_CUSTOM_PLAN="+p?.models?.plan); console.log("SETUP_CUSTOM_BUILD="+p?.models?.build); console.log("SETUP_CUSTOM_FAST="+p?.models?.fast); console.log("SETUP_CUSTOM_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("SETUP_CUSTOM_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("SETUP_CUSTOM_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("SETUP_CUSTOM_OM_ONBOARDING="+s.onboarding.omPackId); console.log("SETUP_CUSTOM_OM_ACTIVE="+s.models.activeOmPackId); console.log("SETUP_CUSTOM_OM_MODEL="+s.models.omModelOverride); console.log("SETUP_CUSTOM_OVERRIDES="+Object.keys(s.models.subagentModels||{}).length+":"+s.preferences.yolo);'`,
     );
     await runtime.waitForScreenText(/SETUP_CUSTOM_DONE=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/SETUP_CUSTOM_ONBOARDING=custom:Setup Custom Pack E2E/i, terminal, 8_000);

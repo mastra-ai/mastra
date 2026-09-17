@@ -14,7 +14,7 @@ export const onboardingOmFollowsLoginScenario = {
   description: 'Preselects the OM pack of the provider signed in during onboarding, not the first reachable one.',
   testName: 'preselects the OM pack matching the provider signed in during setup',
   prepare({ appDataDir, projectDir }) {
-    rmSync(join(appDataDir, 'settings.json'), { force: true });
+    rmSync(join(appDataDir, 'config.json'), { force: true });
     rmSync(join(appDataDir, 'auth.json'), { force: true });
     mkdirSync(projectDir, { recursive: true });
   },
@@ -80,7 +80,7 @@ export const onboardingOmFollowsLoginScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); console.log("ONBOARDING_OM_PACK="+s.onboarding.omPackId+":"+s.models.activeOmPackId);'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s={...JSON.parse(fs.readFileSync(app+"/config.json","utf8")),...JSON.parse(fs.readFileSync(app+"/state.json","utf8"))}; console.log("ONBOARDING_OM_PACK="+s.onboarding.omPackId+":"+s.models.activeOmPackId);'`,
     );
     await runtime.waitForScreenText(/ONBOARDING_OM_PACK=anthropic:anthropic/i, terminal, 8_000);
 

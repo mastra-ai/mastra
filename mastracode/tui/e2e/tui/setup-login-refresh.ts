@@ -10,7 +10,7 @@ export const setupLoginRefreshScenario = {
   description: 'Refreshes onboarding model packs after a successful login without restarting the TUI.',
   testName: 'refreshes available setup packs after login succeeds',
   prepare({ appDataDir, projectDir }) {
-    rmSync(join(appDataDir, 'settings.json'), { force: true });
+    rmSync(join(appDataDir, 'config.json'), { force: true });
     rmSync(join(appDataDir, 'auth.json'), { force: true });
     mkdirSync(projectDir, { recursive: true });
   },
@@ -82,7 +82,7 @@ export const setupLoginRefreshScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); const a=JSON.parse(fs.readFileSync(app+"/auth.json","utf8")); console.log("SETUP_LOGIN_AUTH="+(a.anthropic?.type||"missing")+":"+(a.anthropic?.access||"missing")); console.log("SETUP_LOGIN_PACK="+s.models.activeModelPackId+":"+s.onboarding.modePackId+":"+s.onboarding.omPackId+":"+s.models.activeOmPackId); console.log("SETUP_LOGIN_BUILTIN_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length);'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s={...JSON.parse(fs.readFileSync(app+"/config.json","utf8")),...JSON.parse(fs.readFileSync(app+"/state.json","utf8"))}; const a=JSON.parse(fs.readFileSync(app+"/auth.json","utf8")); console.log("SETUP_LOGIN_AUTH="+(a.anthropic?.type||"missing")+":"+(a.anthropic?.access||"missing")); console.log("SETUP_LOGIN_PACK="+s.models.activeModelPackId+":"+s.onboarding.modePackId+":"+s.onboarding.omPackId+":"+s.models.activeOmPackId); console.log("SETUP_LOGIN_BUILTIN_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length);'`,
     );
     await runtime.waitForScreenText(/SETUP_LOGIN_AUTH=oauth:mc-setup-login-refresh-access/i, terminal, 8_000);
     await runtime.waitForScreenText(/SETUP_LOGIN_PACK=anthropic:anthropic:anthropic:anthropic/i, terminal, 8_000);

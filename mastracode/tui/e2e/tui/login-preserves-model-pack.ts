@@ -18,7 +18,7 @@ export const loginPreservesModelPackScenario = {
   testName: 'keeps explicit model and OM choices after logging in via /login',
   prepare({ appDataDir }) {
     rmSync(join(appDataDir, 'auth.json'), { force: true });
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = readMutableSettingsFixture(settingsPath);
     settings.onboarding = {
       ...settings.onboarding,
@@ -95,7 +95,7 @@ export const loginPreservesModelPackScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); const a=JSON.parse(fs.readFileSync(app+"/auth.json","utf8")); console.log("LOGIN_PRESERVE_AUTH="+(a.anthropic?.type||"missing")+":"+(a.anthropic?.access||"missing")); console.log("LOGIN_PRESERVE_PACK="+s.models.activeModelPackId); console.log("LOGIN_PRESERVE_OM="+s.onboarding.omPackId+":"+s.models.activeOmPackId+":"+s.models.omModelOverride); console.log("LOGIN_PRESERVE_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length);'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s={...JSON.parse(fs.readFileSync(app+"/config.json","utf8")),...JSON.parse(fs.readFileSync(app+"/state.json","utf8"))}; const a=JSON.parse(fs.readFileSync(app+"/auth.json","utf8")); console.log("LOGIN_PRESERVE_AUTH="+(a.anthropic?.type||"missing")+":"+(a.anthropic?.access||"missing")); console.log("LOGIN_PRESERVE_PACK="+s.models.activeModelPackId); console.log("LOGIN_PRESERVE_OM="+s.onboarding.omPackId+":"+s.models.activeOmPackId+":"+s.models.omModelOverride); console.log("LOGIN_PRESERVE_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length);'`,
     );
     await runtime.waitForScreenText(/LOGIN_PRESERVE_AUTH=oauth:mc-login-preserve-access/i, terminal, 8_000);
     await runtime.waitForScreenText(/LOGIN_PRESERVE_PACK=custom:Login Preserve E2E/i, terminal, 8_000);

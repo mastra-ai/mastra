@@ -127,7 +127,7 @@ values
     const observationsPath = env.MC_E2E_PROVIDER_HISTORY_RETRY_OBSERVATIONS;
     if (!observationsPath) throw new Error('MC_E2E_PROVIDER_HISTORY_RETRY_OBSERVATIONS missing');
 
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as {
       customProviders?: Array<{ name: string; url: string | null; apiKey: string | null; models: string[] }>;
       models?: { modeDefaults?: Record<string, string> };

@@ -7,7 +7,7 @@ export const modelSearchScenario = {
   description: 'Searches connected models and keeps the current mode unchanged when API-key entry is cancelled.',
   testName: 'changes the current mode model with /model and aborts a cancelled key prompt',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -69,7 +69,7 @@ export const modelSearchScenario = {
     await runtime.waitForScreenText(/▐build▌model-search-e2e\/new-model/i, terminal, 8_000);
 
     terminal.submit(
-      '!node -e \'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="Model Search E2E"); console.log("MODEL_CANCELLED_BUILD="+p.models.build);\'',
+      '!node -e \'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="Model Search E2E"); console.log("MODEL_CANCELLED_BUILD="+p.models.build);\'',
     );
     await runtime.waitForScreenText(/MODEL_CANCELLED_BUILD=model-search-e2e\/new-model/i, terminal, 8_000);
 

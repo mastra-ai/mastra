@@ -91,7 +91,7 @@ function seedSettings(homeDir: string, useOpenAIModel: boolean, openAiApiKey = '
     );
   }
   writeFileSync(
-    join(appDataDir, 'settings.json'),
+    join(appDataDir, 'config.json'),
     JSON.stringify(
       {
         onboarding: {

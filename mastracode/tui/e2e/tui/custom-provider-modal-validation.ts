@@ -17,11 +17,11 @@ export const customProviderModalValidationScenario = {
   testName: 'validates custom provider modal persistence',
   env({ appDataDir }) {
     return {
-      MC_E2E_CUSTOM_PROVIDER_MODAL_SETTINGS_PATH: join(appDataDir, 'settings.json'),
+      MC_E2E_CUSTOM_PROVIDER_MODAL_SETTINGS_PATH: join(appDataDir, 'config.json'),
     };
   },
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as CustomProviderSettings;
     settings.onboarding = {
       ...settings.onboarding,

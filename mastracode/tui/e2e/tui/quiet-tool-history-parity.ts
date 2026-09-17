@@ -17,7 +17,7 @@ export const quietToolHistoryParityScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'quiet-tool-history-parity.json',
   prepare({ appDataDir, dbPath, projectDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = { ...settings.onboarding, quietModePreferenceSelected: true };
     settings.preferences = {

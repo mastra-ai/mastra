@@ -17,7 +17,7 @@ export const modelSelectionApiKeyPromptScenario = {
     };
   },
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -91,7 +91,7 @@ export const modelSelectionApiKeyPromptScenario = {
     await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const settings=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const pack=settings.customModelPacks.find(p=>p.name==="${packName}"); console.log("MODEL_PROMPT_PLAN="+pack.models.plan); console.log("MODEL_PROMPT_KEY="+(auth["apikey:302ai"]?.key || "missing"));'`,
+      `!node -e 'const fs=require("fs"); const settings=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const pack=settings.customModelPacks.find(p=>p.name==="${packName}"); console.log("MODEL_PROMPT_PLAN="+pack.models.plan); console.log("MODEL_PROMPT_KEY="+(auth["apikey:302ai"]?.key || "missing"));'`,
     );
     await runtime.waitForScreenText(/MODEL_PROMPT_PLAN=302ai\/keyprompt-e2e-model/i, terminal, 8_000);
     await runtime.waitForScreenText(/MODEL_PROMPT_KEY=sk-model-selection-key-e2e/i, terminal, 8_000);

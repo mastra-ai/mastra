@@ -64,7 +64,7 @@ export const workspacePlanModeToolsScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'workspace-plan-mode-tools.json',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
     settings.lsp = true;
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));

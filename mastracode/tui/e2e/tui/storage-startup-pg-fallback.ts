@@ -9,7 +9,7 @@ export const storageStartupPgFallbackScenario: McE2eScenario = {
     'Verify persisted PostgreSQL storage settings are read on startup and fall back visibly when incomplete.',
   testName: 'loads persisted PostgreSQL storage settings at startup and shows fallback warning',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.storage = {
       ...settings.storage,
@@ -38,7 +38,7 @@ export const storageStartupPgFallbackScenario: McE2eScenario = {
     runtime.printScreen('after startup warning', terminal);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("STORAGE_STARTUP_BACKEND="+s.storage.backend+":"+Boolean(s.storage.pg));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); console.log("STORAGE_STARTUP_BACKEND="+s.storage.backend+":"+Boolean(s.storage.pg));'`,
     );
     await runtime.waitForScreenText(/STORAGE_STARTUP_BACKEND=pg:true/i, terminal, 8_000);
   },

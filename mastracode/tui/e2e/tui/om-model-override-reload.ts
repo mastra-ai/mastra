@@ -17,7 +17,7 @@ export const omModelOverrideReloadScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'om-model-override-reload.json',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -87,7 +87,7 @@ export const omModelOverrideReloadScenario: McE2eScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const m=s.models||{}; console.log("OM_MODEL_PACK="+m.activeOmPackId); console.log("OM_MODEL_LEGACY="+(m.omModelOverride||"null")); console.log("OM_MODEL_OBSERVER="+m.observerModelOverride); console.log("OM_MODEL_REFLECTOR="+m.reflectorModelOverride);'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const m=s.models||{}; console.log("OM_MODEL_PACK="+m.activeOmPackId); console.log("OM_MODEL_LEGACY="+(m.omModelOverride||"null")); console.log("OM_MODEL_OBSERVER="+m.observerModelOverride); console.log("OM_MODEL_REFLECTOR="+m.reflectorModelOverride);'`,
     );
     await runtime.waitForScreenText(/OM_MODEL_PACK=custom/i, terminal, 8_000);
     await runtime.waitForScreenText(/OM_MODEL_LEGACY=null/i, terminal, 8_000);
