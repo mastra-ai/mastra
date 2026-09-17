@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
@@ -1398,7 +1398,10 @@ function getSignalSettingsForSave(settings: GlobalSettings, filePath: string): S
 function writeFileAtomically(filePath: string, content: string): void {
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    writeFileSync(tempPath, content, 'utf-8');
+    // Preserve the target's mode across the rename (auth.json keeps its 0600);
+    // new files default to owner-only since these are local app-data files.
+    const mode = existsSync(filePath) ? statSync(filePath).mode & 0o777 : 0o600;
+    writeFileSync(tempPath, content, { encoding: 'utf-8', mode });
     renameSync(tempPath, filePath);
   } finally {
     rmSync(tempPath, { force: true });

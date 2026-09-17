@@ -1,3 +1,4 @@
+import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getBuiltinModePack } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
@@ -30,8 +31,11 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   const previousModeSetting = thread?.metadata?.[modeSettingKey];
   const previousPackSetting = thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
   const previousFallbackStatus = thread?.metadata?.[THREAD_FALLBACK_STATUS_KEY];
-  const previousSessionPackId = (ctx.state.session.state?.get?.() as { activeModelPackId?: string } | undefined)
-    ?.activeModelPackId;
+  const previousPendingFallback = thread?.metadata?.[PACK_FALLBACK_STATE_KEY];
+  const previousSessionState = ctx.state.session.state?.get?.() as
+    | { activeModelPackId?: string; [PACK_FALLBACK_STATE_KEY]?: unknown }
+    | undefined;
+  const previousSessionPackId = previousSessionState?.activeModelPackId;
   const activePackId = threadSettings.activeModelPackId ?? nextSettings.models.activeModelPackId;
   const builtinPack = activePackId ? getBuiltinModePack(activePackId) : undefined;
   const customPack = activePackId?.startsWith('custom:')
@@ -86,6 +90,8 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   let packSettingSaved = false;
   let sessionPackSaved = false;
   let fallbackStatusCleared = false;
+  let pendingThreadFallbackCleared = false;
+  let pendingSessionFallbackCleared = false;
   let globalSettingsWriteStarted = false;
   try {
     await ctx.state.session.thread.setSetting({ key: modeSettingKey, value: modelId });
@@ -104,6 +110,13 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     sessionPackSaved = true;
     await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
     fallbackStatusCleared = true;
+    // A manual switch supersedes any queued hop: getDynamicModel prefers the
+    // pending toModelId over the session model, so leaving the marker in place
+    // would override the user's choice until the hop landed.
+    await ctx.state.session.thread.setSetting({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
+    pendingThreadFallbackCleared = true;
+    await ctx.state.session.state.set({ [PACK_FALLBACK_STATE_KEY]: null });
+    pendingSessionFallbackCleared = true;
   } catch (error) {
     if (globalSettingsWriteStarted) {
       try {
@@ -116,6 +129,19 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     const rollbacks: Array<Promise<unknown>> = [];
     if (sessionPackSaved) {
       rollbacks.push(ctx.state.session.state.set({ activeModelPackId: previousSessionPackId }));
+    }
+    if (pendingThreadFallbackCleared) {
+      rollbacks.push(
+        ctx.state.session.thread.setSetting({ key: PACK_FALLBACK_STATE_KEY, value: previousPendingFallback }),
+      );
+    }
+    if (pendingSessionFallbackCleared) {
+      const previousSessionPending = previousSessionState?.[PACK_FALLBACK_STATE_KEY];
+      rollbacks.push(
+        ctx.state.session.state.set({
+          [PACK_FALLBACK_STATE_KEY]: previousSessionPending === undefined ? null : previousSessionPending,
+        }),
+      );
     }
     if (fallbackStatusCleared) {
       rollbacks.push(

@@ -1714,6 +1714,44 @@ describe('createMastraCode', () => {
     expect(controllerEmitMock).not.toHaveBeenCalled();
   });
 
+  it('does not leak the active session routing-exhaustion into a target thread without persisted exhaustion', async () => {
+    controllerGetCurrentThreadIdMock.mockReturnValue('active-thread');
+    controllerModeMock = 'build';
+    controllerModelMock = 'openai/gpt-5.6-sol';
+    controllerStateMock = {
+      activeModelPackId: 'openai',
+      yolo: false,
+      sandboxAllowedPaths: ['/active-only'],
+      mastracodeAccountRoutingExhausted: {
+        anthropic: { 'anthropic/claude-fable-5-1': ['anthropic:account-a'] },
+      },
+    };
+    controllerThreadMetadataMock = {
+      activeModelPackId: 'anthropic',
+      modeModelId_build: 'anthropic/claude-fable-5-1',
+    };
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode();
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as Record<string, any>)
+      .find(config => config.notifications);
+    const decide = codeAgentConfig?.notifications?.deliveryPolicy?.decide;
+
+    const decision = await decide({
+      record: {
+        priority: 'medium',
+        source: 'github',
+        resourceId: 'project-resource',
+        threadId: 'notification-thread',
+      },
+      threadState: 'idle',
+      now: new Date('2026-09-15T00:00:00.000Z'),
+    });
+    const controllerContext = decision.streamOptions.requestContext.get('controller');
+
+    expect(controllerContext.getState()).not.toHaveProperty('mastracodeAccountRoutingExhausted');
+  });
+
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),

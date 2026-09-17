@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -220,6 +220,27 @@ function withTempSettingsFile(run: (filePath: string) => void): void {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+describe('atomic writes', () => {
+  it('preserves an existing file mode across the rename', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, '{}', { encoding: 'utf-8', mode: 0o600 });
+      chmodSync(filePath, 0o600);
+
+      saveSettings(createSettings(), filePath);
+
+      expect(statSync(filePath).mode & 0o777).toBe(0o600);
+    });
+  });
+
+  it('creates new files owner-only', () => {
+    withTempSettingsFile(filePath => {
+      saveSettings(createSettings(), filePath);
+
+      expect(statSync(filePath).mode & 0o777).toBe(0o600);
+    });
+  });
+});
 
 describe('packFallbacks parsing', () => {
   it('defaults to an empty map when unset', () => {

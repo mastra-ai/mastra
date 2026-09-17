@@ -774,6 +774,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     const baseState = { ...session.state.get() } as MastraCodeState;
     delete baseState.activeModelPackId;
     delete baseState.mastracodePendingPackFallback;
+    // Exhausted-account routing state is per thread: the live session's map
+    // must not leak into a notification run whose target thread has none
+    // (the re-seed below only writes keys the target metadata carries).
+    delete (baseState as Record<string, unknown>)[THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY];
     const persistedSandboxPaths = metadata?.sandboxAllowedPaths;
     baseState.sandboxAllowedPaths =
       Array.isArray(persistedSandboxPaths) && persistedSandboxPaths.every(path => typeof path === 'string')
