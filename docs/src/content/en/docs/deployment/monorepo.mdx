@@ -128,7 +128,7 @@ Keep dependencies consistent to avoid version conflicts and build errors:
 
 ### Skipping dependency installation
 
-By default, `mastra build` copies your package manager's lockfile into `.mastra/output`, updates it for the generated `package.json`, and installs dependencies there. If no source lockfile exists, Mastra uses npm and generates `package-lock.json`. Hermetic build systems (such as Bazel) supply `node_modules` externally and run in a network-less sandbox, where this install is both redundant and fatal.
+By default, `mastra build` copies your package manager's lockfile into `.mastra/output`, updates it for the generated `package.json`, and installs dependencies there. If no source lockfile exists, Mastra uses npm and generates `package-lock.json`. Yarn lockfile preparation requires Yarn 2 or newer because Yarn Classic can't update a lockfile without installing dependencies. Hermetic build systems (such as Bazel) supply `node_modules` externally and run in a network-less sandbox, where this install is both redundant and fatal.
 
 Set `MASTRA_BUILD_SKIP_INSTALL` to `true` or `1` to skip the lockfile preparation and output install:
 

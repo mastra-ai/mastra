@@ -333,6 +333,18 @@ export class Deps extends MastraBase {
     pnpmNodeLinker?: 'hoisted';
   } = {}) {
     if (this.lockFile) {
+      if (this.lockFile.packageManager === 'yarn') {
+        const lockfileContents = await fsPromises.readFile(this.lockFile.path, 'utf-8');
+        if (/^# yarn lockfile v1\r?$/m.test(lockfileContents)) {
+          throw new MastraError({
+            id: 'DEPLOYER_YARN_CLASSIC_LOCKFILE_UNSUPPORTED',
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.USER,
+            text: 'Yarn Classic lockfiles cannot be updated without installing dependencies. Upgrade the project to Yarn 2 or newer before building.',
+          });
+        }
+      }
+
       const destination = path.join(dir, this.lockFile.filename);
       if (path.resolve(this.lockFile.path) !== path.resolve(destination)) {
         await fsPromises.copyFile(this.lockFile.path, destination);
