@@ -1,9 +1,9 @@
-# Chat composition stories
+# Shared component stories
 
-Run `pnpm --filter @mastra/playground-ui storybook` for the shared components and the application compositions in one catalog. `pnpm --filter @mastra/playground-ui typecheck:storybook` checks those compositions together.
+Run `pnpm --filter @mastra/playground-ui storybook` to explore Playground UI components and their composition. Stories import only this package's UI. Application-specific layouts, permission checks, voice controls, settings and persistence stay in Studio and Factory.
 
-`src/ds/components` contains the published UI: composer surfaces and actions, model menu parts, segmented comboboxes, and warning containers. These components receive values, content, and callbacks. They do not fetch catalogs, choose a provider, apply a model pack, persist settings, or start a voice call.
+`pnpm --filter @mastra/playground-ui typecheck:storybook` checks the local stories, fixtures and Storybook configuration. Its tsconfig extends the package configuration without cross-application paths or aliases.
 
-Studio compositions live in `packages/playground/.storybook`; Factory compositions live in `mastracode/factory-ui/.storybook`. They import their own production presentation and the shared UI. Studio owns voice, dictation, the attachment menu, model settings, execution methods, approval settings, and policy messages. Its preference schema stays in the agents domain. Factory owns mode icons and pack actions. The Storybook resolver points public Playground UI imports at source so app compositions and shared primitives use the same contexts.
+Composer action stories cover the shared round and outline buttons, disabled states and send/stop composition. Applications supply their own callbacks and decide when each action is available.
 
-The composer action rows are imported from the same application files used by production. Factory model stories mount its production ModelPicker and ModesSelection with seeded catalog data and local context values. Studio stories reuse its model-picker layout and settings view with local values. Their callbacks are demonstrations, not production transport or persistence tests. Production behavior is covered separately by each application's MSW suites. Keep draft simulations and preset selectors in Storybook fixtures; they are not a shared chat controller.
+Model picker stories demonstrate combined menus, provider/model segments, model packs, loading, locked, unavailable and warning states using shared primitives and local catalogs. Provider discovery, credentials, policy, pack resolution and persisted selections stay in the applications.

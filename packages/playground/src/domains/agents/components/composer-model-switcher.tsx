@@ -1,7 +1,11 @@
+import {
+  ModelPickerDivider,
+  ModelPickerLocked,
+  ModelPickerWarning,
+  ModelPickerWarnings,
+} from '@mastra/playground-ui/components/ModelPicker';
 import { useState } from 'react';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
-import { ComposerModelPickerView } from './composer-model-picker-view';
-import { ComposerModelWarnings } from './composer-model-warnings';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
@@ -13,7 +17,7 @@ export const ComposerModelSwitcher = () => {
 
   const [modelOpen, setModelOpen] = useState(false);
 
-  if (!selection) return null;
+  if (providersLoading || !selection) return null;
 
   const { provider: selectedProvider, model: selectedModel, setProvider, setModel } = selection;
   const providers = dataProviders?.providers || [];
@@ -36,27 +40,22 @@ export const ComposerModelSwitcher = () => {
   };
 
   const modelLabel = selectedProvider && selectedModel ? `${selectedProvider}/${selectedModel}` : 'Locked by admin';
-  const lockedLabel = policy.active && policy.pickerVisible === false ? modelLabel : undefined;
+  if (policy.active && policy.pickerVisible === false) return <ModelPickerLocked label={modelLabel} />;
 
   return (
-    <ComposerModelPickerView
-      loading={providersLoading}
-      lockedLabel={lockedLabel}
-      provider={
-        <LLMProviders value={currentModelProvider} onValueChange={handleProviderSelect} size="md" segment="provider" />
-      }
-      model={
-        <LLMModels
-          llmId={currentModelProvider}
-          value={selectedModel}
-          onValueChange={handleModelSelect}
-          open={modelOpen}
-          onOpenChange={setModelOpen}
-          size="md"
-          segment="model"
-        />
-      }
-    />
+    <div className="inline-flex max-w-full items-stretch">
+      <LLMProviders value={currentModelProvider} onValueChange={handleProviderSelect} size="md" segment="provider" />
+      <ModelPickerDivider />
+      <LLMModels
+        llmId={currentModelProvider}
+        value={selectedModel}
+        onValueChange={handleModelSelect}
+        open={modelOpen}
+        onOpenChange={setModelOpen}
+        size="md"
+        segment="model"
+      />
+    </div>
   );
 };
 
@@ -103,3 +102,36 @@ export const ComposerModelWarning = () => {
     />
   );
 };
+
+function ComposerModelWarnings({
+  warning,
+  staleModel,
+  environmentVariable,
+}: {
+  warning?: string | string[];
+  staleModel?: string;
+  environmentVariable?: string;
+}) {
+  const warningText = Array.isArray(warning) ? warning.filter(Boolean).join(' ') : warning;
+  if (!warningText && !staleModel && !environmentVariable) return null;
+  return (
+    <ModelPickerWarnings>
+      {(warningText || staleModel) && (
+        <ModelPickerWarning role="alert" data-testid="composer-model-stale-warning">
+          {warningText || (
+            <>
+              <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">{staleModel}</code> is no
+              longer allowed by admin policy. Pick a different model.
+            </>
+          )}
+        </ModelPickerWarning>
+      )}
+      {environmentVariable && (
+        <ModelPickerWarning>
+          Set <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">{environmentVariable}</code>{' '}
+          to use this provider
+        </ModelPickerWarning>
+      )}
+    </ModelPickerWarnings>
+  );
+}

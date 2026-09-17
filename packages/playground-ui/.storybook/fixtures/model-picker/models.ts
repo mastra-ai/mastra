@@ -27,10 +27,3 @@ export const packs: ModelPickerPack[] = [
     keywords: ['Review', 'anthropic/claude-sonnet-4-5', 'openai/gpt-4.1-mini'],
   },
 ];
-export function packModel(packId: string, modeId: string) {
-  if (modeId === 'fast') return 'openai/gpt-4.1-mini';
-  return packId === 'review' ? 'anthropic/claude-sonnet-4-5' : 'openai/gpt-4.1';
-}
-export type ModelControlState = 'ready' | 'loading' | 'unconfigured' | 'locked';
-
-export const initialStudioModelSelection = { provider: 'openai', model: 'gpt-4.1' };

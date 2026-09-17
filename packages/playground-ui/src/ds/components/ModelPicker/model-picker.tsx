@@ -75,7 +75,7 @@ export function ModelPickerContent({
           <CommandEmpty>No matching model.</CommandEmpty>
           {children}
         </CommandList>
-        {footer && <p className="border-border1 text-ui-xs text-neutral3 border-t px-3 py-2">{footer}</p>}
+        {footer && <div className="border-border1 text-ui-xs text-neutral3 border-t px-3 py-2">{footer}</div>}
       </Command>
     </PopoverContent>
   );

@@ -31,7 +31,13 @@ export function ComposerModeSelect({ modes, value, onValueChange, busy, disabled
   if (!selected) return null;
   return (
     <Select value={value} disabled={disabled || busy} onValueChange={onValueChange}>
-      <SelectTrigger variant="ghost" size="xs" aria-label="Session mode" aria-busy={Boolean(busy)} className="w-auto">
+      <SelectTrigger
+        variant="ghost"
+        size="xs"
+        aria-label={`Session mode: ${selected.name}`}
+        aria-busy={Boolean(busy)}
+        className="w-auto"
+      >
         <ComposerToneLabel tone={selected.tone}>
           <ModeLabel mode={selected} />
         </ComposerToneLabel>
