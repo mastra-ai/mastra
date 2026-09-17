@@ -221,7 +221,8 @@ export const KeyboardOnly: Story = {
     await user.keyboard('{ArrowDown}{Enter}');
     await user.type(input, 'abc');
     await user.keyboard('{Enter}');
-    // Walk back into the chips, open the last value editor, close it, then remove that chip.
+    // Walk back into the chips (remove button, then value), open the last value editor, close it, then remove that chip.
+    await user.keyboard('{ArrowLeft}');
     await user.keyboard('{ArrowLeft}');
     await user.keyboard('{Enter}');
     await user.keyboard('{Escape}');

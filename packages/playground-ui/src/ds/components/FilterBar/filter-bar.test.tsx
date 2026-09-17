@@ -430,16 +430,17 @@ describe('FilterBar', () => {
       expect(screen.getByRole('group', { name: 'Trace ID is x' })).toBeDefined();
     });
 
-    it('ArrowLeft from the empty input reaches the last chip, ArrowRight goes back to the input', () => {
+    it('ArrowLeft from the empty input reaches the last chip remove button, ArrowRight goes back to the input', () => {
       render(<Harness initial={INITIAL} />);
       const input = getInput();
       input.focus();
       key('ArrowLeft');
-      const lastValue = screen.getByRole('combobox', { name: 'Value: x' });
-      expect(document.activeElement).toBe(lastValue);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Trace ID filter' }));
 
       const secondChip = screen.getByRole('group', { name: 'Trace ID is x' });
-      fireEvent.keyDown(lastValue, { key: 'ArrowLeft' });
+      pressActive({ key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(within(secondChip).getByRole('combobox', { name: 'Value: x' }));
+      pressActive({ key: 'ArrowLeft' });
       expect(document.activeElement).toBe(within(secondChip).getByRole('combobox', { name: 'Operator: is' }));
       pressActive({ key: 'ArrowLeft' });
       expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Field: Trace ID' }));
@@ -527,7 +528,7 @@ describe('FilterBar', () => {
       expect(within(locked).queryAllByRole('button')).toHaveLength(0);
       getInput().focus();
       key('ArrowLeft');
-      expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Value: Running' }));
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Status filter' }));
     });
 
     describe('when a chip is not removable', () => {

@@ -160,7 +160,7 @@ export function FilterBarInput({
         return;
       }
       if (event.key === 'ArrowLeft' && draft.step === 'field') {
-        if (ctx.focusChip(ctx.items.length - 1, -1, 'value')) event.preventDefault();
+        if (ctx.focusChip(ctx.items.length - 1, -1, 'remove')) event.preventDefault();
         return;
       }
     }
