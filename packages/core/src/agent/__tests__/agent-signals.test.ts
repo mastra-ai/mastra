@@ -5470,6 +5470,13 @@ describe('Agent signals', () => {
       await expect(idleWake.accepted).resolves.toMatchObject({ action: 'blocked', reason: 'thread-blocked', runId });
       expect((idleAgent as any).stream).not.toHaveBeenCalled();
       expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+
+      expect(runtime.abortThread({ resourceId, threadId }, pubsub)).toBe(true);
+      await waitForCondition(() => events.some(event => event?.type === 'run-aborted' && event.runId === runId));
+      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBeUndefined();
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('idle');
+      expect(runtime.hasThreadRun(runId, pubsub)).toBe(false);
+      expect(runtime.abortThread({ resourceId, threadId }, pubsub)).toBe(false);
     } finally {
       finishRun();
       subscription.unsubscribe();

@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
@@ -75,11 +76,13 @@ async function createHarness(id: string) {
     },
   });
 
+  const storage = new InMemoryStore();
   let callCount = 0;
   const agent = new Agent({
     id: `${id}-agent`,
     name: `${id} agent`,
     instructions: 'You look up users.',
+    memory: new MockMemory({ storage }),
     model: new MastraLanguageModelV2Mock({
       doStream: async () => {
         callCount++;
@@ -89,7 +92,6 @@ async function createHarness(id: string) {
     tools: { findUser },
   });
 
-  const storage = new InMemoryStore();
   const mastra = new Mastra({ agents: { [`${id}-agent`]: agent }, logger: false, storage });
   const registeredAgent = mastra.getAgent(`${id}-agent`);
 
@@ -192,5 +194,16 @@ describe('session.abort() during approval / suspension (#20592)', () => {
     expect(ds.pendingSuspensions.size).toBe(0);
     expect(ds.isRunning).toBe(false);
     expect(events.some(e => e.type === 'tool_suspension_cancelled')).toBe(true);
+
+    const messages = await session.thread.listMessages({ threadId: session.thread.requireId() });
+    const persistedToolParts = messages
+      .filter(message => message.role === 'assistant')
+      .flatMap(message => message.content.parts)
+      .filter(part => part.type === 'tool-invocation');
+    expect(persistedToolParts).toHaveLength(1);
+    expect(persistedToolParts[0]?.toolInvocation).toMatchObject({
+      state: 'output-denied',
+      approval: { approved: false, reason: 'Aborted by the user' },
+    });
   });
 });
