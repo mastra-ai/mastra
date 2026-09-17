@@ -11,7 +11,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 function MessageText({ text, plain }: { text: string; plain: boolean }) {
   return plain ? (
-    <p className="text-ui-md break-words whitespace-pre-wrap">{text.trim()}</p>
+    <div className="mastra-markdown">
+      <p>{text.trim()}</p>
+    </div>
   ) : (
     <SpanPayloadMarkdown>{text}</SpanPayloadMarkdown>
   );
