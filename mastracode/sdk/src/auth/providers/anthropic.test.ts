@@ -89,7 +89,9 @@ describe('completeAnthropicLogin', () => {
 
   it('throws without exposing the response body when the exchange fails', async () => {
     fetchMock.mockResolvedValueOnce(new Response('upstream-secret', { status: 400 }));
-    await expect(completeAnthropicLogin('code#v', 'v')).rejects.toThrow('Token exchange failed: 400');
+    // Anchored: a plain string only substring-matches, so upstream body text
+    // appended to the message would still pass.
+    await expect(completeAnthropicLogin('code#v', 'v')).rejects.toThrow(/^Token exchange failed: 400$/);
   });
 });
 

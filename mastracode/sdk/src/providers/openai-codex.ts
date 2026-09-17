@@ -198,6 +198,8 @@ export function buildOpenAICodexOAuthFetch(
       headers,
       body,
       signal: request.signal,
+      redirect: request.redirect,
+      integrity: request.integrity,
       ...(body ? ({ duplex: 'half' } as RequestInit) : {}),
     });
     try {

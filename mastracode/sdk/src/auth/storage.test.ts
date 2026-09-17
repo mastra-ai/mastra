@@ -449,13 +449,32 @@ describe('AuthStorage multi-account registry', () => {
       addedAt: work.addedAt, // identity preserved
       refresh: 'r1-new', // tokens replaced
       access: 'a1-new',
-      active: true,
+      // Re-authenticating an inactive account does not hijack the active slot.
+      active: false,
     });
     expect(accounts[0]!.id).not.toBe(work.id); // re-keyed to the new token hash
-    expect(accounts[1]).toMatchObject({ label: 'Personal', active: false });
-    expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r1-new', access: 'a1-new' });
+    expect(accounts[1]).toMatchObject({ label: 'Personal', active: true });
+    expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r2', access: 'a2' });
     // No entry keyed by the old id remains on disk.
     expect(readAuthJson(authPath)[`accounts:${work.id}`]).toBeUndefined();
+  });
+
+  it('re-authenticating the active account keeps it active with the new tokens in the legacy slot', async () => {
+    const { storage } = makeStorage();
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, { label: 'Work' });
+    await storage.addAccount(PROVIDER, { refresh: 'r2', access: 'a2', expires: FUTURE }, { label: 'Personal' });
+    const personal = storage.getActiveAccount(PROVIDER)!;
+
+    const returned = await storage.addAccount(
+      PROVIDER,
+      { refresh: 'r2-new', access: 'a2-new', expires: FUTURE },
+      { replaceAccountId: personal.id },
+    );
+
+    expect(returned.active).toBe(true);
+    expect(storage.getActiveAccount(PROVIDER)?.id).toBe(returned.id);
+    expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r2-new', access: 'a2-new' });
+    expect(storage.listAccounts(PROVIDER).find(entry => entry.label === 'Work')).toMatchObject({ active: false });
   });
 
   it('a fresh AuthStorage instance reloads the registry intact (restart semantics)', async () => {
@@ -521,6 +540,27 @@ describe('AuthStorage multi-account registry', () => {
           : false;
     expect(availability).toBe('oauth');
     expect((kimiCodingCred as { deviceId?: string })?.deviceId).toBe(device2);
+  });
+
+  it('does not carry the previous account metadata into the slot on activation', async () => {
+    const KIMI = 'kimi-for-coding';
+    const { storage } = makeStorage();
+    const deviceA = 'aa'.repeat(16);
+    // A: enterprise-ish metadata. B: bare tokens for the same provider.
+    await storage.addAccount(
+      KIMI,
+      { refresh: 'kr1', access: 'ka1', expires: FUTURE, deviceId: deviceA, enterpriseUrl: 'https://ghe.example.com' },
+      { label: 'A' },
+    );
+    const accountB = await storage.addAccount(KIMI, { refresh: 'kr2', access: 'ka2', expires: FUTURE }, { label: 'B' });
+
+    // Activating B moves B's tokens into the slot. A's deviceId/enterpriseUrl
+    // must not ride along: the providers read those fields off the slot, so a
+    // stale value would pair B's tokens with A's metadata.
+    const slot = storage.get(KIMI) as Record<string, unknown> | undefined;
+    expect(slot).toMatchObject({ type: 'oauth', access: accountB.access ?? 'ka2', refresh: 'kr2' });
+    expect(slot?.deviceId).toBeUndefined();
+    expect(slot?.enterpriseUrl).toBeUndefined();
   });
 
   it('logout removes the slot and every registered account', async () => {

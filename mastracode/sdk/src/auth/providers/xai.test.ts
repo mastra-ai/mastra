@@ -68,7 +68,9 @@ describe('startXAIDeviceLogin', () => {
   it('throws on a failed device code request without exposing the response body', async () => {
     fetchMock.mockResolvedValueOnce(new Response('upstream-secret', { status: 400 }));
 
-    await expect(startXAIDeviceLogin()).rejects.toThrow('Failed to initiate xAI device authorization: 400');
+    // Anchored: a plain string only substring-matches, so upstream body text
+    // appended to the message would still pass.
+    await expect(startXAIDeviceLogin()).rejects.toThrow(/^Failed to initiate xAI device authorization: 400$/);
   });
 });
 

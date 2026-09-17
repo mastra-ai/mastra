@@ -559,6 +559,10 @@ export const githubCopilotOAuthProvider: OAuthProviderInterface = {
    * label prompt/default.
    */
   async getAccountLabel(credentials: OAuthCredentials): Promise<string | undefined> {
+    // Enterprise credentials authenticate against the enterprise host, not
+    // GitHub.com — sending that token to api.github.com would disclose it.
+    // Enterprise accounts fall through to the label prompt/default instead.
+    if ((credentials as GitHubCopilotCredentials).enterpriseUrl) return undefined;
     try {
       const response = await fetch('https://api.github.com/user', {
         headers: {

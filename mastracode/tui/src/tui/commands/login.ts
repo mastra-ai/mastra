@@ -148,11 +148,18 @@ async function openAccountManager(
         finish();
       },
       onActivate: accountId => {
-        ctx.authStorage?.activateAccount(providerId, accountId);
+        // `activateAccount` reloads the registry first, so another process may
+        // have removed the account since the manager snapshot — in that case it
+        // returns undefined and nothing changed. Reporting a switch then would
+        // be a lie about which credential the next request uses.
+        const activated = ctx.authStorage?.activateAccount(providerId, accountId);
+        if (!activated) {
+          ctx.showError(`Could not activate that ${providerName} account. It may have been removed elsewhere.`);
+          finish();
+          return;
+        }
         ctx.state.controller.invalidateAvailableModelsCache();
-        const label =
-          ctx.authStorage?.listAccounts(providerId).find(account => account.id === accountId)?.label ?? accountId;
-        ctx.showInfo(`Switched ${providerName} to ${label}`);
+        ctx.showInfo(`Switched ${providerName} to ${activated.label ?? accountId}`);
         finish();
       },
       onBack: () => finish(),

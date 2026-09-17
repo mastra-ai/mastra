@@ -142,6 +142,52 @@ describe('gateway oauth fetch wrappers', () => {
     }
   });
 
+  it('carries the caller redirect and integrity policies onto the rebuilt request', async () => {
+    anthropicStorage.get.mockReturnValue({ type: 'oauth' });
+    anthropicStorage.getApiKey.mockResolvedValue('anthropic-token');
+    openAIStorage.get.mockReturnValue({
+      type: 'oauth',
+      access: 'codex-token',
+      expires: Date.now() + 60_000,
+      accountId: 'account-1',
+    });
+    githubCopilotStorage.get.mockReturnValue({
+      type: 'oauth',
+      access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
+      refresh: 'ghu_x',
+      expires: Date.now() + 60_000,
+    });
+    githubCopilotStorage.getApiKey.mockResolvedValue('tid=test;proxy-ep=proxy.individual.githubcopilot.com;');
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const { buildAnthropicOAuthFetch } = await import('../claude-max.js');
+    const { buildOpenAICodexOAuthFetch } = await import('../openai-codex.js');
+    const { buildGitHubCopilotOAuthFetch } = await import('../github-copilot.js');
+    const wrappers = [
+      buildAnthropicOAuthFetch({ authStorage: anthropicStorage as any }),
+      buildOpenAICodexOAuthFetch({ authStorage: openAIStorage as any }),
+      buildGitHubCopilotOAuthFetch({ authStorage: githubCopilotStorage as any }),
+    ];
+
+    for (const wrapper of wrappers) {
+      fetchMock.mockClear();
+      // The wrappers hand `finalRequest` straight to fetch, so anything they
+      // drop is gone — `manual` redirects and SRI checks must survive.
+      const input = new Request('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ messages: [] }),
+        redirect: 'manual',
+        integrity: 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=',
+      });
+      await wrapper(input);
+
+      const outbound = outboundRequest();
+      expect(outbound.redirect).toBe('manual');
+      expect(outbound.integrity).toBe('sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=');
+    }
+  });
+
   it('annotates OpenAI gateway fetch errors with the request URL', async () => {
     openAIStorage.get.mockReturnValue({ type: 'oauth', access: 'oauth-token', expires: Date.now() + 60_000 });
     fetchMock.mockRejectedValueOnce(new Error('fetch failed'));

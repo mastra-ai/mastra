@@ -764,4 +764,20 @@ describe('githubCopilotOAuthProvider.getAccountLabel', () => {
       githubCopilotOAuthProvider.getAccountLabel?.({ access: 'bearer', refresh: 'ghu_x', expires: 0 }),
     ).resolves.toBeUndefined();
   });
+
+  it('never sends an enterprise token to api.github.com', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      githubCopilotOAuthProvider.getAccountLabel?.({
+        access: 'bearer',
+        refresh: 'ghu_enterprise',
+        expires: 0,
+        enterpriseUrl: 'https://ghe.example.com',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

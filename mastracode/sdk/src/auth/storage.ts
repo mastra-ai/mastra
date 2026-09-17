@@ -412,14 +412,15 @@ export class AuthStorage {
    * target entry's tokens are replaced in place — id re-keyed to the new
    * refresh-token hash, label/position/addedAt preserved — because providers
    * rotate refresh tokens per authorization, so the picked account's old id
-   * never matches the new token hash. Otherwise, when the new credentials
+   * never matches the new token hash. Re-authentication keeps the target's
+   * active state: an inactive account stays inactive and the currently active
+   * account keeps the legacy slot. Otherwise, when the new credentials
    * hash to an existing entry's id (same refresh token), that entry is
    * updated in place; a genuinely new account is appended and activated.
    *
-   * `activate: false` only applies to the plain add path (re-authentication
-   * always activates its target): the new/updated entry keeps the active
-   * state it had, and the previously active account stays active. The first
-   * account of a provider is activated regardless.
+   * `activate: false` only applies to the plain add path: the new/updated entry
+   * keeps the active state it had, and the previously active account stays
+   * active. The first account of a provider is activated regardless.
    */
   async addAccount(
     providerId: string,
@@ -456,12 +457,28 @@ export class AuthStorage {
         }
       }
       this.data = rebuilt;
-      const activated = this.activateInMemory(providerId, newId);
-      if (!activated) {
-        throw new Error(`Failed to activate account ${newId} for provider ${providerId}`);
+      // Re-authentication preserves the account's active state: fixing a
+      // secondary account's tokens must not hijack the active slot. The target
+      // is activated when it was already active, or when the provider has no
+      // active account at all (first account, or a self-healed gap).
+      const wasActive =
+        target.active === true || entries.some(entry => entry.active && entry.id !== target.id) === false;
+      if (wasActive) {
+        const activated = this.activateInMemory(providerId, newId);
+        if (!activated) {
+          throw new Error(`Failed to activate account ${newId} for provider ${providerId}`);
+        }
+        this.save();
+        return activated;
+      }
+      // Inactive target: tokens stay on the registry entry, the legacy slot
+      // keeps the currently active account's credential untouched.
+      const replacementEntry = this.accountEntries(providerId).find(entry => entry.id === newId);
+      if (!replacementEntry) {
+        throw new Error(`Failed to store account ${newId} for provider ${providerId}`);
       }
       this.save();
-      return activated;
+      return replacementEntry;
     }
 
     // Resolve the label before the final reload+save: the provider hook may
@@ -556,10 +573,12 @@ export class AuthStorage {
       this.data[this.accountKeyFor(current.id)] = { ...current, ...slotCreds, type: 'oauth-account', active: false };
     }
 
-    // Move the target's tokens into the legacy slot, preserving any extra
-    // slot fields the target's credential does not carry.
-    const base = slot?.type === 'oauth' ? slot : {};
-    this.data[providerId] = { ...base, ...credentialFieldsOf(target), type: 'oauth' };
+    // Move the target's tokens into the legacy slot. The slot is rebuilt from
+    // the target's own credentials only: carrying fields over from the
+    // previously active account would pair this account's tokens with that
+    // account's metadata (`deviceId`, `enterpriseUrl`, account id), and the
+    // providers read those fields off the slot.
+    this.data[providerId] = { ...credentialFieldsOf(target), type: 'oauth' };
 
     // Exactly the target stays active (self-heals multi-active states).
     this.data[this.accountKeyFor(target.id)] = { ...target, active: true };
