@@ -43,8 +43,13 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
   // Eager dispatch is a regular-streaming-only contract. The 'called' strategy is
   // excluded because its limit depends on the full set of tools the model ends up
   // calling, which is unknowable while the model is still streaming.
+  //
+  // On unless switched off: an eligible call is a plain server-side call with complete
+  // arguments, and waiting for the rest of the stream before running it buys nothing.
+  // `eagerToolExecution: false` is the escape hatch for a caller who finds a shape this
+  // does not account for.
   const eagerCoordinator =
-    rest.eagerToolExecution && rest.methodType === 'stream' && toolCallConcurrencyStrategy === 'available'
+    rest.eagerToolExecution !== false && rest.methodType === 'stream' && toolCallConcurrencyStrategy === 'available'
       ? // Read the limit late: map-tool-calls recomputes it per step, and the eager
         // path must honour the same recomputed value rather than a construction-time copy.
         new EagerToolExecutionCoordinator(() => toolCallForeachOptions.concurrency)

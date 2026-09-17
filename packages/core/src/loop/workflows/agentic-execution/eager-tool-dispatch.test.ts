@@ -90,15 +90,15 @@ async function runScenario(eagerToolExecution?: boolean) {
 }
 
 describe('eager tool dispatch', () => {
-  it('preserves delayed tool execution when the option is omitted', async () => {
+  it('starts a completed tool call before later model output by default', async () => {
     const events = await runScenario();
 
-    expect(events).toEqual(['complete-a', 'later-output', 'finish', 'input-available-a', 'execute-a', 'result-a']);
+    expect(events).toEqual(['complete-a', 'input-available-a', 'execute-a', 'result-a', 'later-output', 'finish']);
   });
 
-  it('starts a completed tool call before later model output when enabled', async () => {
-    const events = await runScenario(true);
+  it('restores the delayed scheduling when the option is turned off', async () => {
+    const events = await runScenario(false);
 
-    expect(events).toEqual(['complete-a', 'input-available-a', 'execute-a', 'result-a', 'later-output', 'finish']);
+    expect(events).toEqual(['complete-a', 'later-output', 'finish', 'input-available-a', 'execute-a', 'result-a']);
   });
 });
