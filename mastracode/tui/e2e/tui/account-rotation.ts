@@ -196,14 +196,20 @@ export const accountRotationScenario: McE2eScenario = {
       return originalFetch(input, init);
     });
 
+    let stopCurrentApp: (() => Promise<void>) | undefined;
     let currentStop: (() => Promise<void>) | undefined;
     const start = async () => {
       const app = await startMastraCodeApp();
+      // Raw stop, deliberately not `patches.stopApp`: that wrapper restores the
+      // fetch patch, and the restarted app needs it. Restarting must still stop
+      // the previous app — two live TUIs share the same app data otherwise.
+      stopCurrentApp = app.stop;
       currentStop = async () => {
         await patches.stopApp(app.stop);
       };
     };
     restartApp = async () => {
+      await stopCurrentApp?.();
       await start();
     };
 
@@ -281,8 +287,7 @@ export const accountRotationScenario: McE2eScenario = {
     }
 
     // Restart the app on the same app data and reload the thread: the persisted
-    // notice must render from history. `restartApp` stops the running app
-    // itself, so no explicit stop is needed here.
+    // notice must render from history.
     await restartApp?.();
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 30_000);
 

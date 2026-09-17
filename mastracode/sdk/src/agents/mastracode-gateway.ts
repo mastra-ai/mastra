@@ -438,7 +438,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     };
 
     try {
-      const copilotModels = await getCopilotModelCatalog({ authStorage: getGlobalAuthStorage() });
+      const copilotModels = await getCopilotModelCatalog({ authStorage: this.#credentials });
       providers['github-copilot'] = {
         name: 'GitHub Copilot',
         apiKeyEnvVar: '',

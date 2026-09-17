@@ -1,3 +1,4 @@
+import { accountSwitchNoticeText } from '@mastra/code-sdk/auth/account-rotation-processor';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it } from 'vitest';
@@ -72,6 +73,40 @@ describe('getAssistantRenderParts', () => {
         at: '2026-09-17T00:00:00.000Z',
       },
     ]);
+  });
+
+  it.each([
+    ['a string', 'kimi-for-coding:bbbb'],
+    ['a number', 7],
+    ['a boolean', true],
+  ])('renders a non-object to endpoint (%s) as unknown, not pool exhaustion', (_label, to) => {
+    const message = assistantMessage([
+      {
+        type: 'data-mastracode-account-switch',
+        data: {
+          provider: 'kimi-for-coding',
+          from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+          to,
+          reason: 'rate-limit',
+          at: '2026-09-17T00:00:00.000Z',
+        },
+      } as never,
+    ]);
+
+    const parts = getAssistantRenderParts(message);
+    expect(parts).toEqual([
+      {
+        kind: 'account-switch',
+        provider: 'kimi-for-coding',
+        from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+        to: { id: 'unknown', label: 'unknown' },
+        reason: 'rate-limit',
+        at: '2026-09-17T00:00:00.000Z',
+      },
+    ]);
+    // `null` alone means "no usable account" — an unknown endpoint must not
+    // read as pool exhaustion.
+    expect(accountSwitchNoticeText(parts[0] as never)).not.toMatch(/unavailable/);
   });
 
   it('keeps an explicit null to endpoint rendering as pool exhaustion', () => {
