@@ -3,6 +3,7 @@ import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { SSOLoginResponse, LogoutResponse } from '../types';
+import { clearDraftsOnLogout } from '@/domains/conversation/context/thread-draft-state';
 
 /**
  * Hook to initiate SSO login.
@@ -86,12 +87,12 @@ export function useSSOLogin() {
  * ```tsx
  * import { useLogout } from '@/domains/auth/hooks/use-auth-actions';
  *
- * function LogoutButton() {
+ * function LogoutButton({ userId }: { userId: string }) {
  *   const { mutate: logout, isPending } = useLogout();
  *   const queryClient = useQueryClient();
  *
  *   const handleLogout = () => {
- *     logout(undefined, {
+ *     logout({ userId }, {
  *       onSuccess: (data) => {
  *         queryClient.invalidateQueries({ queryKey: ['auth'] });
  *         if (data.redirectTo) {
@@ -142,8 +143,16 @@ export function useLogout() {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
-  return useMutation<LogoutResponse, Error, void>({
-    mutationFn: () => makeLogoutRequest(client),
+  return useMutation<LogoutResponse, Error, { userId: string }>({
+    mutationFn: async ({ userId }) => {
+      const scope = JSON.stringify([client.options.baseUrl, client.options.apiPrefix, userId]);
+      try {
+        await clearDraftsOnLogout(scope);
+      } catch {
+        throw new Error('Local drafts could not be cleared. Sign-out was not completed. Please try again.');
+      }
+      return makeLogoutRequest(client);
+    },
     onSuccess: () => {
       // Invalidate all auth-related queries
       void queryClient.invalidateQueries({ queryKey: ['auth'] });

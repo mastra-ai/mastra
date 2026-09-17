@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
@@ -706,6 +706,79 @@ describe('Thread', () => {
         const dialog = screen.getByRole('dialog', { name });
         expect(within(dialog).getByText(text, { normalizer: value => value }).textContent).toBe(text);
         fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+      }
+    });
+  });
+
+  describe.each(['file classification', 'URL inspection'])('when %s is pending', inspection => {
+    it('keeps the attachment until it can be included in the submitted message', async () => {
+      const captured: CapturedBody[] = [];
+      let release = () => {};
+      const pending = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const url = 'https://files.example.com/report.pdf';
+      server.use(
+        ...baseHandlers(),
+        http.head(url, async () => {
+          await pending;
+          return new HttpResponse(null, { headers: { 'content-type': 'application/pdf' } });
+        }),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          captured.push(await captureBody(request));
+          return sseResponse();
+        }),
+      );
+      const read = FileReader.prototype.readAsArrayBuffer;
+      const probe = vi
+        .spyOn(FileReader.prototype, 'readAsArrayBuffer')
+        .mockImplementation(function (this: FileReader, blob) {
+          void pending.then(() => read.call(this, blob));
+        });
+      try {
+        await act(async () => {
+          renderThread([]);
+        });
+        const textarea = screen.getByPlaceholderText('Enter your message...');
+        fireEvent.change(textarea, { target: { value: 'Read my attachment' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+        if (inspection === 'file classification') {
+          fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
+          const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
+          if (!picker) throw new Error('File picker is missing');
+          const file = new File(['pending file contents'], 'notes.unknown');
+          Object.defineProperty(file, 'text', { value: async () => 'pending file contents' });
+          fireEvent.change(picker, { target: { files: [file] } });
+          expect(probe).toHaveBeenCalledOnce();
+        } else {
+          const input = await screen.findByLabelText('Public URL');
+          fireEvent.change(input, { target: { value: url } });
+          const form = input.closest('form');
+          if (!form) throw new Error('Attachment form is missing');
+          fireEvent.submit(form);
+        }
+        const composer = textarea.closest('form');
+        if (!composer) throw new Error('Composer form is missing');
+        await act(async () => {
+          fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter' });
+          fireEvent.submit(composer);
+        });
+        expect(captured).toHaveLength(0);
+        expect(screen.getByRole('button', { name: 'Send', hidden: true }).hasAttribute('disabled')).toBe(true);
+        await act(async () => {
+          release();
+          await pending;
+        });
+        await waitFor(() => expect(screen.queryByLabelText('Public URL')).toBeNull());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false));
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(captured).toHaveLength(1));
+        const messages = JSON.stringify(captured[0].messages);
+        expect(messages).toContain('Read my attachment');
+        expect(messages).toContain(inspection === 'file classification' ? 'pending file contents' : url);
+      } finally {
+        release();
+        probe.mockRestore();
       }
     });
   });

@@ -1,36 +1,41 @@
-import { useCallback, useMemo, useState } from 'react';
-import type { ReactNode, SetStateAction } from 'react';
-import { resolveThreadInputKey, ThreadInputContext } from './thread-input-context';
+import { useImperativeHandle, useMemo, useState, useSyncExternalStore } from 'react';
+import type { ReactNode, Ref } from 'react';
+import { createThreadDraftState } from './thread-draft-state';
+import { ThreadInputContext } from './thread-input-context';
+import type { ThreadInputContextValue } from './thread-input-context';
 
-export const ThreadInputProvider = ({ children }: { children: ReactNode }) => {
-  const [threadInputs, setThreadInputs] = useState<Record<string, string>>({});
+export interface ThreadDraftHandle {
+  move: (to: string) => Promise<void>;
+}
 
-  const getThreadInput = useCallback(
-    (threadId?: string) => threadInputs[resolveThreadInputKey(threadId)] ?? '',
-    [threadInputs],
+export const ThreadInputProvider = ({
+  children,
+  persistence,
+  ref,
+}: {
+  children: ReactNode;
+  ref?: Ref<ThreadDraftHandle>;
+  persistence?: { key: string; threadId: string };
+}) => {
+  const [state] = useState(() => createThreadDraftState(persistence));
+  const snapshot = useSyncExternalStore(state.subscribe, state.getSnapshot, state.getSnapshot);
+  useImperativeHandle(ref, () => ({ move: state.move }), [state]);
+  const value = useMemo<ThreadInputContextValue>(
+    () => ({
+      getThreadInput: threadId => state.getDraft(threadId).text,
+      setThreadInputForThread: (threadId, value) =>
+        state.updateDraft(threadId, previous => ({
+          ...previous,
+          text: typeof value === 'function' ? value(previous.text) : value,
+        })),
+      drafts: {
+        get: state.getDraft,
+        update: state.updateDraft,
+        status: snapshot.status,
+        discardUnreadable: state.discardUnreadable,
+      },
+    }),
+    [state, snapshot],
   );
-
-  const setThreadInputForThread = useCallback((threadId: string | undefined, value: SetStateAction<string>) => {
-    setThreadInputs(prev => {
-      const key = resolveThreadInputKey(threadId);
-      const previousValue = prev[key] ?? '';
-      const nextValue = typeof value === 'function' ? value(previousValue) : value;
-
-      if (nextValue === previousValue) return prev;
-
-      if (nextValue.length === 0) {
-        if (!(key in prev)) return prev;
-
-        const nextInputs = { ...prev };
-        delete nextInputs[key];
-        return nextInputs;
-      }
-
-      return { ...prev, [key]: nextValue };
-    });
-  }, []);
-
-  const value = useMemo(() => ({ getThreadInput, setThreadInputForThread }), [getThreadInput, setThreadInputForThread]);
-
   return <ThreadInputContext.Provider value={value}>{children}</ThreadInputContext.Provider>;
 };

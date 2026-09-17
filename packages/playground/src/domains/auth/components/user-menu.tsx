@@ -23,7 +23,7 @@ export type UserMenuProps = {
  */
 export function UserMenu({ user }: UserMenuProps) {
   const [open, setOpen] = useState(false);
-  const { mutate: logout, isPending } = useLogout();
+  const { mutate: logout, isPending, error: logoutError } = useLogout();
   const { data: capabilities } = useAuthCapabilities();
   const { isImpersonating, impersonatedRole, startImpersonation, stopImpersonation, isSwitching } =
     useRoleImpersonation();
@@ -31,15 +31,18 @@ export function UserMenu({ user }: UserMenuProps) {
   if (!user) return null;
 
   const handleLogout = () => {
-    logout(undefined, {
-      onSuccess: data => {
-        if (data.redirectTo) {
-          window.location.href = data.redirectTo;
-        } else {
-          window.location.reload();
-        }
+    logout(
+      { userId: user.id },
+      {
+        onSuccess: data => {
+          if (data.redirectTo) {
+            window.location.href = data.redirectTo;
+          } else {
+            window.location.reload();
+          }
+        },
       },
-    });
+    );
   };
 
   const availableRoles = capabilities && isAuthenticated(capabilities) ? capabilities.availableRoles : undefined;
@@ -105,6 +108,11 @@ export function UserMenu({ user }: UserMenuProps) {
         )}
 
         <div className="flex flex-col gap-1 p-2">
+          {logoutError && (
+            <p role="alert" className="text-ui-sm">
+              {logoutError.message}
+            </p>
+          )}
           <Button
             as={Link}
             to="/settings"

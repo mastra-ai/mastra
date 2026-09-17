@@ -44,6 +44,61 @@ const textFile = () => new File(['hello world'], 'notes.txt', { type: 'text/plai
 const pdfFile = () => new File(['pdf-bytes'], 'doc.pdf', { type: 'application/pdf' });
 
 describe('composer attachments', () => {
+  describe.each([false, true])('when concurrent URL additions are pending and cleared: %s', cleared => {
+    it('tracks only the current additions until all of them settle', async () => {
+      const gates = Array.from({ length: 3 }, () => {
+        let resolve = () => {};
+        const promise = new Promise<void>(done => {
+          resolve = done;
+        });
+        return { promise, release: () => resolve() };
+      });
+      const urls = gates.map((_, index) => `https://files.example.com/${index}.pdf`);
+      server.use(
+        ...gates.map((gate, index) =>
+          http.head(urls[index], async () => {
+            await gate.promise;
+            return new HttpResponse(null, { headers: { 'content-type': 'application/pdf' } });
+          }),
+        ),
+      );
+      const { ref } = renderProvider();
+      const additions: Promise<void>[] = [];
+      act(() => {
+        additions.push(ref.current!.addUrl(urls[0]), ref.current!.addUrl(urls[1]));
+      });
+      expect(ref.current!.isAddingAttachments).toBe(true);
+      if (cleared) {
+        act(() => ref.current!.clear());
+        expect(ref.current!.isAddingAttachments).toBe(false);
+        act(() => {
+          additions.push(ref.current!.addUrl(urls[2]));
+        });
+      }
+      await act(async () => {
+        gates[0].release();
+        await additions[0];
+      });
+      expect(ref.current!.isAddingAttachments).toBe(true);
+      await act(async () => {
+        gates[1].release();
+        await additions[1];
+      });
+      if (cleared) {
+        expect(ref.current!.isAddingAttachments).toBe(true);
+        expect(ref.current!.attachments).toEqual([]);
+        await act(async () => {
+          gates[2].release();
+          await additions[2];
+        });
+      }
+      expect(ref.current!.isAddingAttachments).toBe(false);
+      expect(ref.current!.attachments.map(attachment => attachment.name)).toEqual(
+        cleared ? [urls[2]] : urls.slice(0, 2),
+      );
+    });
+  });
+
   describe('when a text file is attached', () => {
     it.each([
       ['leads.csv', 'application/vnd.ms-excel'],
@@ -93,6 +148,7 @@ describe('composer attachments', () => {
       });
       expect(rejected).toEqual(['unknown.bin']);
       expect(ref.current!.attachments).toEqual([]);
+      expect(ref.current!.isAddingAttachments).toBe(false);
     });
   });
 
