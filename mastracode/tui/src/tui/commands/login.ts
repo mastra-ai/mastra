@@ -13,21 +13,28 @@ function toManagedAccounts(accounts: OAuthAccountRecord[]) {
 }
 
 /**
- * After a successful login the active account was just registered — offer a
+ * After a successful login the returned account was just registered — offer a
  * one-shot rename before the dialog closes. Escape or empty submit keeps the
  * label the registry resolved (re-authenticated accounts keep their previous
  * label; new accounts fall back to the provider hook or the default).
+ *
+ * The account is the one `login` resolved, not the active one: re-authenticating
+ * an inactive account must offer — and rename — that account, not the active
+ * one the registry happens to point at.
  */
-async function promptForAccountName(ctx: SlashCommandContext, dialog: LoginDialogComponent, providerId: string) {
+async function promptForAccountName(
+  ctx: SlashCommandContext,
+  dialog: LoginDialogComponent,
+  providerId: string,
+  account: OAuthAccountRecord,
+) {
   const authStorage = ctx.authStorage;
   if (!authStorage) return;
-  const active = authStorage.getActiveAccount(providerId);
-  if (!active) return;
-  const input = await dialog.promptOptional(`Name this account (Enter to keep "${active.label}")`);
+  const input = await dialog.promptOptional(`Name this account (Enter to keep "${account.label}")`);
   if (input === null) return;
   const name = input.trim();
-  if (name && name !== active.label) {
-    authStorage.renameAccount(providerId, active.id, name);
+  if (name && name !== account.label) {
+    authStorage.renameAccount(providerId, account.id, name);
   }
 }
 
@@ -82,8 +89,8 @@ async function performLogin(
         },
         opts,
       )
-      .then(async () => {
-        await promptForAccountName(ctx, dialog, providerId);
+      .then(async account => {
+        await promptForAccountName(ctx, dialog, providerId, account);
         ctx.state.ui.hideOverlay();
         ctx.state.controller.invalidateAvailableModelsCache();
 
