@@ -276,6 +276,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         state.__omTurn = undefined;
       }
 
+      // A turn can be sealed before the loop reaches its next step — for example when a
+      // sub-agent's `finish` / `step-finish` chunks are forwarded into the parent writer.
+      // Reusing an ended turn throws "Turn already ended" from `step()` below, so discard it
+      // and let beginTurn() start a fresh one, mirroring the message-list cleanup above.
+      if (activeTurn?.ended || this.turn?.ended) {
+        if (this.turn?.ended) {
+          this.turn = undefined;
+        }
+        state.__omTurn = undefined;
+      }
+
       if (!this.turn || !state.__omTurn) {
         // End previous turn if state was reset mid-flow
         if (this.turn && !state.__omTurn) {
