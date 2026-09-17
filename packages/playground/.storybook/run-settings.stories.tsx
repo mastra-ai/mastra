@@ -62,6 +62,12 @@ export const Default: Story = {
     const screen = within(canvasElement.ownerDocument.body);
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Model settings' }));
     await expect(screen.getByRole('radio', { name: 'Network' })).toHaveAttribute('aria-disabled', 'true');
+    await expect(screen.getByRole('radio', { name: 'Network' })).toHaveAccessibleDescription(
+      'Network is not available. Please make sure you have at least one sub-agent.',
+    );
+    await expect(
+      screen.getByText('Network is not available. Please make sure you have at least one sub-agent.'),
+    ).toBeVisible();
     await userEvent.click(screen.getByRole('radio', { name: 'Network' }));
     await expect(screen.getByRole('radio', { name: 'Stream subscription (default)' })).toBeChecked();
     await userEvent.click(screen.getByRole('radio', { name: 'Generate' }));

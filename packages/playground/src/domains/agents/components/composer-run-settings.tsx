@@ -2,7 +2,6 @@ import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Entry } from '@mastra/playground-ui/components/Entry';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useId } from 'react';
 
@@ -12,30 +11,30 @@ export interface ModelSettingsMethod {
   unavailable?: string;
 }
 function MethodRadio({ option, disabled, id }: { option: ModelSettingsMethod; disabled: boolean; id: string }) {
-  const radio = (
-    <div className="flex items-center gap-2">
-      <RadioGroupItem
-        value={option.value}
-        id={id}
-        className="text-neutral6"
-        disabled={disabled || Boolean(option.unavailable)}
-      />
-      <Label
-        className={cn('text-ui-md text-neutral6', option.unavailable && 'cursor-not-allowed text-neutral3!')}
-        htmlFor={id}
-      >
-        {option.label}
-      </Label>
-    </div>
-  );
-  if (!option.unavailable) return radio;
+  const descriptionId = option.unavailable ? `${id}-unavailable` : undefined;
   return (
-    <Tooltip>
-      <TooltipTrigger render={<span />}>{radio}</TooltipTrigger>
-      <TooltipContent>
-        <p>{option.unavailable}</p>
-      </TooltipContent>
-    </Tooltip>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <RadioGroupItem
+          value={option.value}
+          id={id}
+          aria-describedby={descriptionId}
+          className="text-neutral6"
+          disabled={disabled || Boolean(option.unavailable)}
+        />
+        <Label
+          className={cn('text-ui-md text-neutral6', option.unavailable && 'cursor-not-allowed text-neutral3!')}
+          htmlFor={id}
+        >
+          {option.label}
+        </Label>
+      </div>
+      {option.unavailable && (
+        <p id={descriptionId} className="text-ui-sm text-neutral3 ml-6">
+          {option.unavailable}
+        </p>
+      )}
+    </div>
   );
 }
 
