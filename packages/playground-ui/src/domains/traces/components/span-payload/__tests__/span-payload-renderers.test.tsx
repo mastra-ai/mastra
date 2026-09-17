@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { SpanDataPanelView } from '../../span-data-panel-view';
 import { SpanDetailsView } from '../../span-details-view';
@@ -23,6 +23,9 @@ import {
   workflowStepSpan,
 } from './fixtures/span-payloads';
 
+// jsdom does not provide PointerEvent, which Base UI switches dispatch.
+beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
+afterAll(() => vi.unstubAllGlobals());
 afterEach(cleanup);
 
 const slot = (name: string) => document.querySelector(`[data-slot="${name}"]`);
@@ -146,13 +149,13 @@ describe.each(['panel', 'details'] as const)('SpanPayloadSection (%s)', layout =
     );
     expect(slot('span-payload-messages')).not.toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'JSON' }));
     expect(slot('span-payload-messages')).toBeNull();
     expect(slot('span-payload-json')?.textContent).toBe(JSON.stringify(agentRunMessagesSpan.input, null, 2));
     expect(document.querySelector('.cm-editor')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Expand JSON' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'JSON' }));
     expect(slot('span-payload-messages')).not.toBeNull();
   });
 
@@ -178,7 +181,7 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
         ),
       );
       expect(slot('span-error')).not.toBeNull();
-      const toggles = screen.getAllByRole('button', { name: 'JSON' });
+      const toggles = screen.getAllByRole('switch', { name: 'JSON' });
       expect(toggles).toHaveLength(1);
       expect(slot('span-input-card')).toBeNull();
       expect(slot('span-payload-json')).not.toBeNull();
@@ -187,9 +190,9 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
       fireEvent.click(jsonToggle);
       expect(slot('span-error')).toBeNull();
       expect(document.body.textContent).toContain('"message": "City not found: Atlantis"');
-      expect(screen.getAllByRole('button', { name: 'JSON' })[0]?.getAttribute('aria-pressed')).toBe('true');
-      expect(screen.getAllByRole('button', { name: 'JSON' })).toHaveLength(1);
-      const previewToggle = screen.getAllByRole('button', { name: 'Preview' })[0];
+      expect(screen.getAllByRole('switch', { name: 'JSON' })[0]?.getAttribute('aria-checked')).toBe('true');
+      expect(screen.getAllByRole('switch', { name: 'JSON' })).toHaveLength(1);
+      const previewToggle = screen.getAllByRole('switch', { name: 'JSON' })[0];
       if (!previewToggle) throw new Error('Missing error Preview toggle');
       fireEvent.click(previewToggle);
       expect(slot('span-error')).not.toBeNull();

@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { SpanPayloadJson } from './span-payload-json';
-import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
+import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
 
 export type SpanPayloadView = 'rich' | 'raw';
@@ -29,29 +28,19 @@ export interface SpanPayloadSectionProps {
 
 function ViewToggle({ view, onChange }: { view: SpanPayloadView; onChange: (view: SpanPayloadView) => void }) {
   return (
-    <ButtonsGroup spacing="close" aria-label="Payload view" data-slot="span-payload-view-toggle">
-      <Button
-        size="sm"
-        variant={view === 'rich' ? 'primary' : 'default'}
-        aria-pressed={view === 'rich'}
-        onClick={() => onChange('rich')}
-      >
-        Preview
-      </Button>
-      <Button
-        size="sm"
-        variant={view === 'raw' ? 'primary' : 'default'}
-        aria-pressed={view === 'raw'}
-        onClick={() => onChange('raw')}
-      >
-        JSON
-      </Button>
-    </ButtonsGroup>
+    <label className="text-ui-sm flex items-center gap-2" data-slot="span-payload-view-toggle">
+      JSON
+      <Switch
+        aria-label="JSON"
+        checked={view === 'raw'}
+        onCheckedChange={checked => onChange(checked ? 'raw' : 'rich')}
+      />
+    </label>
   );
 }
 
 /**
- * A span payload section with a Preview | JSON toggle. All JSON views share
+ * A span payload section with a JSON switch. All JSON views share
  * the same syntax highlighting while preserving the stored payload.
  */
 export function SpanPayloadSection({

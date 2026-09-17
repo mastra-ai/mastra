@@ -15,7 +15,7 @@ import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import { cn } from '@/lib/utils';
 
-const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto p-3';
+const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-3 pt-1 pb-3';
 
 export interface SpanDataPanelViewProps {
   traceId: string;
@@ -123,6 +123,11 @@ function SpanDataPanelContent({
   isAnchor?: boolean;
 }) {
   const usage = span.attributes?.usage as TokenUsage | undefined;
+  const hasContext =
+    (isAnchor ?? span.parentSpanId == null) &&
+    Boolean(
+      span.tags?.length || span.sessionId || span.requestId || span.userId || span.organizationId || span.experimentId,
+    );
 
   const detailsBody = (
     <>
@@ -140,74 +145,76 @@ function SpanDataPanelContent({
 
       {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
 
-      <DataKeysAndValues>
-        {/* Anchor-only: rich trace-context fields. Live on the full SpanRecord, not on the
-         *  lightweight payload, so they only have values once the full span is loaded. */}
-        {(isAnchor ?? span.parentSpanId == null) && (
-          <>
-            {span.tags && span.tags.length > 0 && (
-              <>
-                <DataKeysAndValues.Key>Tags</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>{span.tags.join(', ')}</DataKeysAndValues.Value>
-              </>
-            )}
-            {span.sessionId && (
-              <>
-                <DataKeysAndValues.Key>Session Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Session Id to clipboard"
-                  copyValue={span.sessionId}
-                >
-                  {span.sessionId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.requestId && (
-              <>
-                <DataKeysAndValues.Key>Request Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Request Id to clipboard"
-                  copyValue={span.requestId}
-                >
-                  {span.requestId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.userId && (
-              <>
-                <DataKeysAndValues.Key>User Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy User Id to clipboard" copyValue={span.userId}>
-                  {span.userId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.organizationId && (
-              <>
-                <DataKeysAndValues.Key>Organization Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Organization Id to clipboard"
-                  copyValue={span.organizationId}
-                >
-                  {span.organizationId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.experimentId && (
-              <>
-                <DataKeysAndValues.Key>Experiment Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Experiment Id to clipboard"
-                  copyValue={span.experimentId}
-                >
-                  {span.experimentId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-          </>
-        )}
-      </DataKeysAndValues>
+      {hasContext && (
+        <DataKeysAndValues>
+          {/* Anchor-only: rich trace-context fields. Live on the full SpanRecord, not on the
+           *  lightweight payload, so they only have values once the full span is loaded. */}
+          {(isAnchor ?? span.parentSpanId == null) && (
+            <>
+              {span.tags && span.tags.length > 0 && (
+                <>
+                  <DataKeysAndValues.Key>Tags</DataKeysAndValues.Key>
+                  <DataKeysAndValues.Value>{span.tags.join(', ')}</DataKeysAndValues.Value>
+                </>
+              )}
+              {span.sessionId && (
+                <>
+                  <DataKeysAndValues.Key>Session Id</DataKeysAndValues.Key>
+                  <DataKeysAndValues.ValueWithCopyBtn
+                    copyTooltip="Copy Session Id to clipboard"
+                    copyValue={span.sessionId}
+                  >
+                    {span.sessionId}
+                  </DataKeysAndValues.ValueWithCopyBtn>
+                </>
+              )}
+              {span.requestId && (
+                <>
+                  <DataKeysAndValues.Key>Request Id</DataKeysAndValues.Key>
+                  <DataKeysAndValues.ValueWithCopyBtn
+                    copyTooltip="Copy Request Id to clipboard"
+                    copyValue={span.requestId}
+                  >
+                    {span.requestId}
+                  </DataKeysAndValues.ValueWithCopyBtn>
+                </>
+              )}
+              {span.userId && (
+                <>
+                  <DataKeysAndValues.Key>User Id</DataKeysAndValues.Key>
+                  <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy User Id to clipboard" copyValue={span.userId}>
+                    {span.userId}
+                  </DataKeysAndValues.ValueWithCopyBtn>
+                </>
+              )}
+              {span.organizationId && (
+                <>
+                  <DataKeysAndValues.Key>Organization Id</DataKeysAndValues.Key>
+                  <DataKeysAndValues.ValueWithCopyBtn
+                    copyTooltip="Copy Organization Id to clipboard"
+                    copyValue={span.organizationId}
+                  >
+                    {span.organizationId}
+                  </DataKeysAndValues.ValueWithCopyBtn>
+                </>
+              )}
+              {span.experimentId && (
+                <>
+                  <DataKeysAndValues.Key>Experiment Id</DataKeysAndValues.Key>
+                  <DataKeysAndValues.ValueWithCopyBtn
+                    copyTooltip="Copy Experiment Id to clipboard"
+                    copyValue={span.experimentId}
+                  >
+                    {span.experimentId}
+                  </DataKeysAndValues.ValueWithCopyBtn>
+                </>
+              )}
+            </>
+          )}
+        </DataKeysAndValues>
+      )}
 
-      <div className="mt-4 grid gap-4">
+      <div className={cn('grid gap-4', hasContext && 'mt-4')}>
         <SpanPayloadSection
           title="Input"
           icon={<FileInputIcon />}
@@ -247,7 +254,9 @@ function SpanDataPanelContent({
           <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
         </TabList>
 
-        <TabContent value="details">{detailsBody}</TabContent>
+        <TabContent value="details" className="pt-1">
+          {detailsBody}
+        </TabContent>
         <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>
       </Tabs>
     </div>
