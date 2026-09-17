@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 
 export const segmentClass = cn(
   'flex max-w-48 min-w-0 items-center gap-1 px-2 text-ui-sm leading-ui-sm whitespace-nowrap outline-none',
+  'first:rounded-l-md last:rounded-r-md',
 );
 
 export const editableSegmentClass = cn(
@@ -151,7 +152,7 @@ export function FilterBarChip({ item, readOnly = false, removable = true, classN
         data-slot="filter-bar-chip"
         data-readonly={readOnly || undefined}
         className={cn(
-          'flex h-form-sm max-w-full items-stretch divide-x divide-border1 overflow-hidden rounded-md border border-border1 bg-surface5 text-neutral5',
+          'flex h-form-sm max-w-full items-stretch divide-x divide-border1 rounded-md border border-border1 bg-surface5 text-neutral5',
           className,
         )}
         onKeyDown={handleKeyDown}
