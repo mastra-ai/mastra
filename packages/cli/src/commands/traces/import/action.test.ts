@@ -254,6 +254,7 @@ describe('runTraceImport', () => {
     });
 
     vi.stubEnv('HOME', home);
+    vi.stubEnv('USERPROFILE', home);
     vi.stubEnv('MASTRA_API_TOKEN', '');
     vi.mocked(getToken).mockResolvedValue('token');
     vi.mocked(getCurrentOrgId).mockResolvedValue('org');
