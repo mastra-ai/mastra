@@ -278,6 +278,49 @@ describe('eager tool dispatch — excluded tool classes', () => {
     }
   });
 
+  it('suspends normally when a tool suspends at runtime without declaring a suspend schema', async () => {
+    // The whitelist cannot see this coming: `hasSuspendSchema` is false, so the call is
+    // dispatched eagerly and only discovers it suspends once the body runs. The fail-safe
+    // has to hand it back to the foreach *before* any suspension side effect, otherwise a
+    // suspension is announced on a path that then records an error and never suspends.
+    const run = async (eager: boolean) => {
+      const { record } = createRecorder();
+      const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+      const agent = new Agent({
+        id: 'eager-runtime-suspend-agent',
+        name: 'Eager runtime suspend agent',
+        instructions: 'Call tool-a once.',
+        model,
+        tools: {
+          'tool-a': createTool({
+            id: 'tool-a',
+            description: 'Suspends at runtime without declaring a suspend schema',
+            inputSchema: z.object({ value: z.string() }),
+            outputSchema: z.object({ value: z.string() }),
+            execute: async ({ value }, options?: any) => {
+              await options?.agent?.suspend?.({ reason: 'needs input' });
+              return { value };
+            },
+          }),
+        },
+      });
+
+      const chunks = await drain(
+        await agent.stream('go', { maxSteps: 1, ...(eager ? { eagerToolExecution: true } : {}) }),
+      );
+      return chunks.map(chunk => chunk.type);
+    };
+
+    const base = await run(false);
+    const eager = await run(true);
+
+    // Suspends cleanly, exactly as it does without the option: no `tool-error`, and no
+    // suspension chunk left stranded in front of one.
+    expect(eager).toEqual(base);
+    expect(eager).toContain('tool-call-suspended');
+    expect(eager).not.toContain('tool-error');
+  });
+
   it('does not eagerly execute an agent-derived tool, which can suspend without a suspend schema', async () => {
     const { events, record } = createRecorder();
     const model = createToolCallModel(
@@ -1130,6 +1173,26 @@ describe('EagerToolExecutionCoordinator', () => {
 
     await vi.waitFor(() => expect(started).toBe(2));
     expect(coordinator.running).toBe(1);
+  });
+
+  it('aborts and forgets running work when the caller aborts, not just queued work', async () => {
+    // What the caller-abort listener asks of the coordinator. The run's own signal only
+    // reaches tools that bother to observe it, and an aborted run bails before any
+    // foreach, so without this the work is neither stopped, adopted, nor released.
+    const coordinator = new EagerToolExecutionCoordinator(() => 2);
+    let sawAbort = false;
+
+    coordinator.start('call-1', async signal => {
+      signal.addEventListener('abort', () => (sawAbort = true), { once: true });
+      return await new Promise<never>(() => {});
+    });
+    expect(coordinator.running).toBe(1);
+
+    coordinator.stop({ permanent: true, cancelRunning: true });
+
+    expect(sawAbort).toBe(true);
+    expect(coordinator.running).toBe(0);
+    expect(coordinator.pendingAdoptions).toBe(0);
   });
 
   it('forgets cancelled work so a reused toolCallId cannot adopt a discarded attempt', async () => {

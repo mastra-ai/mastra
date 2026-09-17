@@ -55,6 +55,7 @@ import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 import {
   EAGER_TOOL_ABORT_SIGNAL,
   EAGER_TOOL_EXECUTION_MARKER,
+  EagerToolExecutionNotRun,
   eagerToolCallDidNotExecute,
 } from './eager-tool-execution';
 
@@ -115,9 +116,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Resolve run-scoped state from either the Mastra-managed RunScope (production
       // path via loop.ts hydration) or the legacy `_internal` bag (tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
+      const isEagerExecution = Boolean((executionContext as any)[EAGER_TOOL_EXECUTION_MARKER]);
       // Adopt an execution the LLM step started eagerly for this call, if any. The
       // eager invocation itself carries the marker so it never adopts itself.
-      if (!(executionContext as any)[EAGER_TOOL_EXECUTION_MARKER]) {
+      if (!isEagerExecution) {
         // Take rather than read: adoption is exactly-once, so a later iteration that
         // reuses this toolCallId executes again instead of replaying a stale result.
         const eagerExecution = readScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator')?.take(
@@ -680,6 +682,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             return sqm && tid ? () => sqm.flushMessages(messageList, tid, mcfg) : undefined;
           })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
+            // A tool can suspend at runtime without declaring a suspend schema, so the
+            // eager eligibility whitelist cannot see it coming. Bail here, before any
+            // suspension side effect (chunk, metadata, flush) has happened, so the call
+            // is genuinely handed back to the ordinary foreach rather than half-suspended
+            // on this path. Bailing after the chunk was emitted would leave a suspension
+            // announced that never suspends.
+            if (isEagerExecution) {
+              throw new EagerToolExecutionNotRun(`"${inputData.toolName}" requested suspension`);
+            }
             if (options?.requireToolApproval) {
               const innerApproval =
                 typeof options.requireToolApproval === 'object' && options.requireToolApproval
@@ -1461,6 +1472,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them
         if (error instanceof Error && error.name === 'FGADeniedError') {
+          throw error;
+        }
+        // "The eager attempt must not run this" is control flow, not a tool failure.
+        // Turning it into a resolved `{ error }` would defeat the fail-safe: adoption
+        // awaits the eager promise and would record that error as the tool's result
+        // instead of running the call normally.
+        if (eagerToolCallDidNotExecute(error)) {
           throw error;
         }
         // A throw while the request is aborted is a mid-flight cancellation, not a genuine

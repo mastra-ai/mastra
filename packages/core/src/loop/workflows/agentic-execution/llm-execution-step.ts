@@ -1306,15 +1306,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       if (eagerCoordinator) {
         writeScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator', eagerCoordinator);
-        // A caller abort stops further eager dispatch permanently. Executions already in
-        // flight observe it through the signal the coordinator hands each of them, which
-        // the tool call step fuses with the run's own. Registered once for the whole run
-        // rather than per iteration, so long loops do not pile up listeners.
+        // A caller abort stops further eager dispatch permanently and cancels what is
+        // already running. `cancelRunning` is what makes that hold rather than hope: the
+        // run signal alone only reaches tools that observe it, and the aborted run bails
+        // before any foreach, so nothing would ever adopt or release the work otherwise.
+        // Registered once for the whole run rather than per iteration, so long loops do
+        // not pile up listeners.
         if (!eagerAbortListenerRegistered) {
           eagerAbortListenerRegistered = true;
-          options?.abortSignal?.addEventListener('abort', () => eagerCoordinator.stop({ permanent: true }), {
-            once: true,
-          });
+          options?.abortSignal?.addEventListener(
+            'abort',
+            () => eagerCoordinator.stop({ permanent: true, cancelRunning: true }),
+            { once: true },
+          );
         }
         // A stop caused by one bad turn (tripwire, model error, retry) must not disable
         // eager dispatch for the rest of the run: the next turn is a fresh model call.
