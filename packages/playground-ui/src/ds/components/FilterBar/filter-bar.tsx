@@ -28,9 +28,9 @@ function FilterBarSurface({ className, children }: { className?: string; childre
       data-slot="filter-bar"
       className={cn(
         // Same surface/hover/focus recipe as InputGroup (wrapper whose focus lives on the nested input).
-        // Single-line height matches a md control (28px): 24px chips/input + 1px padding + 1px
-        // border. Uniform p-px keeps chips concentric; rounded-2xl clamps to a pill on one line.
-        'flex min-h-form-md w-full flex-wrap items-center gap-0.5 rounded-2xl border border-border1 bg-surface-overlay-soft p-px',
+        // Layout: leading icon | wrapping chip list | trailing slot (Clear). Icon and slot stay
+        // pinned to the first line; only the list wraps.
+        'flex w-full items-start gap-0.5 rounded-2xl border border-border1 bg-surface-overlay-soft p-0.5',
         'cursor-text transition-all duration-normal ease-out-custom',
         'hover:bg-surface-overlay-strong',
         inputHoverBorderWithin,
@@ -40,8 +40,13 @@ function FilterBarSurface({ className, children }: { className?: string; childre
       )}
       onClick={ctx.focusInput}
     >
-      <ListFilterIcon aria-hidden className="text-neutral3 mr-1 ml-1.5 size-3 shrink-0" />
-      {children}
+      <span className="h-form-sm flex shrink-0 items-center pl-1">
+        <ListFilterIcon aria-hidden className="text-neutral3 size-3" />
+      </span>
+      <div data-slot="filter-bar-list" className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+        {children}
+      </div>
+      <div ref={ctx.registerTrailingSlot} className="h-form-sm flex shrink-0 items-center empty:hidden" />
       <VisuallyHidden aria-live="polite">{ctx.announcement}</VisuallyHidden>
     </div>
   );
