@@ -1,7 +1,5 @@
 import {
   CircleGaugeIcon,
-  ChevronsDownUpIcon,
-  ChevronsUpDownIcon,
   DownloadIcon,
   Link2Icon,
   Loader2Icon,
@@ -22,8 +20,8 @@ import { TraceSpanTimeline } from './trace-span-timeline';
 import { TraceSpanTree } from './trace-span-tree';
 import { TraceSummaryDescription } from './trace-summary-description';
 import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
+import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
@@ -38,7 +36,8 @@ export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 export type TraceDataPanelTab = 'details' | 'timeline' | 'scores' | 'feedback';
 
 export interface TraceDataPanelViewProps {
-  traceId: string;
+  /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
+  traceId?: string;
   /** Lightweight spans for the trace. Caller fetches via useTraceLightSpans. */
   spans: SearchableSpan[] | undefined;
   isLoading?: boolean;
@@ -52,8 +51,14 @@ export interface TraceDataPanelViewProps {
   initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
-  collapsed?: boolean;
-  onCollapsedChange?: (collapsed: boolean) => void;
+  /** Drawer width; defaults to `wide` since the panel lays out several columns. */
+  size?: DataPanelProps['size'];
+  /** Elevation when opened next to other sibling panels. */
+  depth?: DataPanelProps['depth'];
+  /** Rendered inside the drawer above the trace header (e.g. inbox feedback context). */
+  headerSlot?: ReactNode;
+  /** Accessible drawer name; defaults to the trace id. */
+  title?: string;
   placement: TraceDataPanelPlacement;
   /** @deprecated No longer used: the panel renders the span tree with the duration as text. */
   timelineChartWidth?: 'wide' | 'default';
@@ -107,8 +112,6 @@ export interface TraceDataPanelViewProps {
    * typically the span detail.
    */
   spanPanelSlot?: ReactNode;
-  /** Extra classes applied to the panel root (e.g. `h-full` on the trace page). */
-  className?: string;
 }
 
 export function TraceDataPanelView({
@@ -123,8 +126,10 @@ export function TraceDataPanelView({
   initialSpanId,
   onPrevious,
   onNext,
-  collapsed: controlledCollapsed,
-  onCollapsedChange,
+  size = 'wide',
+  depth,
+  headerSlot,
+  title,
   placement,
   LinkComponent,
   traceHref,
@@ -141,12 +146,8 @@ export function TraceDataPanelView({
   featuredSpanIds,
   messagesPanelSlot,
   spanPanelSlot,
-  className,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
-  const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const collapsed = controlledCollapsed ?? internalCollapsed;
-  const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
 
   // Tracked locally too (tabs may be uncontrolled) so the messages column knows
   // when to fold away for the Timeline tab.
@@ -217,22 +218,16 @@ export function TraceDataPanelView({
     onSpanSelect?.(newId);
   };
 
-  const traceActionsMenu = (
+  const traceActionsMenu = traceId && (
     <DropdownMenu>
       <DropdownMenu.Trigger
         render={
-          <Button size="md" variant="ghost" tooltip="Trace actions" aria-label="Trace actions">
+          <Button size="sm" variant="ghost" tooltip="Trace actions" aria-label="Trace actions">
             <MoreHorizontalIcon />
           </Button>
         }
       />
       <DropdownMenu.Content align="end">
-        {!isOnTracePage && onCollapsedChange && (
-          <DropdownMenu.Item onSelect={() => setCollapsed(!collapsed)}>
-            {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-            {collapsed ? 'Expand panel' : 'Collapse panel'}
-          </DropdownMenu.Item>
-        )}
         {!isOnTracePage && onSaveAsDatasetItem && (
           <DropdownMenu.Item onSelect={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
             <SaveIcon />
@@ -260,167 +255,175 @@ export function TraceDataPanelView({
   );
 
   return (
-    <DataPanel collapsed={collapsed} className={className}>
-      <DataPanel.Header>
-        {isOnTracePage ? (
-          <>
-            <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
-            <ButtonsGroup className="ml-auto shrink-0">{traceActionsMenu}</ButtonsGroup>
-          </>
-        ) : (
-          <>
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <DataPanel.Heading className="items-center">
-                Trace
-                <TraceIdButton id={traceId} />
-              </DataPanel.Heading>
-              {!collapsed && rootSpan && (
-                <TraceSummaryDescription
-                  rootSpan={rootSpan}
-                  usage={usage}
-                  entityHref={entityHref}
-                  LinkComponent={LinkComponent}
-                />
-              )}
-            </div>
-            <ButtonsGroup className="ml-auto shrink-0 self-start">
-              {onEvaluateTrace && (
-                <Button variant="primary" size="md" onClick={onEvaluateTrace} disabled={!rootSpan}>
-                  <CircleGaugeIcon />
-                  Score trace
-                </Button>
-              )}
-              {traceActionsMenu}
-              {(onPrevious || onNext) && (
-                <DataPanel.NextPrevNav
-                  variant="ghost"
-                  onPrevious={onPrevious}
-                  onNext={onNext}
-                  previousLabel="Previous trace"
-                  nextLabel="Next trace"
-                />
-              )}
-              <DataPanel.CloseButton variant="ghost" onClick={onClose} />
-            </ButtonsGroup>
-          </>
-        )}
-      </DataPanel.Header>
+    <DataPanel
+      open={!!traceId}
+      onClose={onClose}
+      title={title ?? (isOnTracePage ? 'Trace Timeline' : `Trace ${traceId ?? ''}`)}
+      size={size}
+      depth={depth}
+    >
+      {traceId && (
+        <>
+          {headerSlot}
+          <DataPanel.Header>
+            {isOnTracePage ? (
+              <>
+                <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+                <DataPanel.HeaderActions>{traceActionsMenu}</DataPanel.HeaderActions>
+              </>
+            ) : (
+              <>
+                <DataPanel.HeaderContent>
+                  <DataPanel.Heading>
+                    Trace
+                    <TraceIdButton id={traceId} />
+                  </DataPanel.Heading>
+                  {rootSpan && (
+                    <TraceSummaryDescription
+                      rootSpan={rootSpan}
+                      usage={usage}
+                      entityHref={entityHref}
+                      LinkComponent={LinkComponent}
+                    />
+                  )}
+                </DataPanel.HeaderContent>
+                <DataPanel.HeaderActions>
+                  {onEvaluateTrace && (
+                    <Button variant="primary" size="sm" onClick={onEvaluateTrace} disabled={!rootSpan}>
+                      <CircleGaugeIcon />
+                      Score trace
+                    </Button>
+                  )}
+                  {traceActionsMenu}
+                  {(onPrevious || onNext) && (
+                    <DataPanel.NextPrevNav
+                      onPrevious={onPrevious}
+                      onNext={onNext}
+                      previousLabel="Previous trace"
+                      nextLabel="Next trace"
+                    />
+                  )}
+                  <DataPanel.CloseButton onClick={onClose} />
+                </DataPanel.HeaderActions>
+              </>
+            )}
+          </DataPanel.Header>
 
-      {!collapsed && (
-        <TracePanelColumns
-          messagesPanelSlot={messagesPanelSlot}
-          messagesCollapsed={currentTab === 'timeline'}
-          spanPanelSlot={spanPanelSlot}
-          highlightQuery={query}
-          spanPanelKey={selectedSpanId}
-        >
-          {isLoading ? (
-            <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
-          ) : !spans?.length ? (
-            <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
-          ) : (
-            (() => {
-              // Shared by the Spans and Timeline tabs: both views render the same
-              // filtered `hierarchicalSpans`, so one query drives both.
-              const searchField = (
-                <SearchFieldBlock
-                  name={searchFieldName}
-                  label="Search spans"
-                  labelIsHidden
-                  placeholder="Search spans..."
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  onReset={() => setQuery('')}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                />
-              );
-              const noSearchResults = hierarchicalSpans.length === 0 && (
-                <DataPanel.NoData>No spans match your search.</DataPanel.NoData>
-              );
+          <TracePanelColumns
+            messagesPanelSlot={messagesPanelSlot}
+            messagesCollapsed={currentTab === 'timeline'}
+            spanPanelSlot={spanPanelSlot}
+            highlightQuery={query}
+            spanPanelKey={selectedSpanId}
+          >
+            {isLoading ? (
+              <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
+            ) : !spans?.length ? (
+              <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
+            ) : (
+              (() => {
+                // Shared by the Spans and Timeline tabs: both views render the same
+                // filtered `hierarchicalSpans`, so one query drives both.
+                const searchField = (
+                  <SearchFieldBlock
+                    name={searchFieldName}
+                    label="Search spans"
+                    labelIsHidden
+                    placeholder="Search spans..."
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    onReset={() => setQuery('')}
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                  />
+                );
+                const noSearchResults = hierarchicalSpans.length === 0 && (
+                  <DataPanel.NoData>No spans match your search.</DataPanel.NoData>
+                );
 
-              return (
-                <Tabs<TraceDataPanelTab>
-                  defaultTab="details"
-                  value={activeTab}
-                  onValueChange={handleTabChange}
-                  className="grid h-full min-h-0 grid-rows-[auto_1fr]"
-                >
-                  <DataPanel.Header className="min-h-0 px-2 py-1">
-                    <TabList variant="pill-ghost">
-                      <Tab value="details">Spans</Tab>
-                      <Tab value="timeline">Timeline</Tab>
-                      {feedbackTabSlot && <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>}
-                      {scoresTabSlot && (
-                        <Tab value="scores">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</Tab>
-                      )}
-                    </TabList>
-                  </DataPanel.Header>
-
-                  {/* Tab contents share the tab list's horizontal padding so their edges line up. */}
-                  <TabContent value="details" className="min-h-0 py-0">
-                    <DataPanel.Content className="px-2">
-                      {!isOnTracePage &&
-                        !onEvaluateTrace &&
-                        !onSaveAsDatasetItem &&
-                        !onAddTraceMocksToItem &&
-                        showUnavailableFeaturesMsg && (
-                          <Notice variant="info" className="mb-6">
-                            <Notice.Message>
-                              Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                              deployed).
-                            </Notice.Message>
-                          </Notice>
+                return (
+                  <Tabs<TraceDataPanelTab>
+                    defaultTab="details"
+                    value={activeTab}
+                    onValueChange={handleTabChange}
+                    className="grid h-full min-h-0 grid-rows-[auto_1fr]"
+                  >
+                    <DataPanel.Header>
+                      <TabList variant="pill-ghost">
+                        <Tab value="details">Spans</Tab>
+                        <Tab value="timeline">Timeline</Tab>
+                        {feedbackTabSlot && <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>}
+                        {scoresTabSlot && (
+                          <Tab value="scores">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</Tab>
                         )}
+                      </TabList>
+                    </DataPanel.Header>
 
-                      {/* The tree stays mounted even with no results, because it
+                    {/* Tab contents share the tab list's horizontal padding so their edges line up. */}
+                    <TabContent value="details" className="min-h-0 py-0">
+                      <DataPanel.Content>
+                        {!isOnTracePage &&
+                          !onEvaluateTrace &&
+                          !onSaveAsDatasetItem &&
+                          !onAddTraceMocksToItem &&
+                          showUnavailableFeaturesMsg && (
+                            <Notice variant="info" className="mb-6">
+                              <Notice.Message>
+                                Evaluating traces and saving them as dataset items is available in Mastra Studio (local
+                                or deployed).
+                              </Notice.Message>
+                            </Notice>
+                          )}
+
+                        {/* The tree stays mounted even with no results, because it
                           hosts the search field: unmounting it would strand the user
                           with a query they can no longer clear. */}
-                      <TraceSpanTree
-                        hierarchicalSpans={hierarchicalSpans}
-                        onSpanClick={handleSpanClick}
-                        selectedSpanId={selectedSpanId}
-                        expandedSpanIds={expandedSpanIds}
-                        setExpandedSpanIds={setExpandedSpanIds}
-                        featuredSpanIds={featuredSpanIds}
-                        leadingSlot={searchField}
-                      />
-                      {noSearchResults}
-                    </DataPanel.Content>
-                  </TabContent>
-                  <TabContent value="timeline" className="min-h-0 py-0">
-                    <DataPanel.Content className="px-2">
-                      {/* Same selection + expansion state as the Spans tab, so switching views keeps context. */}
-                      <TraceSpanTimeline
-                        hierarchicalSpans={hierarchicalSpans}
-                        onSpanClick={handleSpanClick}
-                        selectedSpanId={selectedSpanId}
-                        expandedSpanIds={expandedSpanIds}
-                        setExpandedSpanIds={setExpandedSpanIds}
-                        featuredSpanIds={featuredSpanIds}
-                        leadingSlot={searchField}
-                      />
-                      {noSearchResults}
-                    </DataPanel.Content>
-                  </TabContent>
-                  {feedbackTabSlot && (
-                    <TabContent value="feedback" className="h-full min-h-0 py-0">
-                      <DataPanel.Content className="px-2">{feedbackTabSlot({ traceId })}</DataPanel.Content>
-                    </TabContent>
-                  )}
-                  {scoresTabSlot && (
-                    <TabContent value="scores" className="h-full min-h-0 py-0">
-                      <DataPanel.Content className="px-2">
-                        {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
+                        <TraceSpanTree
+                          hierarchicalSpans={hierarchicalSpans}
+                          onSpanClick={handleSpanClick}
+                          selectedSpanId={selectedSpanId}
+                          expandedSpanIds={expandedSpanIds}
+                          setExpandedSpanIds={setExpandedSpanIds}
+                          featuredSpanIds={featuredSpanIds}
+                          leadingSlot={searchField}
+                        />
+                        {noSearchResults}
                       </DataPanel.Content>
                     </TabContent>
-                  )}
-                </Tabs>
-              );
-            })()
-          )}
-        </TracePanelColumns>
+                    <TabContent value="timeline" className="min-h-0 py-0">
+                      <DataPanel.Content>
+                        {/* Same selection + expansion state as the Spans tab, so switching views keeps context. */}
+                        <TraceSpanTimeline
+                          hierarchicalSpans={hierarchicalSpans}
+                          onSpanClick={handleSpanClick}
+                          selectedSpanId={selectedSpanId}
+                          expandedSpanIds={expandedSpanIds}
+                          setExpandedSpanIds={setExpandedSpanIds}
+                          featuredSpanIds={featuredSpanIds}
+                          leadingSlot={searchField}
+                        />
+                        {noSearchResults}
+                      </DataPanel.Content>
+                    </TabContent>
+                    {feedbackTabSlot && (
+                      <TabContent value="feedback" className="h-full min-h-0 py-0">
+                        <DataPanel.Content>{feedbackTabSlot({ traceId })}</DataPanel.Content>
+                      </TabContent>
+                    )}
+                    {scoresTabSlot && (
+                      <TabContent value="scores" className="h-full min-h-0 py-0">
+                        <DataPanel.Content>
+                          {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
+                        </DataPanel.Content>
+                      </TabContent>
+                    )}
+                  </Tabs>
+                );
+              })()
+            )}
+          </TracePanelColumns>
+        </>
       )}
     </DataPanel>
   );

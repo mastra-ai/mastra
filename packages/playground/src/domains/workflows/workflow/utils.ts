@@ -821,31 +821,28 @@ export const collectGraphStepFlags = (
 
 type StepStatusLookup = (stepId: string) => boolean;
 
-/**
- * A conditional branch arm is "bypassed" when one of its successors (a join
- * such as a post-branch map) already has another predecessor that succeeded.
- * That means a sibling arm was the one selected by the condition, so this arm
- * will never run and must be skipped — otherwise per-step execution stalls on
- * it forever. Parallel arms are excluded via `conditionalStepIds`, because
- * every parallel arm is expected to run even though they share a join.
- */
 export const isBranchArmBypassed = ({
   stepId,
   conditionalStepIds,
   stepSuccessors,
   stepsFlow,
-  isStepSuccess,
+  steps,
 }: {
   stepId: string;
   conditionalStepIds: Set<string>;
   stepSuccessors: Record<string, string[]>;
   stepsFlow: Record<string, string[]>;
-  isStepSuccess: StepStatusLookup;
+  steps: Record<string, { status?: string }> | undefined;
 }): boolean => {
   if (!conditionalStepIds.has(stepId)) return false;
-  const successors = stepSuccessors[stepId] ?? [];
-  return successors.some(successorId =>
-    (stepsFlow[successorId] ?? []).some(sib => sib !== stepId && isStepSuccess(sib)),
+  if (steps?.[stepId]?.status === 'skipped') return true;
+  if (steps?.[stepId]?.status !== undefined) return false;
+
+  const hasSucceeded = (candidateId: string) => steps?.[candidateId]?.status === 'success';
+  const siblingArmsOn = (successorId: string) => (stepsFlow[successorId] ?? []).filter(armId => armId !== stepId);
+
+  return (stepSuccessors[stepId] ?? []).some(
+    successorId => hasSucceeded(successorId) || siblingArmsOn(successorId).some(hasSucceeded),
   );
 };
 

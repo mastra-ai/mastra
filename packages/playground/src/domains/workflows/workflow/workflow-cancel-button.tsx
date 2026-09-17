@@ -10,7 +10,6 @@ export interface WorkflowCancelButtonProps {
   disabled?: boolean;
 }
 
-const DONE_STATUSES = ['success', 'failed', 'canceled', 'tripwire'];
 const VISIBLE_STATUSES = ['running', 'suspended', 'paused'];
 
 export function WorkflowCancelButton({
@@ -30,7 +29,7 @@ export function WorkflowCancelButton({
       variant="default"
       className="w-full"
       onClick={onCancel}
-      disabled={disabled || !!cancelMessage || isCancelling || DONE_STATUSES.includes(status)}
+      disabled={disabled || !!cancelMessage || isCancelling}
     >
       {isCancelling ? (
         <Icon>

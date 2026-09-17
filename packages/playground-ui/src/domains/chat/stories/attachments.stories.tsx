@@ -1,4 +1,4 @@
-import type { FilePart } from '@mastra/react';
+import type { FilePart } from '@mastra/react/ui';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { UserFilePartRenderer } from '../messages/renderers/user-file-part-renderer';

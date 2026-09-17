@@ -121,6 +121,8 @@ export default defineConfig({
       '@internal/auth',
       '@internal/core',
       '@internal/voice',
+      '@sindresorhus/slugify',
+      'tokenx',
     ],
   },
   onSuccess: async () => {
@@ -138,6 +140,7 @@ export default defineConfig({
         '@internal/core',
         '@internal/voice',
         '@internal/auth',
+        '@sindresorhus/slugify',
       ]),
       {
         rollupTypes: {

@@ -1,4 +1,4 @@
-import type { DynamicToolPart, MessageFactoryPart, ToolInvocationPart } from '@mastra/react';
+import type { DynamicToolPart, MessageFactoryPart, ToolInvocationPart } from '@mastra/react/ui';
 
 export type ToolPart = ToolInvocationPart | DynamicToolPart;
 

@@ -2893,20 +2893,6 @@ export const API_ROUTE_METADATA = {
       "listProperty": "embedders"
     }
   },
-  "GET /.well-known/:agentId/agent-card.json": {
-    "method": "GET",
-    "path": "/.well-known/:agentId/agent-card.json",
-    "pathParams": [
-      "agentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
   "GET /workspaces": {
     "method": "GET",
     "path": "/workspaces",

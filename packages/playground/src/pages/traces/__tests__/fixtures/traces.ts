@@ -140,3 +140,4 @@ export const emptyTags: Awaited<ReturnType<MastraClient['getTags']>> = { tags: [
 export const emptyEntityNames: Awaited<ReturnType<MastraClient['getEntityNames']>> = { entityNames: [] };
 export const emptyServiceNames: Awaited<ReturnType<MastraClient['getServiceNames']>> = { serviceNames: [] };
 export const emptyEnvironments: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: [] };
+export const environmentsWithProd: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: ['prod'] };
