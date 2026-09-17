@@ -131,9 +131,13 @@ const CODE_AGENT_ID = 'code-agent';
 // settings, so all modes/subagents benefit from a short wait before retrying a transient failure.
 // Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
 const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 10;
-// Leave enough shared retry headroom for large account/fallback cascades while
-// retaining a hard stop if a custom or plugin processor retries indefinitely.
-const MASTRACODE_MAX_PROCESSOR_RETRIES = 1024;
+// Shared ceiling for the whole processor error lane: core counts every
+// processor-requested retry against this one number. Sized for the largest
+// legitimate cascade — a rotation step per remaining account per pack hop
+// (8 representative accounts x 8 packs) — rather than an open-ended budget, so
+// a custom or plugin processor that returns `retry: true` loops at most this
+// many times instead of amplifying one request without bound.
+const MASTRACODE_MAX_PROCESSOR_RETRIES = 64;
 const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 500;
 const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
