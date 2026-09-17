@@ -9,14 +9,16 @@ export interface ToolCallContextValue {
   approveNetworkToolcall: (toolName: string, runId?: string) => void;
   declineNetworkToolcall: (toolName: string, runId?: string) => void;
   isRunning: boolean;
+  isContinuationBlocked: boolean;
   toolCallApprovals: { [toolCallId: string]: { status: 'approved' | 'declined' } };
   networkToolCallApprovals: { [toolName: string]: { status: 'approved' | 'declined' } };
 }
 
 const ToolCallContext = createContext<ToolCallContextValue | undefined>(undefined);
 
-interface ToolCallProviderProps extends ToolCallContextValue {
+interface ToolCallProviderProps extends Omit<ToolCallContextValue, 'isContinuationBlocked'> {
   children: ReactNode;
+  isContinuationBlocked?: boolean;
 }
 
 export function ToolCallProvider({
@@ -28,6 +30,7 @@ export function ToolCallProvider({
   approveNetworkToolcall,
   declineNetworkToolcall,
   isRunning,
+  isContinuationBlocked = false,
   toolCallApprovals,
   networkToolCallApprovals,
 }: ToolCallProviderProps) {
@@ -40,6 +43,7 @@ export function ToolCallProvider({
       approveNetworkToolcall,
       declineNetworkToolcall,
       isRunning,
+      isContinuationBlocked,
       toolCallApprovals,
       networkToolCallApprovals,
     }),
@@ -51,6 +55,7 @@ export function ToolCallProvider({
       approveNetworkToolcall,
       declineNetworkToolcall,
       isRunning,
+      isContinuationBlocked,
       toolCallApprovals,
       networkToolCallApprovals,
     ],

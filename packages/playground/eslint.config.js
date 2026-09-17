@@ -208,6 +208,7 @@ export default [
       'e2e/playwright-report/**',
       'e2e/test-results/**',
       'e2e/playwright.config.ts',
+      'e2e/playwright.version-labels.config.ts',
       'e2e/playwright.studio-base.config.ts',
       'e2e/tests/__utils__/**',
     ],

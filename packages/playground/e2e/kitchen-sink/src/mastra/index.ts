@@ -11,12 +11,13 @@ import {
   codeOverrideLockedAgent,
   omAdaptiveAgent,
   omAgent,
+  versionLabelPinningAgent,
   weatherAgent,
 } from './agents';
 import { simpleMcpServer } from './mcps';
 import { loggingProcessor, contentFilterProcessor } from './processors';
 import { responseQualityScorer, responseTimeScorer } from './scorers';
-import { initE2EStorage, storage } from './storage';
+import { initE2EStorage, isVersionLabelE2EMode, storage } from './storage';
 import { complexWorkflow, enumWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
 import { scheduledWorkflow, multiScheduledWorkflow } from './workflows/scheduled-workflow';
 
@@ -32,6 +33,7 @@ export const mastra = new Mastra({
     codeOverrideLockedAgent,
     builderAgent,
     askUserAgent,
+    ...(isVersionLabelE2EMode ? { versionLabelPinningAgent } : {}),
   },
   logger: new PinoLogger({
     name: 'Mastra',
@@ -39,7 +41,7 @@ export const mastra = new Mastra({
   }),
   storage,
   editor: new MastraEditor({
-    source: 'code',
+    source: isVersionLabelE2EMode ? 'db' : 'code',
     builder: {
       enabled: true,
       features: {
@@ -64,6 +66,22 @@ export const mastra = new Mastra({
   server: {
     ...(process.env.E2E_STUDIO_BASE_PATH ? { studioBase: process.env.E2E_STUDIO_BASE_PATH } : {}),
     apiRoutes: [
+      ...(isVersionLabelE2EMode
+        ? [
+            registerApiRoute('/e2e/reset-version-label-storage', {
+              method: 'POST',
+              handler: async c => {
+                const agentsStore = await storage.getStore('agents');
+                await agentsStore?.dangerouslyClearAll();
+
+                const memoryStore = await storage.getStore('memory');
+                await memoryStore?.dangerouslyClearAll();
+
+                return c.json({ message: 'Version-label E2E storage reset' }, 201);
+              },
+            }),
+          ]
+        : []),
       registerApiRoute('/e2e/reset-storage', {
         method: 'POST',
         handler: async c => {

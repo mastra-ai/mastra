@@ -171,7 +171,7 @@ export const Thread = ({
                   <ChatMessagesLoadingSkeleton />
                 </ChatShell.Column>
               ) : isEmpty ? (
-                <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
+                <ThreadWelcome agentName={agentName} agentId={agentId} suggestedPrompts={suggestedPrompts} />
               ) : (
                 <ChatShell.Column
                   ref={messagesContainerRef}
@@ -240,15 +240,16 @@ export const Thread = ({
 
 export interface ThreadWelcomeProps {
   agentName?: string;
+  agentId?: string;
   suggestedPrompts?: string[];
 }
 
-const ThreadWelcome = ({ agentName, suggestedPrompts = EMPTY_SUGGESTED_PROMPTS }: ThreadWelcomeProps) => {
+const ThreadWelcome = ({ agentName, agentId, suggestedPrompts = EMPTY_SUGGESTED_PROMPTS }: ThreadWelcomeProps) => {
   return (
     <div className="flex w-full grow flex-col items-center pt-[15vh]">
       <Avatar name={agentName || 'Agent'} size="lg" />
       <p className="mt-4 font-medium">How can I help you today?</p>
-      <SuggestedPromptList prompts={suggestedPrompts} />
+      <SuggestedPromptList prompts={suggestedPrompts} agentId={agentId} />
     </div>
   );
 };
@@ -274,10 +275,25 @@ const AgentComposer = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const send = useChatSend();
   const { attachments, toCoreUserMessages, clear } = useComposerAttachments();
-  const { isRunning, canSendWhileStreaming, cancelRun } = useChatRunning();
+  const {
+    isRunning,
+    canSendWhileStreaming,
+    canStartRun,
+    runBlockedReason,
+    canContinueRun,
+    continuationBlockedReason,
+    isContinuationBlocked,
+    cancelRun,
+  } = useChatRunning();
   const [sendPulseKey, setSendPulseKey] = useState(0);
-  const { canExecute } = usePermissions();
-  const canExecuteAgent = canExecute('agents');
+  const { hasPermission } = usePermissions();
+  const hasExecutePermission = agentId ? hasPermission(`agents:execute:${agentId}`) : hasPermission('agents:execute');
+  const canExecuteAgent = hasExecutePermission && !isContinuationBlocked && (isRunning ? canContinueRun : canStartRun);
+  const currentRunBlockedReason = isContinuationBlocked
+    ? continuationBlockedReason
+    : isRunning
+      ? continuationBlockedReason
+      : runBlockedReason;
   // On a brand-new chat, starting the call must transition the page out of its
   // new-thread state (same as the first text send) or the chat never loads messages.
   const voiceCall = useVoiceCall({ agentId, threadId, onCallStarted: refreshThreadList });
@@ -316,7 +332,11 @@ const AgentComposer = ({
               ref={textareaRef}
               value={text}
               autoFocus={false}
-              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+              placeholder={
+                canExecuteAgent
+                  ? 'Enter your message...'
+                  : currentRunBlockedReason || "You don't have permission to execute agents"
+              }
               onChange={event => {
                 setThreadInput(event.target.value);
               }}
@@ -408,7 +428,7 @@ const ComposerActionRow = ({
   return (
     <>
       {((showModelSwitcher && agentId) || runOptionsSlot) && (
-        <div className="flex max-w-full shrink-0 items-center gap-1.5">
+        <div className="flex max-w-full shrink-0 flex-wrap items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
               <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">

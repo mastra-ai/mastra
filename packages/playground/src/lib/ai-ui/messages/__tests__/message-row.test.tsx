@@ -522,7 +522,16 @@ describe('MessageRow', () => {
       message.content.metadata = { runId: 'live-run' };
       const row = (isRunning: boolean) => (
         <ChatRunningContext.Provider
-          value={{ isRunning, activeRunId: 'live-run', cancelRun: () => {}, canSendWhileStreaming: false }}
+          value={{
+            isRunning,
+            isRunningStream: isRunning,
+            activeRunId: 'live-run',
+            cancelRun: () => {},
+            canSendWhileStreaming: false,
+            canStartRun: true,
+            canContinueRun: true,
+            isContinuationBlocked: false,
+          }}
         >
           <MessageRow message={message} />
         </ChatRunningContext.Provider>

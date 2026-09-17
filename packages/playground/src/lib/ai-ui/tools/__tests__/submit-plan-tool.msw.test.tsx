@@ -34,7 +34,7 @@ const pendingProps: SubmitPlanToolProps = {
   },
 };
 
-function renderSubmitPlan(props: SubmitPlanToolProps) {
+function renderSubmitPlan(props: SubmitPlanToolProps, { isContinuationBlocked = false } = {}) {
   const approveToolcall = vi.fn<(toolCallId: string, resumeData?: unknown) => void>();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -49,6 +49,7 @@ function renderSubmitPlan(props: SubmitPlanToolProps) {
           approveNetworkToolcall={vi.fn()}
           declineNetworkToolcall={vi.fn()}
           isRunning={false}
+          isContinuationBlocked={isContinuationBlocked}
           toolCallApprovals={{}}
           networkToolCallApprovals={{}}
         >
@@ -123,6 +124,18 @@ describe('SubmitPlanTool', () => {
       expect(
         screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan and switch to build' }).disabled,
       ).toBe(false);
+    });
+
+    it('disables both plan decisions when the run continuation is fatally blocked', async () => {
+      usePlanFileHandler();
+
+      renderSubmitPlan(pendingProps, { isContinuationBlocked: true });
+
+      await screen.findByRole('heading', { name: 'Add dark mode' });
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan and switch to build' }).disabled,
+      ).toBe(true);
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Reject the plan' }).disabled).toBe(true);
     });
 
     it('keeps the approval action on one line without shrinking', async () => {

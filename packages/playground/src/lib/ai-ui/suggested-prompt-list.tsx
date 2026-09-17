@@ -5,18 +5,20 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 interface SuggestedPromptListProps {
   prompts: string[];
+  agentId?: string;
 }
 
 /** Renders agent-configured prompts as chat actions that respect send permissions. */
-export const SuggestedPromptList = ({ prompts }: SuggestedPromptListProps) => {
+export const SuggestedPromptList = ({ prompts, agentId }: SuggestedPromptListProps) => {
   const send = useChatSend();
-  const { isRunning, canSendWhileStreaming } = useChatRunning();
-  const { canExecute } = usePermissions();
+  const { isRunning, canSendWhileStreaming, canStartRun } = useChatRunning();
+  const { hasPermission } = usePermissions();
 
   if (prompts.length === 0) return null;
 
   const sendBlocked = isRunning && !canSendWhileStreaming;
-  const isDisabled = sendBlocked || !canExecute('agents');
+  const executePermission = agentId ? `agents:execute:${agentId}` : 'agents:execute';
+  const isDisabled = sendBlocked || !canStartRun || !hasPermission(executePermission);
 
   return (
     <div className="mt-6 flex max-w-full flex-row gap-2 overflow-x-auto px-4">

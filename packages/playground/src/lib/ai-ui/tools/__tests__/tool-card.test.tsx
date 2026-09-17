@@ -377,7 +377,15 @@ describe('ToolCard dispatch', () => {
   });
 
   it('shimmers an unsettled call while the run is live, and marks a failed one', () => {
-    const running = { isRunning: true, cancelRun: () => {}, canSendWhileStreaming: false };
+    const running = {
+      isRunning: true,
+      isRunningStream: true,
+      cancelRun: () => {},
+      canSendWhileStreaming: false,
+      canStartRun: true,
+      canContinueRun: true,
+      isContinuationBlocked: false,
+    };
     const { rerender } = render(
       <ChatRunningContext.Provider value={running}>
         <ToolCard {...baseProps({ toolName: 'searchDocs', state: 'input-available' })} />

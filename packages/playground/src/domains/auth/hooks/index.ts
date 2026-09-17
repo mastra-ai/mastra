@@ -3,6 +3,7 @@ export * from './use-auth-capabilities';
 export * from './use-current-user';
 export * from './use-default-visibility';
 export * from './use-auth-actions';
+export * from './use-agent-version-access';
 export * from './use-credentials-login';
 export * from './use-credentials-signup';
 export * from './use-permissions';

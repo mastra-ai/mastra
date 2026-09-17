@@ -1,3 +1,4 @@
+import type { ActivateAgentVersionOptions } from '@mastra/client-js';
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -20,7 +21,15 @@ import {
 import type { AgentDataSource } from '../../utils/compute-agent-initial-values';
 import { useAgentCmsForm } from '../use-agent-cms-form';
 import { useAgentVersions } from '../use-agent-versions';
-import { createdCodeAgent, noAgentVersions, oneUnpublishedAgentVersion } from './fixtures/use-agent-cms-form';
+import {
+  activatedVersion,
+  createdCodeAgent,
+  latestDraftAgentVersion,
+  noAgentVersions,
+  oneUnpublishedAgentVersion,
+  productionMoveConflict,
+  publishedCodeAgent,
+} from './fixtures/use-agent-cms-form';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -56,6 +65,28 @@ const captureCreateBody = (sink: { body: Record<string, unknown> | null }) =>
       if (!isRecord(body)) throw new Error('Expected create-stored-agent request body to be an object');
       sink.body = body;
       return HttpResponse.json(createdCodeAgent);
+    }),
+  );
+
+type ActivationRequestSink = { bodies: ActivateAgentVersionOptions[] };
+
+const readActivationOptions = async (request: Request): Promise<ActivateAgentVersionOptions> => {
+  const body: unknown = await request.json();
+  if (!isRecord(body)) throw new Error('Expected activate-version request body to be an object');
+
+  const expectedActiveVersionId = body.expectedActiveVersionId;
+  if (expectedActiveVersionId !== null && typeof expectedActiveVersionId !== 'string') {
+    throw new Error('Expected activate-version request to include the observed active version');
+  }
+
+  return { expectedActiveVersionId };
+};
+
+const captureActivationBody = (versionId: string, sink: ActivationRequestSink) =>
+  server.use(
+    http.post(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions/${versionId}/activate`, async ({ request }) => {
+      sink.bodies.push(await readActivationOptions(request));
+      return HttpResponse.json({ ...activatedVersion, activeVersionId: versionId });
     }),
   );
 
@@ -394,12 +425,10 @@ describe('useAgentCmsForm — blocksWouldPreventSave guard', () => {
       const sink: { body: Record<string, unknown> | null } = { body: null };
       captureCreateBody(sink);
 
-      let activationRequested = false;
+      const activationSink: ActivationRequestSink = { bodies: [] };
+      captureActivationBody('v1', activationSink);
       server.use(
-        http.post(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions/v1/activate`, () => {
-          activationRequested = true;
-          return HttpResponse.json({ success: true, message: 'Version activated', activeVersionId: 'v1' });
-        }),
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => HttpResponse.json(publishedCodeAgent)),
       );
 
       const { result } = renderHook(
@@ -428,9 +457,120 @@ describe('useAgentCmsForm — blocksWouldPreventSave guard', () => {
 
       // Publishing a specific version bypasses the guard: the activation request
       // was sent, no create request happened, and no guard toast fired.
-      await waitFor(() => expect(activationRequested).toBe(true));
+      await waitFor(() => expect(activationSink.bodies).toHaveLength(1));
+      expect(activationSink.bodies[0]).toEqual({ expectedActiveVersionId: 'version-active' });
       expect(sink.body).toBeNull();
       expect(toastError).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('useAgentCmsForm — production activation precondition', () => {
+  describe('when the first stored override is published', () => {
+    it('activates its new version against the server-observed empty production pointer', async () => {
+      captureCreateBody({ body: null });
+      const activationSink: ActivationRequestSink = { bodies: [] };
+      captureActivationBody('version-1', activationSink);
+      server.use(
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => HttpResponse.json(createdCodeAgent)),
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions`, () =>
+          HttpResponse.json(oneUnpublishedAgentVersion),
+        ),
+      );
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: AGENT_ID,
+            dataSource,
+            isCodeAgentOverride: true,
+            hasStoredOverride: false,
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      await act(async () => {
+        await result.current.handlePublish();
+      });
+
+      expect(activationSink.bodies).toEqual([{ expectedActiveVersionId: null }]);
+    });
+  });
+
+  describe('when the latest saved version is newer than production', () => {
+    it('activates the draft against the server-observed production version', async () => {
+      const activationSink: ActivationRequestSink = { bodies: [] };
+      captureActivationBody('version-target', activationSink);
+      server.use(
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => HttpResponse.json(publishedCodeAgent)),
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions`, () =>
+          HttpResponse.json(latestDraftAgentVersion),
+        ),
+      );
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: AGENT_ID,
+            dataSource,
+            isCodeAgentOverride: true,
+            hasStoredOverride: true,
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      let publishSucceeded: boolean | undefined;
+      await act(async () => {
+        publishSucceeded = await result.current.handlePublish();
+      });
+
+      expect(activationSink.bodies).toEqual([{ expectedActiveVersionId: 'version-active' }]);
+      expect(publishSucceeded).toBe(true);
+    });
+  });
+
+  describe('when production changes after a historical version was selected', () => {
+    it('reports the conflict after one activation request without retrying', async () => {
+      const onSuccess = vi.fn();
+      const activationSink: ActivationRequestSink = { bodies: [] };
+      server.use(
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => HttpResponse.json(publishedCodeAgent)),
+        http.post(
+          `${BASE_URL}/api/stored/agents/${AGENT_ID}/versions/version-target/activate`,
+          async ({ request }) => {
+            activationSink.bodies.push(await readActivationOptions(request));
+            return HttpResponse.json(productionMoveConflict, { status: 409 });
+          },
+        ),
+      );
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: AGENT_ID,
+            dataSource,
+            isCodeAgentOverride: true,
+            hasStoredOverride: true,
+            onSuccess,
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      let publishSucceeded: boolean | undefined;
+      await act(async () => {
+        publishSucceeded = await result.current.handlePublish('version-target');
+      });
+
+      expect(activationSink.bodies).toEqual([{ expectedActiveVersionId: 'version-active' }]);
+      expect(publishSucceeded).toBe(false);
+      expect(onSuccess).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledTimes(1);
+      expect(toastError).toHaveBeenCalledWith(expect.stringContaining('LABEL_MOVE_CONFLICT'));
     });
   });
 });

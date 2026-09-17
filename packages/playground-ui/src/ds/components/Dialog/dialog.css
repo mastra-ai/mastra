@@ -68,3 +68,10 @@
 .dialog-content-anim[data-closed] {
   animation: dialog-content-out 180ms cubic-bezier(0.5, 0, 0.75, 0);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-overlay-anim,
+  .dialog-content-anim {
+    animation: none !important;
+  }
+}

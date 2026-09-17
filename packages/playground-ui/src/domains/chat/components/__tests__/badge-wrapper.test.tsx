@@ -92,7 +92,17 @@ describe('BadgeWrapper', () => {
 
   it('plays the enter animation only for badges that arrive while the chat is running', () => {
     render(
-      <ChatRunningContext.Provider value={{ isRunning: true, cancelRun: () => {}, canSendWhileStreaming: false }}>
+      <ChatRunningContext.Provider
+        value={{
+          isRunning: true,
+          isRunningStream: true,
+          cancelRun: () => {},
+          canSendWhileStreaming: false,
+          canStartRun: true,
+          canContinueRun: true,
+          isContinuationBlocked: false,
+        }}
+      >
         <BadgeWrapper title="Live tool" data-testid="live-badge" />
       </ChatRunningContext.Provider>,
     );

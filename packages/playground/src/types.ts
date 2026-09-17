@@ -1,5 +1,5 @@
 import type { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-import type { GetAgentResponse } from '@mastra/client-js';
+import type { GetAgentResponse, VersionOverrides } from '@mastra/client-js';
 import type { LLMStepResult } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { AiMessageType } from '@mastra/core/memory';
@@ -75,10 +75,30 @@ export interface AgentSettingsType {
   modelSettings: ModelSettings;
 }
 
+export type AgentRunVersionSelectorErrorCode =
+  | 'INVALID_VERSION_SELECTOR'
+  | 'ENTITY_NOT_FOUND'
+  | 'VERSION_NOT_FOUND'
+  | 'LABEL_NOT_FOUND'
+  | 'VERSION_LABEL_INTEGRITY_ERROR'
+  | 'VERSION_LABELS_UNSUPPORTED';
+
 export interface ChatProps {
   agentId: string;
   agentName?: string;
   modelVersion?: string;
+  /** Canonical selectors used only when starting a new run. */
+  versions?: VersionOverrides;
+  /** Whether Studio has a valid explicit selector for the next new run. */
+  canStartRun?: boolean;
+  runBlockedReason?: string;
+  /** Whether an already-active signal-stream run may accept another user turn. */
+  canContinueRun?: boolean;
+  continuationBlockedReason?: string;
+  /** Reports a stable selector failure so the caller can fail the next run closed. */
+  onRunVersionSelectorError?: (code: AgentRunVersionSelectorErrorCode) => void;
+  /** Reports a live authorization rejection so cached access can be refreshed and failed closed. */
+  onRunAuthorizationError?: () => void;
   agentVersionId?: string;
   supportsMemory?: boolean;
   threadId: string;

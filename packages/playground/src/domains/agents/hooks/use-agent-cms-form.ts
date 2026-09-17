@@ -27,6 +27,8 @@ import {
   type PromptBlockPublicationStatus,
   type UnresolvedPromptBlock,
 } from '../utils/instruction-blocks-runtime';
+import { refreshAgentVersionMutationState } from './agent-version-mutation-cache';
+import { invalidateAgentVersionState } from './agent-version-query-keys';
 import { useStoredAgentMutations } from './use-stored-agents';
 import { usePlaygroundStore } from '@/store/playground-store';
 
@@ -92,8 +94,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     form.reset(initialValues);
 
     const mcpClientRecord = options.dataSource.mcpClients as
-      | Record<string, { tools?: Record<string, { description?: string }> }>
-      | undefined;
+      Record<string, { tools?: Record<string, { description?: string }> }> | undefined;
     const ids = Object.keys(mcpClientRecord ?? {});
     if (ids.length === 0) return;
 
@@ -413,7 +414,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         const isValid = await form.trigger();
         if (!isValid) {
           toast.error('Please fill in all required fields');
-          return;
+          return false;
         }
       }
 
@@ -421,12 +422,19 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       setIsSubmitting(true);
 
       try {
-        if (!publishVersionId && (await blocksWouldPreventSave(values))) return;
+        if (!publishVersionId && (await blocksWouldPreventSave(values))) return false;
 
         if (isEdit) {
           if (publishVersionId) {
             // Publishing a specific version (e.g. an older read-only version)
-            await client.getStoredAgent(options.agentId).activateVersion(publishVersionId);
+            const agentDetails = await client.getStoredAgent(options.agentId).details(requestContext);
+            await client.getStoredAgent(options.agentId).activateVersion(
+              {
+                versionId: publishVersionId,
+                expectedActiveVersionId: agentDetails.activeVersionId ?? null,
+              },
+              requestContext,
+            );
           } else if (needsCreate) {
             // First publish for a code agent — create and immediately publish
             const sharedParams = await buildSharedParams(values);
@@ -440,40 +448,50 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
             setOverrideCreated(true);
 
             // Now activate the first version
-            const versionsResponse = await client
-              .getStoredAgent(options.agentId)
-              .listVersions({ orderBy: { field: 'createdAt', direction: 'DESC' }, perPage: 1 });
+            const [agentDetails, versionsResponse] = await Promise.all([
+              client.getStoredAgent(options.agentId).details(requestContext),
+              client
+                .getStoredAgent(options.agentId)
+                .listVersions({ orderBy: { field: 'createdAt', direction: 'DESC' }, perPage: 1 }, requestContext),
+            ]);
             const latestVersion = versionsResponse.versions[0];
             if (latestVersion) {
-              await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
+              await client.getStoredAgent(options.agentId).activateVersion(
+                {
+                  versionId: latestVersion.id,
+                  expectedActiveVersionId: agentDetails.activeVersionId ?? null,
+                },
+                requestContext,
+              );
             }
           } else {
             // Check if there's an unpublished draft version to activate
             const [agentDetails, versionsResponse] = await Promise.all([
-              client.getStoredAgent(options.agentId).details(),
+              client.getStoredAgent(options.agentId).details(requestContext),
               client
                 .getStoredAgent(options.agentId)
-                .listVersions({ orderBy: { field: 'createdAt', direction: 'DESC' }, perPage: 1 }),
+                .listVersions({ orderBy: { field: 'createdAt', direction: 'DESC' }, perPage: 1 }, requestContext),
             ]);
 
             const latestVersion = versionsResponse.versions[0];
             if (!latestVersion || latestVersion.id === agentDetails.activeVersionId) {
-              toast.error('No draft changes to publish. Save a draft first.');
-              return;
+              toast.error('No draft changes to promote. Save a draft first.');
+              return false;
             }
 
-            await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
+            await client.getStoredAgent(options.agentId).activateVersion(
+              {
+                versionId: latestVersion.id,
+                expectedActiveVersionId: agentDetails.activeVersionId ?? null,
+              },
+              requestContext,
+            );
           }
 
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] }),
-            queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] }),
-            queryClient.invalidateQueries({ queryKey: ['agent', agentId] }),
-            queryClient.invalidateQueries({ queryKey: ['agents'] }),
-            queryClient.invalidateQueries({ queryKey: ['stored-agents'] }),
-          ]);
-          toast.success('Agent published');
+          await invalidateAgentVersionState(queryClient, options.agentId);
+          toast.success('Production updated');
           options.onSuccess(options.agentId);
+          return true;
         } else {
           const sharedParams = await buildSharedParams(values);
           const memoryBase = values.memory?.enabled
@@ -495,10 +513,15 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           const created = await createStoredAgent.mutateAsync(createParams);
           toast.success('Agent created successfully');
           options.onSuccess(created.id);
+          return true;
         }
       } catch (error) {
-        const action = isEdit ? 'publish' : 'create';
+        if (isEdit && agentId) {
+          refreshAgentVersionMutationState(queryClient, agentId, error);
+        }
+        const action = isEdit ? 'update production for' : 'create';
         toast.error(`Failed to ${action} agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return false;
       } finally {
         setIsSubmitting(false);
       }
@@ -516,6 +539,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       buildMemoryParams,
       queryClient,
       blocksWouldPreventSave,
+      requestContext,
     ],
   );
 

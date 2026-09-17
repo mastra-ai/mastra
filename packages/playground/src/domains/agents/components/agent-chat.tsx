@@ -14,6 +14,13 @@ export const AgentChat = ({
   memory,
   refreshThreadList,
   modelVersion,
+  versions,
+  canStartRun,
+  runBlockedReason,
+  canContinueRun,
+  continuationBlockedReason,
+  onRunVersionSelectorError,
+  onRunAuthorizationError,
   agentVersionId,
   supportsMemory,
   modelList,
@@ -71,6 +78,13 @@ export const AgentChat = ({
       agentId={agentId}
       agentName={agentName}
       modelVersion={modelVersion}
+      versions={versions}
+      canStartRun={canStartRun}
+      runBlockedReason={runBlockedReason}
+      canContinueRun={canContinueRun}
+      continuationBlockedReason={continuationBlockedReason}
+      onRunVersionSelectorError={onRunVersionSelectorError}
+      onRunAuthorizationError={onRunAuthorizationError}
       agentVersionId={agentVersionId}
       supportsMemory={supportsMemory}
       threadId={threadId}

@@ -97,12 +97,12 @@ describe('AgentDetailHeaderActions', () => {
     await waitFor(() => expect(screen.queryByText('Edit')).toBeNull());
   });
 
-  it('shows the Edit button for stored agents when the user can create agents', async () => {
+  it('leaves stored-agent editing navigation in the shared tabs instead of duplicating it in the header', async () => {
     (window as unknown as Record<string, unknown>).MASTRA_EXPERIMENTAL_UI = 'true';
     installHandlers(storedAgent);
     renderActions();
 
-    const edit = await screen.findByText('Edit');
-    expect(edit.closest('a')?.getAttribute('href')).toBe(`/cms/agents/${AGENT_ID}`);
+    await screen.findByTestId('agent-entity-header-share');
+    expect(screen.queryByRole('link', { name: 'Edit' })).toBeNull();
   });
 });
