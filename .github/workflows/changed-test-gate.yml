@@ -153,7 +153,7 @@ jobs:
             search_dir="$(dirname "$file")"
 
             while [ "$search_dir" != "." ] && [ "$search_dir" != "/" ]; do
-              for support_file in package.json vitest.config.ts vitest.config.mts; do
+              for support_file in package.json vitest.config.ts vitest.config.mts vitest.config.js vitest.config.mjs; do
                 candidate="$search_dir/$support_file"
                 if [ ! -f "$candidate" ] && git cat-file -e "FETCH_HEAD:$candidate" 2>/dev/null; then
                   git checkout FETCH_HEAD -- "$candidate"
@@ -180,7 +180,7 @@ jobs:
             search_dir="$(dirname "$file")"
 
             while [ "$search_dir" != "." ] && [ "$search_dir" != "/" ]; do
-              if [ -f "$search_dir/vitest.config.ts" ] || [ -f "$search_dir/vitest.config.mts" ]; then
+              if [ -f "$search_dir/vitest.config.ts" ] || [ -f "$search_dir/vitest.config.mts" ] || [ -f "$search_dir/vitest.config.js" ] || [ -f "$search_dir/vitest.config.mjs" ]; then
                 test_dir="$search_dir"
                 break
               fi
