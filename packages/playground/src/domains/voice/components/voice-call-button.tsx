@@ -19,7 +19,7 @@ export function VoiceCallButtonView({ status, available, onStart, onStop }: Voic
         aria-label="Start voice call"
         aria-disabled={!available || undefined}
         className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-        tooltip={available ? 'Start voice call' : 'Configure @mastra/livekit to start voice calls.'}
+        tooltip={available ? 'Speak with this agent' : 'Configure @mastra/livekit to start voice calls.'}
         data-testid="voice-call-button"
         onClick={available ? onStart : undefined}
       >
@@ -28,7 +28,14 @@ export function VoiceCallButtonView({ status, available, onStart, onStop }: Voic
     );
   if (status === 'connecting')
     return (
-      <Button variant="default" size="icon-md" type="button" tooltip="Connecting…" data-testid="voice-call-button">
+      <Button
+        variant="default"
+        size="icon-md"
+        type="button"
+        aria-label="Connecting"
+        tooltip="Voice call connection in progress"
+        data-testid="voice-call-button"
+      >
         <Loader2 className="text-neutral3 size-5 motion-safe:animate-spin" />
       </Button>
     );
@@ -37,7 +44,8 @@ export function VoiceCallButtonView({ status, available, onStart, onStop }: Voic
       variant="default"
       size="icon-md"
       type="button"
-      tooltip="End voice call"
+      aria-label="End voice call"
+      tooltip="Stop the current voice call"
       data-testid="voice-call-button"
       onClick={onStop}
     >

@@ -2,7 +2,7 @@ import { jsonLanguage } from '@codemirror/lang-json';
 import { EditorView } from '@codemirror/view';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { modelProviderOptionsSchema } from './provider-options';
 import type { ModelSettingsValues } from './types';
 import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
@@ -24,6 +24,7 @@ export const AdvancedModelSettings = ({ canEdit = true, value, onChange }: Advan
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const pendingFormat = useRef<AbortController | undefined>(undefined);
   const fieldId = useId();
   const theme = useCodemirrorTheme();
 
@@ -32,7 +33,9 @@ export const AdvancedModelSettings = ({ canEdit = true, value, onChange }: Advan
   const providerOptionsStr = JSON.stringify(value.providerOptions ?? {});
 
   useEffect(() => {
-    let cancelled = false;
+    pendingFormat.current?.abort();
+    const controller = new AbortController();
+    pendingFormat.current = controller;
     const formatSavedProviderOptions = async () => {
       if (!isValidJson(providerOptionsStr)) {
         setError('Invalid JSON');
@@ -40,23 +43,26 @@ export const AdvancedModelSettings = ({ canEdit = true, value, onChange }: Advan
       }
 
       const formatted = await formatJSON(providerOptionsStr);
-      if (!cancelled) setProviderOptionsValue(formatted);
+      if (!controller.signal.aborted) setProviderOptionsValue(formatted);
     };
 
     void formatSavedProviderOptions();
     return () => {
-      cancelled = true;
+      pendingFormat.current?.abort();
     };
   }, [providerOptionsStr]);
 
   const formatProviderOptions = async () => {
+    pendingFormat.current?.abort();
+    const controller = new AbortController();
+    pendingFormat.current = controller;
     setError(null);
     if (!isValidJson(providerOptionsValue)) {
       setError('Invalid JSON');
       return;
     }
     const formatted = await formatJSON(providerOptionsValue);
-    setProviderOptionsValue(formatted);
+    if (!controller.signal.aborted) setProviderOptionsValue(formatted);
   };
 
   const saveProviderOptions = async () => {
@@ -253,7 +259,10 @@ export const AdvancedModelSettings = ({ canEdit = true, value, onChange }: Advan
             id={`${fieldId}-provider-options`}
             aria-label="Provider Options"
             value={providerOptionsValue}
-            onChange={setProviderOptionsValue}
+            onChange={(draft: string) => {
+              pendingFormat.current?.abort();
+              setProviderOptionsValue(draft);
+            }}
             theme={theme}
             extensions={[jsonLanguage, EditorView.contentAttributes.of({ 'aria-label': 'Provider Options' })]}
             readOnly={!canEdit}

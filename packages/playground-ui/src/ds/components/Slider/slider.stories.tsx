@@ -46,9 +46,19 @@ export const ControlledScalar: Story = {
 export const WithRange: Story = {
   args: {
     defaultValue: [25, 75],
+    getAriaLabel: index => (index === 0 ? 'Minimum' : 'Maximum'),
     max: 100,
     step: 1,
     className: 'w-[240px]',
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const minimum = canvas.getByRole('slider', { name: 'Minimum' });
+    const maximum = canvas.getByRole('slider', { name: 'Maximum' });
+    minimum.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await expect(minimum).toHaveAttribute('aria-valuenow', '26');
+    await expect(maximum).toHaveAttribute('aria-valuenow', '75');
   },
 };
 
