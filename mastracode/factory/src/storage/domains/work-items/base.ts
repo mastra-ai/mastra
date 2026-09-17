@@ -157,6 +157,8 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'source_repository_missing',
   'unsupported_provider_item',
   'notification_delivery_failed',
+  'run_terminal_event_missing',
+  'skill_delivery_ambiguous',
   'run_overdue',
   'repository_git_missing',
   'repository_egress_blocked',

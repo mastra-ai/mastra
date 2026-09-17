@@ -53,7 +53,7 @@ function buildArgs(codemodPath: string, targetPath: string, options: TransformOp
   }
 
   if (options.verbose) {
-    args.push('--verbose');
+    args.push('--verbose=2');
   }
 
   if (options.jscodeshift) {

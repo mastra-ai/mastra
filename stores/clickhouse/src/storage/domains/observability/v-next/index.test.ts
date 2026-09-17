@@ -15,7 +15,12 @@ import { createClient } from '@clickhouse/client';
 import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import { parseTraceQueryRequest, planTraceQuery, TraceQueryExecutionError } from '@mastra/core/storage';
+import {
+  parseTraceQueryRequest,
+  planTraceQuery,
+  TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
+} from '@mastra/core/storage';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -145,14 +150,38 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
     try {
       await expect(
-        runWithClickHouseTraceQueryTimeout(client, 10, {
-          query: 'SELECT sleep(0.1)',
-          query_params: {},
-        }),
+        runWithClickHouseTraceQueryTimeout(
+          client,
+          { timeoutMs: 10 },
+          {
+            query: 'SELECT sleep(0.1)',
+            query_params: {},
+          },
+        ),
       ).rejects.toBeInstanceOf(TraceQueryExecutionError);
 
       const result = await client.query({ query: 'SELECT 1 AS value', format: 'JSONEachRow' });
       expect(await result.json<{ value: number }>()).toEqual([{ value: 1 }]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('reports discovery memory exhaustion without returning partial rows', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+
+    try {
+      await expect(
+        runWithClickHouseTraceQueryTimeout(
+          client,
+          { timeoutMs: 5_000, memoryLimitBytes: 1 },
+          { query: 'SELECT number, count() FROM numbers(1000000) GROUP BY number', query_params: {} },
+        ),
+      ).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
     } finally {
       await client.close();
     }
@@ -254,7 +283,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         if (expectPrimaryKey) expect(explain).toContain('PrimaryKey');
 
         const queryId = `trace-query-perf-${randomUUID()}`;
-        await runWithClickHouseTraceQueryTimeout(client, 15_000, compiled, queryId);
+        await runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 15_000 }, compiled, queryId);
         await client.command({ query: 'SYSTEM FLUSH LOGS' });
         const logResult = await client.query({
           query: `SELECT read_rows AS readRows, read_bytes AS readBytes
@@ -4601,6 +4630,11 @@ LIMIT 1`,
       expect(stmts).toContain('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 60 DAY');
     });
 
+    it('buildRetentionDDL adds a deletion-request TTL when every signal is bounded', () => {
+      const stmts = buildRetentionDDL({ tracing: 30, logs: 7, metrics: 14, scores: 90, feedback: 60 });
+      expect(stmts).toContain('ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 120 DAY');
+    });
+
     it('buildRetentionDDL skips zero, negative, and non-numeric values', () => {
       const stmts = buildRetentionDDL({
         tracing: 0,
@@ -4609,8 +4643,7 @@ LIMIT 1`,
         scores: undefined,
         feedback: 10,
       } as any);
-      expect(stmts).toHaveLength(1);
-      expect(stmts[0]).toBe('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 10 DAY');
+      expect(stmts).toEqual(['ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 10 DAY']);
     });
 
     it('buildRetentionDDL floors fractional days', () => {
@@ -4662,7 +4695,7 @@ LIMIT 1`,
 
     // --- Integration tests: retention defaults and configured TTLs ---
 
-    it('creates score and feedback tables without TTL by default and applies configured retention', async () => {
+    it('creates signal and deletion-request tables without TTL by default and retrofits configured retention', async () => {
       const database = `mastra_retention_${Date.now()}`;
       const connection = {
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -4677,7 +4710,7 @@ LIMIT 1`,
         const storageWithoutRetention = new ObservabilityStorageClickhouseVNext({ client });
         await storageWithoutRetention.init();
 
-        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS]) {
+        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS, TABLE_DELETION_REQUESTS]) {
           const result = await client.query({ query: `SHOW CREATE TABLE ${table}`, format: 'TabSeparatedRaw' });
           expect(await result.text(), `${table} should not have a default TTL`).not.toContain('TTL');
         }
@@ -4686,7 +4719,7 @@ LIMIT 1`,
           client,
           retention: { scores: 30, feedback: 45 },
         });
-        await storageWithRetention.init();
+        await storageWithRetention.applyRetention();
 
         const expectedTTLs: Record<string, string> = {
           [TABLE_SCORE_EVENTS]: 'timestamp + toIntervalDay(30)',
@@ -4696,6 +4729,12 @@ LIMIT 1`,
           const result = await client.query({ query: `SHOW CREATE TABLE ${table}`, format: 'TabSeparatedRaw' });
           expect(await result.text(), `${table} should use configured retention`).toContain(expectedTTLs[table]!);
         }
+
+        const deletionRequestsResult = await client.query({
+          query: `SHOW CREATE TABLE ${TABLE_DELETION_REQUESTS}`,
+          format: 'TabSeparatedRaw',
+        });
+        expect(await deletionRequestsResult.text()).not.toContain('TTL requestedAt');
       } finally {
         await client.close();
         await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database}` });
@@ -4718,6 +4757,7 @@ LIMIT 1`,
         'mastra_metric_events',
         'mastra_score_events',
         'mastra_feedback_events',
+        'mastra_deletion_requests',
       ];
 
       try {
@@ -4737,6 +4777,7 @@ LIMIT 1`,
           mastra_metric_events: 'timestamp + toIntervalDay(14)',
           mastra_score_events: 'timestamp + toIntervalDay(90)',
           mastra_feedback_events: 'timestamp + toIntervalDay(60)',
+          mastra_deletion_requests: 'requestedAt + toIntervalDay(120)',
         };
 
         for (const name of signalTables) {

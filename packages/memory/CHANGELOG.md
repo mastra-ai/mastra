@@ -1,5 +1,61 @@
 # @mastra/memory
 
+## 1.31.0-alpha.2
+
+### Minor Changes
+
+- Added `skillResultRedactor`, a ready-made `beforeObservation` hook that keeps Agent Skills results out of Observational Memory. ([#24220](https://github.com/mastra-ai/mastra/pull/24220))
+
+  The built-in skill tools (`skill`, `skill_search`, `skill_read`) return a skill's instructions or file contents as their result. Without redaction, the Observer re-observes that text every time a skill is used. `skillResultRedactor()` replaces those results with a placeholder before the Observer runs. The tool call is kept, so the Observer still records which skill was used and what it was called with.
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+  import { skillResultRedactor } from '@mastra/memory/hooks';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        hooks: {
+          beforeObservation: skillResultRedactor(),
+        },
+      },
+    },
+  });
+  ```
+
+  Pass `toolNames` to redact a different set of tools. Related to [#24152](https://github.com/mastra-ai/mastra/issues/24152).
+
+### Patch Changes
+
+- Observational Memory no longer applies its temperature defaults to models that don't support temperature. Fixes #24060. ([#24107](https://github.com/mastra-ai/mastra/pull/24107))
+
+  The Observer (`0.3`) and Reflector (`0`) defaults are now applied only when the resolved model is known to support temperature, on both observation and reflection calls. Models without known temperature support omit the parameter instead of receiving a value that fails the request and aborts the user's turn. Explicit `modelSettings.temperature` values are always preserved.
+
+  Token-routed models selected with `ModelByInputTokens` now receive the `maxOutputTokens: 100_000` default. Previously only the built-in default model selection received it, which left routed models without an output-token budget.
+
+- Fixed reflected observation ranges so they are never saved in reverse order. ([#23897](https://github.com/mastra-ai/mastra/pull/23897))
+
+  Preserved every source range a reflected section actually drew from, instead of only the one named in its heading.
+
+  Kept message ID ranges compact so they do not grow with each reflection.
+
+- Fixed `recall` returning message content from outside the configured retrieval scope when called with `partIndex`. ([#23622](https://github.com/mastra-ai/mastra/pull/23622))
+
+  `recall({ mode: "messages", cursor, partIndex })` resolved the cursor message without the ownership checks that the cursor-only path applies. With thread-scoped retrieval (`retrieval: { scope: "thread" }`), an agent that passed a message ID belonging to another resource or another thread received that message part in full. The identical call without `partIndex` was already refused, so `partIndex` was strictly more permissive than browsing.
+
+  **What changes**
+
+  - `partIndex` now respects the retrieval scope. An out-of-scope cursor fails with `Could not resolve cursor message` instead of returning content.
+  - In thread scope, a cursor belonging to another thread fails with the same generic `Could not resolve cursor message` error as an unknown cursor, so probing message IDs reveals nothing about threads the caller may not browse. Resource scope keeps the cross-thread guidance naming the other thread, where browsing another thread of the same resource is supported.
+
+  Resource-scoped retrieval can still browse another thread of the same resource and continue reading a truncated part there.
+
+  Fixes #21863
+
+- Updated dependencies [[`b246a1b`](https://github.com/mastra-ai/mastra/commit/b246a1ba0cec1ca2781c661a6b90c777520b64c7), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`b2942c0`](https://github.com/mastra-ai/mastra/commit/b2942c0f3c99dd1edba9dc8c2c17bfa55c851ae8), [`99fab39`](https://github.com/mastra-ai/mastra/commit/99fab399c35952ae15427ea64845d4762e9ec144), [`d65d4d4`](https://github.com/mastra-ai/mastra/commit/d65d4d40a24a482d5b0ee83d9bab6042702ca1be), [`4fb5ae9`](https://github.com/mastra-ai/mastra/commit/4fb5ae9e2cba9b14ba6c5cef0894e49bccf6f607), [`e581e66`](https://github.com/mastra-ai/mastra/commit/e581e66e14bb1b2863698aecca7324fbf1ec4ff5), [`a3f8f05`](https://github.com/mastra-ai/mastra/commit/a3f8f05ecb60c52056c590325e3821ecfc85afe3), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`9cd9b4e`](https://github.com/mastra-ai/mastra/commit/9cd9b4eca69a3db0a0c415d0dcedf266cc7d5ec6), [`3589cde`](https://github.com/mastra-ai/mastra/commit/3589cde4ea8dd210df6b9a2355a3e568210965fc), [`783e48a`](https://github.com/mastra-ai/mastra/commit/783e48aba82489a085230f6b8539a9fb338c326b), [`07a81c8`](https://github.com/mastra-ai/mastra/commit/07a81c8be0cbdb5413ffa5c289d32765d80f4ea4), [`07ff1b8`](https://github.com/mastra-ai/mastra/commit/07ff1b8eafbd9c7786ef77decc6be3b63497cfd9), [`0ca5d6d`](https://github.com/mastra-ai/mastra/commit/0ca5d6d58a24e73a364451660a5a8696883eba45)]:
+  - @mastra/core@1.68.0-alpha.3
+
 ## 1.31.0-alpha.1
 
 ### Patch Changes

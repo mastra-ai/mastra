@@ -1,11 +1,12 @@
+import { pathToFileURL } from 'node:url';
 import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
+import { resolveModule } from 'local-pkg';
 import { rollup } from 'rollup';
 import type { OutputChunk, Plugin, SourceMap } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import { hasRootExport } from '../../bundler/workspaceDependencies';
 import { mastraInternalAliasPlugin, mastraToolsAliasPlugin } from '../bundler';
 import { getPackageMetadata, getPackageRootPath } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
@@ -73,10 +74,18 @@ async function captureDependenciesToOptimize(
   projectRoot: string,
   {
     logger,
+    mastraEntry,
     shouldCheckTransitiveDependencies,
+    analyzeCache,
+    activeEntries,
   }: {
     logger: IMastraLogger;
+    mastraEntry: string;
     shouldCheckTransitiveDependencies: boolean;
+    /** Shared cache to avoid re-analyzing the same entry across recursive calls */
+    analyzeCache?: Map<string, AnalyzeEntryResult>;
+    /** Resolved entries currently being analyzed in this recursion path */
+    activeEntries: Set<string>;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -123,43 +132,58 @@ async function captureDependenciesToOptimize(
     });
   }
 
-  const processedWorkspaceDeps = new Set<string>();
+  const processedWorkspaceEntries = new Set<string>();
 
   /**
    * Recursively discovers transitive workspace dependencies from package manifests.
    */
-  function checkTransitiveDependencies(maxDepth = 10, currentDepth = 0) {
-    // Could be a circular dependency...
-    if (currentDepth >= maxDepth) {
-      logger.warn('Maximum dependency depth reached while checking transitive dependencies.');
-      return;
-    }
-
+  async function checkTransitiveDependencies() {
     // Make a copy so that we can safely iterate over it
     const depsSnapshot = new Map(depsToOptimize);
-    let hasAddedDeps = false;
 
     for (const [dep, meta] of depsSnapshot) {
       const pkgName = getPackageName(dep);
-      // We only care about workspace deps that we haven't already processed
-      if (!pkgName || !meta.isWorkspace || processedWorkspaceDeps.has(pkgName)) {
+      if (!pkgName || !meta.isWorkspace) {
         continue;
       }
 
-      processedWorkspaceDeps.add(pkgName);
+      const importerFile = output.facadeModuleId!.startsWith('\x00virtual:')
+        ? mastraEntry || projectRoot
+        : output.facadeModuleId!;
+      const importerPath = pathToFileURL(importerFile).href;
+      // Absolute path to the dependency using ESM-compatible resolution
+      const resolvedPath = resolveModule(dep, {
+        paths: [importerPath],
+      });
 
-      const workspaceInfo = workspaceMap.get(pkgName);
-      if (!workspaceInfo?.dependencies) {
+      if (!resolvedPath) {
+        logger.warn('Could not resolve path for workspace dependency', { dep });
         continue;
       }
 
-      for (const [innerDep, _innerDepVersion] of Object.entries(workspaceInfo.dependencies)) {
-        const innerWorkspaceInfo = workspaceMap.get(innerDep);
-        if (!innerWorkspaceInfo) {
-          continue;
-        }
+      const resolvedEntry = slash(resolvedPath);
+      if (processedWorkspaceEntries.has(resolvedEntry) || activeEntries.has(resolvedEntry)) {
+        continue;
+      }
 
-        if (!hasRootExport(innerWorkspaceInfo.exports)) {
+      processedWorkspaceEntries.add(resolvedEntry);
+
+      const analysis = await analyzeEntry({ entry: resolvedPath, isVirtualFile: false }, mastraEntry, {
+        workspaceMap,
+        projectRoot,
+        logger,
+        sourcemapEnabled: false,
+        shouldCheckTransitiveDependencies: true,
+        analyzeCache,
+        activeEntries,
+      });
+
+      if (!analysis?.dependencies) {
+        continue;
+      }
+
+      for (const [innerDep, innerMeta] of analysis.dependencies) {
+        if (!innerMeta.isWorkspace) {
           continue;
         }
 
@@ -167,29 +191,23 @@ async function captureDependenciesToOptimize(
         if (existingMeta) {
           depsToOptimize.set(innerDep, {
             ...existingMeta,
-            exports: existingMeta.exports.includes('*') ? existingMeta.exports : [...existingMeta.exports, '*'],
+            exports: [...new Set([...existingMeta.exports, ...innerMeta.exports])],
           });
           continue;
+        } else {
+          depsToOptimize.set(innerDep, {
+            exports: innerMeta.exports,
+            rootPath: slash(innerMeta.rootPath || ''),
+            isWorkspace: true,
+            version: innerMeta.version,
+          });
         }
-
-        depsToOptimize.set(innerDep, {
-          exports: ['*'],
-          rootPath: slash(innerWorkspaceInfo.location),
-          isWorkspace: true,
-          version: innerWorkspaceInfo.version,
-        });
-        hasAddedDeps = true;
       }
-    }
-
-    // Continue until no new deps are found
-    if (hasAddedDeps) {
-      checkTransitiveDependencies(maxDepth, currentDepth + 1);
     }
   }
 
   if (shouldCheckTransitiveDependencies) {
-    checkTransitiveDependencies();
+    await checkTransitiveDependencies();
   }
 
   // #tools is a generated dependency, we don't want our analyzer to handle it
@@ -263,6 +281,7 @@ export async function analyzeEntry(
     projectRoot,
     shouldCheckTransitiveDependencies = false,
     analyzeCache,
+    activeEntries: providedActiveEntries,
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
@@ -271,47 +290,72 @@ export async function analyzeEntry(
     shouldCheckTransitiveDependencies?: boolean;
     /** Shared cache to avoid re-analyzing the same entry across recursive calls */
     analyzeCache?: Map<string, AnalyzeEntryResult>;
+    /** Resolved entries currently being analyzed in this recursion path */
+    activeEntries?: Set<string>;
   },
 ): Promise<AnalyzeEntryResult> {
-  // Deduplicate: if this entry was already analyzed, return cached result
-  const cacheKey = isVirtualFile ? undefined : slash(entry);
-  if (cacheKey && analyzeCache?.has(cacheKey)) {
-    return analyzeCache.get(cacheKey)!;
+  const resolvedEntry = isVirtualFile ? undefined : slash(entry);
+  const effectiveAnalyzeCache = analyzeCache ?? new Map<string, AnalyzeEntryResult>();
+  // Transitive analysis produces a different result from direct analysis, so cache them separately.
+  const cacheKey = resolvedEntry
+    ? `${resolvedEntry}:${shouldCheckTransitiveDependencies ? 'transitive' : 'direct'}`
+    : undefined;
+  if (cacheKey && effectiveAnalyzeCache.has(cacheKey)) {
+    return effectiveAnalyzeCache.get(cacheKey)!;
   }
 
-  const optimizerBundler = await rollup({
-    logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
-    input: isVirtualFile ? '#entry' : entry,
-    treeshake: false,
-    preserveSymlinks: true,
-    plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled }),
-    external: DEPS_TO_IGNORE,
-  });
-
-  const { output } = await optimizerBundler.generate({
-    format: 'esm',
-    inlineDynamicImports: true,
-  });
-
-  await optimizerBundler.close();
-
-  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
-    logger,
-    shouldCheckTransitiveDependencies,
-  });
-
-  const result: AnalyzeEntryResult = {
-    dependencies: depsToOptimize,
-    output: {
-      code: output[0].code,
-      map: output[0].map as SourceMap,
-    },
-  };
-
-  // Cache the result so recursive calls for the same entry are instant
-  if (cacheKey && analyzeCache) {
-    analyzeCache.set(cacheKey, result);
+  const activeEntries = providedActiveEntries ?? new Set<string>();
+  const shouldTrackEntry = Boolean(resolvedEntry && !activeEntries.has(resolvedEntry));
+  if (resolvedEntry && shouldTrackEntry) {
+    activeEntries.add(resolvedEntry);
   }
 
-  return result;
+  try {
+    const optimizerBundler = await rollup({
+      logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
+      input: isVirtualFile ? '#entry' : entry,
+      treeshake: false,
+      preserveSymlinks: true,
+      plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled }),
+      external: DEPS_TO_IGNORE,
+    });
+
+    const { output } = await (async () => {
+      try {
+        return await optimizerBundler.generate({
+          format: 'esm',
+          inlineDynamicImports: true,
+        });
+      } finally {
+        await optimizerBundler.close();
+      }
+    })();
+
+    const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
+      logger,
+      mastraEntry,
+      shouldCheckTransitiveDependencies,
+      analyzeCache: effectiveAnalyzeCache,
+      activeEntries,
+    });
+
+    const result: AnalyzeEntryResult = {
+      dependencies: depsToOptimize,
+      output: {
+        code: output[0].code,
+        map: output[0].map as SourceMap,
+      },
+    };
+
+    // Cache the result so recursive calls for the same entry are instant
+    if (cacheKey) {
+      effectiveAnalyzeCache.set(cacheKey, result);
+    }
+
+    return result;
+  } finally {
+    if (resolvedEntry && shouldTrackEntry) {
+      activeEntries.delete(resolvedEntry);
+    }
+  }
 }

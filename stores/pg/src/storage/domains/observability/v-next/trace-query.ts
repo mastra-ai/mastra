@@ -89,6 +89,11 @@ const FEEDBACK_FIELDS = {
 const TRACE_SELECT = `
   r."traceId" AS "traceId",
   r."spanId" AS "rootSpanId",
+  r."name" AS "name",
+  r."entityId" AS "entityId",
+  r."parentSpanId" AS "parentSpanId",
+  r."metadata" AS "metadata",
+  r."input" AS "input",
   r."threadId" AS "threadId",
   r."resourceId" AS "resourceId",
   r."startedAt" AS "startedAt",
@@ -649,6 +654,12 @@ function isPostgresStatementTimeout(error: unknown): boolean {
   return candidate.code === '57014' && String(candidate.message ?? '').includes('statement timeout');
 }
 
+function isPostgresResourceLimit(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown };
+  return candidate.code === '53200' || candidate.code === '53400';
+}
+
 export async function runWithPostgresTraceQueryTimeout<T>(
   client: DbClient,
   timeoutMs: number,
@@ -662,6 +673,7 @@ export async function runWithPostgresTraceQueryTimeout<T>(
     });
   } catch (error) {
     if (isPostgresStatementTimeout(error)) throw new coreStorage.TraceQueryExecutionError();
+    if (isPostgresResourceLimit(error)) throw new coreStorage.TraceQueryResourceLimitError();
     throw error;
   }
 }
@@ -730,6 +742,12 @@ export async function queryTraces(
   const traces = visibleRows.map(row => ({
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: row.metadata ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),

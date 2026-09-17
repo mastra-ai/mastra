@@ -20,6 +20,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
+import { parseJson } from './helpers';
 
 type ParameterType = 'scalar' | 'timestamp';
 type FieldDefinition = { sql: string; parameterType: ParameterType };
@@ -86,6 +87,11 @@ const FEEDBACK_FIELDS = {
 const TRACE_SELECT = `
   r.traceId AS traceId,
   r.spanId AS rootSpanId,
+  r.name AS name,
+  r.entityId AS entityId,
+  r.parentSpanId AS parentSpanId,
+  r.metadata AS metadata,
+  r.input AS input,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -585,13 +591,29 @@ LIMIT ?`,
   };
 }
 
+function isDuckDBResourceLimit(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes('out of memory');
+}
+
+async function runDuckDBDiscoveryQuery(
+  db: DuckDBConnection,
+  query: CompiledDuckDBTraceQuery,
+): Promise<Record<string, unknown>[]> {
+  try {
+    return await db.query<Record<string, unknown>>(query.sql, query.values);
+  } catch (error) {
+    if (isDuckDBResourceLimit(error)) throw new coreStorage.TraceQueryResourceLimitError();
+    throw error;
+  }
+}
+
 export async function getTraceQueryObservedFields(
   db: DuckDBConnection,
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): Promise<TraceQueryObservedFieldsResult> {
   if (plan.predicateScope !== 'trace') return { observedFields: [], observedFieldsTruncated: false };
   const query = compileDuckDBTraceQueryObservedFields(plan);
-  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  const rows = await runDuckDBDiscoveryQuery(db, query);
   return {
     observedFields: rows
       .slice(0, plan.limit)
@@ -605,7 +627,7 @@ export async function getTraceQueryValues(
   plan: TrustedTraceQueryValuesPlan,
 ): Promise<GetTraceQueryValuesResponse> {
   const query = compileDuckDBTraceQueryValues(plan);
-  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  const rows = await runDuckDBDiscoveryQuery(db, query);
   return coreStorage.getTraceQueryValuesResponseSchema.parse({
     values: rows.slice(0, plan.limit).map(row => ({ value: String(row.value), count: Number(row.count) })),
     valuesTruncated: rows.length > plan.limit,
@@ -638,6 +660,12 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
   const traces = visibleRows.map(row => ({
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: parseJson(row.metadata) ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),

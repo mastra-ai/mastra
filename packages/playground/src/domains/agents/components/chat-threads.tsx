@@ -7,6 +7,7 @@ import {
   ThreadListItem,
   ThreadListItems,
   ThreadListNewItem,
+  ThreadListSeparator,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -80,6 +81,8 @@ export const ChatThreads = ({
             </Tooltip>
           )}
         </div>
+
+        <ThreadListSeparator />
 
         {threads.length === 0 ? (
           <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>
