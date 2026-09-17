@@ -338,20 +338,32 @@ export async function runTraceImport(
     }
   }
 
-  const target = createTarget(destination);
-  if (hasPendingUpload) {
-    ui.step('Uploading prepared traces');
-    try {
-      state.manifest = await uploadTraceImport({ directory: state.directory, target, signal: options.signal });
-    } catch (cause) {
-      throw resumableError(cause, state.manifest);
+  let verifier: TraceImportVerifier;
+  const isEmptyImport = state.manifest.counts.preparedTraces === 0 && state.manifest.counts.preparedSpans === 0;
+  if (isEmptyImport) {
+    verifier = {
+      projectId: destination.projectId,
+      readTrace: async () => {
+        throw new Error('An empty import has no trace to read back.');
+      },
+    };
+  } else {
+    const target = createTarget(destination);
+    verifier = target;
+    if (hasPendingUpload) {
+      ui.step('Uploading prepared traces');
+      try {
+        state.manifest = await uploadTraceImport({ directory: state.directory, target, signal: options.signal });
+      } catch (cause) {
+        throw resumableError(cause, state.manifest);
+      }
     }
   }
 
   ui.step('Verifying a sample through Mastra Platform');
   let report: TraceImportReport;
   try {
-    report = await verifyImport({ directory: state.directory, verifier: target, signal: options.signal });
+    report = await verifyImport({ directory: state.directory, verifier, signal: options.signal });
   } catch (cause) {
     throw resumableError(cause, state.manifest);
   }

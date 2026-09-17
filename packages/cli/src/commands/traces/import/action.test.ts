@@ -269,6 +269,30 @@ describe('runTraceImport', () => {
     expect(createTarget).not.toHaveBeenCalled();
   });
 
+  it('completes an empty import without creating a Platform target', async () => {
+    const createTarget = vi.fn(() => {
+      throw new Error('target should not be created');
+    });
+    const result = await runTraceImport(
+      { provider: 'langfuse', yes: true },
+      await dependencies({
+        resolveDestination: async () => ({ projectId: 'target-project', projectName: 'Target project' }),
+        createProvider: () => provider([]),
+        createTarget,
+      }),
+    );
+
+    expect(result.status).toBe('complete');
+    expect(result.report).toMatchObject({
+      phase: 'complete',
+      counts: { preparedTraces: 0, preparedSpans: 0 },
+      acknowledgedTraces: 0,
+      acknowledgedSpans: 0,
+      verification: { status: 'verified', sampledTraces: 0, verifiedTraces: 0, queryAttempts: 0 },
+    });
+    expect(createTarget).not.toHaveBeenCalled();
+  });
+
   it('leaves prepared data resumable when confirmation is declined', async () => {
     const cli = ui(false);
     const createTarget = vi.fn(() => target());
