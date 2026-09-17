@@ -75,6 +75,7 @@ export abstract class MCPClientsStorage extends VersionedStorageDomain<
   StorageListMCPClientsResolvedOutput
 > {
   protected readonly listKey = 'mcpClients';
+  protected readonly versionParentIdField = 'mcpClientId';
   protected readonly versionMetadataFields = [
     'id',
     'mcpClientId',

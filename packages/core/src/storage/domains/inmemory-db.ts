@@ -40,6 +40,7 @@ import type { PromptBlockVersion } from './prompt-blocks';
 import type { Schedule, ScheduleTrigger } from './schedules/base';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
 import type { SkillVersion } from './skills';
+import type { VersionLabelPointer } from './version-labels';
 import type { WorkflowDefinition } from './workflow-definitions';
 import type { WorkspaceVersion } from './workspaces';
 
@@ -71,6 +72,10 @@ export class InMemoryDB {
   readonly feedbackCursorIds = new Map<FeedbackRecord, number>();
   readonly agents = new Map<string, StorageAgentType>();
   readonly agentVersions = new Map<string, AgentVersion>();
+  /** Custom version-label pointers keyed by their normalized logical key. */
+  readonly versionLabels = new Map<string, VersionLabelPointer>();
+  /** Reverse index from an entity version to the primary pointer keys that target it. */
+  readonly versionLabelsByVersion = new Map<string, Set<string>>();
   readonly promptBlocks = new Map<string, StoragePromptBlockType>();
   readonly promptBlockVersions = new Map<string, PromptBlockVersion>();
   readonly scorerDefinitions = new Map<string, StorageScorerDefinitionType>();
@@ -149,6 +154,8 @@ export class InMemoryDB {
     this.feedbackCursorIds.clear();
     this.agents.clear();
     this.agentVersions.clear();
+    this.versionLabels.clear();
+    this.versionLabelsByVersion.clear();
     this.promptBlocks.clear();
     this.promptBlockVersions.clear();
     this.scorerDefinitions.clear();
