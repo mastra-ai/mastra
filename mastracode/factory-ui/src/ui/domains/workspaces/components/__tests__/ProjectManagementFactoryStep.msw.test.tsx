@@ -38,20 +38,10 @@ describe('ProjectManagementFactoryStep', () => {
     });
   });
 
-  describe('given Platform connect routes are mounted', () => {
-    it('offers each Platform provider inline without leaving the wizard', async () => {
+  describe('given the Jira connect route is mounted', () => {
+    it('offers Jira inline without leaving the wizard', async () => {
       server.use(
         http.get(`${TEST_BASE_URL}/web/integrations/platform/jira/connections`, () =>
-          HttpResponse.json({ connections: [] }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/integrations/platform/gitlab/connections`, () =>
-          HttpResponse.json({
-            connections: [
-              { id: 'gl-1', integrationId: 'gitlab-group', status: 'active', accountLabel: 'gitlab.com/acme' },
-            ],
-          }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`, () =>
           HttpResponse.json({ connections: [] }),
         ),
       );
@@ -59,13 +49,8 @@ describe('ProjectManagementFactoryStep', () => {
 
       expect(await screen.findByText('Also sync issues from')).toBeInTheDocument();
       const list = screen.getByRole('list');
-      // Unconnected providers offer a connect action…
       expect(within(list).getByText('Jira')).toBeInTheDocument();
-      expect(within(list).getByText('incident.io')).toBeInTheDocument();
-      expect(within(list).getAllByRole('button', { name: 'Connect' })).toHaveLength(2);
-      // …while a connected one shows the account and an add-another action.
-      expect(within(list).getByText('gitlab.com/acme')).toBeInTheDocument();
-      expect(within(list).getByRole('button', { name: 'Connect another' })).toBeInTheDocument();
+      expect(within(list).getByRole('button', { name: 'Connect' })).toBeInTheDocument();
     });
   });
 });

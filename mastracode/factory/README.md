@@ -380,7 +380,7 @@ const incidentio = new IncidentioIntegration(); // Reads INCIDENT_IO_API_KEY.
 const factory = new MastraFactory({ storage, integrations: [incidentio] });
 ```
 
-For a Mastra Platform connection, use `PlatformIncidentioIntegration`. It discovers the organization's `incident-io` connections at runtime via `/v2/connections?providerKey=incident-io` and proxies provider requests through `/v2/connections/{connectionId}/proxy`, supporting multiple connected accounts. `MastraFactory` installs it automatically when Platform credentials are present; an explicit integration with id `incidentio` takes precedence.
+For a Mastra Platform connection, use `PlatformIncidentioIntegration`. It proxies provider requests through `/v2/connections/{connectionId}/proxy` and reads `MASTRA_INCIDENT_IO_CONNECTION_ID` unless `connectionId` is passed to the constructor. `MastraFactory` installs it automatically when Platform credentials and that connection ID are present; an explicit integration with id `incidentio` takes precedence.
 
 ```typescript
 import { PlatformIncidentioIntegration } from '@mastra/factory/integrations/platform/incidentio/integration';

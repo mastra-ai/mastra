@@ -1,6 +1,6 @@
 /**
  * Browser-side helpers for connecting Platform-managed provider accounts
- * (Jira, GitLab, incident.io) without leaving Factory.
+ * without leaving Factory.
  *
  * The server's `/web/integrations/platform/*` routes mint short-lived Nango
  * connect/reconnect sessions with the deploy's Platform machine credentials;
@@ -13,7 +13,7 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira' | 'gitlab' | 'incident-io';
+export type PlatformConnectProviderId = 'jira';
 
 /** How the provider authorizes: OAuth consent popup or an API-key form. */
 export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
@@ -26,8 +26,6 @@ export interface PlatformConnectProviderMeta {
 
 export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, PlatformConnectProviderMeta> = {
   jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
-  gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
-  'incident-io': { id: 'incident-io', displayName: 'incident.io', authKind: 'apiKey' },
 };
 
 export interface PlatformProviderConnection {

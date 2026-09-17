@@ -3,9 +3,9 @@
  *
  * The consumer's deploy entry constructs deployment-specific config instances
  * (auth adapter, pubsub) and passes them here explicitly. The only provider
- * defaults constructed here are Platform GitHub, incident.io, Jira, and Linear
- * integrations when Platform credentials exist and the caller did not provide
- * those integrations.
+ * defaults constructed here are Platform GitHub, Jira, and Linear integrations
+ * when Platform credentials exist and the caller did not provide those
+ * integrations.
  *
  * `prepare()` resolves feature readiness, threads every dependency explicitly,
  * assembles the web routes/middleware, and returns the constructor args for
@@ -56,7 +56,6 @@ import { isValidGitRef } from './integrations/github/sandbox.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
-import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integration.js';
 import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.js';
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
@@ -405,10 +404,10 @@ export class MastraFactory {
       if (!integrations.some(integration => integration.id === 'github')) {
         integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
       }
-      if (!integrations.some(integration => integration.id === 'gitlab')) {
-        integrations.push(new PlatformGitLabIntegration());
-      }
-      if (!integrations.some(integration => integration.id === 'incidentio')) {
+      if (
+        process.env.MASTRA_INCIDENT_IO_CONNECTION_ID &&
+        !integrations.some(integration => integration.id === 'incidentio')
+      ) {
         integrations.push(new PlatformIncidentioIntegration());
       }
       if (!integrations.some(integration => integration.id === 'jira')) {

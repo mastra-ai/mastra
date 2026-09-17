@@ -45,34 +45,30 @@ function buildApp(user: TestAuthUser | null, fetchImpl: typeof fetch, options: {
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 describe('platform connect routes', () => {
-  it('lists connections for a provider, including auth variants, and hides other providers', async () => {
+  it('lists Jira connections and hides other providers', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
       json({
-        connections: [
-          connection('conn-a', 'gitlab'),
-          connection('conn-b', 'gitlab-group-token', 'needs_reauth'),
-          connection('conn-c', 'jira'),
-        ],
+        connections: [connection('conn-a', 'github'), connection('conn-b', 'jira', 'needs_reauth')],
       }),
     );
     const app = buildApp(org1(), fetchImpl);
 
-    const response = await app.request('/web/integrations/platform/gitlab/connections');
+    const response = await app.request('/web/integrations/platform/jira/connections');
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      connections: [expect.objectContaining({ id: 'conn-a' }), expect.objectContaining({ id: 'conn-b' })],
+      connections: [expect.objectContaining({ id: 'conn-b' })],
     });
   });
 
-  it('mints a connect session with the provider integration id', async () => {
+  it('mints a connect session with the Jira integration id', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json(SESSION, 201));
     const app = buildApp(org1(), fetchImpl);
 
-    const response = await app.request('/web/integrations/platform/incident-io/connect-session', { method: 'POST' });
+    const response = await app.request('/web/integrations/platform/jira/connect-session', { method: 'POST' });
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(SESSION);
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://integrations.example.com/v2/integrations/incident-io/connect-sessions',
+      'https://integrations.example.com/v2/integrations/jira/connect-sessions',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ authorization: 'Bearer platform-secret' }),
@@ -98,7 +94,7 @@ describe('platform connect routes', () => {
     await expect(response.json()).resolves.toEqual(SESSION);
 
     const crossProvider = await app.request(
-      '/web/integrations/platform/gitlab/connections/conn-jira/reconnect-session',
+      '/web/integrations/platform/notion/connections/conn-jira/reconnect-session',
       { method: 'POST' },
     );
     expect(crossProvider.status).toBe(404);

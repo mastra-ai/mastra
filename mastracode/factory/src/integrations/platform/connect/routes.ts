@@ -1,7 +1,6 @@
 /**
  * Mastra `apiRoutes` that let the Factory SPA connect and reconnect
- * Platform-managed provider accounts (Jira, GitLab, incident.io) without
- * leaving Factory.
+ * Platform-managed provider accounts without leaving Factory.
  *
  * The browser cannot talk to the integrations service itself — it has no
  * Platform session — so these routes mint Nango connect/reconnect sessions
@@ -37,13 +36,11 @@ export interface PlatformConnectProvider {
 /**
  * Providers the Factory SPA may connect through these routes. Keys are the
  * SPA-facing provider slugs; `integrationId` is the Platform catalog id used
- * for new connect sessions. GitLab has token/group catalog variants that all
- * surface as one provider in Factory.
+ * for new connect sessions. Provider-specific PRs extend this registry when
+ * their Factory integrations are available.
  */
 export const PLATFORM_CONNECT_PROVIDERS: Record<string, PlatformConnectProvider> = {
   jira: { integrationId: 'jira', connectionIntegrationIds: ['jira'] },
-  gitlab: { integrationId: 'gitlab', connectionIntegrationIds: ['gitlab', 'gitlab-group', 'gitlab-group-token'] },
-  'incident-io': { integrationId: 'incident-io', connectionIntegrationIds: ['incident-io'] },
 };
 
 interface PlatformConnectionRow {
@@ -172,8 +169,8 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
         if (!connectionId) return c.json({ error: 'connection_required' }, 400);
         try {
           // Confirm the connection belongs to this provider before minting so
-          // a Jira page cannot reconnect a GitLab connection through this
-          // route family.
+          // one provider's page cannot reconnect a different provider's
+          // connection through this route family.
           const listed = await client.request<{ connections: PlatformConnectionRow[] }>('GET', '/v2/connections');
           const connection = listed.connections.find(
             candidate =>

@@ -1,6 +1,6 @@
 /**
- * Connect / reconnect controls for Platform-managed provider accounts
- * (Jira, GitLab, incident.io), completed headlessly in the Factory SPA.
+ * Connect / reconnect controls for Platform-managed provider accounts,
+ * completed headlessly in the Factory SPA.
  *
  * OAuth providers open the provider's own consent popup; API-key providers
  * collect the key in a dialog and submit it directly — the same UX as Mastra
