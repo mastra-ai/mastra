@@ -14,7 +14,7 @@ export function ThreadViewSkeleton() {
     <div role="status" aria-label="Loading thread" className="min-h-0 overflow-hidden">
       {ROWS.map(idx => (
         <div key={idx} className="border-border1 grid grid-cols-[24rem_minmax(0,1fr)] border-b pr-4 pl-14">
-          <TraceMessagesSkeleton className="border-border1 border-r pr-4 pl-0" />
+          <TraceMessagesSkeleton className="border-border1 border-x pr-4 pl-0" />
           <div className="min-w-0 overflow-hidden">
             <div className="min-h-header-default border-border1 flex items-center gap-2 border-b px-2 py-1.5">
               <Skeleton className="h-6 w-16 rounded-full" />

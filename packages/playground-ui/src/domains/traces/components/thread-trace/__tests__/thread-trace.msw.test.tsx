@@ -278,7 +278,7 @@ describe('ThreadTrace', () => {
   });
 
   describe('details column', () => {
-    it('draws the borders on the row — a line under each turn, the messages column closed on the right — and renders custom actions', async () => {
+    it('draws the borders on the row — a line under each turn, the messages column framed left and right — and renders custom actions', async () => {
       renderView();
       await screen.findByText('Chef agent run');
 
@@ -286,7 +286,7 @@ describe('ThreadTrace', () => {
         const details = screen.getByTestId(`details-${id}`);
         const row = getRow(id);
         expect(row.className).toContain('border-b');
-        expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-r');
+        expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-x');
         expect(details.className).not.toMatch(/border|rounded/);
       }
       expect(screen.getByRole('button', { name: 'Action trace-a' })).toBeTruthy();
