@@ -54,10 +54,12 @@ import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 import {
   EAGER_TOOL_ABORT_SIGNAL,
+  EAGER_TOOL_BAILOUT,
   EAGER_TOOL_EXECUTION_MARKER,
   EagerToolExecutionNotRun,
   eagerToolCallDidNotExecute,
 } from './eager-tool-execution';
+import type { EagerToolBailout } from './eager-tool-execution';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -117,6 +119,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // path via loop.ts hydration) or the legacy `_internal` bag (tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
       const isEagerExecution = Boolean((executionContext as any)[EAGER_TOOL_EXECUTION_MARKER]);
+      // Present only on an eager dispatch. Marked before bailing out, so the dispatcher
+      // can reject a settlement whose bailout the tool swallowed.
+      const eagerBailout = (executionContext as unknown as Record<symbol, EagerToolBailout | undefined>)[
+        EAGER_TOOL_BAILOUT
+      ];
       // Adopt an execution the LLM step started eagerly for this call, if any. The
       // eager invocation itself carries the marker so it never adopts itself.
       if (!isEagerExecution) {
@@ -689,7 +696,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // on this path. Bailing after the chunk was emitted would leave a suspension
             // announced that never suspends.
             if (isEagerExecution) {
-              throw new EagerToolExecutionNotRun(`"${inputData.toolName}" requested suspension`);
+              // Recorded before the throw, because the throw is not enough on its own: it
+              // unwinds through the tool's body, and a tool that catches it would otherwise
+              // return normally and have that return adopted as the call's result.
+              const reason = `"${inputData.toolName}" requested suspension`;
+              if (eagerBailout) eagerBailout.reason = reason;
+              throw new EagerToolExecutionNotRun(reason);
             }
             if (options?.requireToolApproval) {
               const innerApproval =

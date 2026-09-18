@@ -17,6 +17,24 @@ export const EAGER_TOOL_EXECUTION_MARKER = Symbol('eager-tool-execution');
  */
 export const EAGER_TOOL_ABORT_SIGNAL = Symbol('eager-tool-abort-signal');
 
+/**
+ * Carries a per-dispatch bailout record into `toolCallStep`, so a call that turns out to
+ * need suspension can mark itself unusable *before* throwing.
+ *
+ * The throw alone is not fail-safe: it unwinds through the tool's own body, and a tool
+ * that wraps its work in try/catch swallows it and returns normally. The step would then
+ * resolve an ordinary-looking envelope and the foreach would adopt a result for a call
+ * that asked to suspend. The dispatcher re-reads this record after the step settles and
+ * converts any marked settlement back into a rejection.
+ *
+ * One record per dispatch, so a later attempt reusing the same toolCallId cannot observe
+ * a previous attempt's bailout.
+ */
+export const EAGER_TOOL_BAILOUT = Symbol('eager-tool-bailout');
+
+/** Set by `toolCallStep` when an eagerly dispatched call bails out. */
+export type EagerToolBailout = { reason?: string };
+
 /** Brands errors raised before the tool's own `execute` ever ran. */
 const EAGER_NOT_EXECUTED = Symbol('eager-tool-not-executed');
 
