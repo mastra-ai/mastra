@@ -393,7 +393,7 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       const traceDialog = await screen.findByRole('dialog', { name: 'Trace experiment-trace-1' });
       await pickTraceSideView(/^scores/i, traceDialog);
-      fireEvent.click(await screen.findByRole('button', { name: /0\.9Experiment relevance/i }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Score experime' }));
 
       expect(await screen.findByText('Matches the experiment result score')).toBeDefined();
     });
@@ -405,7 +405,7 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       const traceDialog = await screen.findByRole('dialog', { name: 'Trace experiment-trace-1' });
       await pickTraceSideView(/^scores/i, traceDialog);
-      fireEvent.click(await screen.findByRole('button', { name: /0\.9Experiment relevance/i }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Score experime' }));
 
       expect(traceSideViewLabel(traceDialog)).toMatch(/scores \(1\)/i);
       expect(screen.queryByText('Matches the experiment result score')).toBeNull();

@@ -424,7 +424,7 @@ describe('Traces side panel Scores view', () => {
   describe('when the trace has scores', () => {
     it('opens score details in a sibling drawer above the trace and closes it independently', async () => {
       await openScoresTab(traceSpanScores);
-      fireEvent.click(await screen.findByText('score-1'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Score score-1' }));
 
       const scoreDialog = await screen.findByRole('dialog', { name: 'Score score-1' });
       expect(scoreDialog.getAttribute('data-depth')).toBe('2');
@@ -435,19 +435,35 @@ describe('Traces side panel Scores view', () => {
       expect(traceSideViewLabel()).toMatch(/scores/i);
     });
 
-    it('renders the score chart legend above the scores table', async () => {
+    it('renders one card per score with the scorer name, value and a link to the scorer run', async () => {
       await openScoresTab(traceSpanScores);
 
-      // Chart legend: one entry per scorer with its average (scorer names also
-      // appear in the table rows, hence the *AllByText queries).
-      expect((await screen.findAllByText('Relevance')).length).toBeGreaterThan(0);
-      expect(screen.getAllByText('Toxicity').length).toBeGreaterThan(0);
-      expect(screen.getByText('0.60')).not.toBeNull();
-      expect(screen.getByText('1.00')).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Score score-1' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Score score-3' })).not.toBeNull();
+      expect(screen.getAllByText('Relevance')).toHaveLength(2);
+      expect(screen.getByText('Toxicity')).not.toBeNull();
+      expect(screen.getByText('0.4')).not.toBeNull();
+      expect(screen.getByText('0.8')).not.toBeNull();
+      expect(screen.getByText('1')).not.toBeNull();
 
-      // Table rows still render from the same data.
-      expect(screen.getByText('score-1')).not.toBeNull();
-      expect(screen.getByText('score-3')).not.toBeNull();
+      const links = screen.getAllByRole('link', { name: /open scorer run/i });
+      expect(links).toHaveLength(3);
+      expect(links[0]?.getAttribute('href')).toBe('/scorers/relevance-scorer?scoreId=score-1');
+    });
+
+    it('truncates a long reason and reveals the rest on Read more', async () => {
+      const longReason = 'a'.repeat(200);
+      await openScoresTab({
+        ...traceSpanScores,
+        scores: [{ ...traceSpanScores.scores[0]!, reason: longReason }],
+      });
+
+      const preview = await screen.findByText(new RegExp(`^${'a'.repeat(100)}…`));
+      expect(preview.textContent).not.toContain(longReason);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Read more' }));
+      expect(screen.getByText(new RegExp(longReason))).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Read less' })).not.toBeNull();
     });
   });
 

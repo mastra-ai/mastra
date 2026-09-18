@@ -49,7 +49,6 @@ import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
-import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 
