@@ -19,11 +19,21 @@ services:
       start_period: 3s
   mongodb-vector:
     # Pinned to 8.2: $rankFusion (used by hybridQuery) requires MongoDB >= 8.1.
-    image: mongodb/mongodb-atlas-local:8.2
+    #
+    # Automated Embedding needs the `preview` image, which bundles the Community mongot
+    # build, and a Voyage API key. To run those tests, set both in stores/mongodb/.env:
+    #   ATLAS_LOCAL_TAG=preview
+    #   VOYAGE_API_KEY=<key>
+    # https://hub.docker.com/r/mongodb/mongodb-atlas-local#current-experimental-features
+    image: mongodb/mongodb-atlas-local:${ATLAS_LOCAL_TAG:-8.2}
     container_name: 'mongodb-vector-test-db'
     environment:
       MONGODB_INITDB_ROOT_USERNAME: mongodb
       MONGODB_INITDB_ROOT_PASSWORD: mongodb
+      # Consumed by mongot in the preview image; ignored by the pinned tag. The key must be
+      # provisioned through the Atlas UI — a key issued by Voyage AI directly is rejected by
+      # the default https://ai.mongodb.com/v1/embeddings endpoint.
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
     ports:
       - 27018:27017
     healthcheck:
