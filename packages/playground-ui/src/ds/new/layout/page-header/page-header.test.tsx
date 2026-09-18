@@ -62,4 +62,29 @@ describe('PageHeader', () => {
   it('renders an empty header', () => {
     expect(renderToStaticMarkup(<PageHeader />)).toContain('<header');
   });
+
+  it('keeps the title anchored to the top of the row regardless of action height', () => {
+    const withTallAction = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Title>Environment</PageHeader.Title>
+        <PageHeader.Action>
+          <div style={{ height: 120 }}>Tall action</div>
+        </PageHeader.Action>
+      </PageHeader>,
+    );
+
+    const withoutAction = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Title>Environment</PageHeader.Title>
+      </PageHeader>,
+    );
+
+    const titleClass = (markup: string) => markup.match(/<h1[^>]*class="([^"]*)"/)?.[1];
+    const tallActionTitleClass = titleClass(withTallAction);
+    const noActionTitleClass = titleClass(withoutAction);
+
+    expect(tallActionTitleClass).toBeDefined();
+    expect(tallActionTitleClass).toEqual(noActionTitleClass);
+    expect(tallActionTitleClass).toContain('self-start');
+  });
 });

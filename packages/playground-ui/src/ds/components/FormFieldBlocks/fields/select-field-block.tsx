@@ -4,6 +4,7 @@ import type { FieldBlockErrorMsgProps } from '../block/field-block-error-msg';
 import type { FieldBlockHelpTextProps } from '../block/field-block-help-text';
 import type { FieldBlockLabelProps } from '../block/field-block-label';
 import type { FieldBlockLayoutProps } from '../block/field-block-layout';
+import { fieldErrorId } from '../block/field-error-id';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 
@@ -64,7 +65,11 @@ export function SelectFieldBlock({
           onValueChange={onValueChange}
           disabled={disabled}
         >
-          <SelectTrigger size={size}>
+          <SelectTrigger
+            size={size}
+            aria-invalid={errorMsg ? true : undefined}
+            aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
+          >
             <SelectValue placeholder={placeholder} />
           </SelectTrigger>
           <SelectContent>
@@ -76,7 +81,7 @@ export function SelectFieldBlock({
           </SelectContent>
         </Select>
         {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
-        {errorMsg && <FieldBlock.ErrorMsg>{errorMsg}</FieldBlock.ErrorMsg>}
+        {errorMsg && <FieldBlock.ErrorMsg name={name}>{errorMsg}</FieldBlock.ErrorMsg>}
       </FieldBlock.Column>
     </FieldBlock.Layout>
   );

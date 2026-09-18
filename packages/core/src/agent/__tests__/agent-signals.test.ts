@@ -1588,7 +1588,7 @@ describe('Agent signals', () => {
     expect(wrapper.stream.mock.calls[0]?.[1]).toMatchObject({ untilIdle: true, runId: accepted.runId });
   });
 
-  it('delivers directly when the current runtime owns the thread claim', async () => {
+  it('wakes the claimed owner when the current runtime owns the thread claim', async () => {
     const pubsub = new EventEmitterPubSub();
     const agent = new Agent({
       id: 'local-owner-agent',
@@ -1623,11 +1623,76 @@ describe('Agent signals', () => {
     );
 
     const subscribedRun = await withTimeout(nextRun, 'Timed out waiting for local owner run');
-    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: subscribedRun.value.runId });
+    // The claimed owner ran the turn in this process, so this is a `wake`, not a
+    // `deliver`: `deliver` means no run started locally and the signal joined a
+    // run that was already in flight.
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
     expect(subscribedRun.value.text).toBe('local owner response');
 
     claim.unsubscribe();
     subscription.unsubscribe();
+  });
+
+  it('honors the incoming request context when waking a locally claimed thread owner', async () => {
+    // A claimed owner's stream options belong to whichever run claimed the
+    // thread, so they do not carry the context of every later wake. A wake that
+    // brings its own request context — a dispatcher starting a turn on behalf of
+    // an authenticated caller — has to have it applied to the woken run, or the
+    // run starts anonymously and downstream resolution rejects the caller.
+    const pubsub = new EventEmitterPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const ownerAgent = {
+      id: 'context-owner',
+      stream: vi.fn(async () => ({})),
+    } as unknown as Agent;
+    const senderAgent = new Agent({
+      id: 'context-sender',
+      name: 'Context Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const claim = await runtime.claimThreadOwnership(
+      ownerAgent,
+      {
+        resourceId: 'context-user',
+        threadId: 'context-thread',
+        streamOptions: { memory: { resource: 'context-user', thread: 'context-thread' } },
+      },
+      pubsub,
+    );
+    expect(claim.claimed).toBe(true);
+    const requestContext = new RequestContext();
+    requestContext.set('caller', { organizationId: 'context-org' });
+
+    const signalResult = runtime.sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake with context' },
+      {
+        resourceId: 'context-user',
+        threadId: 'context-thread',
+        ifIdle: {
+          behavior: 'wake',
+          requireClaimedOwner: true,
+          streamOptions: { requestContext },
+        },
+      },
+      pubsub,
+    );
+
+    const accepted = await signalResult.accepted;
+    expect(accepted).toMatchObject({ action: 'wake' });
+    if (accepted.action !== 'wake') throw new Error('Expected signal wake');
+    expect(accepted.output).toBeDefined();
+    expect(ownerAgent.stream).toHaveBeenCalledTimes(1);
+    expect(ownerAgent.stream.mock.calls[0]?.[1]).toMatchObject({ requestContext });
+    // Options the claim itself contributed must survive the merge.
+    expect(ownerAgent.stream.mock.calls[0]?.[1]?.memory).toEqual({
+      resource: 'context-user',
+      thread: 'context-thread',
+    });
+
+    claim.unsubscribe();
   });
 
   it('routes idle signals to the claimed thread owner runtime', async () => {
