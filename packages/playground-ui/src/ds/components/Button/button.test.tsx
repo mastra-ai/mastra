@@ -3,13 +3,73 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { TooltipProvider } from '../Tooltip';
-import { Button } from './Button';
+import { Button, buttonVariants } from './Button';
+import type { ButtonVariant } from './Button';
 
 afterEach(() => {
   cleanup();
 });
 
 describe('Button', () => {
+  it('uses semantic neutral roles with distinct interaction states', () => {
+    const baseClasses = buttonVariants().split(' ');
+    expect(baseClasses).toEqual(
+      expect.arrayContaining(['transition-[background-color,border-color,color]', 'motion-reduce:transition-none']),
+    );
+    expect(baseClasses).not.toContain('transition-all');
+
+    const variants: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost', 'outline'];
+    const expectedClasses = {
+      default: [
+        'new-theme',
+        'border-border',
+        'bg-foreground/10',
+        'text-foreground',
+        'not-disabled:hover:bg-foreground/14',
+        'not-disabled:active:bg-foreground/18',
+      ],
+      primary: [
+        'bg-foreground',
+        'text-background',
+        'not-disabled:hover:bg-foreground/75',
+        'not-disabled:active:bg-foreground/60',
+      ],
+      destructive: ['not-disabled:hover:bg-accent2/80', 'not-disabled:active:bg-accent2/70'],
+      'destructive-ghost': ['not-disabled:hover:bg-accent2/20', 'not-disabled:active:bg-accent2/30'],
+      ghost: ['text-foreground/90', 'not-disabled:hover:bg-foreground/4', 'not-disabled:active:bg-foreground/10'],
+      outline: [
+        'border-foreground/30',
+        'bg-transparent',
+        'text-foreground',
+        'not-disabled:hover:border-foreground/45',
+        'not-disabled:hover:bg-foreground/4',
+        'not-disabled:active:bg-foreground/10',
+      ],
+    } satisfies Record<ButtonVariant, string[]>;
+
+    for (const variant of variants) {
+      const classes = buttonVariants({ variant }).split(' ');
+      expect(classes).toEqual(expect.arrayContaining(expectedClasses[variant]));
+    }
+  });
+
+  it('defaults native buttons to type button', () => {
+    render(<Button>Save</Button>);
+    expect(screen.getByRole('button', { name: 'Save' }).getAttribute('type')).toBe('button');
+  });
+
+  it('preserves an explicit submit type', () => {
+    render(<Button type="submit">Save</Button>);
+    expect(screen.getByRole('button', { name: 'Save' }).getAttribute('type')).toBe('submit');
+  });
+
+  it('composes with links through render', () => {
+    render(<Button render={<a href="/docs" />}>Read docs</Button>);
+    const link = screen.getByRole('link', { name: 'Read docs' });
+    expect(link.getAttribute('href')).toBe('/docs');
+    expect(link.className).toContain('new-theme');
+  });
+
   describe('icon prop', () => {
     it('renders the icon inside an <Icon> slot before the label', () => {
       render(

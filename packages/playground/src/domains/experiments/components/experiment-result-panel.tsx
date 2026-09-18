@@ -273,7 +273,7 @@ function ExperimentResultPanelBody({
             nextLabel="Next result"
           />
           {experimentLink && (
-            <Button size="sm" variant="ghost" as={Link} to={experimentLink} icon={<FlaskConical />}>
+            <Button size="sm" variant="ghost" render={<Link href={experimentLink} />} icon={<FlaskConical />}>
               See experiment
             </Button>
           )}

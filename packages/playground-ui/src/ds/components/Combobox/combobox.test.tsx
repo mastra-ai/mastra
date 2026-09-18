@@ -292,7 +292,7 @@ describe('Combobox', () => {
     expect(option.className).toContain('rounded-lg');
     expect(option.className).not.toContain('rounded-full');
     expect(option.className).not.toContain('rounded-md');
-    expect(option.className).toContain('data-highlighted:bg-neutral6/5');
+    expect(option.className).toContain('data-highlighted:bg-foreground/4');
   });
 
   it('applies the error border when an error is provided', () => {

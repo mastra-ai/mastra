@@ -132,7 +132,7 @@ describe('Select', () => {
     expect(trigger.classList.contains('text-ui-smd')).toBe(true);
     expect(trigger.classList.contains('text-ui-md')).toBe(false);
     // Focus is the unified neutral border (from `buttonVariants`), not the old
-    // bespoke `focus-visible:border-border2`.
-    expect(trigger.className).toContain('focus-visible:border-neutral5/50');
+    // bespoke focus border.
+    expect(trigger.className).toContain('focus-visible:border-foreground/60');
   });
 });

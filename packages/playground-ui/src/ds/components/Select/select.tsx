@@ -141,7 +141,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
           'w-full justify-between',
           // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant],
-          'data-[placeholder]:text-neutral3',
+          'data-[placeholder]:text-muted-foreground',
           '[&>span]:truncate',
           className,
         )}

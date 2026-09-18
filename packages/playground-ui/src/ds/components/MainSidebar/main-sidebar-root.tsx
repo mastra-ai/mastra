@@ -245,7 +245,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
       >
         <ResizeHandleIndicator
           className={cn(
-            'via-foreground/25 group-hover:opacity-100',
+            'via-foreground/30 group-hover:opacity-100',
             'group-focus-visible:via-accent1 group-focus-visible:opacity-100',
             'in-data-[sidebar-gesture=active]:via-foreground/45 in-data-[sidebar-gesture=active]:opacity-100',
           )}

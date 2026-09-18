@@ -21,16 +21,14 @@ const getInput = () => {
   return input;
 };
 
-const inputGroupVariants = ['default', 'filled', 'outline'] as const;
-
 const expectOnlyGuardedHoverBorder = (className: string) => {
   const hoverBorderTokens = className
     .split(/\s+/)
-    .filter(token => token.includes('hover') && token.includes('border-border2'));
+    .filter(token => token.includes('hover') && token.includes('border-foreground/45'));
 
-  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within)]:border-border2']);
-  expect(className).toContain('focus-within:border-neutral5/50');
-  expect(className).not.toContain('hover:border-border2');
+  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within)]:border-foreground/45']);
+  expect(className).toContain('focus-within:border-foreground/60');
+  expect(className).not.toContain('hover:border-foreground/45');
 };
 
 describe('InputGroup', () => {
@@ -154,6 +152,16 @@ describe('InputGroup', () => {
     expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:border-error');
   });
 
+  it('still renders the filled surface for a call site on the removed filled variant', () => {
+    render(
+      <InputGroup variant="filled">
+        <InputGroupInput placeholder="x" />
+      </InputGroup>,
+    );
+
+    expect(getWrapper().className).toContain('bg-foreground/10');
+  });
+
   it('supports an outline variant without an initial filled background', () => {
     render(
       <InputGroup variant="outline">
@@ -164,7 +172,7 @@ describe('InputGroup', () => {
     const wrapperClass = getWrapper().className;
     expect(wrapperClass).toContain('bg-transparent');
     expect(wrapperClass).toContain('rounded-full');
-    expect(wrapperClass).not.toContain('bg-surface-overlay-soft');
+    expect(wrapperClass).not.toContain('bg-foreground/10');
   });
 
   it('suppresses both native number spinners (WebKit + Firefox) and the WebKit search clear button', () => {
@@ -181,10 +189,10 @@ describe('InputGroup', () => {
     expect(cls).toContain('[&::-webkit-search-cancel-button]:appearance-none');
   });
 
-  it.each(inputGroupVariants)('prioritizes the focus border over hover for the %s variant', variant => {
+  it('prioritizes the focus border over hover for the outline variant', () => {
     render(
-      <InputGroup variant={variant}>
-        <InputGroupInput placeholder={variant} />
+      <InputGroup variant="outline">
+        <InputGroupInput placeholder="outline" />
       </InputGroup>,
     );
     const cls = getWrapper().className;
@@ -193,5 +201,18 @@ describe('InputGroup', () => {
     // is guarded so it cannot override focus when the group is focused and hovered.
     expectOnlyGuardedHoverBorder(cls);
     expect(cls).not.toContain('ring-accent1');
+  });
+
+  it('carries the default variant hover in the fill, leaving its border alone', () => {
+    render(
+      <InputGroup>
+        <InputGroupInput placeholder="default" />
+      </InputGroup>,
+    );
+    const cls = getWrapper().className;
+
+    expect(cls).toContain('hover:bg-foreground/14');
+    expect(cls).toContain('focus-within:border-foreground/60');
+    expect(cls.split(/\s+/).filter(token => token.includes('hover') && token.includes('border-'))).toEqual([]);
   });
 });

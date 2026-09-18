@@ -123,8 +123,8 @@ function ThreadTraceRowContent() {
           </ThreadTrace.TabList>
           <ThreadTrace.DetailsActions>
             <Button
-              as={Link}
-              to={`/traces?traceId=${encodeURIComponent(traceId)}`}
+              render={<Link to={`/traces?traceId=${encodeURIComponent(traceId)}`} />}
+
               variant="ghost"
               size="md"
               icon={<ExternalLinkIcon />}
