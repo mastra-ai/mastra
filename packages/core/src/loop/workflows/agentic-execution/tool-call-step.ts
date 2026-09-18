@@ -1464,6 +1464,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         const rawResult = await tool.execute(args, toolOptions);
+
+        // The tool asked to suspend or bail and then swallowed the throw. Its return value
+        // is the return value of a call that was never supposed to complete here, so bail
+        // before it is published: `onOutput` is a side effect the foreach will produce
+        // again when it runs the call for real.
+        if (eagerBailout?.reason) {
+          throw new EagerToolExecutionNotRun(eagerBailout.reason);
+        }
+
         const result = ensureSerializable(rawResult);
 
         // Call onOutput hook after successful execution
