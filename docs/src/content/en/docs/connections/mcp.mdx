@@ -9,7 +9,11 @@ packages:
 
 Mastra supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction), an open standard for connecting AI agents to external tools and resources.
 
-Use [`MCPClient`](/reference/tools/mcp-client) to connect to MCP servers. Use [`MCPServer`](/reference/tools/mcp-server) to expose Mastra agents, tools, workflows, prompts, and resources to other MCP-compatible systems.
+Use [`MCPClient`](/reference/tools/mcp-client) to connect to MCP servers. Use [`MCPServer`](/reference/tools/mcp-server) to expose Mastra agents, tools, workflows, prompts, and resources to other MCP-compatible systems. Both speak the MCP `2026-07-28` revision over stdio and Streamable HTTP.
+
+:::note
+Upgrading from `@mastra/mcp` 1.x? See the [migration guide](/reference/migrations/mcp-v2).
+:::
 
 ## Connect to MCP servers
 
@@ -148,11 +152,11 @@ Registries provide hosted or packaged MCP servers. The client configuration abov
 | Registry | Connection | Notes |
 | :- | :- | :- |
 | [Klavis AI](https://klavis.ai) | Hosted HTTP | Enterprise authentication and managed servers |
-| [mcp.run](https://www.mcp.run/) | Signed SSE URL | Treat the profile URL as a secret |
-| [Composio](https://mcp.composio.dev) | Hosted SSE URL | URLs are often tied to one user account |
+| [mcp.run](https://www.mcp.run/) | Signed hosted URL | Treat the profile URL as a secret |
+| [Composio](https://mcp.composio.dev) | Hosted URL | URLs are often tied to one user account |
 | [Smithery](https://smithery.ai) | CLI or hosted URL | Run local packages through `npx` |
 | [Apify](https://mcp.apify.com) | Hosted HTTP | Authenticate with an Apify API token |
-| [Ampersand](https://docs.withampersand.com/mcp) | SSE or stdio | Connect to configured SaaS integrations |
+| [Ampersand](https://docs.withampersand.com/mcp) | Hosted URL or stdio | Connect to configured SaaS integrations |
 
 Store signed URLs, API keys, and tokens in environment variables. Follow the registry's documentation to obtain the endpoint, command, and credentials for each server.
 
@@ -192,6 +196,10 @@ export const mastra = new Mastra({
 Protect HTTP MCP servers with OAuth middleware. Visit [OAuth protection](/reference/tools/mcp-server#oauth-protection) for setup instructions.
 
 :::
+
+Registered servers are served at `/api/mcp/:serverId/mcp` over Streamable HTTP. Every request is self-contained, so the same server runs unchanged on long-lived hosts and serverless platforms.
+
+A tool that needs something from the user before it can finish calls `context.suspend()` with a payload and declares a `resumeSchema`. The server turns that into an `input_required` round and runs the tool again with the answer in `context.resumeData`. Clients answer those rounds with the `inputRequests` handler on their server definition. Visit [Asking the caller for input](/reference/tools/mcp-server#asking-the-caller-for-input) and [Answering input requests](/reference/tools/mcp-client#answering-input-requests).
 
 Visit the [`MCPServer` reference](/reference/tools/mcp-server) for prompts, resources, transports, and other server options.
 

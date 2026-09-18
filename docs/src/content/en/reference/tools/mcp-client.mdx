@@ -360,7 +360,7 @@ const mcp = new MCPClient({
 Enforcement details:
 
 - On the default fetch path, requests to disallowed hosts, including every redirect hop, are blocked **before** they're sent. Redirects are followed manually (up to 5 hops) so each hop is validated, and the `Authorization` header isn't carried across hops to a different origin (any scheme, host, or port change drops it, matching standard fetch behavior).
-- When you supply a custom `fetch` (or a custom `eventSourceInit.fetch`), the initial URL is still checked before the request, but redirect hops are validated **after the fact** using `response.url`: the outbound hop may occur, and the response is discarded when its final URL points at a disallowed host. A hand-built `Response` with an empty `response.url` skips this post-hoc check.
+- When you supply a custom `fetch`, the initial URL is still checked before the request, but redirect hops are validated **after the fact** using `response.url`: the outbound hop may occur, and the response is discarded when its final URL points at a disallowed host. A hand-built `Response` with an empty `response.url` skips this post-hoc check.
 - OAuth requests made through `authProvider` (authorization server metadata discovery, token exchange, refresh) are also validated. If your authorization server runs on a different host than the MCP server, add that host to `allowedHosts` too.
 - A blocked host fails the connection with a clear error and is never retried by the reconnect logic.
 

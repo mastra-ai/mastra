@@ -113,7 +113,7 @@ app.listen({ port: 3000 }, (err, address) => {
     type: 'MCPOptions',
     typeDescription: '{ serverless?: boolean, sessionIdGenerator?: () => string }',
     description:
-      'MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.',
+      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`.',
     isOptional: true,
   },
 ]}
