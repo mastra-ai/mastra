@@ -19,6 +19,7 @@ import type {
   UpdateIntakeIssueInput,
 } from '../../../capabilities/intake.js';
 import type { RouteAuth } from '../../../routes/route.js';
+import type { IntakeStorage } from '../../../storage/domains/intake/base.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import { buildIncidentioAgentTools } from '../../incidentio/agent-tools.js';
@@ -160,6 +161,7 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
   /** Bound once by the factory via `initialize()` before any surface is used. */
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
+  #intakeStorage: IntakeStorage | undefined;
   readonly #orgIdByResourceId = new Map<string, string | null>();
 
   constructor(config: PlatformIncidentioIntegrationConfig = {}) {
@@ -174,9 +176,26 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
     return this.#rules;
   }
 
-  initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth: RouteAuth }): void {
+  initialize({
+    projects,
+    auth,
+    intake,
+  }: {
+    projects: FactoryProjectsStorage;
+    auth: RouteAuth;
+    intake: IntakeStorage;
+  }): void {
     this.#projects = projects;
     this.#auth = auth;
+    this.#intakeStorage = intake;
+  }
+
+  /** Cross-integration intake selection/binding domain — agent-tool authorization. */
+  get intakeStorage(): IntakeStorage {
+    if (!this.#intakeStorage) {
+      throw new Error('PlatformIncidentioIntegration is not initialized — the factory binds storage during prepare().');
+    }
+    return this.#intakeStorage;
   }
 
   /** Factory projects domain — maps a session's resourceId to its owning org. */

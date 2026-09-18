@@ -6,6 +6,7 @@ import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
 import { buildIncidentioAgentTools, INCIDENTIO_UNTRUSTED_CONTENT_NOTICE } from './agent-tools.js';
 import { IncidentioApiError } from './api.js';
+import { INCIDENTIO_FOLLOW_UPS_SOURCE_ID } from './intake.js';
 import { IncidentioIntegration } from './integration.js';
 
 // A real integration instance backed by seeded `:memory:` storage. Only the
@@ -42,6 +43,22 @@ async function seedProject(): Promise<void> {
     input: { name: 'Acme app' },
   });
   PROJECT_ID = project.id;
+  await routeSourceToProject(PROJECT_ID);
+}
+
+/** Select the follow-ups source in Settings and bind it to the given Factory. */
+async function routeSourceToProject(factoryProjectId: string): Promise<void> {
+  await seed.intake.saveConfig({
+    orgId: ORG_ID,
+    config: { incidentio: { enabled: true, sourceIds: [INCIDENTIO_FOLLOW_UPS_SOURCE_ID] } },
+  });
+  await seed.intake.setBinding({
+    orgId: ORG_ID,
+    integrationId: 'incidentio',
+    sourceId: INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
+    factoryProjectId,
+    board: 'work',
+  });
 }
 
 const followUpDetail = {
@@ -67,7 +84,7 @@ beforeEach(async () => {
   PROJECT_ID = '';
   seed = await createFactoryStorageForTests();
   incidentio = new IncidentioIntegration({ apiKey: 'incident-key' });
-  incidentio.initialize({ projects: seed.projects, auth: fakeRouteAuth() });
+  incidentio.initialize({ projects: seed.projects, auth: fakeRouteAuth(), intake: seed.intake });
   vi.spyOn(incidentio.intake, 'getIssue').mockImplementation(input => fetchDetail(input.issueId));
   fetchDetail.mockReset();
 });
@@ -83,7 +100,7 @@ describe('buildIncidentioAgentTools — exposure gating', () => {
 
   it('exposes nothing when the host runs without web auth', async () => {
     await seedProject();
-    incidentio.initialize({ projects: seed.projects, auth: fakeRouteAuth({ enabled: false }) });
+    incidentio.initialize({ projects: seed.projects, auth: fakeRouteAuth({ enabled: false }), intake: seed.intake });
     const tools = await buildIncidentioAgentTools({ incidentio, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toEqual({});
   });
@@ -159,5 +176,53 @@ describe('incidentio_get_issue', () => {
     expect(result).toEqual({
       error: 'Failed to fetch incident.io item: incident.io API request failed (500)',
     });
+  });
+});
+
+describe('incidentio_get_issue — Factory routing authorization', () => {
+  const notFound = { error: `incident.io item "${ITEM_REF}" was not found on the connected accounts.` };
+
+  it("refuses items whose source is routed to a different Factory's boards", async () => {
+    // Two projects in the same org; the follow-ups source is bound only to
+    // the other one. A board run for this project must not read it.
+    const project = await seed.projects.create({ orgId: ORG_ID, userId: 'user-1', input: { name: 'Acme app' } });
+    const other = await seed.projects.create({ orgId: ORG_ID, userId: 'user-1', input: { name: 'Other app' } });
+    await routeSourceToProject(other.id);
+    const tools = await buildIncidentioAgentTools({ incidentio, requestContext: requestContextFor(project.id) });
+    const result = await (tools.incidentio_get_issue!.execute as any)({ issue: ITEM_REF });
+    expect(result).toEqual(notFound);
+    expect(fetchDetail).not.toHaveBeenCalled();
+  });
+
+  it('refuses items when no incident.io source is bound to the Factory at all', async () => {
+    const project = await seed.projects.create({ orgId: ORG_ID, userId: 'user-1', input: { name: 'Acme app' } });
+    await seed.intake.saveConfig({
+      orgId: ORG_ID,
+      config: { incidentio: { enabled: true, sourceIds: [INCIDENTIO_FOLLOW_UPS_SOURCE_ID] } },
+    });
+    const tools = await buildIncidentioAgentTools({ incidentio, requestContext: requestContextFor(project.id) });
+    const result = await (tools.incidentio_get_issue!.execute as any)({ issue: ITEM_REF });
+    expect(result).toEqual(notFound);
+    expect(fetchDetail).not.toHaveBeenCalled();
+  });
+
+  it('refuses items when incident.io intake is disabled in Settings', async () => {
+    await seedProject();
+    await seed.intake.saveConfig({ orgId: ORG_ID, config: { incidentio: { enabled: false, sourceIds: [] } } });
+    const tools = await buildIncidentioAgentTools({ incidentio, requestContext: requestContextFor(PROJECT_ID) });
+    const result = await (tools.incidentio_get_issue!.execute as any)({ issue: ITEM_REF });
+    expect(result).toEqual(notFound);
+    expect(fetchDetail).not.toHaveBeenCalled();
+  });
+
+  it('reads items normally on board runs for the Factory the source is routed to', async () => {
+    await seedProject();
+    fetchDetail.mockResolvedValueOnce(followUpDetail);
+    const tools = await buildIncidentioAgentTools({
+      incidentio,
+      requestContext: boardRunRequestContext(PROJECT_ID),
+    });
+    const result = await (tools.incidentio_get_issue!.execute as any)({ issue: ITEM_REF });
+    expect(result).toEqual({ notice: INCIDENTIO_UNTRUSTED_CONTENT_NOTICE, ...followUpDetail });
   });
 });

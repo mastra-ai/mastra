@@ -3,6 +3,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { RouteAuth } from '../../routes/route.js';
+import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
@@ -36,6 +37,7 @@ export class IncidentioIntegration implements FactoryIntegration {
   /** Bound once by the factory via `initialize()` before any surface is used. */
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
+  #intakeStorage: IntakeStorage | undefined;
   readonly #orgIdByResourceId = new Map<string, string | null>();
 
   constructor(config: IncidentioIntegrationConfig = {}) {
@@ -67,9 +69,26 @@ export class IncidentioIntegration implements FactoryIntegration {
    * per-org connection rows here — credentials are deployment-global
    * constructor config.
    */
-  initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth: RouteAuth }): void {
+  initialize({
+    projects,
+    auth,
+    intake,
+  }: {
+    projects: FactoryProjectsStorage;
+    auth: RouteAuth;
+    intake: IntakeStorage;
+  }): void {
     this.#projects = projects;
     this.#auth = auth;
+    this.#intakeStorage = intake;
+  }
+
+  /** Cross-integration intake selection/binding domain — agent-tool authorization. */
+  get intakeStorage(): IntakeStorage {
+    if (!this.#intakeStorage) {
+      throw new Error('IncidentioIntegration is not initialized — the factory binds storage during prepare().');
+    }
+    return this.#intakeStorage;
   }
 
   /** Factory projects domain — maps a session's resourceId to its owning org. */

@@ -18,7 +18,9 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { Intake } from '../../capabilities/intake.js';
+import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { IncidentioApiError } from './api.js';
+import { scopeSourceIdsToProject } from './routes.js';
 
 /**
  * Prompt-injection boundary: follow-up titles and descriptions are authored by
@@ -33,6 +35,8 @@ export interface IncidentioAgentToolsHost {
   intake: Intake;
   authEnabled: boolean;
   resolveOrgId(resourceId: string): Promise<string | null>;
+  /** Cross-integration intake selection/binding domain, bound by `initialize()`. */
+  intakeStorage: IntakeStorage;
 }
 
 function toolError(action: string, err: unknown): { error: string } {
@@ -42,7 +46,30 @@ function toolError(action: string, err: unknown): { error: string } {
   return { error: `${action}: ${err instanceof Error ? err.message : String(err)}` };
 }
 
-function createIncidentioGetIssueTool(incidentio: IncidentioAgentToolsHost, orgId: string) {
+/**
+ * The sources routed to this Factory project: selected in Settings AND bound
+ * to the project by an intake binding. Same authorization the HTTP detail
+ * route enforces — an item outside these sources reads as not found.
+ */
+async function routedSourceBoards(
+  incidentio: IncidentioAgentToolsHost,
+  orgId: string,
+  factoryProjectId: string,
+): Promise<Record<string, string>> {
+  const intake = incidentio.intakeStorage;
+  await intake.ensureReady();
+  const config = await intake.getConfig({ orgId, integrationIds: ['incidentio'] });
+  const selection = config.incidentio;
+  if (!selection?.enabled) return {};
+  return scopeSourceIdsToProject({
+    intake,
+    orgId,
+    factoryProjectId,
+    selectedIds: selection.sourceIds ?? [],
+  });
+}
+
+function createIncidentioGetIssueTool(incidentio: IncidentioAgentToolsHost, orgId: string, factoryProjectId: string) {
   return createTool({
     id: 'incidentio_get_issue',
     description:
@@ -56,13 +83,21 @@ function createIncidentioGetIssueTool(incidentio: IncidentioAgentToolsHost, orgI
     }),
     execute: async ({ issue }: { issue: string }) => {
       try {
+        // The item must resolve through a source routed to this Factory — a
+        // board run must not read follow-ups routed to another Factory or not
+        // routed at all (same authorization and ordering as the HTTP detail
+        // route: bindings are checked before any provider request).
+        const intakeBoards = await routedSourceBoards(incidentio, orgId, factoryProjectId);
+        if (Object.keys(intakeBoards).length === 0) {
+          return { error: `incident.io item "${issue}" was not found on the connected accounts.` };
+        }
         // Resolve through intake dispatch so multi-account Platform deployments
         // find the connection that owns the item.
         const dispatch = await incidentio.intake.resolveIntakeDispatch?.({
           orgId,
           externalSource: { type: 'issue', externalId: issue },
         });
-        if (!dispatch) {
+        if (!dispatch || !dispatch.sourceId || !(dispatch.sourceId in intakeBoards)) {
           return { error: `incident.io item "${issue}" was not found on the connected accounts.` };
         }
         const detail = await incidentio.intake.getIssue({
@@ -85,9 +120,9 @@ function createIncidentioGetIssueTool(incidentio: IncidentioAgentToolsHost, orgI
  * runs with web auth and the session's resource is an org-owned factory
  * project.
  *
- * Note the trust boundary: intake source bindings scope the board feed, not
- * these tools — within the intended single-tenant deployment, they can read
- * any item visible to the connected incident.io accounts.
+ * Trust boundary: the tools enforce the same source-level authorization as
+ * the HTTP detail route — an item is readable only through a source selected
+ * in Settings and bound to the session's Factory project.
  */
 export async function buildIncidentioAgentTools({
   requestContext,
@@ -112,6 +147,6 @@ export async function buildIncidentioAgentTools({
   if (!orgId) return {};
 
   return {
-    incidentio_get_issue: createIncidentioGetIssueTool(incidentio, orgId),
+    incidentio_get_issue: createIncidentioGetIssueTool(incidentio, orgId, projectId),
   };
 }

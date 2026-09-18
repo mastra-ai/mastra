@@ -69,8 +69,10 @@ export interface MountIncidentioRoutesOptions {
  * Factory project. Routing is explicit: a source feeds this Factory only when
  * its binding names both the Factory project and a board. Mirrors the Jira
  * routes' scoping semantics — the generic binding storage is provider-neutral.
+ * Shared with the agent tools, which enforce the same source-level
+ * authorization before fetching item details.
  */
-async function scopeSourceIdsToProject({
+export async function scopeSourceIdsToProject({
   intake,
   orgId,
   factoryProjectId,
