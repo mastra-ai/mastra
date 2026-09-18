@@ -5,6 +5,7 @@ import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
+import { fieldErrorId } from '../block/field-error-id';
 import { cn } from '@/lib/utils';
 
 export type SearchFieldBlockProps = {
@@ -107,6 +108,8 @@ export function SearchFieldBlock({
             onChange={onChange}
             size={size}
             variant={variant}
+            error={Boolean(errorMsg)}
+            aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
             className={cn(
               size === 'xs' && 'px-7',
               size === 'sm' && 'px-8',
@@ -144,7 +147,7 @@ export function SearchFieldBlock({
           )}
         </div>
         {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
-        {errorMsg && <FieldBlock.ErrorMsg>{errorMsg}</FieldBlock.ErrorMsg>}
+        {errorMsg && <FieldBlock.ErrorMsg name={name}>{errorMsg}</FieldBlock.ErrorMsg>}
       </FieldBlock.Column>
     </FieldBlock.Layout>
   );
