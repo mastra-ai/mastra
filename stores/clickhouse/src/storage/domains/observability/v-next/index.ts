@@ -171,6 +171,7 @@ import {
 } from './migration';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
+import { backfillCurrentScores } from './score-current';
 import * as scoresOps from './scores';
 import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
@@ -696,12 +697,11 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // to recreate them in place when the engine doesn't match.
       await reconcileDiscoveryTables(this.#client, this.#replication);
 
-      // Core tables + incremental MVs (must succeed)
-      const coreDdl =
-        this.#deltaCursorStrategy === null
-          ? [...BASE_TABLE_DDL, ...BASE_MV_DDL]
-          : [...buildAllTableDDL(), ...buildAllMvDDL(this.#deltaCursorStrategy)];
-      for (const ddl of coreDdl) {
+      // Create tables before migrations and views. Existing score tables need
+      // the additive writeVersion migration before the current-state MV can
+      // select that column.
+      const coreTableDdl = this.#deltaCursorStrategy === null ? BASE_TABLE_DDL : buildAllTableDDL();
+      for (const ddl of coreTableDdl) {
         await this.#client.command({ query: applyReplicationToDDL(ddl, this.#replication) });
       }
 
@@ -714,6 +714,16 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       for (const migration of pendingMigrations) {
         await this.#client.command({ query: addOnClusterToDDL(migration.sql, this.#replication) });
       }
+
+      const coreMvDdl = this.#deltaCursorStrategy === null ? BASE_MV_DDL : buildAllMvDDL(this.#deltaCursorStrategy);
+      for (const ddl of coreMvDdl) {
+        await this.#client.command({ query: applyReplicationToDDL(ddl, this.#replication) });
+      }
+
+      // The current-state MV is live before this one-time backfill, so writes
+      // arriving during initialization are captured. ReplacingMergeTree uses
+      // writeVersion to prevent an older backfill row from replacing them.
+      await backfillCurrentScores(this.#client);
 
       // Apply retention TTL if configured (per design doc: per-signal, day increments).
       // Skip statements whose current TTL already matches: `MODIFY TTL` bumps the

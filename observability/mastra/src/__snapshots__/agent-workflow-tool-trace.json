@@ -149,7 +149,19 @@
               "reasoning": [],
               "sources": [],
               "text": "Mock V2 stream response",
-              "warnings": []
+              "warnings": [],
+              "toolCalls": [
+                {
+                  "toolCallId": "call-workflow-1",
+                  "toolName": "workflowExecutor",
+                  "args": {
+                    "workflowId": "simpleWorkflow",
+                    "input": {
+                      "input": "test input"
+                    }
+                  }
+                }
+              ]
             }
           },
           "children": [

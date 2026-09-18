@@ -15,6 +15,7 @@ import {
 } from '@mastra/core/storage';
 import type {
   CreateFeedbackRecord,
+  CreateScoreRecord,
   CreateSpanRecord,
   ObservabilityStorage,
   TraceQueryRequest,
@@ -30,6 +31,8 @@ import {
   TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS,
   TRACE_QUERY_FIXTURE_DATA,
   TRACE_QUERY_ORDINAL_FIXTURE_DATA,
+  TRACE_QUERY_SCORE_REPLACEMENT_CASES,
+  TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
 } from './trace-query';
 import type { TraceQueryFixtureData } from './trace-query';
 
@@ -565,6 +568,22 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         } while (after);
         expect(pagedTraceIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
         expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+      });
+
+      describe('score replacement conformance', () => {
+        it('uses one current score per scoreId before trace predicates', async () => {
+          await writeTraceQueryFixture(
+            storage,
+            TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
+            capabilities.traceQuerySpanWriteModel,
+          );
+
+          for (const testCase of TRACE_QUERY_SCORE_REPLACEMENT_CASES) {
+            const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+            const response = await storage.queryTraces(plan);
+            expect.soft(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
+          }
+        });
       });
 
       it('matches list-compatible trace-query page boundaries and metadata', async () => {
@@ -3905,6 +3924,205 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           }),
         );
         expect(await storage.getScoreById('missing-score')).toBeNull();
+      });
+
+      it('uses only the current score version for lookup, pages, filters, and OLAP reads', async () => {
+        const timestamp = new Date('2026-01-01T00:10:00.000Z');
+        const staleScore: CreateScoreRecord = {
+          scoreId: 'score-current-a',
+          timestamp,
+          traceId: 'trace-current',
+          spanId: 'span-current',
+          scorerId: 'rewrite-quality',
+          scorerVersion: 'stale',
+          scoreSource: 'manual',
+          score: 0.2,
+          entityName: 'stale-agent',
+          metadata: { revision: 'stale' },
+        };
+        const lowScore: CreateScoreRecord = {
+          scoreId: 'score-current-b',
+          timestamp: new Date('2026-01-01T00:20:00.000Z'),
+          traceId: 'trace-current',
+          spanId: 'span-current',
+          scorerId: 'rewrite-quality',
+          scorerVersion: 'current',
+          scoreSource: 'automated',
+          score: 0.1,
+          entityName: 'low-agent',
+          metadata: { revision: 'current' },
+        };
+        const currentScore: CreateScoreRecord = {
+          ...staleScore,
+          scorerVersion: 'current',
+          scoreSource: 'automated',
+          score: 0.8,
+          entityName: 'current-agent',
+          metadata: { revision: 'current' },
+        };
+
+        await storage.createScore({ score: staleScore });
+        await storage.createScore({ score: lowScore });
+        await storage.createScore({ score: currentScore });
+
+        await expect(storage.getScoreById('score-current-a')).resolves.toEqual(
+          expect.objectContaining({ score: 0.8, scorerVersion: 'current', entityName: 'current-agent' }),
+        );
+
+        const all = await storage.listScores({ orderBy: { field: 'score', direction: 'ASC' } });
+        expect(all.scores.map(score => [score.scoreId, score.score])).toEqual([
+          ['score-current-b', 0.1],
+          ['score-current-a', 0.8],
+        ]);
+        expect(all.pagination?.total).toBe(2);
+
+        const firstPage = await storage.listScores({
+          pagination: { page: 0, perPage: 1 },
+          orderBy: { field: 'score', direction: 'ASC' },
+        });
+        const secondPage = await storage.listScores({
+          pagination: { page: 1, perPage: 1 },
+          orderBy: { field: 'score', direction: 'ASC' },
+        });
+        expect(firstPage.scores.map(score => score.scoreId)).toEqual(['score-current-b']);
+        expect(secondPage.scores.map(score => score.scoreId)).toEqual(['score-current-a']);
+        expect(firstPage.pagination).toEqual({ total: 2, page: 0, perPage: 1, hasMore: true });
+        expect(secondPage.pagination).toEqual({ total: 2, page: 1, perPage: 1, hasMore: false });
+
+        await expect(storage.listScores({ filters: { scoreSource: 'manual' } })).resolves.toMatchObject({
+          scores: [],
+          pagination: { total: 0 },
+        });
+        await expect(storage.listScores({ filters: { metadata: { revision: 'stale' } } })).resolves.toMatchObject({
+          scores: [],
+          pagination: { total: 0 },
+        });
+
+        await expect(storage.getScoreAggregate({ scorerId: 'rewrite-quality', aggregation: 'count' })).resolves.toEqual(
+          { value: 2 },
+        );
+        await expect(storage.getScoreAggregate({ scorerId: 'rewrite-quality', aggregation: 'avg' })).resolves.toEqual({
+          value: 0.45,
+        });
+
+        const breakdown = await storage.getScoreBreakdown({
+          scorerId: 'rewrite-quality',
+          aggregation: 'avg',
+          groupBy: ['entityName'],
+        });
+        expect(breakdown.groups).toEqual([
+          { dimensions: { entityName: 'current-agent' }, value: 0.8 },
+          { dimensions: { entityName: 'low-agent' }, value: 0.1 },
+        ]);
+
+        await expect(
+          storage.getScoreTimeSeries({ scorerId: 'rewrite-quality', aggregation: 'avg', interval: '1h' }),
+        ).resolves.toEqual({
+          series: [
+            {
+              name: 'rewrite-quality',
+              points: [{ timestamp: new Date('2026-01-01T00:00:00.000Z'), value: 0.45 }],
+            },
+          ],
+        });
+        const percentiles = await storage.getScorePercentiles({
+          scorerId: 'rewrite-quality',
+          percentiles: [0.5],
+          interval: '1h',
+        });
+        expect(percentiles.series).toHaveLength(1);
+        expect(percentiles.series[0]!.percentile).toBe(0.5);
+        expect(percentiles.series[0]!.points).toHaveLength(1);
+        expect(percentiles.series[0]!.points[0]!.timestamp).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+        expect(percentiles.series[0]!.points[0]!.value).toBeCloseTo(0.45);
+      });
+
+      it('uses the last repeated scoreId entry within one batch', async () => {
+        const timestamp = new Date('2026-01-01T00:00:00.000Z');
+        await storage.batchCreateScores({
+          scores: [
+            {
+              scoreId: 'score-batch-rewrite',
+              timestamp,
+              traceId: 'trace-batch',
+              scorerId: 'batch-quality',
+              score: 0.2,
+            },
+            {
+              scoreId: 'score-batch-other',
+              timestamp,
+              traceId: 'trace-batch',
+              scorerId: 'batch-quality',
+              score: 0.1,
+            },
+            {
+              scoreId: 'score-batch-rewrite',
+              timestamp,
+              traceId: 'trace-batch',
+              scorerId: 'batch-quality',
+              score: 0.8,
+            },
+          ],
+        });
+
+        const result = await storage.listScores({ orderBy: { field: 'score', direction: 'ASC' } });
+        expect(result.scores.map(score => [score.scoreId, score.score])).toEqual([
+          ['score-batch-other', 0.1],
+          ['score-batch-rewrite', 0.8],
+        ]);
+        expect(result.pagination?.total).toBe(2);
+      });
+
+      it('selects the current score before target and timestamp filters', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-moved-target',
+            timestamp: new Date('2026-02-15T00:00:00.000Z'),
+            traceId: 'trace-old',
+            spanId: 'span-old',
+            scorerId: 'old-scorer',
+            score: 0.9,
+            environment: 'stale',
+            metadata: { revision: 'stale' },
+          },
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-moved-target',
+            timestamp: new Date('2026-01-15T00:00:00.000Z'),
+            traceId: 'trace-current',
+            spanId: 'span-current',
+            scorerId: 'current-scorer',
+            score: 0.4,
+            environment: 'production',
+            metadata: { revision: 'current' },
+          },
+        });
+
+        const current = await storage.listScores({ filters: { traceId: 'trace-current', spanId: 'span-current' } });
+        expect(current.scores).toEqual([
+          expect.objectContaining({ scoreId: 'score-moved-target', scorerId: 'current-scorer', score: 0.4 }),
+        ]);
+        expect(current.pagination?.total).toBe(1);
+
+        const staleFilters = [
+          { traceId: 'trace-old' },
+          { spanId: 'span-old' },
+          { scorerId: 'old-scorer' },
+          { environment: 'stale' },
+          { metadata: { revision: 'stale' } },
+          {
+            timestamp: {
+              start: new Date('2026-02-01T00:00:00.000Z'),
+              end: new Date('2026-03-01T00:00:00.000Z'),
+            },
+          },
+        ];
+        for (const filters of staleFilters) {
+          const result = await storage.listScores({ filters });
+          expect.soft(result.scores, JSON.stringify(filters)).toEqual([]);
+          expect.soft(result.pagination?.total, JSON.stringify(filters)).toBe(0);
+        }
       });
 
       it('supports nullable traceId for scores at the storage boundary', async () => {

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
 
@@ -149,6 +150,10 @@ describe('Structured output with memory - assistant message in final position (#
 
     const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
     expect(lastMessage.role).toBe('user');
+
+    // The synthetic turn is request-only: it must not be written to the thread.
+    const { messages: persisted } = await mockMemory.recall({ threadId, resourceId });
+    expect(JSON.stringify(persisted)).not.toContain('Generate the structured response.');
   });
 
   it('guards Claude 5 assistant-role input without configured input processors or memory', async () => {
@@ -239,6 +244,278 @@ describe('Structured output with memory - assistant message in final position (#
     await agent.generate([{ role: 'assistant', content: 'Draft response' }], {
       structuredOutput: { schema: z.object({ answer: z.string() }) },
     });
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'assistant' });
+  });
+
+  it('guards Gemini 3 assistant-role input without configured input processors or memory', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'google',
+      modelId: 'gemini-3.5-flash-lite',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ answer: 'done' }) }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'gemini-3-trailing-assistant-guard-test',
+      name: 'Gemini 3 Trailing Assistant Guard Test',
+      instructions: 'Return a structured response.',
+      model: mockModel,
+    });
+
+    await agent.generate(
+      [
+        { role: 'user', content: 'Give me a verdict.' },
+        { role: 'assistant', content: 'Draft response' },
+      ],
+      { structuredOutput: { schema: z.object({ answer: z.string() }) } },
+    );
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user' });
+  });
+
+  it('guards Gemini 3 assistant-role input even without structured output', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'google',
+      modelId: 'gemini-3.5-flash-lite',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'done' }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'gemini-3-plain-trailing-assistant-guard-test',
+      name: 'Gemini 3 Plain Trailing Assistant Guard Test',
+      instructions: 'Reply briefly.',
+      model: mockModel,
+    });
+
+    await agent.generate([
+      { role: 'user', content: 'Give me a verdict.' },
+      { role: 'assistant', content: 'Draft response' },
+    ]);
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user' });
+    expect(nonSystemMessages.at(-1).content).toMatchObject([{ type: 'text', text: 'Continue.' }]);
+  });
+
+  it('guards when an input processor swaps a non-Google model to Gemini 3 mid-step', async () => {
+    const capturedPrompts: any[] = [];
+    const makeModel = (provider: string, modelId: string) =>
+      new MockLanguageModelV2({
+        provider,
+        modelId,
+        doGenerate: async options => {
+          capturedPrompts.push({ modelId, prompt: options.prompt });
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: 'done' }],
+            warnings: [],
+          };
+        },
+      });
+    const openai = makeModel('openai.chat', 'gpt-5');
+    const gemini3 = makeModel('google', 'gemini-3.5-flash-lite');
+    const agent = new Agent({
+      id: 'model-swap-trailing-assistant-guard-test',
+      name: 'Model Swap Trailing Assistant Guard Test',
+      instructions: 'Reply briefly.',
+      model: openai,
+      inputProcessors: [
+        {
+          id: 'swap-to-gemini',
+          name: 'Swap To Gemini',
+          processInputStep: () => ({ model: gemini3 }),
+        },
+      ],
+    });
+
+    await agent.generate([
+      { role: 'user', content: 'Give me a verdict.' },
+      { role: 'assistant', content: 'Draft response' },
+    ]);
+
+    expect(capturedPrompts).toHaveLength(1);
+    expect(capturedPrompts[0].modelId).toBe('gemini-3.5-flash-lite');
+    const nonSystemMessages = capturedPrompts[0].prompt.filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user' });
+    expect(nonSystemMessages.at(-1).content).toMatchObject([{ type: 'text', text: 'Continue.' }]);
+  });
+
+  it('does not inject a user turn into Gemini 3 agentic-loop steps that follow a tool result', async () => {
+    const capturedPrompts: any[] = [];
+    let call = 0;
+    const mockModel = new MockLanguageModelV2({
+      provider: 'google',
+      modelId: 'gemini-3.5-flash-lite',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        call += 1;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: call === 1 ? 'tool-calls' : 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content:
+            call === 1
+              ? [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'weather', input: '{"city":"SF"}' }]
+              : [{ type: 'text', text: 'Sunny.' }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'gemini-3-tool-loop-guard-test',
+      name: 'Gemini 3 Tool Loop Guard Test',
+      instructions: 'Use tools.',
+      model: mockModel,
+      tools: {
+        weather: createTool({
+          id: 'weather',
+          description: 'weather',
+          inputSchema: z.object({ city: z.string() }),
+          execute: async () => ({ temperature: 72 }),
+        }),
+      },
+    });
+
+    const result = await agent.generate('Weather in SF?', { maxSteps: 3 });
+
+    expect(result.text).toBe('Sunny.');
+    expect(capturedPrompts).toHaveLength(2);
+    // Step 2 prompt already ends on the tool-result turn; the guard must not append "Continue."
+    const secondStep = capturedPrompts[1].filter((message: any) => message.role !== 'system');
+    expect(secondStep.at(-1)).toMatchObject({ role: 'tool' });
+    expect(JSON.stringify(secondStep)).not.toContain('Continue.');
+  });
+
+  it('guards Gemini 3 when history ends on assistant text followed by an unfinished tool call', async () => {
+    // Shape left behind when a previous run died mid-tool: the call never got a result. Default
+    // prompt conversion drops the unpaired call, leaving the assistant text as the trailing turn.
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'google',
+      modelId: 'gemini-3.5-flash-lite',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'done' }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'gemini-3-orphaned-call-guard-test',
+      name: 'Gemini 3 Orphaned Call Guard Test',
+      instructions: 'Reply briefly.',
+      model: mockModel,
+    });
+
+    await agent.generate([
+      { role: 'user', content: 'Weather in SF?' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Let me check.' },
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'weather', input: { city: 'SF' } },
+        ],
+      },
+    ]);
+
+    expect(capturedPrompts).toHaveLength(1);
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(JSON.stringify(nonSystemMessages)).not.toContain('call-1');
+    expect(nonSystemMessages.at(-2)).toMatchObject({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Let me check.' }],
+    });
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user', content: [{ type: 'text', text: 'Continue.' }] });
+  });
+
+  it('preserves the trailing assistant turn for Anthropic without structured output (valid prefill)', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'anthropic.messages',
+      modelId: 'claude-opus-4-6',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'done' }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'anthropic-plain-trailing-assistant-test',
+      name: 'Anthropic Plain Trailing Assistant Test',
+      instructions: 'Reply briefly.',
+      model: mockModel,
+    });
+
+    await agent.generate([
+      { role: 'user', content: 'Give me a verdict.' },
+      { role: 'assistant', content: 'Draft response' },
+    ]);
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'assistant' });
+  });
+
+  it('preserves the trailing assistant turn for Gemini 2.5', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'google',
+      modelId: 'gemini-2.5-flash',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ answer: 'done' }) }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'gemini-2-5-trailing-assistant-test',
+      name: 'Gemini 2.5 Trailing Assistant Test',
+      instructions: 'Return a structured response.',
+      model: mockModel,
+    });
+
+    await agent.generate(
+      [
+        { role: 'user', content: 'Give me a verdict.' },
+        { role: 'assistant', content: 'Draft response' },
+      ],
+      { structuredOutput: { schema: z.object({ answer: z.string() }) } },
+    );
 
     const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
     expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'assistant' });

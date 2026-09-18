@@ -558,6 +558,9 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
           expect(nodes.some(node => node['Index Name']?.includes('mastra_span_events_root_'))).toBe(true);
         }
         expect(groupedNodes.some(node => node['Relation Name'] === TABLE_SCORE_EVENTS)).toBe(false);
+        for (const nodes of [scoreNodes, repeatedScoreNodes, mixedNodes]) {
+          expect(nodes.some(node => node['Node Type'] === 'Unique')).toBe(false);
+        }
         expect(
           groupedNodes
             .filter(node => node.Alias?.startsWith('r'))
@@ -2020,6 +2023,111 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         await harness.domain.batchCreateSpans({ records: [span] });
 
         expect(await countRows(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).toBe(1);
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('score rewrite conflicts', () => {
+    it('collapses equivalent timestamp strings before the PostgreSQL upsert', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_score_conflict' });
+
+      try {
+        const scoreId = 'equivalent-timestamp-score';
+        const canonicalTimestamp = dayAt(0, 10).toISOString();
+        await harness.domain.batchCreateScores({
+          scores: [
+            makeScore({
+              scoreId,
+              timestamp: canonicalTimestamp.replace('.000Z', 'Z') as unknown as Date,
+              score: 0.2,
+            }),
+            makeScore({
+              scoreId,
+              timestamp: canonicalTimestamp as unknown as Date,
+              score: 0.8,
+            }),
+          ],
+        });
+
+        expect(await countRows(harness.baseClient, harness.schema, TABLE_SCORE_EVENTS)).toBe(1);
+        await expect(harness.domain.getScoreById(scoreId)).resolves.toMatchObject({ scoreId, score: 0.8 });
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('current score query plans', () => {
+    it('uses candidate and newer-row indexes without globally deduplicating score history', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_score_plan' });
+      const table = qualifiedTable(harness.schema, TABLE_SCORE_EVENTS);
+      const logicalRows = 20_000;
+      const selectedRows = 100;
+      const oldTimestamp = dayAt(-1, 10);
+      const currentTimestamp = dayAt(0, 10);
+
+      try {
+        await harness.client.none(
+          `INSERT INTO ${table} ("scoreId", "timestamp", "scorerId", "score")
+           SELECT 'score-plan-' || value, $1, 'stale-scorer', 0.1
+           FROM generate_series(1, $2::integer) AS value`,
+          [oldTimestamp, logicalRows],
+        );
+        await harness.client.none(
+          `INSERT INTO ${table} ("scoreId", "timestamp", "scorerId", "score")
+           SELECT 'score-plan-' || value,
+                  $1,
+                  CASE WHEN value <= $2::integer THEN 'selected-scorer' ELSE 'other-scorer' END,
+                  0.8
+           FROM generate_series(1, $3::integer) AS value`,
+          [currentTimestamp, selectedRows, logicalRows],
+        );
+        await harness.client.none(`ANALYZE ${table}`);
+
+        const query = `
+          SELECT COUNT(*)::text AS count
+          FROM ${table} s
+          WHERE s."scorerId" = $1
+            AND s."timestamp" >= $2
+            AND s."timestamp" < $3
+            AND NOT EXISTS (
+              SELECT 1
+              FROM ${table} newer
+              WHERE newer."scoreId" = s."scoreId"
+                AND newer."cursorId" > s."cursorId"
+            )
+        `;
+        const values = ['selected-scorer', dayAt(0, 0), dayAt(1, 0)];
+        const explained = await harness.client.one<{ 'QUERY PLAN': Array<{ Plan: ExplainPlanNode }> }>(
+          `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${query}`,
+          values,
+        );
+        const nodes = collectPlanNodes(explained['QUERY PLAN'][0]!.Plan);
+        const result = await harness.client.one<{ count: string }>(query, values);
+
+        expect(Number(result.count)).toBe(selectedRows);
+        expect(nodes.some(node => node['Node Type'] === 'Unique')).toBe(false);
+        expect(nodes.some(node => node['Index Name']?.includes('scorerId_timestamp_idx'))).toBe(true);
+        expect(nodes.some(node => node['Index Name']?.includes('scoreId_cursorId_idx'))).toBe(true);
+
+        const page = await harness.domain.listScores({
+          filters: {
+            scorerId: 'selected-scorer',
+            timestamp: { start: dayAt(0, 0), end: dayAt(1, 0) },
+          },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(page.pagination.total).toBe(selectedRows);
+        expect(page.scores).toHaveLength(10);
+        await expect(
+          harness.domain.getScoreAggregate({
+            scorerId: 'selected-scorer',
+            aggregation: 'count',
+            filters: { timestamp: { start: dayAt(0, 0), end: dayAt(1, 0) } },
+          }),
+        ).resolves.toEqual({ value: selectedRows });
       } finally {
         await harness.close();
       }

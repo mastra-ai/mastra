@@ -696,8 +696,17 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 const modelSpan = observability.rebuildSpan(
                   modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
                 ) as AIModelGenerationSpan | undefined;
+                // Surface every tool call made during the run so exporters (e.g. PostHog)
+                // see the same { toolCallId, toolName, args } shape as the in-process loop.
+                const toolCalls = state.accumulatedSteps.flatMap(step =>
+                  ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
+                    toolCallId: tc.toolCallId,
+                    toolName: tc.toolName,
+                    args: tc.args,
+                  })),
+                );
                 modelSpan?.createTracker()?.endGeneration({
-                  output: { text: finalText },
+                  output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
                   attributes: { finishReason: finalOutput.stepResult?.reason },
                   usage: state.accumulatedUsage,
                 });

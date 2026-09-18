@@ -31,21 +31,26 @@ import {
   buildRetentionEntries,
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
+  MV_SCORE_EVENTS_CURRENT,
   MV_TRACE_ROOTS_DELTA,
   parseTtlExpression,
+  SCORE_EVENT_COLUMN_NAMES,
   TABLE_DELETION_REQUESTS,
   TABLE_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
   TABLE_FEEDBACK_EVENTS,
   TABLE_FEEDBACK_EVENTS_DELTA,
   TABLE_SCORE_EVENTS,
+  TABLE_SCORE_EVENTS_CURRENT,
+  TABLE_SCORE_EVENTS_CURRENT_BACKFILL,
   TABLE_SCORE_EVENTS_DELTA,
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
   TABLE_TRACE_ROOTS_DELTA,
 } from './ddl';
-import { feedbackRecordToRow, spanRecordToRow } from './helpers';
+import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
+import { backfillCurrentScores } from './score-current';
 import { compileClickHouseTraceQuery, runWithClickHouseTraceQueryTimeout } from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
@@ -103,14 +108,26 @@ createObservabilityVNextTests({
   // background merges. In retry-idempotency tests we force the merge with
   // OPTIMIZE ... FINAL so the read assertion sees the collapsed row.
   flushPendingMerges: async () => {
-    const { TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS } = await import('./ddl');
+    const {
+      TABLE_LOG_EVENTS,
+      TABLE_METRIC_EVENTS,
+      TABLE_SCORE_EVENTS,
+      TABLE_SCORE_EVENTS_CURRENT,
+      TABLE_FEEDBACK_EVENTS,
+    } = await import('./ddl');
     const client = createClient({
       url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
       username: process.env.CLICKHOUSE_USERNAME || 'default',
       password: process.env.CLICKHOUSE_PASSWORD || 'password',
     });
     try {
-      for (const table of [TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS]) {
+      for (const table of [
+        TABLE_LOG_EVENTS,
+        TABLE_METRIC_EVENTS,
+        TABLE_SCORE_EVENTS,
+        TABLE_SCORE_EVENTS_CURRENT,
+        TABLE_FEEDBACK_EVENTS,
+      ]) {
         await client.command({ query: `OPTIMIZE TABLE ${table} FINAL` });
       }
     } finally {
@@ -264,6 +281,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         request: Record<string, unknown>,
         expectedTable: string,
         expectPrimaryKey = true,
+        expectedIndex?: string,
       ) => {
         const plan = planTraceQuery(
           parseTraceQueryRequest({
@@ -283,6 +301,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         const explain = await explainResult.text();
         expect(explain).toContain(expectedTable);
         if (expectPrimaryKey) expect(explain).toContain('PrimaryKey');
+        if (expectedIndex) expect(explain).toContain(expectedIndex);
 
         const queryId = `trace-query-perf-${randomUUID()}`;
         await runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 15_000 }, compiled, queryId);
@@ -311,7 +330,7 @@ LIMIT 1`,
       );
       const scoreReadRows = await executeAndReadRows(
         { where: { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } } },
-        TABLE_SCORE_EVENTS,
+        TABLE_SCORE_EVENTS_CURRENT,
       );
       const repeatedSpanReadRows = await executeAndReadRows(
         {
@@ -335,7 +354,7 @@ LIMIT 1`,
             ],
           },
         },
-        TABLE_SCORE_EVENTS,
+        TABLE_SCORE_EVENTS_CURRENT,
       );
       const mixedReadRows = await executeAndReadRows(
         {
@@ -351,16 +370,101 @@ LIMIT 1`,
       );
       const groupedReadRows = await executeAndReadRows({ group: { by: ['threadId'] } }, TABLE_TRACE_ROOTS, false);
 
-      for (const readRows of [
-        spanReadRows,
-        scoreReadRows,
-        repeatedSpanReadRows,
-        repeatedScoreReadRows,
-        mixedReadRows,
-      ]) {
-        expect(readRows).toBeLessThan(fixtureSize);
-      }
+      expect(spanReadRows).toBeLessThan(fixtureSize);
+      expect(repeatedSpanReadRows).toBeLessThan(fixtureSize);
+      // Score predicates read the compact current-state table rather than rewrite history.
+      expect(scoreReadRows).toBeLessThan(fixtureSize * 2 + 100);
+      expect(repeatedScoreReadRows).toBeLessThan(fixtureSize * 2 + 100);
+      expect(mixedReadRows).toBeLessThan(fixtureSize * 3);
       expect(groupedReadRows).toBeLessThan(10);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('keeps ordinary current-score reads proportional to logical rows after merges', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const logicalRows = 5_000;
+    const versionsPerScore = 5;
+    const aggregateQuery = `
+      SELECT count() AS total, avg(score) AS average
+      FROM (SELECT * FROM ${TABLE_SCORE_EVENTS_CURRENT} FINAL)
+      WHERE scorerId = 'current-state-performance'
+    `;
+
+    const runAggregate = async (queryId: string) => {
+      const result = await client.query({ query: aggregateQuery, query_id: queryId, format: 'JSONEachRow' });
+      const [row] = await result.json<{ total: string | number; average: number }>();
+      await client.command({ query: 'SYSTEM FLUSH LOGS' });
+      const logResult = await client.query({
+        query: `SELECT read_rows AS readRows
+                FROM system.query_log
+                WHERE query_id = {queryId:String} AND type = 'QueryFinish'
+                ORDER BY event_time_microseconds DESC
+                LIMIT 1`,
+        query_params: { queryId },
+        format: 'JSONEachRow',
+      });
+      const [log] = await logResult.json<{ readRows: string | number }>();
+      return { total: Number(row?.total), average: Number(row?.average), readRows: Number(log?.readRows) };
+    };
+
+    try {
+      await client.command({
+        query: `INSERT INTO ${TABLE_SCORE_EVENTS} (timestamp, scoreId, writeVersion, scorerId, score)
+                SELECT
+                  now64(3, 'UTC') - toIntervalDay(${versionsPerScore} - version),
+                  concat('current-state-performance-', toString(id)),
+                  version + 1,
+                  'current-state-performance',
+                  toFloat64(version)
+                FROM (SELECT number AS id FROM numbers(${logicalRows})) AS ids
+                CROSS JOIN (SELECT number AS version FROM numbers(${versionsPerScore})) AS versions`,
+      });
+
+      const explainResult = await client.query({
+        query: `EXPLAIN indexes = 1 ${aggregateQuery}`,
+        format: 'TabSeparatedRaw',
+      });
+      const explain = await explainResult.text();
+      expect(explain).toContain(TABLE_SCORE_EVENTS_CURRENT);
+      expect(explain.replaceAll(TABLE_SCORE_EVENTS_CURRENT, '')).not.toContain(TABLE_SCORE_EVENTS);
+
+      const beforeMerge = await runAggregate(`current-state-before-${randomUUID()}`);
+      const beforePage = await storage.listScores({
+        filters: { scorerId: 'current-state-performance' },
+        pagination: { page: 0, perPage: 10 },
+      });
+      const beforeOlap = await storage.getScoreAggregate({ scorerId: 'current-state-performance', aggregation: 'avg' });
+
+      await client.command({ query: `OPTIMIZE TABLE ${TABLE_SCORE_EVENTS_CURRENT} FINAL` });
+
+      const afterMerge = await runAggregate(`current-state-after-${randomUUID()}`);
+      const afterPage = await storage.listScores({
+        filters: { scorerId: 'current-state-performance' },
+        pagination: { page: 0, perPage: 10 },
+      });
+      const afterOlap = await storage.getScoreAggregate({ scorerId: 'current-state-performance', aggregation: 'avg' });
+      const historyResult = await client.query({
+        query: `SELECT count() AS total FROM ${TABLE_SCORE_EVENTS} WHERE scorerId = 'current-state-performance'`,
+        format: 'JSONEachRow',
+      });
+      const [historyRow] = await historyResult.json<{ total: string | number }>();
+
+      expect(beforeMerge).toMatchObject({ total: logicalRows, average: versionsPerScore - 1 });
+      expect(afterMerge).toMatchObject({ total: logicalRows, average: versionsPerScore - 1 });
+      expect(afterMerge.readRows).toBeLessThanOrEqual(logicalRows);
+      expect(afterMerge.readRows).toBeLessThan(Number(historyRow?.total));
+      expect(beforePage.pagination.total).toBe(logicalRows);
+      expect(beforePage.scores).toHaveLength(10);
+      expect(beforePage.scores.every(score => score.score === versionsPerScore - 1)).toBe(true);
+      expect(afterPage).toEqual(beforePage);
+      expect(beforeOlap).toEqual({ value: versionsPerScore - 1 });
+      expect(afterOlap).toEqual(beforeOlap);
     } finally {
       await client.close();
     }
@@ -2156,6 +2260,250 @@ LIMIT 1`,
           'Deprecated `source` filter is not supported for scores; use `scoreSource or executionSource` instead.',
         );
       });
+
+      it('allocates increasing write versions across separate writes regardless of timestamp', async () => {
+        const score = {
+          scoreId: 'score-physical-supersession',
+          timestamp: new Date('2026-01-02T00:00:00Z'),
+          traceId: 'score-physical-trace',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        };
+        await storage.createScore({ score });
+        await storage.createScore({
+          score: {
+            ...score,
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            score: 0.8,
+          },
+        });
+
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        try {
+          const result = await client.query({
+            query: `SELECT score, toString(writeVersion) AS writeVersion FROM ${TABLE_SCORE_EVENTS} FINAL WHERE scoreId = {scoreId:String} ORDER BY writeVersion`,
+            query_params: { scoreId: score.scoreId },
+            format: 'JSONEachRow',
+          });
+          expect(await result.json<{ score: number; writeVersion: string }>()).toEqual([
+            { score: 0.2, writeVersion: '1' },
+            { score: 0.8, writeVersion: '2' },
+          ]);
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('allocates increasing write versions for repeated score IDs within one batch', async () => {
+        const score = {
+          scoreId: 'score-batch-write-version',
+          timestamp: new Date('2026-01-02T00:00:00Z'),
+          traceId: 'score-batch-version-trace',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        };
+        await storage.batchCreateScores({
+          scores: [
+            score,
+            {
+              ...score,
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              traceId: 'score-batch-version-current-trace',
+              score: 0.8,
+            },
+          ],
+        });
+
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        try {
+          const result = await client.query({
+            query: `SELECT traceId, score, toString(writeVersion) AS writeVersion FROM ${TABLE_SCORE_EVENTS} FINAL WHERE scoreId = {scoreId:String} ORDER BY writeVersion`,
+            query_params: { scoreId: score.scoreId },
+            format: 'JSONEachRow',
+          });
+          expect(await result.json<{ traceId: string; score: number; writeVersion: string }>()).toEqual([
+            { traceId: 'score-batch-version-trace', score: 0.2, writeVersion: '1' },
+            { traceId: 'score-batch-version-current-trace', score: 0.8, writeVersion: '2' },
+          ]);
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('backfills physically distinct equal-version legacy score rows independently of insertion order', async () => {
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        const first = scoreRecordToRow({
+          scoreId: 'score-equal-write-version',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-equal-a',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        });
+        const second = scoreRecordToRow({
+          scoreId: 'score-equal-write-version',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-equal-b',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.8,
+          reason: null,
+          metadata: null,
+        });
+
+        try {
+          await client.insert({ table: TABLE_SCORE_EVENTS, values: [first, second], format: 'JSONEachRow' });
+          await client.command({ query: `TRUNCATE TABLE ${TABLE_SCORE_EVENTS_CURRENT}` });
+          await backfillCurrentScores(client);
+          const forwardWinner = await storage.getScoreById('score-equal-write-version');
+
+          await storage.dangerouslyClearAll();
+          await client.insert({ table: TABLE_SCORE_EVENTS, values: [second, first], format: 'JSONEachRow' });
+          await client.command({ query: `TRUNCATE TABLE ${TABLE_SCORE_EVENTS_CURRENT}` });
+          await backfillCurrentScores(client);
+          const reverseWinner = await storage.getScoreById('score-equal-write-version');
+
+          expect(reverseWinner).toEqual(forwardWinner);
+          expect([0.2, 0.8]).toContain(forwardWinner?.score);
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('uses engine last-insert semantics for exact-key legacy ties before and after merges', async () => {
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        const first = scoreRecordToRow({
+          scoreId: 'score-exact-key-write-version',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-exact-key',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        });
+        const second = { ...first, score: 0.8 };
+
+        try {
+          await client.insert({ table: TABLE_SCORE_EVENTS, values: [first, second], format: 'JSONEachRow' });
+          expect(await storage.getScoreById('score-exact-key-write-version')).toMatchObject({ score: 0.8 });
+          await client.command({ query: `OPTIMIZE TABLE ${TABLE_SCORE_EVENTS} FINAL` });
+          expect(await storage.getScoreById('score-exact-key-write-version')).toMatchObject({ score: 0.8 });
+
+          await storage.dangerouslyClearAll();
+          await client.insert({ table: TABLE_SCORE_EVENTS, values: [second, first], format: 'JSONEachRow' });
+          expect(await storage.getScoreById('score-exact-key-write-version')).toMatchObject({ score: 0.2 });
+          await client.command({ query: `OPTIMIZE TABLE ${TABLE_SCORE_EVENTS} FINAL` });
+          expect(await storage.getScoreById('score-exact-key-write-version')).toMatchObject({ score: 0.2 });
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('keeps the same current score before and after physical merges', async () => {
+        const score = {
+          scoreId: 'score-current-across-merge',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'score-merge-old-trace',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        };
+        await storage.createScore({ score });
+        await storage.createScore({
+          score: { ...score, traceId: 'score-merge-current-trace', score: 0.8 },
+        });
+
+        expect(await storage.getScoreById(score.scoreId)).toMatchObject({
+          traceId: 'score-merge-current-trace',
+          score: 0.8,
+        });
+
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        try {
+          await client.command({ query: `OPTIMIZE TABLE ${TABLE_SCORE_EVENTS} FINAL` });
+          expect(await storage.getScoreById(score.scoreId)).toMatchObject({
+            traceId: 'score-merge-current-trace',
+            score: 0.8,
+          });
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('starts post-migration score replacements at version 1 above legacy version-0 rows', async () => {
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        const legacyScore = {
+          scoreId: 'score-legacy-write-version',
+          timestamp: new Date('2026-01-02T00:00:00Z'),
+          traceId: 'score-legacy-trace',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        };
+        try {
+          await client.insert({
+            table: TABLE_SCORE_EVENTS,
+            values: [scoreRecordToRow(legacyScore)],
+            format: 'JSONEachRow',
+          });
+          await storage.createScore({
+            score: {
+              ...legacyScore,
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              score: 0.8,
+            },
+          });
+
+          const result = await client.query({
+            query: `SELECT score, toString(writeVersion) AS writeVersion FROM ${TABLE_SCORE_EVENTS} FINAL WHERE scoreId = {scoreId:String} ORDER BY writeVersion`,
+            query_params: { scoreId: legacyScore.scoreId },
+            format: 'JSONEachRow',
+          });
+          expect(await result.json<{ score: number; writeVersion: string }>()).toEqual([
+            { score: 0.2, writeVersion: '0' },
+            { score: 0.8, writeVersion: '1' },
+          ]);
+        } finally {
+          await client.close();
+        }
+      });
     });
 
     describe('feedback filters', () => {
@@ -2800,6 +3148,42 @@ LIMIT 1`,
   // ==========================================================================
 
   describe('scores', () => {
+    it('captures new score writes in the current-state table', async () => {
+      const scoreId = 'score-current-state-write';
+      await storage.createScore({
+        score: {
+          scoreId,
+          timestamp: new Date(),
+          traceId: 'trace-current-state-write',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.9,
+          reason: null,
+          metadata: null,
+        },
+      });
+
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      try {
+        const result = await client.query({
+          query: `SELECT scoreId, score, toString(writeVersion) AS writeVersion
+                  FROM ${TABLE_SCORE_EVENTS_CURRENT} FINAL
+                  WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId },
+          format: 'JSONEachRow',
+        });
+        expect(await result.json<{ scoreId: string; score: number; writeVersion: string }>()).toEqual([
+          { scoreId, score: 0.9, writeVersion: '1' },
+        ]);
+      } finally {
+        await client.close();
+      }
+    });
+
     it('scoreSource round-trips through CH scoreSource column', async () => {
       await storage.createScore({
         score: {
@@ -4761,10 +5145,11 @@ LIMIT 1`,
 
     it('buildRetentionDDL generates per-signal TTL statements', () => {
       const stmts = buildRetentionDDL({ logs: 7, metrics: 14, scores: 90, feedback: 60 });
-      expect(stmts).toHaveLength(4);
+      expect(stmts).toHaveLength(5);
       expect(stmts).toContain('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
       expect(stmts).toContain('ALTER TABLE mastra_metric_events MODIFY TTL timestamp + INTERVAL 14 DAY');
       expect(stmts).toContain('ALTER TABLE mastra_score_events MODIFY TTL timestamp + INTERVAL 90 DAY');
+      expect(stmts).toContain('ALTER TABLE mastra_score_events_current MODIFY TTL timestamp + INTERVAL 90 DAY');
       expect(stmts).toContain('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 60 DAY');
     });
 
@@ -4848,7 +5233,12 @@ LIMIT 1`,
         const storageWithoutRetention = new ObservabilityStorageClickhouseVNext({ client });
         await storageWithoutRetention.init();
 
-        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS, TABLE_DELETION_REQUESTS]) {
+        for (const table of [
+          TABLE_SCORE_EVENTS,
+          TABLE_SCORE_EVENTS_CURRENT,
+          TABLE_FEEDBACK_EVENTS,
+          TABLE_DELETION_REQUESTS,
+        ]) {
           const result = await client.query({ query: `SHOW CREATE TABLE ${table}`, format: 'TabSeparatedRaw' });
           expect(await result.text(), `${table} should not have a default TTL`).not.toContain('TTL');
         }
@@ -4861,9 +5251,10 @@ LIMIT 1`,
 
         const expectedTTLs: Record<string, string> = {
           [TABLE_SCORE_EVENTS]: 'timestamp + toIntervalDay(30)',
+          [TABLE_SCORE_EVENTS_CURRENT]: 'timestamp + toIntervalDay(30)',
           [TABLE_FEEDBACK_EVENTS]: 'timestamp + toIntervalDay(45)',
         };
-        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS]) {
+        for (const table of [TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_CURRENT, TABLE_FEEDBACK_EVENTS]) {
           const result = await client.query({ query: `SHOW CREATE TABLE ${table}`, format: 'TabSeparatedRaw' });
           expect(await result.text(), `${table} should use configured retention`).toContain(expectedTTLs[table]!);
         }
@@ -4894,6 +5285,7 @@ LIMIT 1`,
         'mastra_log_events',
         'mastra_metric_events',
         'mastra_score_events',
+        'mastra_score_events_current',
         'mastra_feedback_events',
         'mastra_deletion_requests',
       ];
@@ -4914,6 +5306,7 @@ LIMIT 1`,
           mastra_log_events: 'timestamp + toIntervalDay(7)',
           mastra_metric_events: 'timestamp + toIntervalDay(14)',
           mastra_score_events: 'timestamp + toIntervalDay(90)',
+          mastra_score_events_current: 'timestamp + toIntervalDay(90)',
           mastra_feedback_events: 'timestamp + toIntervalDay(60)',
           mastra_deletion_requests: 'requestedAt + toIntervalDay(120)',
         };
@@ -4952,19 +5345,191 @@ LIMIT 1`,
   describe('init idempotence', () => {
     // --- Unit tests for ALL_MIGRATIONS shape ---
 
-    it('includes durable feedback write versions in fresh and migrated schemas', () => {
+    it('defines score current-state storage with a stable scoreId key', () => {
       const tableDdl = buildAllTableDDL().find(ddl =>
-        ddl.includes(`CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS}`),
+        ddl.includes(`CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_CURRENT}`),
       );
+      expect(tableDdl).toContain('ENGINE = ReplacingMergeTree(writeVersion)');
+      expect(tableDdl).toContain('PARTITION BY cityHash64(scoreId) % 64');
+      expect(tableDdl).toContain('ORDER BY scoreId');
+
+      const mvDdl = buildAllMvDDL('fallback').find(ddl =>
+        ddl.includes(`CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_CURRENT}`),
+      );
+      expect(mvDdl).toContain(`TO ${TABLE_SCORE_EVENTS_CURRENT}`);
+      expect(mvDdl).toContain(`FROM ${TABLE_SCORE_EVENTS}`);
+    });
+
+    it.each([
+      ['score', TABLE_SCORE_EVENTS],
+      ['feedback', TABLE_FEEDBACK_EVENTS],
+    ])('includes durable %s write versions in fresh and migrated schemas', (_signal, table) => {
+      const tableDdl = buildAllTableDDL().find(ddl => ddl.includes(`CREATE TABLE IF NOT EXISTS ${table}`));
       expect(tableDdl).toContain('writeVersion       UInt64 DEFAULT 0');
       expect(
         ALL_MIGRATIONS.find(
-          migration =>
-            migration.kind === 'column' &&
-            migration.table === TABLE_FEEDBACK_EVENTS &&
-            migration.name === 'writeVersion',
+          migration => migration.kind === 'column' && migration.table === table && migration.name === 'writeVersion',
         )?.sql,
       ).toContain('ADD COLUMN IF NOT EXISTS writeVersion UInt64 DEFAULT 0');
+    });
+
+    it('additively upgrades legacy score rows without losing source or delta data', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const score = {
+        scoreId: 'legacy-score-write-version-migration',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'legacy-score-migration-trace',
+        spanId: null,
+        scorerId: 'quality',
+        score: 0.4,
+        reason: null,
+        metadata: null,
+      };
+
+      try {
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_SCORE_EVENTS_CURRENT}` });
+        await client.command({ query: `DROP TABLE IF EXISTS ${TABLE_SCORE_EVENTS_CURRENT}` });
+        await client.command({ query: `DROP TABLE IF EXISTS ${TABLE_SCORE_EVENTS_CURRENT_BACKFILL}` });
+        await client.command({ query: `ALTER TABLE ${TABLE_SCORE_EVENTS} DROP COLUMN IF EXISTS writeVersion` });
+        await client.insert({
+          table: TABLE_SCORE_EVENTS,
+          values: [scoreRecordToRow(score)],
+          format: 'JSONEachRow',
+        });
+
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+
+        const sourceResult = await client.query({
+          query: `SELECT scoreId, score, toString(writeVersion) AS writeVersion FROM ${TABLE_SCORE_EVENTS} FINAL WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+          format: 'JSONEachRow',
+        });
+        expect(await sourceResult.json<{ scoreId: string; score: number; writeVersion: string }>()).toEqual([
+          { scoreId: score.scoreId, score: 0.4, writeVersion: '0' },
+        ]);
+
+        const deltaResult = await client.query({
+          query: `SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+          format: 'JSONEachRow',
+        });
+        expect(await deltaResult.json<{ scoreId: string }>()).toEqual([{ scoreId: score.scoreId }]);
+
+        const currentResult = await client.query({
+          query: `SELECT scoreId, score, toString(writeVersion) AS writeVersion FROM ${TABLE_SCORE_EVENTS_CURRENT} FINAL WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+          format: 'JSONEachRow',
+        });
+        expect(await currentResult.json<{ scoreId: string; score: number; writeVersion: string }>()).toEqual([
+          { scoreId: score.scoreId, score: 0.4, writeVersion: '0' },
+        ]);
+
+        const markerResult = await client.query({
+          query: `SELECT marker FROM ${TABLE_SCORE_EVENTS_CURRENT_BACKFILL} FINAL`,
+          format: 'JSONEachRow',
+        });
+        expect(await markerResult.json<{ marker: string }>()).toEqual([{ marker: 'v1' }]);
+      } finally {
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        await client.close();
+      }
+    });
+
+    it('resumes a partial current-score backfill and skips it after completion', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const scores = [
+        {
+          scoreId: 'partial-backfill-a',
+          timestamp: new Date('2026-01-01T01:00:00Z'),
+          traceId: 'partial-backfill-trace-a',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        },
+        {
+          scoreId: 'partial-backfill-b',
+          timestamp: new Date('2026-01-01T02:00:00Z'),
+          traceId: 'partial-backfill-trace-b',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.8,
+          reason: null,
+          metadata: null,
+        },
+      ];
+
+      try {
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_SCORE_EVENTS_CURRENT}` });
+        await client.command({ query: `TRUNCATE TABLE ${TABLE_SCORE_EVENTS_CURRENT}` });
+        await client.command({ query: `TRUNCATE TABLE ${TABLE_SCORE_EVENTS_CURRENT_BACKFILL}` });
+        await client.insert({
+          table: TABLE_SCORE_EVENTS,
+          values: scores.map((score, index) => ({ ...scoreRecordToRow(score), writeVersion: index + 1 })),
+          format: 'JSONEachRow',
+        });
+        const scoreColumns = SCORE_EVENT_COLUMN_NAMES.join(', ');
+        await client.command({
+          query: `INSERT INTO ${TABLE_SCORE_EVENTS_CURRENT} (${scoreColumns})
+                  SELECT ${scoreColumns} FROM ${TABLE_SCORE_EVENTS}
+                  WHERE scoreId = 'partial-backfill-a'`,
+        });
+
+        const first = new ObservabilityStorageClickhouseVNext({ client });
+        const initialCommand = client.command.bind(client);
+        const backfillCommands: Array<Parameters<typeof client.command>[0]> = [];
+        const backfillSpy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          backfillCommands.push(args);
+          return initialCommand(args);
+        });
+        try {
+          await first.init();
+        } finally {
+          backfillSpy.mockRestore();
+        }
+        expect(backfillCommands).toContainEqual(
+          expect.objectContaining({
+            query: expect.stringContaining(`INSERT INTO ${TABLE_SCORE_EVENTS_CURRENT} (`),
+            clickhouse_settings: { max_bytes_ratio_before_external_sort: 0.5 },
+          }),
+        );
+
+        const currentResult = await client.query({
+          query: `SELECT scoreId, score FROM ${TABLE_SCORE_EVENTS_CURRENT} FINAL
+                  WHERE scoreId IN ('partial-backfill-a', 'partial-backfill-b')
+                  ORDER BY scoreId`,
+          format: 'JSONEachRow',
+        });
+        expect(await currentResult.json<{ scoreId: string; score: number }>()).toEqual([
+          { scoreId: 'partial-backfill-a', score: 0.2 },
+          { scoreId: 'partial-backfill-b', score: 0.8 },
+        ]);
+
+        const originalCommand = client.command.bind(client);
+        const commands: string[] = [];
+        const spy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          commands.push((args as { query: string }).query);
+          return originalCommand(args);
+        });
+        try {
+          await new ObservabilityStorageClickhouseVNext({ client }).init();
+          expect(commands.some(query => query.includes(`INSERT INTO ${TABLE_SCORE_EVENTS_CURRENT} (`))).toBe(false);
+        } finally {
+          spy.mockRestore();
+        }
+      } finally {
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        await client.close();
+      }
     });
 
     it('ALL_MIGRATIONS entries carry table + name consistent with their SQL', () => {
@@ -5039,6 +5604,7 @@ LIMIT 1`,
         'mastra_log_events',
         'mastra_metric_events',
         'mastra_score_events',
+        'mastra_score_events_current',
         'mastra_feedback_events',
       ];
 

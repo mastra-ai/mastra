@@ -15,6 +15,10 @@ import {
   TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS,
   TRACE_QUERY_FIXTURE_DATA,
   TRACE_QUERY_ORDINAL_FIXTURE_DATA,
+  TRACE_QUERY_SCORE_REPLACEMENT_CASES,
+  TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
+  TRACE_QUERY_SCORE_TIE_CASE,
+  TRACE_QUERY_SCORE_TIE_FIXTURE_DATA,
   TRACE_QUERY_TIED_TIMESTAMP_CASES,
   TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA,
 } from './trace-query';
@@ -107,6 +111,33 @@ describe('trace-query reference evaluator', () => {
       ).toEqual(testCase.expected);
     });
   }
+
+  describe('score replacement contract', () => {
+    for (const testCase of TRACE_QUERY_SCORE_REPLACEMENT_CASES) {
+      it(testCase.name, () => {
+        expect(
+          normalizeTraceQueryResponse(
+            evaluateTraceQueryRequest(TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA, testCase.request),
+          ),
+        ).toEqual(testCase.expected);
+      });
+    }
+
+    it(TRACE_QUERY_SCORE_TIE_CASE.name, () => {
+      const reversed = {
+        ...TRACE_QUERY_SCORE_TIE_FIXTURE_DATA,
+        scores: [...TRACE_QUERY_SCORE_TIE_FIXTURE_DATA.scores].reverse(),
+      };
+      expect(
+        normalizeTraceQueryResponse(
+          evaluateTraceQueryRequest(TRACE_QUERY_SCORE_TIE_FIXTURE_DATA, TRACE_QUERY_SCORE_TIE_CASE.request),
+        ),
+      ).toEqual(TRACE_QUERY_SCORE_TIE_CASE.expected);
+      expect(
+        normalizeTraceQueryResponse(evaluateTraceQueryRequest(reversed, TRACE_QUERY_SCORE_TIE_CASE.request)),
+      ).toEqual(TRACE_QUERY_SCORE_TIE_CASE.expected);
+    });
+  });
 
   describe('feedback replacement contract', () => {
     for (const scenario of TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS) {
