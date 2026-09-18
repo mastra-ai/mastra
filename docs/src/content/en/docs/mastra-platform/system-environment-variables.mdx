@@ -1,0 +1,71 @@
+---
+title: "System environment variables | Mastra platform"
+description: "Reference for the environment variables Mastra platform injects into every deploy, including project and environment identity, region, and managed database credentials."
+---
+
+# System environment variables
+
+Mastra platform injects a set of environment variables into every deploy. They hold the identity of the project and environment the code is running in, the region it runs in, and the credentials for any [hosted database](/docs/mastra-platform/database) attached to it.
+
+You can read them like any other variable:
+
+```ts
+const environmentName = process.env.MASTRA_ENVIRONMENT_NAME
+```
+
+System variables are reserved. A variable you store with one of these names is kept on the project or environment record but never reaches the runtime, because the platform's value is applied last.
+
+## Project and environment variables
+
+Injected on every deploy.
+
+| Variable | Value |
+| - | - |
+| `MASTRA_PROJECT_ID` | ID of the project being deployed |
+| `MASTRA_ENVIRONMENT_ID` | ID of the environment. Stable across renames |
+| `MASTRA_ENVIRONMENT_NAME` | Name of the environment, such as `production` |
+| `MASTRA_ENVIRONMENT_SLUG` | Routing slug of the environment |
+| `MASTRA_PLATFORM_REGION` | Region the environment runs in, `US` or `EU` |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | Token the deploy uses to call platform APIs, including observability |
+| `MASTRA_PLATFORM_BUCKET_NAME` | Bucket backing the environment's [workspace](/docs/mastra-platform/workspaces). Set when workspaces are enabled |
+| `MASTRA_WORKERS` | Set to `false` on the main service when the project declares workers, so they run only in their own service |
+
+## Managed database variables
+
+Attaching a hosted database adds its connection variables to the environments the database covers. Names are fixed per provider.
+
+| Provider | Variables |
+| - | - |
+| Turso | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` |
+| Neon | `DATABASE_URL` |
+| Postgres | `POSTGRES_URL` |
+| Redis | `REDIS_URL` |
+
+Values are resolved at deploy time and never stored in your project. An environment-scoped database replaces the values of a project-scoped database of the same provider for that environment.
+
+## Precedence
+
+A deploy resolves variables in this order, last one wins:
+
+1. Variables you stored on the project.
+1. Variables you stored on the environment.
+1. Managed database variables for that environment.
+1. Platform variables.
+
+System values are applied last, so they win on a name collision. Your stored value stays on the record and keeps showing in the dashboard, but the running service never sees it. The Environment Variables page marks these rows with a warning icon so you can tell which of your values are being shadowed.
+
+A database attached to a single environment shadows a project-wide database of the same provider, but only inside that environment. To point one environment at a different database, attach an [environment-scoped database](/docs/mastra-platform/database#attach-with-the-cli) rather than overwriting the connection variable by hand.
+
+To see what an environment runs with, pull the merged set into a local file:
+
+```bash
+mastra env vars pull staging --output .env.staging
+```
+
+Managed values aren't written to the file. They appear as name-only comments.
+
+## Related
+
+- [Environments](/docs/mastra-platform/environments)
+- [Deploy](/docs/mastra-platform/deploy)
+- [Hosted databases](/docs/mastra-platform/database)

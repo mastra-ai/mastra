@@ -36,6 +36,8 @@ export const Colors = {
   ring: 'var(--ring)',
   'sidebar-accent': 'var(--sidebar-accent)',
   selected: 'var(--selected)',
+  destructive: 'var(--destructive)',
+  'destructive-foreground': 'var(--destructive-foreground)',
 
   error: 'var(--error)',
 
