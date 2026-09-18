@@ -147,7 +147,6 @@ export class MastraCodeAcpAgent implements Agent {
         unsubscribe: () => {},
         commands: [],
       };
-      await this.refreshCommands(thread.id, entry);
       if (this.disposed) throw RequestError.internalError(undefined, 'ACP connection is closed');
       entry.unsubscribe = runtime.session.subscribe(event => {
         handleAgentControllerEvent(event, entry.state, this.connection, entry.session);
@@ -172,8 +171,7 @@ export class MastraCodeAcpAgent implements Agent {
             .catch(error => process.stderr.write(`[acp] configuration update failed: ${error}\n`));
         }
       });
-      this.sessions.set(thread.id, entry);
-      return {
+      const response: NewSessionResponse = {
         sessionId: thread.id,
         modes: {
           currentModeId: runtime.session.mode.get(),
@@ -182,6 +180,14 @@ export class MastraCodeAcpAgent implements Agent {
         models,
         configOptions: this.configOptions(entry),
       };
+      this.sessions.set(thread.id, entry);
+      // Let the SDK send session/new before clients receive updates for this ID.
+      setImmediate(() => {
+        void this.enqueue(entry, async () => {
+          if (!this.disposed) await this.refreshCommands(thread.id, entry);
+        }).catch(error => process.stderr.write(`[acp] command discovery failed: ${error}\n`));
+      });
+      return response;
     } catch (error) {
       await runtime.cleanup?.();
       throw error;
