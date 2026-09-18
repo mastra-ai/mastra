@@ -381,8 +381,11 @@ export class AccountRotationProcessor implements Processor {
 
     // Deployed requests resolve the tenant-scoped store; local mode keeps the
     // host storage. Reading the host registry here would rotate or announce
-    // host accounts for a tenant request.
-    const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
+    // host accounts for a tenant request. Annotated as the rotation surface:
+    // `resolveCredentialStore` returns a plain CredentialStore, and the 401
+    // path below uses the optional `forceRefreshActiveAccount` when the host
+    // provides it.
+    const store: RotationCredentialStore = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
     const accounts = store.listAccounts?.(providerId) ?? [];
     const active = store.getActiveAccount?.(providerId) ?? accounts.find(account => account.active);
 

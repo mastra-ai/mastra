@@ -351,17 +351,35 @@ export function clearCopilotCatalogCache(): void {
  *
  * Concurrent calls during a fetch share the inflight promise.
  */
-export async function getCopilotModelCatalog(opts: { authStorage?: AuthStorage } = {}): Promise<CopilotModelEntry[]> {
+export async function getCopilotModelCatalog(
+  opts: { authStorage?: CredentialStore } = {},
+): Promise<CopilotModelEntry[]> {
   const storage = opts.authStorage ?? getAuthStorage();
 
   // Resolve one coherent credential snapshot before consulting the cache so a
   // token can never be paired with another account's enterprise endpoint.
-  const credential = await storage.getOAuthCredential(COPILOT_PROVIDER_ID);
-  if (!credential || credential.type !== 'oauth') return [];
-  const accessToken = credential.access;
-  const enterpriseUrl = (credential as GitHubCopilotCredentials).enterpriseUrl;
+  // `getOAuthCredential` is optional (deployed stores have no local registry),
+  // so fall back to the always-present `getApiKey`, taking any enterprise
+  // endpoint from the same slot via `get()`.
+  let accessToken: string | undefined;
+  let accountInstanceId: string | undefined;
+  let enterpriseUrl: string | undefined;
+  if (storage.getOAuthCredential) {
+    const credential = await storage.getOAuthCredential(COPILOT_PROVIDER_ID);
+    if (!credential || credential.type !== 'oauth') return [];
+    accessToken = credential.access;
+    accountInstanceId = credential.accountInstanceId;
+    enterpriseUrl = (credential as GitHubCopilotCredentials).enterpriseUrl;
+  } else {
+    accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
+    if (!accessToken) return [];
+    const stored = storage.get(COPILOT_PROVIDER_ID);
+    if (stored?.type === 'oauth') {
+      enterpriseUrl = (stored as GitHubCopilotCredentials).enterpriseUrl;
+    }
+  }
   const baseUrl = getGitHubCopilotBaseUrl(accessToken, enterpriseUrl);
-  const credentialKey = `${credential.accountInstanceId ?? 'legacy'}\0${baseUrl}`;
+  const credentialKey = `${accountInstanceId ?? 'legacy'}\0${baseUrl}`;
 
   const now = Date.now();
   const cached = catalogCache.get(credentialKey);
