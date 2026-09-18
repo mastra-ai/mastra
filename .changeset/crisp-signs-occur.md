@@ -2,6 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fixed `ToolCallFilter({ preserveModelOutput: true })` losing the compacted tool output, so filtered history no longer dropped the tool result entirely.
+Fixed `ToolCallFilter({ preserveModelOutput: true })` dropping the compacted tool output, so filtered history kept the tool result instead of losing it entirely.
 
-The prompt metadata stripping introduced in a recent release removed the internal model-output marker before input processors could read it, which broke the filter. That stripping has been reverted, so the marker travels with the prompt again.
+Custom input processors that read `providerOptions.mastra.modelOutput` from the prompt see it again: prompt assembly no longer removes that marker before processors run.
