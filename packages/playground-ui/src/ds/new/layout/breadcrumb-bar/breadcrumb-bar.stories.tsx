@@ -1,9 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { ChevronDown } from 'lucide-react';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 import { BreadcrumbBar } from './breadcrumb-bar';
 import { useBreadcrumbBarCrumb } from './breadcrumb-bar-context';
 import { Button } from '@/ds/components/Button';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 
 function StoryLink({ to, ...props }: ComponentPropsWithoutRef<'a'> & { to?: string }) {
   return <a href={to} {...props} />;
@@ -17,6 +19,24 @@ function ExampleCrumb({ children }: { children: ReactNode }) {
     <BreadcrumbBar.Crumb as={isLeaf ? 'span' : StoryLink} to={isLeaf ? undefined : crumb?.pathname} isCurrent={isLeaf}>
       {children}
     </BreadcrumbBar.Crumb>
+  );
+}
+
+function ExampleProjectSwitcher() {
+  return (
+    <BreadcrumbBar.SwitcherCrumb>
+      <DropdownMenu>
+        <DropdownMenu.Trigger variant="ghost" size="xs">
+          Production project
+          <ChevronDown />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="start">
+          <DropdownMenu.Item>Production project</DropdownMenu.Item>
+          <DropdownMenu.Item>Staging project</DropdownMenu.Item>
+          <DropdownMenu.Item>Development project</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    </BreadcrumbBar.SwitcherCrumb>
   );
 }
 
@@ -50,7 +70,7 @@ export const ProjectSwitcher: Story = {
         <ExampleCrumb>Projects</ExampleCrumb>
       </BreadcrumbBar.Item>
       <BreadcrumbBar.Item pathname="/projects/production">
-        <BreadcrumbBar.SwitcherCrumb>Production project</BreadcrumbBar.SwitcherCrumb>
+        <ExampleProjectSwitcher />
       </BreadcrumbBar.Item>
     </BreadcrumbBar>
   ),
@@ -63,7 +83,7 @@ export const ChevronSeparators: Story = {
         <ExampleCrumb>Projects</ExampleCrumb>
       </BreadcrumbBar.Item>
       <BreadcrumbBar.Item pathname="/projects/production">
-        <BreadcrumbBar.SwitcherCrumb>Production project</BreadcrumbBar.SwitcherCrumb>
+        <ExampleProjectSwitcher />
       </BreadcrumbBar.Item>
     </BreadcrumbBar>
   ),
