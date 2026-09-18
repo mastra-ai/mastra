@@ -92,12 +92,14 @@ const result = await scorer.run({
   {
     name: 'score',
     type: 'number',
+    isOptional: true,
     description:
       'Numerical score computed by the generateScore step. Absent when a step returned notScorable(). Check notScorable first.',
   },
   {
     name: 'notScorable',
     type: 'NotScorableOutcome',
+    isOptional: true,
     description:
       'Present when a step returned notScorable(). Carries the step name and optional reason. Remaining steps are skipped and no score is produced. See the notScorable() reference (optional).',
   },
