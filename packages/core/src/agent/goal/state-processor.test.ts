@@ -69,7 +69,7 @@ describe('GoalStateProcessor', () => {
     expect(result!.mode).toBe('snapshot');
     expect(result!.tagName).toBe('current-objective');
     expect(result!.contents).toContain('Ship the feature');
-    expect(result!.attributes).toMatchObject({ status: 'active', runsUsed: 0, maxRuns: 5 });
+    expect(result!.attributes).toMatchObject({ status: 'active' });
   });
 
   it('emits nothing when unchanged and the base is still in window', async () => {
@@ -79,12 +79,23 @@ describe('GoalStateProcessor', () => {
   });
 
   it('re-emits when the objective changes', async () => {
+    const { processor } = await createProcessor(objective({ objective: 'Ship the hyperdrive' }));
+    const result = await processor.computeStateSignal(
+      createArgs({ lastSnapshot: objective({ objective: 'Ship the feature' }), hasSnapshot: true }),
+    );
+    expect(result).toBeTruthy();
+    expect(result!.contents).toContain('Ship the hyperdrive');
+  });
+
+  // Regression: `runsUsed` advances on every judge pass. Keying the projection
+  // on it made the key differ from the previous one on every step, so an
+  // unchanged objective was appended to the window again each attempt.
+  it('emits nothing when only progress changed', async () => {
     const { processor } = await createProcessor(objective({ runsUsed: 2 }));
     const result = await processor.computeStateSignal(
       createArgs({ lastSnapshot: objective({ runsUsed: 0 }), hasSnapshot: true }),
     );
-    expect(result).toBeTruthy();
-    expect(result!.attributes).toMatchObject({ runsUsed: 2 });
+    expect(result).toBeUndefined();
   });
 
   it('re-snapshots when the base was dropped from the window', async () => {
@@ -247,5 +258,31 @@ describe('GoalStateProcessor', () => {
     expect(result?.contents).toContain('Ship the feature');
     expect(getState).toHaveBeenCalledTimes(1);
     await stopGoalActivity({ agentId: 'goal-agent', runId: 'cached-hit-run' });
+  });
+
+  // Regression: a processor that never received a Mastra instance (e.g. one
+  // contributed by a signal provider while `inputProcessors` is configured as a
+  // function) resolves no store. An unreadable store is not an absent goal:
+  // projecting `status: none` tells the model the goal was cancelled and it
+  // abandons the run.
+  it('keeps the last projection when no store resolves', async () => {
+    const { processor } = await createProcessor(objective({ objective: 'Active objective in window' }));
+    // Drop the Mastra instance the processor resolves the store through.
+    (processor as any).mastra = undefined;
+
+    const result = await processor.computeStateSignal(
+      createArgs({ lastSnapshot: objective({ objective: 'Active objective in window' }), hasSnapshot: true }),
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  it('still retracts when the store resolves and reports no objective', async () => {
+    const { processor } = await createProcessor();
+    const result = await processor.computeStateSignal(
+      createArgs({ lastSnapshot: objective(), hasSnapshot: true }),
+    );
+
+    expect(result?.attributes).toMatchObject({ status: 'none' });
   });
 });

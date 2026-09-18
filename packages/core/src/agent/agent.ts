@@ -469,6 +469,37 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
   return cb(value as T);
 }
 
+/**
+ * Registers the Mastra instance on a signal provider and on the processors it
+ * contributes.
+ *
+ * The provider's own `__registerMastra` only reaches the provider. Its
+ * processors need the instance too — they resolve storage through it (e.g. the
+ * goal and task state processors read the thread-scoped state domain). The
+ * array branch in `Agent.__registerMastra` covers processors configured as a
+ * plain `inputProcessors` array, but a provider-contributed processor leaves
+ * that walk as soon as `inputProcessors` is configured as a function: the Agent
+ * folds the two into one resolved function, so `Array.isArray` is false and no
+ * processor in it is registered. Without this, such a processor never resolves
+ * a store and silently degrades (the goal processor projects `status: none`,
+ * i.e. "the goal was cancelled").
+ *
+ * `mastra.addProcessor` is deliberately not used here: it early-returns on the
+ * first instance registered under an id, so a second agent's processor instance
+ * would never receive the instance.
+ */
+function registerProviderMastra(provider: SignalProvider, mastra: Mastra) {
+  provider.__registerMastra(mastra);
+  for (const processor of [
+    ...(provider.getInputProcessors?.() ?? []),
+    ...(provider.getOutputProcessors?.() ?? []),
+  ]) {
+    if (typeof (processor as { __registerMastra?: unknown }).__registerMastra === 'function') {
+      (processor as { __registerMastra: (m: Mastra) => void }).__registerMastra(mastra);
+    }
+  }
+}
+
 function listProcessorWorkflowChildren(workflow: ProcessorWorkflow): unknown[] {
   const workflowChildren = workflow as ProcessorWorkflowChildrenContainer;
   const children: unknown[] = [];
@@ -958,7 +989,7 @@ export class Agent<
       for (const provider of effectiveSignals) {
         // Propagate Mastra instance before lifecycle so providers have storage access
         if (this.#mastra) {
-          provider.__registerMastra(this.#mastra);
+          registerProviderMastra(provider, this.#mastra);
         }
 
         // Skip re-wiring providers that are already connected (e.g. via __fork())
@@ -3609,7 +3640,7 @@ export class Agent<
     // Propagate Mastra instance to signal providers
     if (this.#signals) {
       for (const provider of this.#signals) {
-        provider.__registerMastra(mastra);
+        registerProviderMastra(provider, mastra);
       }
     }
   }

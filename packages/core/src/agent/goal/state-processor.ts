@@ -36,8 +36,16 @@ function lp(value: string): string {
   return `${value.length}:${value}`;
 }
 
-function stableObjectiveCacheKey(record: GoalObjectiveRecord, maxRuns: number): string {
-  return `goal:${lp(record.objective)}${lp(record.status)}${lp(String(record.runsUsed))}${lp(String(maxRuns))}`;
+function stableObjectiveCacheKey(record: GoalObjectiveRecord): string {
+  // Identity of a projection: the objective it renders, plus its status. The
+  // progress fields (`runsUsed`, `maxRuns`) are deliberately excluded — a judge
+  // pass advances `runsUsed` every attempt, so keying on it would make the key
+  // differ from the previous projection on every step and re-add an unchanged
+  // objective to the window. The projection is append-only, so re-adding it
+  // duplicates context rather than updating it. Whether the objective is
+  // already in the window is what decides re-emission; the attempt count is
+  // carried by the goal-judge reminder, which is emitted per attempt.
+  return `goal:${lp(record.objective)}${lp(record.status)}`;
 }
 
 type ResolvedThreadStateStore = {
@@ -72,6 +80,7 @@ export class GoalStateProcessor {
   }
 
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
+    const prior = this.getPriorObjective(args);
     // Current objective for this turn: the within-turn write a `setObjective`
     // surfaced on the shared RequestContext this step, else the durable store.
     const carried = getObjectiveFromRequestContext(args.requestContext);
@@ -88,12 +97,18 @@ export class GoalStateProcessor {
       // without an objective carries no information — treating it as "no goal"
       // would retract an objective the store reports as active.
       const store = await this.resolveStore();
-      current = store
-        ? await store.getState<GoalObjectiveRecord>({ threadId: args.threadId, type: GOAL_STATE_TYPE })
-        : undefined;
+      if (store) {
+        current = await store.getState<GoalObjectiveRecord>({ threadId: args.threadId, type: GOAL_STATE_TYPE });
+      } else {
+        // No store to read: the objective is unknown, not absent. An unreadable
+        // store must not be reported to the model as `status: none` — that
+        // reads as "the goal was cancelled" and abandons the run. Keep the last
+        // projection instead; a genuine clear/complete goes through the store
+        // and still retracts below.
+        current = prior;
+      }
     }
 
-    const prior = this.getPriorObjective(args);
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
 
     // Only project an active objective. A done/paused/cleared objective is not
@@ -116,12 +131,12 @@ export class GoalStateProcessor {
         metadata: { value: { objective: undefined } },
       };
     }
-    const maxRuns = current.maxRuns ?? prior?.maxRuns ?? 0;
-    const cacheKey = stableObjectiveCacheKey(current, maxRuns);
-    const priorCacheKey = prior ? stableObjectiveCacheKey(prior, prior.maxRuns ?? 0) : undefined;
+    const cacheKey = stableObjectiveCacheKey(current);
+    const priorCacheKey = prior ? stableObjectiveCacheKey(prior) : undefined;
 
     // No change and the base snapshot is still in the window: emit nothing so the
-    // cached prefix stays stable.
+    // cached prefix stays stable. This is what keeps an already-projected
+    // objective from being appended again on every step.
     if (hasBase && priorCacheKey === cacheKey) return;
 
     return {
@@ -131,11 +146,10 @@ export class GoalStateProcessor {
       tagName: 'current-objective',
       contents: renderObjective(current),
       value: { objective: current },
-      attributes: {
-        status: current.status,
-        runsUsed: current.runsUsed,
-        ...(maxRuns ? { maxRuns } : {}),
-      },
+      // Only stable fields here: an attribute that advances per attempt cannot
+      // be kept current by an append-only snapshot, and would contradict the
+      // goal-judge reminder that reports the live attempt count.
+      attributes: { status: current.status },
       metadata: { value: { objective: current } },
     };
   }
