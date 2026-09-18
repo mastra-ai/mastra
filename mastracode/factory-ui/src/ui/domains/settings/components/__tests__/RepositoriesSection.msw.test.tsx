@@ -62,6 +62,7 @@ describe('Repositories settings', () => {
         HttpResponse.json({
           enabled: true,
           configured: true,
+          mode: 'platform',
           accounts: ['gitlab.com'],
           reauthRequired: false,
           reason: 'ready',
@@ -92,12 +93,16 @@ describe('Repositories settings', () => {
 
     renderRepositoriesSettings();
 
-    expect(await screen.findByText(PRIMARY_PROJECT)).toBeInTheDocument();
-    expect(await screen.findByText('Default branch: main')).toBeInTheDocument();
+    expect((await screen.findAllByText(PRIMARY_PROJECT)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Default branch: main')).length).toBeGreaterThan(0);
     await waitFor(() => expect(gitlabProjectReads).toBe(1));
     expect(await screen.findByText(/factory-gitlab-control/)).toBeInTheDocument();
     expect(screen.queryByText('GitHub is disabled on the server.')).not.toBeInTheDocument();
     expect(screen.queryByText('GitHub CLI tokens')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Manage GitLab connection' })).toHaveAttribute(
+      'href',
+      'https://projects.mastra.ai',
+    );
     expect(screen.queryByText('Worker token')).not.toBeInTheDocument();
   });
 });

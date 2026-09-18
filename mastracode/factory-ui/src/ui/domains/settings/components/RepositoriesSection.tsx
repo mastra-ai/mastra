@@ -1,15 +1,17 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
+import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
+import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
 import { ConnectRepositoriesPanel } from '../../workspaces';
 import { manageGithubConnection } from '../../workspaces/services/github';
-import { GithubPatBlock } from './GithubPatBlock';
 import { FactorySetupSection } from './FactorySetupSection';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { GithubPatBlock } from './GithubPatBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 
@@ -18,6 +20,7 @@ export function RepositoriesSection() {
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
   const githubConnected = useGithubStatusQuery().data?.connected === true;
+  const gitlabStatus = useGitLabStatusQuery().data;
   const activeFactory = factoryQuery.data;
 
   if (!activeFactory) {
@@ -33,11 +36,21 @@ export function RepositoriesSection() {
         title="Repositories"
         description={`Repositories ${activeFactory.name} can edit. What feeds the board is set under Work Intake.`}
         action={
-          githubConnected && (
-            <Button variant="outline" size="sm" onClick={() => manageGithubConnection(baseUrl)}>
-              Manage GitHub connection
-            </Button>
-          )
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {githubConnected && (
+              <Button variant="outline" size="sm" onClick={() => manageGithubConnection(baseUrl)}>
+                Manage GitHub connection
+              </Button>
+            )}
+            {gitlabStatus?.mode === 'platform' && (
+              <Button as="a" href={MASTRA_PROJECTS_URL} target="_blank" variant="outline" size="sm">
+                {gitlabStatus.configured ? 'Manage GitLab connection' : 'Connect GitLab'}
+              </Button>
+            )}
+            {gitlabStatus?.configured && gitlabStatus.mode === 'direct' && (
+              <span className="text-ui-xs text-icon3">GitLab managed by deployment environment variables</span>
+            )}
+          </div>
         }
       >
         <SettingsContainer>

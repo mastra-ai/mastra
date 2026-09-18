@@ -1,5 +1,11 @@
 /** Browser-side helpers for the GitLab intake source. */
 
+export const MASTRA_PROJECTS_URL = 'https://projects.mastra.ai';
+
+export function manageGitLabConnection(): void {
+  window.open(MASTRA_PROJECTS_URL, '_blank', 'noopener,noreferrer');
+}
+
 export interface GitLabConnection {
   id: string;
   integrationId: string;
@@ -10,6 +16,7 @@ export interface GitLabConnection {
 export interface GitLabStatus {
   enabled: boolean;
   configured: boolean;
+  mode?: 'direct' | 'platform';
   connections?: GitLabConnection[];
   accounts?: string[];
   reauthRequired: boolean;
@@ -32,6 +39,15 @@ export interface GitLabIssue {
   labels: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GitLabIssueDetail extends GitLabIssue {
+  description: string | null;
+  comments: Array<{
+    author: string | null;
+    body: string;
+    createdAt: string;
+  }>;
 }
 
 export interface GitLabIssuePage {
@@ -64,14 +80,13 @@ export interface GitLabRepository {
   owner: string;
   defaultBranch: string;
   private: boolean;
-  installationStorageId: string;
+  installationStorageId?: string;
   sandboxProvider: string;
   sandboxWorkdir: string;
 }
 
 export function gitLabProjectRepository(project: GitLabProject): GitLabRepository | null {
-  if (!project.projectId || !project.installationStorageId || !project.sandboxProvider || !project.sandboxWorkdir)
-    return null;
+  if (!project.projectId || !project.sandboxProvider || !project.sandboxWorkdir) return null;
   const fullName = project.projectPath ?? project.name;
   const parts = fullName.split('/').filter(Boolean);
   return {
@@ -105,9 +120,13 @@ export async function fetchGitLabStatus(baseUrl: string): Promise<GitLabStatus> 
   }
 }
 
-async function getGitLabResource<T>(baseUrl: string, path: string): Promise<T> {
+async function getGitLabResource<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${baseUrl}${path}`, {
-    headers: { Accept: 'application/json' },
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+    },
     credentials: 'include',
   });
   if (!res.ok) {
@@ -143,6 +162,20 @@ export async function fetchGitLabProjects(baseUrl: string): Promise<GitLabProjec
   return projects;
 }
 
+export async function registerGitLabRepository(
+  baseUrl: string,
+  sourceId: string,
+): Promise<GitLabRepository & { installationStorageId: string }> {
+  const { project } = await getGitLabResource<{ project: GitLabProject }>(
+    baseUrl,
+    '/web/gitlab/projects/registration',
+    { method: 'POST', body: JSON.stringify({ sourceId }) },
+  );
+  const repository = gitLabProjectRepository(project);
+  if (!repository?.installationStorageId) throw new Error('GitLab project registration returned no installation');
+  return repository as GitLabRepository & { installationStorageId: string };
+}
+
 export async function listGitLabIssues(
   baseUrl: string,
   factoryProjectId: string,
@@ -152,4 +185,9 @@ export async function listGitLabIssues(
   const params = new URLSearchParams({ factoryProjectId, board });
   if (after) params.set('after', after);
   return getGitLabResource<GitLabIssuePage>(baseUrl, '/web/gitlab/issues?' + params.toString());
+}
+
+export function getGitLabIssue(baseUrl: string, factoryProjectId: string, issueId: string): Promise<GitLabIssueDetail> {
+  const params = new URLSearchParams({ factoryProjectId });
+  return getGitLabResource(baseUrl, `/web/gitlab/issues/${encodeURIComponent(issueId)}?${params.toString()}`);
 }

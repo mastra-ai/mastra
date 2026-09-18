@@ -120,6 +120,43 @@ describe('VCS Factory step', () => {
     expect(await screen.findByText('group/project')).toBeInTheDocument();
   });
 
+  it('offers Mastra Platform connection setup when GitLab has no active account yet', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          configured: false,
+          mode: 'platform',
+          connections: [],
+          accounts: [],
+          reauthRequired: false,
+          reason: 'not_connected',
+        }),
+      ),
+    );
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    renderWithProviders(
+      <VcsFactoryStep
+        connectingRepositoryId={null}
+        githubRedirecting={false}
+        mutationPending={false}
+        mutationError={null}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByText('Connect GitLab through Mastra Platform to choose a repository.'),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Connect GitLab/ }));
+    expect(open).toHaveBeenCalledWith('https://projects.mastra.ai', '_blank', 'noopener,noreferrer');
+    expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
+  });
+
   it('shows provider-specific configuration guidance when connections are unavailable', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
