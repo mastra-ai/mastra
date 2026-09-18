@@ -1,5 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { MastraWorker } from '@mastra/core/worker';
 
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
@@ -19,7 +20,9 @@ import type {
 } from '../../capabilities/intake.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
+import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildGitLabAgentTools } from './agent-tools.js';
 import {
   GITLAB_ISSUES_PAGE_SIZE,
@@ -29,7 +32,15 @@ import {
   GitLabApiError,
 } from './api.js';
 import type { GitLabIssue, GitLabNote, GitLabProject } from './api.js';
+import { resolveGitLabRules } from './default-rules.js';
+import type { GitLabEventRules, GitLabRuleOverrides } from './default-rules.js';
+import { attachGitLabReconciler } from './reconciler.js';
+import {
+  gitlabReconciliationEnabled,
+  gitlabReconciliationInterval,
+} from './reconciliation-config.js';
 import { buildGitLabRoutes } from './routes.js';
+import { attachGitLabRules } from './rules.js';
 import { buildGitLabVersionControl } from './version-control.js';
 
 interface GitLabConnectionContext {
@@ -38,13 +49,23 @@ interface GitLabConnectionContext {
   api: GitLabApiClient;
   connection: IntegrationConnection;
   host: string;
-  /** Raw provider token for git-over-HTTPS. Platform proxy selectors deliberately omit this. */
-  repositoryAccessToken?: string;
+  /** Resolves a fresh provider token for a single brokered git operation. */
+  repositoryAccessToken?: () => Promise<string>;
 }
 
 interface GitLabSourceReference {
-  connectionId: string;
+  /** Present only on legacy v1 ids; authentication is not resource identity. */
+  connectionId?: string;
+  /** Canonical v2 ids use the GitLab instance host plus immutable project id. */
+  host?: string;
   projectId: string;
+  /** Legacy ids carry display metadata; v2 resolves it from GitLab. */
+  projectPath?: string;
+}
+
+interface ResolvedGitLabSourceReference extends GitLabSourceReference {
+  connectionId: string;
+  host: string;
   projectPath: string;
 }
 
@@ -68,6 +89,7 @@ const DIRECT_CONNECTION_ID = 'direct';
 const GITLAB_CONNECTION_TOKEN_PREFIX = 'gitlab-connection:';
 const GITLAB_SOURCE_PREFIX = 'gitlab-project:';
 const GITLAB_ISSUE_PREFIX = 'gitlab-issue:';
+export const GITLAB_TRUSTED_ACCESS_LEVEL = 30;
 // Bound issue detail reads to 2,000 notes. GitLab does not expose truncation through the Intake contract.
 const MAX_NOTES_PAGES = 20;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -75,8 +97,14 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 export abstract class GitLabIntegrationBase implements FactoryIntegration {
   readonly id = 'gitlab';
   #projects: FactoryProjectsStorage | undefined;
+  #sourceControl: SourceControlStorageHandle | undefined;
   #auth: RouteAuth | undefined;
   readonly #orgIdByResourceId = new Map<string, string | null>();
+  readonly rules: GitLabEventRules;
+
+  constructor(rules?: GitLabRuleOverrides) {
+    this.rules = resolveGitLabRules(rules);
+  }
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
@@ -90,10 +118,18 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   readonly versionControl = buildGitLabVersionControl({
     contextForConnection: connection => this.#versionControlContext(connection),
   });
-
-  initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth: RouteAuth }): void {
+  initialize({
+    projects,
+    auth,
+    sourceControl,
+  }: {
+    projects: FactoryProjectsStorage;
+    auth: RouteAuth;
+    sourceControl?: SourceControlStorageHandle;
+  }): void {
     this.#projects = projects;
     this.#auth = auth;
+    this.#sourceControl = sourceControl;
   }
 
   get authEnabled(): boolean {
@@ -134,22 +170,66 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   protected abstract activeContexts(): Promise<GitLabConnectionContext[]>;
   protected abstract contextById(connectionId: string): Promise<GitLabConnectionContext>;
 
+  async getProjectMemberAccessLevel(
+    connectionId: string,
+    projectId: string,
+    username: string,
+  ): Promise<number | undefined> {
+    const normalized = username.trim().toLowerCase();
+    if (!normalized) return undefined;
+    const members = await (await this.contextById(connectionId)).api.listProjectMembers(projectId, { query: username });
+    const member = members.find(
+      candidate => candidate.username.toLowerCase() === normalized && candidate.state !== 'blocked',
+    );
+    return member?.access_level;
+  }
+
+  async isProjectMemberTrustedForSource(sourceId: string, username: string): Promise<boolean> {
+    const reference = decodeSourceId(sourceId);
+    if (!reference) throw new GitLabApiError('GitLab source identity is invalid.', 400);
+    const { context, source } = await this.#resolveSourceReference(reference);
+    const accessLevel = await this.getProjectMemberAccessLevel(context.id, source.projectId, username);
+    return (accessLevel ?? 0) >= GITLAB_TRUSTED_ACCESS_LEVEL;
+  }
+
   /** Platform mode exposes org connections; direct mode returns undefined. */
   async statusConnections(): Promise<GitLabStatusConnection[] | undefined> {
     return undefined;
+  }
+
+  /** Direct mode verifies its configured credential; Platform mode uses connection status. */
+  async verifyStatus(): Promise<void> {
+    // Platform connection state is authoritative unless a provider overrides this probe.
   }
 
   protected get webhookSecret(): string | undefined {
     return undefined;
   }
 
+
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    if (!gitlabReconciliationEnabled()) return [];
+    const reconcile = attachGitLabReconciler(this, ctx);
+    if (!reconcile) return [];
+    const intervalMs = gitlabReconciliationInterval();
+    return [
+      new IssueReconcileWorker({
+        integrationId: this.id,
+        reconcile,
+        ...(intervalMs ? { intervalMs } : {}),
+      }),
+    ];
+  }
   routes(ctx: IntegrationContext): ApiRoute[] {
+    const ingestFactoryEvent = attachGitLabRules(this, ctx);
     return buildGitLabRoutes({
       gitlab: this,
       auth: ctx.auth,
       intake: ctx.storage?.intake,
+      emitAudit: ctx.hooks?.emitAudit,
       sandbox: ctx.sandbox,
       webhookSecret: this.webhookSecret,
+      ingestFactoryEvent,
     });
   }
 
@@ -171,33 +251,81 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     }
     return contexts[0]!;
   }
+  async #contextForReference(reference: GitLabSourceReference): Promise<GitLabConnectionContext> {
+    if (reference.connectionId) return this.contextById(reference.connectionId);
+    const contexts = (await this.activeContexts()).filter(
+      context => !reference.host || normalizeGitLabHost(context.host) === normalizeGitLabHost(reference.host),
+    );
+    if (contexts.length === 0) {
+      throw new GitLabApiError('No active GitLab connection can access this source.', 401);
+    }
+    if (contexts.length === 1) return contexts[0]!;
+
+    if (this.#sourceControl) {
+      const linkedConnectionIds = new Set(
+        (await this.#sourceControl.projectRepositories.listConfiguredExternalKeys())
+          .filter(key => key.repositoryExternalId === reference.projectId)
+          .map(key => key.installationExternalId),
+      );
+      const linked = contexts.filter(context => linkedConnectionIds.has(context.id));
+      if (linked.length > 0) return linked.sort((left, right) => left.id.localeCompare(right.id))[0]!;
+    }
+
+    for (const context of contexts.sort((left, right) => left.id.localeCompare(right.id))) {
+      try {
+        await context.api.getProject(reference.projectId);
+        return context;
+      } catch (error) {
+        if (!(error instanceof GitLabApiError) || ![401, 403, 404].includes(error.status ?? 0)) throw error;
+        // This credential cannot access the project; try another active account for the same canonical source.
+      }
+    }
+    throw new GitLabApiError('No active GitLab connection can access this source.', 404);
+  }
+
+  async #resolveSourceReference(
+    reference: GitLabSourceReference,
+  ): Promise<{ context: GitLabConnectionContext; source: ResolvedGitLabSourceReference }> {
+    const context = await this.#contextForReference(reference);
+    const projectPath =
+      reference.projectPath ?? (await context.api.getProject(reference.projectId)).path_with_namespace;
+    return {
+      context,
+      source: {
+        connectionId: context.id,
+        host: normalizeGitLabHost(reference.host ?? context.host),
+        projectId: reference.projectId,
+        projectPath,
+      },
+    };
+  }
+
 
   async #resolveIntakeDispatch({ externalSource }: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null> {
     if (externalSource.type !== 'issue') return null;
     const reference = decodeIssueReference(externalSource.externalId);
     if (!reference) return null;
-    const context = await this.contextById(reference.connectionId);
+    const { context, source } = await this.#resolveSourceReference(reference);
     return {
       connection: context.connection,
-      sourceId: encodeSourceId({
-        connectionId: reference.connectionId,
-        projectId: reference.projectId,
-        projectPath: reference.projectPath,
-      }),
+      sourceId: encodeSourceId(source),
       issueId: String(reference.issueIid),
     };
   }
 
   async #listSources(): Promise<IntakeSource[]> {
-    const sources: IntakeSource[] = [];
+    const sources = new Map<string, IntakeSource>();
     for (const context of await this.activeContexts()) {
       for (let page = 1; ; page++) {
         const projects = await context.api.listProjects({ page });
-        sources.push(...projects.map(project => this.#toIntakeSource(context, project)));
+        for (const project of projects) {
+          const source = this.#toIntakeSource(context, project);
+          if (!sources.has(source.id)) sources.set(source.id, source);
+        }
         if (projects.length < GITLAB_PROJECTS_PAGE_SIZE) break;
       }
     }
-    return sources;
+    return [...sources.values()];
   }
 
   async #listItems(input: ListIntakeItemsInput): Promise<IntakeItemPage> {
@@ -246,8 +374,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     if (!current || current.source >= sources.length) return { issues: [], nextCursor: null };
 
     for (let sourceIndex = current.source; sourceIndex < sources.length; sourceIndex++) {
-      const source = sources[sourceIndex]!;
-      const context = await this.contextById(source.connectionId);
+      const { source, context } = await this.#resolveSourceReference(sources[sourceIndex]!);
       const page = sourceIndex === current.source ? current.page : 1;
       const issues = await context.api.listIssues(source.projectId, { page, labels });
       const nextCursor =
@@ -329,35 +456,40 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     const issueReference = decodeIssueReference(input.issueId);
     const source = input.sourceId ? decodeSourceId(input.sourceId) : null;
     const locator = parseIssueLocator(input.issueId);
-    const connectionId =
-      issueReference?.connectionId ?? source?.connectionId ?? connectionIdFromConnection(input.connection);
-    const contexts = connectionId ? [await this.contextById(connectionId)] : await this.activeContexts();
-    if (contexts.length !== 1) {
-      throw new GitLabApiError(
-        'GitLab issue reference must identify a connection when multiple GitLab accounts are connected.',
-        400,
-      );
+    const reference = issueReference ?? source;
+    let context: GitLabConnectionContext;
+    if (reference) {
+      context = await this.#contextForReference(reference);
+    } else {
+      const connectionId = connectionIdFromConnection(input.connection);
+      const contexts = connectionId ? [await this.contextById(connectionId)] : await this.activeContexts();
+      if (contexts.length !== 1) {
+        throw new GitLabApiError(
+          'GitLab issue reference must resolve to exactly one active connection.',
+          400,
+        );
+      }
+      context = contexts[0]!;
     }
     const projectId = issueReference?.projectId ?? source?.projectId ?? locator?.projectPath;
-    const projectPath = issueReference?.projectPath ?? source?.projectPath ?? locator?.projectPath;
     const issueIid = issueReference?.issueIid ?? locator?.issueIid ?? parsePositiveInteger(input.issueId);
-    if (!projectId || !projectPath || !issueIid) {
+    if (!projectId || !issueIid) {
       throw new GitLabApiError(
         'GitLab issue must include a project and issue IID (for example, group/project#42).',
         400,
       );
     }
-    return {
-      context: contexts[0]!,
-      projectId,
-      projectPath,
-      issueIid,
-    };
+    const projectPath =
+      issueReference?.projectPath ??
+      source?.projectPath ??
+      locator?.projectPath ??
+      (await context.api.getProject(projectId)).path_with_namespace;
+    return { context, projectId, projectPath, issueIid };
   }
 
   #toIntakeSource(context: GitLabConnectionContext, project: GitLabProject): IntakeSource {
     const reference: GitLabSourceReference = {
-      connectionId: context.id,
+      host: normalizeGitLabHost(context.host),
       projectId: String(project.id),
       projectPath: project.path_with_namespace,
     };
@@ -401,6 +533,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
 export type GitLabAccessTokenType = 'personal' | 'group';
 
 export interface GitLabIntegrationConfig {
+  rules?: GitLabRuleOverrides;
   accessToken?: string;
   /** Defaults to `personal`; both token types authenticate identically but have different resource reach. */
   accessTokenType?: GitLabAccessTokenType;
@@ -419,7 +552,7 @@ export class GitLabIntegration extends GitLabIntegrationBase {
   readonly #context: GitLabConnectionContext;
 
   constructor(config: GitLabIntegrationConfig = {}) {
-    super();
+    super(config.rules);
     const accessToken = config.accessToken?.trim() || process.env.GITLAB_ACCESS_TOKEN?.trim();
     if (!accessToken) {
       throw new Error('GitLabIntegration: missing required GITLAB_ACCESS_TOKEN.');
@@ -441,7 +574,7 @@ export class GitLabIntegration extends GitLabIntegrationBase {
       api,
       connection: { type: 'oauth', accessToken: DIRECT_CONNECTION_TOKEN },
       host: new URL(this.#baseUrl).host,
-      repositoryAccessToken: this.#accessToken,
+      repositoryAccessToken: async () => this.#accessToken,
     };
   }
 
@@ -451,6 +584,10 @@ export class GitLabIntegration extends GitLabIntegrationBase {
 
   async hasActiveConnections(): Promise<boolean> {
     return true;
+  }
+
+  override async verifyStatus(): Promise<void> {
+    await this.#context.api.getCurrentUser();
   }
 
   authFailureMessage(): string {
@@ -486,6 +623,16 @@ function parseAccessTokenType(value: string | undefined): GitLabAccessTokenType 
 }
 
 export function encodeSourceId(reference: GitLabSourceReference): string {
+  if (reference.host) {
+    return `${GITLAB_SOURCE_PREFIX}${encodeOpaque({
+      version: 2,
+      host: normalizeGitLabHost(reference.host),
+      projectId: reference.projectId,
+    })}`;
+  }
+  if (!reference.connectionId || !reference.projectPath) {
+    throw new Error('GitLab source reference is missing its instance host.');
+  }
   return `${GITLAB_SOURCE_PREFIX}${encodeOpaque(reference)}`;
 }
 
@@ -494,6 +641,17 @@ export function decodeSourceId(value: string): GitLabSourceReference | null {
 }
 
 export function encodeIssueReference(reference: GitLabIssueReference): string {
+  if (reference.host) {
+    return `${GITLAB_ISSUE_PREFIX}${encodeOpaque({
+      version: 2,
+      host: normalizeGitLabHost(reference.host),
+      projectId: reference.projectId,
+      issueIid: reference.issueIid,
+    })}`;
+  }
+  if (!reference.connectionId || !reference.projectPath) {
+    throw new Error('GitLab issue reference is missing its instance host.');
+  }
   return `${GITLAB_ISSUE_PREFIX}${encodeOpaque(reference)}`;
 }
 
@@ -524,17 +682,22 @@ function decodeOpaque<T>(value: string, prefix: string, guard: (value: unknown) 
   }
 }
 
+function normalizeGitLabHost(host: string): string {
+  return host.trim().toLowerCase().replace(/\.$/, '');
+}
+
 function isSourceReference(value: unknown): value is GitLabSourceReference {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const ref = value as Record<string, unknown>;
-  return (
+  if (typeof ref.projectId !== 'string' || ref.projectId.length === 0) return false;
+  const canonical =
+    ref.version === 2 && typeof ref.host === 'string' && normalizeGitLabHost(ref.host).length > 0;
+  const legacy =
     typeof ref.connectionId === 'string' &&
     ref.connectionId.length > 0 &&
-    typeof ref.projectId === 'string' &&
-    ref.projectId.length > 0 &&
     typeof ref.projectPath === 'string' &&
-    ref.projectPath.length > 0
-  );
+    ref.projectPath.length > 0;
+  return canonical || legacy;
 }
 
 function isIssueReference(value: unknown): value is GitLabIssueReference {
