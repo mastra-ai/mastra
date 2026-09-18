@@ -68,22 +68,33 @@ function startWorker(): Promise<WorkerHandle> {
       // Idempotent: a settled promise ignores later rejections.
       rejectExited(error);
     };
-    const onData = (buffer: Buffer) => {
-      if (!ready && buffer.toString().includes('ABORT_WORKER_READY')) {
-        ready = true;
-        clearTimeout(timer);
-        resolve({
-          proc,
-          exited,
-          disarm: () => {
-            disarmed = true;
-          },
-        });
-      }
+    const READY_MARKER = 'ABORT_WORKER_READY';
+    // Pipe chunk boundaries are arbitrary: the marker can be split across two
+    // `data` events. Keep a rolling tail per stream so a split marker still
+    // matches; retain only marker.length - 1 chars so the buffer stays bounded.
+    const watchForReady = (stream: NodeJS.ReadableStream | null | undefined) => {
+      let tail = '';
+      stream?.on('data', (buffer: Buffer) => {
+        if (ready) return;
+        tail += buffer.toString();
+        if (tail.includes(READY_MARKER)) {
+          ready = true;
+          clearTimeout(timer);
+          resolve({
+            proc,
+            exited,
+            disarm: () => {
+              disarmed = true;
+            },
+          });
+          return;
+        }
+        tail = tail.slice(-(READY_MARKER.length - 1));
+      });
     };
     const timer = setTimeout(() => fail(new Error('abort worker did not become ready')), 90_000);
-    proc.stdout?.on('data', onData);
-    proc.stderr?.on('data', onData);
+    watchForReady(proc.stdout);
+    watchForReady(proc.stderr);
     proc.once('error', error => fail(error));
     proc.once('exit', (code, signal) =>
       fail(new Error(`abort worker exited unexpectedly (code ${code}, signal ${signal})`)),
