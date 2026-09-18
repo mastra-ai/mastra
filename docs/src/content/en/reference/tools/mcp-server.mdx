@@ -943,9 +943,9 @@ Example:
 
 ```typescript
 execute: async ({ location }, context) => {
-  await context.mcp?.log('debug', 'Fetching weather', { location })
+  await context.mcp?.log?.('debug', 'Fetching weather', { location })
   const weather = await fetchWeather(location)
-  await context.mcp?.log('info', 'Weather fetched')
+  await context.mcp?.log?.('info', 'Weather fetched')
   return weather
 }
 ```
@@ -970,7 +970,7 @@ Example:
 execute: async ({ items }, context) => {
   for (const [index, item] of items.entries()) {
     await processItem(item)
-    await context.mcp?.progress({
+    await context.mcp?.progress?.({
       progress: index + 1,
       total: items.length,
       message: `Processed ${item.name}`,
