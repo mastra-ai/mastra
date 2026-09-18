@@ -1,5 +1,6 @@
 import { abortFollowupScenario } from './abort-followup.js';
 import { accountRotationScenario } from './account-rotation.js';
+import { accountRoutingTargetedScenario } from './account-routing-targeted.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
 import { agentConnectionsExpectedReplyWatchdogScenario } from './agent-connections-expected-reply-watchdog.js';
 import { agentConnectionsNotificationSignalScenario } from './agent-connections-notification-signal.js';
@@ -371,6 +372,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'storage-startup-pg-fallback': storageStartupPgFallbackScenario,
   'stream-error-retry': streamErrorRetryScenario,
   'account-rotation': accountRotationScenario,
+  'account-routing-targeted': accountRoutingTargetedScenario,
   'pack-fallback': packFallbackScenario,
   'multi-account-login': multiAccountLoginScenario,
   'streaming-render-stability': streamingRenderStabilityScenario,

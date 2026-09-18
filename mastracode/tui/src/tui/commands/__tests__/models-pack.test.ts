@@ -346,7 +346,7 @@ describe('fallbackPackCandidates', () => {
 });
 
 describe('formatPackAccountRoutingSummary', () => {
-  it('groups shared models and distinguishes preferred subscriptions from Automatic routing', () => {
+  it('labels a pinned subscription as exclusive and Automatic as rotating', () => {
     const settings = createSettings({
       models: {
         ...createSettings().models,
@@ -360,9 +360,11 @@ describe('formatPackAccountRoutingSummary', () => {
       providerId === 'openai-codex' ? [{ id: 'openai-codex:team', label: 'OpenAI Team' }] : [],
     );
 
-    expect(summary).toContain('plan → OpenAI Team');
-    expect(summary).toContain('build → Automatic');
-    expect(summary).toContain('fast → Automatic');
+    // A12: a named account is used exclusively; Automatic is the mode that
+    // rotates, so the two must read differently in the pack detail.
+    expect(summary).toContain('plan → OpenAI Team (only)');
+    expect(summary).toContain('build → Automatic (rotate)');
+    expect(summary).toContain('fast → Automatic (rotate)');
   });
 
   it('shows one route when multiple modes resolve to the same model', () => {
@@ -371,7 +373,7 @@ describe('formatPackAccountRoutingSummary', () => {
       models: { ...alphaPack.models, fast: alphaPack.models.plan },
     };
 
-    expect(formatPackAccountRoutingSummary(createSettings(), pack)).toContain('plan/fast → Automatic');
+    expect(formatPackAccountRoutingSummary(createSettings(), pack)).toContain('plan/fast → Automatic (rotate)');
   });
 });
 

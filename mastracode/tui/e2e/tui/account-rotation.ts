@@ -11,8 +11,7 @@ const PROVIDER = 'kimi-for-coding';
 const PACK_NAME = 'rotation-kimi';
 const MODEL_ID = 'kimi-for-coding/kimi-for-coding';
 const PROMPT = 'Rotate to the next account when this one is rate limited.';
-const RESPONSE_TEXT = 'Completed on the remaining account after preferred subscription failover.';
-const FOLLOWUP_RESPONSE_TEXT = 'Sticky preferred subscription failover completed.';
+const RESPONSE_TEXT = 'Completed on the second account after rotation.';
 const ACCOUNT_A_ACCESS = 'mc-rotation-a-access';
 const ACCOUNT_B_ACCESS = 'mc-rotation-b-access';
 const ACCOUNT_A_DEVICE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -42,12 +41,7 @@ function authSummary(auth: AuthSnapshot) {
   return {
     accountCount: accounts.length,
     accounts,
-    activeSlotLabel:
-      auth[PROVIDER]?.access === ACCOUNT_A_ACCESS
-        ? 'A'
-        : auth[PROVIDER]?.access === ACCOUNT_B_ACCESS
-          ? 'B'
-          : 'unrecognized',
+    slotMatchesAccountB: auth[PROVIDER]?.access === ACCOUNT_B_ACCESS && auth[PROVIDER]?.deviceId === ACCOUNT_B_DEVICE,
   };
 }
 
@@ -81,7 +75,7 @@ function rateLimitResponse(): Response {
   );
 }
 
-function completionResponse(text = RESPONSE_TEXT): Response {
+function completionResponse(): Response {
   const events: Array<[string, object]> = [
     [
       'message_start',
@@ -99,7 +93,10 @@ function completionResponse(text = RESPONSE_TEXT): Response {
       },
     ],
     ['content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }],
-    ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } }],
+    [
+      'content_block_delta',
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: RESPONSE_TEXT } },
+    ],
     ['content_block_stop', { type: 'content_block_stop', index: 0 }],
     [
       'message_delta',
@@ -112,10 +109,11 @@ function completionResponse(text = RESPONSE_TEXT): Response {
 }
 
 /**
- * A two-account Kimi For Coding OAuth pool where /models prefers account B.
- * B is rate limited, so the account-rotation processor advances to A, pairs
- * token and device metadata, persists B's exhaustion for this pack/model, and
- * skips B on the next message after an app restart.
+ * A two-account Kimi For Coding OAuth pool where the active account is rate
+ * limited: the account-rotation processor advances the registry, the retried
+ * request completes on the second account (token AND device headers follow the
+ * rotation), the switch renders as a transcript notice, and both the registry
+ * state and the persisted notice survive an app restart.
  *
  * Kimi is used instead of Anthropic because the Anthropic OAuth provider has a
  * vitest-only test-mode shortcut (`apiKey: 'test-api-key'`) that bypasses the
@@ -123,9 +121,8 @@ function completionResponse(text = RESPONSE_TEXT): Response {
  */
 export const accountRotationScenario: McE2eScenario = {
   name: 'account-rotation',
-  description:
-    'Configures a pack/model preferred subscription, fails over on 429, and keeps the exhausted preference sticky.',
-  testName: 'routes through a preferred subscription and keeps failover sticky across restart',
+  description: 'Rotates to the next OAuth account on a 429 and shows the switch in the transcript.',
+  testName: 'rotates a rate-limited OAuth account, renders the switch, and persists it across restart',
   async prepare({ appDataDir }) {
     scenarioAppDataDir = appDataDir;
     const settingsPath = join(appDataDir, 'settings.json');
@@ -187,28 +184,22 @@ export const accountRotationScenario: McE2eScenario = {
   async inProcessApp({ startMastraCodeApp }) {
     const patches = createGlobalPatchScope();
     outbound = [];
-    let successfulCompletions = 0;
     const originalFetch = globalThis.fetch.bind(globalThis);
-    const mockedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    patches.setProperty(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
       if (new URL(requestUrl(input)).hostname === 'api.kimi.com') {
         const headers = requestHeaders(init);
         const bearer = (headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
         const deviceId = headers.get('x-msh-device-id') ?? '';
         outbound.push({ bearer, deviceId });
-        if (bearer === ACCOUNT_B_ACCESS) return rateLimitResponse();
-        successfulCompletions += 1;
-        return completionResponse(successfulCompletions === 1 ? RESPONSE_TEXT : FOLLOWUP_RESPONSE_TEXT);
+        return bearer === ACCOUNT_B_ACCESS ? completionResponse() : rateLimitResponse();
       }
       return originalFetch(input, init);
-    };
-    patches.setProperty(globalThis, 'fetch', mockedFetch);
+    });
 
     let stopCurrentApp: (() => Promise<void>) | undefined;
     let currentStop: (() => Promise<void>) | undefined;
     const start = async () => {
       const app = await startMastraCodeApp();
-      // Re-assert the fetch mock: a previous app's stop may have restored it.
-      globalThis.fetch = mockedFetch;
       // Raw stop, deliberately not `patches.stopApp`: that wrapper restores the
       // fetch patch, and the restarted app needs it. Restarting must still stop
       // the previous app — two live TUIs share the same app data otherwise.
@@ -226,11 +217,8 @@ export const accountRotationScenario: McE2eScenario = {
       await start();
       return {
         stop: async () => {
-          try {
-            await currentStop?.();
-          } finally {
-            patches.restore();
-          }
+          await currentStop?.();
+          patches.restore();
         },
       };
     } catch (error) {
@@ -242,49 +230,12 @@ export const accountRotationScenario: McE2eScenario = {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
-    // Configure this pack/model to prefer account B without making it globally active.
-    terminal.submit('/models');
-    await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
-    await runtime.waitForScreenText(/rotation-kimi/i, terminal, 8_000);
-    terminal.write('\r');
-    await runtime.waitForScreenText(/Custom pack: rotation-kimi/i, terminal, 8_000);
-    terminal.write('\x1b[B\x1b[B\x1b[B');
-    terminal.write('\r');
-    await runtime.waitForScreenText(/Subscription routing: rotation-kimi/i, terminal, 8_000);
-    await runtime.waitForScreenText(/kimi-for-coding\/kimi-for-coding/i, terminal, 8_000);
-    terminal.write('\r');
-    await runtime.waitForScreenText(/Preferred subscription for kimi-for-coding\/kimi-for-coding/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Kimi Account A.*active/i, terminal, 8_000);
-    terminal.write('\x1b[B\x1b[B');
-    await runtime.waitForScreenText(/Request order: Kimi Account B → Kimi Account A \(active\)/i, terminal, 8_000);
-    terminal.write('\r');
-    await runtime.waitForScreenText(/Subscription routing: rotation-kimi/i, terminal, 8_000);
-    terminal.write('\x1b');
-    await runtime.waitForScreenText(/Custom pack: rotation-kimi/i, terminal, 8_000);
-    terminal.write('\x1b');
-    await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
-    terminal.write('\x1b');
-    await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
-
-    const configured = readMutableSettingsFixture(join(scenarioAppDataDir, 'settings.json'));
-    const preferredId = configured.models.packAccountPreferences?.[`custom:${PACK_NAME}`]?.[MODEL_ID];
-    const accountBId = new AuthStorage(join(scenarioAppDataDir, 'auth.json')).listAccounts(PROVIDER)[1]!.id;
-    if (preferredId !== accountBId) {
-      throw new Error('Expected /models to persist account B as the pack/model preference.');
-    }
-
     terminal.submit(PROMPT);
 
-    // Preferred B activates first, then its 429 rotates to A and records B as
-    // exhausted for this pack/model.
+    // The switch notice renders mid-run, then the completion streams on account B.
     try {
       await runtime.waitForScreenText(
-        /Switched Kimi account: Kimi Account A → Kimi Account B \(subscription routing\)/i,
-        terminal,
-        30_000,
-      );
-      await runtime.waitForScreenText(
-        /Switched Kimi account: Kimi Account B → Kimi Account A \(rate limit\)/i,
+        /Switched Kimi account: Kimi Account A → Kimi Account B \(rate limit\)/i,
         terminal,
         30_000,
       );
@@ -296,36 +247,43 @@ export const accountRotationScenario: McE2eScenario = {
       );
     }
     await runtime.waitForScreenText(new RegExp(RESPONSE_TEXT), terminal, 30_000);
-    runtime.printScreen('after preferred routing failover', terminal);
+    runtime.printScreen('after rotation', terminal);
 
-    // Bearer plus device header: a request can carry account B's token with
-    // account A's device id and still look "preferred" on the token alone.
-    if (
-      outbound.length === 0 ||
-      outbound[0]!.bearer !== ACCOUNT_B_ACCESS ||
-      outbound[0]!.deviceId !== ACCOUNT_B_DEVICE
-    ) {
-      throw new Error(
-        `Expected the first Kimi request to use preferred account B and its device header: ${JSON.stringify(outboundSummary())}`,
-      );
+    // Raw outbound requests: account A was tried first, account B served the
+    // completion, and the device header followed the rotation with the token.
+    if (outbound.length === 0 || outbound[0]!.bearer !== ACCOUNT_A_ACCESS) {
+      throw new Error(`Expected the first Kimi request to use account A, saw: ${JSON.stringify(outboundSummary())}`);
     }
     const lastSuccess = outbound[outbound.length - 1]!;
-    if (lastSuccess.bearer !== ACCOUNT_A_ACCESS || lastSuccess.deviceId !== ACCOUNT_A_DEVICE) {
-      throw new Error(`Expected account A and its device header to complete: ${JSON.stringify(outboundSummary())}`);
+    if (lastSuccess.bearer !== ACCOUNT_B_ACCESS) {
+      throw new Error(`Expected the last Kimi request to use account B, saw: ${JSON.stringify(outboundSummary())}`);
     }
-    const firstA = outbound.findIndex(request => request.bearer === ACCOUNT_A_ACCESS);
-    if (firstA === -1 || outbound.slice(firstA).some(request => request.bearer === ACCOUNT_B_ACCESS)) {
-      throw new Error(`Expected no account B request after failover: ${JSON.stringify(outboundSummary())}`);
+    if (lastSuccess.deviceId !== ACCOUNT_B_DEVICE) {
+      throw new Error(
+        `Expected the account B request to carry account B's device header, saw: ${JSON.stringify(outboundSummary())}`,
+      );
+    }
+    if (!outbound.some(request => request.bearer === ACCOUNT_A_ACCESS && request.deviceId === ACCOUNT_A_DEVICE)) {
+      throw new Error(
+        `Expected account A's requests to carry its device header, saw: ${JSON.stringify(outboundSummary())}`,
+      );
+    }
+    const firstB = outbound.findIndex(request => request.bearer === ACCOUNT_B_ACCESS);
+    if (firstB === -1 || outbound.slice(firstB).some(request => request.bearer === ACCOUNT_A_ACCESS)) {
+      throw new Error(`Expected no account A request after the rotation, saw: ${JSON.stringify(outboundSummary())}`);
     }
 
+    // On disk: the isolated auth.json slot now holds account B's tokens.
     const auth = JSON.parse(readFileSync(join(scenarioAppDataDir, 'auth.json'), 'utf-8')) as AuthSnapshot;
-    if (auth[PROVIDER]?.access !== ACCOUNT_A_ACCESS || auth[PROVIDER]?.deviceId !== ACCOUNT_A_DEVICE) {
-      throw new Error(`Expected the legacy slot to hold account A's credentials: ${JSON.stringify(authSummary(auth))}`);
+    if (auth[PROVIDER]?.access !== ACCOUNT_B_ACCESS || auth[PROVIDER]?.deviceId !== ACCOUNT_B_DEVICE) {
+      throw new Error(`Expected the legacy slot to hold account B's credentials: ${JSON.stringify(authSummary(auth))}`);
     }
     const registryEntries = Object.entries(auth).filter(([key]) => key.startsWith('accounts:kimi-for-coding:'));
     const activeEntries = registryEntries.filter(([, value]) => value?.active === true);
-    if (registryEntries.length !== 2 || activeEntries.length !== 1 || activeEntries[0]![1].label !== 'Kimi Account A') {
-      throw new Error(`Expected both accounts with A active: ${JSON.stringify(authSummary(auth))}`);
+    if (registryEntries.length !== 2 || activeEntries.length !== 1 || activeEntries[0]![1].label !== 'Kimi Account B') {
+      throw new Error(
+        `Expected the registry to hold both accounts with B active: ${JSON.stringify(authSummary(auth))}`,
+      );
     }
 
     // Restart the app on the same app data and reload the thread: the persisted
@@ -339,24 +297,11 @@ export const accountRotationScenario: McE2eScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/Switched to:/i, terminal, 10_000);
     await runtime.waitForScreenText(
-      /Switched Kimi account: Kimi Account B → Kimi Account A \(rate limit\)/i,
+      /Switched Kimi account: Kimi Account A → Kimi Account B \(rate limit\)/i,
       terminal,
       30_000,
     );
     runtime.printScreen('after restart history reload', terminal);
-
-    const requestsBeforeFollowup = outbound.length;
-    terminal.submit('Confirm sticky routing on the next message.');
-    await runtime.waitForScreenText(new RegExp(FOLLOWUP_RESPONSE_TEXT), terminal, 30_000);
-    const followupRequests = outbound.slice(requestsBeforeFollowup);
-    // Token *and* device header: pairing the surviving account's bearer with the
-    // exhausted account's device id would still present as sticky on bearer alone.
-    if (
-      followupRequests.length === 0 ||
-      followupRequests.some(request => request.bearer !== ACCOUNT_A_ACCESS || request.deviceId !== ACCOUNT_A_DEVICE)
-    ) {
-      throw new Error(`Expected sticky routing to skip exhausted preferred B: ${JSON.stringify(outboundSummary())}`);
-    }
 
     terminal.keyCtrlC();
   },

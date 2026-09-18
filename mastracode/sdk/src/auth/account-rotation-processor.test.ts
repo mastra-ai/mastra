@@ -29,6 +29,7 @@ import {
   PACK_FALLBACK_STATE_KEY,
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
+  accountSwitchNoticeText,
   classifyRotationError,
   clearExhaustedAccountRoute,
   isAccountSwitchReason,
@@ -665,7 +666,7 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     expect(noModel.writer.custom).not.toHaveBeenCalled();
   });
 
-  it('selects the pack/model preferred account before the request and skips sticky exhausted accounts', async () => {
+  it('A12: fails closed instead of using a sibling when the routed account is exhausted', async () => {
     const seeded = await makeTwoAccountStorage();
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
     mkdirSync(appDataDir, { recursive: true });
@@ -697,21 +698,16 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     const args = makeInputArgs({ requestContext });
     const processor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
 
-    await processor.processInput(args as any);
-
-    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
-    expect(args.writer.custom).toHaveBeenCalledTimes(1);
-    expect(args.writer.custom.mock.calls[0]![0]).toMatchObject({
-      type: ACCOUNT_SWITCH_PART_TYPE,
-      data: {
-        from: { id: seeded.accountA.id },
-        to: { id: seeded.accountB.id },
-        reason: 'preferred-routing',
-      },
-    });
+    // The route names account A; A is exhausted. Account B is healthy but the
+    // route does not permit it — the user pinned A so this model cannot spend
+    // B's quota.
+    await expect(processor.processInput(args as any)).rejects.toThrow(
+      'The subscription selected for anthropic · anthropic/claude-fable-5 is exhausted',
+    );
+    expect(args.writer.custom).not.toHaveBeenCalled();
   });
 
-  it('tries a preferred account before the remaining accounts in insertion order', async () => {
+  it('A12: a targeted route never activates a sibling account and its failure goes to the fallback chain', async () => {
     const seeded = await makeTwoAccountStorage();
     const accountC = await addThirdAccount(seeded.storage);
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
@@ -722,6 +718,7 @@ describe('AccountStartNoticeProcessor.processInput', () => {
         onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
         models: {
           activeModelPackId: 'anthropic',
+          packFallbacks: { anthropic: 'custom:Fallback' },
           packAccountPreferences: {
             anthropic: { 'anthropic/claude-fable-5': seeded.accountB.id },
           },
@@ -753,14 +750,78 @@ describe('AccountStartNoticeProcessor.processInput', () => {
       credentialStore: seeded.storage,
       maxProcessorRetries: 22,
     });
+    // The targeted account failed: the route hops to the fallback chain rather
+    // than rotating, so core advances to the next pack model.
+    const result = await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(429) } as never);
+    expect(result.retry).toBe(false);
+
+    const switchedTo = inputArgs.writer.custom.mock.calls
+      .map(call => call[0])
+      .filter(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to)
+      .map(part => part.data.to.id);
+    // Only the request-start activation of the target — never account A or C.
+    expect(switchedTo).toEqual([seeded.accountB.id]);
+    expect(switchedTo).not.toContain(seeded.accountA.id);
+    expect(switchedTo).not.toContain(accountC.id);
+    // The pool is announced unavailable so the hop is visible, flagged
+    // exclusive: only the pinned account was consulted (A12).
+    const unavailable = inputArgs.writer.custom.mock.calls
+      .map(call => call[0])
+      .find(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to === null);
+    expect(unavailable?.data).toMatchObject({ reason: 'pool-exhausted', exclusive: true });
+    expect(accountSwitchNoticeText(unavailable!.data)).toBe('Pinned Anthropic account unavailable (pool exhausted)');
+  });
+
+  it('A12: an Automatic route still rotates through the remaining accounts in insertion order', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const accountC = await addThirdAccount(seeded.storage);
+    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models: {
+          activeModelPackId: 'anthropic',
+          packAccountPreferences: {},
+        },
+      }),
+      'utf-8',
+    );
+    let controllerState: Record<string, unknown> = { activeModelPackId: 'anthropic' };
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      threadId: 'thread-1',
+      getState: () => controllerState,
+      setState: async (updates: Record<string, unknown>) => {
+        controllerState = { ...controllerState, ...updates };
+      },
+      setThreadSetting: vi.fn(async () => {}),
+    });
+    const inputArgs = makeInputArgs({ requestContext });
+    const startProcessor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
+    await startProcessor.processInput(inputArgs as any);
+
+    const errorArgs = makeArgs({
+      state: inputArgs.state,
+      writer: inputArgs.writer,
+      requestContext,
+    });
+    const rotationProcessor = new AccountRotationProcessor({
+      credentialStore: seeded.storage,
+      maxProcessorRetries: 22,
+    });
     expect((await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(429) } as never)).retry).toBe(true);
     expect((await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(429) } as never)).retry).toBe(true);
 
+    // Automatic rotates the whole pool: the request-start activation of the
+    // first account in insertion order, then each remaining account.
     const destinations = inputArgs.writer.custom.mock.calls
       .map(call => call[0])
       .filter(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to)
       .map(part => part.data.to.id);
-    expect(destinations).toEqual([seeded.accountB.id, seeded.accountA.id, accountC.id]);
+    expect(destinations).toEqual([seeded.accountA.id, seeded.accountB.id, accountC.id]);
   });
 
   it('fails before provider execution when every routed account is already exhausted', async () => {
@@ -1090,7 +1151,7 @@ describe('pack-fallback parts', () => {
     expect(scoped.getStoredApiKey('openai-codex')).toBe('sk-other');
   });
 
-  it('persists exhausted accounts per pack/model so later requests do not retry the preference', async () => {
+  it('A12: records the targeted account as exhausted so a later request fails closed rather than using a sibling', async () => {
     const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks(
       {},
@@ -1101,7 +1162,8 @@ describe('pack-fallback parts', () => {
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
 
-    expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: true });
+    // The pinned account failed: the route does not rotate to B.
+    expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: false });
 
     const routingWrite = args.setThreadSetting.mock.calls.find(
       ([setting]) => setting.key === THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
@@ -1130,13 +1192,14 @@ describe('pack-fallback parts', () => {
       writer: { custom: vi.fn(async () => {}) },
       requestContext,
     };
-    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(nextArgs as any);
 
-    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
-    expect(nextArgs.writer.custom.mock.calls[0]![0].data).toMatchObject({
-      to: { id: seeded.accountB.id },
-      reason: 'starting-on-account',
-    });
+    // The next request fails closed on the targeted account — it must never
+    // fall through to the healthy sibling subscription.
+    await expect(
+      new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(nextArgs as any),
+    ).rejects.toThrow('The subscription selected for anthropic · anthropic/claude-fable-5 is exhausted');
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).not.toBe(seeded.accountB.id);
+    expect(nextArgs.writer.custom).not.toHaveBeenCalled();
   });
 
   it('serializes concurrent sticky-exhaustion merges for the same thread', async () => {

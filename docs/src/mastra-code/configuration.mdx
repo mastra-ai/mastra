@@ -120,11 +120,13 @@ Exactly one account per provider is active at a time; the others are kept for ro
 
 #### Subscription routing by model pack
 
-A model pack can prefer a different account for each model. In `/models`, select a pack, choose **Set subscription routing…**, select a model, then select an account. The routing preview shows the request order before you save it.
+A model pack can pin a different account for each model. In `/models`, select a pack, choose **Set subscription routing…**, select a model, then select an account. The picker previews the effect before you save it.
 
-The preferred account is tried first. If it fails, Mastra Code tries the provider's remaining accounts in the order they were added. Exhausted accounts stay skipped for that model and thread on later messages. Select **Automatic** to use insertion order without a preferred account.
+A selected account is used **exclusively** for that pack and model. If it cannot serve a request, Mastra Code does not fall back to another subscription on the provider — it moves to the pack's configured fallback chain instead, if one is set. This is what keeps a heavy model from consuming the quota on every subscription you own: pin the heavy model to one account and a lighter model to another, and each subscription's usage is spent only where you intended.
 
-Preferences belong to the pack and resolved model. Two packs that use the same model can prefer different accounts. When a request hops to a fallback pack, that pack's own subscription routing applies.
+Select **Automatic** to leave the route unpinned — the model then rotates through the provider's accounts (see below).
+
+Preferences belong to the pack and resolved model. Two packs that use the same model can pin different accounts. When a request hops to a fallback pack, that pack's own subscription routing applies.
 
 #### Automatic account rotation
 
@@ -134,11 +136,13 @@ For eligible failures on the active account, Mastra Code automatically rotates t
 - **Auth failures** (HTTP 401/403) first force one token refresh of the current account; if the refreshed token still fails, the pool rotates.
 - **Server errors and network outages** first exhaust the normal transient retry budget; if the provider still can't serve the request, the error surfaces without another account being activated.
 
-Rotation starts with the account selected by the pack's subscription routing, then walks the remaining accounts in the order they were added. Each account is tried at most once per request. When every account in the pool has been tried, the error surfaces normally or the request moves to the configured fallback pack. Other errors — malformed requests (HTTP 400 with no provider usage-limit message) and anything unrecognized — never rotate; they surface immediately.
+Rotation walks the provider's accounts in the order they were added. Each account is tried at most once per request. When every account in the pool has been tried, the error surfaces normally or the request moves to the configured fallback pack. Other errors — malformed requests (HTTP 400 with no provider usage-limit message) and anything unrecognized — never rotate; they surface immediately.
+
+Rotation applies to **Automatic** routes only. A model pinned to a specific account never rotates to a sibling account; its failures go to the pack's fallback chain.
 
 Rotation and transient retries share one retry budget, so after a rotation the remaining accounts may see fewer transient retries each — the next account is always preferred over further retries on a failing one.
 
-Every switch is shown in the transcript as a one-line notice (for example, `Switched Kimi account: Work → Personal (rate limit)`) and is persisted in the thread history, so it also appears when you reopen the thread later. When a request starts on an account that isn't the first one in the pool, a `Starting on …` notice marks that too.
+Every switch is shown in the transcript as a one-line notice (for example, `Switched Kimi account: Work → Personal (rate limit)`) and is persisted in the thread history, so it also appears when you reopen the thread later. When a request starts on an account that isn't the first one in the pool, a `Starting on …` notice marks that too. When a pinned account can't serve a request, the notice names that account (`Pinned Anthropic account unavailable (pool exhausted)`) rather than reporting the whole pool as unavailable.
 
 When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/connect` or during onboarding, Mastra Code asks how you want to sign in:
 

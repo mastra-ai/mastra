@@ -196,10 +196,11 @@ export function formatPackAccountRoutingSummary(
   return packRoutingEntries(pack)
     .map(({ modelId, modes, providerId }) => {
       const preferredId = preferences[modelId];
+      // A12: a selected account is exclusive to the route; `Automatic` is the
+      // mode that rotates through accounts on failure.
       const label = preferredId
-        ? ((providerId ? lookupAccounts(providerId).find(account => account.id === preferredId)?.label : undefined) ??
-          preferredId)
-        : 'Automatic';
+        ? `${(providerId ? lookupAccounts(providerId).find(account => account.id === preferredId)?.label : undefined) ?? preferredId} (only)`
+        : 'Automatic (rotate)';
       return `  ${modes.join('/')} → ${label}`;
     })
     .join('\n');
@@ -211,7 +212,7 @@ function accountRoutingActionDetail(ctx: SlashCommandContext, pack: ModePack): s
     pack,
     providerId => ctx.authStorage?.listAccounts(providerId) ?? [],
   );
-  return `${theme.fg('dim', '  Request order for each resolved model:')}\n${theme.fg('textHighlight', summary)}`;
+  return `${theme.fg('dim', '  Subscription per resolved model:')}\n${theme.fg('textHighlight', summary)}`;
 }
 
 /** "Activate" detail: the pack's model lines plus its fallback chain when one is set. */
@@ -234,7 +235,7 @@ async function askCustomPackAction(
     { id: 'activate', label: 'Activate', description: 'Use this pack as-is' },
     { id: 'edit', label: 'Edit', description: 'Update this pack' },
     { id: 'share', label: 'Share', description: 'Copy to clipboard' },
-    { id: 'routing', label: 'Set subscription routing…', description: 'Choose a preferred account per model' },
+    { id: 'routing', label: 'Set subscription routing…', description: 'Pin each model to one account, or rotate' },
     { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
     { id: 'delete', label: 'Delete', description: 'Remove this custom pack' },
   ] as const;
@@ -304,7 +305,7 @@ async function askBuiltinPackAction(
 ): Promise<'activate' | 'routing' | 'fallback' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Switch to this pack' },
-    { id: 'routing', label: 'Set subscription routing…', description: 'Choose a preferred account per model' },
+    { id: 'routing', label: 'Set subscription routing…', description: 'Pin each model to one account, or rotate' },
     { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
   ] as const;
 
@@ -365,7 +366,7 @@ async function askModifiedBuiltinPackAction(
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use the modified models' },
     { id: 'reset', label: 'Reset to built-in models', description: 'Remove all overrides' },
-    { id: 'routing', label: 'Set subscription routing…', description: 'Choose a preferred account per model' },
+    { id: 'routing', label: 'Set subscription routing…', description: 'Pin each model to one account, or rotate' },
     { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
   ] as const;
 
@@ -1139,7 +1140,7 @@ async function askRoutingModel(ctx: SlashCommandContext, pack: ModePack): Promis
       : undefined;
     return {
       value: modelId,
-      label: `  ${modes.join('/')}  ${theme.fg('dim', modelId)}  ${theme.fg(preferredId ? 'textHighlight' : 'dim', account?.label ?? preferredId ?? 'Automatic')}`,
+      label: `  ${modes.join('/')}  ${theme.fg('dim', modelId)}  ${theme.fg(preferredId ? 'textHighlight' : 'dim', preferredId ? `${account?.label ?? preferredId} (only)` : 'Automatic')}`,
     };
   });
 
@@ -1177,32 +1178,38 @@ async function askPreferredAccount(
   const items: SelectItem[] = [
     {
       value: '__automatic__',
-      label: `  Automatic  ${theme.fg('dim', 'Use account insertion order')}${!current ? theme.fg('accent', ' (current)') : ''}`,
+      label: `  Automatic  ${theme.fg('dim', 'Rotate through accounts on failure')}${!current ? theme.fg('accent', ' (current)') : ''}`,
     },
     ...accounts.map(account => ({
       value: account.id,
-      label: `  ${account.label}${account.active ? theme.fg('success', ' (active)') : ''}${account.id === current ? theme.fg('accent', ' (preferred)') : ''}`,
+      label: `  ${account.label}${account.active ? theme.fg('success', ' (active)') : ''}${account.id === current ? theme.fg('accent', ' (selected)') : ''}`,
     })),
   ];
 
   return new Promise(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', `Preferred subscription for ${modelId}`)), 0, 0));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Subscription for ${modelId}`)), 0, 0));
     container.addChild(new Spacer(1));
     const selectList = new SelectList(items, items.length, getSelectListTheme());
     const preview = new Text('', 0, 0);
     const updatePreview = (selectedId: string) => {
       const preferred = selectedId === '__automatic__' ? null : selectedId;
       const preferredAccount = preferred ? accounts.find(account => account.id === preferred) : undefined;
-      const ordered = preferredAccount
-        ? [preferredAccount, ...accounts.filter(account => account.id !== preferredAccount.id)]
-        : accounts;
-      const labels = ordered.map(account => `${account.label}${account.active ? ' (active)' : ''}`);
-      preview.setText(
-        labels.length > 0
-          ? `${theme.fg('dim', '  Request order: ')}${theme.fg('textHighlight', labels.join(' → '))}`
-          : theme.fg('dim', '  No OAuth subscriptions available for this model.'),
-      );
+      if (preferredAccount) {
+        // A12: the selected account is used exclusively. On failure the pack's
+        // fallback chain takes over — other subscriptions are never touched,
+        // so a heavy model cannot drain a second subscription's quota.
+        preview.setText(
+          `${theme.fg('dim', '  Uses only: ')}${theme.fg('textHighlight', preferredAccount.label)}${theme.fg('dim', ' — on failure the pack fallback chain is used, not another account.')}`,
+        );
+      } else {
+        const labels = accounts.map(account => `${account.label}${account.active ? ' (active)' : ''}`);
+        preview.setText(
+          labels.length > 0
+            ? `${theme.fg('dim', '  Rotation order: ')}${theme.fg('textHighlight', labels.join(' → '))}`
+            : theme.fg('dim', '  No OAuth subscriptions available for this model.'),
+        );
+      }
       ctx.state.ui.requestRender();
     };
     selectList.onSelectionChange = item => updatePreview(item.value);

@@ -6,6 +6,8 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 export type ScenarioName =
   | 'startup'
   | 'abort-followup'
+  | 'account-rotation'
+  | 'account-routing-targeted'
   | 'branch-context-long-name'
   | 'active-signal-followup'
   | 'agent-connections-expected-reply-watchdog'

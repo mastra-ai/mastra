@@ -109,6 +109,38 @@ describe('getAssistantRenderParts', () => {
     expect(accountSwitchNoticeText(parts[0] as never)).not.toMatch(/unavailable/);
   });
 
+  it('re-renders a persisted pinned-account exhaustion as pinned, not the whole pool', () => {
+    const message = assistantMessage([
+      {
+        type: 'data-mastracode-account-switch',
+        data: {
+          provider: 'kimi-for-coding',
+          from: { id: 'kimi-for-coding:bbbb', label: 'Personal' },
+          to: null,
+          reason: 'pool-exhausted',
+          at: '2026-09-17T00:00:00.000Z',
+          exclusive: true,
+        },
+      } as never,
+    ]);
+
+    const parts = getAssistantRenderParts(message);
+    // The flag must survive history parsing: dropping it would re-render a
+    // route that consulted one account as if the pool had been walked (A12).
+    expect(parts).toEqual([
+      {
+        kind: 'account-switch',
+        provider: 'kimi-for-coding',
+        from: { id: 'kimi-for-coding:bbbb', label: 'Personal' },
+        to: null,
+        reason: 'pool-exhausted',
+        at: '2026-09-17T00:00:00.000Z',
+        exclusive: true,
+      },
+    ]);
+    expect(accountSwitchNoticeText(parts[0] as never)).toBe('Pinned Kimi account unavailable (pool exhausted)');
+  });
+
   it('keeps an explicit null to endpoint rendering as pool exhaustion', () => {
     const message = assistantMessage([
       {

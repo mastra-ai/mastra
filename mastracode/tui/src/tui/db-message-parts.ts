@@ -131,6 +131,9 @@ function accountSwitchRenderPart(data: unknown): AccountSwitchRenderPart | null 
     to: toEndpoint(record.to),
     reason: record.reason,
     at: typeof record.at === 'string' ? record.at : '',
+    // A12 exclusivity flag: without it a pinned route's exhaustion would
+    // re-render from history as "all accounts unavailable".
+    ...(record.exclusive === true ? { exclusive: true } : {}),
   };
 }
 

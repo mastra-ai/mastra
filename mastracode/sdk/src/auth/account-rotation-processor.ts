@@ -57,6 +57,13 @@ export interface AccountSwitchPartData {
     | 'preferred-routing'
     | 'starting-on-account';
   at: string;
+  /**
+   * Set on a `to: null` part when a route pinned to a single account reported
+   * that account unusable. The provider's other subscriptions were never
+   * consulted (A12), so "all accounts unavailable" would misreport what
+   * happened.
+   */
+  exclusive?: boolean;
 }
 
 /** The store surface rotation needs; `AuthStorage` satisfies it structurally. */
@@ -373,6 +380,12 @@ export function accountSwitchNoticeText(data: AccountSwitchPartData): string {
   }
   const reason = data.reason === 'starting-on-account' ? data.reason : REASON_TEXT[data.reason];
   if (data.to === null) {
+    // A12: a targeted route reports *its* account, not the pool — the other
+    // subscriptions were never tried, so "all accounts unavailable" would be
+    // wrong and would read as if the pool had been walked.
+    if (data.exclusive) {
+      return `Pinned ${provider} account unavailable (${reason})`;
+    }
     return `All ${provider} accounts unavailable (${reason})`;
   }
   const from = data.from?.label ?? 'unknown';
@@ -557,10 +570,19 @@ function getExhaustedAccountIds(args: Pick<RoutingProcessorArgs, 'requestContext
   return exhausted[route.packId]?.[route.modelId] ?? [];
 }
 
-function orderAccountsForRoute<T extends { id: string }>(accounts: T[], preferredId: string | undefined): T[] {
-  if (!preferredId) return accounts;
-  const preferred = accounts.find(account => account.id === preferredId);
-  return preferred ? [preferred, ...accounts.filter(account => account.id !== preferredId)] : accounts;
+/**
+ * A12: the account a pack/model route targets, or `undefined` when the route
+ * is `Automatic` (no entry — insertion order, full pool rotation).
+ *
+ * A targeted route is *exclusive*: only that account may serve the route, so
+ * rotation must never spill the request onto a sibling subscription's quota.
+ * A heavy model on one subscription can burn that subscription's quota in
+ * hours; spilling it into a second subscription defeats the point of having
+ * one.
+ */
+function getRouteTargetAccountId(settingsPath: string | undefined, route: AccountRoute | null): string | undefined {
+  if (!route) return undefined;
+  return loadSettings(settingsPath).models.packAccountPreferences?.[route.packId]?.[route.modelId];
 }
 
 function getRequestActiveAccount(
@@ -644,8 +666,7 @@ async function applyPreferredAccountRoute(
   settingsPath: string | undefined,
   route: AccountRoute,
 ): Promise<boolean> {
-  const settings = loadSettings(settingsPath);
-  const preferredId = settings.models.packAccountPreferences?.[route.packId]?.[route.modelId];
+  const preferredId = getRouteTargetAccountId(settingsPath, route);
   const accounts = store.listAccounts?.(route.providerId) ?? [];
   if (accounts.length === 0) return false;
   const tried = getTriedInstances(args.state);
@@ -653,8 +674,12 @@ async function applyPreferredAccountRoute(
     ...getExhaustedAccountIds(args, route),
     ...accounts.filter(account => tried.has(account.id)).map(account => account.id),
   ]);
-  const ordered = orderAccountsForRoute(accounts, preferredId);
-  const selected = ordered.find(account => !unavailable.has(account.id));
+  const selected = // A12: a targeted route may use only the account it names. `Automatic`
+  // keeps insertion order with full pool rotation (A10).
+  (preferredId ? accounts.filter(account => account.id === preferredId) : accounts).find(
+    account => !unavailable.has(account.id),
+  );
+
   for (const accountId of unavailable) tried.add(accountId);
   if (!selected) {
     markRequestAccountRoutingExhausted(args.requestContext, route.providerId);
@@ -775,6 +800,17 @@ export class AccountRotationProcessor implements Processor {
       return this.declarePoolUnavailable(args, providerId, 'persistent-outage');
     }
 
+    // A12: a targeted route never activates a sibling subscription. A
+    // rotate-classified failure on the account the route selected proceeds to
+    // the pack's fallback chain instead — the request hops, it does not spill
+    // onto another subscription's quota. `Automatic` keeps rotating, so this
+    // check sits above the pool-size test: a targeted route has nothing to
+    // rotate to at any pool size. A stale id for an account the user removed
+    // reads the same way: fail closed rather than silently land on a sibling.
+    if (getRouteTargetAccountId(this.options.settingsPath, route)) {
+      return this.declarePoolUnavailable(args, providerId, 'pool-exhausted', true);
+    }
+
     // A pool smaller than 2 has nothing to rotate to — it is exhausted by
     // definition once a rotate-classified error arrives. Route through the
     // pool-exhausted path so the notices (and any pack hop) still fire; with
@@ -796,10 +832,8 @@ export class AccountRotationProcessor implements Processor {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
 
-    const preferredId = route
-      ? loadSettings(this.options.settingsPath).models.packAccountPreferences?.[route.packId]?.[route.modelId]
-      : undefined;
-    const nextCandidate = orderAccountsForRoute(accounts, preferredId).find(account => !tried.has(account.id));
+    const nextCandidate = accounts.find(account => !tried.has(account.id));
+
     const next = nextCandidate ? store.activateAccount?.(providerId, nextCandidate.id) : undefined;
     if (!next) {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
@@ -1022,6 +1056,7 @@ export class AccountRotationProcessor implements Processor {
     args: ProcessAPIErrorArgs,
     providerId: string,
     reason: 'pool-exhausted' | 'persistent-outage',
+    exclusive = false,
   ): Promise<{ retry: boolean }> {
     const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
     const accounts = store.listAccounts?.(providerId) ?? [];
@@ -1043,6 +1078,7 @@ export class AccountRotationProcessor implements Processor {
       to: null,
       reason,
       at: new Date().toISOString(),
+      ...(exclusive ? { exclusive: true } : {}),
     });
 
     await this.emitPackFallbackPart(args, reason);
@@ -1083,8 +1119,14 @@ export class AccountStartNoticeProcessor implements Processor {
     }
 
     if (route && isRequestAccountRoutingExhausted(args.requestContext, route.providerId)) {
+      // A12: a targeted route cannot serve from a sibling, so name the
+      // selected subscription instead of claiming the whole provider pool is
+      // gone — the other subscriptions may be perfectly healthy.
+      const target = getRouteTargetAccountId(this.options.settingsPath, route);
       throw new ProviderAuthRequiredError(
-        `All saved ${route.providerId} subscriptions are exhausted for ${route.packId} · ${route.modelId}.`,
+        target
+          ? `The subscription selected for ${route.packId} · ${route.modelId} is exhausted. Pick another account or set the route to Automatic in /models.`
+          : `All saved ${route.providerId} subscriptions are exhausted for ${route.packId} · ${route.modelId}.`,
       );
     }
 
