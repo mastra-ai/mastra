@@ -219,25 +219,6 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
 // ============================================================================
 
 /**
- * Delete feedback events by feedbackId via lightweight DELETE. Optional
- * `organizationId` and `resourceId` values are ANDed into the predicate to
- * restrict deletion to records with matching scope fields.
- *
- * A durable deletion request is recorded before the lightweight delete and
- * marked applied once the delete succeeds. If the delete fails, the request
- * stays unapplied and does not block updates to the still-visible rows; retry
- * by calling this function again.
- *
- * The delete runs once more after the applied mark. `updateFeedbackReviewStatus`
- * only re-hides rows for applied requests, so a review-status write that lands
- * between the first delete and the mark would otherwise survive; the second
- * delete is the fence that closes that window without cross-client locking.
- *
- * The delete is immediately visible to subsequent reads; physical purge depends
- * on the table's configured retention TTL. The delta table is intentionally not
- * touched and expires through its fixed two-day TTL.
- */
-/**
  * Scoped lightweight DELETE for feedback rows. Shared by the delete API and by
  * the post-write guard in `updateFeedbackReviewStatus`, which re-hides a row
  * that an already-applied request covers and therefore needs no new audit row.
@@ -272,6 +253,25 @@ async function hideFeedbackRows(
   });
 }
 
+/**
+ * Delete feedback events by feedbackId via lightweight DELETE. Optional
+ * `organizationId` and `resourceId` values are ANDed into the predicate to
+ * restrict deletion to records with matching scope fields.
+ *
+ * A durable deletion request is recorded before the lightweight delete and
+ * marked applied once the delete succeeds. If the delete fails, the request
+ * stays unapplied and does not block updates to the still-visible rows; retry
+ * by calling this function again.
+ *
+ * The delete runs once more after the applied mark. `updateFeedbackReviewStatus`
+ * only re-hides rows for applied requests, so a review-status write that lands
+ * between the first delete and the mark would otherwise survive; the second
+ * delete is the fence that closes that window without cross-client locking.
+ *
+ * The delete is immediately visible to subsequent reads; physical purge depends
+ * on the table's configured retention TTL. The delta table is intentionally not
+ * touched and expires through its fixed two-day TTL.
+ */
 export async function deleteFeedback(
   client: ClickHouseClient,
   args: DeleteFeedbackArgs,

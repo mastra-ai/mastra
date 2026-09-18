@@ -39,9 +39,13 @@ const EPOCH = '1970-01-01T00:00:00.000Z';
  * `select_sequential_consistency` on the mutation guard only holds when quorum
  * inserts are serialized: parallel quorum inserts can land on different replica
  * sets, so no single replica is guaranteed to hold every write. ClickHouse also
- * rejects quorum inserts that are async (`async_insert` defaults to 1 on recent
- * servers), so the audit write is pinned synchronous here. Both are required
- * together; relaxing either silently drops the guard's read guarantee.
+ * rejects quorum inserts when `async_insert` is enabled (for example through a
+ * user profile), so the audit write is pinned synchronous here. Both are
+ * required together; relaxing either silently drops the guard's read guarantee.
+ *
+ * Serialized quorum inserts reject a write that overlaps an in-flight one with
+ * `UNSATISFIED_QUORUM_FOR_PREVIOUS_WRITE`; the caller's documented recovery is
+ * to call the delete API again.
  */
 const QUORUM_INSERT_SETTINGS = {
   insert_quorum: 'auto',
