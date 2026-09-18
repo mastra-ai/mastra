@@ -2040,7 +2040,7 @@ export class Agent<
     const hasCompat = processors.some(
       processor =>
         !isProcessorWorkflow(processor) &&
-        isProcessor(processor) &&
+        'id' in processor &&
         (processor.id === 'provider-boundary-compat' || processor.id === 'provider-history-compat'),
     );
     return hasCompat ? processors : [...processors, providerBoundaryCompat];

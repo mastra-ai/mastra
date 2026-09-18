@@ -1,6 +1,6 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
-import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
+import { ProviderHistoryCompat, providerBoundaryCompat } from '../../processors/provider-history-compat';
 import { Agent } from '../agent';
 
 describe('provider boundary compatibility', () => {
@@ -134,5 +134,19 @@ describe('provider boundary compatibility', () => {
     const ids = (await explicit.__listLLMRequestProcessors()).map(processor => processor.id);
     expect(ids).toContain('provider-history-compat');
     expect(ids).not.toContain('provider-boundary-compat');
+  });
+
+  it('does not duplicate an explicitly configured narrow processor', async () => {
+    const model = new MockLanguageModelV2({ provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-oss-20b' });
+    const agent = new Agent({
+      id: 'explicit-narrow',
+      name: 'explicit-narrow',
+      instructions: 'test',
+      model,
+      inputProcessors: [providerBoundaryCompat],
+    });
+
+    const ids = (await agent.__listLLMRequestProcessors()).map(processor => processor.id);
+    expect(ids.filter(id => id === 'provider-boundary-compat')).toHaveLength(1);
   });
 });

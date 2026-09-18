@@ -902,6 +902,16 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     expect(isMaybeBedrockMantleGptOss(() => undefined)).toBe(false);
   });
 
+  it('tolerates nullish entries in a fallback model array', () => {
+    expect(isMaybeBedrockMantleGptOss([null])).toBe(false);
+    expect(isMaybeBedrockMantleGptOss([undefined])).toBe(false);
+    expect(isMaybeBedrockMantleGptOss([{ model: null }])).toBe(false);
+    expect(isMaybeBedrockMantleGptOss([5, 'bedrock-mantle.chat/openai.gpt-oss-20b'])).toBe(false);
+    expect(
+      isMaybeBedrockMantleGptOss([null, { model: { provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-oss-20b' } }]),
+    ).toBe(true);
+  });
+
   it('strips only outbound reasoning for Bedrock Mantle Chat GPT-OSS', () => {
     const prompt = promptWithReasoning();
     const result = bedrockMantleGptOssStripReasoningContent.applyToPrompt!({

@@ -209,7 +209,7 @@ export function isMaybeBedrockMantleGptOss(model: unknown): boolean {
   if (model == null || typeof model === 'string' || typeof model === 'function') return false;
 
   if (Array.isArray(model)) {
-    return model.some(entry => isMaybeBedrockMantleGptOss((entry as { model?: unknown }).model ?? entry));
+    return model.some(entry => isMaybeBedrockMantleGptOss((entry as { model?: unknown } | null)?.model ?? entry));
   }
 
   if (typeof model !== 'object') return false;
