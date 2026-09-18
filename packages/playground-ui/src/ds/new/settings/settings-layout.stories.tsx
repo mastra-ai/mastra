@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Badge } from '../Badge';
-import { Button } from '../Button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
-import { Switch } from '../Switch';
 import { SettingsLayout } from './settings-layout';
+import { Badge } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Switch } from '@/ds/components/Switch';
 import {
   SettingsContainer,
   SettingsDescription,
