@@ -12,7 +12,9 @@ export type TimelinePointerGesture =
   | { type: 'handle'; boundary: DateBoundary; originalSelection: TimelineIndexRange };
 
 export type TimelineInteraction =
-  { type: 'selecting' } | { type: 'moving' } | { type: 'resizing'; boundary: DateBoundary };
+  | { type: 'selecting' }
+  | { type: 'moving' }
+  | { type: 'resizing'; boundary: DateBoundary };
 
 const KEYBOARD_LARGE_STEP_DAYS = 7;
 

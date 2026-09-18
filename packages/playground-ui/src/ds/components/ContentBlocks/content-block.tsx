@@ -2,7 +2,8 @@ import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 import { Draggable } from '@hello-pangea/dnd';
 
 export type ContentBlockChildren =
-  React.ReactNode | ((dragHandleProps: DraggableProvidedDragHandleProps | null) => React.ReactNode);
+  | React.ReactNode
+  | ((dragHandleProps: DraggableProvidedDragHandleProps | null) => React.ReactNode);
 
 export interface ContentBlockProps {
   children: ContentBlockChildren;
