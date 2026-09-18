@@ -826,6 +826,7 @@ export async function queryTraces(
       client,
       resolvedTimeoutMs,
       async transaction => {
+        await setRemainingTimeout(transaction, deadline);
         const horizon = await readSafeXactHorizon(transaction);
         let rows: Record<string, unknown>[] = [];
         if (watermark !== undefined) {
@@ -858,14 +859,12 @@ export async function queryTraces(
       resolvedTimeoutMs,
       async transaction => {
         // The list-polling feature predates the trace-query cursor encoder.
-        const deltaCursor =
-          deltaPollingFeatureEnabled() && typeof coreStorage.encodeTraceQueryDeltaCursor === 'function'
-            ? coreStorage.encodeTraceQueryDeltaCursor(
-                plan,
-                'pg',
-                encodeDeltaCursor(await readSafeXactHorizon(transaction), 0),
-              )
-            : undefined;
+        let deltaCursor: string | undefined;
+        if (deltaPollingFeatureEnabled() && typeof coreStorage.encodeTraceQueryDeltaCursor === 'function') {
+          await setRemainingTimeout(transaction, deadline);
+          const horizon = await readSafeXactHorizon(transaction);
+          deltaCursor = coreStorage.encodeTraceQueryDeltaCursor(plan, 'pg', encodeDeltaCursor(horizon, 0));
+        }
         if (deltaCursor !== undefined) await setRemainingTimeout(transaction, deadline);
         const countRows = await transaction.any<{ count: string }>(countQuery.text, countQuery.values);
         const remainingTimeoutMs = Math.floor(deadline - performance.now());

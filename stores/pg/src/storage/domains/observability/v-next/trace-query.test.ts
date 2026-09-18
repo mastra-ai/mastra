@@ -727,11 +727,39 @@ describe('Postgres advanced trace delta polling', () => {
     expect(tx).not.toHaveBeenCalled();
   });
 
+  it.each(['delta', 'page'] as const)('uses the remaining %s deadline for the horizon read', async mode => {
+    vi.spyOn(performance, 'now').mockReturnValueOnce(1000).mockReturnValue(2250.25);
+    const one = vi.fn().mockResolvedValue({ xactId: '200' });
+    const any = vi.fn().mockResolvedValue([]);
+    const query = vi.fn();
+    const tx = vi.fn(async callback => callback({ one, any, query }));
+    const request = mode === 'delta' ? deltaPlan() : plan({ pagination: {} });
+
+    await queryTraces({ tx } as unknown as DbClient, 'public', request, 15000);
+
+    expect(query).toHaveBeenNthCalledWith(3, `SELECT set_config('statement_timeout', $1, true)`, ['13749ms']);
+    expect(query.mock.invocationCallOrder[2]).toBeLessThan(one.mock.invocationCallOrder[0]!);
+  });
+
+  it.each(['delta', 'page'] as const)('skips the horizon read when the %s deadline has expired', async mode => {
+    vi.spyOn(performance, 'now').mockReturnValueOnce(1000).mockReturnValue(16000);
+    const one = vi.fn().mockResolvedValue({ xactId: '200' });
+    const any = vi.fn().mockResolvedValue([]);
+    const tx = vi.fn(async callback => callback({ one, any, query: vi.fn() }));
+    const request = mode === 'delta' ? deltaPlan() : plan({ pagination: {} });
+
+    await expect(queryTraces({ tx } as unknown as DbClient, 'public', request, 15000)).rejects.toBeInstanceOf(
+      TraceQueryExecutionError,
+    );
+    expect(one).not.toHaveBeenCalled();
+    expect(any).not.toHaveBeenCalled();
+  });
+
   it('preserves the feature gate and the shared deadline after reading the horizon', async () => {
     coreFeatures.delete('observability-delta-polling');
     await expect(queryTraces({} as DbClient, 'public', deltaPlan(), 15000)).rejects.toThrow();
     coreFeatures.add('observability-delta-polling');
-    vi.spyOn(performance, 'now').mockReturnValueOnce(1000).mockReturnValue(16000);
+    vi.spyOn(performance, 'now').mockReturnValueOnce(1000).mockReturnValueOnce(2000).mockReturnValue(16000);
     const any = vi.fn();
     const tx = vi.fn(async callback =>
       callback({
