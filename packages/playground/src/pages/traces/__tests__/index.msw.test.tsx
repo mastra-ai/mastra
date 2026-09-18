@@ -200,24 +200,14 @@ describe('Traces page usage columns', () => {
       );
     };
 
-    it('given an agent trace with a thread id, when opened, then Messages renders as a column and the panel is wide', async () => {
+    it('given an agent trace with a thread id, when opened, then Messages renders as a column and the panel covers the full frame', async () => {
       setThreadedTraceHandlers();
 
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
       expect(await screen.findByTestId('messages-panel')).not.toBeNull();
       expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
-      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    });
-
-    it('given a span is also selected, then the panel covers the full frame', async () => {
-      setThreadedTraceHandlers();
-
-      const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
-
-      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
-      await waitFor(() => expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-full'));
+      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-full');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
@@ -257,7 +247,7 @@ describe('Traces page usage columns', () => {
         );
       };
 
-      it('when "Open full thread" is clicked, then the side panel shows every turn at the same width, and "Back to trace" restores the trace', async () => {
+      it('when "Open full thread" is clicked, then the side panel shows every turn at wide width, and "Back to trace" restores the full-width trace', async () => {
         setMultiTurnThreadHandlers();
 
         const { queryClient } = renderPage('/traces?traceId=trace-a');
@@ -276,12 +266,12 @@ describe('Traces page usage columns', () => {
 
         expect(await screen.findByTestId('messages-panel')).not.toBeNull();
         expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
-        expect(dialog().className).toContain('w-4/5');
+        expect(dialog().className).toContain('w-full');
         await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       });
     });
 
-    it('given a trace without a thread id, then no Messages column renders and the panel is half width', async () => {
+    it('given a trace without a thread id, then no Messages column renders and the panel still covers the full frame', async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
       server.use(http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)));
 
@@ -289,7 +279,7 @@ describe('Traces page usage columns', () => {
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(screen.queryByTestId('messages-panel')).toBeNull();
-      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-1/2');
+      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-full');
     });
   });
 

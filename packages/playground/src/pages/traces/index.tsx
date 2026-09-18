@@ -262,14 +262,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Tool mocks only make sense for agent runs — gate the "Add tool mocks to item" action
   // on the displayed root/anchor span being an agent.
   const isAgentTrace = anchorSpan?.entityType === 'agent';
-  // The trace drawer widens per column shown: Messages (agent turn) and/or span detail.
-  const hasMessagesColumn = !!getTraceThreadId(anchorSpan, anchorSpanId ?? undefined);
-  const hasDetailColumn = !!url.spanIdParam;
   const isFullThreadOpen = !!url.traceIdParam && fullThreadTraceId === url.traceIdParam;
   const selectedTraceId =
     url.traceIdParam && (url.listMode !== 'branches' || !!url.anchorSpanIdParam) ? url.traceIdParam : undefined;
-  const tracePanelSize =
-    hasMessagesColumn && hasDetailColumn ? 'full' : hasMessagesColumn || hasDetailColumn ? 'wide' : 'half';
 
   const filtersApplied =
     !!url.selectedEntityOption ||
@@ -405,7 +400,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
       <TraceSpanPanel
         title="Trace details"
-        size={tracePanelSize}
+        size="full"
         traceId={selectedTraceId}
         spans={traceSpans}
         anchorSpanId={anchorSpanId}
