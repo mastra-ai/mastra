@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { omWork } from '../om';
 import { initialChatRuntime, runtimeReducer } from '../runtime';
 
+type MessageUpdateEvent = Extract<AgentControllerEvent, { type: 'message_update' }>;
+
 describe('chat runtime status', () => {
   it('discards snapshot telemetry when resetting without a destination thread', () => {
     const reset = runtimeReducer(initialChatRuntime, {
@@ -139,7 +141,7 @@ describe('chat runtime status', () => {
         type: 'message_update',
         id: 'assistant-1',
         event: { type: 'reasoning-delta', index: 0, delta: 'Thinking' },
-      });
+      } satisfies MessageUpdateEvent);
       vi.advanceTimersByTime(1000);
       emit({
         type: 'message_update',
@@ -152,9 +154,9 @@ describe('chat runtime status', () => {
             toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
           },
         },
-      });
+      } satisfies MessageUpdateEvent);
       vi.advanceTimersByTime(1000);
-      const assistantTextDelta: AgentControllerEvent = {
+      const assistantTextDelta: MessageUpdateEvent = {
         type: 'message_update',
         id: 'assistant-1',
         event: { type: 'text-delta', delta: 'Working' },

@@ -7,6 +7,8 @@ import {
   type ChatRuntimeState,
 } from '../../../factory-ui/src/ui/domains/chat/services/runtime';
 
+type MessageUpdateEvent = Extract<AgentControllerEvent, { type: 'message_update' }>;
+
 /**
  * Tokens/sec computation — tested by driving the chat runtime reducer directly
  * with the same event order the real SSE stream produces: content deltas
@@ -15,7 +17,7 @@ import {
  * so TTFT and inter-step tool gaps do not deflate it. No server round-trip.
  */
 
-function assistantTextDelta(delta = 'x'): AgentControllerEvent {
+function assistantTextDelta(delta = 'x'): MessageUpdateEvent {
   return {
     type: 'message_update',
     id: 'assistant-1',
