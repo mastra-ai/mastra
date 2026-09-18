@@ -78,7 +78,7 @@ export class MastraCodeAcpAgent implements Agent {
     this.disposed = true;
     const entries = [...this.sessions.values()];
     this.sessions.clear();
-    this.disposal = Promise.allSettled([
+    const cleanup = Promise.allSettled([
       // A runtime under construction owns its cleanup until it joins sessions.
       Promise.allSettled([...this.pendingCreations]),
       ...entries.map(async entry => {
@@ -95,6 +95,12 @@ export class MastraCodeAcpAgent implements Agent {
       const failures = results.filter(result => result.status === 'rejected').map(result => result.reason);
       failures.push(...this.startupCleanupFailures);
       if (failures.length) throw new AggregateError(failures, 'ACP session cleanup failed');
+    });
+    // A provider or MCP startup can stall. Keep its cleanup ownership, but let
+    // the host terminate the connection if shutdown cannot finish in time.
+    this.disposal = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('ACP shutdown timed out after 10 seconds')), 10_000);
+      void cleanup.then(resolve, reject).finally(() => clearTimeout(timeout));
     });
     return this.disposal;
   }
