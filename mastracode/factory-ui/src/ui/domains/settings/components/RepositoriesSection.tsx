@@ -24,6 +24,8 @@ export function RepositoriesSection() {
     return <Notice variant="info">Select a factory to manage its repositories.</Notice>;
   }
 
+  const showGithubSettings = githubConnected || activeFactory.repositories.some(repo => repo.provider !== 'gitlab');
+
   return (
     <div className="flex min-w-0 flex-col gap-8">
       <SettingsSubsection
@@ -45,9 +47,13 @@ export function RepositoriesSection() {
 
       <FactorySetupSection factory={activeFactory} />
 
-      <UserGithubConnectionRow />
+      {showGithubSettings && (
+        <>
+          <UserGithubConnectionRow />
 
-      <GithubPatBlock />
+          <GithubPatBlock />
+        </>
+      )}
     </div>
   );
 }

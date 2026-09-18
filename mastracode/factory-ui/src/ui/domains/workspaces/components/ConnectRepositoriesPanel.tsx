@@ -7,60 +7,74 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
+import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
+import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import { FolderIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import type { FactoryProject, GithubStatus } from '../services/github';
-import { connectGithub } from '../services/github';
+import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
+import { connectGithub, isGitLabRepository } from '../services/github';
 
 /**
- * Repository linking for a server-backed Factory. One list: the factory's
- * linked repositories first, then every repo the user's GitHub installations
- * can reach (link on click). When GitHub isn't connected the panel shows a
- * Connect GitHub CTA instead — it never hides the Factory itself.
+ * Repository linking for a server-backed Factory. Linked repositories retain
+ * their provider identity; available repositories come from every configured
+ * source-control provider.
  */
 export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
   const { baseUrl } = useApiConfig();
   const statusQuery = useGithubStatusQuery();
   const status = statusQuery.data;
-  const connected = !!status?.connected;
+  const githubConnected = status?.connected === true;
+  const gitlabStatusQuery = useGitLabStatusQuery();
+  const gitlabConfigured = gitlabStatusQuery.data?.enabled === true && gitlabStatusQuery.data.configured;
   const [query, setQuery] = useState('');
-  const reposQuery = useGithubReposQuery(query || undefined, connected);
+  const reposQuery = useGithubReposQuery(query || undefined, githubConnected);
+  const gitlabProjectsQuery = useGitLabProjectsQuery(gitlabConfigured);
   const linkRepository = useLinkRepositoryMutation();
   const unlinkRepository = useUnlinkRepositoryMutation();
 
   const factoryProjectId = factory.id;
   const linked = factory.repositories;
-  const linkedSlugs = new Set(linked.map(repo => repo.slug));
-  const repos = reposQuery.data ?? [];
-  const available = repos.filter(repo => !linkedSlugs.has(repo.fullName));
-  // The repo list is filtered server-side; linked repos come from the factory, so filter them here.
+  const linkedKeys = new Set(linked.map(repo => `${repo.provider ?? 'github'}:${repo.slug}`));
+  const gitlabRepos = (gitlabProjectsQuery.data ?? []).flatMap(project => {
+    const repository = gitLabProjectRepository(project);
+    return repository ? [repository] : [];
+  });
+  const repos: SourceControlRepository[] = [...(reposQuery.data ?? []), ...gitlabRepos];
   const normalizedQuery = query.trim().toLowerCase();
+  const available = repos.filter(repo => {
+    const provider = isGitLabRepository(repo) ? 'gitlab' : 'github';
+    return (
+      !linkedKeys.has(`${provider}:${repo.fullName}`) &&
+      (!normalizedQuery || repo.fullName.toLowerCase().includes(normalizedQuery))
+    );
+  });
+  // GitHub is filtered server-side; linked and GitLab repositories are filtered here.
   const visibleLinked = normalizedQuery
     ? linked.filter(repo => repo.slug.toLowerCase().includes(normalizedQuery))
     : linked;
 
-  const error = reposQuery.error ?? linkRepository.error ?? unlinkRepository.error;
+  const error = reposQuery.error ?? gitlabProjectsQuery.error ?? linkRepository.error ?? unlinkRepository.error;
   const busyRepoId = linkRepository.isPending ? linkRepository.variables?.repo.id : null;
   const unlinkingId = unlinkRepository.isPending ? unlinkRepository.variables?.projectRepositoryId : null;
 
-  if (statusQuery.isPending) {
-    return <SkeletonRows label="Loading GitHub status" rows={3} rowClassName="h-10 w-full rounded-xl" />;
+  if (statusQuery.isPending || gitlabStatusQuery.isPending) {
+    return <SkeletonRows label="Loading source control status" rows={3} rowClassName="h-10 w-full rounded-xl" />;
   }
 
   return (
     <div className="flex min-w-0 flex-col" aria-label="Connect repositories">
-      {status && (
+      {status && !gitlabConfigured && (
         <StatusCallout
           status={status}
-          connected={connected}
-          empty={connected && !reposQuery.isPending && repos.length === 0}
+          connected={githubConnected}
+          empty={githubConnected && !reposQuery.isPending && repos.length === 0}
         />
       )}
 
-      {!connected ? (
+      {!githubConnected && !gitlabConfigured && linked.length === 0 ? (
         status &&
         status.reason !== 'missing_config' &&
         status.reason !== 'organization_required' && (
@@ -90,10 +104,16 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 <div key={repo.projectRepositoryId} className="flex w-full items-center gap-3 rounded-md px-2 py-2">
                   <span className="min-w-0 flex-1">
                     <span className="text-ui-md text-icon6 flex items-center gap-1.5">
-                      <GithubIcon className="text-icon5 size-3.5 shrink-0" />
+                      {repo.provider === 'gitlab' ? (
+                        <GitLabIcon className="text-icon5 size-3.5 shrink-0" />
+                      ) : (
+                        <GithubIcon className="text-icon5 size-3.5 shrink-0" />
+                      )}
                       <span className="min-w-0 truncate">{repo.slug}</span>
                     </span>
-                    {repo.gitBranch && <span className="text-ui-sm text-icon3 block truncate">{repo.gitBranch}</span>}
+                    {repo.gitBranch && (
+                      <span className="text-ui-sm text-icon3 block truncate">Default branch: {repo.gitBranch}</span>
+                    )}
                   </span>
                   <Button
                     variant="ghost"
@@ -108,7 +128,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 </div>
               ))}
 
-              {reposQuery.isPending ? (
+              {(githubConnected && reposQuery.isPending) || (gitlabConfigured && gitlabProjectsQuery.isPending) ? (
                 <div className="px-2 py-2">
                   <SkeletonRows label="Loading repositories" rows={3} rowClassName="h-8 w-full rounded-md" />
                 </div>
@@ -121,27 +141,35 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
               ) : (
                 <>
                   {visibleLinked.length > 0 && <ListHeading>Available</ListHeading>}
-                  {available.map(repo => (
-                    <button
-                      type="button"
-                      key={repo.id}
-                      className="hover:bg-surface-overlay-soft flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
-                      title={repo.fullName}
-                      disabled={busyRepoId !== null}
-                      onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="text-ui-md text-icon5 flex items-center gap-1.5">
-                          <FolderIcon size={14} className="text-icon3 shrink-0" />
-                          <span className="min-w-0 truncate">{repo.fullName}</span>
+                  {available.map(repo => {
+                    const gitlab = isGitLabRepository(repo);
+                    return (
+                      <button
+                        type="button"
+                        key={`${gitlab ? 'gitlab' : 'github'}:${repo.id}`}
+                        className="hover:bg-surface-overlay-soft flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                        title={repo.fullName}
+                        disabled={busyRepoId !== null}
+                        onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="text-ui-md text-icon5 flex items-center gap-1.5">
+                            {gitlab ? (
+                              <GitLabIcon className="text-icon3 size-3.5 shrink-0" />
+                            ) : (
+                              <FolderIcon size={14} className="text-icon3 shrink-0" />
+                            )}
+                            <span className="min-w-0 truncate">{repo.fullName}</span>
+                          </span>
+                          <span className="text-ui-sm text-icon3 block truncate">
+                            {gitlab ? 'GitLab' : repo.private ? 'private' : 'public'} · Default branch:{' '}
+                            {repo.defaultBranch}
+                          </span>
                         </span>
-                        <span className="text-ui-sm text-icon3 block truncate">
-                          {repo.private ? 'private' : 'public'} · {repo.defaultBranch}
-                        </span>
-                      </span>
-                      {busyRepoId === repo.id && <span className="text-ui-sm text-icon3">Linking…</span>}
-                    </button>
-                  ))}
+                        {busyRepoId === repo.id && <span className="text-ui-sm text-icon3">Linking…</span>}
+                      </button>
+                    );
+                  })}
                 </>
               )}
             </div>
@@ -149,6 +177,14 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         </>
       )}
     </div>
+  );
+}
+
+function GitLabIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
+      <path d="M23.955 13.587 20.613 3.307a.54.54 0 0 0-1.025 0l-2.257 6.946H6.67L4.413 3.307a.54.54 0 0 0-1.025 0L.045 13.587a1.08 1.08 0 0 0 .393 1.207L12 23.196l11.562-8.402a1.08 1.08 0 0 0 .393-1.207Z" />
+    </svg>
   );
 }
 

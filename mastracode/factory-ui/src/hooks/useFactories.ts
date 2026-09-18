@@ -6,11 +6,12 @@ import {
   connectInstallation,
   createFactoryProject,
   deleteFactoryProject,
+  isGitLabRepository,
   linkRepository,
   listFactoryProjects,
   unlinkRepository,
 } from '../ui/domains/workspaces/services/github';
-import type { FactoryProject, GithubRepo } from '../ui/domains/workspaces/services/github';
+import type { FactoryProject, SourceControlRepository } from '../ui/domains/workspaces/services/github';
 import { fetchIntakeConfig, selectIntakeSource } from '../ui/domains/factory/services/intake';
 import { useSaveIntakeConfigMutation } from './useIntakeConfig';
 
@@ -68,14 +69,26 @@ export function useLinkRepositoryMutation() {
   const queryClient = useQueryClient();
   const saveIntakeConfig = useSaveIntakeConfigMutation();
   return useMutation({
-    mutationFn: async ({ factoryProjectId, repo }: { factoryProjectId: string; repo: GithubRepo }) => {
-      const connectionId = await connectInstallation(baseUrl, factoryProjectId, repo.installationStorageId);
+    mutationFn: async ({ factoryProjectId, repo }: { factoryProjectId: string; repo: SourceControlRepository }) => {
+      const gitlab = isGitLabRepository(repo);
+      const connectionId = await connectInstallation(
+        baseUrl,
+        factoryProjectId,
+        repo.installationStorageId,
+        gitlab ? 'gitlab' : 'github',
+      );
       const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, repo);
       try {
         const config = await fetchIntakeConfig(baseUrl);
-        const githubSelection = selectIntakeSource(config.github, repo.fullName);
-        if (githubSelection !== config.github)
-          await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
+        if (gitlab) {
+          const gitlabSelection = selectIntakeSource(config.gitlab, repo.id);
+          if (gitlabSelection !== config.gitlab)
+            await saveIntakeConfig.mutateAsync({ ...config, gitlab: gitlabSelection });
+        } else {
+          const githubSelection = selectIntakeSource(config.github, repo.fullName);
+          if (githubSelection !== config.github)
+            await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
+        }
       } finally {
         invalidateFactories(queryClient);
       }

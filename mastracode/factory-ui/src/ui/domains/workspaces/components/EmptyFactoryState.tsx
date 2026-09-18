@@ -5,7 +5,7 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useCreateFactoryMutation, useFactoriesQuery, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { connectLinear } from '../../factory/services/linear';
-import type { FactoryProject, FactoryProjectPayload, GithubRepo } from '../services/github';
+import type { FactoryProject, FactoryProjectPayload, SourceControlRepository } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import {
   clearOnboardingFlow,
@@ -31,7 +31,7 @@ const STEP_META: Record<Step, { title: string; description?: string }> = {
   },
   vcs: {
     title: 'Choose your codebase.',
-    description: 'Connect GitHub, then select the repository that will become your first factory.',
+    description: 'Connect GitHub or GitLab, then select the repository that will become your first Factory.',
   },
   'project-management': {
     title: 'Connect the work behind the code.',
@@ -56,7 +56,7 @@ export function EmptyFactoryState() {
   const [pendingFactory, setPendingFactory] = useState<FactoryProject | FactoryProjectPayload | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
-  const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | null>(null);
+  const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | string | null>(null);
   const [githubRedirecting, setGithubRedirecting] = useState(false);
   const navigate = useNavigate();
 
@@ -87,14 +87,19 @@ export function EmptyFactoryState() {
     if (pendingFactory) persistOnboardingFactory(pendingFactory.id);
   };
 
-  const chooseRepository = async (repo: GithubRepo) => {
+  const chooseRepository = async (repo: SourceControlRepository) => {
     if (createFactory.isPending || linkRepository.isPending) return;
     setMutationError(null);
     setConnectingRepositoryId(repo.id);
     try {
-      const factory = await createFactory.mutateAsync({ name: repo.name });
-      setPendingFactory(factory);
-      persistOnboardingFactory(factory.id);
+      // A prior attempt may have created the Factory and linked the repository
+      // before a later onboarding write failed. Reuse that persisted Factory so
+      // retrying the same step cannot create duplicates.
+      const factory = pendingFactory ?? (await createFactory.mutateAsync({ name: repo.name }));
+      if (!pendingFactory) {
+        setPendingFactory(factory);
+        persistOnboardingFactory(factory.id);
+      }
       const linkedRepository = await linkRepository.mutateAsync({
         factoryProjectId: factory.id,
         repo,

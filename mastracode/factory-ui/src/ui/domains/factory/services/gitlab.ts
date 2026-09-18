@@ -42,9 +42,51 @@ export interface GitLabIssuePage {
 export interface GitLabProject {
   id: string;
   name: string;
+  projectId?: string;
+  projectPath?: string;
+  installationStorageId?: string;
   connectionId?: string | null;
   accountLabel?: string | null;
   defaultBranch?: string | null;
+  sandboxProvider?: string;
+  sandboxWorkdir?: string;
+}
+
+/** Provider-neutral repository pick used by Factory onboarding and linking. */
+export interface GitLabRepository {
+  provider: 'gitlab';
+  /** Opaque Intake source id. */
+  id: string;
+  /** GitLab's numeric project id, kept as a string. */
+  externalId: string;
+  fullName: string;
+  name: string;
+  owner: string;
+  defaultBranch: string;
+  private: boolean;
+  installationStorageId: string;
+  sandboxProvider: string;
+  sandboxWorkdir: string;
+}
+
+export function gitLabProjectRepository(project: GitLabProject): GitLabRepository | null {
+  if (!project.projectId || !project.installationStorageId || !project.sandboxProvider || !project.sandboxWorkdir)
+    return null;
+  const fullName = project.projectPath ?? project.name;
+  const parts = fullName.split('/').filter(Boolean);
+  return {
+    provider: 'gitlab',
+    id: project.id,
+    externalId: project.projectId,
+    fullName,
+    name: parts.at(-1) ?? fullName,
+    owner: parts.slice(0, -1).join('/'),
+    defaultBranch: project.defaultBranch ?? 'main',
+    private: true,
+    installationStorageId: project.installationStorageId,
+    sandboxProvider: project.sandboxProvider,
+    sandboxWorkdir: project.sandboxWorkdir,
+  };
 }
 
 export async function fetchGitLabStatus(baseUrl: string): Promise<GitLabStatus> {
