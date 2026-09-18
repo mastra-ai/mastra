@@ -479,14 +479,14 @@ describe('Tab', () => {
         </Tabs>,
       );
 
-      const isTooltipTrigger = (name: string) =>
-        screen.getByRole('tab', { name }).hasAttribute('data-base-ui-tooltip-trigger');
+      const tooltipTrigger = (name: string) => screen.getByRole('tab', { name }).parentElement;
 
       // Only a tab that is both disabled and has something to say gets one.
-      expect(isTooltipTrigger('Explained')).toBe(true);
-      expect(isTooltipTrigger('Silent')).toBe(false);
-      expect(isTooltipTrigger('Enabled with text')).toBe(false);
-      expect(isTooltipTrigger('Enabled')).toBe(false);
+      expect(tooltipTrigger('Explained')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(true);
+      expect(tooltipTrigger('Explained')?.tabIndex).toBe(0);
+      expect(tooltipTrigger('Silent')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
+      expect(tooltipTrigger('Enabled with text')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
+      expect(tooltipTrigger('Enabled')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
     });
   });
 
