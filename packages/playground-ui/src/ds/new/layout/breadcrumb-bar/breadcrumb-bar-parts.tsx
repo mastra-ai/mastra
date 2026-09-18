@@ -38,7 +38,9 @@ export function BreadcrumbBarSwitcherCrumb({ children, className }: BreadcrumbBa
 
 export function BreadcrumbBarSwitcherTrigger({ children }: BreadcrumbBarSwitcherPartProps) {
   return (
-    <span className="contents [&_button:active]:!bg-transparent [&_button:hover]:!bg-transparent">{children}</span>
+    <span className="contents [&_button]:!gap-0 [&_button]:!px-0 [&_button:active]:!bg-transparent [&_button:hover]:!bg-transparent">
+      {children}
+    </span>
   );
 }
 
