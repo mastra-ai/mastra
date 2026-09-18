@@ -73,6 +73,18 @@ export interface OAuthProviderInterface {
    * captured when the account is registered in the multi-account registry.
    */
   getAccountLabel?(credentials: OAuthCredentials): Promise<string | undefined>;
+
+  /**
+   * Optional stable identity for the *subscription* behind a set of
+   * credentials (e.g. a provider account id or an email), read from the
+   * credentials themselves — synchronous and local, so it can be used while
+   * deciding whether an added account is one we already hold. Must be the same
+   * value across refreshes and re-authorizations of one subscription, and
+   * different for two subscriptions of the same provider. Providers whose
+   * credentials carry no such identifier omit this; a re-authorization of an
+   * existing subscription is then indistinguishable from a new account.
+   */
+  getAccountIdentity?(credentials: OAuthCredentials): string | undefined;
 }
 
 export type ApiKeyCredential = {
@@ -107,6 +119,13 @@ export interface OAuthAccountRecord extends OAuthCredentials {
   /** ISO timestamp of when the account was added. */
   addedAt: string;
   active: boolean;
+  /**
+   * Stable provider-supplied identity for the subscription behind this account
+   * (an account id, an email) when the provider exposes one. Used to recognize
+   * that an added account is one we already hold; absent for providers whose
+   * credentials carry no such identifier.
+   */
+  identity?: string;
 }
 
 export type AuthStorageData = Record<string, AuthCredential | OAuthAccountRecord>;

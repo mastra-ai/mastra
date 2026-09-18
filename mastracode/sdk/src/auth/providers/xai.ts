@@ -295,4 +295,12 @@ export const xaiOAuthProvider: OAuthProviderInterface = {
   getAccountLabel(credentials: OAuthCredentials): Promise<string | undefined> {
     return Promise.resolve(emailFromIdToken(credentials.idToken as string | undefined));
   },
+
+  /**
+   * The account's email, read from the id token — one subscription per email,
+   * so this distinguishes two xAI accounts from a re-authorization of one.
+   */
+  getAccountIdentity(credentials: OAuthCredentials): string | undefined {
+    return emailFromIdToken(credentials.idToken as string | undefined);
+  },
 };

@@ -801,4 +801,13 @@ export const openaiCodexOAuthProvider: OAuthProviderInterface = {
     const email = credentials.email;
     return Promise.resolve(typeof email === 'string' && email.length > 0 ? email : undefined);
   },
+
+  /**
+   * The ChatGPT account/workspace id from the token, when present — stable
+   * across refreshes and re-authorizations of one subscription.
+   */
+  getAccountIdentity(credentials: OAuthCredentials): string | undefined {
+    const accountId = credentials.accountId;
+    return typeof accountId === 'string' && accountId.length > 0 ? accountId : undefined;
+  },
 };

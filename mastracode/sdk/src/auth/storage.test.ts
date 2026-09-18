@@ -25,6 +25,7 @@ import { AuthStorage } from './storage.js';
 import type { OAuthAccountRecord, OAuthCredential, OAuthCredentials } from './types.js';
 
 const PROVIDER = 'anthropic';
+const CODEX = 'openai-codex';
 const FUTURE = Date.now() + 60 * 60 * 1000;
 const PAST = Date.now() - 60 * 60 * 1000;
 
@@ -428,14 +429,13 @@ describe('AuthStorage multi-account registry', () => {
     expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r2', access: 'a2' });
   });
 
-  it('addAccount with replaceAccountId re-keys the picked account in place (re-authentication)', async () => {
+  it('addAccount with replaceAccountId re-authorizes the picked account in place, keeping its id', async () => {
     const { storage, authPath } = makeStorage();
     await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, { label: 'Work' });
     await storage.addAccount(PROVIDER, { refresh: 'r2', access: 'a2', expires: FUTURE }, { label: 'Personal' });
     const work = storage.listAccounts(PROVIDER)[0]!;
 
-    // Re-authentication returns a rotated refresh token — no id collision
-    // with the picked account's old id is possible.
+    // Re-authentication returns a rotated refresh token.
     await storage.addAccount(
       PROVIDER,
       { refresh: 'r1-new', access: 'a1-new', expires: FUTURE },
@@ -452,11 +452,14 @@ describe('AuthStorage multi-account registry', () => {
       // Re-authenticating an inactive account does not hijack the active slot.
       active: false,
     });
-    expect(accounts[0]!.id).not.toBe(work.id); // re-keyed to the new token hash
+    // A13: the id is minted once and never derived from credentials, so
+    // re-authorization keeps it — every id persisted outside auth.json
+    // (settings routing preferences, per-thread routing state) stays valid.
+    expect(accounts[0]!.id).toBe(work.id);
     expect(accounts[1]).toMatchObject({ label: 'Personal', active: true });
     expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r2', access: 'a2' });
-    // No entry keyed by the old id remains on disk.
-    expect(readAuthJson(authPath)[`accounts:${work.id}`]).toBeUndefined();
+    // The entry is still keyed by the same id, now holding the fresh tokens.
+    expect(readAuthJson(authPath)[`accounts:${work.id}`]).toMatchObject({ refresh: 'r1-new', access: 'a1-new' });
   });
 
   it('re-authenticating the active account keeps it active with the new tokens in the legacy slot', async () => {
@@ -487,11 +490,12 @@ describe('AuthStorage multi-account registry', () => {
       { label: 'Personal', activate: false },
     );
 
-    // The re-authenticated tokens hash to Work's id: both entries are the same
+    // The re-authenticated credentials are Work's: both entries are the same
     // underlying subscription. Work is dropped in favor of the picked account,
     // and because Work was the active account the survivor must stay active —
     // otherwise the registry would be left with no active entry while the
-    // legacy slot still held the old tokens.
+    // legacy slot still held the old tokens. The survivor keeps the picked
+    // account's id (A13: ids are minted, not re-derived from tokens).
     const returned = await storage.addAccount(
       PROVIDER,
       { refresh: 'r1', access: 'a1-new', expires: FUTURE },
@@ -499,7 +503,7 @@ describe('AuthStorage multi-account registry', () => {
     );
 
     expect(returned.active).toBe(true);
-    expect(storage.getActiveAccount(PROVIDER)?.id).toBe(work.id);
+    expect(storage.getActiveAccount(PROVIDER)?.id).toBe(personal.id);
     expect(storage.listAccounts(PROVIDER)).toHaveLength(1);
     expect(storage.listAccounts(PROVIDER)[0]).toMatchObject({ active: true, label: 'Personal' });
     expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r1', access: 'a1-new' });
@@ -507,7 +511,7 @@ describe('AuthStorage multi-account registry', () => {
     // And it survives a reload: a non-empty registry always has an active entry.
     const reopened = new AuthStorage(authPath);
     expect(reopened.listAccounts(PROVIDER)).toHaveLength(1);
-    expect(reopened.getActiveAccount(PROVIDER)?.id).toBe(work.id);
+    expect(reopened.getActiveAccount(PROVIDER)?.id).toBe(personal.id);
   });
 
   it('re-authenticating onto a collided account takes that subscription’s credential metadata', async () => {
@@ -536,11 +540,15 @@ describe('AuthStorage multi-account registry', () => {
       { replaceAccountId: personal.id },
     );
 
-    expect(returned.id).toBe(work.id);
+    // The survivor is the picked account, so it keeps Personal's id (A13) while
+    // taking Work's credential metadata.
+    expect(returned.id).toBe(personal.id);
     expect(returned.enterpriseUrl).toBe('https://ghe.work.example.com');
     // Registry metadata still comes from the picked (target) account.
     expect(returned.label).toBe('Personal');
     expect(returned.addedAt).toBe(personal.addedAt);
+    // The collided entry for the same subscription is dropped, not left as a twin.
+    expect(storage.listAccounts(PROVIDER).some(entry => entry.id === work.id)).toBe(false);
   });
 
   it('fresh re-authentication credentials win over the collided entry’s metadata', async () => {
@@ -563,8 +571,10 @@ describe('AuthStorage multi-account registry', () => {
       { replaceAccountId: personal.id },
     );
 
-    expect(returned.id).toBe(work.id);
+    expect(returned.id).toBe(personal.id);
     expect(returned.enterpriseUrl).toBe('https://ghe.new.example.com');
+    // The collided entry for the same subscription is dropped, not left as a twin.
+    expect(storage.listAccounts(PROVIDER).some(entry => entry.id === work.id)).toBe(false);
   });
 
   it('a fresh AuthStorage instance reloads the registry intact (restart semantics)', async () => {
@@ -664,5 +674,88 @@ describe('AuthStorage multi-account registry', () => {
     expect(storage.get(PROVIDER)).toBeUndefined();
     const onDisk = readAuthJson(authPath);
     expect(Object.keys(onDisk).filter(k => k.startsWith(`accounts:${PROVIDER}:`))).toHaveLength(0);
+  });
+
+  it('A13: an account id survives a token refresh (identity is minted, not derived from the token)', async () => {
+    const { storage } = makeStorage({ [PROVIDER]: oauthCred('r1', 'a1', PAST) });
+    const [entry] = storage.listAccounts(PROVIDER);
+    expect(entry).toBeDefined();
+
+    vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockResolvedValue({
+      refresh: 'r1-rotated',
+      access: 'a1-rotated',
+      expires: FUTURE,
+    });
+
+    await storage.getApiKey(PROVIDER);
+    storage.reload();
+
+    const accounts = storage.listAccounts(PROVIDER);
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0]).toMatchObject({ id: entry!.id, refresh: 'r1-rotated', access: 'a1-rotated' });
+    // Under the pre-A13 scheme the id was sha256(refresh).slice(0,8): refreshing
+    // silently left the id describing a credential the account no longer held.
+    expect(accounts[0]!.id).not.toBe(
+      `${PROVIDER}:${createHash('sha256').update('r1-rotated').digest('hex').slice(0, 8)}`,
+    );
+  });
+
+  it('A13: adds a subscription identity when the provider exposes one, and re-authorization matches on it', async () => {
+    const { storage } = makeStorage();
+
+    // openai-codex reads a stable account id off the credentials.
+    const first = await storage.addAccount(
+      CODEX,
+      { refresh: 'cr1', access: 'ca1', expires: FUTURE, accountId: 'acct-A' },
+      { label: 'A' },
+    );
+    expect(first.identity).toBe('acct-A');
+
+    // Re-authorization returns a rotated token but the same subscription.
+    await storage.addAccount(CODEX, {
+      refresh: 'cr1-rotated',
+      access: 'ca1-new',
+      expires: FUTURE,
+      accountId: 'acct-A',
+    });
+
+    const accounts = storage.listAccounts(CODEX);
+    expect(accounts).toHaveLength(1); // same subscription, not a second account
+    expect(accounts[0]).toMatchObject({ id: first.id, identity: 'acct-A', refresh: 'cr1-rotated' });
+
+    // A genuinely different subscription is still a new account.
+    await storage.addAccount(CODEX, { refresh: 'cr2', access: 'ca2', expires: FUTURE, accountId: 'acct-B' });
+    expect(storage.listAccounts(CODEX)).toHaveLength(2);
+  });
+
+  it('A13: backfills the subscription identity of a pre-A13 registry without re-keying it', async () => {
+    const legacyId = `${CODEX}:${createHash('sha256').update('cr1').digest('hex').slice(0, 8)}`;
+    const { storage, authPath } = makeStorage({
+      [CODEX]: oauthCred('cr1', 'ca1'),
+      [`accounts:${legacyId}`]: {
+        ...accountRecord('cr1', 'ca1', { active: true }),
+        id: legacyId,
+        accountId: 'acct-A',
+      },
+    });
+
+    const [entry] = storage.listAccounts(CODEX);
+    // The id is left exactly as it was: ids derive from nothing, so re-keying
+    // would only invalidate references persisted outside auth.json.
+    expect(entry!.id).toBe(legacyId);
+    expect(entry!.identity).toBe('acct-A');
+    // Backfilled durably, so it holds across a restart.
+    expect(readAuthJson(authPath)[`accounts:${legacyId}`]).toMatchObject({ identity: 'acct-A' });
+
+    // And the backfilled identity makes a later re-authorization update the
+    // entry rather than register a second account for the subscription.
+    await storage.addAccount(CODEX, {
+      refresh: 'cr1-rotated',
+      access: 'ca1-new',
+      expires: FUTURE,
+      accountId: 'acct-A',
+    });
+    expect(storage.listAccounts(CODEX)).toHaveLength(1);
+    expect(storage.listAccounts(CODEX)[0]!.id).toBe(legacyId);
   });
 });

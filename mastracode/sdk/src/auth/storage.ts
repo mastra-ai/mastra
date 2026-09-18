@@ -62,9 +62,46 @@ export function getOAuthProviders(): OAuthProviderInterface[] {
   return Array.from(oauthProviderRegistry.values());
 }
 
-/** Stable instance id for an OAuth account: `${providerId}:${sha256(refresh).slice(0,8)}`. */
-function accountIdFor(providerId: string, refreshToken: string): string {
+/**
+ * Mint an account instance id: `${providerId}:${randomUUID()}`.
+ *
+ * Assigned once, when the account is created, and never derived from
+ * credentials. Deriving it from the refresh token (the pre-A13 scheme) looked
+ * stable but was not: `persistRefreshedCredential` keeps an entry's key while
+ * writing rotated tokens onto it, so every refresh left the id describing a
+ * credential the account no longer had — and re-adding that same subscription
+ * then failed to match its own entry and registered a second one for it.
+ */
+function mintAccountId(providerId: string): string {
+  return `${providerId}:${randomUUID()}`;
+}
+
+/**
+ * The pre-A13 id scheme: `${providerId}:${sha256(refresh).slice(0,8)}`.
+ *
+ * No longer used to assign ids, but still needed to recognize registries
+ * written before A13 — both to match a re-authorized account onto its existing
+ * entry, and to recognize entries whose fields the A13 migration must backfill.
+ */
+function legacyAccountIdFor(providerId: string, refreshToken: string): string {
   return `${providerId}:${createHash('sha256').update(refreshToken).digest('hex').slice(0, 8)}`;
+}
+
+/**
+ * Stable identity for the *subscription* behind an account, when the provider
+ * exposes one (an account id, an email — anything that survives a refresh and
+ * a re-authorization). Used to decide whether an added account is one we
+ * already have. Providers whose credentials carry no such identifier return
+ * undefined; for those, a re-authorization is indistinguishable from a new
+ * account without spending a request.
+ */
+function providerIdentity(provider: OAuthProviderInterface | undefined, creds: OAuthCredentials): string | undefined {
+  try {
+    const identity = provider?.getAccountIdentity?.(creds);
+    return typeof identity === 'string' && identity.length > 0 ? identity : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function isOAuthAccountRecord(value: unknown): value is OAuthAccountRecord {
@@ -84,7 +121,15 @@ function isOAuthAccountRecord(value: unknown): value is OAuthAccountRecord {
 
 /** The credential fields of an account record — everything but registry identity. */
 function credentialFieldsOf(record: OAuthAccountRecord): OAuthCredentials {
-  const { type: _type, id: _id, label: _label, addedAt: _addedAt, active: _active, ...creds } = record;
+  const {
+    type: _type,
+    id: _id,
+    label: _label,
+    addedAt: _addedAt,
+    active: _active,
+    identity: _identity,
+    ...creds
+  } = record;
   return creds;
 }
 
@@ -193,6 +238,26 @@ export class AuthStorage {
       }
       this.data[providerId] = { type: 'oauth', ...credentialFieldsOf(active) };
       changed = true;
+    }
+
+    // Case 5 (A13): backfill the stable account identity on entries that
+    // predate it, so adding a subscription we already hold updates its entry
+    // instead of registering a second one for it.
+    //
+    // Ids are deliberately left exactly as they are. Ids are minted once and
+    // derive from nothing (A13), so there is nothing to repair — and re-keying
+    // a live registry would invalidate every id persisted outside this file
+    // (settings routing preferences, per-thread routing state) for no gain.
+    for (const providerId of registeredProviders) {
+      const provider = getOAuthProvider(providerId as OAuthProviderId);
+      if (!provider?.getAccountIdentity) continue;
+      for (const entry of this.accountEntries(providerId)) {
+        if (entry.identity) continue;
+        const identity = providerIdentity(provider, entry);
+        if (!identity) continue;
+        this.data[this.accountKeyFor(entry.id)] = { ...entry, identity };
+        changed = true;
+      }
     }
 
     if (changed) this.save();
@@ -374,12 +439,14 @@ export class AuthStorage {
 
   /** Adopt a legacy slot credential as the registry's first active entry. */
   private adoptSlot(providerId: string, slot: OAuthCredential): OAuthAccountRecord {
-    const id = accountIdFor(providerId, slot.refresh);
+    const id = mintAccountId(providerId);
     const provider = getOAuthProvider(providerId);
+    const identity = providerIdentity(provider, slot);
     const record: OAuthAccountRecord = {
       ...slot,
       type: 'oauth-account',
       id,
+      ...(identity ? { identity } : {}),
       label: `${provider?.name ?? providerId} account 1`,
       addedAt: new Date().toISOString(),
       active: true,
@@ -435,34 +502,49 @@ export class AuthStorage {
       if (!target) {
         throw new Error(`No account ${opts.replaceAccountId} for provider ${providerId}`);
       }
-      const newId = accountIdFor(providerId, creds.refresh);
-      // Re-key in place so the account keeps its insertion position; a
-      // stale entry already owning the new id (same tokens) is dropped in
-      // favor of the picked account. That collision means both entries are the
-      // same underlying subscription, so the survivor inherits the collided
-      // entry's active state — otherwise re-authenticating an inactive account
-      // onto the active account's tokens would delete the active entry and
-      // leave the registry with no active account at all.
-      const collided = newId === target.id ? undefined : entries.find(entry => entry.id === newId);
+      const provider = getOAuthProvider(providerId);
+      const identity = providerIdentity(provider, creds) ?? target.identity;
+      // Re-authentication updates the account in place and **keeps its id**:
+      // ids are minted once and never derived from credentials (A13), so the
+      // entry's insertion position, the settings routing preference and any
+      // thread routing state that name this id all stay valid.
+      //
+      // A stale entry for the *same* subscription is dropped in favor of the
+      // picked account. Same-subscription is a matching stable identity, or —
+      // for a registry written before A13, whose ids were the refresh-token
+      // hash — the credentials' own legacy id, or an entry already holding
+      // exactly these credentials (a re-authorization that returns the same
+      // tokens, the only signal an identity-less provider gives). The survivor
+      // inherits the collided entry's active state, so re-authenticating an
+      // inactive account onto the active account's credentials cannot leave the
+      // registry with no active entry.
+      const legacyId = legacyAccountIdFor(providerId, creds.refresh);
+      const collided = entries.find(
+        entry =>
+          entry.id !== target.id &&
+          ((identity !== undefined && entry.identity === identity) ||
+            entry.id === legacyId ||
+            entry.refresh === creds.refresh),
+      );
       // Credential metadata (device id, enterprise URL, …) follows the tokens:
       // when the fresh response omits a field, the collided entry's value is the
       // coherent fallback, not the target's — pairing fresh tokens with another
       // subscription's stale endpoint would misroute requests. Fresh `creds`
-      // win last; only the target's registry metadata (label, addedAt) carries
-      // over.
+      // win last; only the target's registry metadata (id, label, addedAt)
+      // carries over.
       const replacement: OAuthAccountRecord = {
         ...target,
         ...(collided ? credentialFieldsOf(collided) : {}),
         ...creds,
         type: 'oauth-account',
-        id: newId,
+        ...(identity ? { identity } : {}),
         label: opts.label ?? target.label,
       };
       const rebuilt: AuthStorageData = {};
       for (const [key, value] of Object.entries(this.data)) {
         if (key === this.accountKeyFor(target.id)) {
-          rebuilt[this.accountKeyFor(newId)] = collided?.active ? { ...replacement, active: true } : replacement;
-        } else if (newId !== target.id && key === this.accountKeyFor(newId)) {
+          rebuilt[key] = collided?.active ? { ...replacement, active: true } : replacement;
+        } else if (collided && key === this.accountKeyFor(collided.id)) {
           continue;
         } else {
           rebuilt[key] = value;
@@ -479,18 +561,18 @@ export class AuthStorage {
         collided?.active === true ||
         entries.some(entry => entry.active && entry.id !== target.id) === false;
       if (wasActive) {
-        const activated = this.activateInMemory(providerId, newId);
+        const activated = this.activateInMemory(providerId, target.id);
         if (!activated) {
-          throw new Error(`Failed to activate account ${newId} for provider ${providerId}`);
+          throw new Error(`Failed to activate account ${target.id} for provider ${providerId}`);
         }
         this.save();
         return activated;
       }
       // Inactive target: tokens stay on the registry entry, the legacy slot
       // keeps the currently active account's credential untouched.
-      const replacementEntry = this.accountEntries(providerId).find(entry => entry.id === newId);
+      const replacementEntry = this.accountEntries(providerId).find(entry => entry.id === target.id);
       if (!replacementEntry) {
-        throw new Error(`Failed to store account ${newId} for provider ${providerId}`);
+        throw new Error(`Failed to store account ${target.id} for provider ${providerId}`);
       }
       this.save();
       return replacementEntry;
@@ -500,19 +582,45 @@ export class AuthStorage {
     // hit the network, and a concurrent write during that await must not be
     // clobbered by a stale snapshot.
     const provider = getOAuthProvider(providerId);
+    const identity = providerIdentity(provider, creds);
     const label = opts?.label ?? (await provider?.getAccountLabel?.(creds)) ?? null;
     this.reload();
     const freshEntries = this.accountEntries(providerId);
 
-    const id = accountIdFor(providerId, creds.refresh);
-    const existing = freshEntries.find(entry => entry.id === id);
+    // Is this a subscription we already hold? Match the provider's stable
+    // account identity where it exposes one, then the pre-A13 id (the
+    // refresh-token hash) so a pre-A13 registry still updates its entry rather
+    // than gaining a second one for the same subscription, and finally an
+    // entry already holding these exact credentials (a re-add of the same
+    // account as returned, which is the only signal an identity-less provider
+    // such as Anthropic gives us — a provider that cannot name its accounts
+    // cannot say "this is the same subscription, re-authorized").
+    //
+    // Crucially this must not re-derive the id of a *minted* entry: after a
+    // refresh such an entry's id no longer hashes its current token, and
+    // treating that miss as "new account" is exactly how re-adding a
+    // subscription used to create a duplicate entry for it.
+    const legacyId = legacyAccountIdFor(providerId, creds.refresh);
+    const existing =
+      (identity ? freshEntries.find(entry => entry.identity === identity) : undefined) ??
+      freshEntries.find(entry => entry.id === legacyId) ??
+      freshEntries.find(entry => entry.refresh === creds.refresh);
+    const id = existing?.id ?? mintAccountId(providerId);
     if (existing) {
-      this.data[this.accountKeyFor(id)] = { ...existing, ...creds, type: 'oauth-account', id, active: existing.active };
+      this.data[this.accountKeyFor(id)] = {
+        ...existing,
+        ...creds,
+        type: 'oauth-account',
+        id,
+        ...(identity ? { identity } : {}),
+        active: existing.active,
+      };
     } else {
       const resolvedLabel = label ?? `${provider?.name ?? providerId} account ${freshEntries.length + 1}`;
       this.data[this.accountKeyFor(id)] = {
         type: 'oauth-account',
         id,
+        ...(identity ? { identity } : {}),
         label: resolvedLabel,
         addedAt: new Date().toISOString(),
         active: false,
