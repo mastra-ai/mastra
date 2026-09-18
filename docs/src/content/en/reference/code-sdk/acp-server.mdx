@@ -62,7 +62,7 @@ await acpMain()
 ]}
 />
 
-Returns `Promise<void>`. This entry point owns the process's standard streams and signal handlers. Closing standard input releases the sessions. `SIGINT` and `SIGTERM` wait for cleanup before exiting. A fatal server failure exits with status `1`.
+Returns `Promise<void>`. This entry point owns the process's standard streams and signal handlers. Closing standard input releases the sessions. `SIGINT` and `SIGTERM` wait up to ten seconds for cleanup before exiting. A cleanup timeout or fatal server failure exits with status `1`.
 
 The CLI's `--dangerous-auto-approve` flag enables the same approval override. See [commit attribution](/reference/code-sdk/mount-agent-controller#commit-attribution) for the `coAuthor` defaults.
 

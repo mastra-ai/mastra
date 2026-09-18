@@ -41,6 +41,47 @@ function runtime(id: string) {
 const connection = () => ({ sessionUpdate: vi.fn().mockResolvedValue(undefined) }) as unknown as AgentSideConnection;
 
 describe('ACP session isolation', () => {
+  it.each(['factory', 'model discovery'])(
+    'bounds shutdown during stalled %s and cleans up a late runtime',
+    async phase => {
+      vi.useFakeTimers();
+      const state = runtime('late');
+      const entered = Promise.withResolvers<void>();
+      const startup = Promise.withResolvers<void>();
+      const block = async () => {
+        entered.resolve();
+        await startup.promise;
+      };
+      if (phase === 'model discovery')
+        state.controller.listAvailableModels = async () => {
+          await block();
+          return [];
+        };
+      const agent = new MastraCodeAcpAgent(connection(), async () => {
+        if (phase === 'factory') await block();
+        return state;
+      });
+      const creating = agent.newSession({ cwd: '/one', mcpServers: [] });
+      const rejected = expect(creating).rejects.toMatchObject({ code: -32603 });
+      try {
+        await entered.promise;
+        const disposal = agent.dispose();
+        expect(agent.dispose()).toBe(disposal);
+        const timedOut = expect(disposal).rejects.toThrow('ACP shutdown timed out');
+        await vi.advanceTimersByTimeAsync(10_000);
+        await timedOut;
+        expect(state.cleanup).not.toHaveBeenCalled();
+        startup.resolve();
+        await rejected;
+        expect(state.cleanup).toHaveBeenCalledOnce();
+      } finally {
+        startup.resolve();
+        await rejected;
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it('reports cleanup failures from a session that was still starting at shutdown', async () => {
     const state = runtime('starting');
     const startup = Promise.withResolvers<typeof state>();
