@@ -809,8 +809,12 @@ export class SessionRunEngine {
         const suspPayload = getDisplayTransform(chunk.metadata, 'suspend', getPayload(chunk).suspendPayload);
         const suspResumeSchema = getString(getPayload(chunk).resumeSchema);
 
+        // Capture the whole binding before the memory-resolution await below:
+        // a rebind during that await must not pair this run with the new
+        // session's resource.
         const suspRunId = this.#session.run.getRunId();
         const suspThreadId = this.#session.thread.getId();
+        const suspResourceId = this.#session.identity.getResourceId();
         if (suspRunId) {
           const runScope = this.#machinery.getRunScope(suspRunId);
           // A subscription restored for the current mode can replay this
@@ -843,7 +847,7 @@ export class SessionRunEngine {
               runId: suspRunId,
               toolName: suspToolName,
               threadId: suspThreadId,
-              resourceId: this.#session.identity.getResourceId(),
+              resourceId: suspResourceId,
             });
           }
         }
