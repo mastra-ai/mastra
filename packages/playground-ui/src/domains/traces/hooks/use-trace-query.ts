@@ -10,7 +10,7 @@ export const TRACE_QUERY_PER_PAGE = 25;
 type TraceQueryCursorResponse = Extract<TraceQueryTraceResponse, { page: { next: string | null } }>;
 type TraceQueryTrace = TraceQueryCursorResponse['traces'][number];
 
-export type TraceQueryArgs = Omit<QueryTracesInput, 'page' | 'pagination'>;
+export type TraceQueryArgs = Omit<QueryTracesInput, 'group' | 'page' | 'pagination'>;
 
 export interface UseTraceQueryArgs {
   query: TraceQueryArgs | undefined;
