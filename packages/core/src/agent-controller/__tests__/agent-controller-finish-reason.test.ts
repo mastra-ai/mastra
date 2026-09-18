@@ -227,6 +227,31 @@ describe('AgentController: non-success finish reasons', () => {
 });
 
 describe('Session cancellation during startup', () => {
+  it('releases the aborted-stream watcher when a pending startup is cancelled', async () => {
+    const model = vi.fn(() => createFinishReasonStream('stop'));
+    const { session } = await buildController('startup-watcher', model);
+    vi.spyOn(session.run, 'isAbortRequested').mockReturnValue(true);
+    vi.spyOn(session.run, 'isRunning').mockReturnValue(false);
+    vi.spyOn(session.stream, 'isOpen').mockReturnValue(true);
+    const wait = vi.spyOn(session.stream, 'waitForTeardown');
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    vi.spyOn(session.thread, 'ensureSubscription').mockImplementationOnce(async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    const pending = session.sendSignal({ content: 'Cancelled follow-up' }, { requireDelivery: true }).accepted;
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await entered.promise;
+    const signal = wait.mock.calls[0]![0];
+    expect(signal.aborted).toBe(false);
+    session.abort();
+    release.resolve();
+    await rejected;
+    expect(signal.aborted).toBe(true);
+    expect(model).not.toHaveBeenCalled();
+  });
+
   it.each(['subscription', 'model-sync'] as const)('does not dispatch after cancellation during %s', async phase => {
     const model = vi.fn(() => createFinishReasonStream('stop'));
     const { session } = await buildController(`startup-${phase}`, model);
