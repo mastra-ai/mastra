@@ -2,8 +2,13 @@ import { skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchGitLabProjects, fetchGitLabStatus, listGitLabIssues } from '../ui/domains/factory/services/gitlab';
-import { INTAKE_POLL_MS } from './useFactoryData';
+import {
+  fetchGitLabProjects,
+  fetchGitLabStatus,
+  getGitLabIssue,
+  listGitLabIssues,
+} from '../ui/domains/factory/services/gitlab';
+import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
 
 export function useGitLabStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
@@ -37,5 +42,17 @@ export function useGitLabIssuesQuery(factoryProjectId: string | undefined, board
     select: data => data.pages.flatMap(page => page.issues),
     refetchInterval: INTAKE_POLL_MS,
     refetchOnWindowFocus: true,
+  });
+}
+
+export function useGitLabIssueDetail(factoryProjectId: string | undefined, issueId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.gitlabIssue(factoryProjectId, issueId),
+    queryFn:
+      factoryProjectId !== undefined && issueId !== undefined
+        ? () => getGitLabIssue(baseUrl, factoryProjectId, issueId)
+        : skipToken,
+    staleTime: DETAIL_STALE_MS,
   });
 }

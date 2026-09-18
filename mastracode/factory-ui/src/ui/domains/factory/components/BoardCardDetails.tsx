@@ -2,18 +2,20 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 import { useGitHubIssueDetail, useGitHubPullRequestDetail } from '../../../../hooks/useFactoryData';
+import { useGitLabIssueDetail } from '../../../../hooks/useGitLabData';
 import { useLinearIssueDetail } from '../../../../hooks/useLinearData';
 import { githubNumberForItem, linearIdentifierForItem, linearIssueIdForItem } from '../boardItems';
 import type { WorkItem } from '../services/workItems';
 
 /** The card's source and metadata — a work item or an unfiled candidate. */
-type SourceItem = Pick<WorkItem, 'source' | 'metadata'>;
+type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'metadata'>;
 
-function descriptionSource(item: SourceItem): 'issue' | 'pull' | 'linear' | undefined {
+function descriptionSource(item: SourceItem): 'issue' | 'pull' | 'gitlab' | 'linear' | undefined {
   if (githubNumberForItem(item) !== undefined) {
     if (item.source === 'github-issue') return 'issue';
     if (item.source === 'github-pr') return 'pull';
   }
+  if (item.source === 'gitlab-issue' && item.sourceKey) return 'gitlab';
   if (linearIdentifierForItem(item) !== undefined) return 'linear';
   return undefined;
 }
@@ -27,6 +29,7 @@ export function useSourceDescription(
   const number = githubNumberForItem(item);
   const identifier = linearIdentifierForItem(item);
   const linearIssueId = linearIssueIdForItem(item);
+  const gitlabIssueId = item.source === 'gitlab-issue' ? (item.sourceKey ?? undefined) : undefined;
   const source = descriptionSource(item);
   const issue = useGitHubIssueDetail(
     source === 'issue' ? projectRepositoryId : undefined,
@@ -36,12 +39,16 @@ export function useSourceDescription(
     source === 'pull' ? projectRepositoryId : undefined,
     source === 'pull' ? number : undefined,
   );
+  const gitlab = useGitLabIssueDetail(
+    source === 'gitlab' ? factoryProjectId : undefined,
+    source === 'gitlab' ? gitlabIssueId : undefined,
+  );
   const linear = useLinearIssueDetail(
     source === 'linear' ? factoryProjectId : undefined,
     source === 'linear' ? identifier : undefined,
     source === 'linear' ? linearIssueId : undefined,
   );
-  return source === undefined ? undefined : { issue, pull, linear }[source];
+  return source === undefined ? undefined : { issue, pull, gitlab, linear }[source];
 }
 
 export function CardSourceDescription({
