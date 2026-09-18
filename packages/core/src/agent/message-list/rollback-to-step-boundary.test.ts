@@ -215,6 +215,37 @@ describe('MessageList#rollbackToStepBoundary', () => {
     expect(list.get.all.db().find(m => m.id === id)).toBeUndefined();
   });
 
+  it('removes the message whole when a processor dropped the boundary and left a twin behind', () => {
+    // The dangerous shape: a processor that both clones and *edits* can delete the real boundary
+    // while a same-millisecond synthetic marker survives. It is then the only timestamp match, and
+    // believing it would splice below the rejected tool call — exactly the bug being fixed. The
+    // survivor sits at a different marker ordinal than the boundary did, which is how it's caught.
+    const { list, id } = listWith(assistant([text('accepted', 'msg_1')]));
+    const boundary = openBoundary(list);
+    partsOf(list, id)!.push(toolCall('call-rejected', 'no'), {
+      type: 'step-start',
+      createdAt: boundary!.createdAt,
+    });
+    const message = list.get.all.db().find(m => m.id === id)!;
+    const cloned = message.content.parts!.map(part => structuredClone(part));
+    // Drop the boundary the iteration opened, keeping the twin that trails the rejected call.
+    message.content.parts = cloned.filter(part => part !== cloned[1]);
+
+    expect(list.rollbackToStepBoundary(id, boundary)).toBe(true);
+    expect(list.get.all.db().find(m => m.id === id)).toBeUndefined();
+  });
+
+  it('prefers the held reference even when another marker shares its timestamp', () => {
+    const { list, id } = listWith(assistant([text('accepted', 'msg_1')]));
+    const boundary = openBoundary(list);
+    partsOf(list, id)!.push(text('rejected', 'msg_2'), { type: 'step-start', createdAt: boundary!.createdAt });
+
+    expect(list.rollbackToStepBoundary(id, boundary)).toBe(true);
+
+    expect(partsOf(list, id)!.map(p => p.type)).toEqual(['text']);
+    expect(JSON.stringify(partsOf(list, id)!)).not.toContain('rejected');
+  });
+
   it('removes the message whole when the boundary carries no timestamp to recover by', () => {
     // `MessageMerger` leaves a synthesized marker unstamped when no step-start precedes it, so a
     // deduped boundary can have no `createdAt`. Nothing identifies it once identity is lost.

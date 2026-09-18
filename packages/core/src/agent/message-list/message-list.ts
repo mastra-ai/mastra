@@ -114,23 +114,46 @@ type MessageListAddOptions = {
  * messages re-added with `{ merge: false }` (`processors/runner.ts`), so a processor that maps or
  * clones them hands back parts this list has never seen and identity is lost. `stampPart` gives
  * every marker a `createdAt`, and cloning carries it, so the timestamp recovers the anchor
- * afterwards — but only when it names exactly one marker. Two markers sharing a millisecond are
- * ambiguous, and guessing there is worse than not trying: too early over-splices accepted content,
- * too late strands the rejected step, which is the bug this anchoring exists to prevent. An
- * unstamped marker (`MessageMerger` leaves one unstamped when there is no preceding step-start)
- * is likewise not identifying. Both bail to -1, and the caller removes the message whole.
+ * afterwards.
+ *
+ * That recovery has to be stingy, because a wrong match is worse than no match: too early
+ * over-splices accepted content, too late strands the rejected step, which is the bug this
+ * anchoring exists to prevent. So a timestamp is only believed when it names exactly one marker
+ * *and* the parts in front of that marker have the same shape they had when the boundary was
+ * opened (`shape`). Uniqueness alone is not enough: the same processors that can clone parts can
+ * also drop them, and a dropped boundary leaves a same-millisecond synthetic marker as the sole
+ * match — sitting further down the message, with the rejected step in front of it. Comparing the
+ * prefix catches that, and it is the right thing to compare, since a splice index is only ever a
+ * statement about what precedes it. Ties, unstamped markers (`MessageMerger` leaves one unstamped
+ * when no step-start precedes it), a changed prefix, and a boundary opened by some other list all
+ * return -1, and the caller removes the message whole.
  */
-function findBoundaryIndex(parts: MastraMessagePart[], boundary: MastraStepStartPart): number {
+function findBoundaryIndex(
+  parts: MastraMessagePart[],
+  boundary: MastraStepStartPart,
+  shape: string | undefined,
+): number {
   const byReference = parts.indexOf(boundary);
   if (byReference !== -1) return byReference;
 
   const stampedAt = boundary.createdAt;
-  if (stampedAt == null) return -1;
+  if (stampedAt == null || shape === undefined) return -1;
 
   const matches = parts.flatMap((part, index) =>
     part.type === 'step-start' && part.createdAt != null && +part.createdAt === +stampedAt ? [index] : [],
   );
-  return matches.length === 1 ? matches[0]! : -1;
+  if (matches.length !== 1) return -1;
+
+  const index = matches[0]!;
+  return prefixShape(parts, index) === shape ? index : -1;
+}
+
+/** The part types preceding an index — what a splice at that index is actually a statement about. */
+function prefixShape(parts: MastraMessagePart[], index: number): string {
+  return parts
+    .slice(0, index)
+    .map(part => part.type)
+    .join('|');
 }
 
 export class MessageList {
@@ -656,12 +679,10 @@ export class MessageList {
       return true;
     }
 
-    // Identity, not position: the marker is matched by reference because no stored field
-    // distinguishes it from a synthetic one. -1 covers the marker having been spliced away by
-    // an earlier rollback in the same turn, and a boundary opened on a different message.
-    const boundaryIndex = boundary ? findBoundaryIndex(parts, boundary) : -1;
+    // Reference, then timestamp, then give up — see findBoundaryIndex.
+    const boundaryIndex = boundary ? findBoundaryIndex(parts, boundary, this.#boundaryShapes.get(boundary)) : -1;
 
-    // No boundary of our own: the rejected attempt is the entire message.
+    // Nowhere to splice: discard the message rather than guess which parts were accepted.
     if (boundaryIndex === -1) {
       this.removeByIds([messageId]);
       return true;
@@ -1674,11 +1695,13 @@ export class MessageList {
     // Don't add a duplicate step-start
     const lastPart = lastMsg.content.parts[lastMsg.content.parts.length - 1];
     if (lastPart?.type === 'step-start') {
+      this.#rememberBoundaryShape(lastMsg.content.parts, lastPart);
       return { boundary: lastPart, appended: false };
     }
 
     const boundary = stampPart({ type: 'step-start' as const });
     lastMsg.content.parts.push(boundary);
+    this.#rememberBoundaryShape(lastMsg.content.parts, boundary);
 
     // Ensure the mutated message is persisted
     if (!this.stateManager.isResponseMessage(lastMsg)) {
@@ -1687,6 +1710,18 @@ export class MessageList {
     }
 
     return { boundary, appended: true };
+  }
+
+  /**
+   * The shape of the parts that preceded a boundary when it was opened, kept beside the part
+   * rather than on it so nothing new has to survive serialization. `findBoundaryIndex` needs it
+   * to tell a recovered boundary from a same-millisecond marker that merely took its place.
+   */
+  #boundaryShapes = new WeakMap<MastraStepStartPart, string>();
+
+  #rememberBoundaryShape(parts: MastraMessagePart[], boundary: MastraStepStartPart) {
+    const index = parts.indexOf(boundary);
+    if (index !== -1) this.#boundaryShapes.set(boundary, prefixShape(parts, index));
   }
 
   /** Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row. */
