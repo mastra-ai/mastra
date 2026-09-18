@@ -25,7 +25,8 @@ export function normalizeModelOutput(output: unknown): unknown {
       if (part.type === 'image-url' && typeof part.url === 'string') {
         // Remote URLs can't be represented as `media` (Base64-only `data`).
         // Keep the part untouched — url, mediaType and providerOptions intact.
-        if (!part.url.startsWith('data:')) return part;
+        // Scheme matching is case-insensitive per RFC 3986.
+        if (!/^data:/i.test(part.url)) return part;
         // data: URIs are Base64 payloads, so `media` is the right storage shape.
         const mediaType =
           typeof part.mediaType === 'string' && part.mediaType

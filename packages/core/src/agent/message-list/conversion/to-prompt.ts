@@ -363,10 +363,11 @@ function convertToolResultContent(
 /**
  * Remote URLs cannot appear in Base64 `media.data`, but messages persisted by
  * older versions stored them there (issue #22618) — `://` is not valid Base64,
- * so this detection is unambiguous.
+ * so this detection is unambiguous. Scheme matching is case-insensitive per
+ * RFC 3986: legacy values were stored verbatim, so `HTTPS://…` must heal too.
  */
 function isRemoteUrl(data: string): boolean {
-  return data.startsWith(`http://`) || data.startsWith(`https://`);
+  return /^https?:\/\//i.test(data);
 }
 
 /**

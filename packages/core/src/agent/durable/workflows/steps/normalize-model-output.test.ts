@@ -41,6 +41,17 @@ describe('normalizeModelOutput', () => {
     });
   });
 
+  it('converts uppercase-scheme data-URI image-url parts to media (RFC 3986)', () => {
+    const result = normalizeModelOutput({
+      type: 'content',
+      value: [{ type: 'image-url', url: 'DATA:image/png;base64,abc123' }],
+    }) as { value: unknown[] };
+
+    // Scheme matching is case-insensitive; the mediaType slice is
+    // prefix-length based so casing does not affect extraction.
+    expect(result.value[0]).toEqual({ type: 'media', data: 'DATA:image/png;base64,abc123', mediaType: 'image/png' });
+  });
+
   it('prefers the author-supplied mediaType for data-URI image-url parts', () => {
     const result = normalizeModelOutput({
       type: 'content',

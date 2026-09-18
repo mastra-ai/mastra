@@ -79,6 +79,20 @@ describe('aiV5PromptToAIV6Prompt tool-result content', () => {
     ]);
   });
 
+  it('heals legacy media parts with mixed-case URL schemes (RFC 3986)', () => {
+    const result = aiV5PromptToAIV6Prompt(
+      toolResultPrompt([
+        { type: 'media', data: 'HTTPS://example.com/radar.png', mediaType: 'image/png' },
+        { type: 'media', data: 'HTTP://example.com/report.pdf', mediaType: 'application/pdf' },
+      ]),
+    );
+
+    expect(firstOutputValue(result)).toEqual([
+      { type: 'image-url', url: 'HTTPS://example.com/radar.png', mediaType: 'image/png' },
+      { type: 'file-url', url: 'HTTP://example.com/report.pdf', mediaType: 'application/pdf' },
+    ]);
+  });
+
   it('is idempotent when applied twice (llmPrompt selection + router V3 wrapper)', () => {
     const prompt = toolResultPrompt([
       { type: 'media', data: 'aGVsbG8=', mediaType: 'image/png' },
@@ -145,6 +159,20 @@ describe('aiV5PromptToAIV7Prompt tool-result content', () => {
 
     expect(firstOutputValue(result)).toEqual([
       { type: 'file', data: { type: 'url', url: 'https://example.com/radar.png' }, mediaType: 'image/jpeg' },
+    ]);
+  });
+
+  it('heals legacy media parts with mixed-case URL schemes (RFC 3986)', () => {
+    const result = aiV5PromptToAIV7Prompt(
+      toolResultPrompt([
+        { type: 'media', data: 'HTTPS://example.com/radar.png', mediaType: 'image/png' },
+        { type: 'media', data: 'HTTP://example.com/report.pdf', mediaType: 'application/pdf' },
+      ]),
+    );
+
+    expect(firstOutputValue(result)).toEqual([
+      { type: 'file', data: { type: 'url', url: 'HTTPS://example.com/radar.png' }, mediaType: 'image/png' },
+      { type: 'file', data: { type: 'url', url: 'HTTP://example.com/report.pdf' }, mediaType: 'application/pdf' },
     ]);
   });
 });
