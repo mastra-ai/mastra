@@ -677,6 +677,12 @@ export class AIV6Adapter {
             },
             {
               rawInput: part.toolInvocation.rawInput,
+              // A failed hosted call replays by item reference like a successful
+              // one, so its result id needs the same dedicated slot (see the
+              // `result` case below).
+              resultProviderMetadata: getResponseResultProviderMetadata(
+                part.providerMetadata as Record<string, unknown> | undefined,
+              ),
               approval:
                 part.toolInvocation.approval?.approved === true
                   ? {

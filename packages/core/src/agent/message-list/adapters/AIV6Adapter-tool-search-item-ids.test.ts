@@ -108,6 +108,53 @@ describe('AIV6Adapter — tool_search call/result item id preservation', () => {
     expect(openaiMetadata?.[RESPONSE_RESULT_ITEM_ID_KEY]).toBe(RESULT_ITEM_ID);
   });
 
+  it('survives a round trip when the hosted search ended in output-error', () => {
+    // A failed hosted search replays by item reference exactly like a successful
+    // one, so its result id has to reach the same dedicated slot. Without it the
+    // round trip returns a single-id part, which prompt conversion then drops.
+    const dbMsg: MastraDBMessage = {
+      id: 'msg-1',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolCallId: CALL_ITEM_ID,
+              toolName: 'tool_search',
+              args: { query: 'find weather tools' },
+              errorText: 'search failed',
+            },
+            providerExecuted: true,
+            providerMetadata: {
+              openai: { itemId: CALL_ITEM_ID, [RESPONSE_RESULT_ITEM_ID_KEY]: RESULT_ITEM_ID },
+            },
+          },
+        ],
+      },
+    };
+
+    const uiMsg = AIV6Adapter.toUIMessage(dbMsg);
+
+    const uiToolPart = uiMsg.parts[0];
+    if (!isToolUIPart(uiToolPart) || uiToolPart.state !== 'output-error') {
+      throw new Error('expected a tool_search UI part in output-error state');
+    }
+    expect(uiToolPart.callProviderMetadata?.openai?.itemId).toBe(CALL_ITEM_ID);
+    expect(uiToolPart.callProviderMetadata?.openai?.[RESPONSE_RESULT_ITEM_ID_KEY]).toBeUndefined();
+    expect(uiToolPart.resultProviderMetadata?.openai?.itemId).toBe(RESULT_ITEM_ID);
+
+    const roundTripped = AIV6Adapter.fromUIMessage(uiMsg);
+
+    const toolInvocationPart = findToolInvocationPart(roundTripped, CALL_ITEM_ID);
+    const openaiMetadata = toolInvocationPart?.providerMetadata?.openai;
+    expect(openaiMetadata?.itemId).toBe(CALL_ITEM_ID);
+    expect(openaiMetadata?.[RESPONSE_RESULT_ITEM_ID_KEY]).toBe(RESULT_ITEM_ID);
+  });
+
   it('leaves call-only states unchanged (no result metadata to merge)', () => {
     const toolPart: AIV6Type.ToolUIPart = {
       type: 'tool-tool_search',
