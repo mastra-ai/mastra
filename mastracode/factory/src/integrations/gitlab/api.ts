@@ -191,6 +191,14 @@ export class GitLabApiClient {
     this.#platform = null;
   }
 
+  async getCurrentUser(): Promise<GitLabUser> {
+    return this.#request<GitLabUser>('GET', '/api/v4/user');
+  }
+
+  async getProject(projectId: string): Promise<GitLabProject> {
+    return this.#request<GitLabProject>('GET', `/api/v4/projects/${encodeURIComponent(projectId)}`);
+  }
+
   async listProjects(options: { page?: number } = {}): Promise<GitLabProject[]> {
     return this.#request<GitLabProject[]>('GET', '/api/v4/projects', {
       query: {
@@ -422,6 +430,19 @@ export class GitLabApiClient {
     return this.#request<GitLabDiscussion>(
       'GET',
       `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/discussions/${encodeURIComponent(discussionId)}`,
+    );
+  }
+
+  async resolveMergeRequestDiscussion(
+    projectId: string,
+    mergeRequestIid: number,
+    discussionId: string,
+    resolved: boolean,
+  ): Promise<GitLabDiscussion> {
+    return this.#request<GitLabDiscussion>(
+      'PUT',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/discussions/${encodeURIComponent(discussionId)}`,
+      { body: { resolved } },
     );
   }
 

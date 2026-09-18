@@ -1,5 +1,6 @@
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import { GitLabApiClient, GitLabApiError } from '../../gitlab/api.js';
+import type { GitLabRuleOverrides } from '../../gitlab/default-rules.js';
 import { gitlabConnection, GitLabIntegrationBase } from '../../gitlab/integration.js';
 import type { GitLabStatusConnection } from '../../gitlab/integration.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
@@ -15,6 +16,7 @@ interface PlatformIntegrationConnection {
 interface PlatformGitLabContext {
   id: string;
   label: string | null;
+  repositoryAccessToken: () => Promise<string>;
   api: GitLabApiClient;
   connection: IntegrationConnection;
   host: string;
@@ -23,34 +25,38 @@ interface PlatformGitLabContext {
 const GITLAB_INTEGRATION_IDS = new Set(['gitlab', 'gitlab-group', 'gitlab-group-token']);
 
 export interface PlatformGitLabIntegrationConfig {
+  rules?: GitLabRuleOverrides;
   clientConfig?: PlatformApiClientConfig;
   connectionId?: string;
+  webhookSecret?: string;
 }
 
 export class PlatformGitLabIntegration extends GitLabIntegrationBase {
   readonly #client: PlatformApiClient;
-  readonly #connectionId: string;
+  readonly #connectionId: string | undefined;
   readonly #endpointHost: string;
+  readonly #webhookSecret: string | undefined;
 
   constructor(config: PlatformGitLabIntegrationConfig = {}) {
-    super();
-    const connectionId = config.connectionId?.trim() || process.env.MASTRA_GITLAB_CONNECTION_ID?.trim();
-    if (!connectionId) {
-      throw new Error('PlatformGitLabIntegration: missing required MASTRA_GITLAB_CONNECTION_ID.');
-    }
+    super(config.rules);
+    const connectionId = config.connectionId?.trim() || process.env.MASTRA_GITLAB_CONNECTION_ID?.trim() || undefined;
     const clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(clientConfig);
     this.#connectionId = connectionId;
     this.#endpointHost = new URL(clientConfig.baseUrl).host;
+    this.#webhookSecret =
+      config.webhookSecret?.trim() || process.env.MASTRA_GITLAB_WEBHOOK_SECRET?.trim() || undefined;
   }
 
   async listConnections(): Promise<PlatformIntegrationConnection[]> {
     const result = await this.#client.request<{ connections: PlatformIntegrationConnection[] }>(
       'GET',
-      '/v2/connections',
+      '/v2/connections?providerKey=gitlab',
     );
     return result.connections.filter(
-      connection => connection.id === this.#connectionId && GITLAB_INTEGRATION_IDS.has(connection.integrationId),
+      connection =>
+        (!this.#connectionId || connection.id === this.#connectionId) &&
+        GITLAB_INTEGRATION_IDS.has(connection.integrationId),
     );
   }
 
@@ -64,6 +70,10 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
 
   authFailureMessage(): string {
     return 'GitLab rejected the connected account. Reconnect it in Mastra Platform.';
+  }
+
+  protected override get webhookSecret(): string | undefined {
+    return this.#webhookSecret;
   }
 
   protected async activeContexts(): Promise<PlatformGitLabContext[]> {
@@ -81,8 +91,8 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       configured: true,
       mode: 'platform',
       endpointHost: this.#endpointHost,
-      connectionConfigured: true,
-      webhookConfigured: false,
+      connectionFilterConfigured: Boolean(this.#connectionId),
+      webhookConfigured: Boolean(this.#webhookSecret),
     };
   }
 
@@ -98,6 +108,19 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       connection: gitlabConnection(connection.id),
       // Platform does not currently expose the connected GitLab instance host.
       host: 'gitlab.com',
+      repositoryAccessToken: () => this.#repositoryAccessToken(connection.id),
     };
+  }
+
+  async #repositoryAccessToken(connectionId: string): Promise<string> {
+    const credential = await this.#client.request<
+      | { type: 'oauth2'; accessToken: string; expiresAt: string | null }
+      | { type: 'api_key'; apiKey: string }
+    >('GET', `/v2/connections/${encodeURIComponent(connectionId)}/credentials`);
+    const token = credential.type === 'oauth2' ? credential.accessToken : credential.apiKey;
+    if (!token?.trim()) {
+      throw new GitLabApiError('GitLab connection did not provide a repository access credential.', 502);
+    }
+    return token;
   }
 }
