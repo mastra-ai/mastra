@@ -1266,6 +1266,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 toolName: params.toolName,
                                 result: transcriptResult,
                                 isError: params.status === 'failed',
+                                providerOptions: providerMetadata,
                               },
                             ],
                           },

@@ -344,6 +344,20 @@ describe('createToolCallStep background task resume with falsy payload', () => {
       .filter((message: any) => message?.role === 'tool')
       .filter((message: any) => (message.content ?? []).some((part: any) => part.type === 'tool-call'));
     expect(callRecords).toHaveLength(1);
+    const persisted = new MessageList();
+    persisted.add(added.flat(), 'response');
+    const results = persisted.get.all.db().flatMap(message => message.content.parts ?? []);
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool-invocation',
+          toolInvocation: expect.objectContaining({ state: 'result', result: { ok: true } }),
+          providerMetadata: expect.objectContaining({
+            mastra: expect.objectContaining({ backgroundTask: { taskId: 'task-1', status: 'completed' } }),
+          }),
+        }),
+      ]),
+    );
   });
 
   it('resumes the suspended task when the resume payload is an object', async () => {

@@ -1364,6 +1364,7 @@ export class SessionRunEngine {
         if (settled) {
           this.#session.emit({
             type: 'tool_end',
+            threadId: suspension.threadId,
             toolCallId: suspension.toolCallId,
             result: ABORTED_BY_USER_REASON,
             isError: false,
