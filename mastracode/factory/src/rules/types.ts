@@ -4,6 +4,7 @@ export type WorkItemSource =
   | 'github-issue'
   | 'github-pr'
   | 'gitlab-issue'
+  | 'gitlab-pr'
   | 'linear-issue'
   | 'jira-issue'
   | 'incidentio-follow-up'
@@ -32,7 +33,7 @@ export function needsApproval(item: {
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'linear') return 'linear-issue';
-  if (source.integrationId === 'gitlab' && source.type === 'issue') return 'gitlab-issue';
+  if (source.integrationId === 'gitlab') return source.type === 'pull-request' ? 'gitlab-pr' : 'gitlab-issue';
   if (source.integrationId === 'jira') return 'jira-issue';
   if (source.integrationId === 'incidentio') return 'incidentio-follow-up';
   // Only GitHub, GitLab, Linear, Jira, and incident.io have provider-specific
@@ -45,7 +46,7 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
 // Authored outside the write-access circle: a missing trust stamp fails closed until
 // the reconcile sweep backfills it, and Factory's own PRs pass through `factoryAuthored`.
 export function externallyAuthored(item: { source: string; metadata: Record<string, unknown> | null }): boolean {
-  if (item.source !== 'github-pr' && item.source !== 'github-issue') return false;
+  if (!['github-pr', 'github-issue', 'gitlab-pr', 'gitlab-issue'].includes(item.source)) return false;
   if (item.metadata?.factoryAuthored === true) return false;
   return item.metadata?.authorTrusted !== true;
 }
@@ -130,6 +131,7 @@ export const FACTORY_RULE_SOURCES = [
   'issue',
   'pullRequest',
   'gitlabIssue',
+  'gitlabPullRequest',
   'linearIssue',
   'jiraIssue',
   'incidentioFollowUp',
@@ -153,6 +155,19 @@ export const FACTORY_GITHUB_EVENTS = [
   'pullRequestClosed',
 ] as const;
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
+
+export const FACTORY_GITLAB_EVENTS = [
+  'issueOpened',
+  'issueUpdated',
+  'issueClosed',
+  'issueCommented',
+  'mergeRequestOpened',
+  'mergeRequestUpdated',
+  'mergeRequestCommented',
+  'mergeRequestMerged',
+  'mergeRequestClosed',
+] as const;
+export type FactoryGitLabEventName = (typeof FACTORY_GITLAB_EVENTS)[number];
 
 export const FACTORY_LINEAR_EVENTS = ['issueObserved', 'issueClosed'] as const;
 export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
@@ -188,10 +203,11 @@ export type FactoryRuleActor =
   | { type: 'human'; id: string }
   | { type: 'agent'; bindingId: string; role: string }
   | { type: 'github'; login: string; trusted: boolean; factoryAuthored: boolean }
+  | { type: 'gitlab'; username: string; trusted: boolean; factoryAuthored: boolean }
   | { type: 'system'; id: string };
 
 export interface FactoryRuleIngressIdentity {
-  type: 'human' | 'agent' | 'toolResult' | 'github' | 'linear' | 'jira' | 'incidentio' | 'rule';
+  type: 'human' | 'agent' | 'toolResult' | 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'rule';
   id: string;
 }
 
@@ -299,6 +315,56 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
 export interface FactoryRuleIntakeTarget {
   board: string;
   initialPhase: string;
+}
+
+export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  intake?: FactoryRuleIntakeTarget;
+  event: FactoryGitLabEventName;
+  deliveryId: string;
+  factory: { createdAt: string };
+  repository: { id: number; fullName: string; host: string };
+  issue?: {
+    number: number;
+    sourceKey: string;
+    title: string;
+    url: string;
+    createdAt?: string;
+    updatedAt?: string;
+    assignees?: string[];
+    labels?: string[];
+    state?: 'open' | 'closed';
+    author?: string;
+    authorTrusted: boolean;
+  };
+  note?: {
+    id: number;
+    body?: string;
+    url?: string;
+    author?: string;
+    createdAt?: string;
+    updatedAt?: string;
+  };
+  mergeRequest?: {
+    number: number;
+    sourceKey: string;
+    title: string;
+    url: string;
+    createdAt?: string;
+    state: 'open' | 'closed';
+    draft: boolean;
+    merged: boolean;
+    assignees?: string[];
+    reviewers?: string[];
+    labels?: string[];
+    author?: string;
+    authorTrusted: boolean;
+    factoryAuthored: boolean;
+    headBranch: string;
+    baseBranch: string;
+  };
 }
 
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
@@ -529,6 +595,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'pullRequest';
     case 'gitlab-issue':
       return 'gitlabIssue';
+    case 'gitlab-pr':
+      return 'gitlabPullRequest';
     case 'linear-issue':
       return 'linearIssue';
     case 'jira-issue':

@@ -33,6 +33,7 @@ const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
   'github-issue',
   'github-pr',
   'gitlab-issue',
+  'gitlab-pr',
   'linear-issue',
   'jira-issue',
   'incidentio-follow-up',

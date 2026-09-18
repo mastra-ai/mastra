@@ -378,15 +378,17 @@ function externalSourceForDecision(decision: Extract<FactoryCommitDecision, { ty
       ? ['github', 'pull-request']
       : decision.source === 'github-issue'
         ? ['github', 'issue']
-        : decision.source === 'gitlab-issue'
-          ? ['gitlab', 'issue']
-          : decision.source === 'linear-issue'
-            ? ['linear', 'issue']
-            : decision.source === 'jira-issue'
-              ? ['jira', 'issue']
-              : decision.source === 'incidentio-follow-up'
-                ? ['incidentio', 'issue']
-                : ['factory', 'manual'];
+        : decision.source === 'gitlab-pr'
+          ? ['gitlab', 'pull-request']
+          : decision.source === 'gitlab-issue'
+            ? ['gitlab', 'issue']
+            : decision.source === 'linear-issue'
+              ? ['linear', 'issue']
+              : decision.source === 'jira-issue'
+                ? ['jira', 'issue']
+                : decision.source === 'incidentio-follow-up'
+                  ? ['incidentio', 'issue']
+                  : ['factory', 'manual'];
   return { integrationId, type, externalId: decision.sourceKey, url: decision.url ?? undefined };
 }
 
@@ -401,6 +403,19 @@ function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor 
     return {
       type: 'github',
       login: actor.login,
+      trusted: actor.trusted,
+      factoryAuthored: actor.factoryAuthored,
+    };
+  }
+  if (
+    actor?.type === 'gitlab' &&
+    typeof actor.username === 'string' &&
+    typeof actor.trusted === 'boolean' &&
+    typeof actor.factoryAuthored === 'boolean'
+  ) {
+    return {
+      type: 'gitlab',
+      username: actor.username,
       trusted: actor.trusted,
       factoryAuthored: actor.factoryAuthored,
     };
