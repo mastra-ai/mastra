@@ -82,7 +82,8 @@ export function resolveDelegationRefs(
       missing.push(ref);
       continue;
     }
-    const tag = `delegation_result_${Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex')}`;
+    const random = globalThis.crypto.getRandomValues(new Uint8Array(6));
+    const tag = `delegation_result_${Array.from(random, byte => byte.toString(16).padStart(2, '0')).join('')}`;
     const attrs = [`ref="${escapeAttribute(ref)}"`, `from="${escapeAttribute(entry.agentName)}"`];
     if (as) attrs.push(`as="${escapeAttribute(as)}"`);
     if (note) attrs.push(`note="${escapeAttribute(note)}"`);

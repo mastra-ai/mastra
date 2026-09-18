@@ -417,7 +417,9 @@ export function createKnowledgeUlid(now = Date.now()): string {
     lastUlidRandom = (lastUlidRandom + 1n) & ((1n << 80n) - 1n);
   } else {
     lastUlidTime = now;
-    lastUlidRandom = BigInt(`0x${Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(10))).toString('hex')}`);
+    lastUlidRandom = globalThis.crypto
+      .getRandomValues(new Uint8Array(10))
+      .reduce((value, byte) => (value << 8n) | BigInt(byte), 0n);
   }
   return `${encodeCrockford(BigInt(now), 10)}${encodeCrockford(lastUlidRandom, 16)}`;
 }

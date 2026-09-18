@@ -34,8 +34,8 @@ export interface SkillPublishResult {
 async function hashContent(content: string | Buffer): Promise<string> {
   const bytes = typeof content === 'string' ? new TextEncoder().encode(content) : content;
   const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
-  return Buffer.from(digest).toString('hex');
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', data));
+  return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 /**
