@@ -769,7 +769,9 @@ function stripItemId(part: MastraMessagePart): void {
  *
  * Reactive by design — it fires only after OpenAI has actually rejected the
  * request, so a legitimately reasoning-free message (e.g.
- * `reasoning.effort: 'none'`, or a non-reasoning model) is never touched.
+ * `reasoning.effort: 'none'`, or a non-reasoning model) is untouched on any
+ * thread that has not already hit this 400. Once it has, see the collateral
+ * note below.
  *
  * Deliberately narrow:
  * - Matches only the `of type 'message'` phrasing. The sibling `function_call`
@@ -799,14 +801,13 @@ function stripItemId(part: MastraMessagePart): void {
  * non-reasoning Responses model, the non-reasoning turns are also orphan-shaped
  * (an `itemId`, no reasoning) but are perfectly valid, and they lose their item
  * references too. They still replay correctly — by value instead of by
- * reference — so the effect is a forfeited server-side cache hit, not a
- * failure. The asymmetry is deliberate: under-stripping ends the turn,
- * over-stripping costs a cache hit.
+ * reference — so the effect is a lost item reference, not a failure. The asymmetry is deliberate: under-stripping ends the turn,
+ * over-stripping only costs the reference.
  *
  * Known limitation: the guard reasons about message *shape*, because the
  * required `rs_…` id named in the error is not available to `fix`. A turn whose
- * reasoning row belongs to a different turn can therefore be skipped when it
- * should have been repaired. That case degrades to today's behavior — the turn
+ * reasoning row belongs to a different turn could in principle be skipped
+ * when it should have been repaired. That case degrades to today's behavior — the turn
  * fails as it already does — so the guard can cost a recovery, never cause a
  * new failure.
  *
