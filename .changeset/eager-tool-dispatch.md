@@ -7,10 +7,10 @@ Start a tool as soon as its own arguments are complete, instead of waiting for t
 ```ts
 // A tool call completes early in the step; its execution no longer waits for
 // the rest of the model's output.
-const stream = await agent.stream('Compare the weather in Paris and Rome');
+const eager = await agent.stream('Compare the weather in Paris and Rome');
 
 // Opt out to restore the previous scheduling.
-const stream = await agent.stream('Compare the weather in Paris and Rome', {
+const deferred = await agent.stream('Compare the weather in Paris and Rome', {
   eagerToolExecution: false,
 });
 ```
@@ -19,6 +19,6 @@ Eligibility is narrow by design: approval-gated, suspendable, provider-executed,
 
 Eager work honours the same configured concurrency limit, but counts against it separately from the deferred pipeline. A step that mixes eligible and ineligible calls can therefore run one of each at once, so a limit of 1 bounds each path rather than the step as a whole. Set `eagerToolExecution: false` where a tool depends on being the only one running.
 
-If the model errors and the request is retried or failed over, a tool that already finished has its call and result written into the conversation, so the replacement attempt sees the work as done rather than asking for it again. A tool still running when that happens is aborted.
+If the model errors and a replacement attempt demonstrably starts — a retry or a fallback model — a tool that already finished has its call and result written into the conversation, so that attempt sees the work as done rather than asking for it again. A tool still running when that happens is aborted. Where no replacement attempt starts, finished work is left uncommitted.
 
 A caller abort is the exception. It drops both the work still running and any result that finished but has not been written into the conversation yet, so a tool that completed in the moments before the abort can leave its side effect unrecorded.
