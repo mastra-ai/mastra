@@ -34,10 +34,7 @@ export function SpanTypeLegend({ spans }: { spans: UISpan[] }) {
 
   // Bleeds past the panel's `px-2` so the bottom border reaches the container edges.
   return (
-    <div
-      data-slot="span-type-legend"
-      className="border-border1 -mx-2 flex flex-wrap items-center gap-1.5 border-b px-2 pt-2 pb-2.5"
-    >
+    <div data-slot="span-type-legend" className="flex flex-wrap items-center gap-1.5 pt-2 pb-2.5">
       {usedSpanTypes.map(type => {
         const spanUI = getSpanTypeUi(type);
         return (
