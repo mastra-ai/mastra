@@ -36,6 +36,20 @@ export function SidebarNewNavStackView({
     wasActiveRef.current = active;
   }, [active]);
 
+  React.useEffect(() => {
+    if (!active) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      closeView(returnFocusRef);
+      onBack?.();
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [active, closeView, onBack, returnFocusRef]);
+
   function handleBack() {
     closeView(returnFocusRef);
     onBack?.();

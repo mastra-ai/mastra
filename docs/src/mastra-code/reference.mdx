@@ -212,12 +212,8 @@ const { session } = await createMastraCode({
 })
 
 session.subscribe(event => {
-  if (event.type === 'message_update') {
-    const text = event.message.content
-      .filter(p => p.type === 'text')
-      .map(p => p.text)
-      .join('')
-    process.stdout.write(text)
+  if (event.type === 'message_update' && event.event.type === 'text-delta') {
+    process.stdout.write(event.event.delta)
   }
 })
 

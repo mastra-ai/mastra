@@ -4,6 +4,10 @@ packages:
   - service-two
   - service-mastra
 
+allowBuilds:
+  esbuild: set this to true or false
+  protobufjs: set this to true or false
+
 catalog:
   tsx: ^4.21.0
   typescript: ^5.9.3
@@ -16,3 +20,7 @@ overrides:
   '@mastra/otel-exporter': link:../../../otel-exporter
   'brace-expansion@>=2.0.0 <2.1.4': 2.1.4
   mastra: link:../../../../packages/cli
+  vitest@>=2.1.0 <4.1.11: 4.1.11
+  '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.11
+  image-size@<=2.0.2: 2.0.4
+  adm-zip@<=0.6.0: 0.6.1

@@ -717,6 +717,7 @@ export type ProviderModelsMap = {
     'thinkingmachines/Inkling-Small:thinking',
     'thinkingmachines/inkling',
     'thinkingmachines/inkling:thinking',
+    'unbiased/pareto',
     'undi95/remm-slerp-l2-13b',
     'universal-summarizer',
     'unsloth/gemma-3-12b-it',
