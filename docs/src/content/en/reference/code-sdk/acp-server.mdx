@@ -1,0 +1,120 @@
+---
+title: 'Reference: ACP server | Code SDK'
+description: 'Run Mastra Code as an Agent Client Protocol server with isolated sessions, model controls, tool permissions, and skill commands.'
+packages:
+  - '@mastra/code-sdk'
+  - 'mastracode'
+---
+
+# ACP server
+
+Mastra Code serves coding-agent conversations over the Agent Client Protocol (ACP). An ACP client starts the server as a subprocess and exchanges newline-delimited JSON-RPC messages over standard input and output. Standard error carries diagnostics.
+
+This server connects an editor or other ACP client to Mastra Code. To connect a Mastra agent to an external ACP server, use an [ACP connection](/docs/connections/acp).
+
+## Start the server
+
+With the `mastracode` CLI installed, configure your client to launch:
+
+```bash
+mastracode --acp
+```
+
+A client that accepts command and argument fields can use:
+
+```json
+{
+  "command": "mastracode",
+  "args": ["--acp"]
+}
+```
+
+Configure provider authentication in Mastra Code before starting the client, or supply API keys in the server process's environment. ACP sessions don't load project `.env` files into the shared process environment. The server doesn't offer interactive ACP authentication.
+
+After initialization, the client calls `session/new` with an absolute `cwd` and an `mcpServers` array. The response includes the session ID and configuration choices. Send that ID with subsequent prompts and configuration requests.
+
+## `acpMain(options?)`
+
+To start the same server from an SDK entry point:
+
+```typescript title="acp-server.ts"
+import { acpMain } from '@mastra/code-sdk/acp/index'
+
+await acpMain()
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'dangerousAutoApprove',
+    type: 'boolean',
+    description:
+      'Approve supported tool permission requests without asking the client. Leave this disabled when the client should control approval.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'coAuthor',
+    type: '{ name?: string; email?: string }',
+    description: 'Commit attribution used by each session. Omitted fields use the Code SDK defaults.',
+    isOptional: true,
+  },
+]}
+/>
+
+Returns `Promise<void>`. This entry point owns the process's standard streams and signal handlers. Closing standard input releases the sessions. `SIGINT` and `SIGTERM` wait for cleanup before exiting. A fatal server failure exits with status `1`.
+
+The CLI's `--dangerous-auto-approve` flag enables the same approval override. See [commit attribution](/reference/code-sdk/mount-agent-controller#commit-attribution) for the `coAuthor` defaults.
+
+## Sessions and MCP servers
+
+Each session has its own runtime and working directory. The server connects client-supplied Model Context Protocol (MCP) servers using stdio, HTTP, or SSE. Stdio processes receive the session's working directory and supplied environment variables. HTTP and SSE connections receive the supplied headers. Duplicate server names and failed client-server initialization return errors.
+
+Prompts and configuration changes run in order within a session. Different sessions can run concurrently. `session/cancel` stops the requested session's active turn and cancels its queued prompts.
+
+## Model and reasoning controls
+
+The `session/new` response exposes `configOptions` for models, modes, and reasoning effort. Use values from the returned choices with `session/set_config_option`:
+
+```typescript
+await connection.setSessionConfigOption({
+  sessionId,
+  configId: 'thought_level',
+  value: 'high',
+})
+```
+
+Model choices retain their full provider routing IDs and omit providers without configured credentials. The session's saved model remains available even when discovery doesn't return it. Mode and model changes wait for the current turn to finish.
+
+Reasoning choices follow the selected model's policy. A provider may adjust the requested level. Each session reads default settings once at startup. Mode changes and explicit reasoning selections remain live. Start a new session to pick up edits to the settings file.
+
+Legacy `session/set_mode` and `session/set_model` requests are also supported.
+
+## Skill commands
+
+After the `session/new` response, the server advertises workspace skills through `available_commands_update`. Clients can offer `/skill/<name>` completions before the first prompt. The server refreshes the list before subsequent prompts and sends an update when it changes.
+
+Send a command as a text prompt, followed by optional instructions:
+
+```typescript
+await connection.prompt({
+  sessionId,
+  prompt: [{ type: 'text', text: '/skill/review Check the current changes' }],
+})
+```
+
+The server adds the skill's instructions and resource listings to the turn. It uses Mastra Code's project and global skill directories. Duplicate names select the first user-invokable file in workspace catalog order. Skills marked `user-invocable: false` are hidden and rejected when explicitly invoked. Missing skills return an invalid-parameters error without starting inference.
+
+Terminal commands such as `/goal` aren't exposed as ACP commands.
+
+## Permissions and errors
+
+By default, tool approvals and sandbox access requests go through the client's permission UI. Denied tools don't execute. Cancellation of a suspended permission request records the denial before aborting, so a later turn doesn't replay the request. Free-text tool questions aren't supported. The `ask_user` tool is disabled.
+
+Assistant chunks contain assistant output. User prompts and internal system signals aren't emitted as assistant replies. Provider failures return JSON-RPC errors. Token limits return `max_tokens`, content-filter refusals return `refusal`, and cancellation returns `cancelled`.
+
+## Supported protocol profile
+
+The server supports ACP v1 initialization, new sessions, text prompts, text resources, assistant and tool updates, permissions, cancellation, configuration, and command discovery. It doesn't advertise session loading. Image, audio, and binary resource prompts return invalid-parameters errors.
+
+The repository's ACP conformance gate validates messages against a pinned upstream schema and exercises the built SDK with local model and MCP fixtures. These checks cover the implemented profile. They aren't upstream certification, a guarantee of every optional ACP feature, or a replacement for testing live provider authentication in your client.
