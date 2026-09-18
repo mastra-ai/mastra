@@ -207,7 +207,7 @@ export function FeedbackThread({
   };
 
   return (
-    <Comment variant={variant} className="min-h-0 gap-4">
+    <Comment variant={variant} className="min-h-0 gap-3">
       {/* Same size/variant as the timeline search field so switching tabs doesn't shift the layout. */}
       <form
         aria-label="Leave feedback"
