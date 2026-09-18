@@ -1,13 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { SettingsLayout } from './settings-layout';
-import { SettingsLayout as DeprecatedSettingsLayout } from '@/ds/components/SettingsLayout';
 
 describe('SettingsLayout', () => {
-  it('keeps the deprecated entry point', () => {
-    expect(DeprecatedSettingsLayout).toBe(SettingsLayout);
-  });
-
   it('renders the page title, action, and settings content', () => {
     const output = renderToStaticMarkup(
       <SettingsLayout

@@ -132,6 +132,7 @@ const semanticEntries: [string, string][] = [
   ['muted', Colors.muted],
   ['foreground', Colors.foreground],
   ['muted-foreground', Colors['muted-foreground']],
+  ['destructive', Colors.destructive],
   ['ring', Colors.ring],
   ['sidebar-accent', Colors['sidebar-accent']],
   ['selected', Colors.selected],

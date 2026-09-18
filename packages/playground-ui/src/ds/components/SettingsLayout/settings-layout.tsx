@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Txt } from '@/ds/components/Txt';
+import { Txt } from '../Txt';
 import { cn } from '@/lib/utils';
 
 export interface SettingsLayoutProps {

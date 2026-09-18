@@ -6,6 +6,7 @@
   --muted: var(--gray-1);
   --foreground: var(--gray-10);
   --muted-foreground: var(--gray-9);
+  --destructive: var(--accent2);
   --border: var(--gray-alpha-2);
   --ring: var(--gray-8);
   --sidebar-accent: var(--gray-alpha-1);
@@ -24,6 +25,7 @@ html.light .new-theme {
   --color-muted: var(--muted);
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-ring: var(--ring);
   --color-sidebar-accent: var(--sidebar-accent);

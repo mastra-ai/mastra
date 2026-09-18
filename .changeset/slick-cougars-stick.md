@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Deprecated the SettingsLayout component entry point. Import SettingsLayout from @mastra/playground-ui/new/settings instead.
+Updated settings and destructive controls to use semantic colors and the shared text hierarchy.

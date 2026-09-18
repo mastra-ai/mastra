@@ -52,12 +52,12 @@ export const buttonVariants = cva(
           'disabled:bg-foreground/45 disabled:text-background/75',
         ),
         destructive: cn(
-          'border border-transparent bg-accent2 font-medium text-white not-disabled:hover:bg-accent2/80 not-disabled:active:bg-accent2/70',
-          'disabled:bg-accent2/40 disabled:text-white/80',
+          'border border-transparent bg-destructive font-medium text-white not-disabled:hover:bg-destructive/80 not-disabled:active:bg-destructive/70',
+          'disabled:bg-destructive/40 disabled:text-white/80',
         ),
         'destructive-ghost': cn(
-          'border border-transparent bg-transparent text-accent2 not-disabled:hover:bg-accent2/20 not-disabled:hover:text-accent2 not-disabled:active:bg-accent2/30',
-          'disabled:bg-transparent disabled:text-accent2/50',
+          'border border-transparent bg-transparent text-destructive not-disabled:hover:bg-destructive/20 not-disabled:hover:text-destructive not-disabled:active:bg-destructive/30',
+          'disabled:bg-transparent disabled:text-destructive/50',
         ),
         ghost: cn(
           'border border-transparent bg-transparent text-foreground/90 not-disabled:hover:bg-foreground/4 not-disabled:hover:text-foreground not-disabled:active:bg-foreground/10',

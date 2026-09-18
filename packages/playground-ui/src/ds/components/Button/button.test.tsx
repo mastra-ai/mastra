@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 describe('Button', () => {
-  it('uses semantic neutral roles with distinct interaction states', () => {
+  it('uses semantic roles with distinct interaction states', () => {
     const baseClasses = buttonVariants().split(' ');
     expect(baseClasses).toEqual(
       expect.arrayContaining(['transition-[background-color,border-color,color]', 'motion-reduce:transition-none']),
@@ -35,8 +35,12 @@ describe('Button', () => {
         'not-disabled:hover:bg-foreground/75',
         'not-disabled:active:bg-foreground/60',
       ],
-      destructive: ['not-disabled:hover:bg-accent2/80', 'not-disabled:active:bg-accent2/70'],
-      'destructive-ghost': ['not-disabled:hover:bg-accent2/20', 'not-disabled:active:bg-accent2/30'],
+      destructive: ['bg-destructive', 'not-disabled:hover:bg-destructive/80', 'not-disabled:active:bg-destructive/70'],
+      'destructive-ghost': [
+        'text-destructive',
+        'not-disabled:hover:bg-destructive/20',
+        'not-disabled:active:bg-destructive/30',
+      ],
       ghost: ['text-foreground/90', 'not-disabled:hover:bg-foreground/4', 'not-disabled:active:bg-foreground/10'],
       outline: [
         'border-foreground/30',
