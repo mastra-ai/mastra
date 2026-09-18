@@ -614,7 +614,7 @@ export interface GoalConfig {
  *
  * - `true`  → wrap with `createDurableAgent` using defaults on Mastra registration.
  * - object  → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
- *   cleanupTimeoutMs, shouldCache, shouldPersistSnapshot, id, name).
+ *   cleanupTimeoutMs, shouldCache, shouldPersistSnapshot, id, name, engine).
  *
  * See `packages/core/src/agent/durable/create-durable-agent.ts`.
  */
@@ -642,6 +642,13 @@ export type AgentDurableOption =
       id?: string;
       /** Optional name override (defaults to agent.name). */
       name?: string;
+      /**
+       * See createDurableAgent options: which execution engine the agentic
+       * workflows are built on. `'evented'` dispatches steps through the
+       * workflows pubsub topic for execution by a worker process.
+       * Defaults to `'default'` (in-process execution).
+       */
+      engine?: 'default' | 'evented';
     };
 
 interface AgentConfigBase<

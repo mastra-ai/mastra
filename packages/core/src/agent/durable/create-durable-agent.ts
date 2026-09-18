@@ -96,6 +96,13 @@ export interface CreateDurableAgentOptions<
    * regardless of this option.
    */
   shouldCache?: (topic: string) => boolean;
+
+  /**
+   * Which execution engine the agentic workflows are built on.
+   * See {@link DurableAgentConfig.engine}. Defaults to `'default'`
+   * (in-process execution).
+   */
+  engine?: 'default' | 'evented';
 }
 
 /**
@@ -143,7 +150,8 @@ export function createDurableAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateDurableAgentOptions<TAgentId, TTools, TOutput>): DurableAgent<TAgentId, TTools, TOutput> {
-  const { agent, id, name, cache, pubsub, maxSteps, cleanupTimeoutMs, shouldCache, shouldPersistSnapshot } = options;
+  const { agent, id, name, cache, pubsub, maxSteps, cleanupTimeoutMs, shouldCache, shouldPersistSnapshot, engine } =
+    options;
 
   return new DurableAgent({
     agent,
@@ -155,6 +163,7 @@ export function createDurableAgent<
     cleanupTimeoutMs,
     shouldCache,
     shouldPersistSnapshot,
+    engine,
   } as DurableAgentConfig<TAgentId, TTools, TOutput>);
 }
 
