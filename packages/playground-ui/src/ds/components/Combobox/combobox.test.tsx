@@ -67,6 +67,23 @@ describe('Combobox', () => {
     expect(screen.queryByPlaceholderText('Search providers')).toBeNull();
   });
 
+  it('keeps search available for custom values with two options', async () => {
+    render(
+      <Combobox
+        options={options.slice(0, 2)}
+        allowCustomValue
+        onValueChange={vi.fn()}
+        searchPlaceholder="Search providers"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'custom-provider' }, inputType: 'insertText' });
+
+    expect(await screen.findByRole('option', { name: 'Use “custom-provider”' })).toBeTruthy();
+  });
+
   it('portals the popup into document.body when there is no portal container provider', async () => {
     const { container } = renderCombobox();
 

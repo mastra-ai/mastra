@@ -108,7 +108,7 @@ export function Combobox(props: ComboboxProps) {
       ? { label: `Use “${customValue}”`, value: customValue }
       : undefined;
   const displayedOptions = customOption ? [customOption, ...options] : options;
-  const showSearch = displayedOptions.length > 2;
+  const showSearch = allowCustomValue || displayedOptions.length > 2;
   const selectedValues = multiple ? (props.value ?? EMPTY_VALUES) : EMPTY_VALUES;
   const selectedValueSet = React.useMemo(() => new Set(selectedValues), [selectedValues]);
   const selectedOption = multiple ? null : (options.find(option => option.value === props.value) ?? null);
