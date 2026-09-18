@@ -10,6 +10,7 @@ import { extractToolCalls } from '@mastra/evals/scorers/utils'
 
 const refundJudge = createScorer({
   id: 'refund-judge',
+  description: 'Judges refund handling',
   type: 'agent',
   judge: { model: 'openai/gpt-5-mini', instructions: '...' },
 })
@@ -23,4 +24,15 @@ const refundJudge = createScorer({
     description: 'Score the refund handling from 0 to 1',
     createPrompt: ({ run }) => `Rate the refund handling: ${JSON.stringify(run.output)}`,
   })
+```
+
+**Reading the result.** `scorer.run()` is either scored or skipped. Check `notScorable` before using `score` as a number, including on scorers that never skip:
+
+```ts
+const result = await refundJudge.run(input)
+if (result.notScorable) {
+  // skipped — no score
+} else {
+  result.score
+}
 ```
