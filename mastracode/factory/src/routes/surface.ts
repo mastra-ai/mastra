@@ -490,9 +490,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
   const sourceControlRegistrations = registrations.filter(({ integration }) => integration.versionControl);
-  const sourceControls = sourceControlRegistrations.map(({ integration }) =>
-    deps.sourceControlStorage.forIntegration(integration.id),
-  );
+  const sourceControlIntegrationIds = [
+    ...new Set(['github', ...sourceControlRegistrations.map(({ integration }) => integration.id)]),
+  ];
+  const sourceControls = sourceControlIntegrationIds.map(id => deps.sourceControlStorage.forIntegration(id));
   const sourceControlSessions = createSourceControlSessionLookup(sourceControls);
 
   const integrationRoutes = registrations.flatMap(registration => {
@@ -511,7 +512,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   });
   // Session persistence belongs to the linked source-control provider, not to
   // GitHub. Replace legacy GitHub-owned handlers with one resolver spanning
-  // every registered source-control partition.
+  // the legacy GitHub partition and every registered source-control partition.
   const sharedSessionRouteKeys = new Set([
     'GET /web/github/projects/:id/sessions',
     'POST /web/github/projects/:id/sessions',
