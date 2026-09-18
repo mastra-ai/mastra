@@ -113,6 +113,19 @@ export interface ButtonProps
   to?: string;
   /** @deprecated Set it on the element passed to `render`. */
   target?: string;
+  /** @deprecated Set it on the element passed to `render`. */
+  prefetch?: boolean | null;
+}
+
+// A link is not a button. `render` always entered `BaseButton`, which warns in
+// development when the resolved element is not a native button. `nativeButton={false}`
+// is the worse fix: Base UI then adds `role="button"` and Enter/Space handling, so a
+// screen reader announces a link as a button. Render links directly instead and keep
+// `BaseButton` for real buttons.
+function isLinkElement(element: React.ReactElement): boolean {
+  if (element.type === 'a') return true;
+  const { href, to } = element.props as { href?: unknown; to?: unknown };
+  return href !== undefined || to !== undefined;
 }
 
 // Button's icon-* sizes don't match `<Icon>`'s own size scale (`sm | default | lg`).
@@ -168,6 +181,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       href,
       to,
       target,
+      prefetch,
       size,
       variant = 'default',
       disabled,
@@ -228,12 +242,22 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       ...(href === undefined ? null : { href }),
       ...(to === undefined ? null : { to }),
       ...(target === undefined ? null : { target }),
+      ...(prefetch === undefined ? null : { prefetch }),
     };
+
+    const renderedLink = React.isValidElement(render) && isLinkElement(render) ? render : undefined;
 
     const button = LegacyComponent ? (
       <LegacyComponent ref={ref} {...legacyLinkProps} {...sharedProps}>
         {content}
       </LegacyComponent>
+    ) : renderedLink ? (
+      React.cloneElement(renderedLink as React.ReactElement<Record<string, unknown>>, {
+        ref,
+        ...sharedProps,
+        className: cn(sharedProps.className, (renderedLink.props as { className?: string }).className),
+        children: content,
+      })
     ) : (
       <BaseButton ref={ref} render={render} {...sharedProps}>
         {content}

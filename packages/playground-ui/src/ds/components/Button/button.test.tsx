@@ -211,4 +211,56 @@ describe('Button', () => {
       expect(onSubmit).not.toHaveBeenCalled();
     });
   });
+  describe('link renders', () => {
+    it('renders an anchor without a Base UI button warning', () => {
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      render(<Button render={<a href="/docs" />}>Docs</Button>);
+      const link = screen.getByRole('link', { name: 'Docs' });
+      expect(link.getAttribute('href')).toBe('/docs');
+      expect(link.getAttribute('role')).toBeNull();
+      const messages = [...err.mock.calls, ...warn.mock.calls].map(c => String(c[0])).join(' ');
+      expect(messages).not.toContain('nativeButton');
+      err.mockRestore();
+      warn.mockRestore();
+    });
+
+    it('keeps the class from the rendered element alongside the recipe', () => {
+      render(
+        <Button render={<a href="/docs" className="custom-link" />} className="from-caller">
+          Docs
+        </Button>,
+      );
+      const cls = screen.getByRole('link', { name: 'Docs' }).className;
+      expect(cls).toContain('custom-link');
+      expect(cls).toContain('from-caller');
+      expect(cls).toContain('new-theme');
+    });
+
+    it('detects a router link by its `to` prop', () => {
+      render(<Button render={<RouterLink to="/agents" />}>Agents</Button>);
+      expect(screen.getByRole('link', { name: 'Agents' }).getAttribute('href')).toBe('/agents');
+    });
+
+    it('still routes a real button through Base UI', () => {
+      render(<Button render={<button type="submit" />}>Save</Button>);
+      expect(screen.getByRole('button', { name: 'Save' }).getAttribute('type')).toBe('submit');
+    });
+  });
+
+  describe('deprecated prefetch', () => {
+    it('forwards prefetch to the legacy element', () => {
+      const seen: Record<string, unknown> = {};
+      const Probe = React.forwardRef<HTMLAnchorElement, Record<string, unknown>>((props, ref) => {
+        Object.assign(seen, props);
+        return <a ref={ref} href={String(props.href ?? '')} {...{}} />;
+      });
+      render(
+        <Button as={Probe} href="/x" prefetch={false}>
+          x
+        </Button>,
+      );
+      expect(seen.prefetch).toBe(false);
+    });
+  });
 });
