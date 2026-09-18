@@ -3809,7 +3809,7 @@ export class Session<TState = unknown> {
       return { accepted: true as const, runId: undefined };
     });
 
-    return { id: signal.id, type: signal.type, accepted };
+    return { id: signal.id, type: signal.type, accepted: accepted.finally(() => abortedStreamTeardown?.cancel()) };
   }
 
   /**
