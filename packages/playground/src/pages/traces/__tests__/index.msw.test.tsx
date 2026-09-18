@@ -4,7 +4,7 @@ import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/t
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
 import {
   emptyTraceQueryFields,
@@ -119,6 +119,17 @@ beforeEach(() => {
     serializeTraceColumnPreferences({ visibleColumns: ['inputTokens'], metadataKeys: [] }),
   );
   onBreakdownRequest.mockClear();
+});
+
+// `TracesListView` dispatches a synthetic `scroll` event on its scroll container to make the
+// virtualizer re-read `scrollTop` once a query settles. The virtualizer answers scroll events
+// through a trailing debounce of `isScrollingResetDelay` (150ms) that its `cleanup()` never
+// cancels, so a test that finishes right after a render leaves that timer pending. Vitest tears
+// the jsdom environment down when the file ends, and the timer then fires with the `window`
+// global already gone — an unhandled `ReferenceError: window is not defined` that fails the
+// whole run. Let the debounce expire while the environment is still alive.
+afterAll(async () => {
+  await new Promise(resolve => setTimeout(resolve, 200));
 });
 
 describe('Traces page usage columns', () => {
