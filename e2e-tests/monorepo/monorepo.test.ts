@@ -1124,7 +1124,6 @@ export const mastra = new Mastra({
       },
       timeout,
     );
-
   });
 
   describe.sequential('Studio control route authentication', () => {
