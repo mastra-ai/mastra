@@ -467,7 +467,7 @@ export class MastraPlatformExporter extends BaseExporter {
       spanId: span.id,
       spanType: span.type,
       startedAt: span.startTime,
-      endedAt: span.endTime ?? null,
+      endedAt: span.endTime ?? (span.isEvent ? span.startTime : null),
       error: span.errorInfo ?? null,
       createdAt: new Date(),
       updatedAt: null,
