@@ -624,39 +624,6 @@ describe('handleGoalCommand', () => {
     expect(sendSignal).toHaveBeenCalledTimes(1);
   });
 
-  it('can activate goal mode without sending a trigger so plan approval can inject through the TUI', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
-    const goalManager = new GoalManager();
-    const sendMessage = vi.fn().mockResolvedValue(undefined);
-
-    const ctx = {
-      state: createMockState({
-        threadId: 'thread-1',
-        session: { sendMessage },
-        extra: { pendingNewThread: false, goalManager },
-      }),
-      addUserMessage: vi.fn(),
-      showError: vi.fn(),
-      updateStatusLine: vi.fn(),
-    } as any;
-
-    await startGoalWithDefaults(ctx, '# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.', { trigger: 'none' });
-    vi.setSystemTime(new Date('2026-05-15T15:00:00.000Z'));
-
-    expect(goalManager.isActive()).toBe(true);
-    expect(goalManager.getGoal()).toMatchObject({ activeDurationMs: 0 });
-    expect(ctx.addUserMessage).toHaveBeenCalledTimes(1);
-    expect(getReminderView(ctx.addUserMessage.mock.calls[0][0])).toMatchObject({
-      reminderType: 'goal',
-      message: '# Ship it\n\n1. Build\n2. Test',
-      goalMaxTurns: 50,
-      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
-    });
-    expect(sendMessage).not.toHaveBeenCalled();
-    vi.useRealTimers();
-  });
-
   it('updates the current goal when judge defaults change', async () => {
     settingsMock.loadSettings.mockReturnValue({
       models: {

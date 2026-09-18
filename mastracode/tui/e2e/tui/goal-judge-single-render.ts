@@ -10,11 +10,13 @@ const OBJECTIVE = 'Complete the single-render goal judge e2e objective.';
 const HISTORY_THREAD_ID = 'thread-goal-judge-single-render-history';
 const HISTORY_THREAD_TITLE = 'E2E goal judge history fixture';
 export const GOAL_JUDGE_BOX_SIGNATURE = /Goal\s+●\s+done\s+\(1\/3\)/g;
-// Any goal box, whichever metadata keys survived. This has to be the budget-free
-// form: matched on the budget substring, the count passes on the duplicate,
-// because the stale local render wrote `goalMaxTurns` (so it matched) while the
-// mis-keyed echoed signal rendered `Goal (judge: …)` and did not.
-export const GOAL_BOX_SIGNATURE = /Goal \([^)]*\)/g;
+// Any goal reminder box, whichever metadata keys survived. This has to be the
+// budget-free form: matched on the budget substring, the count passes on the
+// duplicate, because the stale local render wrote `goalMaxTurns` (so it
+// matched) while the mis-keyed echoed signal rendered `Goal (judge: …)` and
+// did not. The `(?!:)` lookahead excludes `/goal` status lines, which render
+// as `Goal (active): "…"` and would otherwise inflate the count.
+export const GOAL_BOX_SIGNATURE = /Goal \([^)]*\)(?!:)/g;
 // The budget-bearing form specifically. The box only shows the attempt count
 // when the reminder signal's metadata key matches what the transcript reads.
 export const GOAL_REMINDER_BOX_SIGNATURE = /Goal \(3 max attempts, judge: [^)]+\)/g;
@@ -27,11 +29,11 @@ function countJudgeBoxes(view: string): number {
   return stripAnsi(view).match(GOAL_JUDGE_BOX_SIGNATURE)?.length ?? 0;
 }
 
-function countGoalReminderBoxes(view: string): number {
+export function countGoalReminderBoxes(view: string): number {
   return stripAnsi(view).match(GOAL_REMINDER_BOX_SIGNATURE)?.length ?? 0;
 }
 
-function countGoalBoxes(view: string): number {
+export function countGoalBoxes(view: string): number {
   return stripAnsi(view).match(GOAL_BOX_SIGNATURE)?.length ?? 0;
 }
 

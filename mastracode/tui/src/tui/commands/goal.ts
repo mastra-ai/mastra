@@ -14,8 +14,6 @@ import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import { createGoalReminderSignal } from '@mastra/code-sdk/goal-signal';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { createSignal } from '@mastra/core/signals';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
@@ -26,10 +24,6 @@ import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { getSelectListTheme, theme } from '../theme.js';
 
 import type { SlashCommandContext } from './types.js';
-
-export interface StartGoalOptions {
-  trigger?: 'send' | 'none';
-}
 
 export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const { state } = ctx;
@@ -235,13 +229,12 @@ export async function startGoalWithDefaults(
   ctx: SlashCommandContext,
   objective: string,
   cancelMessage = 'Goal cancelled.',
-  options: StartGoalOptions = {},
 ): Promise<void> {
   const defaults = getJudgeDefaults();
   const judgeDefaults = defaults ?? (await promptForJudgeDefaults(ctx, cancelMessage));
   if (!judgeDefaults) return;
 
-  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns, options);
+  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns);
 }
 
 function getJudgeDefaults(): JudgeDefaults | null {
@@ -323,7 +316,6 @@ async function startGoal(
   objective: string,
   judgeModelId: string,
   maxTurns: number,
-  options: StartGoalOptions = {},
 ): Promise<void> {
   const { state } = ctx;
   const goalManager = state.goalManager;
@@ -369,14 +361,6 @@ async function startGoal(
   await goalManager.saveToThread(state);
   ctx.updateStatusLine();
 
-  if (options.trigger === 'none') {
-    // No reminder signal is sent in this mode, so nothing echoes the goal into
-    // the transcript — render it locally. On the sending paths the echoed
-    // signal renders the goal box, and rendering here too shows it twice.
-    ctx.addUserMessage(createGoalReminderMessage(goal.id, goal.objective, goal.maxTurns, goal.judgeModelId));
-    return;
-  }
-
   try {
     await state.session.sendSignal(createGoalReminderSignal(goal)).accepted;
   } catch (err) {
@@ -384,26 +368,6 @@ async function startGoal(
     await goalManager.saveToThread(state);
     ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
   }
-}
-
-// Rendered only when no reminder signal is sent (`trigger: 'none'`). On the
-// sending paths the echoed signal is the single source of the goal box.
-export function createGoalReminderMessage(
-  goalId: string,
-  objective: string,
-  maxTurns: number,
-  judgeModelId: string,
-): MastraDBMessage {
-  return createSignal({
-    id: `goal-${goalId}`,
-    type: 'reactive',
-    tagName: 'system-reminder',
-    contents: objective,
-    attributes: { type: 'goal' },
-    // Key must match what `getReminderView` reads, and what
-    // `createGoalReminderSignal` now emits.
-    metadata: { goalMaxTurns: maxTurns, judgeModelId },
-  } as Parameters<typeof createSignal>[0]).toDBMessage();
 }
 
 export function createGoalReminderXml(message: string): string {
