@@ -272,7 +272,7 @@ For workflows, use `WorkflowScorerConfig` to specify scorers at different levels
     name: 'verdict',
     type: "'passed' | 'scored' | 'failed'",
     description:
-      'Present when `gates` or threshold-bearing scorers are provided. `passed` = all gates and thresholds met. `scored` = gates passed but a threshold was missed. `failed` = at least one gate did not score 1.0.',
+      'Present when at least one configured gate or threshold (top-level or per-turn) produces a numeric score. Omitted when none do, including when every assertion returned notScorable(). `passed` = all gates and thresholds met. `scored` = gates passed but a threshold was missed. `failed` = at least one gate did not score 1.0.',
     isOptional: true,
   },
   {

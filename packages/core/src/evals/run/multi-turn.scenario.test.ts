@@ -400,4 +400,37 @@ describe('Per-turn assertions (turns) — scenario tests via runEvals + AIMock',
     ]);
     expect(result.summary.notScorable).toEqual({ 'refund-turn': 2 });
   });
+
+  it('omits the verdict when every per-turn gate and threshold was not scorable', async () => {
+    const agent = textAgent('scripted answer');
+
+    const refundTurnScorer = createScorer({
+      id: 'refund-turn',
+      description: 'Judges refund turns only',
+      name: 'Refund Turn',
+    })
+      .preprocess(({ run }) =>
+        typeof run.input === 'string' && run.input.includes('refund') ? { refund: true } : notScorable('not a refund'),
+      )
+      .generateScore(() => 1);
+
+    const result = await runEvals({
+      data: [
+        {
+          turns: [
+            { input: 'What is the weather?', gates: [refundTurnScorer] },
+            {
+              input: 'Tell me a joke',
+              scorers: [{ scorer: refundTurnScorer, threshold: 0.9 }],
+            },
+          ],
+        },
+      ],
+      target: agent,
+    });
+
+    expect(result.verdict).toBeUndefined();
+    expect(result.turnResults).toEqual([{ index: 0 }, { index: 1 }]);
+    expect(result.summary.notScorable).toEqual({ 'refund-turn': 2 });
+  });
 });

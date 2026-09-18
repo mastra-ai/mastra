@@ -641,5 +641,29 @@ describe('Gates & Verdict — scenario tests via runEvals + AIMock', () => {
 
       expect(result.summary).toEqual({ totalItems: 1 });
     });
+
+    it('omits the verdict when every top-level gate was not scorable', async () => {
+      const agent = textAgent('Handled.');
+      const result = await runEvals({
+        data: [{ input: 'What is the weather?' }],
+        gates: [refundScorer('refund-gate')],
+        target: agent,
+      });
+      expect(result.verdict).toBeUndefined();
+      expect(result.gateResults).toBeUndefined();
+      expect(result.summary.notScorable).toEqual({ 'refund-gate': 1 });
+    });
+
+    it('omits the verdict when every top-level threshold was not scorable', async () => {
+      const agent = textAgent('Handled.');
+      const result = await runEvals({
+        data: [{ input: 'What is the weather?' }],
+        scorers: [{ scorer: refundScorer('refund-quality'), threshold: 0.9 }],
+        target: agent,
+      });
+      expect(result.verdict).toBeUndefined();
+      expect(result.thresholdResults).toBeUndefined();
+      expect(result.summary.notScorable).toEqual({ 'refund-quality': 1 });
+    });
   });
 });

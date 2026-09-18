@@ -151,7 +151,11 @@ export type RunEvalsResult = {
      */
     notScorable?: Record<string, number>;
   };
-  /** Present when `gates` or threshold-bearing scorers (top-level or per-turn) are provided. */
+  /**
+   * Present when at least one configured gate or threshold (top-level or
+   * per-turn) produced a numeric result. Omitted when none did, including
+   * when every assertion returned `notScorable()`.
+   */
   verdict?: EvalVerdict;
   /** Per-gate results (averaged across all data items). */
   gateResults?: GateResult[];
@@ -491,50 +495,61 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
     result.turnResults = turnAggregate.turnResults;
   }
 
-  // Compute verdict if gates or thresholds are present (top-level or per-turn)
+  // Compute gate/threshold results. Verdict is set only when at least one
+  // assertion produced a numeric score (skip ≠ pass and skip ≠ fail).
   const hasGates = !!gates && gates.length > 0;
   const hasThresholds = thresholdMap.size > 0;
   const hasTurnGates = turnAggregate?.hasTurnGates ?? false;
   const hasTurnThresholds = turnAggregate?.hasTurnThresholds ?? false;
 
-  if (hasGates || hasThresholds || hasTurnGates || hasTurnThresholds) {
-    // Compute gate results
-    let allGatesPassed = true;
-    if (hasGates) {
-      result.gateResults = [];
-      for (const gate of gates) {
-        const scores = gateScoresByGateId[gate.id]!;
-        // A gate that declared every run not scorable has no evidence either
-        // way. It is reported in `summary.notScorable` and left out of the verdict.
-        if (scores.length === 0 && notScorableCounts[gate.id]) continue;
-        const avgScore = average(scores);
-        const passed = avgScore >= 1.0;
-        if (!passed) allGatesPassed = false;
-        result.gateResults.push({ id: gate.id, passed, score: avgScore });
-      }
-    }
+  let allGatesPassed = true;
+  let allThresholdsPassed = true;
 
-    // Compute threshold results
-    let allThresholdsPassed = true;
-    if (hasThresholds) {
-      result.thresholdResults = [];
-      for (const [scorerId, threshold] of thresholdMap) {
-        const scores = thresholdScoresByScorerID[scorerId]!;
-        if (scores.length === 0 && notScorableCounts[scorerId]) continue;
-        const averageScore = average(scores);
-        const passed = checkThresholdPassed(averageScore, threshold);
-        if (!passed) allThresholdsPassed = false;
-        result.thresholdResults.push({ id: scorerId, passed, averageScore, threshold });
-      }
+  if (hasGates) {
+    const gateResults: GateResult[] = [];
+    for (const gate of gates) {
+      const scores = gateScoresByGateId[gate.id]!;
+      // A gate that declared every run not scorable has no evidence either
+      // way. It is reported in `summary.notScorable` and left out of the verdict.
+      if (scores.length === 0 && notScorableCounts[gate.id]) continue;
+      const avgScore = average(scores);
+      const passed = avgScore >= 1.0;
+      if (!passed) allGatesPassed = false;
+      gateResults.push({ id: gate.id, passed, score: avgScore });
     }
+    if (gateResults.length > 0) result.gateResults = gateResults;
+  }
 
-    // Fold per-turn gate/threshold outcomes into the overall verdict.
-    if (turnAggregate) {
-      if (!turnAggregate.turnGatesPassed) allGatesPassed = false;
-      if (!turnAggregate.turnThresholdsPassed) allThresholdsPassed = false;
+  if (hasThresholds) {
+    const thresholdResults: Array<{
+      id: string;
+      passed: boolean;
+      averageScore: number;
+      threshold: ThresholdConfig;
+    }> = [];
+    for (const [scorerId, threshold] of thresholdMap) {
+      const scores = thresholdScoresByScorerID[scorerId]!;
+      if (scores.length === 0 && notScorableCounts[scorerId]) continue;
+      const averageScore = average(scores);
+      const passed = checkThresholdPassed(averageScore, threshold);
+      if (!passed) allThresholdsPassed = false;
+      thresholdResults.push({ id: scorerId, passed, averageScore, threshold });
     }
+    if (thresholdResults.length > 0) result.thresholdResults = thresholdResults;
+  }
 
-    // Determine verdict
+  if (turnAggregate) {
+    if (hasTurnGates && !turnAggregate.turnGatesPassed) allGatesPassed = false;
+    if (hasTurnThresholds && !turnAggregate.turnThresholdsPassed) allThresholdsPassed = false;
+  }
+
+  const hasNumericAssertions =
+    (result.gateResults?.length ?? 0) > 0 ||
+    (result.thresholdResults?.length ?? 0) > 0 ||
+    hasTurnGates ||
+    hasTurnThresholds;
+
+  if (hasNumericAssertions) {
     if (!allGatesPassed) {
       result.verdict = 'failed';
     } else if (!allThresholdsPassed) {

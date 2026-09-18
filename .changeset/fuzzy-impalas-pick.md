@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added `notScorable()`. Return it from a scorer step when a run has nothing to evaluate, for example a refund judge on a chat that never called the refund tool. Remaining steps are skipped, so the judge is never called and the run stays out of that scorer's averages.
+Added `notScorable()`. Return it from a scorer step when a run has nothing to evaluate, for example a refund judge on a chat that never called the refund tool. Remaining steps are skipped, so the judge is never called and the run stays out of that scorer's averages. `runEvals()` omits `verdict` when every configured gate or threshold was not scorable.
 
 ```ts
 import { createScorer, notScorable } from '@mastra/core/evals'
