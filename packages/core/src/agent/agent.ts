@@ -3107,7 +3107,7 @@ export class Agent<
         throw mastraError;
       }
 
-      const ensuredTools = (await ensureToolProperties(tools)) as ToolsInput;
+      const ensuredTools = ensureToolProperties(tools) as ToolsInput;
       if (!resolveWebSearch || !Object.values(ensuredTools).some(isWebSearchTool)) {
         return ensuredTools as TTools;
       }
@@ -6830,7 +6830,7 @@ export class Agent<
 
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {
-        await runScorer({
+        runScorer({
           mastra: this.#mastra ?? this.#ephemeralMastra,
           scorerId: scorerObject.scorer.id,
           scorerObject: scorerObject,

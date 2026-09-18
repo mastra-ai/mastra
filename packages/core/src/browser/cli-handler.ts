@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { shellQuote, splitShellCommand, reassembleShellCommand } from '../workspace/sandbox/utils';
 import type { MastraBrowser } from './browser';
 
@@ -197,7 +198,7 @@ export class BrowserCliHandler {
    * Inject CDP URL and session flag into all browser CLI commands in a potentially
    * chained command string (commands joined by &&, ||, or ;).
    */
-  async injectCdpUrl(command: string, cdpUrl: string, threadId?: string): Promise<string> {
+  injectCdpUrl(command: string, cdpUrl: string, threadId?: string): string {
     const { header, suffix } = this.getShellHeader(command);
     const headerParts = splitShellCommand(header);
     if (headerParts.parts.some(part => this.isBrowserUseStdinCommand(part))) {
@@ -211,13 +212,9 @@ export class BrowserCliHandler {
       const transformed = modifiedParts.some((part, index) => part !== headerParts.parts[index])
         ? reassembleShellCommand(modifiedParts, headerParts.operators) + suffix
         : command;
-      const name = Buffer.from(
-        await globalThis.crypto.subtle.digest(
-          'SHA-256',
-          new TextEncoder().encode(JSON.stringify([threadId ?? 'default', cdpUrl])),
-        ),
-      )
-        .toString('hex')
+      const name = createHash('sha256')
+        .update(JSON.stringify([threadId ?? 'default', cdpUrl]))
+        .digest('hex')
         .slice(0, 16);
       return `BU_CDP_WS=${shellQuote(cdpUrl)} BU_NAME=${shellQuote(`mastra-${name}`)} sh -c ${shellQuote(transformed)}`;
     }

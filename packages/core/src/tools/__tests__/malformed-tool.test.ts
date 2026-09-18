@@ -13,7 +13,7 @@ import { createTool } from '../tool';
  * This should throw a descriptive error instead.
  */
 describe('Malformed tool validation - Issue #11244', () => {
-  it('should throw an error when a function is passed as a tool instead of a tool object', async () => {
+  it('should throw an error when a function is passed as a tool instead of a tool object', () => {
     // This is the malformed pattern from the issue:
     // The user defined a function that returns a tool, but passed the function itself
     const scanFolderFactory = (rootFolder: string) =>
@@ -33,11 +33,11 @@ describe('Malformed tool validation - Issue #11244', () => {
       scanFolder: scanFolderFactory, // BUG: Should be scanFolderFactory('/some/path')
     };
 
-    // This should reject with an error, not silently accept a function
-    await expect(ensureToolProperties(malformedTools as any)).rejects.toThrow(/not a valid tool format/i);
+    // This should throw an error, not silently accept a function
+    expect(() => ensureToolProperties(malformedTools as any)).toThrow(/not a valid tool format/i);
   });
 
-  it('should provide a helpful error message that mentions the tool key', async () => {
+  it('should provide a helpful error message that mentions the tool key', () => {
     const badToolFactory = () =>
       createTool({
         id: 'bad-tool',
@@ -49,11 +49,11 @@ describe('Malformed tool validation - Issue #11244', () => {
       myBadTool: badToolFactory,
     };
 
-    await expect(ensureToolProperties(malformedTools as any)).rejects.toThrow(/myBadTool/);
+    expect(() => ensureToolProperties(malformedTools as any)).toThrow(/myBadTool/);
   });
 
-  it('preserves deterministic Vercel tool IDs', async () => {
-    const tools = await ensureToolProperties({
+  it('preserves deterministic Vercel tool IDs', () => {
+    const tools = ensureToolProperties({
       search: {
         description: 'A deterministic description',
         parameters: z.object({ query: z.string() }),

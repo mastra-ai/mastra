@@ -112,7 +112,7 @@ export type SchedulerConfig = {
    * Wired up by `SchedulerWorker` from the registered workflow's serialized
    * step graph.
    */
-  isTargetCurrent?: (target: ScheduleTarget) => boolean | Promise<boolean>;
+  isTargetCurrent?: (target: ScheduleTarget) => boolean;
   /**
    * Whether the claiming process also consumes workflow-execution events,
    * i.e. whether a fire published here would be executed here.

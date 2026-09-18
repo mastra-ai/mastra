@@ -109,18 +109,18 @@ describe('buildResponseCacheKey with non-plain prompt values', () => {
     stepNumber: 0,
   };
 
-  it('preserves a frozen Node-generated key for an empty prompt', async () => {
-    await expect(
+  it('preserves a frozen Node-generated key for an empty prompt', () => {
+    expect(
       buildResponseCacheKey({
         agentId: 'vector-agent',
         model: { provider: 'test', modelId: 'model', specVersion: 'v2' },
         prompt: [] as never,
         stepNumber: 0,
       }),
-    ).resolves.toBe('mastra:agent-response:vector-agent:b4359e121d53b5df27ef8d875b1bb440');
+    ).toBe('mastra:agent-response:vector-agent:b4359e121d53b5df27ef8d875b1bb440');
   });
 
-  it('hashes only the exact bytes of a binary subview', async () => {
+  it('hashes only the exact bytes of a binary subview', () => {
     const bytesPrompt = (bytes: Uint8Array) => [
       {
         role: 'user' as const,
@@ -129,9 +129,9 @@ describe('buildResponseCacheKey with non-plain prompt values', () => {
     ];
     const backing = new Uint8Array([99, 1, 2, 3, 99]);
 
-    await expect(
-      buildResponseCacheKey({ ...base, prompt: bytesPrompt(backing.subarray(1, 4)) as never }),
-    ).resolves.toBe(await buildResponseCacheKey({ ...base, prompt: bytesPrompt(new Uint8Array([1, 2, 3])) as never }));
+    expect(buildResponseCacheKey({ ...base, prompt: bytesPrompt(backing.subarray(1, 4)) as never })).toBe(
+      buildResponseCacheKey({ ...base, prompt: bytesPrompt(new Uint8Array([1, 2, 3])) as never }),
+    );
   });
 
   it('distinguishes prompts whose only difference is a URL file part', async () => {

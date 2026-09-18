@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { stableStringify } from '../../agent/message-list/cache/stable-stringify';
 import type { MastraServerCache } from '../../cache';
@@ -366,11 +367,11 @@ export class ResponseCache implements Processor<'mastra/response-cache'> {
       } catch {
         // Custom key function threw — fall back to the deterministic
         // hash so the call still benefits from caching.
-        return await buildResponseCacheKey(inputs);
+        return buildResponseCacheKey(inputs);
       }
     }
 
-    return await buildResponseCacheKey(inputs);
+    return buildResponseCacheKey(inputs);
   }
 }
 
@@ -382,7 +383,7 @@ export class ResponseCache implements Processor<'mastra/response-cache'> {
  * Different prompts/models/scopes produce different keys, so config changes
  * automatically invalidate stale entries.
  */
-export async function buildResponseCacheKey(inputs: ResponseCacheKeyInputs): Promise<string> {
+export function buildResponseCacheKey(inputs: ResponseCacheKeyInputs): string {
   const scope = inputs.scope ?? '';
   const modelTag = `${inputs.model.provider ?? 'unknown'}:${inputs.model.modelId ?? 'unknown'}:${inputs.model.specVersion ?? 'unknown'}`;
 
@@ -391,18 +392,12 @@ export async function buildResponseCacheKey(inputs: ResponseCacheKeyInputs): Pro
     step: inputs.stepNumber,
     scope,
     model: modelTag,
-    prompt: await normalizeForHash(stripMastraInternalMetadata(inputs.prompt)),
+    prompt: normalizeForHash(stripMastraInternalMetadata(inputs.prompt)),
   };
 
   const serialized = stableStringify(payload);
-  const hash = Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized)))
-    .toString('hex')
-    .slice(0, 32);
-  const scopeTag = scope
-    ? `:${Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(scope)))
-        .toString('hex')
-        .slice(0, 8)}`
-    : '';
+  const hash = createHash('sha256').update(serialized).digest('hex').slice(0, 32);
+  const scopeTag = scope ? `:${createHash('sha256').update(scope).digest('hex').slice(0, 8)}` : '';
   return `mastra:agent-response:${inputs.agentId}${scopeTag}:${hash}`;
 }
 
@@ -489,7 +484,7 @@ function stripMastraInternalMetadata(value: unknown): unknown {
  *
  * @internal
  */
-async function normalizeForHash(value: unknown): Promise<unknown> {
+function normalizeForHash(value: unknown): unknown {
   if (value === undefined) return null;
   if (value === null) return null;
   if (typeof value === 'function') return '[function]';
@@ -499,8 +494,8 @@ async function normalizeForHash(value: unknown): Promise<unknown> {
   // `LanguageModelV2DataContent` is `string | Uint8Array | URL`, so file and
   // image parts routinely carry both of the shapes below.
   if (value instanceof URL) return `url:${value.href}`;
-  if (isBinary(value)) return `binary:${await hashBinary(value)}`;
-  if (Array.isArray(value)) return await Promise.all(value.map(normalizeForHash));
+  if (isBinary(value)) return `binary:${hashBinary(value)}`;
+  if (Array.isArray(value)) return value.map(normalizeForHash);
   if (typeof value === 'object') {
     // A class instance with no enumerable own keys would otherwise serialize
     // as `{}`, silently erasing whatever it identified. `LanguageModelV2Prompt`
@@ -514,7 +509,7 @@ async function normalizeForHash(value: unknown): Promise<unknown> {
     for (const k of Object.keys(value as Record<string, unknown>)) {
       const v = (value as Record<string, unknown>)[k];
       if (v === undefined) continue;
-      out[k] = await normalizeForHash(v);
+      out[k] = normalizeForHash(v);
     }
     return out;
   }
@@ -552,12 +547,11 @@ function isBinary(value: unknown): value is ArrayBufferView | ArrayBuffer {
  *
  * @internal
  */
-async function hashBinary(value: ArrayBufferView | ArrayBuffer): Promise<string> {
+function hashBinary(value: ArrayBufferView | ArrayBuffer): string {
   const bytes = ArrayBuffer.isView(value)
     ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
     : new Uint8Array(value);
-  const hash = Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(bytes))).toString('hex');
-  return `${bytes.byteLength}:${hash}`;
+  return `${bytes.byteLength}:${createHash('sha256').update(bytes).digest('hex')}`;
 }
 
 /**

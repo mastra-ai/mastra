@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { AvailableHooks, executeHook } from '../hooks';
 import { setScorerHookOwner } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
@@ -14,12 +15,12 @@ import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types
  * UUID run IDs) rather than only for synthetic sequential inputs. Reads 6 bytes (48 bits) —
  * well within the 53-bit integer range, so no precision loss.
  */
-export async function hashToUnitInterval(key: string): Promise<number> {
-  const digest = new DataView(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)));
-  return (digest.getUint32(0) * 2 ** 16 + digest.getUint16(4)) / 2 ** 48;
+export function hashToUnitInterval(key: string): number {
+  const digest = createHash('sha256').update(key).digest();
+  return Number(digest.readUIntBE(0, 6)) / 2 ** 48;
 }
 
-export async function runScorer({
+export function runScorer({
   runId,
   scorerId,
   scorerObject,
@@ -131,7 +132,7 @@ export async function runScorer({
         // traceId is a shared constant and would collapse the whole declined population into
         // one all-or-nothing decision.
         const samplingKey = currentSpan?.traceId ?? runId;
-        shouldExecute = (await hashToUnitInterval(samplingKey)) < scorerObject?.sampling?.rate;
+        shouldExecute = hashToUnitInterval(samplingKey) < scorerObject?.sampling?.rate;
         break;
       }
       case 'none':

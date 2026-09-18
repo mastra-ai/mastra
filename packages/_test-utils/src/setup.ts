@@ -22,7 +22,8 @@ import { vi, beforeEach } from 'vitest';
 // ---------------------------------------------------------------------------
 // Deterministic crypto.randomUUID — each test gets its own counter via
 // AsyncLocalStorage so concurrent tests within a file stay isolated.
-// Covers `globalThis.crypto.randomUUID()`.
+// Covers both `globalThis.crypto.randomUUID()` and packages that have not yet
+// migrated their `node:crypto` or `crypto` imports.
 // ---------------------------------------------------------------------------
 const uuidStore = new AsyncLocalStorage<{ counter: number }>();
 let fallbackCounter = 0;
@@ -33,6 +34,16 @@ function deterministicUUID(): `${string}-${string}-${string}-${string}-${string}
   const hex = count.toString(16).padStart(12, '0');
   return `00000000-0000-4000-8000-${hex}`;
 }
+
+vi.mock('node:crypto', async importOriginal => {
+  const original: any = await importOriginal();
+  return { ...original, randomUUID: deterministicUUID };
+});
+
+vi.mock('crypto', async importOriginal => {
+  const original: any = await importOriginal();
+  return { ...original, randomUUID: deterministicUUID };
+});
 
 // enterWith transitions the current async context into the store.
 // vitest runs beforeEach in the same async context as the test,
