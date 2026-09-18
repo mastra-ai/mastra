@@ -142,6 +142,8 @@ Results are scoped to the agent you call `listSuspendedRuns()` on because snapsh
 
 Run snapshots are only persisted while a run is waiting on input and are deleted when it finishes, so suspended runs are the only runs discoverable from storage. Suspended runs only survive restarts when the Mastra instance has a persistent [storage provider](/docs/storage) configured. With the default in-memory store, snapshots are lost on restart.
 
+The `threadId` and `resourceId` filters are pushed down to the storage query where the adapter supports it (`@mastra/pg`, `@mastra/libsql`, and the in-memory store), so matching runs are narrowed inside the database instead of loading every suspended snapshot. Other storage adapters apply these filters in-process after fetching; results are identical either way.
+
 ## Related
 
 - [Agent approval](/docs/agents/human-in-the-loop)
