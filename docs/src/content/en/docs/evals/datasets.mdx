@@ -140,6 +140,96 @@ Unset configuration now reads as `undefined` where some adapters previously retu
 
 Older LibSQL, PostgreSQL, MySQL, and Spanner writes stored optional JSON `null` values as SQL `NULL`, so those values remain indistinguishable from omitted fields. Older MongoDB writes stored omitted optional payload fields as BSON `null`. The storage fixes preserve new writes but don't reconstruct previously lost distinctions.
 
+## Transfer a dataset
+
+Export a snapshot and import it into a **new dataset** to move evaluation cases between environments. The transfer preserves stored configuration, authored item fields, item timestamps, and portable identities without synchronizing an existing destination dataset. Scorer code, workflow definitions, models, and external dependencies aren't included.
+
+This example uses two in-memory instances. Configure persistent storage in each instance when transferring between deployed environments:
+
+```typescript title="src/mastra/datasets/transfer.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { InMemoryStore } from '@mastra/core/storage'
+
+const source = new Mastra({ storage: new InMemoryStore() })
+const destination = new Mastra({ storage: new InMemoryStore() })
+const dataset = await source.datasets.create({ name: 'translation-pairs' })
+await dataset.addItem({ input: 'Hello', groundTruth: 'Hola' })
+
+const snapshot = await dataset.exportSnapshot({
+  acknowledgeSensitiveData: true,
+})
+const request = {
+  snapshot: JSON.stringify(snapshot),
+  idempotencyKey: 'translation-release-2026-09-18',
+}
+
+const report = await destination.datasets.preflightSnapshot(request)
+if (!report.canImport) {
+  throw new Error('Register the missing references listed in report.errors')
+}
+
+const result = await destination.datasets.importSnapshot(request)
+if (!result.datasetExists) {
+  throw new Error('This request already completed, but its dataset was deleted')
+}
+
+const copy = await destination.datasets.get({ id: result.receipt.datasetId })
+console.log((await copy.listItems()).items.length) // 1
+```
+
+### Choose the captured version
+
+`exportSnapshot()` captures the current item version by default. Pass `version` to select an earlier item version, but configuration is always captured at export time because configuration history isn't stored. The artifact records this distinction as `configurationBasis: 'export-time'`. Export fails if the selected content has been purged or doesn't satisfy the captured schemas.
+
+Export requires `acknowledgeSensitiveData: true` because inputs, request context, metadata, and tool mock outputs can contain secrets. Review the dataset before exporting, and protect the resulting JSON as sensitive data. Automatic redaction isn't performed.
+
+Portable identities are stored separately from authored metadata and remain stable across re-exports. Exported items are sorted by portable identity, so repeated exports of unchanged content produce identical files. A dataset without a description exports with the field omitted, even when an artifact imported it as `null`. Imported items retain their source `createdAt` and `updatedAt`, while the receipt records completion time. A later destination edit advances `updatedAt` normally. The destination starts at item version `1`, or `0` for an empty dataset, rather than copying the source's version history.
+
+### Check destination references
+
+`preflightSnapshot()` validates the artifact, captured schemas, and adapter capabilities without writing a dataset or receipt. Its report includes `targetIds`, `scorerIds`, `targetMappings`, `scorerMappings`, and an `errors` array of unresolved references. A valid report has `canImport: true`, but database restrictions can still cause the subsequent transaction to fail.
+
+Register referenced agents, workflows, and scorers in the destination before importing. If their identifiers differ, pass explicit `targetMappings` and `scorerMappings` arrays containing `{ from, to }` entries to both preflight and import. Scorer mappings apply to both dataset configuration and item overrides without changing the source artifact, but matching references doesn't establish equivalent behavior in the destination code.
+
+Import repeats the reference checks before creating a dataset, though recovering an already completed request doesn't require those references to remain registered. Use `destination: { name, organizationId, projectId }` to override the destination name or tenancy. Source ownership and candidate bindings aren't copied. In server code, derive tenancy from the authenticated caller and apply authorization before calling these APIs.
+
+### Retry an import
+
+Reuse the same artifact, options, and `idempotencyKey` after a lost response. An atomic import commits the dataset, items, portable identity mappings, and receipt together after reading back the stored values. A failed transaction publishes none of them.
+
+Keys are scoped by destination organization and project. Reusing a key with a different artifact, name, or reference mapping fails instead of creating another copy. Completed receipts survive dataset deletion, so retrying a deleted import returns its original receipt with `datasetExists: false`. Use a new key when you intend to create another dataset.
+
+Look up an outcome without resubmitting the artifact:
+
+```typescript
+const outcome = await destination.datasets.getSnapshotImport({
+  idempotencyKey: request.idempotencyKey,
+})
+console.log(outcome?.receipt.datasetId, outcome?.datasetExists)
+```
+
+Include `organizationId` and `projectId` in this lookup when the import used those fields. In-memory receipts last only as long as the storage instance.
+
+### Storage requirements and limits
+
+Snapshot transfer is implemented for in-memory, LibSQL, PostgreSQL, MySQL, MongoDB, and Spanner storage, with these restrictions:
+
+- MongoDB requires a replica set or sharded deployment with transaction support. Snapshots can't be exported while a dataset's nontransactional deletion is in progress, including after a partial deletion failure. Retry deletion to finish removing that dataset.
+- MySQL rejects nonempty item `toolMocks` during preflight rather than dropping them.
+- Processor target references fail destination preflight because the experiment runner doesn't currently resolve processor targets.
+- Local LibSQL file databases rely on the `LibSQLStore` busy timeout so that concurrent processes wait for the SQLite write lock. Pass `connectionTimeoutMs` to `LibSQLStore` rather than a raw `@libsql/client` without a timeout, because a client whose `BEGIN` fails can't commit later transactions.
+- Adapters without snapshot support reject the operation rather than falling back to a non-atomic import.
+
+Export locks the dataset row for the duration of the capture on PostgreSQL, MySQL, and MongoDB so that identities and items are read consistently. Concurrent writers to that dataset wait until the export commits.
+
+Receipts are retained indefinitely so that retries stay safe. There's no API for removing them, so delete rows from the `mastra_dataset_snapshot_imports` table directly if you need to reclaim space.
+
+Captured schemas from an artifact are compiled into validators before import, including any `pattern` regular expressions. Only import artifacts from sources you trust.
+
+Pass `maxBytes` to export, preflight, or import to change the default 4 MiB UTF-8 budget. The same format limits described below still apply. A successful preflight doesn't reserve database capacity, and storage limits or transaction timeouts can reject an import without creating a partial dataset.
+
+These are core APIs. They don't add HTTP endpoints or change Studio's item-array JSON importer.
+
 ## Validate snapshot artifacts
 
 Use `createDatasetSnapshot()` and `parseDatasetSnapshot()` from `@mastra/core/datasets` to create and validate a versioned JSON artifact. These are pure format utilities: they don't export from storage, import a dataset, allocate portable identities, or change Studio's JSON importer.

@@ -31,6 +31,7 @@ import { runExperiment, resolveTarget, executeExperimentItem } from './experimen
 import { experimentScoreId } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
 import { deleteExperimentTraces } from './experiment-traces.js';
+import type { DatasetSnapshotExportOptions } from './snapshot-transfer.js';
 
 /**
  * Public API for interacting with a single dataset.
@@ -56,6 +57,12 @@ export class Dataset {
     this.id = id;
     this.#mastra = mastra;
     this.#scope = scope;
+  }
+
+  /** Capture one item version and the current configuration, including sensitive authored fields. */
+  async exportSnapshot(options: DatasetSnapshotExportOptions) {
+    const store = await this.#getDatasetsStore();
+    return store.exportSnapshot({ ...options, datasetId: this.id, filters: this.#scope });
   }
 
   // ---------------------------------------------------------------------------

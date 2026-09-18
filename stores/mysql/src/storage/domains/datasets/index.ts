@@ -4,6 +4,15 @@ import {
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_SNAPSHOT_IDENTITIES,
+  TABLE_DATASET_SNAPSHOT_IMPORTS,
+  captureDatasetSnapshot,
+  datasetSnapshotIdentityId,
+  datasetSnapshotRecordEntries,
+  datasetSnapshotDestinationExists,
+  datasetSnapshotStorageError,
+  verifyDatasetSnapshotImport,
+  verifyDatasetSnapshotReceipt,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
@@ -37,8 +46,15 @@ import type {
   BatchDeleteItemsInput,
   DatasetTenancyFilters,
   TargetType,
+  DatasetSnapshotExportOptions,
+  PreparedDatasetSnapshotImport,
+  DatasetSnapshotImportPlan,
+  DatasetSnapshotImportResult,
+  DatasetSnapshotImportReceipt,
+  DatasetSnapshotIdentityRecord,
+  TABLE_NAMES,
 } from '@mastra/core/storage';
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } from '../utils';
@@ -89,7 +105,159 @@ export class DatasetsMySQL extends DatasetsStorage {
   #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
-  static readonly MANAGED_TABLES = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
+  static readonly MANAGED_TABLES = [
+    TABLE_DATASETS,
+    TABLE_DATASET_ITEMS,
+    TABLE_DATASET_VERSIONS,
+    TABLE_DATASET_SNAPSHOT_IDENTITIES,
+    TABLE_DATASET_SNAPSHOT_IMPORTS,
+  ] as const;
+
+  override readonly supportsSnapshotTransfer: boolean = true;
+
+  protected async validateSnapshotImportCapability(prepared: PreparedDatasetSnapshotImport): Promise<void> {
+    for (const item of prepared.content.items) this.#rejectToolMocks(item.payload.toolMocks);
+  }
+
+  private async withSnapshotTransaction<T>(work: (connection: PoolConnection) => Promise<T>): Promise<T> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const result = await work(connection);
+      await connection.commit();
+      return result;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  private async insertSnapshotRecord(connection: PoolConnection, table: TABLE_NAMES, record: object): Promise<void> {
+    const entries = datasetSnapshotRecordEntries(table, record);
+    const values = entries.map(([, value, type]) =>
+      type === 'jsonb' ? jsonDataArg(value) : transformToSqlValue(value),
+    );
+    await connection.execute(
+      `INSERT INTO ${formatTableName(table)} (${entries.map(([column]) => quoteIdentifier(column, 'column name')).join(', ')}) VALUES (${entries.map(() => '?').join(', ')})`,
+      values,
+    );
+  }
+
+  private async snapshotState(
+    connection: PoolConnection,
+    datasetId: string,
+    version?: number,
+    filters?: DatasetTenancyFilters,
+  ) {
+    const conditions = ['id = ?'];
+    const values = [datasetId];
+    for (const column of ['organizationId', 'projectId'] as const) {
+      if (filters?.[column] !== undefined) {
+        conditions.push(`${quoteIdentifier(column, 'column name')} = ?`);
+        values.push(filters[column]);
+      }
+    }
+    const [rows] = await connection.execute<RowDataPacket[]>(
+      `SELECT * FROM ${formatTableName(TABLE_DATASETS)} WHERE ${conditions.join(' AND ')} FOR UPDATE`,
+      values,
+    );
+    if (!rows[0]) throw datasetSnapshotStorageError('DATASET_NOT_FOUND', 'Dataset not found');
+    const dataset = this.mapDataset(rows[0]);
+    const selectedVersion = version ?? dataset.version;
+    const [items] = await connection.execute<RowDataPacket[]>(
+      `SELECT ${ITEM_SELECT_COLUMNS} FROM ${formatTableName(TABLE_DATASET_ITEMS)} WHERE \`datasetId\` = ? AND \`datasetVersion\` <= ? AND (\`validTo\` IS NULL OR \`validTo\` > ?) AND \`isDeleted\` = FALSE`,
+      [datasetId, selectedVersion, selectedVersion],
+    );
+    const [identities] = await connection.execute<Array<RowDataPacket & DatasetSnapshotIdentityRecord>>(
+      `SELECT * FROM ${formatTableName(TABLE_DATASET_SNAPSHOT_IDENTITIES)} WHERE \`datasetId\` = ?`,
+      [datasetId],
+    );
+    return { dataset, items: items.map(item => this.mapItem(item)), identities };
+  }
+
+  private async snapshotReceipt(connection: PoolConnection, id: string): Promise<DatasetSnapshotImportReceipt | null> {
+    const [rows] = await connection.execute<RowDataPacket[]>(
+      `SELECT receipt FROM ${formatTableName(TABLE_DATASET_SNAPSHOT_IMPORTS)} WHERE id = ? FOR UPDATE`,
+      [id],
+    );
+    return rows[0] ? (parseJSON<DatasetSnapshotImportReceipt>(rows[0].receipt) ?? null) : null;
+  }
+
+  private async snapshotImportResult(
+    connection: PoolConnection,
+    receipt: DatasetSnapshotImportReceipt,
+  ): Promise<DatasetSnapshotImportResult> {
+    const [rows] = await connection.execute<RowDataPacket[]>(
+      `SELECT * FROM ${formatTableName(TABLE_DATASETS)} WHERE id = ? AND \`organizationId\` <=> ? AND \`projectId\` <=> ? FOR UPDATE`,
+      [receipt.datasetId, receipt.organizationId, receipt.projectId],
+    );
+    const [identities] = await connection.execute<Array<RowDataPacket & DatasetSnapshotIdentityRecord>>(
+      `SELECT * FROM ${formatTableName(TABLE_DATASET_SNAPSHOT_IDENTITIES)} WHERE id = ?`,
+      [datasetSnapshotIdentityId(receipt.datasetId, null)],
+    );
+    return {
+      receipt,
+      datasetExists: datasetSnapshotDestinationExists(
+        receipt,
+        rows[0] ? this.mapDataset(rows[0]) : null,
+        identities[0] ?? null,
+      ),
+    };
+  }
+
+  protected async _doExportSnapshot(
+    input: DatasetSnapshotExportOptions & { datasetId: string; filters?: DatasetTenancyFilters },
+  ) {
+    return this.withSnapshotTransaction(async connection => {
+      const state = await this.snapshotState(connection, input.datasetId, input.version, input.filters);
+      const captured = captureDatasetSnapshot({
+        ...state,
+        version: input.version ?? state.dataset.version,
+        options: { maxBytes: input.maxBytes },
+      });
+      for (const identity of captured.adopted)
+        await this.insertSnapshotRecord(connection, TABLE_DATASET_SNAPSHOT_IDENTITIES, identity);
+      return captured.snapshot;
+    });
+  }
+
+  protected async _doImportSnapshot(
+    prepared: PreparedDatasetSnapshotImport,
+    plan: DatasetSnapshotImportPlan,
+  ): Promise<DatasetSnapshotImportResult> {
+    return this.withSnapshotTransaction(async connection => {
+      // Claim the unique receipt key before creating any destination records.
+      await connection.execute(
+        `INSERT INTO ${formatTableName(TABLE_DATASET_SNAPSHOT_IMPORTS)} (id, receipt) VALUES (?, ?) ON DUPLICATE KEY UPDATE id = id`,
+        [prepared.receiptId, JSON.stringify(plan.receipt)],
+      );
+      const existing = await this.snapshotReceipt(connection, prepared.receiptId);
+      if (!existing)
+        throw datasetSnapshotStorageError('DATASET_SNAPSHOT_RECEIPT_NOT_FOUND', 'Snapshot import receipt not found');
+      verifyDatasetSnapshotReceipt(existing, prepared);
+      // `plan.dataset.id` is a fresh UUID for this call, so reading it back proves this
+      // transaction won the claim. Any other value means a completed import already
+      // holds the key and this call must replay its outcome instead of writing.
+      if (existing.datasetId !== plan.dataset.id) return this.snapshotImportResult(connection, existing);
+      await this.insertSnapshotRecord(connection, TABLE_DATASETS, plan.dataset);
+      for (const item of plan.items) await this.insertSnapshotRecord(connection, TABLE_DATASET_ITEMS, item);
+      if (plan.versionRecord) await this.insertSnapshotRecord(connection, TABLE_DATASET_VERSIONS, plan.versionRecord);
+      for (const identity of plan.identities)
+        await this.insertSnapshotRecord(connection, TABLE_DATASET_SNAPSHOT_IDENTITIES, identity);
+      verifyDatasetSnapshotImport(plan, await this.snapshotState(connection, plan.dataset.id));
+      // The claim already stored the complete receipt; it becomes visible at commit.
+      return { receipt: plan.receipt, datasetExists: true };
+    });
+  }
+
+  protected async _doGetSnapshotImport(id: string): Promise<DatasetSnapshotImportResult | null> {
+    return this.withSnapshotTransaction(async connection => {
+      const receipt = await this.snapshotReceipt(connection, id);
+      return receipt ? this.snapshotImportResult(connection, receipt) : null;
+    });
+  }
 
   /**
    * Item-level tool mocks are not persisted by the MySQL adapter. Reject writes
@@ -114,6 +282,11 @@ export class DatasetsMySQL extends DatasetsStorage {
   static getDefaultIndexDefs(prefix: string = ''): CreateIndexOptions[] {
     return [
       {
+        name: `${prefix}idx_dataset_snapshot_identities_dataset`,
+        table: TABLE_DATASET_SNAPSHOT_IDENTITIES,
+        columns: ['datasetId'],
+      },
+      {
         name: `${prefix}idx_dataset_items_dataset_externalid_version`,
         table: TABLE_DATASET_ITEMS,
         columns: ['datasetId', 'externalId', 'datasetVersion'],
@@ -133,6 +306,14 @@ export class DatasetsMySQL extends DatasetsStorage {
         compositePrimaryKey: ['id', 'datasetVersion'],
       }),
       generateTableSQL({ tableName: TABLE_DATASET_VERSIONS, schema: TABLE_SCHEMAS[TABLE_DATASET_VERSIONS] }),
+      generateTableSQL({
+        tableName: TABLE_DATASET_SNAPSHOT_IDENTITIES,
+        schema: TABLE_SCHEMAS[TABLE_DATASET_SNAPSHOT_IDENTITIES],
+      }),
+      generateTableSQL({
+        tableName: TABLE_DATASET_SNAPSHOT_IMPORTS,
+        schema: TABLE_SCHEMAS[TABLE_DATASET_SNAPSHOT_IMPORTS],
+      }),
     ];
   }
 
@@ -186,6 +367,14 @@ export class DatasetsMySQL extends DatasetsStorage {
     await this.operations.createTable({ tableName: TABLE_DATASETS, schema: DATASETS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_DATASET_ITEMS as any, schema: DATASET_ITEMS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_DATASET_VERSIONS, schema: DATASET_VERSIONS_SCHEMA });
+    await this.operations.createTable({
+      tableName: TABLE_DATASET_SNAPSHOT_IDENTITIES,
+      schema: TABLE_SCHEMAS[TABLE_DATASET_SNAPSHOT_IDENTITIES],
+    });
+    await this.operations.createTable({
+      tableName: TABLE_DATASET_SNAPSHOT_IMPORTS,
+      schema: TABLE_SCHEMAS[TABLE_DATASET_SNAPSHOT_IMPORTS],
+    });
     // Backfill tenancy + candidate identity columns on pre-existing tables so
     // older deployments keep working when they upgrade in place.
     await this.operations.alterTable({
@@ -223,6 +412,8 @@ export class DatasetsMySQL extends DatasetsStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.pool.execute(`DELETE FROM ${formatTableName(TABLE_DATASET_SNAPSHOT_IMPORTS)}`);
+    await this.pool.execute(`DELETE FROM ${formatTableName(TABLE_DATASET_SNAPSHOT_IDENTITIES)}`);
     await this.pool.execute(`DELETE FROM ${formatTableName(TABLE_DATASET_VERSIONS)}`);
     await this.pool.execute(`DELETE FROM ${formatTableName(TABLE_DATASET_ITEMS)}`);
     await this.pool.execute(`DELETE FROM ${formatTableName(TABLE_DATASETS)}`);
@@ -537,6 +728,10 @@ export class DatasetsMySQL extends DatasetsStorage {
         );
       }
 
+      await connection.execute(
+        `DELETE FROM ${formatTableName(TABLE_DATASET_SNAPSHOT_IDENTITIES)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?`,
+        [id],
+      );
       await connection.execute(
         `DELETE FROM ${formatTableName(TABLE_DATASET_VERSIONS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?`,
         [id],
@@ -998,6 +1193,9 @@ export class DatasetsMySQL extends DatasetsStorage {
         `UPDATE ${itemsTable} SET ${quoteIdentifier('input', 'column name')} = ?, ${quoteIdentifier('groundTruth', 'column name')} = NULL, ${quoteIdentifier('expectedTrajectory', 'column name')} = NULL, ${quoteIdentifier('toolMocks', 'column name')} = NULL, ${quoteIdentifier('unmockedToolPolicy', 'column name')} = NULL, ${quoteIdentifier('scorerIds', 'column name')} = NULL, ${quoteIdentifier('requestContext', 'column name')} = NULL, ${quoteIdentifier('metadata', 'column name')} = ?, ${quoteIdentifier('source', 'column name')} = NULL WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ?`,
         ['null', purgedMetadata, id, datasetId],
       );
+      await connection.execute(`DELETE FROM ${formatTableName(TABLE_DATASET_SNAPSHOT_IDENTITIES)} WHERE id = ?`, [
+        datasetSnapshotIdentityId(datasetId, id),
+      ]);
 
       if (experimentTablesExist) {
         await connection.execute(

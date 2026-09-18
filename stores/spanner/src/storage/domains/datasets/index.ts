@@ -9,6 +9,14 @@ import {
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_SNAPSHOT_IDENTITIES,
+  TABLE_DATASET_SNAPSHOT_IMPORTS,
+  captureDatasetSnapshot,
+  datasetSnapshotIdentityId,
+  datasetSnapshotDestinationExists,
+  datasetSnapshotStorageError,
+  verifyDatasetSnapshotImport,
+  verifyDatasetSnapshotReceipt,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
@@ -35,6 +43,12 @@ import type {
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
   PurgeDatasetItemInput,
+  DatasetSnapshotExportOptions,
+  PreparedDatasetSnapshotImport,
+  DatasetSnapshotImportPlan,
+  DatasetSnapshotImportResult,
+  DatasetSnapshotImportReceipt,
+  DatasetSnapshotIdentityRecord,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
@@ -145,7 +159,165 @@ export class DatasetsSpanner extends DatasetsStorage {
   private readonly skipDefaultIndexes?: boolean;
   private readonly indexes?: CreateIndexOptions[];
 
-  static readonly MANAGED_TABLES = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
+  static readonly MANAGED_TABLES = [
+    TABLE_DATASETS,
+    TABLE_DATASET_ITEMS,
+    TABLE_DATASET_VERSIONS,
+    TABLE_DATASET_SNAPSHOT_IDENTITIES,
+    TABLE_DATASET_SNAPSHOT_IMPORTS,
+  ] as const;
+
+  override readonly supportsSnapshotTransfer: boolean = true;
+
+  private async withSnapshotTransaction<T>(work: (tx: Transaction) => Promise<T>): Promise<T> {
+    return this.db.runWithAbortRetry(() =>
+      this.database.runTransactionAsync(async tx => {
+        try {
+          const result = await work(tx);
+          await tx.commit();
+          return result;
+        } catch (error) {
+          await tx.rollback();
+          throw error;
+        }
+      }),
+    );
+  }
+
+  private async snapshotState(tx: Transaction, datasetId: string, version?: number, filters?: DatasetTenancyFilters) {
+    const conditions = ['id = @datasetId'];
+    const params: Record<string, string> = { datasetId };
+    for (const column of ['organizationId', 'projectId'] as const) {
+      if (filters?.[column] !== undefined) {
+        conditions.push(`${quoteIdent(column, 'column name')} = @${column}`);
+        params[column] = filters[column];
+      }
+    }
+    const [rows] = await tx.run({
+      sql: `SELECT * FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${conditions.join(' AND ')}`,
+      params,
+    });
+    const row = rows[0]?.toJSON();
+    if (!row) throw datasetSnapshotStorageError('DATASET_NOT_FOUND', 'Dataset not found');
+    const dataset = rowToDataset(row);
+    const [items] = await tx.run({
+      sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')} WHERE datasetId = @datasetId AND datasetVersion <= @version AND (validTo IS NULL OR validTo > @version) AND isDeleted = FALSE`,
+      params: { datasetId, version: version ?? dataset.version },
+    });
+    const [identityRows] = await tx.run({
+      sql: `SELECT * FROM ${quoteIdent(TABLE_DATASET_SNAPSHOT_IDENTITIES, 'table name')} WHERE datasetId = @datasetId`,
+      params: { datasetId },
+    });
+    const identities: DatasetSnapshotIdentityRecord[] = identityRows.map(identityRow => {
+      const identity = identityRow.toJSON();
+      return {
+        id: String(identity.id),
+        datasetId: String(identity.datasetId),
+        itemId: identity.itemId == null ? null : String(identity.itemId),
+        portableId: String(identity.portableId),
+      };
+    });
+    return { dataset, items: items.map(item => rowToItem(item.toJSON())), identities };
+  }
+
+  private async snapshotReceipt(tx: Transaction, id: string): Promise<DatasetSnapshotImportReceipt | null> {
+    const [rows] = await tx.run({
+      sql: `SELECT TO_JSON_STRING(receipt) AS receipt FROM ${quoteIdent(TABLE_DATASET_SNAPSHOT_IMPORTS, 'table name')} WHERE id = @id`,
+      params: { id },
+    });
+    return rows[0] ? JSON.parse(rows[0].toJSON().receipt) : null;
+  }
+
+  private async snapshotImportResult(
+    tx: Transaction,
+    receipt: DatasetSnapshotImportReceipt,
+  ): Promise<DatasetSnapshotImportResult> {
+    const [rows] = await tx.run({
+      sql: `SELECT * FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE id = @id AND organizationId IS NOT DISTINCT FROM @organizationId AND projectId IS NOT DISTINCT FROM @projectId`,
+      params: { id: receipt.datasetId, organizationId: receipt.organizationId, projectId: receipt.projectId },
+      types: { organizationId: 'string', projectId: 'string' },
+    });
+    const [identities] = await tx.run({
+      sql: `SELECT * FROM ${quoteIdent(TABLE_DATASET_SNAPSHOT_IDENTITIES, 'table name')} WHERE id = @id`,
+      params: { id: datasetSnapshotIdentityId(receipt.datasetId, null) },
+    });
+    const identity = identities[0]?.toJSON();
+    return {
+      receipt,
+      datasetExists: datasetSnapshotDestinationExists(
+        receipt,
+        rows[0] ? rowToDataset(rows[0].toJSON()) : null,
+        identity
+          ? {
+              id: String(identity.id),
+              datasetId: String(identity.datasetId),
+              itemId: null,
+              portableId: String(identity.portableId),
+            }
+          : null,
+      ),
+    };
+  }
+
+  protected async _doExportSnapshot(
+    input: DatasetSnapshotExportOptions & { datasetId: string; filters?: DatasetTenancyFilters },
+  ) {
+    return this.withSnapshotTransaction(async tx => {
+      const state = await this.snapshotState(tx, input.datasetId, input.version, input.filters);
+      const captured = captureDatasetSnapshot({
+        ...state,
+        version: input.version ?? state.dataset.version,
+        options: { maxBytes: input.maxBytes },
+      });
+      for (const identity of captured.adopted)
+        await this.db.insert({ tableName: TABLE_DATASET_SNAPSHOT_IDENTITIES, record: identity, transaction: tx });
+      return captured.snapshot;
+    });
+  }
+
+  protected async _doImportSnapshot(
+    prepared: PreparedDatasetSnapshotImport,
+    plan: DatasetSnapshotImportPlan,
+  ): Promise<DatasetSnapshotImportResult> {
+    return this.withSnapshotTransaction(async tx => {
+      const existing = await this.snapshotReceipt(tx, prepared.receiptId);
+      if (existing) {
+        verifyDatasetSnapshotReceipt(existing, prepared);
+        return this.snapshotImportResult(tx, existing);
+      }
+      await this.db.insert({ tableName: TABLE_DATASETS, record: plan.dataset, transaction: tx });
+      for (const item of plan.items) {
+        await this.db.insert({
+          tableName: TABLE_DATASET_ITEMS,
+          record: {
+            ...item,
+            input: jsonDataArg(item.input),
+            groundTruth: jsonDataArg(item.groundTruth),
+            expectedTrajectory: jsonDataArg(item.expectedTrajectory),
+          },
+          transaction: tx,
+        });
+      }
+      if (plan.versionRecord)
+        await this.db.insert({ tableName: TABLE_DATASET_VERSIONS, record: plan.versionRecord, transaction: tx });
+      for (const identity of plan.identities)
+        await this.db.insert({ tableName: TABLE_DATASET_SNAPSHOT_IDENTITIES, record: identity, transaction: tx });
+      verifyDatasetSnapshotImport(plan, await this.snapshotState(tx, plan.dataset.id));
+      await this.db.insert({
+        tableName: TABLE_DATASET_SNAPSHOT_IMPORTS,
+        record: { id: plan.receipt.id, receipt: plan.receipt },
+        transaction: tx,
+      });
+      return { receipt: plan.receipt, datasetExists: true };
+    });
+  }
+
+  protected async _doGetSnapshotImport(id: string): Promise<DatasetSnapshotImportResult | null> {
+    return this.withSnapshotTransaction(async tx => {
+      const receipt = await this.snapshotReceipt(tx, id);
+      return receipt ? this.snapshotImportResult(tx, receipt) : null;
+    });
+  }
 
   constructor(config: SpannerDomainConfig) {
     super();
@@ -160,6 +332,14 @@ export class DatasetsSpanner extends DatasetsStorage {
     await this.db.createTable({ tableName: TABLE_DATASETS, schema: TABLE_SCHEMAS[TABLE_DATASETS] });
     await this.db.createTable({ tableName: TABLE_DATASET_ITEMS, schema: TABLE_SCHEMAS[TABLE_DATASET_ITEMS] });
     await this.db.createTable({ tableName: TABLE_DATASET_VERSIONS, schema: TABLE_SCHEMAS[TABLE_DATASET_VERSIONS] });
+    await this.db.createTable({
+      tableName: TABLE_DATASET_SNAPSHOT_IDENTITIES,
+      schema: TABLE_SCHEMAS[TABLE_DATASET_SNAPSHOT_IDENTITIES],
+    });
+    await this.db.createTable({
+      tableName: TABLE_DATASET_SNAPSHOT_IMPORTS,
+      schema: TABLE_SCHEMAS[TABLE_DATASET_SNAPSHOT_IMPORTS],
+    });
     // Backfill tenancy + candidate identity columns on pre-existing tables so
     // older deployments keep working when they upgrade in place.
     await this.db.alterTable({
@@ -186,6 +366,11 @@ export class DatasetsSpanner extends DatasetsStorage {
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
     return [
+      {
+        name: 'idx_dataset_snapshot_identities_dataset',
+        table: TABLE_DATASET_SNAPSHOT_IDENTITIES,
+        columns: ['datasetId'],
+      },
       {
         // listItems / getItemsByVersion: filter current rows by dataset.
         name: 'mastra_dataset_items_dataset_validto_idx',
@@ -225,6 +410,8 @@ export class DatasetsSpanner extends DatasetsStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_DATASET_SNAPSHOT_IMPORTS });
+    await this.db.clearTable({ tableName: TABLE_DATASET_SNAPSHOT_IDENTITIES });
     await this.db.clearTable({ tableName: TABLE_DATASET_VERSIONS });
     await this.db.clearTable({ tableName: TABLE_DATASET_ITEMS });
     await this.db.clearTable({ tableName: TABLE_DATASETS });
@@ -447,7 +634,7 @@ export class DatasetsSpanner extends DatasetsStorage {
               });
             }
 
-            for (const table of [TABLE_DATASET_VERSIONS, TABLE_DATASET_ITEMS]) {
+            for (const table of [TABLE_DATASET_SNAPSHOT_IDENTITIES, TABLE_DATASET_VERSIONS, TABLE_DATASET_ITEMS]) {
               await tx.runUpdate({
                 sql: `DELETE FROM ${quoteIdent(table, 'table name')} WHERE ${quoteIdent('datasetId', 'column name')} = @id`,
                 params: { id: args.id },
@@ -963,6 +1150,10 @@ export class DatasetsSpanner extends DatasetsStorage {
                     ${quoteIdent('source', 'column name')} = NULL
                     WHERE ${quoteIdent('id', 'column name')} = @id AND ${quoteIdent('datasetId', 'column name')} = @datasetId`,
               params: { id, datasetId, purgedAt },
+            });
+            await tx.runUpdate({
+              sql: `DELETE FROM ${quoteIdent(TABLE_DATASET_SNAPSHOT_IDENTITIES, 'table name')} WHERE id = @id`,
+              params: { id: datasetSnapshotIdentityId(datasetId, id) },
             });
 
             if (experimentTablesExist) {

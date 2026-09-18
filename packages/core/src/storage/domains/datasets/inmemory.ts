@@ -1,3 +1,5 @@
+import type { DatasetSnapshot } from '../../../datasets/snapshot';
+import type { DatasetSnapshotExportOptions, PreparedDatasetSnapshotImport } from '../../../datasets/snapshot-transfer';
 import { calculatePagination, normalizePerPage } from '../../base';
 import type {
   DatasetRecord,
@@ -33,6 +35,15 @@ function matchesTenancy(
 import type { InMemoryDB } from '../inmemory-db';
 import { DatasetsStorage } from './base';
 import { createDatasetItemIdentityConflictError, datasetItemPayloadsEqual } from './identity';
+import {
+  captureDatasetSnapshot,
+  datasetSnapshotIdentityId,
+  datasetSnapshotDestinationExists,
+  datasetSnapshotStorageError,
+  verifyDatasetSnapshotImport,
+  verifyDatasetSnapshotReceipt,
+} from './snapshot';
+import type { DatasetSnapshotImportPlan, DatasetSnapshotImportResult } from './snapshot';
 
 /** Convert a storage row to the public DatasetItem type (strips validTo/isDeleted) */
 function toDatasetItem(row: DatasetItemRow): DatasetItem {
@@ -86,10 +97,88 @@ export class DatasetsInMemory extends DatasetsStorage {
     this.db = db;
   }
 
+  override readonly supportsSnapshotTransfer: boolean = true;
+
+  protected async _doExportSnapshot(
+    input: DatasetSnapshotExportOptions & { datasetId: string; filters?: DatasetTenancyFilters },
+  ): Promise<DatasetSnapshot> {
+    // No await between capture and adoption: mutations cannot interleave with this boundary.
+    const dataset = this.db.datasets.get(input.datasetId);
+    if (!dataset || !matchesTenancy(dataset, input.filters)) {
+      throw datasetSnapshotStorageError('DATASET_NOT_FOUND', 'Dataset not found');
+    }
+    const version = input.version ?? dataset.version;
+    const items = [...this.db.datasetItems.values()].flatMap(rows => {
+      const row = rows.find(
+        row =>
+          row.datasetId === dataset.id &&
+          row.datasetVersion <= version &&
+          (row.validTo === null || row.validTo > version),
+      );
+      return row && !row.isDeleted ? [toDatasetItem(row)] : [];
+    });
+    const captured = captureDatasetSnapshot({
+      dataset: toDatasetRecord(dataset),
+      items,
+      version,
+      identities: [...this.db.datasetSnapshotIdentities.values()].filter(identity => identity.datasetId === dataset.id),
+      options: { maxBytes: input.maxBytes },
+    });
+    for (const identity of captured.adopted) this.db.datasetSnapshotIdentities.set(identity.id, identity);
+    return captured.snapshot;
+  }
+
+  protected async _doImportSnapshot(
+    prepared: PreparedDatasetSnapshotImport,
+    plan: DatasetSnapshotImportPlan,
+  ): Promise<DatasetSnapshotImportResult> {
+    const existing = this.db.datasetSnapshotImports.get(prepared.receiptId);
+    if (existing) {
+      verifyDatasetSnapshotReceipt(existing, prepared);
+      return {
+        receipt: structuredClone(existing),
+        datasetExists: datasetSnapshotDestinationExists(
+          existing,
+          this.db.datasets.get(existing.datasetId),
+          this.db.datasetSnapshotIdentities.get(datasetSnapshotIdentityId(existing.datasetId, null)),
+        ),
+      };
+    }
+    const staged = structuredClone(plan);
+    verifyDatasetSnapshotImport(plan, {
+      dataset: toDatasetRecord(staged.dataset),
+      items: staged.items.map(toDatasetItem),
+      identities: staged.identities,
+    });
+    // Stage and validate everything before the synchronous publication. There are no awaits here.
+    this.db.datasets.set(staged.dataset.id, staged.dataset);
+    for (const item of staged.items) this.db.datasetItems.set(item.id, [item]);
+    if (staged.versionRecord) this.db.datasetVersions.set(staged.versionRecord.id, staged.versionRecord);
+    for (const identity of staged.identities) this.db.datasetSnapshotIdentities.set(identity.id, identity);
+    this.db.datasetSnapshotImports.set(staged.receipt.id, staged.receipt);
+    return { receipt: structuredClone(staged.receipt), datasetExists: true };
+  }
+
+  protected async _doGetSnapshotImport(id: string): Promise<DatasetSnapshotImportResult | null> {
+    const receipt = this.db.datasetSnapshotImports.get(id);
+    return receipt
+      ? {
+          receipt: structuredClone(receipt),
+          datasetExists: datasetSnapshotDestinationExists(
+            receipt,
+            this.db.datasets.get(receipt.datasetId),
+            this.db.datasetSnapshotIdentities.get(datasetSnapshotIdentityId(receipt.datasetId, null)),
+          ),
+        }
+      : null;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.db.datasets.clear();
     this.db.datasetItems.clear();
     this.db.datasetVersions.clear();
+    this.db.datasetSnapshotIdentities.clear();
+    this.db.datasetSnapshotImports.clear();
   }
 
   // Dataset CRUD
@@ -190,6 +279,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       }
     }
 
+    for (const [key, identity] of this.db.datasetSnapshotIdentities) {
+      if (identity.datasetId === id) this.db.datasetSnapshotIdentities.delete(key);
+    }
     this.db.datasets.delete(id);
   }
 
@@ -418,6 +510,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       row.metadata = { __purged: true, purgedAt };
       row.source = null;
     }
+    // Purge is an erasure operation: drop the item's portable identity too, so nothing
+    // links the erased content back to copies in other environments. Every adapter does this.
+    this.db.datasetSnapshotIdentities.delete(datasetSnapshotIdentityId(datasetId, id));
 
     for (const result of this.db.experimentResults.values()) {
       const experiment = this.db.experiments.get(result.experimentId);
