@@ -2,6 +2,7 @@ import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { MongoClient, ObjectId } from 'mongodb';
 import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
+import type { MongoDBCreateIndexParams } from './';
 
 // Tests for GitHub issue #6563 - Configurable embedding field path
 // https://github.com/mastra-ai/mastra/issues/6563
@@ -148,12 +149,12 @@ async function waitForSync(
 // Create index and wait until the search index (named `${indexName}_vector_index`) is READY
 async function createIndexAndWait(
   vectorDB: MongoDBVector,
-  indexName: string,
-  dimension: number,
-  metric: 'cosine' | 'euclidean' | 'dotproduct',
+  params: MongoDBCreateIndexParams,
+  readyTimeoutMs: number = 60000,
 ) {
-  await vectorDB.createIndex({ indexName, dimension, metric });
-  await vectorDB.waitForIndexReady({ indexName, checkIntervalMs: 500 });
+  const { indexName } = params;
+  await vectorDB.createIndex(params);
+  await vectorDB.waitForIndexReady({ indexName, timeoutMs: readyTimeoutMs, checkIntervalMs: 500 });
   const created = await waitForCondition(
     async () => {
       const cols = await vectorDB.listIndexes();
@@ -208,9 +209,9 @@ describe('MongoDBVector Integration Tests', () => {
     }
 
     await Promise.all([
-      createIndexAndWait(vectorDB, testIndexName, 4, 'cosine'),
-      createIndexAndWait(vectorDB, testIndexName2, 4, 'cosine'),
-      createIndexAndWait(vectorDB, emptyIndexName, 4, 'cosine'),
+      createIndexAndWait(vectorDB, { indexName: testIndexName, dimension: 4, metric: 'cosine' }),
+      createIndexAndWait(vectorDB, { indexName: testIndexName2, dimension: 4, metric: 'cosine' }),
+      createIndexAndWait(vectorDB, { indexName: emptyIndexName, dimension: 4, metric: 'cosine' }),
     ]);
   }, 500000);
 
@@ -238,7 +239,7 @@ describe('MongoDBVector Integration Tests', () => {
 
     beforeAll(async () => {
       // Create index for bug reproduction
-      await createIndexAndWait(vectorDB, bugTestIndexName, 4, 'cosine');
+      await createIndexAndWait(vectorDB, { indexName: bugTestIndexName, dimension: 4, metric: 'cosine' });
 
       // Insert vectors with thread_id and resource_id in metadata
       // Simulating what the Memory system does
@@ -347,7 +348,7 @@ describe('MongoDBVector Integration Tests', () => {
 
       // Create the index and upsert a document via the shared vectorDB instance.
       // createIndex writes the sentinel (__index_metadata__); upsert writes the doc.
-      await createIndexAndWait(vectorDB, indexName, 4, 'cosine');
+      await createIndexAndWait(vectorDB, { indexName, dimension: 4, metric: 'cosine' });
       await vectorDB.upsert({ indexName, vectors: [[1, 0, 0, 0]], ids: ['f2-doc'] });
 
       // Reproduce the edge case where the Atlas Search index has been modified outside
@@ -420,7 +421,7 @@ createVectorTestSuite({
     await mongodbVector.disconnect();
   },
   createIndex: async (indexName, options) => {
-    await createIndexAndWait(mongodbVector, indexName, 1536, options?.metric ?? 'cosine');
+    await createIndexAndWait(mongodbVector, { indexName, dimension: 1536, metric: options?.metric ?? 'cosine' });
   },
   deleteIndex: async (indexName: string) => {
     await deleteIndexAndWait(mongodbVector, indexName);
@@ -2023,7 +2024,7 @@ describe('MongoDBVector listIndexes logical names', () => {
       searchIndexName: byoSearchIdx,
     });
     await store.waitForIndexReady({ indexName: byoIdx, timeoutMs: 60000 });
-    await createIndexAndWait(store, managedIdx, 4, 'cosine');
+    await createIndexAndWait(store, { indexName: managedIdx, dimension: 4, metric: 'cosine' });
   }, 500000);
 
   afterAll(async () => {
@@ -2288,5 +2289,683 @@ describe('MongoDBVector describeIndex embedded-only count (round4-fix8)', () => 
     // 3 docs in the collection, but only 2 carry an embedding.
     expect(stats.count).toBe(2);
     expect(stats.dimension).toBe(4);
+  });
+});
+
+// ─── Automated Embedding (autoEmbed indexes) ─────────────────────────────────────────────
+describe('MongoDBVector autoEmbed', () => {
+  const makeVector = () => new MongoDBVector({ id: 'test', uri: 'mongodb://localhost:27017', dbName: 'test_db' });
+
+  const stubCreateIndex = (v: MongoDBVector) => {
+    const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+    (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+    vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+    vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+    vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+    return createSearchIndex;
+  };
+  const vectorDefOf = (createSearchIndex: ReturnType<typeof vi.fn>) =>
+    createSearchIndex.mock.calls[0][0].definition.fields;
+
+  describe('createIndex', () => {
+    it('emits an autoEmbed field instead of a vector field', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } });
+
+      const fields = vectorDefOf(createSearchIndex);
+      expect(fields).toContainEqual({
+        type: 'autoEmbed',
+        modality: 'text',
+        path: 'document',
+        model: 'voyage-4',
+      });
+      expect(fields.some((f: any) => f.type === 'vector')).toBe(false);
+    });
+
+    it('forwards the optional autoEmbed tuning knobs', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({
+        indexName: 'movies',
+        autoEmbed: {
+          model: 'voyage-4-large',
+          numDimensions: 512,
+          quantization: 'binary',
+          indexingMethod: 'flat',
+          hnswOptions: { maxEdges: 32, numEdgeCandidates: 200 },
+        },
+      });
+
+      const field = vectorDefOf(createSearchIndex).find((f: any) => f.type === 'autoEmbed');
+      expect(field).toMatchObject({
+        model: 'voyage-4-large',
+        numDimensions: 512,
+        quantization: 'binary',
+        indexingMethod: 'flat',
+        hnswOptions: { maxEdges: 32, numEdgeCandidates: 200 },
+      });
+    });
+
+    it('omits tuning knobs that were not supplied so MongoDB applies its defaults', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } });
+
+      const field = vectorDefOf(createSearchIndex).find((f: any) => f.type === 'autoEmbed');
+      expect(Object.keys(field).sort()).toEqual(['modality', 'model', 'path', 'type']);
+    });
+
+    it('does not declare the embedded field as a filter field', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' }, filterFields: ['year'] });
+
+      const filterPaths = vectorDefOf(createSearchIndex)
+        .filter((f: any) => f.type === 'filter')
+        .map((f: any) => f.path);
+      expect(filterPaths).toEqual(['_id', 'metadata.year']);
+    });
+
+    it('keeps document as a filter field when a custom path is embedded', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4', path: 'fullplot' } });
+
+      const filterPaths = vectorDefOf(createSearchIndex)
+        .filter((f: any) => f.type === 'filter')
+        .map((f: any) => f.path);
+      expect(filterPaths).toEqual(['_id', 'document']);
+    });
+
+    it('does not infer a similarity function from the default metric', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      // `similarity` is rejected outright by the Community mongot build that ships in the
+      // preview image, so it must never be sent unless the caller asked for it.
+      await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } });
+
+      const field = vectorDefOf(createSearchIndex).find((f: any) => f.type === 'autoEmbed');
+      expect(field.similarity).toBeUndefined();
+    });
+
+    it('sends a similarity function only when explicitly configured', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4', similarity: 'dotProduct' } });
+
+      const field = vectorDefOf(createSearchIndex).find((f: any) => f.type === 'autoEmbed');
+      expect(field.similarity).toBe('dotProduct');
+    });
+
+    it('rejects dimension combined with autoEmbed', async () => {
+      const v = makeVector();
+      stubCreateIndex(v);
+
+      await expect(
+        v.createIndex({ indexName: 'movies', dimension: 1024, autoEmbed: { model: 'voyage-4' } }),
+      ).rejects.toThrow(/dimension cannot be combined with autoEmbed/);
+    });
+
+    it('persists the autoEmbed config so another process can rebuild the query stage', async () => {
+      const v = makeVector();
+      stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4', path: 'fullplot' } });
+
+      const writeRegistryEntry = (v as any).writeRegistryEntry as ReturnType<typeof vi.spyOn>;
+      expect(writeRegistryEntry.mock.calls[0][1]).toMatchObject({
+        autoEmbed: { model: 'voyage-4', path: 'fullplot' },
+      });
+    });
+
+    it('still creates the companion full-text index for a managed autoEmbed index', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } });
+
+      expect(createSearchIndex).toHaveBeenCalledTimes(2);
+      expect(createSearchIndex.mock.calls[1][0].type).toBe('search');
+    });
+  });
+
+  describe('query', () => {
+    const makeCursor = (docs: any[]) => ({ toArray: async () => docs });
+    const stubQuery = (v: MongoDBVector, autoEmbed: any = { model: 'voyage-4', path: 'document' }) => {
+      // null means 'index has no autoEmbed config'; undefined would re-trigger the default.
+      const aggregate = vi.fn().mockReturnValue(makeCursor([]));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        autoEmbed: autoEmbed ?? undefined,
+      });
+      return aggregate;
+    };
+
+    it('sends the query string to MongoDB instead of a vector', async () => {
+      const v = makeVector();
+      const aggregate = stubQuery(v);
+
+      await v.query({ indexName: 'movies', queryText: 'space opera', topK: 5 });
+
+      const vectorSearch = aggregate.mock.calls[0][0][0].$vectorSearch;
+      expect(vectorSearch.query).toEqual({ text: 'space opera' });
+      expect(vectorSearch.queryVector).toBeUndefined();
+    });
+
+    it('points the search at the embedded text field, not the embedding field', async () => {
+      const v = makeVector();
+      const aggregate = stubQuery(v, { model: 'voyage-4', path: 'fullplot' });
+
+      await v.query({ indexName: 'movies', queryText: 'space opera' });
+
+      expect(aggregate.mock.calls[0][0][0].$vectorSearch.path).toBe('fullplot');
+    });
+
+    it('pre-filters on document instead of pushing it into $vectorSearch when it is the embedded field', async () => {
+      const v = makeVector();
+      // First aggregate call materialises candidate _ids; the second runs $vectorSearch.
+      const aggregate = vi
+        .fn()
+        .mockReturnValueOnce({
+          map: () => ({ toArray: async () => ['doc-1'] }),
+          toArray: async () => [{ _id: 'doc-1' }],
+        })
+        .mockReturnValueOnce({ toArray: async () => [] });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        autoEmbed: { model: 'voyage-4', path: 'document' },
+      });
+
+      await v.query({ indexName: 'movies', queryText: 'space opera', documentFilter: { $eq: 'astronaut' } });
+
+      // The embedded field is not a declared filter field, so it cannot be pushed down.
+      const vectorSearch = aggregate.mock.calls[1][0][0].$vectorSearch;
+      expect(JSON.stringify(vectorSearch.filter)).not.toContain('astronaut');
+      expect(vectorSearch.filter).toEqual({ _id: { $in: ['doc-1'] } });
+      expect(aggregate.mock.calls[0][0][0].$match).toEqual({ document: { $eq: 'astronaut' } });
+    });
+
+    it('still pushes documentFilter into $vectorSearch on a client-embedded index', async () => {
+      const v = makeVector();
+      const aggregate = vi.fn().mockReturnValue({ toArray: async () => [] });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+      });
+
+      await v.query({ indexName: 'movies', queryVector: [0.1], documentFilter: { $eq: 'astronaut' } });
+
+      expect(aggregate.mock.calls[0][0][0].$vectorSearch.filter).toEqual({ document: { $eq: 'astronaut' } });
+    });
+
+    it('rejects supplying both queryText and queryVector', async () => {
+      const v = makeVector();
+      stubQuery(v);
+
+      await expect(v.query({ indexName: 'movies', queryText: 'space opera', queryVector: [0.1] })).rejects.toThrow(
+        /mutually exclusive/i,
+      );
+    });
+
+    it('rejects queryText against an index that was not created with autoEmbed', async () => {
+      const v = makeVector();
+      stubQuery(v, null);
+
+      await expect(v.query({ indexName: 'movies', queryText: 'space opera' })).rejects.toThrow(/autoEmbed/);
+    });
+
+    it('still rejects a query with neither input', async () => {
+      const v = makeVector();
+      stubQuery(v);
+
+      await expect(v.query({ indexName: 'movies' })).rejects.toThrow(/queryVector/);
+    });
+
+    it('lets a query override the index model', async () => {
+      const v = makeVector();
+      const aggregate = stubQuery(v);
+
+      await v.query({ indexName: 'movies', queryText: 'space opera', model: 'voyage-4-lite' });
+
+      expect(aggregate.mock.calls[0][0][0].$vectorSearch.model).toBe('voyage-4-lite');
+    });
+
+    it('leaves the model out so the index model applies', async () => {
+      const v = makeVector();
+      const aggregate = stubQuery(v);
+
+      await v.query({ indexName: 'movies', queryText: 'space opera' });
+
+      expect('model' in aggregate.mock.calls[0][0][0].$vectorSearch).toBe(false);
+    });
+
+    it('rejects a model override alongside a precomputed vector', async () => {
+      const v = makeVector();
+      stubQuery(v);
+
+      await expect(v.query({ indexName: 'movies', queryVector: [0.1], model: 'voyage-4-lite' })).rejects.toThrow(
+        /model/,
+      );
+    });
+
+    it('rejects includeVector on an autoEmbed index because no vector is stored', async () => {
+      const v = makeVector();
+      stubQuery(v);
+
+      await expect(v.query({ indexName: 'movies', queryText: 'space opera', includeVector: true })).rejects.toThrow(
+        /includeVector/,
+      );
+    });
+  });
+
+  describe('hybridQuery', () => {
+    const makeCursor = (docs: any[]) => ({ toArray: async () => docs });
+    const stubHybrid = (v: MongoDBVector, autoEmbed: any = { model: 'voyage-4', path: 'document' }) => {
+      const aggregate = vi.fn().mockReturnValue(makeCursor([]));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'assertRankFusionSupported').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        textSearchIndexName: 'movies_search_index',
+        autoEmbed,
+      });
+      return aggregate;
+    };
+
+    it('feeds the vector branch a query string while the text branch keeps its own term', async () => {
+      const v = makeVector();
+      const aggregate = stubHybrid(v);
+
+      await v.hybridQuery({
+        indexName: 'movies',
+        queryText: 'database connection keeps dropping',
+        query: 'ERR_4821',
+        paths: ['document'],
+      });
+
+      const pipelines = aggregate.mock.calls[0][0][0].$rankFusion.input.pipelines;
+      expect(pipelines.vector[0].$vectorSearch.query).toEqual({ text: 'database connection keeps dropping' });
+      expect(pipelines.vector[0].$vectorSearch.queryVector).toBeUndefined();
+      expect(pipelines.text[0].$search.text.query).toBe('ERR_4821');
+    });
+
+    it('lets a hybrid query override the index model for its vector branch', async () => {
+      const v = makeVector();
+      const aggregate = stubHybrid(v);
+
+      await v.hybridQuery({
+        indexName: 'movies',
+        queryText: 'lonely in space',
+        query: 'Paris',
+        paths: ['document'],
+        model: 'voyage-4-lite',
+      });
+
+      const pipelines = aggregate.mock.calls[0][0][0].$rankFusion.input.pipelines;
+      expect(pipelines.vector[0].$vectorSearch.model).toBe('voyage-4-lite');
+    });
+
+    it('rejects a hybrid query with neither queryVector nor queryText', async () => {
+      const v = makeVector();
+      stubHybrid(v);
+
+      await expect(
+        v.hybridQuery({ indexName: 'movies', query: 'ERR_4821', paths: ['document'] } as any),
+      ).rejects.toThrow(/queryVector/);
+    });
+  });
+
+  // A second store instance starts with an empty in-memory cache, so it must read the
+  // autoEmbed config back from the registry collection.
+  describe('registry hydration in a fresh process', () => {
+    const stubFromRegistry = (v: MongoDBVector) => {
+      const aggregate = vi.fn().mockReturnValue({ toArray: async () => [] });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
+        _id: 'movies',
+        indexName: 'movies',
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        allowWrites: true,
+        autoEmbed: { model: 'voyage-4', path: 'fullplot' },
+      });
+      return aggregate;
+    };
+
+    it('queries by text using the persisted autoEmbed config', async () => {
+      const v = makeVector();
+      const aggregate = stubFromRegistry(v);
+
+      await v.query({ indexName: 'movies', queryText: 'space opera' });
+
+      const vectorSearch = aggregate.mock.calls[0][0][0].$vectorSearch;
+      expect(vectorSearch.query).toEqual({ text: 'space opera' });
+      expect(vectorSearch.path).toBe('fullplot');
+    });
+
+    it('accepts a text upsert using the persisted autoEmbed config', async () => {
+      const v = makeVector();
+      const bulkWrite = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ bulkWrite });
+      vi.spyOn(v as any, 'assertWritable').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
+        _id: 'movies',
+        indexName: 'movies',
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        allowWrites: true,
+        autoEmbed: { model: 'voyage-4', path: 'document' },
+      });
+
+      await v.upsert({ indexName: 'movies', documents: ['a lonely astronaut'] });
+
+      expect(bulkWrite.mock.calls[0][0][0].updateOne.update.$set.embedding).toBeUndefined();
+    });
+  });
+
+  describe('upsert', () => {
+    const stubUpsert = (v: MongoDBVector, autoEmbed: any = { model: 'voyage-4', path: 'document' }) => {
+      const bulkWrite = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ bulkWrite });
+      vi.spyOn(v as any, 'assertWritable').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        autoEmbed: autoEmbed ?? undefined,
+      });
+      return bulkWrite;
+    };
+
+    it('writes the text without an embedding field', async () => {
+      const v = makeVector();
+      const bulkWrite = stubUpsert(v);
+
+      await v.upsert({ indexName: 'movies', documents: ['a lonely astronaut'], metadata: [{ year: 1972 }] });
+
+      const update = bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+      expect(update).toEqual({ document: 'a lonely astronaut', metadata: { year: 1972 } });
+      expect(update.embedding).toBeUndefined();
+    });
+
+    it('generates one id per document', async () => {
+      const v = makeVector();
+      const bulkWrite = stubUpsert(v);
+
+      const ids = await v.upsert({ indexName: 'movies', documents: ['one', 'two', 'three'] });
+
+      expect(ids).toHaveLength(3);
+      expect(bulkWrite.mock.calls[0][0]).toHaveLength(3);
+    });
+
+    it('does not consult describeIndex, since there is no dimension to validate', async () => {
+      const v = makeVector();
+      stubUpsert(v);
+      const describeIndex = vi.spyOn(v, 'describeIndex');
+
+      await v.upsert({ indexName: 'movies', documents: ['one'] });
+
+      expect(describeIndex).not.toHaveBeenCalled();
+    });
+
+    it('rejects vectors supplied alongside documents on an autoEmbed index', async () => {
+      const v = makeVector();
+      stubUpsert(v);
+
+      await expect(v.upsert({ indexName: 'movies', vectors: [[0.1]], documents: ['one'] })).rejects.toThrow(
+        /autoEmbed/,
+      );
+    });
+
+    it('rejects an empty documents array', async () => {
+      const v = makeVector();
+      stubUpsert(v);
+
+      await expect(v.upsert({ indexName: 'movies', documents: [] })).rejects.toThrow(/documents/i);
+    });
+
+    it('rejects metadata that does not line up with documents', async () => {
+      const v = makeVector();
+      stubUpsert(v);
+
+      await expect(v.upsert({ indexName: 'movies', documents: ['one', 'two'], metadata: [{ a: 1 }] })).rejects.toThrow(
+        /metadata/i,
+      );
+    });
+  });
+
+  describe('describeIndex', () => {
+    const stubDescribe = (v: MongoDBVector, definition: any) => {
+      const countDocuments = vi.fn().mockResolvedValue(2);
+      const listSearchIndexes = vi.fn().mockReturnValue({
+        toArray: async () => [{ name: 'movies_vector_index', latestDefinition: definition }],
+      });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ countDocuments, listSearchIndexes });
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        autoEmbed: { model: 'voyage-4', path: 'fullplot' },
+      });
+      return countDocuments;
+    };
+
+    it('reads stats from an autoEmbed definition instead of throwing', async () => {
+      const v = makeVector();
+      stubDescribe(v, {
+        fields: [{ type: 'autoEmbed', modality: 'text', path: 'fullplot', model: 'voyage-4', similarity: 'cosine' }],
+      });
+
+      const stats = await v.describeIndex({ indexName: 'movies' });
+
+      expect(stats).toMatchObject({ count: 2, metric: 'cosine' });
+    });
+
+    it("reports MongoDB's default embedding size when the index does not pin one", async () => {
+      const v = makeVector();
+      stubDescribe(v, {
+        fields: [{ type: 'autoEmbed', modality: 'text', path: 'fullplot', model: 'voyage-4' }],
+      });
+
+      expect((await v.describeIndex({ indexName: 'movies' })).dimension).toBe(1024);
+    });
+
+    it('reports the pinned embedding size when the index declares one', async () => {
+      const v = makeVector();
+      stubDescribe(v, {
+        fields: [{ type: 'autoEmbed', modality: 'text', path: 'fullplot', model: 'voyage-4', numDimensions: 512 }],
+      });
+
+      expect((await v.describeIndex({ indexName: 'movies' })).dimension).toBe(512);
+    });
+
+    it('counts documents carrying the embedded text, not an embedding field', async () => {
+      const v = makeVector();
+      const countDocuments = stubDescribe(v, {
+        fields: [{ type: 'autoEmbed', modality: 'text', path: 'fullplot', model: 'voyage-4' }],
+      });
+
+      await v.describeIndex({ indexName: 'movies' });
+
+      expect(countDocuments.mock.calls[0][0]).toMatchObject({ fullplot: { $exists: true } });
+    });
+  });
+
+  describe('updateVector', () => {
+    it('rejects a vector update on an autoEmbed index instead of writing a dead field', async () => {
+      const v = makeVector();
+      vi.spyOn(v as any, 'assertWritable').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ updateOne: vi.fn() });
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        autoEmbed: { model: 'voyage-4', path: 'document' },
+      });
+
+      await expect(v.updateVector({ indexName: 'movies', id: '1', update: { vector: [0.1, 0.2] } })).rejects.toThrow(
+        /autoEmbed/,
+      );
+    });
+  });
+});
+
+// ─── Live Automated Embedding ────────────────────────────────────────────────────────────
+// These write documents and consume Voyage AI embedding tokens, so they need an explicit
+// opt-in as well as credentials:
+//   TEST_MONGODB_AUTOEMBEDDING=1 pnpm --filter @mastra/mongodb test
+//
+// Against Atlas: set MONGODB_AUTOEMBED_URL to a cluster connection string.
+// Against the local container: set VOYAGE_API_KEY and ATLAS_LOCAL_TAG=preview, then recreate
+// the container. The pinned image has no autoEmbed support.
+const AUTOEMBED_URL = process.env.MONGODB_AUTOEMBED_URL;
+const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY;
+const describeAutoEmbed =
+  process.env.TEST_MONGODB_AUTOEMBEDDING && (AUTOEMBED_URL || VOYAGE_API_KEY) ? describe : describe.skip;
+
+describeAutoEmbed('MongoDBVector Automated Embedding (live)', () => {
+  const indexName = 'autoembed_movies';
+  const autoEmbedUri = AUTOEMBED_URL || uri;
+  let store: MongoDBVector;
+
+  const movies = [
+    'A lonely astronaut adrift near a strange ocean planet, haunted by his memories.',
+    'A crew of thieves robs a bank vault in the middle of Paris.',
+    'Explorers travel through a wormhole in deep space to save humanity.',
+  ];
+  const metadata = [{ year: 1972 }, { year: 2001 }, { year: 2014 }];
+
+  // Voyage enforces per-minute token limits, and the lower AI tiers are easy to hit with
+  // back-to-back queries. Retry rather than fail the assertion.
+  const retryOnRateLimit = async <T>(operation: () => Promise<T>): Promise<T> => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await operation();
+      } catch (error: any) {
+        const rateLimited = /rate limit/i.test(String(error?.message ?? '') + String(error?.cause?.message ?? ''));
+        if (!rateLimited || attempt >= 5) throw error;
+        await new Promise(resolve => setTimeout(resolve, 15000 * (attempt + 1)));
+      }
+    }
+  };
+
+  // Embeddings are generated asynchronously after the write, so a query can legitimately
+  // return nothing for a while after the index reports READY.
+  const queryUntilPopulated = async (text: string) => {
+    let results: Awaited<ReturnType<MongoDBVector['query']>> = [];
+    await waitForSync(
+      store,
+      indexName,
+      async () => {
+        results = await retryOnRateLimit(() => store.query({ indexName, queryText: text, topK: 3 }));
+        return results.length > 0;
+      },
+      300000,
+      5000,
+    );
+    return results;
+  };
+
+  beforeAll(async () => {
+    store = new MongoDBVector({ id: 'autoembed', uri: autoEmbedUri, dbName });
+    await store.connect();
+    await store.deleteIndex({ indexName }).catch(() => {});
+    try {
+      await createIndexAndWait(store, { indexName, autoEmbed: { model: 'voyage-4' }, filterFields: ['year'] }, 300000);
+    } catch (error: any) {
+      if (/not registered|unrecognized field/i.test(String(error?.cause?.message ?? error?.message ?? ''))) {
+        throw new Error(
+          'This deployment cannot create autoEmbed indexes. Point MONGODB_AUTOEMBED_URL at an Atlas cluster, ' +
+            'or set ATLAS_LOCAL_TAG=preview and recreate the container.',
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+    await store.upsert({ indexName, documents: movies, metadata });
+  }, 600000);
+
+  afterAll(async () => {
+    await store.deleteIndex({ indexName }).catch(() => {});
+    await store.disconnect();
+  });
+
+  it('writes plain text with no embedding field in the document', async () => {
+    const doc = await store['db'].collection(indexName).findOne({ document: movies[0] });
+    expect(doc).toBeTruthy();
+    expect(doc?.embedding).toBeUndefined();
+  });
+
+  it('ranks by meaning for a query string the server embeds', async () => {
+    const results = await queryUntilPopulated('space opera about isolation');
+    expect(results[0]?.document).toBe(movies[0]);
+  });
+
+  it('applies a metadata pre-filter to a text query', async () => {
+    await queryUntilPopulated('space opera about isolation');
+    const results = await retryOnRateLimit(() =>
+      store.query({
+        indexName,
+        queryText: 'space opera about isolation',
+        topK: 3,
+        filter: { year: { $gt: 2000 } },
+      }),
+    );
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every(r => (r.metadata?.year as number) > 2000)).toBe(true);
+  });
+
+  it('fuses a server-embedded vector branch with a BM25 branch', async () => {
+    await queryUntilPopulated('space opera about isolation');
+    const results = await retryOnRateLimit(() =>
+      store.hybridQuery({
+        indexName,
+        queryText: 'space opera about isolation',
+        query: 'Paris',
+        paths: ['document'],
+        topK: 3,
+      }),
+    );
+    expect(results.length).toBeGreaterThan(0);
+  });
+
+  it('honours a query-time model override from the same family', async () => {
+    await queryUntilPopulated('space opera about isolation');
+    const results = await retryOnRateLimit(() =>
+      store.query({ indexName, queryText: 'space opera about isolation', model: 'voyage-4-lite', topK: 3 }),
+    );
+    expect(results.length).toBeGreaterThan(0);
+  });
+
+  it("surfaces MongoDB's rejection of an incompatible model", async () => {
+    await expect(
+      retryOnRateLimit(() => store.query({ indexName, queryText: 'space opera', model: 'voyage-code-3', topK: 3 })),
+    ).rejects.toThrow(/not compatible/);
+  });
+
+  it('reports stats for an autoEmbed index', async () => {
+    const stats = await store.describeIndex({ indexName });
+    expect(stats.count).toBe(movies.length);
+    expect(stats.dimension).toBe(1024);
   });
 });
