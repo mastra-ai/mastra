@@ -1,3 +1,15 @@
+import type { DatasetSnapshot } from '../../../datasets/snapshot';
+import {
+  datasetSnapshotExportOptionsSchema,
+  datasetSnapshotImportOptionsSchema,
+  datasetSnapshotReceiptId,
+  prepareDatasetSnapshotImport,
+} from '../../../datasets/snapshot-transfer';
+import type {
+  DatasetSnapshotExportOptions,
+  DatasetSnapshotImportOptions,
+  PreparedDatasetSnapshotImport,
+} from '../../../datasets/snapshot-transfer';
 import { getSchemaValidator, SchemaUpdateValidationError } from '../../../datasets/validation';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type {
@@ -25,6 +37,8 @@ import { StorageDomain } from '../base';
 import { planDatasetItemBatch as createDatasetItemBatchPlan, validateDatasetItemExternalId } from './identity';
 import type { DatasetItemBatchPlan } from './identity';
 import { validateDatasetItemPayloadSerialization } from './serialization';
+import type { DatasetSnapshotImportPlan, DatasetSnapshotImportResult } from './snapshot';
+import { datasetSnapshotStorageError, planDatasetSnapshotImport, validateDatasetSnapshotSchemas } from './snapshot';
 
 const DATASET_IMMUTABLE_FIELDS = ['organizationId', 'projectId', 'candidateKey', 'candidateId'] as const;
 
@@ -42,6 +56,146 @@ export abstract class DatasetsStorage extends StorageDomain {
       component: 'STORAGE',
       name: 'DATASETS',
     });
+  }
+
+  readonly supportsSnapshotTransfer: boolean = false;
+
+  async exportSnapshot(
+    input: DatasetSnapshotExportOptions & { datasetId: string; filters?: DatasetTenancyFilters },
+  ): Promise<DatasetSnapshot> {
+    this.assertSnapshotTransferSupported();
+    const { datasetId, filters, ...options } = input;
+    const parsed = datasetSnapshotExportOptionsSchema.safeParse(options);
+    if (!parsed.success) {
+      throw datasetSnapshotStorageError(
+        'DATASET_SNAPSHOT_INVALID_OPTIONS',
+        'Invalid dataset snapshot export options',
+        parsed.error,
+      );
+    }
+    return this._doExportSnapshot({ datasetId, filters, ...parsed.data });
+  }
+
+  async preflightSnapshot(input: DatasetSnapshotImportOptions & { snapshot: string }) {
+    return this.describeSnapshotImport(await this.prepareSnapshotImport(input));
+  }
+
+  /** Summarize a prepared artifact without parsing it again. */
+  describeSnapshotImport(prepared: PreparedDatasetSnapshotImport) {
+    return {
+      datasetIdentity: prepared.snapshot.datasetIdentity,
+      artifactDigest: prepared.snapshot.digest,
+      itemCount: prepared.content.items.length,
+      destination: prepared.destination,
+      targetType: prepared.content.configuration.targetType,
+      targetIds: prepared.content.configuration.targetIds ?? [],
+      scorerIds: [
+        ...new Set([
+          ...(prepared.content.configuration.scorerIds ?? []),
+          ...prepared.content.items.flatMap(item => item.payload.scorerIds ?? []),
+        ]),
+      ],
+      targetMappings: prepared.targetMappings,
+      scorerMappings: prepared.scorerMappings,
+    };
+  }
+
+  async importSnapshot(
+    input: DatasetSnapshotImportOptions & { snapshot: string },
+  ): Promise<DatasetSnapshotImportResult> {
+    return this.importPreparedSnapshot(await this.prepareSnapshotImport(input));
+  }
+
+  /** Import an artifact that `prepareSnapshotImport` already validated. */
+  async importPreparedSnapshot(prepared: PreparedDatasetSnapshotImport): Promise<DatasetSnapshotImportResult> {
+    return this._doImportSnapshot(prepared, planDatasetSnapshotImport(prepared));
+  }
+
+  async getSnapshotImport(input: {
+    idempotencyKey: string;
+    organizationId?: string | null;
+    projectId?: string | null;
+  }): Promise<DatasetSnapshotImportResult | null> {
+    this.assertSnapshotTransferSupported();
+    let id: string;
+    try {
+      id = datasetSnapshotReceiptId(input);
+    } catch (error) {
+      throw datasetSnapshotStorageError(
+        'DATASET_SNAPSHOT_INVALID_OPTIONS',
+        'Invalid dataset snapshot receipt lookup options',
+        error,
+      );
+    }
+    return this._doGetSnapshotImport(id);
+  }
+
+  private assertSnapshotTransferSupported(): void {
+    if (!this.supportsSnapshotTransfer) {
+      throw datasetSnapshotStorageError(
+        'DATASET_SNAPSHOT_UNSUPPORTED',
+        'This storage adapter does not support atomic dataset snapshot transfer',
+      );
+    }
+  }
+
+  /** Parse and validate an artifact once; the result can be described and then imported. */
+  async prepareSnapshotImport(
+    input: DatasetSnapshotImportOptions & { snapshot: string },
+  ): Promise<PreparedDatasetSnapshotImport> {
+    this.assertSnapshotTransferSupported();
+    const { snapshot, ...options } = input;
+    const parsedOptions = datasetSnapshotImportOptionsSchema.safeParse(options);
+    if (!parsedOptions.success) {
+      throw datasetSnapshotStorageError(
+        'DATASET_SNAPSHOT_INVALID_OPTIONS',
+        'Invalid dataset snapshot import options',
+        parsedOptions.error,
+      );
+    }
+    let prepared: PreparedDatasetSnapshotImport;
+    try {
+      prepared = prepareDatasetSnapshotImport(snapshot, parsedOptions.data);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      const reason = error instanceof Error ? error.message : String(error);
+      throw datasetSnapshotStorageError(
+        'DATASET_SNAPSHOT_INVALID_ARTIFACT',
+        `The snapshot artifact is not a valid dataset snapshot: ${reason}`,
+        error,
+      );
+    }
+    validateDatasetSnapshotSchemas(prepared.content);
+    await this.validateSnapshotImportCapability(prepared);
+    return prepared;
+  }
+
+  protected async validateSnapshotImportCapability(_prepared: PreparedDatasetSnapshotImport): Promise<void> {}
+
+  protected async _doExportSnapshot(
+    _input: DatasetSnapshotExportOptions & { datasetId: string; filters?: DatasetTenancyFilters },
+  ): Promise<DatasetSnapshot> {
+    throw datasetSnapshotStorageError(
+      'DATASET_SNAPSHOT_UNSUPPORTED',
+      'This storage adapter does not support atomic dataset snapshot export',
+    );
+  }
+
+  protected async _doImportSnapshot(
+    _prepared: PreparedDatasetSnapshotImport,
+    _plan: DatasetSnapshotImportPlan,
+  ): Promise<DatasetSnapshotImportResult> {
+    throw datasetSnapshotStorageError(
+      'DATASET_SNAPSHOT_UNSUPPORTED',
+      'This storage adapter does not support atomic dataset snapshot import',
+    );
+  }
+
+  protected async _doGetSnapshotImport(_id: string): Promise<DatasetSnapshotImportResult | null> {
+    throw datasetSnapshotStorageError(
+      'DATASET_SNAPSHOT_UNSUPPORTED',
+      'This storage adapter does not support dataset snapshot receipts',
+    );
   }
 
   protected validateCallerDefinedDatasetId(id: string): void {

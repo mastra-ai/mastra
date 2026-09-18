@@ -6,6 +6,14 @@ import {
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_SNAPSHOT_IDENTITIES,
+  TABLE_DATASET_SNAPSHOT_IMPORTS,
+  captureDatasetSnapshot,
+  datasetSnapshotIdentityId,
+  datasetSnapshotDestinationExists,
+  datasetSnapshotStorageError,
+  verifyDatasetSnapshotImport,
+  verifyDatasetSnapshotReceipt,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   createStorageErrorId,
@@ -35,16 +43,28 @@ import type {
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
   DatasetTenancyFilters,
+  DatasetSnapshotExportOptions,
+  PreparedDatasetSnapshotImport,
+  DatasetSnapshotImportPlan,
+  DatasetSnapshotImportResult,
+  DatasetSnapshotImportReceipt,
+  DatasetSnapshotIdentityRecord,
 } from '@mastra/core/storage';
 
-import type { Collection } from 'mongodb';
+import type { ClientSession, Collection } from 'mongodb';
 
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { applyTenancyFilter } from '../utils';
 
-const MANAGED_COLLECTIONS = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
+const MANAGED_COLLECTIONS = [
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_SNAPSHOT_IDENTITIES,
+  TABLE_DATASET_SNAPSHOT_IMPORTS,
+] as const;
 
 export class MongoDBDatasetsStorage extends DatasetsStorage {
   #connector: MongoDBConnector;
@@ -64,10 +84,201 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     return this.#connector.getCollection(name);
   }
 
+  override readonly supportsSnapshotTransfer: boolean = true;
+
+  protected async validateSnapshotImportCapability(_prepared: PreparedDatasetSnapshotImport): Promise<void> {
+    if (!(await this.#connector.supportsTransactions())) {
+      throw datasetSnapshotStorageError(
+        'MONGODB_SNAPSHOT_REQUIRES_TRANSACTIONS',
+        'Dataset snapshot transfer requires MongoDB transaction support',
+      );
+    }
+    // Same-key arbitration relies on the receipt id being unique, so ensure the
+    // constraint exists even when the store was used without `init()`.
+    await this.ensureSnapshotUniqueIndexes();
+  }
+
+  private async ensureSnapshotUniqueIndexes(): Promise<void> {
+    // These are integrity constraints, not optional query-performance indexes.
+    for (const table of [TABLE_DATASET_SNAPSHOT_IDENTITIES, TABLE_DATASET_SNAPSHOT_IMPORTS]) {
+      const collection = await this.getCollection(table);
+      await collection.createIndex({ id: 1 }, { name: 'snapshot_id_unique', unique: true });
+    }
+  }
+
+  private async withSnapshotTransaction<T>(work: (session: ClientSession) => Promise<T>): Promise<T> {
+    return this.#connector.withTransaction(
+      session => {
+        if (!session)
+          throw datasetSnapshotStorageError(
+            'MONGODB_SNAPSHOT_REQUIRES_TRANSACTIONS',
+            'Dataset snapshot transfer requires MongoDB transaction support',
+          );
+        return work(session);
+      },
+      { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' }, readPreference: 'primary' },
+    );
+  }
+
+  private async snapshotState(
+    session: ClientSession,
+    datasetId: string,
+    version?: number,
+    filters?: DatasetTenancyFilters,
+  ) {
+    const datasets = await this.getCollection(TABLE_DATASETS);
+    const query: Record<string, unknown> = { id: datasetId, snapshotDeletionPending: { $ne: true } };
+    applyTenancyFilter(query, filters);
+    const row = await datasets.findOneAndUpdate(
+      query,
+      { $inc: { identityRevision: 1 } },
+      { session, returnDocument: 'after' },
+    );
+    if (!row) throw datasetSnapshotStorageError('DATASET_NOT_FOUND', 'Dataset not found or deletion is in progress');
+    const dataset = this.transformDatasetRow(row);
+    const selectedVersion = version ?? dataset.version;
+    const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
+    const items = await itemsCollection
+      .find(
+        {
+          datasetId,
+          datasetVersion: { $lte: selectedVersion },
+          $or: [{ validTo: null }, { validTo: { $gt: selectedVersion } }],
+          isDeleted: false,
+        },
+        { session },
+      )
+      .toArray();
+    const identityCollection = await this.getCollection(TABLE_DATASET_SNAPSHOT_IDENTITIES);
+    const rows = await identityCollection.find({ datasetId }, { session }).toArray();
+    const identities: DatasetSnapshotIdentityRecord[] = rows.map(identity => ({
+      id: identity.id,
+      datasetId: identity.datasetId,
+      itemId: identity.itemId,
+      portableId: identity.portableId,
+    }));
+    return { dataset, items: items.map(item => this.transformItemRow(item)), identities };
+  }
+
+  private async snapshotReceipt(session: ClientSession, id: string): Promise<DatasetSnapshotImportReceipt | null> {
+    const collection = await this.getCollection(TABLE_DATASET_SNAPSHOT_IMPORTS);
+    const row = await collection.findOne({ id }, { session });
+    return row?.receipt ?? null;
+  }
+
+  private async snapshotImportResult(
+    session: ClientSession,
+    receipt: DatasetSnapshotImportReceipt,
+  ): Promise<DatasetSnapshotImportResult> {
+    const datasets = await this.getCollection(TABLE_DATASETS);
+    const row = await datasets.findOne(
+      {
+        id: receipt.datasetId,
+        organizationId: receipt.organizationId,
+        projectId: receipt.projectId,
+        snapshotDeletionPending: { $ne: true },
+      },
+      { session },
+    );
+    const identities = await this.getCollection(TABLE_DATASET_SNAPSHOT_IDENTITIES);
+    const identity = await identities.findOne({ id: datasetSnapshotIdentityId(receipt.datasetId, null) }, { session });
+    return {
+      receipt,
+      datasetExists: datasetSnapshotDestinationExists(
+        receipt,
+        row ? this.transformDatasetRow(row) : null,
+        identity
+          ? { id: identity.id, datasetId: identity.datasetId, itemId: identity.itemId, portableId: identity.portableId }
+          : null,
+      ),
+    };
+  }
+
+  protected async _doExportSnapshot(
+    input: DatasetSnapshotExportOptions & { datasetId: string; filters?: DatasetTenancyFilters },
+  ) {
+    return this.withSnapshotTransaction(async session => {
+      const state = await this.snapshotState(session, input.datasetId, input.version, input.filters);
+      const captured = captureDatasetSnapshot({
+        ...state,
+        version: input.version ?? state.dataset.version,
+        options: { maxBytes: input.maxBytes },
+      });
+      if (captured.adopted.length) {
+        const identities = await this.getCollection(TABLE_DATASET_SNAPSHOT_IDENTITIES);
+        await identities.insertMany(
+          captured.adopted.map(identity => ({ ...identity })),
+          { session },
+        );
+      }
+      return captured.snapshot;
+    });
+  }
+
+  protected async _doImportSnapshot(
+    prepared: PreparedDatasetSnapshotImport,
+    plan: DatasetSnapshotImportPlan,
+  ): Promise<DatasetSnapshotImportResult> {
+    try {
+      return await this.withSnapshotTransaction(async session => {
+        const existing = await this.snapshotReceipt(session, prepared.receiptId);
+        if (existing) {
+          verifyDatasetSnapshotReceipt(existing, prepared);
+          return this.snapshotImportResult(session, existing);
+        }
+        const receipts = await this.getCollection(TABLE_DATASET_SNAPSHOT_IMPORTS);
+        await receipts.insertOne({ id: prepared.receiptId, receipt: plan.receipt }, { session });
+        const datasets = await this.getCollection(TABLE_DATASETS);
+        await datasets.insertOne({ ...plan.dataset }, { session, ignoreUndefined: true });
+        if (plan.items.length) {
+          const items = await this.getCollection(TABLE_DATASET_ITEMS);
+          await items.insertMany(
+            plan.items.map(item => ({ ...item })),
+            { session, ignoreUndefined: true },
+          );
+        }
+        if (plan.versionRecord) {
+          const versions = await this.getCollection(TABLE_DATASET_VERSIONS);
+          await versions.insertOne({ ...plan.versionRecord }, { session });
+        }
+        const identities = await this.getCollection(TABLE_DATASET_SNAPSHOT_IDENTITIES);
+        await identities.insertMany(
+          plan.identities.map(identity => ({ ...identity })),
+          { session },
+        );
+        verifyDatasetSnapshotImport(plan, await this.snapshotState(session, plan.dataset.id));
+        // The claim already stored the complete receipt; it becomes visible at commit.
+        return { receipt: plan.receipt, datasetExists: true };
+      });
+    } catch (error) {
+      // A concurrent unique-key winner can surface as a duplicate-key error, not
+      // a retryable transaction error. Read its committed receipt in a new snapshot.
+      if (!hasErrorCode(error, new Set([11000]))) throw error;
+      return this.withSnapshotTransaction(async session => {
+        const receipt = await this.snapshotReceipt(session, prepared.receiptId);
+        if (!receipt) throw error;
+        verifyDatasetSnapshotReceipt(receipt, prepared);
+        return this.snapshotImportResult(session, receipt);
+      });
+    }
+  }
+
+  protected async _doGetSnapshotImport(id: string): Promise<DatasetSnapshotImportResult | null> {
+    return this.withSnapshotTransaction(async session => {
+      const receipt = await this.snapshotReceipt(session, id);
+      return receipt ? this.snapshotImportResult(session, receipt) : null;
+    });
+  }
+
   // --- Index management ---
 
   getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
     return [
+      {
+        collection: TABLE_DATASET_SNAPSHOT_IDENTITIES,
+        keys: { datasetId: 1 },
+        options: { name: 'idx_snapshot_identities_dataset' },
+      },
       { collection: TABLE_DATASETS, keys: { id: 1 }, options: { name: 'idx_datasets_id', unique: true } },
       { collection: TABLE_DATASETS, keys: { createdAt: -1, id: 1 }, options: { name: 'idx_datasets_createdat_id' } },
       {
@@ -153,6 +364,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
   }
 
   async init(): Promise<void> {
+    await this.ensureSnapshotUniqueIndexes();
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -358,7 +570,13 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const datasetsCollectionForGate = await this.getCollection(TABLE_DATASETS);
       const gateQuery: Record<string, any> = { id };
       applyTenancyFilter(gateQuery, filters);
-      const gateHit = await datasetsCollectionForGate.findOne(gateQuery, { projection: { id: 1 } });
+      // Exclude snapshots before beginning the intentionally nontransactional cascade.
+      // Leave this marker on failure so a retry can finish deletion without exporting partial contents.
+      const gateHit = await datasetsCollectionForGate.findOneAndUpdate(
+        gateQuery,
+        { $set: { snapshotDeletionPending: true } },
+        { projection: { id: 1 }, returnDocument: 'after' },
+      );
       if (!gateHit) return;
 
       // Detach experiments — tolerate missing collections (NamespaceNotFound)
@@ -394,6 +612,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       await versionsCollection.deleteMany({ datasetId: id });
       await itemsCollection.deleteMany({ datasetId: id });
+      const identities = await this.getCollection(TABLE_DATASET_SNAPSHOT_IDENTITIES);
+      await identities.deleteMany({ datasetId: id });
       const parentDeleteQuery: Record<string, any> = { id };
       applyTenancyFilter(parentDeleteQuery, filters);
       await datasetsCollection.deleteOne(parentDeleteQuery);
@@ -840,7 +1060,15 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const purgedAt = new Date().toISOString();
       const metadata = { __purged: true, purgedAt };
 
+      const datasetsCollection = await this.getCollection(TABLE_DATASETS);
+      const identitiesCollection = await this.getCollection(TABLE_DATASET_SNAPSHOT_IDENTITIES);
       await this.#connector.withTransaction(async session => {
+        const dataset = await datasetsCollection.findOneAndUpdate(
+          { id: datasetId },
+          { $inc: { identityRevision: 1 } },
+          { session, projection: { id: 1 } },
+        );
+        if (!dataset) return;
         const item = await itemsCollection.findOneAndUpdate(
           { id, datasetId },
           { $inc: { purgeBarrierRevision: 1 } },
@@ -870,6 +1098,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           },
           { session },
         );
+        await identitiesCollection.deleteOne({ id: datasetSnapshotIdentityId(datasetId, id) }, { session });
         if (experimentCollectionsExist) {
           const experimentIds = await experimentsCollection
             .find({ datasetId }, { projection: { id: 1 }, session })
@@ -1370,7 +1599,11 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
     const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
 
+    const identitiesCollection = await this.getCollection(TABLE_DATASET_SNAPSHOT_IDENTITIES);
+    const importsCollection = await this.getCollection(TABLE_DATASET_SNAPSHOT_IMPORTS);
     const results = await Promise.allSettled([
+      identitiesCollection.deleteMany({}),
+      importsCollection.deleteMany({}),
       datasetsCollection.deleteMany({}),
       itemsCollection.deleteMany({}),
       versionsCollection.deleteMany({}),

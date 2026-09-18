@@ -8,6 +8,7 @@ import type { DatasetTenancyFilters, TargetType } from '../storage/types.js';
 import { Dataset } from './dataset.js';
 import { compareExperiments as compareExperimentsInternal } from './experiment/analytics/compare.js';
 import { deleteExperimentTraces } from './experiment-traces.js';
+import type { DatasetSnapshotImportOptions } from './snapshot-transfer.js';
 
 /**
  * Build a {@link DatasetTenancyFilters} from public manager args. Returns
@@ -96,6 +97,72 @@ export class DatasetsManager {
 
     this.#experimentsStore = store;
     return store;
+  }
+
+  /** Validate an artifact and report references unavailable in this Mastra instance, without writing data. */
+  async preflightSnapshot(input: DatasetSnapshotImportOptions & { snapshot: string }) {
+    const store = await this.#getDatasetsStore();
+    return this.#checkSnapshotReferences(store.describeSnapshotImport(await store.prepareSnapshotImport(input)));
+  }
+
+  /** Registered keys and ids for one target type. Registry keys are valid references too. */
+  #registeredIds(targetType: TargetType | null | undefined): Set<string> {
+    const registry: Record<string, { id?: string; name?: string }> | undefined =
+      targetType === 'agent'
+        ? this.#mastra.listAgents()
+        : targetType === 'workflow'
+          ? this.#mastra.listWorkflows()
+          : targetType === 'scorer'
+            ? this.#mastra.listScorers()
+            : targetType === 'processor'
+              ? this.#mastra.listProcessors()
+              : undefined;
+    return new Set(
+      Object.entries(registry ?? {}).flatMap(([key, entry]) =>
+        [key, entry.id, entry.name].filter((value): value is string => typeof value === 'string'),
+      ),
+    );
+  }
+
+  #checkSnapshotReferences(report: ReturnType<DatasetsStorage['describeSnapshotImport']>) {
+    const targetIds = this.#registeredIds(report.targetType);
+    const scorerIds = this.#registeredIds('scorer');
+    const errors: Array<{ kind: 'target' | 'scorer'; id: string }> = [
+      ...report.targetIds.filter(id => !targetIds.has(id)).map(id => ({ kind: 'target' as const, id })),
+      ...report.scorerIds.filter(id => !scorerIds.has(id)).map(id => ({ kind: 'scorer' as const, id })),
+    ];
+    return { ...report, canImport: errors.length === 0, errors };
+  }
+
+  /** Atomically create a new dataset, or recover the original outcome for an already completed request. */
+  async importSnapshot(input: DatasetSnapshotImportOptions & { snapshot: string }) {
+    // Copy the request before the first await so a caller cannot mutate mappings after the
+    // reference check. The artifact is parsed exactly once, by `prepareSnapshotImport`.
+    const request = structuredClone(input);
+    const store = await this.#getDatasetsStore();
+    const prepared = await store.prepareSnapshotImport(request);
+    const report = this.#checkSnapshotReferences(store.describeSnapshotImport(prepared));
+    const existing = await store.getSnapshotImport({ idempotencyKey: request.idempotencyKey, ...report.destination });
+    if (!existing && !report.canImport) {
+      throw new MastraError({
+        id: 'DATASET_SNAPSHOT_UNRESOLVED_REFERENCES',
+        domain: 'STORAGE',
+        category: 'USER',
+        text: 'Snapshot target or scorer references are unavailable in the destination. Register them or provide explicit mappings.',
+        details: { missingReferences: report.errors.length },
+      });
+    }
+    return store.importPreparedSnapshot(prepared);
+  }
+
+  /** Look up a completed import without requiring its targets or scorers to remain registered. */
+  async getSnapshotImport(input: {
+    idempotencyKey: string;
+    organizationId?: string | null;
+    projectId?: string | null;
+  }) {
+    const store = await this.#getDatasetsStore();
+    return store.getSnapshotImport(input);
   }
 
   // ---------------------------------------------------------------------------

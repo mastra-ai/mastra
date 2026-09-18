@@ -4,6 +4,16 @@ import {
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_SNAPSHOT_IDENTITIES,
+  TABLE_DATASET_SNAPSHOT_IMPORTS,
+  TABLE_SCHEMAS,
+  captureDatasetSnapshot,
+  datasetSnapshotIdentityId,
+  datasetSnapshotRecordEntries,
+  datasetSnapshotDestinationExists,
+  datasetSnapshotStorageError,
+  verifyDatasetSnapshotImport,
+  verifyDatasetSnapshotReceipt,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   DATASETS_SCHEMA,
@@ -37,11 +47,18 @@ import type {
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
   DatasetTenancyFilters,
+  DatasetSnapshotExportOptions,
+  PreparedDatasetSnapshotImport,
+  DatasetSnapshotImportPlan,
+  DatasetSnapshotImportResult,
+  DatasetSnapshotImportReceipt,
+  DatasetSnapshotIdentityRecord,
+  TABLE_NAMES,
 } from '@mastra/core/storage';
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
+import type { SqliteClient as Client, SqliteInValue as InValue, SqliteTransaction } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
 import { tenancyWhere } from '../utils';
@@ -67,11 +84,173 @@ export class DatasetsLibSQL extends DatasetsStorage {
     this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
   }
 
+  override readonly supportsSnapshotTransfer: boolean = true;
+
+  private async withSnapshotTransaction<T>(
+    work: (tx: SqliteTransaction) => Promise<T>,
+    mode: 'write' | 'read' = 'write',
+  ): Promise<T> {
+    const run = async () => {
+      const tx = await this.#client.transaction(mode);
+      try {
+        const result = await work(tx);
+        await tx.commit();
+        return result;
+      } catch (error) {
+        if (!tx.closed) await tx.rollback();
+        throw error;
+      } finally {
+        tx.close();
+      }
+    };
+    // Reads get one consistent WAL snapshot without queueing behind an open writer.
+    return this.#db.executeWriteOperationWithRetry(
+      () => (mode === 'write' ? withClientWriteLock(this.#client, run) : run()),
+      'dataset snapshot transaction',
+    );
+  }
+
+  private async insertSnapshotRecord(tx: SqliteTransaction, table: TABLE_NAMES, record: object): Promise<void> {
+    const entries = datasetSnapshotRecordEntries(table, record);
+    const args: InValue[] = entries.map(([, value, type]) => {
+      if (type === 'jsonb') return jsonDataArg(value);
+      if (value === null) return null;
+      if (value instanceof Date) return value.toISOString();
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+      throw datasetSnapshotStorageError('DATASET_SNAPSHOT_INVALID_STORAGE_VALUE', 'Invalid snapshot storage value');
+    });
+    await tx.execute({
+      sql: `INSERT INTO "${table}" (${entries.map(([column]) => `"${column}"`).join(',')}) VALUES (${entries.map(([, , type]) => (type === 'jsonb' ? 'jsonb(?)' : '?')).join(',')})`,
+      args,
+    });
+  }
+
+  private async snapshotIdentities(tx: SqliteTransaction, datasetId: string): Promise<DatasetSnapshotIdentityRecord[]> {
+    const result = await tx.execute({
+      sql: `SELECT * FROM ${TABLE_DATASET_SNAPSHOT_IDENTITIES} WHERE datasetId = ?`,
+      args: [datasetId],
+    });
+    return result.rows.map(row => ({
+      id: String(row.id),
+      datasetId: String(row.datasetId),
+      itemId: row.itemId === null ? null : String(row.itemId),
+      portableId: String(row.portableId),
+    }));
+  }
+
+  private async snapshotState(
+    tx: SqliteTransaction,
+    datasetId: string,
+    version?: number,
+    filters?: DatasetTenancyFilters,
+  ) {
+    const { conditions, params } = tenancyWhere(filters);
+    const result = await tx.execute({
+      sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} WHERE ${['id = ?', ...conditions].join(' AND ')}`,
+      args: [datasetId, ...params],
+    });
+    if (!result.rows[0]) throw datasetSnapshotStorageError('DATASET_NOT_FOUND', 'Dataset not found');
+    const dataset = this.transformDatasetRow(result.rows[0]);
+    const selectedVersion = version ?? dataset.version;
+    const itemResult = await tx.execute({
+      sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ? AND datasetVersion <= ? AND (validTo IS NULL OR validTo > ?) AND isDeleted = 0`,
+      args: [datasetId, selectedVersion, selectedVersion],
+    });
+    return {
+      dataset,
+      items: itemResult.rows.map(row => this.transformItemRow(row)),
+      identities: await this.snapshotIdentities(tx, datasetId),
+    };
+  }
+
+  private async snapshotReceipt(tx: SqliteTransaction, id: string): Promise<DatasetSnapshotImportReceipt | null> {
+    const result = await tx.execute({
+      sql: `SELECT json(receipt) AS receipt FROM ${TABLE_DATASET_SNAPSHOT_IMPORTS} WHERE id = ?`,
+      args: [id],
+    });
+    return result.rows[0] ? JSON.parse(String(result.rows[0].receipt)) : null;
+  }
+
+  private async snapshotImportResult(
+    tx: SqliteTransaction,
+    receipt: DatasetSnapshotImportReceipt,
+  ): Promise<DatasetSnapshotImportResult> {
+    const datasetResult = await tx.execute({
+      sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} WHERE id = ? AND organizationId IS ? AND projectId IS ?`,
+      args: [receipt.datasetId, receipt.organizationId, receipt.projectId],
+    });
+    const dataset = datasetResult.rows[0] ? this.transformDatasetRow(datasetResult.rows[0]) : null;
+    const identityResult = await tx.execute({
+      sql: `SELECT * FROM ${TABLE_DATASET_SNAPSHOT_IDENTITIES} WHERE id = ?`,
+      args: [datasetSnapshotIdentityId(receipt.datasetId, null)],
+    });
+    const row = identityResult.rows[0];
+    const identity = row
+      ? { id: String(row.id), datasetId: String(row.datasetId), itemId: null, portableId: String(row.portableId) }
+      : null;
+    return { receipt, datasetExists: datasetSnapshotDestinationExists(receipt, dataset, identity) };
+  }
+
+  protected async _doExportSnapshot(
+    input: DatasetSnapshotExportOptions & { datasetId: string; filters?: DatasetTenancyFilters },
+  ) {
+    return this.withSnapshotTransaction(async tx => {
+      const state = await this.snapshotState(tx, input.datasetId, input.version, input.filters);
+      const captured = captureDatasetSnapshot({
+        ...state,
+        version: input.version ?? state.dataset.version,
+        options: { maxBytes: input.maxBytes },
+      });
+      for (const identity of captured.adopted)
+        await this.insertSnapshotRecord(tx, TABLE_DATASET_SNAPSHOT_IDENTITIES, identity);
+      return captured.snapshot;
+    });
+  }
+
+  protected async _doImportSnapshot(
+    prepared: PreparedDatasetSnapshotImport,
+    plan: DatasetSnapshotImportPlan,
+  ): Promise<DatasetSnapshotImportResult> {
+    return this.withSnapshotTransaction(async tx => {
+      const existing = await this.snapshotReceipt(tx, prepared.receiptId);
+      if (existing) {
+        verifyDatasetSnapshotReceipt(existing, prepared);
+        return this.snapshotImportResult(tx, existing);
+      }
+      await this.insertSnapshotRecord(tx, TABLE_DATASETS, plan.dataset);
+      for (const item of plan.items) await this.insertSnapshotRecord(tx, TABLE_DATASET_ITEMS, item);
+      if (plan.versionRecord) await this.insertSnapshotRecord(tx, TABLE_DATASET_VERSIONS, plan.versionRecord);
+      for (const identity of plan.identities)
+        await this.insertSnapshotRecord(tx, TABLE_DATASET_SNAPSHOT_IDENTITIES, identity);
+      verifyDatasetSnapshotImport(plan, await this.snapshotState(tx, plan.dataset.id));
+      await this.insertSnapshotRecord(tx, TABLE_DATASET_SNAPSHOT_IMPORTS, {
+        id: plan.receipt.id,
+        receipt: plan.receipt,
+      });
+      return { receipt: plan.receipt, datasetExists: true };
+    });
+  }
+
+  protected async _doGetSnapshotImport(id: string): Promise<DatasetSnapshotImportResult | null> {
+    return this.withSnapshotTransaction(async tx => {
+      const receipt = await this.snapshotReceipt(tx, id);
+      return receipt ? this.snapshotImportResult(tx, receipt) : null;
+    }, 'read');
+  }
+
   async init(): Promise<void> {
     // T3.23 — NO item_versions table
     await this.#db.createTable({ tableName: TABLE_DATASETS, schema: DATASETS_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_DATASET_ITEMS, schema: DATASET_ITEMS_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_DATASET_VERSIONS, schema: DATASET_VERSIONS_SCHEMA });
+    await this.#db.createTable({
+      tableName: TABLE_DATASET_SNAPSHOT_IDENTITIES,
+      schema: TABLE_SCHEMAS[TABLE_DATASET_SNAPSHOT_IDENTITIES],
+    });
+    await this.#db.createTable({
+      tableName: TABLE_DATASET_SNAPSHOT_IMPORTS,
+      schema: TABLE_SCHEMAS[TABLE_DATASET_SNAPSHOT_IMPORTS],
+    });
 
     // Migrate: add new columns to existing tables
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'requestContextSchema', 'TEXT');
@@ -113,6 +292,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
           args: [],
         },
         {
+          sql: `CREATE INDEX IF NOT EXISTS idx_dataset_snapshot_identities_dataset ON "${TABLE_DATASET_SNAPSHOT_IDENTITIES}" ("datasetId")`,
+          args: [],
+        },
+        {
           sql: `CREATE INDEX IF NOT EXISTS idx_dataset_versions_dataset_version ON "${TABLE_DATASET_VERSIONS}" ("datasetId", "version")`,
           args: [],
         },
@@ -145,6 +328,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_DATASET_SNAPSHOT_IMPORTS });
+    await this.#db.deleteData({ tableName: TABLE_DATASET_SNAPSHOT_IDENTITIES });
     await this.#db.deleteData({ tableName: TABLE_DATASET_VERSIONS });
     await this.#db.deleteData({ tableName: TABLE_DATASET_ITEMS });
     await this.#db.deleteData({ tableName: TABLE_DATASETS });
@@ -468,6 +653,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
           args: [id],
         });
       }
+      statements.push({
+        sql: `DELETE FROM ${TABLE_DATASET_SNAPSHOT_IDENTITIES} WHERE datasetId = ? AND EXISTS (SELECT 1 FROM ${TABLE_DATASETS} WHERE ${scopedWhere})`,
+        args: [id, id, ...params],
+      });
       statements.push({ sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] });
       statements.push({ sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] });
       statements.push({ sql: `DELETE FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`, args: [id, ...params] });
@@ -892,6 +1081,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
           await tx.execute({
             sql: `UPDATE ${TABLE_DATASET_ITEMS} SET input = jsonb('null'), groundTruth = NULL, expectedTrajectory = NULL, toolMocks = NULL, unmockedToolPolicy = NULL, scorerIds = NULL, requestContext = NULL, metadata = jsonb(?), source = NULL WHERE id = ? AND datasetId = ?`,
             args: [purgedMetadata, id, datasetId],
+          });
+          await tx.execute({
+            sql: `DELETE FROM ${TABLE_DATASET_SNAPSHOT_IDENTITIES} WHERE id = ?`,
+            args: [datasetSnapshotIdentityId(datasetId, id)],
           });
 
           if (experimentTablesExist) {

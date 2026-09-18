@@ -17,6 +17,10 @@ import type {
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_SNAPSHOT_IDENTITIES,
+  TABLE_DATASET_SNAPSHOT_IMPORTS,
+  DatasetSnapshotIdentityRecord,
+  DatasetSnapshotImportReceipt,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_PROMPT_BLOCKS,
@@ -156,6 +160,8 @@ export type RecordTypes = {
   [TABLE_DATASETS]: Record<string, any>;
   [TABLE_DATASET_ITEMS]: Record<string, any>;
   [TABLE_DATASET_VERSIONS]: Record<string, any>;
+  [TABLE_DATASET_SNAPSHOT_IDENTITIES]: DatasetSnapshotIdentityRecord;
+  [TABLE_DATASET_SNAPSHOT_IMPORTS]: { id: string; receipt: DatasetSnapshotImportReceipt };
   [TABLE_EXPERIMENTS]: Record<string, any>;
   [TABLE_EXPERIMENT_RESULTS]: Record<string, any>;
   [TABLE_PROMPT_BLOCKS]: StoragePromptBlockType;

@@ -4,6 +4,15 @@ import {
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_SNAPSHOT_IDENTITIES,
+  TABLE_DATASET_SNAPSHOT_IMPORTS,
+  captureDatasetSnapshot,
+  datasetSnapshotIdentityId,
+  datasetSnapshotRecordEntries,
+  datasetSnapshotDestinationExists,
+  datasetSnapshotStorageError,
+  verifyDatasetSnapshotImport,
+  verifyDatasetSnapshotReceipt,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_CONFIGS,
@@ -40,6 +49,13 @@ import type {
   CreateIndexOptions,
   TargetType,
   DatasetTenancyFilters,
+  DatasetSnapshotExportOptions,
+  PreparedDatasetSnapshotImport,
+  DatasetSnapshotImportPlan,
+  DatasetSnapshotImportResult,
+  DatasetSnapshotImportReceipt,
+  DatasetSnapshotIdentityRecord,
+  TABLE_NAMES,
 } from '@mastra/core/storage';
 import type { TxClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
@@ -87,7 +103,15 @@ export class DatasetsPG extends DatasetsStorage {
   #skipDefaultIndexes?: boolean;
   #indexes?: CreateIndexOptions[];
 
-  static readonly MANAGED_TABLES = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
+  override readonly supportsSnapshotTransfer: boolean = true;
+
+  static readonly MANAGED_TABLES = [
+    TABLE_DATASETS,
+    TABLE_DATASET_ITEMS,
+    TABLE_DATASET_VERSIONS,
+    TABLE_DATASET_SNAPSHOT_IDENTITIES,
+    TABLE_DATASET_SNAPSHOT_IMPORTS,
+  ] as const;
 
   constructor(config: PgDomainConfig) {
     super();
@@ -96,6 +120,122 @@ export class DatasetsPG extends DatasetsStorage {
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (DatasetsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  private snapshotTable(table: TABLE_NAMES): string {
+    return getTableName({ indexName: table, schemaName: getSchemaName(this.#schema) });
+  }
+
+  private async insertSnapshotRecord(tx: TxClient, table: TABLE_NAMES, record: object): Promise<void> {
+    const entries = datasetSnapshotRecordEntries(table, record);
+    for (const [column, value, type] of [...entries]) {
+      if (type === 'timestamp') entries.push([`${column}Z`, value, type]);
+    }
+    const values = entries.map(([, value, type]) =>
+      type === 'jsonb' ? jsonDataArg(value) : value instanceof Date ? value.toISOString() : value,
+    );
+    await tx.none(
+      `INSERT INTO ${this.snapshotTable(table)} (${entries.map(([column]) => `"${column}"`).join(', ')}) VALUES (${entries.map((_, index) => `$${index + 1}`).join(', ')})`,
+      values,
+    );
+  }
+
+  private async snapshotState(tx: TxClient, datasetId: string, version?: number, filters?: DatasetTenancyFilters) {
+    const { conditions, params } = tenancyWhere(filters, 2);
+    const row = await tx.oneOrNone<Record<string, unknown>>(
+      `SELECT * FROM ${this.snapshotTable(TABLE_DATASETS)} WHERE ${['id = $1', ...conditions].join(' AND ')} FOR UPDATE`,
+      [datasetId, ...params],
+    );
+    if (!row) throw datasetSnapshotStorageError('DATASET_NOT_FOUND', 'Dataset not found');
+    const dataset = this.transformDatasetRow(row);
+    const selectedVersion = version ?? dataset.version;
+    const items = await tx.any<Record<string, unknown>>(
+      `SELECT ${ITEM_SELECT_COLUMNS} FROM ${this.snapshotTable(TABLE_DATASET_ITEMS)} WHERE "datasetId" = $1 AND "datasetVersion" <= $2 AND ("validTo" IS NULL OR "validTo" > $2) AND "isDeleted" = FALSE`,
+      [datasetId, selectedVersion],
+    );
+    const identities = await tx.any<DatasetSnapshotIdentityRecord>(
+      `SELECT * FROM ${this.snapshotTable(TABLE_DATASET_SNAPSHOT_IDENTITIES)} WHERE "datasetId" = $1`,
+      [datasetId],
+    );
+    return { dataset, items: items.map(item => this.transformItemRow(item)), identities };
+  }
+
+  private async snapshotReceipt(tx: TxClient, id: string): Promise<DatasetSnapshotImportReceipt | null> {
+    const row = await tx.oneOrNone<{ receipt: DatasetSnapshotImportReceipt }>(
+      `SELECT receipt FROM ${this.snapshotTable(TABLE_DATASET_SNAPSHOT_IMPORTS)} WHERE id = $1`,
+      [id],
+    );
+    return row?.receipt ?? null;
+  }
+
+  private async snapshotImportResult(
+    tx: TxClient,
+    receipt: DatasetSnapshotImportReceipt,
+  ): Promise<DatasetSnapshotImportResult> {
+    const row = await tx.oneOrNone<Record<string, unknown>>(
+      `SELECT * FROM ${this.snapshotTable(TABLE_DATASETS)} WHERE id = $1 AND "organizationId" IS NOT DISTINCT FROM $2 AND "projectId" IS NOT DISTINCT FROM $3 FOR UPDATE`,
+      [receipt.datasetId, receipt.organizationId, receipt.projectId],
+    );
+    const identity = await tx.oneOrNone<DatasetSnapshotIdentityRecord>(
+      `SELECT * FROM ${this.snapshotTable(TABLE_DATASET_SNAPSHOT_IDENTITIES)} WHERE id = $1`,
+      [datasetSnapshotIdentityId(receipt.datasetId, null)],
+    );
+    return {
+      receipt,
+      datasetExists: datasetSnapshotDestinationExists(receipt, row ? this.transformDatasetRow(row) : null, identity),
+    };
+  }
+
+  protected async _doExportSnapshot(
+    input: DatasetSnapshotExportOptions & { datasetId: string; filters?: DatasetTenancyFilters },
+  ) {
+    return this.#db.client.tx(async tx => {
+      const state = await this.snapshotState(tx, input.datasetId, input.version, input.filters);
+      const captured = captureDatasetSnapshot({
+        ...state,
+        version: input.version ?? state.dataset.version,
+        options: { maxBytes: input.maxBytes },
+      });
+      for (const identity of captured.adopted)
+        await this.insertSnapshotRecord(tx, TABLE_DATASET_SNAPSHOT_IDENTITIES, identity);
+      return captured.snapshot;
+    });
+  }
+
+  protected async _doImportSnapshot(
+    prepared: PreparedDatasetSnapshotImport,
+    plan: DatasetSnapshotImportPlan,
+  ): Promise<DatasetSnapshotImportResult> {
+    return this.#db.client.tx(async tx => {
+      // The receipt's unique key serializes imports before a destination dataset exists.
+      // A competing INSERT waits for commit; a failed import rolls its claim back too.
+      const claim = await tx.oneOrNone<{ id: string }>(
+        `INSERT INTO ${this.snapshotTable(TABLE_DATASET_SNAPSHOT_IMPORTS)} (id, receipt) VALUES ($1, $2::jsonb) ON CONFLICT (id) DO NOTHING RETURNING id`,
+        [prepared.receiptId, JSON.stringify(plan.receipt)],
+      );
+      if (!claim) {
+        const existing = await this.snapshotReceipt(tx, prepared.receiptId);
+        if (!existing)
+          throw datasetSnapshotStorageError('DATASET_SNAPSHOT_RECEIPT_NOT_FOUND', 'Snapshot import receipt not found');
+        verifyDatasetSnapshotReceipt(existing, prepared);
+        return this.snapshotImportResult(tx, existing);
+      }
+      await this.insertSnapshotRecord(tx, TABLE_DATASETS, plan.dataset);
+      for (const item of plan.items) await this.insertSnapshotRecord(tx, TABLE_DATASET_ITEMS, item);
+      if (plan.versionRecord) await this.insertSnapshotRecord(tx, TABLE_DATASET_VERSIONS, plan.versionRecord);
+      for (const identity of plan.identities)
+        await this.insertSnapshotRecord(tx, TABLE_DATASET_SNAPSHOT_IDENTITIES, identity);
+      verifyDatasetSnapshotImport(plan, await this.snapshotState(tx, plan.dataset.id));
+      // The claim already stored the complete receipt; it becomes visible at commit.
+      return { receipt: plan.receipt, datasetExists: true };
+    });
+  }
+
+  protected async _doGetSnapshotImport(id: string): Promise<DatasetSnapshotImportResult | null> {
+    return this.#db.client.tx(async tx => {
+      const receipt = await this.snapshotReceipt(tx, id);
+      return receipt ? this.snapshotImportResult(tx, receipt) : null;
+    });
   }
 
   static getExportDDL(schemaName?: string): string[] {
@@ -122,6 +262,14 @@ export class DatasetsPG extends DatasetsStorage {
       compositePrimaryKey: TABLE_CONFIGS[TABLE_DATASET_ITEMS]?.compositePrimaryKey,
     });
     await this.#db.createTable({ tableName: TABLE_DATASET_VERSIONS, schema: DATASET_VERSIONS_SCHEMA });
+    await this.#db.createTable({
+      tableName: TABLE_DATASET_SNAPSHOT_IDENTITIES,
+      schema: TABLE_SCHEMAS[TABLE_DATASET_SNAPSHOT_IDENTITIES],
+    });
+    await this.#db.createTable({
+      tableName: TABLE_DATASET_SNAPSHOT_IMPORTS,
+      schema: TABLE_SCHEMAS[TABLE_DATASET_SNAPSHOT_IMPORTS],
+    });
 
     // Migrate: add new columns to existing tables
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'requestContextSchema', 'JSONB');
@@ -160,6 +308,11 @@ export class DatasetsPG extends DatasetsStorage {
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
     return [
+      {
+        name: 'idx_dataset_snapshot_identities_dataset',
+        table: TABLE_DATASET_SNAPSHOT_IDENTITIES,
+        columns: ['datasetId'],
+      },
       { name: 'idx_dataset_items_dataset_validto', table: TABLE_DATASET_ITEMS, columns: ['datasetId', 'validTo'] },
       {
         name: 'idx_dataset_items_dataset_version',
@@ -570,6 +723,9 @@ export class DatasetsPG extends DatasetsStorage {
           );
         }
 
+        await t.none(`DELETE FROM ${this.snapshotTable(TABLE_DATASET_SNAPSHOT_IDENTITIES)} WHERE "datasetId" = $1`, [
+          id,
+        ]);
         await t.none(`DELETE FROM ${versionsTable} WHERE "datasetId" = $1`, [id]);
         await t.none(`DELETE FROM ${itemsTable} WHERE "datasetId" = $1`, [id]);
         await t.none(`DELETE FROM ${datasetsTable} WHERE ${scopedWhere}`, [id, ...params]);
@@ -992,6 +1148,9 @@ export class DatasetsPG extends DatasetsStorage {
           `UPDATE ${itemsTable} SET "input" = 'null'::jsonb, "groundTruth" = NULL, "expectedTrajectory" = NULL, "toolMocks" = NULL, "unmockedToolPolicy" = NULL, "scorerIds" = NULL, "requestContext" = NULL, "metadata" = $2::jsonb, "source" = NULL WHERE "id" = $1 AND "datasetId" = $3`,
           [id, purgedMetadata, datasetId],
         );
+        await t.none(`DELETE FROM ${this.snapshotTable(TABLE_DATASET_SNAPSHOT_IDENTITIES)} WHERE id = $1`, [
+          datasetSnapshotIdentityId(datasetId, id),
+        ]);
 
         const experimentTablesExist = await t.one<{ exists: boolean }>(
           `SELECT to_regclass($1) IS NOT NULL AND to_regclass($2) IS NOT NULL AS exists`,
@@ -1464,6 +1623,8 @@ export class DatasetsPG extends DatasetsStorage {
   // --- Clear ---
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_DATASET_SNAPSHOT_IMPORTS });
+    await this.#db.clearTable({ tableName: TABLE_DATASET_SNAPSHOT_IDENTITIES });
     await this.#db.clearTable({ tableName: TABLE_DATASET_VERSIONS });
     await this.#db.clearTable({ tableName: TABLE_DATASET_ITEMS });
     await this.#db.clearTable({ tableName: TABLE_DATASETS });
