@@ -46,8 +46,9 @@ const WORKFLOW_SNAPSHOT_STATUS_INDEX = 'mastra_workflow_snapshot_name_status_cre
  * Schema-prefixed name of the status index, lowercased and truncated the same way Postgres
  * stores it, so the init snapshot's index set answers "does it exist?" without a probe or a
  * no-op `CREATE INDEX` (schema-prefixed names routinely exceed the 63-byte limit).
+ * Exported for tests.
  */
-function workflowSnapshotStatusIndexName(schemaName?: string): string {
+export function workflowSnapshotStatusIndexName(schemaName?: string): string {
   return buildConstraintName({
     baseName: WORKFLOW_SNAPSHOT_STATUS_INDEX,
     schemaName: schemaName && schemaName !== 'public' ? schemaName : undefined,
@@ -66,11 +67,21 @@ function workflowSnapshotStatusIndexSQL(indexName: string, schemaName?: string):
 /** Base name (before any schema prefix) of the expression index backing the threadId filter. */
 const WORKFLOW_SNAPSHOT_THREAD_ID_INDEX = 'mastra_workflow_snapshot_threadid_idx';
 
-/** Schema-prefixed name of the threadId index (see workflowSnapshotStatusIndexName). */
-function workflowSnapshotThreadIdIndexName(schemaName?: string): string {
+/**
+ * Schema-prefixed name of the threadId index (see workflowSnapshotStatusIndexName).
+ *
+ * Unlike the status index, truncation appends a collision hash: both index names share the
+ * long `<schema>_mastra_workflow_snapshot_` prefix, so with a schema name of 37+ bytes plain
+ * truncation collapses them to the same 63-byte identifier and `CREATE INDEX IF NOT EXISTS`
+ * silently skips this index. The status index keeps plain truncation because its truncated
+ * name already exists in deployed catalogs; this index is new and free to adopt the rule.
+ * Exported for tests.
+ */
+export function workflowSnapshotThreadIdIndexName(schemaName?: string): string {
   return buildConstraintName({
     baseName: WORKFLOW_SNAPSHOT_THREAD_ID_INDEX,
     schemaName: schemaName && schemaName !== 'public' ? schemaName : undefined,
+    hashWhenTruncated: true,
   });
 }
 
