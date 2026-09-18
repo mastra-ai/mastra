@@ -19,7 +19,7 @@ await sandbox.executeCommand('/bin/sh', ['-c', 'rg -n "pattern" --files-with-mat
 
 ```ts
 // opt-in: close stdin on a spawned process
-const handle = await sandbox.processes.spawn('node', ['server.js'], { stdinMode: 'ignore' });
+const handle = await sandbox.processes.spawn('node server.js', { stdinMode: 'ignore' });
 ```
 
 Run-to-completion spawns (`executeCommand()` and `execute_command` with `background: true`) pass this option automatically.
