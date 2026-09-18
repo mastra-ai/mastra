@@ -70,7 +70,6 @@ function createMockEctx(): EventHandlerContext {
     renderTaskDeltaInline: vi.fn(),
     addUserMessage: vi.fn(),
     updateStatusLine: vi.fn(),
-    addUserMessage: vi.fn(),
     addChildBeforeFollowUps: vi.fn(),
   } as unknown as EventHandlerContext;
 }
