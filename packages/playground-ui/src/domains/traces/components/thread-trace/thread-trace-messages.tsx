@@ -52,11 +52,14 @@ export type ThreadTraceMessagesHeaderProps = DataPanelHeaderProps;
 
 /**
  * The bordered tab row at the top of the messages column, same chrome as the trace panel's side
- * column. It bleeds over the column's right gutter so its border reaches the column's right border
- * and continues into the details header's border as one line.
+ * column. It bleeds over the row's rail gutter on the left and the column's gutter on the right so
+ * its border runs from the panel edge to the column's right border, continuing into the details
+ * header's border as one line.
  */
 export function ThreadTraceMessagesHeader({ className, ...props }: ThreadTraceMessagesHeaderProps) {
-  return <DataPanel.Header className={cn('-mr-4 w-auto border-b border-border1', className)} {...props} />;
+  return (
+    <DataPanel.Header className={cn('-mr-4 -ml-14 w-auto border-b border-border1 pr-6 pl-16', className)} {...props} />
+  );
 }
 
 export type ThreadTraceTabListProps = Omit<TabListProps, 'variant' | 'size'> & {
