@@ -19,7 +19,7 @@ import type {
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import {
   TABLE_FEEDBACK_EVENTS,
