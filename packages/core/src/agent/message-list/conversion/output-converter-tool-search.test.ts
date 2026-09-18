@@ -199,6 +199,68 @@ describe('aiV5UIMessagesToAIV5ModelMessages — hosted tool_search replay', () =
     expect(allParts.filter(p => p.type === 'tool-call' || p.type === 'tool-result')).toHaveLength(0);
   });
 
+  it('should drop a completed hosted tool_search whose SELECTED namespace has only one id', () => {
+    // Mixed metadata: openai carries a lone id, azure carries a full pair. The
+    // guard must read both ids out of the SAME namespace it replays from —
+    // otherwise azure's pair vouches for openai's lone id, the split rewrites
+    // only azure, and the openai id goes out on the call AND the result
+    // ("Duplicate item found").
+    const msg = makeMessage([
+      {
+        type: 'tool-tool_search',
+        toolCallId: 'tsc_mixed',
+        state: 'output-available',
+        input: { queries: ['cache'], call_id: null },
+        output: { tools: ['get_block'] },
+        providerExecuted: true,
+        callProviderMetadata: {
+          openai: { itemId: 'tsc_o' },
+          azure: { itemId: 'tsc_a', resultItemId: 'tso_a' },
+        },
+      } as ToolUIPartLike,
+    ]);
+
+    const result = aiV5UIMessagesToAIV5ModelMessages([msg], [], 'prompt');
+
+    const allParts = result.flatMap(m => (typeof m.content === 'string' ? [] : m.content));
+    expect(allParts.filter(p => p.type === 'tool-call' || p.type === 'tool-result')).toHaveLength(0);
+  });
+
+  it('should not leave a duplicate reference in a namespace the split does not rewrite', () => {
+    // The reverse mix: openai has the pair and replays fine, azure has a lone id
+    // the split leaves alone. That leftover would otherwise be copied onto both
+    // model parts and duplicate on its own.
+    const msg = makeMessage([
+      {
+        type: 'tool-tool_search',
+        toolCallId: 'tsc_mixed2',
+        state: 'output-available',
+        input: { queries: ['cache'], call_id: null },
+        output: { tools: ['get_block'] },
+        providerExecuted: true,
+        callProviderMetadata: {
+          openai: { itemId: 'tsc_o', resultItemId: 'tso_o' },
+          azure: { itemId: 'stale_a' },
+        },
+      } as ToolUIPartLike,
+    ]);
+
+    const result = aiV5UIMessagesToAIV5ModelMessages([msg], [], 'prompt');
+
+    const allParts = result.flatMap(m => (typeof m.content === 'string' ? [] : m.content));
+    const toolParts = allParts.filter(p => p.type === 'tool-call' || p.type === 'tool-result');
+    expect(toolParts).toHaveLength(2);
+
+    const itemIds = toolParts.flatMap(part => {
+      const providerOptions = (part as { providerOptions?: Record<string, Record<string, unknown>> }).providerOptions;
+      return Object.values(providerOptions ?? {}).flatMap(namespace =>
+        typeof namespace.itemId === 'string' ? [namespace.itemId] : [],
+      );
+    });
+
+    expect(new Set(itemIds).size).toBe(itemIds.length);
+  });
+
   it('should drop a single-id hosted tool_search whose one id is the CALL id', () => {
     // Which half survived depends on write order, so the drop cannot key off the
     // id looking like a result (`tso_…`) — a lone call id is equally unreplayable.

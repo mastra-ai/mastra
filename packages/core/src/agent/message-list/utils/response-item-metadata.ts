@@ -101,6 +101,40 @@ export function getResponseResultProviderMetadata(
   return result;
 }
 
+/**
+ * Reads the result-side item id stored beside `itemId` in ONE provider
+ * namespace. Callers that replay a specific namespace must read both ids from
+ * that same namespace: a pair stored under `azure` says nothing about whether
+ * an `openai` id can be replayed.
+ */
+export function getResponseResultItemId(
+  providerMetadata: Record<string, unknown> | undefined,
+  provider: ResponseItemIdProvider,
+): string | undefined {
+  const resultItemId = (providerMetadata?.[provider] as Record<string, unknown> | undefined)?.[
+    RESPONSE_RESULT_ITEM_ID_KEY
+  ];
+  return typeof resultItemId === 'string' ? resultItemId : undefined;
+}
+
+/**
+ * Drops {@link RESPONSE_RESULT_ITEM_ID_KEY} from every namespace. The key is
+ * Mastra's internal way of carrying a result id on a part with a single
+ * metadata slot; it must never reach a provider or a public UI surface that
+ * already has a dedicated slot for the result's metadata.
+ */
+export function omitResponseResultItemIds<T extends Record<string, unknown> | undefined>(providerMetadata: T): T {
+  if (!providerMetadata) return providerMetadata;
+  let result = providerMetadata;
+  for (const provider of RESPONSE_ITEM_ID_PROVIDERS) {
+    const namespace = result[provider] as Record<string, unknown> | undefined;
+    if (!namespace || !(RESPONSE_RESULT_ITEM_ID_KEY in namespace)) continue;
+    const { [RESPONSE_RESULT_ITEM_ID_KEY]: _removed, ...rest } = namespace;
+    result = { ...result, [provider]: rest };
+  }
+  return result;
+}
+
 export function getResponseProviderItemKeys(providerMetadata: Record<string, unknown> | undefined): string[] {
   return getResponseProviderItemIds(providerMetadata).map(({ provider, itemId }) =>
     formatResponseProviderItemKey(provider, itemId),

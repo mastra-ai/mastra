@@ -11,7 +11,11 @@ import type {
   MastraToolInvocationPart,
 } from '../state/types';
 import type { AIV5Type, AIV6Type, MessageSource } from '../types';
-import { getResponseResultProviderMetadata, preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata';
+import {
+  getResponseResultProviderMetadata,
+  omitResponseResultItemIds,
+  preserveResponseItemIdsOnMerge,
+} from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
 import { AIV5Adapter } from './AIV5Adapter';
 
@@ -610,7 +614,14 @@ export class AIV6Adapter {
           providerExecuted: part.providerExecuted,
         },
         {
-          callProviderMetadata: part.providerMetadata,
+          // `resultItemId` is how a single-slot Mastra part carries the result's
+          // Responses item id. v6 has a real slot for it (`resultProviderMetadata`
+          // below), so the internal key must not ride along on the public call
+          // metadata — v6's own convertToModelMessages would forward it to the
+          // provider as `providerOptions.openai.resultItemId`.
+          callProviderMetadata: omitResponseResultItemIds(
+            part.providerMetadata as Record<string, unknown> | undefined,
+          ) as typeof part.providerMetadata,
           title: part.title,
         },
       );

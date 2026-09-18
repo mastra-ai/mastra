@@ -17,7 +17,7 @@ import {
 import {
   getResponseProviderItemId,
   getResponseProviderItemKey,
-  getResponseResultProviderMetadata,
+  getResponseResultItemId,
   RESPONSE_ITEM_ID_PROVIDERS,
   RESPONSE_RESULT_ITEM_ID_KEY,
 } from '../utils/response-item-metadata';
@@ -123,12 +123,15 @@ function isUnreplayableHostedToolSearchPart(part: AIV5Type.ToolUIPart): boolean 
 
   const callProviderMetadata =
     'callProviderMetadata' in part ? (part.callProviderMetadata as Record<string, unknown> | undefined) : undefined;
-  if (getResponseProviderItemId(callProviderMetadata)) {
+  const callItem = getResponseProviderItemId(callProviderMetadata);
+  if (callItem) {
     // Both completed states emit a tool-call AND a tool-result, each carrying the
     // part's call metadata, so a lone id lands on both. An in-flight call emits no
     // result part, so its call id alone is complete.
     const isCompleted = part.state === 'output-available' || part.state === 'output-error';
-    if (!isCompleted || getResponseResultProviderMetadata(callProviderMetadata)) return false;
+    // Read the result id from the namespace this part actually replays from. A
+    // pair stored under another namespace does not make THIS id replayable.
+    if (!isCompleted || getResponseResultItemId(callProviderMetadata, callItem.provider)) return false;
   }
 
   const input = part.input;
@@ -161,6 +164,7 @@ function splitResponsesToolItemReferences(modelMessages: AIV5Type.ModelMessage[]
       if (!providerOptions) return part;
 
       let rewritten: Record<string, Record<string, unknown>> | undefined;
+      const split = new Set<string>();
       for (const provider of RESPONSE_ITEM_ID_PROVIDERS) {
         const namespace = providerOptions[provider];
         if (!namespace) continue;
@@ -168,12 +172,27 @@ function splitResponsesToolItemReferences(modelMessages: AIV5Type.ModelMessage[]
         if (typeof resultItemId !== 'string') continue;
 
         const { [RESPONSE_RESULT_ITEM_ID_KEY]: _removed, ...rest } = namespace;
+        split.add(provider);
         rewritten = {
           ...(rewritten ?? providerOptions),
           [provider]: part.type === 'tool-result' ? { ...rest, itemId: resultItemId } : rest,
         };
       }
       if (!rewritten) return part;
+
+      // A namespace with no `resultItemId` has one id for both halves of the
+      // pair. On the call part that is correct; on the result part it is the
+      // call's id a second time ("Duplicate item found"), so drop it and let
+      // the split namespace carry the reference.
+      if (part.type === 'tool-result') {
+        for (const provider of RESPONSE_ITEM_ID_PROVIDERS) {
+          if (split.has(provider)) continue;
+          const leftover: Record<string, unknown> | undefined = rewritten[provider];
+          if (typeof leftover?.itemId !== 'string') continue;
+          const { itemId: _duplicate, ...withoutItemId } = leftover;
+          rewritten = { ...rewritten, [provider]: withoutItemId };
+        }
+      }
 
       modified = true;
       return { ...part, providerOptions: rewritten } as typeof part;

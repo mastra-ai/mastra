@@ -90,6 +90,12 @@ describe('AIV6Adapter — tool_search call/result item id preservation', () => {
     }
     expect(uiToolPart.callProviderMetadata?.openai?.itemId).toBe(CALL_ITEM_ID);
     expect(uiToolPart.resultProviderMetadata?.openai?.itemId).toBe(RESULT_ITEM_ID);
+    // `resultItemId` is Mastra's internal way of carrying the result id on a part
+    // that has one metadata slot. v6 has a real slot for it, so the key must not
+    // ride along on the public call metadata — a consumer running AI SDK v6's own
+    // convertToModelMessages would send `providerOptions.openai.resultItemId` to
+    // the provider.
+    expect(uiToolPart.callProviderMetadata?.openai?.[RESPONSE_RESULT_ITEM_ID_KEY]).toBeUndefined();
 
     const roundTripped = AIV6Adapter.fromUIMessage(uiMsg);
 
