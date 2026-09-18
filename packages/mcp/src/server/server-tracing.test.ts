@@ -228,4 +228,49 @@ describe('MCPServer tracing', () => {
     const span = requestSpans()[0];
     expect(span.errorInfo?.id).toBe('MCP_SERVER_TOOL_INVALID_INPUT');
   });
+
+  it('carries the caller identity on the span', async () => {
+    // The span can only be given a request context when it is created, so the
+    // auth mapper has to run first. Without that the span shows no caller.
+    const authed = new MCPServer({
+      id: 'authed-server',
+      name: 'Authed Server',
+      version: '1.0.0',
+      tools: { echoTool: tools.echoTool },
+      mapAuthInfoToUser: async () => ({ id: 'user-1' }),
+    });
+    const authedSpans: any[] = [];
+    new Mastra({
+      logger: false,
+      mcpServers: { authed },
+      observability: new Observability({
+        configs: {
+          default: {
+            serviceName: 'mcp-auth-test',
+            exporters: [
+              {
+                name: 'auth-collector',
+                async exportTracingEvent(event: { type: string; exportedSpan?: any }) {
+                  if (event.type === TracingEventType.SPAN_ENDED) authedSpans.push(event.exportedSpan);
+                },
+                async flush() {},
+                async shutdown() {},
+              },
+            ],
+          },
+        },
+      }),
+    });
+    const authedHttp = await serveHTTP(authed, { auth: { token: 't', clientId: 'c1', scopes: [] } });
+    try {
+      const authedClient = await connectClient(authedHttp.url);
+      await authedClient.callTool({ name: 'echoTool', arguments: { message: 'hi' } });
+      await authedClient.close();
+
+      const span = authedSpans.find(s => s.type === SpanType.MCP_SERVER_REQUEST);
+      expect(span.requestContext).toMatchObject({ user: { id: 'user-1' }, authInfo: { clientId: 'c1' } });
+    } finally {
+      await authedHttp.close();
+    }
+  });
 });

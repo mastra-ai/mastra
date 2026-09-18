@@ -518,6 +518,8 @@ export class MCPServer extends MCPServerBase {
       ctx: ServerContext,
       trace: {
         requestSpan: Span<SpanType.MCP_SERVER_REQUEST> | undefined;
+        /** Resolved once per request, before the span, and shared with the handler. */
+        requestContext: RequestContext;
         /**
          * Records the error behind an `isError` result. A handler that turns a
          * caught error into an error result reports it here so the span carries
@@ -529,13 +531,23 @@ export class MCPServer extends MCPServerBase {
   ): void {
     server.setRequestHandler(method, async (request, ctx) => {
       const params = request.params as Record<string, unknown> | undefined;
-      const requestSpan = this.startRequestSpan(method, params, { server, ctx });
+      // A span can only be given its request context when it is created, so auth is
+      // resolved first. A mapper that throws still leaves a failed span behind.
+      let requestContext: RequestContext;
+      try {
+        requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
+      } catch (error) {
+        this.startRequestSpan(method, params, { server, ctx })?.error({ error: error as Error });
+        throw error;
+      }
+      const requestSpan = this.startRequestSpan(method, params, { server, ctx, requestContext });
       let reportedError: Error | undefined;
       return this.traceRequest(
         requestSpan,
         () =>
           handler(request, ctx, {
             requestSpan,
+            requestContext,
             reportError: error => {
               reportedError = error;
             },
@@ -552,7 +564,7 @@ export class MCPServer extends MCPServerBase {
   private startRequestSpan(
     method: string,
     params: Record<string, unknown> | undefined,
-    connection?: { server: Server; ctx: ServerContext },
+    connection?: { server: Server; ctx: ServerContext; requestContext?: RequestContext },
   ): Span<SpanType.MCP_SERVER_REQUEST> | undefined {
     // A stateless HTTP request carries its own envelope; a stdio connection
     // negotiates once and the instance holds what it agreed to.
@@ -581,6 +593,7 @@ export class MCPServer extends MCPServerBase {
         clientVersion: client?.version,
       },
       tracingContext: {},
+      requestContext: connection?.requestContext,
       mastra: this.mastra,
     });
   }
@@ -657,6 +670,7 @@ export class MCPServer extends MCPServerBase {
 
   private async serverRequest(
     ctx: ServerContext,
+    requestContext: RequestContext,
     method: ContinuationEnvelope['method'],
     name: string,
     args: unknown,
@@ -668,7 +682,6 @@ export class MCPServer extends MCPServerBase {
     argsHash: string;
   }> {
     const argsHash = hashArguments(args);
-    const requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
     const continuation = readContinuation(ctx, requestContext, { method, name, argsHash });
     if (continuation?.outcome === 'accept' && resumeSchema) {
       const validation = await resumeSchema['~standard'].validate(continuation.resumeData);
@@ -692,9 +705,8 @@ export class MCPServer extends MCPServerBase {
   }
 
   private registerToolHandlers(server: Server): void {
-    this.setTracedHandler(server, 'tools/list', async (_request, ctx) => {
-      const requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
-      const entries = await this.authorizedToolEntries(requestContext);
+    this.setTracedHandler(server, 'tools/list', async (_request, _ctx, trace) => {
+      const entries = await this.authorizedToolEntries(trace.requestContext);
       return { tools: entries.map(([name, tool]) => this.toMCPTool(name, tool)) };
     });
 
@@ -707,7 +719,7 @@ export class MCPServer extends MCPServerBase {
       }
       const args = request.params.arguments ?? {};
       const argsHash = hashArguments(args);
-      const requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
+      const requestContext = trace.requestContext;
       const continuation = readContinuation(ctx, requestContext, { method: 'tools/call', name, argsHash });
       const mcp = toToolExecutionContext(ctx, this.name);
       const startedAt = Date.now();
@@ -830,21 +842,23 @@ export class MCPServer extends MCPServerBase {
     const hasAppResources = this.appResourceList.length > 0;
     if (!options && !hasAppResources) return;
 
-    const listResources = async (ctx: ServerContext): Promise<Resource[]> => [
+    const listResources = async (ctx: ServerContext, requestContext: RequestContext): Promise<Resource[]> => [
       ...this.appResourceList,
       ...((await options?.listResources({
         extra: toToolExecutionContext(ctx, this.name).extra,
-        requestContext: await toRequestContext(ctx, this.mapAuthInfoToUser),
+        requestContext,
       })) ?? []),
     ];
 
     // Providers are re-evaluated with the current request every time; resource
     // lists are scoped per caller and never cached on the shared server.
-    this.setTracedHandler(server, 'resources/list', async (_request, ctx) => ({ resources: await listResources(ctx) }));
+    this.setTracedHandler(server, 'resources/list', async (_request, ctx, trace) => ({
+      resources: await listResources(ctx, trace.requestContext),
+    }));
 
-    this.setTracedHandler(server, 'resources/read', async (request, ctx) => {
+    this.setTracedHandler(server, 'resources/read', async (request, ctx, trace) => {
       const uri = request.params.uri;
-      const resource = (await listResources(ctx)).find(r => r.uri === uri);
+      const resource = (await listResources(ctx, trace.requestContext)).find(r => r.uri === uri);
       if (!resource) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
 
       const html = this.appResourceHtml.get(uri);
@@ -856,7 +870,7 @@ export class MCPServer extends MCPServerBase {
         continuation,
         suspended,
         argsHash,
-      } = await this.serverRequest(ctx, 'resources/read', uri, {}, options.resumeSchema);
+      } = await this.serverRequest(ctx, trace.requestContext, 'resources/read', uri, {}, options.resumeSchema);
       if (continuation && continuation.outcome !== 'accept') {
         throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Reading '${uri}' was ${continuation.outcome}ed`);
       }
@@ -880,10 +894,10 @@ export class MCPServer extends MCPServerBase {
     });
 
     if (options?.resourceTemplates) {
-      this.setTracedHandler(server, 'resources/templates/list', async (_request, ctx) => ({
+      this.setTracedHandler(server, 'resources/templates/list', async (_request, ctx, trace) => ({
         resourceTemplates: await options.resourceTemplates!({
           extra: toToolExecutionContext(ctx, this.name).extra,
-          requestContext: await toRequestContext(ctx, this.mapAuthInfoToUser),
+          requestContext: trace.requestContext,
         }),
       }));
     }
@@ -908,21 +922,23 @@ export class MCPServer extends MCPServerBase {
     const options = this.promptOptions;
     if (!options) return;
 
-    const listPrompts = async (ctx: ServerContext) => {
+    const listPrompts = async (ctx: ServerContext, requestContext: RequestContext) => {
       const prompts = await options.listPrompts({
         extra: toToolExecutionContext(ctx, this.name).extra,
-        requestContext: await toRequestContext(ctx, this.mapAuthInfoToUser),
+        requestContext,
       });
       for (const prompt of prompts) PromptSchema.parse(prompt);
       return prompts;
     };
 
-    this.setTracedHandler(server, 'prompts/list', async (_request, ctx) => ({ prompts: await listPrompts(ctx) }));
+    this.setTracedHandler(server, 'prompts/list', async (_request, ctx, trace) => ({
+      prompts: await listPrompts(ctx, trace.requestContext),
+    }));
 
     if (!options.getPromptMessages) return;
-    this.setTracedHandler(server, 'prompts/get', async (request, ctx) => {
+    this.setTracedHandler(server, 'prompts/get', async (request, ctx, trace) => {
       const { name, arguments: args } = request.params;
-      const prompt = (await listPrompts(ctx)).find(p => p.name === name);
+      const prompt = (await listPrompts(ctx, trace.requestContext)).find(p => p.name === name);
       if (!prompt) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Prompt "${name}" not found`);
       for (const arg of prompt.arguments ?? []) {
         if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
@@ -934,7 +950,7 @@ export class MCPServer extends MCPServerBase {
         continuation,
         suspended,
         argsHash,
-      } = await this.serverRequest(ctx, 'prompts/get', name, args ?? {}, options.resumeSchema);
+      } = await this.serverRequest(ctx, trace.requestContext, 'prompts/get', name, args ?? {}, options.resumeSchema);
       if (continuation && continuation.outcome !== 'accept') {
         throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Prompt "${name}" was ${continuation.outcome}ed`);
       }
