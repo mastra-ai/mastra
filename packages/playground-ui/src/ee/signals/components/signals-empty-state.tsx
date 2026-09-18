@@ -300,16 +300,19 @@ export const SignalsEmptyState = ({
             {actionSlot}
             <Button
               icon={<ExternalLink />}
-              as="a"
-              href="https://mastra.ai/en/docs/mastra-platform/trace-intelligence"
-              target="_blank"
-              rel="noopener noreferrer"
+              render={
+                <a
+                  href="https://mastra.ai/en/docs/mastra-platform/trace-intelligence"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
               variant="outline"
               size="sm"
             >
               Read the docs<span className="sr-only"> (opens in new tab)</span>
             </Button>
-            <Button icon={<TraceIcon />} as={LinkComponent} href="/traces" variant="primary" size="sm">
+            <Button icon={<TraceIcon />} render={<LinkComponent href="/traces" />} variant="primary" size="sm">
               View incoming traces
             </Button>
           </div>

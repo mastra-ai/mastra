@@ -546,8 +546,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/kimi-for-coding',
-          label: 'Kimi For Coding',
+          id: 'providers/kimi-code-plan-global',
+          label: 'Kimi For Coding (kimi.ai)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kimi-code-plan-cn',
+          label: 'Kimi For Coding (kimi.com)',
         },
         {
           type: 'doc',

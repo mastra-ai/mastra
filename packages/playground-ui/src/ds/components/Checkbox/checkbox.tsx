@@ -1,3 +1,4 @@
+import '../../../../new-theme.css';
 import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
 import { Check, Minus } from 'lucide-react';
 import * as React from 'react';
@@ -35,22 +36,22 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
         indeterminate={indeterminate ?? isCheckedIndeterminate}
         data-slot="checkbox"
         className={cn(
-          'peer flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[0.3125rem]',
-          'border border-neutral6/[0.06] bg-neutral6/[0.12] text-surface1 outline-hidden',
+          'new-theme peer flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[0.3125rem]',
+          'border border-border bg-foreground/14 text-background outline-hidden',
           transitions.all,
-          'hover:border-neutral6/[0.12] hover:bg-neutral6/[0.16]',
-          'active:scale-95 active:border-neutral6/[0.18] active:bg-neutral6/[0.18]',
-          'focus-visible:border-neutral5/50 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
-          'data-[checked]:border-neutral6 data-[checked]:bg-neutral6 data-[checked]:text-surface1',
-          'data-[indeterminate]:border-neutral6 data-[indeterminate]:bg-neutral6 data-[indeterminate]:text-surface1',
-          'data-[checked]:hover:border-neutral5 data-[checked]:hover:bg-neutral5',
-          'data-[indeterminate]:hover:border-neutral5 data-[indeterminate]:hover:bg-neutral5',
-          'data-[checked]:active:border-neutral4 data-[checked]:active:bg-neutral4',
-          'data-[indeterminate]:active:border-neutral4 data-[indeterminate]:active:bg-neutral4',
+          'hover:border-foreground/18 hover:bg-foreground/18',
+          'active:scale-95 active:border-foreground/30 active:bg-foreground/30',
+          'focus-visible:border-foreground/45 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-foreground/45 focus-visible:outline-solid',
+          'data-[checked]:border-foreground data-[checked]:bg-foreground data-[checked]:text-background',
+          'data-[indeterminate]:border-foreground data-[indeterminate]:bg-foreground data-[indeterminate]:text-background',
+          'data-[checked]:hover:border-foreground/90 data-[checked]:hover:bg-foreground/90',
+          'data-[indeterminate]:hover:border-foreground/90 data-[indeterminate]:hover:bg-foreground/90',
+          'data-[checked]:active:border-foreground/75 data-[checked]:active:bg-foreground/75',
+          'data-[indeterminate]:active:border-foreground/75 data-[indeterminate]:active:bg-foreground/75',
           // Base UI's Checkbox.Root is a `<span>`, so `:disabled` never matches; target `data-disabled`.
-          'data-[disabled]:cursor-not-allowed data-[disabled]:border-neutral6/[0.38] data-[disabled]:bg-neutral6/[0.38] data-[disabled]:hover:border-neutral6/[0.38] data-[disabled]:hover:bg-neutral6/[0.38] data-[disabled]:active:scale-100',
-          'data-[disabled]:data-[checked]:border-neutral6/[0.38] data-[disabled]:data-[checked]:bg-neutral6/[0.38] data-[disabled]:data-[checked]:text-neutral6',
-          'data-[disabled]:data-[indeterminate]:border-neutral6/[0.38] data-[disabled]:data-[indeterminate]:bg-neutral6/[0.38] data-[disabled]:data-[indeterminate]:text-neutral6',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:border-foreground/45 data-[disabled]:bg-foreground/45 data-[disabled]:hover:border-foreground/45 data-[disabled]:hover:bg-foreground/45 data-[disabled]:active:scale-100',
+          'data-[disabled]:data-[checked]:border-foreground/45 data-[disabled]:data-[checked]:bg-foreground/45 data-[disabled]:data-[checked]:text-foreground',
+          'data-[disabled]:data-[indeterminate]:border-foreground/45 data-[disabled]:data-[indeterminate]:bg-foreground/45 data-[disabled]:data-[indeterminate]:text-foreground',
           className,
         )}
         {...props}

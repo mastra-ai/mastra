@@ -62,8 +62,8 @@ export const Sizes: Story = {
 };
 
 /**
- * A select is a field, so it offers the same button looks as everywhere:
- * `default` (the filled Button surface, the default here too), `outline`
+ * A select is a field, so it shares the Input's surface rather than the Button's:
+ * `default` (the Input's overlay surface, the default here too), `outline`
  * (bordered, transparent) and `ghost` (borderless, for dense toolbars). It does
  * not expose the high-emphasis `primary` look.
  */

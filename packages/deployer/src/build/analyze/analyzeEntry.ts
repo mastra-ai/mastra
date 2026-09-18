@@ -24,7 +24,7 @@ import { DEPS_TO_IGNORE } from './constants';
 function getInputPlugins(
   { entry, isVirtualFile }: { entry: string; isVirtualFile: boolean },
   mastraEntry: string,
-  { sourcemapEnabled }: { sourcemapEnabled: boolean },
+  { sourcemapEnabled, env }: { sourcemapEnabled: boolean; env: Record<string, string> },
 ): Plugin[] {
   let virtualPlugin = null;
   if (isVirtualFile) {
@@ -46,7 +46,7 @@ function getInputPlugins(
       mastraToolsAliasPlugin(),
       tsConfigPaths(),
       json(),
-      esbuild(),
+      esbuild({ define: env }),
       commonjs({
         strictRequires: 'debug',
         ignoreTryCatch: false,
@@ -76,12 +76,14 @@ async function captureDependenciesToOptimize(
     logger,
     mastraEntry,
     shouldCheckTransitiveDependencies,
+    env,
     analyzeCache,
     activeEntries,
   }: {
     logger: IMastraLogger;
     mastraEntry: string;
     shouldCheckTransitiveDependencies: boolean;
+    env: Record<string, string>;
     /** Shared cache to avoid re-analyzing the same entry across recursive calls */
     analyzeCache?: Map<string, AnalyzeEntryResult>;
     /** Resolved entries currently being analyzed in this recursion path */
@@ -173,6 +175,7 @@ async function captureDependenciesToOptimize(
         projectRoot,
         logger,
         sourcemapEnabled: false,
+        env,
         shouldCheckTransitiveDependencies: true,
         analyzeCache,
         activeEntries,
@@ -279,6 +282,7 @@ export async function analyzeEntry(
     sourcemapEnabled,
     workspaceMap,
     projectRoot,
+    env = { 'process.env.NODE_ENV': JSON.stringify('production') },
     shouldCheckTransitiveDependencies = false,
     analyzeCache,
     activeEntries: providedActiveEntries,
@@ -287,6 +291,7 @@ export async function analyzeEntry(
     sourcemapEnabled: boolean;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     projectRoot: string;
+    env?: Record<string, string>;
     shouldCheckTransitiveDependencies?: boolean;
     /** Shared cache to avoid re-analyzing the same entry across recursive calls */
     analyzeCache?: Map<string, AnalyzeEntryResult>;
@@ -316,7 +321,7 @@ export async function analyzeEntry(
       input: isVirtualFile ? '#entry' : entry,
       treeshake: false,
       preserveSymlinks: true,
-      plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled }),
+      plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled, env }),
       external: DEPS_TO_IGNORE,
     });
 
@@ -335,6 +340,7 @@ export async function analyzeEntry(
       logger,
       mastraEntry,
       shouldCheckTransitiveDependencies,
+      env,
       analyzeCache: effectiveAnalyzeCache,
       activeEntries,
     });

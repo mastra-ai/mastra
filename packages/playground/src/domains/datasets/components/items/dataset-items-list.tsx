@@ -246,10 +246,8 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
             </ButtonsGroup>
             <Button
               variant="ghost"
-              as="a"
-              href="https://mastra.ai/docs/evals/datasets"
-              target="_blank"
-              rel="noopener noreferrer"
+              render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
+
               icon={<ExternalLinkIcon />}
             >
               Datasets Documentation

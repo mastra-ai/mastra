@@ -1,4 +1,36 @@
-import type { TraceQueryTraceResponse } from '@mastra/client-js';
+import type {
+  GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesResponse,
+  TraceQueryTraceResponse,
+} from '@mastra/client-js';
+
+export const emptyTraceQueryFields: GetTraceQueryFieldsResponse = {
+  canonicalFields: [],
+  observedFields: [],
+  observedFieldsTruncated: false,
+};
+
+export const traceQueryFieldsWithRegion: GetTraceQueryFieldsResponse = {
+  canonicalFields: [],
+  observedFields: [
+    {
+      path: 'metadata.region',
+      valueKind: 'string',
+      operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'],
+      valueSuggestions: true,
+      occurrences: 12,
+    },
+  ],
+  observedFieldsTruncated: false,
+};
+
+export const traceQueryRegionValues: GetTraceQueryValuesResponse = {
+  values: [
+    { value: 'eu-west', count: 8 },
+    { value: 'us-east', count: 4 },
+  ],
+  valuesTruncated: false,
+};
 
 export const traceQueryPage: Extract<TraceQueryTraceResponse, { page: { next: string | null } }> = {
   traces: [

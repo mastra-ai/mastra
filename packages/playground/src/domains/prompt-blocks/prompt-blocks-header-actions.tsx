@@ -10,7 +10,12 @@ export function PromptBlocksHeaderCreateAction() {
   if (!isCmsAvailable) return null;
   return (
     <RouteHeaderActions owner="prompt-block-list">
-      <CreateButton as={Link} to={paths.cmsPromptBlockCreateLink()} tooltip="Create a prompt" variant="ghost" size="sm">
+      <CreateButton
+        render={<Link href={paths.cmsPromptBlockCreateLink()} />}
+        tooltip="Create a prompt"
+        variant="ghost"
+        size="sm"
+      >
         New prompt
       </CreateButton>
     </RouteHeaderActions>

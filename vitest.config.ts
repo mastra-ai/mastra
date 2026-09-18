@@ -13,6 +13,9 @@ const EXCLUDED_DIRS = new Set([
   'browser/_test-utils',
   'workspaces/_test-utils',
   'observability/_examples',
+  // Standalone private app: not a pnpm workspace member, so its dependencies
+  // are never installed and its suite cannot resolve them (e.g. `hono`).
+  'mastracode/web',
 ]);
 
 // Directories to scan for vitest configs

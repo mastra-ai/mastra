@@ -113,7 +113,7 @@ function CommandPaletteScope({
     >
       <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="border-border1 bg-surface4/70 text-neutral3 text-ui-xs rounded-md border px-1.5 py-0.5 leading-none">
+      <span className="border-border1 bg-surface4/70 text-ui-xs text-neutral3 rounded-md border px-1.5 py-0.5 leading-none">
         {count}
       </span>
     </button>
@@ -138,6 +138,7 @@ function CommandPaletteResults({ children, footer, ...props }: CommandPaletteRes
         scrollAreaClassName="min-h-0 flex-1 rounded-none"
         scrollAreaViewportClassName="command-palette-scroll-viewport"
         className="command-palette-list max-h-none rounded-none border-none bg-transparent shadow-none"
+        highlightClassName="rounded-xl"
       >
         {children}
       </CommandList>
@@ -168,7 +169,7 @@ function CommandPaletteItem({
   return (
     <CommandItem
       className={cn(
-        'group h-auto items-start gap-3 rounded-xl border border-transparent px-3 py-2.5 data-[selected=true]:border-border1 data-[selected=true]:bg-surface4/80',
+        'group h-auto items-start gap-3 rounded-xl border border-transparent px-3 py-2.5 data-[selected=true]:border-border1',
         'transition-[background-color,border-color] duration-150 ease-out',
         className,
       )}
@@ -181,7 +182,7 @@ function CommandPaletteItem({
         <span className="flex min-w-0 items-center gap-2">
           <span className="text-ui-smd leading-ui-sm text-neutral6 truncate font-medium">{title}</span>
           {badge && (
-            <span className="border-border1 bg-surface4/60 text-neutral3 text-ui-xs shrink-0 rounded-md border px-1.5 py-0.5 leading-none font-medium uppercase">
+            <span className="border-border1 bg-surface4/60 text-ui-xs text-neutral3 shrink-0 rounded-md border px-1.5 py-0.5 leading-none font-medium uppercase">
               {badge}
             </span>
           )}
@@ -190,7 +191,7 @@ function CommandPaletteItem({
           <span className="text-ui-xs leading-ui-xs text-neutral3 flex min-w-0 items-center gap-2">
             {subtitle && <span className="truncate">{subtitle}</span>}
             {path && (
-              <span className="border-border1 bg-surface4/70 text-neutral3 text-ui-xs max-w-52 truncate rounded-md border px-1.5 py-0.5 font-mono leading-none">
+              <span className="border-border1 bg-surface4/70 text-ui-xs text-neutral3 max-w-52 truncate rounded-md border px-1.5 py-0.5 font-mono leading-none">
                 {path}
               </span>
             )}

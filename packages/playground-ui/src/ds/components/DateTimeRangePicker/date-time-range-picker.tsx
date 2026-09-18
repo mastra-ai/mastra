@@ -162,22 +162,19 @@ export function DateTimeRangePicker({
               />
             </div>
           </div>
-          {customRangeError && <p className={cn('px-4 pb-1 text-ui-sm text-red-500')}>{customRangeError}</p>}
+          {customRangeError && <p className={cn('px-4 pb-1 text-ui-sm text-error')}>{customRangeError}</p>}
           <div className={cn('flex items-center justify-between px-4 pb-3')}>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={disabled}
-              className={cn(
-                'text-ui-sm text-neutral3 hover:text-neutral4',
-                disabled && 'pointer-events-none opacity-50',
-              )}
               onClick={() => {
                 setCustomRangeError(undefined);
                 handlePresetSelect(fallbackPreset);
               }}
             >
               &larr; Presets
-            </button>
+            </Button>
             <Button icon={<Check />} variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
               Apply
             </Button>
