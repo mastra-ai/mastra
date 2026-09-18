@@ -45,18 +45,29 @@ function buildApp(user: TestAuthUser | null, fetchImpl: typeof fetch, options: {
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 describe('platform connect routes', () => {
-  it('lists Jira connections and hides other providers', async () => {
+  it('lists only connections belonging to the requested provider', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
       json({
-        connections: [connection('conn-a', 'github'), connection('conn-b', 'jira', 'needs_reauth')],
+        connections: [
+          connection('conn-a', 'github'),
+          connection('conn-b', 'jira', 'needs_reauth'),
+          connection('conn-c', 'gitlab'),
+          connection('conn-d', 'gitlab-group-token'),
+        ],
       }),
     );
     const app = buildApp(org1(), fetchImpl);
 
-    const response = await app.request('/web/integrations/platform/jira/connections');
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
+    const jiraResponse = await app.request('/web/integrations/platform/jira/connections');
+    expect(jiraResponse.status).toBe(200);
+    await expect(jiraResponse.json()).resolves.toEqual({
       connections: [expect.objectContaining({ id: 'conn-b' })],
+    });
+
+    const gitlabResponse = await app.request('/web/integrations/platform/gitlab/connections');
+    expect(gitlabResponse.status).toBe(200);
+    await expect(gitlabResponse.json()).resolves.toEqual({
+      connections: [expect.objectContaining({ id: 'conn-c' }), expect.objectContaining({ id: 'conn-d' })],
     });
   });
 

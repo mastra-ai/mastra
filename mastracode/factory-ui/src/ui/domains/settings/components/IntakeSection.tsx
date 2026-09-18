@@ -8,6 +8,7 @@ import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
+import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
 import { ProviderConnectControl, ProviderConnectionsList } from './PlatformProviderConnections';
 import { useLinearProjectsQuery, useLinearStatusQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
 import { isJiraAuthError } from '../../factory/services/jira';
@@ -158,6 +159,36 @@ function LinearIntakeSection({
             }
           />
         )}
+      </SettingsContainer>
+    </SettingsSubsection>
+  );
+}
+
+function GitLabConnectionsSection() {
+  const connectionsQuery = usePlatformConnectionsQuery('gitlab');
+  if (connectionsQuery.isPending || connectionsQuery.isError) return null;
+
+  const connections = connectionsQuery.data ?? [];
+  const reconnectTarget = connections.find(connection => connection.status === 'needs_reauth');
+  const action = reconnectTarget ? (
+    <ProviderConnectControl provider="gitlab" reconnectConnectionId={reconnectTarget.id} label="Reconnect GitLab" />
+  ) : (
+    <ProviderConnectControl
+      provider="gitlab"
+      label={connections.length > 0 ? 'Connect another account' : 'Connect GitLab'}
+      variant={connections.length > 0 ? 'ghost' : 'default'}
+    />
+  );
+
+  return (
+    <SettingsSubsection
+      scope="org"
+      title="GitLab"
+      description="Connect GitLab accounts directly from Factory. OAuth opens GitLab's consent screen without leaving settings."
+      action={action}
+    >
+      <SettingsContainer>
+        <ProviderConnectionsList provider="gitlab" connections={connections} />
       </SettingsContainer>
     </SettingsSubsection>
   );
@@ -401,6 +432,7 @@ export function IntakeSection() {
           </SettingsContainer>
         </SettingsSubsection>
       )}
+      <GitLabConnectionsSection />
     </div>
   );
 }

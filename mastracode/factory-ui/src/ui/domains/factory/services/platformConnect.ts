@@ -13,7 +13,7 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira';
+export type PlatformConnectProviderId = 'jira' | 'gitlab';
 
 /** How the provider authorizes: OAuth consent popup or an API-key form. */
 export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
@@ -26,6 +26,7 @@ export interface PlatformConnectProviderMeta {
 
 export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, PlatformConnectProviderMeta> = {
   jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
+  gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
 };
 
 export interface PlatformProviderConnection {
