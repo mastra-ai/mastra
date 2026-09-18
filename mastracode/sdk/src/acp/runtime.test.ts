@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMastraCode } from '../index.js';
-import { createAcpSession } from './runtime.js';
 import { loadSettings, resolveDefaultThinkingLevel } from '../onboarding/settings.js';
+import { createAcpSession } from './runtime.js';
 
 vi.mock('../onboarding/settings.js', () => ({
   loadSettings: vi.fn(() => ({})),
