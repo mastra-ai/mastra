@@ -340,6 +340,55 @@ The `prepareRun` function can also be async.
 
 :::
 
+## Skipping runs that cannot be scored
+
+Some scorers only apply to a subset of runs. A scorer that judges how well a refund was handled has nothing to say about a run where no refund was requested. Judging it anyway costs a model call and stores a score that does not measure what the scorer is for, which skews averages and pass rates.
+
+Return [`notScorable()`](/reference/evals/not-scorable) from a function step to declare that the run has nothing to evaluate. The remaining steps are skipped, no score is stored, and the run is left out of the scorer's aggregates:
+
+```typescript title="src/mastra/scorers/refund-judge.ts"
+import { createScorer, notScorable } from '@mastra/core/evals'
+import { extractToolCalls } from '@mastra/evals/scorers/utils'
+
+export const refundJudge = createScorer({
+  id: 'refund-judge',
+  description: 'Judges how well refund requests were handled',
+  type: 'agent',
+  judge: {
+    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    instructions: 'You are a strict QA reviewer for customer-support refund handling.',
+  },
+})
+  .preprocess(({ run }) => {
+    const { tools } = extractToolCalls(run.output)
+    return tools.includes('refundCustomer')
+      ? { tools }
+      : notScorable('refundCustomer was not called')
+  })
+  .generateScore({
+    description: 'Score the refund handling from 0 to 1',
+    createPrompt: ({ run }) =>
+      `Rate this refund handling from 0 to 1:\n${JSON.stringify(run.output)}`,
+  })
+```
+
+Put the check in `preprocess` so it runs before any judge step. `notScorable()` is accepted from any function step, so a `generateScore` function can also return it after inspecting `analyze` output.
+
+The run result has `notScorable` set and no `score`:
+
+```typescript
+const result = await refundJudge.run(run)
+
+if (result.notScorable) {
+  // result.notScorable.step === 'preprocess'
+  // result.notScorable.reason === 'refundCustomer was not called'
+}
+```
+
+In [`runEvals()`](/reference/evals/run-evals), not-scorable runs are left out of `scores`, gate and threshold averages, and the verdict, and are counted per scorer in `summary.notScorable`. In experiments, the scorer result has `score: null`, `error: null`, and `notScorable` set. Live scoring stores nothing for the run.
+
+`notScorable()` is different from an [eligibility filter](/docs/evals/overview#how-live-evaluations-work): filters decide from request context whether the scorer runs at all, while `notScorable()` lets the scorer inspect the run's input and output before deciding.
+
 ## Example: Create a custom scorer
 
 A custom scorer in Mastra uses `createScorer` with four core components:

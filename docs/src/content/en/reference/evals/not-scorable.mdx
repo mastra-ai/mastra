@@ -1,0 +1,126 @@
+---
+title: 'Reference: notScorable() | Evals'
+description: 'Declares that a run has nothing for a scorer to evaluate. Return it from a scorer step to skip the remaining steps, store no score, and keep the run out of aggregates.'
+packages:
+  - '@mastra/core'
+---
+
+# notScorable()
+
+Declares that the current run has nothing for this scorer to evaluate. Return it from a scorer function step, typically `preprocess`. The remaining steps are skipped, so no judge model call is spent, no score is stored, and the run is left out of that scorer's averages, gates, and thresholds.
+
+Use `notScorable()` when whether a run qualifies depends on the run's own input or output, such as whether a specific tool was called. Use an [eligibility filter](/docs/evals/overview#how-live-evaluations-work) instead when the condition can be expressed from request context or entity metadata, since filters skip the scorer before it runs at all.
+
+## Usage example
+
+The following scorer judges refund handling with an LLM. Runs that never called `refundCustomer` are declared not scorable before the judge is asked anything:
+
+```typescript title="src/mastra/scorers/refund-judge.ts"
+import { createScorer, notScorable } from '@mastra/core/evals'
+import { extractToolCalls } from '@mastra/evals/scorers/utils'
+
+export const refundJudge = createScorer({
+  id: 'refund-judge',
+  description: 'Judges how well refund requests were handled',
+  type: 'agent',
+  judge: {
+    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    instructions: 'You are a strict QA reviewer for customer-support refund handling.',
+  },
+})
+  .preprocess(({ run }) => {
+    const { tools } = extractToolCalls(run.output)
+    return tools.includes('refundCustomer')
+      ? { tools }
+      : notScorable('refundCustomer was not called')
+  })
+  .generateScore({
+    description: 'Score the refund handling from 0 to 1',
+    createPrompt: ({ run }) =>
+      `Rate this refund handling from 0 to 1:\n${JSON.stringify(run.output)}`,
+  })
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'reason',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Why the run is not scorable. Surfaced on the run result, the scorer-run span, and experiment results.',
+  },
+]}
+/>
+
+**Returns:** `NotScorable`. An opaque value recognized by the scorer pipeline. Return it directly from the step; do not wrap it in another object.
+
+## Where it can be returned
+
+`notScorable()` is accepted from any function step: `preprocess`, `analyze`, `generateScore`, or `generateReason`. Prompt-object steps (LLM judge steps) cannot return it because their output is produced by the model.
+
+Steps that completed before the not-scorable step keep their results. For example, a `preprocessStepResult` is still present on the run result when `analyze` returns `notScorable()`.
+
+## Run result
+
+When a step returns `notScorable()`, `scorer.run()` resolves with `notScorable` set and no `score` key. Narrow on `notScorable` before reading `score`:
+
+```typescript
+const result = await refundJudge.run(run)
+
+if (result.notScorable) {
+  console.log(result.notScorable.step) // 'preprocess'
+  console.log(result.notScorable.reason) // 'refundCustomer was not called'
+} else {
+  console.log(result.score) // number
+}
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'notScorable',
+    type: 'NotScorableOutcome',
+    isOptional: true,
+    description: 'Present only when a step returned notScorable().',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'step',
+            type: "'preprocess' | 'analyze' | 'generateScore' | 'generateReason'",
+            description: 'The step that returned notScorable().',
+          },
+          {
+            name: 'reason',
+            type: 'string',
+            isOptional: true,
+            description: 'The reason passed to notScorable(), when one was given.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Effect on each scoring path
+
+| Path | Behavior for a not-scorable run |
+| - | - |
+| Live scoring (`scorers` on an agent or workflow) | No score row is stored. The outcome is recorded on the `SCORER_RUN` span output and logged at debug level. |
+| [`runEvals()`](/reference/evals/run-evals) | Left out of `scores`, gate and threshold averages, and the verdict. Counted per scorer in `summary.notScorable`. A gate or threshold scorer whose every run was not scorable is omitted from `gateResults` / `thresholdResults` rather than failing. |
+| Experiments (`runExperiment()`) | The scorer result has `score: null`, `error: null`, and `notScorable` set. No score row is stored. |
+| `scoreTrace()` | Resolves to `null`. Nothing is written to the scores store or the span. |
+| `scoreTraceBatch()` | The target's result is `{ ok: true, notScorable }`. Reported in `notScorableCount`, separate from `scoredCount` and `failedCount`. |
+
+Scorers that never return `notScorable()` behave exactly as before.
+
+## Related
+
+- [`createScorer()`](/reference/evals/create-scorer)
+- [`filterRun()`](/reference/evals/filter-run) trims what a scorer sees; it still produces a score.
+- [Custom scorers: skipping runs](/docs/evals/custom-scorers#skipping-runs-that-cannot-be-scored)

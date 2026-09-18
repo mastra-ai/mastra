@@ -262,6 +262,13 @@ For workflows, use `WorkflowScorerConfig` to specify scorers at different levels
     description: 'Total number of test cases processed.',
   },
   {
+    name: 'summary.notScorable',
+    type: 'Record<string, number>',
+    description:
+      'Number of runs each scorer or gate declared not scorable via `notScorable()`, keyed by id. Those runs are left out of `scores`, gate and threshold averages, and the verdict. Present only when at least one run was not scorable.',
+    isOptional: true,
+  },
+  {
     name: 'verdict',
     type: "'passed' | 'scored' | 'failed'",
     description:
