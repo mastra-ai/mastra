@@ -7722,7 +7722,12 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       toolCallConcurrency: options.toolCallConcurrency,
-      eagerToolExecution: options.eagerToolExecution,
+      // Resolved to a boolean here, at the one entry point the contract covers, rather
+      // than left undefined and defaulted deep in the loop. Anything that reaches the
+      // agentic-execution workflow without coming through a regular agent call — the
+      // durable steps, a direct `loop()` caller — therefore has to opt in by passing
+      // `true`, instead of inheriting the default by omission.
+      eagerToolExecution: options.eagerToolExecution ?? true,
       resumeContext,
       agentId: this.id,
       agentVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,

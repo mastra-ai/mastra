@@ -44,12 +44,17 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
   // excluded because its limit depends on the full set of tools the model ends up
   // calling, which is unknowable while the model is still streaming.
   //
-  // On unless switched off: an eligible call is a plain server-side call with complete
-  // arguments, and waiting for the rest of the stream before running it buys nothing.
-  // `eagerToolExecution: false` is the escape hatch for a caller who finds a shape this
-  // does not account for.
+  // `Agent.stream()` is where the default lives: it resolves the option to a boolean
+  // before the options reach here, so an eligible call — a plain server-side call with
+  // complete arguments — runs early unless the caller passed `eagerToolExecution: false`.
+  //
+  // The check is `=== true` rather than "not false" on purpose. Durable agents run their
+  // own mirrored steps and never build this workflow, and durable preparation rejects an
+  // explicit `true` outright; requiring the flag to be present makes that exclusion a
+  // stated condition rather than a consequence of the option not being threaded through.
+  // The same goes for any other caller reaching the loop directly.
   const eagerCoordinator =
-    rest.eagerToolExecution !== false && rest.methodType === 'stream' && toolCallConcurrencyStrategy === 'available'
+    rest.eagerToolExecution === true && rest.methodType === 'stream' && toolCallConcurrencyStrategy === 'available'
       ? // Read the limit late: map-tool-calls recomputes it per step, and the eager
         // path must honour the same recomputed value rather than a construction-time copy.
         new EagerToolExecutionCoordinator(() => toolCallForeachOptions.concurrency)
