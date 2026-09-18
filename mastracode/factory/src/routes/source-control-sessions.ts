@@ -8,6 +8,7 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
 
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
+import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -123,16 +124,6 @@ async function resolveSession(
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isValidGitRef(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    value.length <= 255 &&
-    !value.startsWith('-') &&
-    /^[A-Za-z0-9_./-]+$/.test(value)
-  );
 }
 
 function createSessionNaming() {

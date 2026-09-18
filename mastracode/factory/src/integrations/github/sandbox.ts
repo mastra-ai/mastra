@@ -16,6 +16,7 @@
  */
 
 import type { RepositoryAccess } from '../../capabilities/version-control.js';
+import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
@@ -659,22 +660,7 @@ function classifyGitFailure(
 // repository configuration.
 // ---------------------------------------------------------------------------
 
-/**
- * Validate a git ref (branch) name. Server-side defense-in-depth: only allow a
- * conservative character set as defense in depth. Mirrors the route-layer
- * check.
- */
-export function isValidGitRef(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    value.length <= 255 &&
-    // Reject leading-dash refs (e.g. `--mirror`) so the value can never be
-    // parsed as a git option when interpolated into a command.
-    !value.startsWith('-') &&
-    /^[A-Za-z0-9_./-]+$/.test(value)
-  );
-}
+export { isValidGitRef };
 
 /** Identity used to author commits inside the sandbox. */
 export interface GitIdentity {
