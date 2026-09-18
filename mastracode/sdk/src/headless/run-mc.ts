@@ -11,6 +11,7 @@
  * final result via `result`.
  */
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
+import { z } from 'zod';
 
 import { GoalManager } from '../goal-manager.js';
 import { createGoalReminderSignal } from '../goal-signal.js';
@@ -415,7 +416,9 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
           await session.thread.create();
         }
 
-        const goalManager = goal.goalManager ?? new GoalManager();
+        const sessionState = await session.state.get();
+        const configDirName = z.string().safeParse(sessionState?.configDir).data;
+        const goalManager = goal.goalManager ?? new GoalManager(configDirName);
         const state = {
           controller,
           session,

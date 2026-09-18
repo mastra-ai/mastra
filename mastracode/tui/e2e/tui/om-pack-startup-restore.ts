@@ -13,7 +13,7 @@ export const omPackStartupRestoreScenario: McE2eScenario = {
     GOOGLE_GENERATIVE_AI_API_KEY: 'mc-e2e-google-key',
   }),
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -46,7 +46,7 @@ export const omPackStartupRestoreScenario: McE2eScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const m=s.models||{}; console.log("OM_PACK_SETTINGS="+[m.activeOmPackId,m.omModelOverride||"null",m.observerModelOverride||"null",m.reflectorModelOverride||"null"].join(":"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const m=s.models||{}; console.log("OM_PACK_SETTINGS="+[m.activeOmPackId,m.omModelOverride||"null",m.observerModelOverride||"null",m.reflectorModelOverride||"null"].join(":"));'`,
     );
     await runtime.waitForScreenText(/OM_PACK_SETTINGS=gemini:null:null:null/i, terminal, 8_000);
 

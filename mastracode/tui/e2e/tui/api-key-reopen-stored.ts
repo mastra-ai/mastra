@@ -21,7 +21,7 @@ export const apiKeyReopenStoredScenario = {
   description: 'Enter opens the key dialog and Delete works for providers with existing keys.',
   testName: 'opens dialog on Enter for env-sourced key and allows storing/deleting a local override',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,

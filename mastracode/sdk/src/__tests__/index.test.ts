@@ -1097,9 +1097,13 @@ describe('createMastraCode', () => {
       undefined,
     );
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      | { initialState?: Record<string, unknown> }
+      | { initialState?: Record<string, unknown>; modelUseCountProvider?: () => Record<string, number> }
       | undefined;
     expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
+
+    loadSettingsMock.mockClear();
+    agentControllerConfig?.modelUseCountProvider?.();
+    expect(loadSettingsMock).toHaveBeenCalledWith(undefined, '.acme-code');
   });
 
   it('passes programmatic MCP servers into the startup manager with project and configDir', async () => {

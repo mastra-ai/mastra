@@ -16,7 +16,7 @@ export const setupCompletionPersistenceScenario = {
     MASTRA_GATEWAY_API_KEY: 'mc-e2e-gateway-key',
   }),
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -67,7 +67,7 @@ export const setupCompletionPersistenceScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("SETUP_COMPLETED="+Boolean(s.onboarding.completedAt)); console.log("SETUP_SKIPPED="+s.onboarding.skippedAt); console.log("SETUP_MODE="+s.onboarding.modePackId+":"+s.models.activeModelPackId); console.log("SETUP_OM="+s.onboarding.omPackId+":"+s.models.activeOmPackId+":"+s.models.omModelOverride); console.log("SETUP_YOLO="+s.preferences.yolo); console.log("SETUP_CUSTOM_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length)'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s={...JSON.parse(fs.readFileSync(app+"/config.json","utf8")),...JSON.parse(fs.readFileSync(app+"/state.json","utf8"))}; console.log("SETUP_COMPLETED="+Boolean(s.onboarding.completedAt)); console.log("SETUP_SKIPPED="+s.onboarding.skippedAt); console.log("SETUP_MODE="+s.onboarding.modePackId+":"+s.models.activeModelPackId); console.log("SETUP_OM="+s.onboarding.omPackId+":"+s.models.activeOmPackId+":"+s.models.omModelOverride); console.log("SETUP_YOLO="+s.preferences.yolo); console.log("SETUP_CUSTOM_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length)'`,
     );
     await runtime.waitForScreenText(/SETUP_COMPLETED=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/SETUP_SKIPPED=null/i, terminal, 8_000);

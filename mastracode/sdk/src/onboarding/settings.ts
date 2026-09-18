@@ -4,17 +4,17 @@
  * so they carry across threads and restarts.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import fs, { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
+import { z } from 'zod';
 import { AuthStorage } from '../auth/storage.js';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
-import {
-  isThinkingLevelSetting,
-  resolveDefaultThinkingLevel as resolveThinkingDefault,
-  THINKING_LEVEL_VALUES,
-} from '../thinking.js';
+import { isThinkingLevelSetting, resolveDefaultThinkingLevel as resolveThinkingDefault } from '../thinking.js';
 import type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
 export { isThinkingLevelSetting, THINKING_LEVEL_VALUES } from '../thinking.js';
 export type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
@@ -458,24 +458,11 @@ const DEFAULTS: GlobalSettings = {
 
 export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
-const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
 
-function cloneSignalSettings(signals: SignalSettings): SignalSettings {
-  return { ...signals };
-}
-
-function rememberLoadedSettings(settings: GlobalSettings): GlobalSettings {
-  loadedSignalSettings.set(settings, cloneSignalSettings(settings.signals));
+function rememberLoadedSettings(settings: GlobalSettings, configDirName = DEFAULT_CONFIG_DIR): GlobalSettings {
+  loadedSettingsRecords.set(settings, toSettingsRecord(settings));
+  loadedSettingsConfigDirs.set(settings, configDirName);
   return settings;
-}
-
-function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boolean {
-  return (
-    left.unixSocketPubSub === right.unixSocketPubSub &&
-    left.experimentalGithubSignals === right.experimentalGithubSignals &&
-    left.experimentalCrossAgentSignals === right.experimentalCrossAgentSignals &&
-    left.githubPollIntervalMs === right.githubPollIntervalMs
-  );
 }
 
 function parseWebSearchProvider(value: unknown): WebSearchProviderSetting {
@@ -594,7 +581,19 @@ function getNewInstallDefaults(): GlobalSettings {
   return settings;
 }
 
-export function getSettingsPath(): string {
+function getGlobalSettingsDir(configDirName = DEFAULT_CONFIG_DIR): string {
+  return process.env.MASTRA_APP_DATA_DIR ?? join(homedir(), configDirName);
+}
+
+export function getSettingsPath(configDirName = DEFAULT_CONFIG_DIR): string {
+  return join(getGlobalSettingsDir(configDirName), 'config.json');
+}
+
+export function getStatePath(): string {
+  return join(getAppDataDir(), 'state.json');
+}
+
+export function getLegacySettingsPath(): string {
   return join(getAppDataDir(), 'settings.json');
 }
 
@@ -850,74 +849,37 @@ function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
   return { resources, localTracing };
 }
 
-/**
- * One-time migration: move model-related data from auth.json to settings.json.
- * Reads `_modelRanks`, `_modeModelId_*`, `_subagentModelId*` from auth.json,
- * merges them into settings, removes them from auth.json, and writes both files.
- * No-ops if auth.json has no _ prefixed model data.
- */
-function migrateFromAuth(settingsPath: string): boolean {
-  const authPath = join(getAppDataDir(), 'auth.json');
-  if (!existsSync(authPath)) return false;
+interface AuthMigration {
+  authPath: string;
+  authData: Record<string, unknown>;
+}
 
-  let authData: Record<string, any>;
+function migrateFromAuth(
+  settings: GlobalSettings,
+  authPath = join(getAppDataDir(), 'auth.json'),
+): AuthMigration | undefined {
+  if (!existsSync(authPath)) return undefined;
+
+  let authData: Record<string, unknown>;
   try {
-    authData = JSON.parse(readFileSync(authPath, 'utf-8'));
+    const parsed = JSON.parse(readFileSync(authPath, 'utf-8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    authData = parsed as Record<string, unknown>;
   } catch {
-    return false;
+    return undefined;
   }
 
-  const modelKeys = Object.keys(authData).filter(k => k.startsWith('_'));
-  if (modelKeys.length === 0) return false;
+  const modelKeys = Object.keys(authData).filter(key => key.startsWith('_'));
+  if (modelKeys.length === 0) return undefined;
 
-  // Load existing settings (or defaults) and merge auth data into it
-  let settings: GlobalSettings;
-  if (existsSync(settingsPath)) {
-    try {
-      const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
-      settings = {
-        onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
-        models: {
-          ...DEFAULTS.models,
-          ...raw.models,
-          modePackOverrides: parseModePackOverrides(raw.models?.modePackOverrides),
-          modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
-        },
-        preferences: parsePreferences(raw.preferences),
-        storage: {
-          ...STORAGE_DEFAULTS,
-          ...raw.storage,
-          libsql: { ...STORAGE_DEFAULTS.libsql, ...raw.storage?.libsql },
-          pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
-        },
-        customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
-        customProviders: parseCustomProviders(raw.customProviders),
-        modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
-        updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
-        memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
-        lsp: parseLspSettings(raw.lsp),
-        browser: parseBrowserSettings(raw.browser),
-        shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
-        voice: parseVoiceSettings(raw.voice),
-        backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
-        signals: parseSignalSettings(raw.signals),
-        mcp: parseMcpDiscoverySettings(raw.mcp),
-        observability: parseObservabilitySettings(raw.observability),
-      };
-      applyQuietModePreferenceRollout(settings, raw.onboarding);
-    } catch {
-      settings = structuredClone(DEFAULTS);
-    }
-  } else {
-    settings = structuredClone(DEFAULTS);
+  const modelRanks = authData._modelRanks;
+  if (modelRanks && typeof modelRanks === 'object' && !Array.isArray(modelRanks)) {
+    const counts = Object.fromEntries(
+      Object.entries(modelRanks).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+    );
+    settings.modelUseCounts = { ...counts, ...settings.modelUseCounts };
   }
 
-  // Migrate model use counts (only if settings doesn't already have them)
-  if (authData._modelRanks && typeof authData._modelRanks === 'object') {
-    settings.modelUseCounts = { ...authData._modelRanks, ...settings.modelUseCounts };
-  }
-
-  // Migrate per-mode model defaults (don't overwrite existing settings)
   for (const key of modelKeys) {
     const modeMatch = key.match(/^_modeModelId_(.+)$/);
     if (modeMatch?.[1] && typeof authData[key] === 'string' && !settings.models.modeDefaults[modeMatch[1]]) {
@@ -925,31 +887,26 @@ function migrateFromAuth(settingsPath: string): boolean {
     }
   }
 
-  // Migrate subagent models (don't overwrite existing settings)
   for (const key of modelKeys) {
     if (key === '_subagentModelId' && typeof authData[key] === 'string' && !settings.models.subagentModels['default']) {
       settings.models.subagentModels['default'] = authData[key];
     }
-    const saMatch = key.match(/^_subagentModelId_(.+)$/);
-    if (saMatch?.[1] && typeof authData[key] === 'string' && !settings.models.subagentModels[saMatch[1]]) {
-      settings.models.subagentModels[saMatch[1]] = authData[key];
+    const subagentMatch = key.match(/^_subagentModelId_(.+)$/);
+    if (subagentMatch?.[1] && typeof authData[key] === 'string' && !settings.models.subagentModels[subagentMatch[1]]) {
+      settings.models.subagentModels[subagentMatch[1]] = authData[key];
     }
   }
 
-  // Write migrated settings
-  saveSettings(settings, settingsPath);
+  for (const key of modelKeys) delete authData[key];
+  return { authPath, authData };
+}
 
-  // Clean up auth.json — remove _ prefixed keys
-  for (const key of modelKeys) {
-    delete authData[key];
-  }
+function finishAuthMigration(migration: AuthMigration): void {
   try {
-    writeFileSync(authPath, JSON.stringify(authData, null, 2), 'utf-8');
+    writeFileSync(migration.authPath, JSON.stringify(migration.authData, null, 2), 'utf-8');
   } catch {
-    // Non-fatal — settings are saved, auth cleanup can fail
+    return;
   }
-
-  return true;
 }
 
 const LEGACY_VARIED_MODELS: Record<string, string> = {
@@ -995,69 +952,220 @@ export function migrateLegacyVariedPack(settings: GlobalSettings): boolean {
   return true;
 }
 
-export function loadSettings(filePath: string = getSettingsPath()): GlobalSettings {
-  // One-time migration: move model data from auth.json into settings.json
-  migrateFromAuth(filePath);
+const settingsRecordSchema = z.record(z.string(), z.json());
+const modelUseCountsSchema = z.record(z.string(), z.number());
+const customModelPacksSchema = z.array(
+  z.object({ name: z.string(), models: z.record(z.string(), z.string()), createdAt: z.string() }),
+);
+const memoryGatewaySchema = z.object({ baseUrl: z.string().optional() });
+const mirrorMetadataSchema = z.object({ version: z.literal(1), baseline: settingsRecordSchema });
+type SettingsRecord = z.infer<typeof settingsRecordSchema>;
+type SettingsValue = SettingsRecord[string];
+type SettingsRecordRead = { status: 'missing' } | { status: 'invalid' } | { status: 'valid'; value: SettingsRecord };
 
-  if (!existsSync(filePath)) return rememberLoadedSettings(getNewInstallDefaults());
+const LEGACY_MIRROR_KEY = '_splitSettingsMirror';
+const LEGACY_MIRROR_VERSION = 1;
+const loadedSettingsRecords = new WeakMap<GlobalSettings, SettingsRecord>();
+const loadedSettingsConfigDirs = new WeakMap<GlobalSettings, string>();
+
+function parseNestedSettingsRecord(value: SettingsRecord[string] | undefined): SettingsRecord | undefined {
+  const result = settingsRecordSchema.safeParse(value);
+  return result.success ? result.data : undefined;
+}
+
+function restrictSettingsFilePermissions(filePath: string): void {
   try {
-    const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
-    // Spread raw first to preserve unknown top-level keys (forward-compatibility),
-    // then overlay with parsed/typed fields so known keys are always correct.
-    const settings: GlobalSettings = {
-      ...raw,
-      onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
-      models: {
-        ...DEFAULTS.models,
-        ...raw.models,
-        modePackOverrides: parseModePackOverrides(raw.models?.modePackOverrides),
-        modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
-      },
-      preferences: parsePreferences(raw.preferences),
-      storage: {
-        ...STORAGE_DEFAULTS,
-        ...raw.storage,
-        libsql: { ...STORAGE_DEFAULTS.libsql, ...raw.storage?.libsql },
-        pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
-      },
-      customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
-      customProviders: parseCustomProviders(raw.customProviders),
-      modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
-      updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
-      memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
-      lsp: parseLspSettings(raw.lsp),
-      browser: parseBrowserSettings(raw.browser),
-      shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
-      voice: parseVoiceSettings(raw.voice),
-      backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
-      signals: parseSignalSettings(raw.signals),
-      mcp: parseMcpDiscoverySettings(raw.mcp),
-      observability: parseObservabilitySettings(raw.observability),
-    };
+    fs.chmodSync(filePath, 0o600);
+  } catch {}
+}
 
-    // Migrate legacy omModelId → omModelOverride
-    let settingsChanged = false;
-    if (!hasQuietModePreferenceSelected(raw.onboarding)) {
-      applyQuietModePreferenceRollout(settings, raw.onboarding);
-      settingsChanged = true;
-    }
-    if (raw.models?.omModelId && !settings.models.omModelOverride) {
-      settings.models.omModelOverride = raw.models.omModelId;
-      settingsChanged = true;
-    }
-
-    if (migrateLegacyVariedPack(settings)) {
-      settingsChanged = true;
-    }
-
-    if (settingsChanged) {
-      saveSettings(settings, filePath);
-    }
-
-    return rememberLoadedSettings(settings);
+function readSettingsRecord(filePath: string): SettingsRecordRead {
+  if (!existsSync(filePath)) return { status: 'missing' };
+  let result: ReturnType<typeof settingsRecordSchema.safeParse>;
+  try {
+    result = settingsRecordSchema.safeParse(JSON.parse(readFileSync(filePath, 'utf-8')));
   } catch {
-    return rememberLoadedSettings(structuredClone(DEFAULTS));
+    return { status: 'invalid' };
   }
+  if (!result.success) return { status: 'invalid' };
+  restrictSettingsFilePermissions(filePath);
+  return { status: 'valid', value: result.data };
+}
+
+function getSettingsRecord(read: SettingsRecordRead): SettingsRecord | undefined {
+  return read.status === 'valid' ? read.value : undefined;
+}
+
+function stripMirrorMetadata(record: SettingsRecord): SettingsRecord {
+  const { [LEGACY_MIRROR_KEY]: _metadata, ...settings } = record;
+  return settings;
+}
+
+function getMirrorBaseline(record: SettingsRecord): SettingsRecord | undefined {
+  const result = mirrorMetadataSchema.safeParse(record[LEGACY_MIRROR_KEY]);
+  return result.success ? result.data.baseline : undefined;
+}
+
+function isSettingsRecord(value: SettingsValue | undefined): value is SettingsRecord {
+  return settingsRecordSchema.safeParse(value).success;
+}
+
+function mergeChangedSettings(
+  base: SettingsValue | undefined,
+  preferred: SettingsValue | undefined,
+  secondary: SettingsValue | undefined,
+): SettingsValue | undefined {
+  if (isDeepStrictEqual(preferred, base)) return structuredClone(secondary);
+  if (isDeepStrictEqual(secondary, base) || isDeepStrictEqual(preferred, secondary)) {
+    return structuredClone(preferred);
+  }
+  if (isSettingsRecord(base) && isSettingsRecord(preferred) && isSettingsRecord(secondary)) {
+    const merged: SettingsRecord = {};
+    const keys = new Set([...Object.keys(base), ...Object.keys(preferred), ...Object.keys(secondary)]);
+    for (const key of keys) {
+      const value = mergeChangedSettings(base[key], preferred[key], secondary[key]);
+      if (value !== undefined) merged[key] = value;
+    }
+    return merged;
+  }
+  return structuredClone(preferred);
+}
+
+interface ParsedSettingsRecord {
+  settings: GlobalSettings;
+  changed: boolean;
+}
+
+function parseSettingsRecord(raw: SettingsRecord): ParsedSettingsRecord {
+  const rawOnboarding = parseNestedSettingsRecord(raw.onboarding);
+  const rawModels = parseNestedSettingsRecord(raw.models);
+  const rawStorage = parseNestedSettingsRecord(raw.storage);
+  const modelUseCounts = modelUseCountsSchema.safeParse(raw.modelUseCounts);
+  const customModelPacks = customModelPacksSchema.safeParse(raw.customModelPacks);
+  const memoryGateway = memoryGatewaySchema.safeParse(raw.memoryGateway);
+  const dismissedVersion = z.string().safeParse(raw.updateDismissedVersion);
+  const legacyOmModelId = z.string().safeParse(rawModels?.omModelId);
+  const settings: GlobalSettings = {
+    ...raw,
+    onboarding: { ...DEFAULTS.onboarding, ...rawOnboarding },
+    models: {
+      ...DEFAULTS.models,
+      ...rawModels,
+      modePackOverrides: parseModePackOverrides(rawModels?.modePackOverrides),
+      modeThinkingDefaults: parseModeThinkingDefaults(rawModels?.modeThinkingDefaults),
+    },
+    preferences: parsePreferences(raw.preferences),
+    storage: {
+      ...STORAGE_DEFAULTS,
+      ...rawStorage,
+      libsql: { ...STORAGE_DEFAULTS.libsql, ...parseNestedSettingsRecord(rawStorage?.libsql) },
+      pg: { ...STORAGE_DEFAULTS.pg, ...parseNestedSettingsRecord(rawStorage?.pg) },
+    },
+    customModelPacks: customModelPacks.success ? customModelPacks.data : [],
+    customProviders: parseCustomProviders(raw.customProviders),
+    modelUseCounts: modelUseCounts.success ? modelUseCounts.data : {},
+    updateDismissedVersion: dismissedVersion.success ? dismissedVersion.data : null,
+    memoryGateway: memoryGateway.success ? memoryGateway.data : {},
+    lsp: parseLspSettings(raw.lsp),
+    browser: parseBrowserSettings(raw.browser),
+    shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
+    voice: parseVoiceSettings(raw.voice),
+    backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
+    signals: parseSignalSettings(raw.signals),
+    mcp: parseMcpDiscoverySettings(raw.mcp),
+    observability: parseObservabilitySettings(raw.observability),
+  };
+
+  let changed = false;
+  if (!hasQuietModePreferenceSelected(rawOnboarding)) {
+    applyQuietModePreferenceRollout(settings, rawOnboarding);
+    changed = true;
+  }
+  if (legacyOmModelId.success && !settings.models.omModelOverride) {
+    settings.models.omModelOverride = legacyOmModelId.data;
+    changed = true;
+  }
+  if (migrateLegacyVariedPack(settings)) changed = true;
+
+  return { settings, changed };
+}
+
+function mergeSettingsRecords(config: SettingsRecord | undefined, state: SettingsRecord | undefined): SettingsRecord {
+  const raw: SettingsRecord = { ...config };
+  if (state?.onboarding !== undefined) raw.onboarding = state.onboarding;
+  if (state?.modelUseCounts !== undefined) raw.modelUseCounts = state.modelUseCounts;
+  if (state?.updateDismissedVersion !== undefined) raw.updateDismissedVersion = state.updateDismissedVersion;
+  return raw;
+}
+
+export function loadSettings(filePath?: string, configDirName = DEFAULT_CONFIG_DIR): GlobalSettings {
+  if (filePath !== undefined) {
+    const stored = readSettingsRecord(filePath);
+    const raw = stored.status === 'valid' ? stripMirrorMetadata(stored.value) : undefined;
+    const parsed = raw ? parseSettingsRecord(raw) : undefined;
+    const settings =
+      parsed?.settings ?? (stored.status === 'missing' ? getNewInstallDefaults() : structuredClone(DEFAULTS));
+    const authMigration = migrateFromAuth(settings);
+    if (stored.status !== 'invalid' && (parsed?.changed || authMigration)) {
+      saveSettings(settings, filePath, configDirName);
+      if (authMigration) finishAuthMigration(authMigration);
+    }
+    return rememberLoadedSettings(settings, configDirName);
+  }
+
+  const configPath = getSettingsPath(configDirName);
+  const statePath = getStatePath();
+  const legacyPath = getLegacySettingsPath();
+  const configRead = readSettingsRecord(configPath);
+  const stateRead = readSettingsRecord(statePath);
+  const legacyRead = readSettingsRecord(legacyPath);
+  const legacyRecord = getSettingsRecord(legacyRead);
+  const legacySettings = legacyRecord ? stripMirrorMetadata(legacyRecord) : undefined;
+  const storedConfig = getSettingsRecord(configRead);
+  const storedState = getSettingsRecord(stateRead);
+  const config = storedConfig ?? (configRead.status === 'missing' ? legacySettings : undefined);
+  const state = storedState ?? (stateRead.status === 'missing' ? legacySettings : undefined);
+  const hasInvalidSplitStore = configRead.status === 'invalid' || stateRead.status === 'invalid';
+
+  let parsed: ParsedSettingsRecord;
+  if (!config && !state) {
+    parsed = {
+      settings: hasInvalidSplitStore ? structuredClone(DEFAULTS) : getNewInstallDefaults(),
+      changed: false,
+    };
+  } else {
+    parsed = parseSettingsRecord(mergeSettingsRecords(config, state));
+  }
+
+  let settings = parsed.settings;
+  let reconciledLegacy = false;
+  const mirrorBaseline = legacyRecord ? getMirrorBaseline(legacyRecord) : undefined;
+  if (!hasInvalidSplitStore && storedConfig && storedState && legacySettings && mirrorBaseline) {
+    const splitRecord = toSettingsRecord(settings);
+    const legacyParsed = parseSettingsRecord(legacySettings).settings;
+    const merged = mergeChangedSettings(mirrorBaseline, splitRecord, toSettingsRecord(legacyParsed));
+    if (isSettingsRecord(merged) && !isDeepStrictEqual(merged, splitRecord)) {
+      settings = parseSettingsRecord(merged).settings;
+      reconciledLegacy = true;
+    }
+  }
+
+  const authMigration = migrateFromAuth(settings, join(dirname(legacyPath), 'auth.json'));
+  const needsMirror = legacyRead.status === 'missing' || !mirrorBaseline;
+  const needsPersistence =
+    parsed.changed ||
+    reconciledLegacy ||
+    configRead.status === 'missing' ||
+    stateRead.status === 'missing' ||
+    needsMirror ||
+    Boolean(authMigration);
+
+  if (!hasInvalidSplitStore && legacyRead.status !== 'invalid' && needsPersistence) {
+    saveSettings(settings, undefined, configDirName);
+    if (authMigration) finishAuthMigration(authMigration);
+  }
+
+  return rememberLoadedSettings(settings, configDirName);
 }
 
 export const THREAD_ACTIVE_MODEL_PACK_ID_KEY = 'activeModelPackId';
@@ -1242,34 +1350,116 @@ export function resolveOmModel(
   return resolveOmRoleModel(settings, 'observer', builtinOmPacks);
 }
 
-function getSignalSettingsForSave(settings: GlobalSettings, filePath: string): SignalSettings {
-  const loadedSignals = loadedSignalSettings.get(settings);
-  if (!loadedSignals || !signalSettingsEqual(settings.signals, loadedSignals) || !existsSync(filePath)) {
-    return settings.signals;
-  }
-
-  try {
-    const currentRaw = JSON.parse(readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
-    const currentSignals = parseSignalSettings(currentRaw.signals);
-    if (!signalSettingsEqual(currentSignals, loadedSignals)) {
-      return currentSignals;
-    }
-  } catch {
-    // If the current file is unreadable, fall back to the caller's settings.
-  }
-
-  return settings.signals;
+function toSettingsRecord(settings: GlobalSettings): SettingsRecord {
+  const parsed = settingsRecordSchema.safeParse(JSON.parse(JSON.stringify(settings)));
+  if (!parsed.success) throw new Error('Settings contain values that cannot be serialized');
+  return stripMirrorMetadata(parsed.data);
 }
 
-export function saveSettings(settings: GlobalSettings, filePath: string = getSettingsPath()): void {
+interface SplitSettingsRecord {
+  config: SettingsRecord;
+  state: SettingsRecord;
+}
+
+function splitSettingsRecord(record: SettingsRecord): SplitSettingsRecord {
+  const { onboarding, modelUseCounts, updateDismissedVersion, ...config } = record;
+  const state: SettingsRecord = {};
+  if (onboarding !== undefined) state.onboarding = onboarding;
+  if (modelUseCounts !== undefined) state.modelUseCounts = modelUseCounts;
+  if (updateDismissedVersion !== undefined) state.updateDismissedVersion = updateDismissedVersion;
+  return { config, state };
+}
+
+function writeSettingsRecord(filePath: string, value: SettingsRecord): void {
   const dir = dirname(filePath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const temporaryPath = `${filePath}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    writeFileSync(temporaryPath, JSON.stringify(value, null, 2), { encoding: 'utf-8', mode: 0o600 });
+    renameSync(temporaryPath, filePath);
+    restrictSettingsFilePermissions(filePath);
+  } finally {
+    rmSync(temporaryPath, { force: true });
   }
-  const signals = getSignalSettingsForSave(settings, filePath);
-  settings.signals = signals;
-  loadedSignalSettings.set(settings, cloneSignalSettings(signals));
-  writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
+function writeSettingsRecordIfChanged(filePath: string, value: SettingsRecord, current?: SettingsRecord): void {
+  if (!current || !isDeepStrictEqual(current, value)) writeSettingsRecord(filePath, value);
+}
+
+function writeLegacyMirror(filePath: string, settings: SettingsRecord, current?: SettingsRecord): void {
+  writeSettingsRecordIfChanged(
+    filePath,
+    {
+      ...settings,
+      [LEGACY_MIRROR_KEY]: { version: LEGACY_MIRROR_VERSION, baseline: settings },
+    },
+    current,
+  );
+}
+
+export function saveSettings(
+  settings: GlobalSettings,
+  filePath?: string,
+  configDirName = loadedSettingsConfigDirs.get(settings) ?? DEFAULT_CONFIG_DIR,
+): void {
+  const desired = toSettingsRecord(settings);
+  const baseline = loadedSettingsRecords.get(settings);
+
+  if (filePath !== undefined) {
+    const currentRead = readSettingsRecord(filePath);
+    if (currentRead.status === 'invalid') {
+      console.warn(`Skipped saving unreadable settings file: ${filePath}`);
+      return;
+    }
+    const storedCurrent = getSettingsRecord(currentRead);
+    const current = storedCurrent
+      ? toSettingsRecord(parseSettingsRecord(stripMirrorMetadata(storedCurrent)).settings)
+      : undefined;
+    const merged = baseline && current ? mergeChangedSettings(baseline, desired, current) : desired;
+    if (!isSettingsRecord(merged)) throw new Error('Unable to merge settings');
+    writeSettingsRecordIfChanged(filePath, merged, storedCurrent ? stripMirrorMetadata(storedCurrent) : undefined);
+    loadedSettingsRecords.set(settings, desired);
+    loadedSettingsConfigDirs.set(settings, configDirName);
+    return;
+  }
+
+  const configPath = getSettingsPath(configDirName);
+  const statePath = getStatePath();
+  const configRead = readSettingsRecord(configPath);
+  const stateRead = readSettingsRecord(statePath);
+  const configInvalid = configRead.status === 'invalid';
+  const stateInvalid = stateRead.status === 'invalid';
+  if (configInvalid) console.warn(`Skipped saving unreadable settings file: ${configPath}`);
+  if (stateInvalid) console.warn(`Skipped saving unreadable settings file: ${statePath}`);
+  const currentConfig = getSettingsRecord(configRead);
+  const currentState = getSettingsRecord(stateRead);
+  const current =
+    currentConfig || currentState
+      ? toSettingsRecord(parseSettingsRecord(mergeSettingsRecords(currentConfig, currentState)).settings)
+      : desired;
+  let merged = baseline ? mergeChangedSettings(baseline, desired, current) : desired;
+  if (!isSettingsRecord(merged)) throw new Error('Unable to merge settings');
+
+  const legacyPath = getLegacySettingsPath();
+  const legacyRead = readSettingsRecord(legacyPath);
+  const legacyRecord = getSettingsRecord(legacyRead);
+  const mirrorBaseline = legacyRecord ? getMirrorBaseline(legacyRecord) : undefined;
+  if (legacyRead.status === 'invalid') console.warn(`Skipped saving unreadable settings file: ${legacyPath}`);
+  if (!configInvalid && !stateInvalid && legacyRecord && mirrorBaseline) {
+    const legacySettings = toSettingsRecord(parseSettingsRecord(stripMirrorMetadata(legacyRecord)).settings);
+    merged = mergeChangedSettings(mirrorBaseline, merged, legacySettings);
+    if (!isSettingsRecord(merged)) throw new Error('Unable to merge legacy settings');
+  }
+
+  const split = splitSettingsRecord(merged);
+  if (!configInvalid) writeSettingsRecordIfChanged(configPath, split.config, currentConfig);
+  if (!stateInvalid) writeSettingsRecordIfChanged(statePath, split.state, currentState);
+  if (!configInvalid && !stateInvalid && legacyRead.status !== 'invalid') {
+    writeLegacyMirror(legacyPath, merged, legacyRecord);
+  }
+  if (!configInvalid && !stateInvalid) loadedSettingsRecords.set(settings, desired);
+  loadedSettingsConfigDirs.set(settings, configDirName);
 }
 
 /** Marker file name to track which provider last used a profile. */

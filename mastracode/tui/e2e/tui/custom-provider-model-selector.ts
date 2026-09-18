@@ -26,7 +26,7 @@ export const customProviderModelSelectorScenario = {
   testName: 'selects custom-provider models in the /models custom pack flow and persists defaults',
   skipReason: 'current main no longer exposes settings-backed custom provider models in the selector catalog',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -72,7 +72,7 @@ export const customProviderModelSelectorScenario = {
     await runtime.waitForScreenText(/Switched to Provider Selector E2E pack/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const pack=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("CUSTOM_PROVIDER_COUNT="+s.customProviders.length); console.log("CUSTOM_SELECTOR_ACTIVE="+s.models.activeModelPackId); console.log("CUSTOM_SELECTOR_PLAN="+s.models.modeDefaults.plan); console.log("CUSTOM_SELECTOR_BUILD="+s.models.modeDefaults.build); console.log("CUSTOM_SELECTOR_FAST="+s.models.modeDefaults.fast); console.log("CUSTOM_SELECTOR_PACK_PLAN="+pack.models.plan); console.log("CUSTOM_SELECTOR_PACK_BUILD="+pack.models.build); console.log("CUSTOM_SELECTOR_PACK_FAST="+pack.models.fast); console.log("CUSTOM_SELECTOR_SUBAGENTS="+Object.keys(s.models.subagentModels||{}).length);'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const pack=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("CUSTOM_PROVIDER_COUNT="+s.customProviders.length); console.log("CUSTOM_SELECTOR_ACTIVE="+s.models.activeModelPackId); console.log("CUSTOM_SELECTOR_PLAN="+s.models.modeDefaults.plan); console.log("CUSTOM_SELECTOR_BUILD="+s.models.modeDefaults.build); console.log("CUSTOM_SELECTOR_FAST="+s.models.modeDefaults.fast); console.log("CUSTOM_SELECTOR_PACK_PLAN="+pack.models.plan); console.log("CUSTOM_SELECTOR_PACK_BUILD="+pack.models.build); console.log("CUSTOM_SELECTOR_PACK_FAST="+pack.models.fast); console.log("CUSTOM_SELECTOR_SUBAGENTS="+Object.keys(s.models.subagentModels||{}).length);'`,
     );
     await runtime.waitForScreenText(/CUSTOM_PROVIDER_COUNT=1/i, terminal, 8_000);
     await runtime.waitForScreenText(/CUSTOM_SELECTOR_ACTIVE=custom:Provider Selector E2E/i, terminal, 8_000);

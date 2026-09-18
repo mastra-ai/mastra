@@ -1,6 +1,7 @@
 import { StdinBuffer } from '@earendil-works/pi-tui';
 import type { Terminal } from '@earendil-works/pi-tui';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { Terminal as XtermTerminalType } from '@xterm/headless';
 import xterm from '@xterm/headless';
 
@@ -23,6 +24,7 @@ export type TerminalRunConfig = {
   env: Record<string, string | null>;
   cwd: string;
   context: McE2ePrepareContext;
+  readGlobalSettings: () => GlobalSettings;
 };
 
 const XtermTerminal = xterm.Terminal;
@@ -480,7 +482,12 @@ export async function runTerminalScenario(
       };
 
       await withTerminalProcessOutput(terminal, () =>
-        scenario.run({ terminal: scenarioTerminal, runtime, dbPath: runConfig.context.dbPath }),
+        scenario.run({
+          terminal: scenarioTerminal,
+          runtime,
+          dbPath: runConfig.context.dbPath,
+          readGlobalSettings: runConfig.readGlobalSettings,
+        }),
       );
       return 0;
     } finally {

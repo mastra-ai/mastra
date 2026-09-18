@@ -51,7 +51,7 @@ export const goalJudgeSingleRenderScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'goal-judge-single-render.json',
   prepare({ appDataDir, dbPath, projectDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.models = {
       ...settings.models,

@@ -7,7 +7,7 @@ export const browserProfileProviderMismatchScenario = {
   description: 'Warns before reusing a browser profile with a different provider and persists only after confirmation.',
   testName: 'handles browser profile provider mismatch confirmation through the /browser wizard',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const profilePath = join(appDataDir, 'browser-profile-provider-mismatch');
     mkdirSync(profilePath, { recursive: true });
     writeFileSync(join(profilePath, '.mastra-provider'), 'stagehand');
@@ -63,7 +63,7 @@ export const browserProfileProviderMismatchScenario = {
     await runtime.waitForScreenText(/Browser setup cancelled\./i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const path=require("path"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; const marker=fs.readFileSync(path.join(b.profile,".mastra-provider"),"utf8").trim(); console.log("BROWSER_MISMATCH_CANCEL="+[b.enabled,b.provider,marker].join(":"));'`,
+      `!node -e 'const fs=require("fs"); const path=require("path"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const b=s.browser||{}; const marker=fs.readFileSync(path.join(b.profile,".mastra-provider"),"utf8").trim(); console.log("BROWSER_MISMATCH_CANCEL="+[b.enabled,b.provider,marker].join(":"));'`,
     );
     await runtime.waitForScreenText(/BROWSER_MISMATCH_CANCEL=false:stagehand:stagehand/i, terminal, 8_000);
     await runtime.waitForScreenText(/\$ node -e[\s\S]*✓/i, terminal, 8_000);
@@ -77,7 +77,7 @@ export const browserProfileProviderMismatchScenario = {
     await runtime.waitForScreenText(/Provider:\s+AgentBrowser \(deterministic\)/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const path=require("path"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; const marker=fs.readFileSync(path.join(b.profile,".mastra-provider"),"utf8").trim(); console.log("BROWSER_MISMATCH_PROCEED="+[b.enabled,b.provider,b.headless,b.profile.endsWith("browser-profile-provider-mismatch"),marker].join(":"));'`,
+      `!node -e 'const fs=require("fs"); const path=require("path"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const b=s.browser||{}; const marker=fs.readFileSync(path.join(b.profile,".mastra-provider"),"utf8").trim(); console.log("BROWSER_MISMATCH_PROCEED="+[b.enabled,b.provider,b.headless,b.profile.endsWith("browser-profile-provider-mismatch"),marker].join(":"));'`,
     );
     await runtime.waitForScreenText(
       /BROWSER_MISMATCH_PROCEED=true:agent-browser:false:true:agent-browser/i,

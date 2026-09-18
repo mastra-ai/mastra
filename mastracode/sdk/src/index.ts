@@ -449,7 +449,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   // Auth storage (shared with Claude Max / OpenAI providers and AgentController)
   const authStorage = createAuthStorage();
-  const globalSettings = loadSettings(config?.settingsPath);
+  const globalSettings = loadSettings(config?.settingsPath, configDir);
   const backgroundToolsEnabled = globalSettings.backgroundTools?.enabled ?? false;
   const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
@@ -890,7 +890,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     maxProcessorRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: ctx => getDynamicModel(ctx, config?.settingsPath),
+    model: ctx => getDynamicModel(ctx, config?.settingsPath, configDir),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -952,7 +952,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // judge model is configured, keeping the goal step a no-op. Bind the same
       // `settingsPath` used above so the judge model and `maxRuns` come from one
       // config (a custom settings file would otherwise diverge).
-      judge: ctx => getGoalJudgeModel(ctx, config?.settingsPath),
+      judge: ctx => getGoalJudgeModel(ctx, config?.settingsPath, configDir),
       maxRuns: globalSettings.models.goalMaxTurns ?? 50,
       maxSteps: 1000,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,
@@ -1228,12 +1228,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     modes,
     intervalHandlers,
-    modelUseCountProvider: () => loadSettings().modelUseCounts,
+    modelUseCountProvider: () => loadSettings(config?.settingsPath, configDir).modelUseCounts,
     modelUseCountTracker: modelId => {
       try {
-        const settings = loadSettings();
+        const settings = loadSettings(config?.settingsPath, configDir);
         settings.modelUseCounts[modelId] = (settings.modelUseCounts[modelId] ?? 0) + 1;
-        saveSettings(settings);
+        saveSettings(settings, config?.settingsPath, configDir);
       } catch (error) {
         console.error('Failed to persist model usage count', error);
       }
@@ -1383,6 +1383,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // Surface the project root so boot/mount paths can wire workflow tools
     // against a workspace anchored at it without re-running detectProject().
     projectPath: project.rootPath,
+    configDir,
     // Surface the Agent instance so registerWorkflowBuilderPrimitives can add
     // it as a plain agent on the Mastra registry. Workflows then compose it
     // as an agent step (agentId: 'code-agent') and delegate open-ended tool
@@ -1521,7 +1522,7 @@ export async function wireSessionConcerns(
  */
 export async function bootLocalAgentController(config?: MastraCodeConfig) {
   const base = await createMastraCodeAgentController(config);
-  const { controller, sessionId, ownerId, projectPath, codeAgent, mcpManager } = base;
+  const { controller, sessionId, ownerId, projectPath, configDir, codeAgent, mcpManager } = base;
 
   await controller.init();
   // Register workflow primitives (sub-agent + workspace tools + code-agent
@@ -1529,7 +1530,9 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   // Mastra so the dynamic-workflow loading in startWorkers() can rehydrate
   // saved workflows against the right tool/agent registry.
   const mastra = controller.getMastra();
-  if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });
+  if (mastra) {
+    await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager, configDirName: configDir });
+  }
   await mastra?.startWorkers();
   base.registerConfiguredProcessorsWithMastra();
   base.startPluginSignalProviders();
@@ -1628,6 +1631,7 @@ export async function prepareAgentControllerMount(
     storage,
     authStorage,
     projectPath,
+    configDir,
     codeAgent,
     mcpManager,
     backgroundToolsEnabled,
@@ -1669,7 +1673,14 @@ export async function prepareAgentControllerMount(
     await controller.init();
     if (weOwnTheMastra) {
       const mastra = controller.getMastra();
-      if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });
+      if (mastra) {
+        await registerWorkflowBuilderPrimitives(mastra, {
+          projectPath,
+          codeAgent,
+          mcpManager,
+          configDirName: configDir,
+        });
+      }
     }
     await controller.getMastra()?.startWorkers();
     // Anchored here rather than at a `new Mastra(...)` call site: finalize runs

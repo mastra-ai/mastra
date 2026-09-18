@@ -14,7 +14,7 @@ export const browserbaseStartupRestoreScenario = {
     BROWSERBASE_PROJECT_ID: 'mc-e2e-browserbase-startup-project',
   }),
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -58,7 +58,7 @@ export const browserbaseStartupRestoreScenario = {
     await runtime.waitForScreenText(/\/browser on to apply, \/browser to reconfigure, or restart\./i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; const sh=b.stagehand||{}; console.log("BROWSERBASE_STARTUP_ENABLED="+b.enabled); console.log("BROWSERBASE_STARTUP_PROVIDER="+b.provider); console.log("BROWSERBASE_STARTUP_ENV="+sh.env); console.log("BROWSERBASE_STARTUP_HEADLESS="+b.headless); console.log("BROWSERBASE_STARTUP_CDP_SUFFIX="+String(b.cdpUrl||"").split("/").pop()); console.log("BROWSERBASE_STARTUP_CREDS="+Boolean(sh.apiKey||sh.projectId));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const b=s.browser||{}; const sh=b.stagehand||{}; console.log("BROWSERBASE_STARTUP_ENABLED="+b.enabled); console.log("BROWSERBASE_STARTUP_PROVIDER="+b.provider); console.log("BROWSERBASE_STARTUP_ENV="+sh.env); console.log("BROWSERBASE_STARTUP_HEADLESS="+b.headless); console.log("BROWSERBASE_STARTUP_CDP_SUFFIX="+String(b.cdpUrl||"").split("/").pop()); console.log("BROWSERBASE_STARTUP_CREDS="+Boolean(sh.apiKey||sh.projectId));'`,
     );
     await runtime.waitForScreenText(/BROWSERBASE_STARTUP_ENABLED=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSERBASE_STARTUP_PROVIDER=stagehand/i, terminal, 8_000);

@@ -233,7 +233,7 @@ export async function getDynamicWorkspace({
 
   // LSP is opt-in. When disabled we pass `false` so core skips the dependency
   // check, the LSP manager, and the `lsp_inspect` tool entirely.
-  const userLsp = resolveLspSetting(loadSettings().lsp);
+  const userLsp = resolveLspSetting(loadSettings(undefined, configDir).lsp);
   let lspConfig: LSPConfig | false = false;
   if (userLsp !== false) {
     const mcModulePath = join(dirname(fileURLToPath(import.meta.url)), '..');

@@ -19,7 +19,7 @@ export const customProviderEditShareImportScenario = {
   description: 'edits a custom provider and exercises custom pack share plus import cancel through real TUI modals',
   testName: 'edits a custom provider and cancels importing a shared pack collision',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,

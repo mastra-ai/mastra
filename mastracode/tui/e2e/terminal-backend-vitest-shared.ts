@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readdirSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LLMock } from '@copilotkit/aimock';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import { LibSQLStore } from '@mastra/libsql';
 import { afterAll, describe, it } from 'vitest';
 
@@ -75,6 +76,19 @@ function getAppDataDirForHome(homeDir: string): string {
   return join(homeDir, '.local', 'share', 'mastracode');
 }
 
+export function readGlobalSettings(appDataDir: string): GlobalSettings {
+  const configPath = join(appDataDir, 'config.json');
+  const statePath = join(appDataDir, 'state.json');
+  const legacyPath = join(appDataDir, 'settings.json');
+  const config = existsSync(configPath)
+    ? JSON.parse(readFileSync(configPath, 'utf8'))
+    : existsSync(legacyPath)
+      ? JSON.parse(readFileSync(legacyPath, 'utf8'))
+      : {};
+  const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : {};
+  return { ...config, ...state };
+}
+
 function seedSettings(homeDir: string, useOpenAIModel: boolean, openAiApiKey = 'mc-e2e-openai-key'): void {
   const appDataDir = getAppDataDirForHome(homeDir);
   mkdirSync(appDataDir, { recursive: true });
@@ -91,7 +105,7 @@ function seedSettings(homeDir: string, useOpenAIModel: boolean, openAiApiKey = '
     );
   }
   writeFileSync(
-    join(appDataDir, 'settings.json'),
+    join(appDataDir, 'config.json'),
     JSON.stringify(
       {
         onboarding: {
@@ -190,6 +204,14 @@ async function prepareTerminalRun(
     projectDir,
   };
   await scenario.prepare?.(scenarioContext);
+  if (scenario.name === 'models-pack-activation-persistence') {
+    writeFileSync(
+      join(isolatedAppDataDir, 'settings.json'),
+      JSON.stringify(readGlobalSettings(isolatedAppDataDir), null, 2),
+    );
+    rmSync(join(isolatedAppDataDir, 'config.json'), { force: true });
+    rmSync(join(isolatedAppDataDir, 'state.json'), { force: true });
+  }
 
   const launchCwd = projectDir;
 
@@ -232,6 +254,7 @@ async function prepareTerminalRun(
       liveOutput: false,
       cwd: launchCwd,
       context: scenarioContext,
+      readGlobalSettings: () => readGlobalSettings(isolatedAppDataDir),
       env,
     },
   };

@@ -196,7 +196,7 @@ export function createDynamicTools(
       });
     }
 
-    const configuredWebTools = createConfiguredWebTools();
+    const configuredWebTools = createConfiguredWebTools(state?.configDir);
     if (configuredWebTools) {
       Object.assign(tools, configuredWebTools);
     } else if (isAnthropicModel) {

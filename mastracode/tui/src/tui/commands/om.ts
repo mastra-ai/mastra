@@ -92,7 +92,8 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
         onObserveAttachmentsChange: async value => {
           await ctx.state.session.state.set({ observeAttachments: value } as any);
           await ctx.state.session.thread.setSetting({ key: 'observeAttachments', value });
-          persistOmObserveAttachments(value);
+          const sessionState = await ctx.state.session.state.get();
+          persistOmObserveAttachments(value, sessionState?.configDir);
           const label = value === 'auto' ? 'auto' : value ? 'on' : 'off';
           ctx.showInfo(`Observe attachments → ${label}`);
         },

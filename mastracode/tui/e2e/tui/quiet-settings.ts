@@ -7,7 +7,7 @@ export const quietSettingsScenario = {
   description: 'toggles quiet mode and preview-line settings through the real TUI settings overlay',
   testName: 'enables quiet mode and updates preview lines in the real TUI',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = { ...settings.onboarding, quietModePreferenceSelected: true };
     settings.preferences = {

@@ -12,7 +12,7 @@ export const loginSeedsOmDefaultScenario = {
   testName: 'matches observer and reflector models to the provider selected in /login',
   prepare({ appDataDir }) {
     rmSync(join(appDataDir, 'auth.json'), { force: true });
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = readMutableSettingsFixture(settingsPath);
     settings.onboarding = {
       ...settings.onboarding,
@@ -72,7 +72,7 @@ export const loginSeedsOmDefaultScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); console.log("LOGIN_OM_DEFAULT="+s.onboarding.omPackId+":"+s.models.activeOmPackId+":"+(s.models.omModelOverride||"none"));'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s={...JSON.parse(fs.readFileSync(app+"/config.json","utf8")),...JSON.parse(fs.readFileSync(app+"/state.json","utf8"))}; console.log("LOGIN_OM_DEFAULT="+s.onboarding.omPackId+":"+s.models.activeOmPackId+":"+(s.models.omModelOverride||"none"));'`,
     );
     await runtime.waitForScreenText(/LOGIN_OM_DEFAULT=openai:openai:none/i, terminal, 8_000);
 

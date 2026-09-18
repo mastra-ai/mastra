@@ -9,7 +9,7 @@ export const omThresholdPersistenceScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'om-threshold-persistence.json',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -57,7 +57,7 @@ export const omThresholdPersistenceScenario: McE2eScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("OM_THRESH_GLOBAL="+s.models.omObservationThreshold+":"+s.models.omReflectionThreshold)'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); console.log("OM_THRESH_GLOBAL="+s.models.omObservationThreshold+":"+s.models.omReflectionThreshold)'`,
     );
     await runtime.waitForScreenText(/OM_THRESH_GLOBAL=15000:60000/i, terminal, 8_000);
 

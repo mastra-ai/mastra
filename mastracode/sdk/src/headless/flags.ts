@@ -187,7 +187,7 @@ export const FLAGS: FlagSpec[] = [
     field: 'settings',
     coerce: validate.string,
     placeholder: '<path>',
-    help: 'Path to settings.json file (default: global settings)',
+    help: 'Path to a configuration file (default: global config.json)',
   },
   {
     key: 'help',

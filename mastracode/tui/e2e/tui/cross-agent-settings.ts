@@ -10,7 +10,7 @@ export const crossAgentSettingsScenario: McE2eScenario = {
   testName: 'persists the experimental cross-agent communication setting',
   env({ appDataDir }) {
     return {
-      MC_E2E_CROSS_AGENT_SETTINGS_PATH: join(appDataDir, 'settings.json'),
+      MC_E2E_CROSS_AGENT_SETTINGS_PATH: join(appDataDir, 'config.json'),
     };
   },
   async run({ terminal, runtime }) {

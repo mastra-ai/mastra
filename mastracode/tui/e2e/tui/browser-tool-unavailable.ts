@@ -31,7 +31,7 @@ export const browserToolUnavailableScenario = {
   useOpenAIModel: true,
   aimockFixture: 'browser-tool-unavailable.json',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
     settings.onboarding = {
       ...((typeof settings.onboarding === 'object' && settings.onboarding !== null

@@ -22,7 +22,7 @@ export const customPackImportRenameScenario = {
     'Imports a shared custom model pack through /models, renames a name collision, and verifies persistence.',
   testName: 'imports a shared custom pack by renaming a name collision and persists both packs',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -86,7 +86,7 @@ export const customPackImportRenameScenario = {
 
     await runtime.waitForScreenText(/Imported and activated Imported Renamed E2E pack/i, terminal, 8_000);
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const packs=s.customModelPacks; const original=packs.find(p=>p.name==="Import Rename E2E"); const renamed=packs.find(p=>p.name==="Imported Renamed E2E"); const same=(a,b,c,d,e,f)=>a===d&&b===e&&c===f; console.log("IMPORT_RENAME_COUNT="+packs.length); console.log("IMPORT_RENAME_NAMES="+packs.map(p=>p.name).sort().join("|")); console.log("IMPORT_RENAME_ACTIVE="+s.models.activeModelPackId); console.log("IMPORT_RENAME_DEFAULTS_OK="+same(s.models.modeDefaults.plan,s.models.modeDefaults.build,s.models.modeDefaults.fast,"openai/gpt-5.5","openai/gpt-5.5","openai/gpt-5.4-mini")); console.log("IMPORT_RENAME_ORIGINAL_OK="+same(original?.models?.plan,original?.models?.build,original?.models?.fast,"pack-import-rename-e2e/old-plan","pack-import-rename-e2e/old-build","pack-import-rename-e2e/old-explore")); console.log("IMPORT_RENAME_IMPORTED_OK="+same(renamed?.models?.plan,renamed?.models?.build,renamed?.models?.fast,"openai/gpt-5.5","openai/gpt-5.5","openai/gpt-5.4-mini"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const packs=s.customModelPacks; const original=packs.find(p=>p.name==="Import Rename E2E"); const renamed=packs.find(p=>p.name==="Imported Renamed E2E"); const same=(a,b,c,d,e,f)=>a===d&&b===e&&c===f; console.log("IMPORT_RENAME_COUNT="+packs.length); console.log("IMPORT_RENAME_NAMES="+packs.map(p=>p.name).sort().join("|")); console.log("IMPORT_RENAME_ACTIVE="+s.models.activeModelPackId); console.log("IMPORT_RENAME_DEFAULTS_OK="+same(s.models.modeDefaults.plan,s.models.modeDefaults.build,s.models.modeDefaults.fast,"openai/gpt-5.5","openai/gpt-5.5","openai/gpt-5.4-mini")); console.log("IMPORT_RENAME_ORIGINAL_OK="+same(original?.models?.plan,original?.models?.build,original?.models?.fast,"pack-import-rename-e2e/old-plan","pack-import-rename-e2e/old-build","pack-import-rename-e2e/old-explore")); console.log("IMPORT_RENAME_IMPORTED_OK="+same(renamed?.models?.plan,renamed?.models?.build,renamed?.models?.fast,"openai/gpt-5.5","openai/gpt-5.5","openai/gpt-5.4-mini"));'`,
     );
     await runtime.waitForScreenText(/IMPORT_RENAME_COUNT=2/i, terminal, 8_000);
     await runtime.waitForScreenText(/IMPORT_RENAME_NAMES=Import Rename E2E\|Imported Renamed E2E/i, terminal, 8_000);

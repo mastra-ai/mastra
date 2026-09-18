@@ -10,7 +10,7 @@ export const automatedChatScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'automated-chat.json',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, any>;
     settings.models = { ...settings.models, observerModelOverride: 'openai/gpt-5.4-mini' };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));

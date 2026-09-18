@@ -12,7 +12,7 @@ export const apiKeyDeleteEnvScenario = {
   description: 'Deletes a stored API key without clearing an existing shell environment key.',
   testName: 'removes a stored API key while preserving an existing env key projection',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,

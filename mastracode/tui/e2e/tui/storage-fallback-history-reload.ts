@@ -13,7 +13,7 @@ export const storageFallbackHistoryReloadScenario: McE2eScenario = {
   description: 'Verify PostgreSQL startup fallback keeps local LibSQL history visible in the real TUI.',
   testName: 'loads local history after persisted PostgreSQL settings fall back to LibSQL',
   prepare({ appDataDir, dbPath, projectDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.storage = {
       ...settings.storage,
@@ -73,7 +73,7 @@ values
     await runtime.waitForScreenText(/Fallback LibSQL history survived PostgreSQL startup fallback/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("STORAGE_SETTINGS_BACKEND="+s.storage.backend);'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); console.log("STORAGE_SETTINGS_BACKEND="+s.storage.backend);'`,
     );
     await runtime.waitForScreenText(/STORAGE_SETTINGS_BACKEND=pg/i, terminal, 8_000);
   },

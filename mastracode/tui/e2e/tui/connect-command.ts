@@ -7,7 +7,7 @@ export const connectCommandScenario = {
   description: 'Opens account and API key authentication from one command.',
   testName: 'opens the account or API key selector with /connect',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,

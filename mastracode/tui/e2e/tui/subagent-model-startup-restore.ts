@@ -18,7 +18,7 @@ export const subagentModelStartupRestoreScenario = {
   useOpenAIModel: true,
   aimockFixture: 'subagent-model-startup-restore.json',
   prepare({ appDataDir, projectDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -66,7 +66,7 @@ export const subagentModelStartupRestoreScenario = {
     );
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("SUBAGENT_STARTUP_ACTIVE="+s.models.activeModelPackId); console.log("SUBAGENT_STARTUP_ONBOARDING="+s.onboarding.modePackId); console.log("SUBAGENT_STARTUP_FAST="+p?.models?.fast); console.log("SUBAGENT_STARTUP_OVERRIDES="+Object.keys(s.models.subagentModels||{}).length);'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s={...JSON.parse(fs.readFileSync(app+"/config.json","utf8")),...JSON.parse(fs.readFileSync(app+"/state.json","utf8"))}; const p=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("SUBAGENT_STARTUP_ACTIVE="+s.models.activeModelPackId); console.log("SUBAGENT_STARTUP_ONBOARDING="+s.onboarding.modePackId); console.log("SUBAGENT_STARTUP_FAST="+p?.models?.fast); console.log("SUBAGENT_STARTUP_OVERRIDES="+Object.keys(s.models.subagentModels||{}).length);'`,
     );
     await runtime.waitForScreenText(/SUBAGENT_STARTUP_ACTIVE=custom:Subagent Startup Restore E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(

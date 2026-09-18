@@ -43,7 +43,7 @@ echo "Summarize the repo" | mastracode --prompt -
 | `--model`, `-m <id>` | Model override (e.g. a `provider/model` id) |
 | `--mode <build\|plan\|fast>` | Execution mode — defaults to `build` if omitted |
 | `--thinking-level <level>` | Thinking level: `off`, `low`, `medium`, `high`, `xhigh` |
-| `--settings <path>` | Path to a `settings.json` file (default: global settings) |
+| `--settings <path>` | Path to a custom combined settings file (default: global `config.json` and `state.json`) |
 | `--help`, `-h` | Show usage |
 
 `--continue` and `--thread` cannot be used together.
@@ -77,7 +77,7 @@ mastracode --prompt "Refactor" --output jsonl
 mastracode --prompt "Review this PR" --permission-mode deny --max-turns 10
 
 # Use a CI-specific settings file
-mastracode --settings ./settings-ci.json --prompt "Run tests"
+mastracode --settings ./config-ci.json --prompt "Run tests"
 
 # Resume the most recent thread
 mastracode -c --prompt "Continue where you left off"

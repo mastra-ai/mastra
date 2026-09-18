@@ -128,10 +128,10 @@ Thread behavior:
   Use --continue to resume the most recent thread, or --thread to target a specific one.
   Use --clone-thread to branch off a copy before running.
 
-Settings file:
-  Uses the same settings.json as the interactive TUI. Pass --settings to use
-  a custom settings file (e.g., settings-ci.json for CI). All model, pack,
-  subagent, and OM configuration is resolved from settings at startup.
+Configuration file:
+  Uses the same global config.json as the interactive TUI. Pass --settings to use
+  a custom configuration file (e.g., config-ci.json for CI). All model, pack,
+  subagent, and OM configuration is resolved from it at startup.
 
 Exit codes:
   0  Agent completed successfully
@@ -143,7 +143,7 @@ Examples:
   mastracode --prompt "Add tests" --timeout 300 --output json
   mastracode --prompt "Refactor" --output jsonl
   mastracode --prompt "Review this PR" --permission-mode deny --max-turns 10
-  mastracode --settings ./settings-ci.json --prompt "Run tests"
+  mastracode --settings ./config-ci.json --prompt "Run tests"
   mastracode -c --prompt "Continue where you left off"
   echo "Summarize the repo" | mastracode --prompt -
 `);

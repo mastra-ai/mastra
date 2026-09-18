@@ -19,7 +19,7 @@ export const browserModelPickerScenario = {
     };
   },
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -51,7 +51,7 @@ export const browserModelPickerScenario = {
 
     // Neither rejection should have written anything.
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("REJECTED_MODEL="+((s.browser.stagehand||{}).model||"missing"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); console.log("REJECTED_MODEL="+((s.browser.stagehand||{}).model||"missing"));'`,
     );
     await runtime.waitForScreenText(/REJECTED_MODEL=missing/i, terminal, 8_000);
 
@@ -87,7 +87,7 @@ export const browserModelPickerScenario = {
     await runtime.waitForScreenText(/Set model = groq\/llama-3\.3-70b-versatile/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const b=s.browser.stagehand||{}; console.log("PICKED_MODEL="+(b.model||"missing")); console.log("PICKED_ENV="+(b.env||"missing")); console.log("PICKED_KEY="+((auth["apikey:groq"]||{}).key||"missing"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const b=s.browser.stagehand||{}; console.log("PICKED_MODEL="+(b.model||"missing")); console.log("PICKED_ENV="+(b.env||"missing")); console.log("PICKED_KEY="+((auth["apikey:groq"]||{}).key||"missing"));'`,
     );
     await runtime.waitForScreenText(/PICKED_MODEL=groq\/llama-3\.3-70b-versatile/i, terminal, 8_000);
     await runtime.waitForScreenText(/PICKED_ENV=LOCAL/i, terminal, 8_000);
@@ -100,7 +100,7 @@ export const browserModelPickerScenario = {
     await runtime.waitForScreenText(/Model selection cancelled/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("AFTER_CANCEL_MODEL="+((s.browser.stagehand||{}).model||"missing"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); console.log("AFTER_CANCEL_MODEL="+((s.browser.stagehand||{}).model||"missing"));'`,
     );
     await runtime.waitForScreenText(/AFTER_CANCEL_MODEL=groq\/llama-3\.3-70b-versatile/i, terminal, 8_000);
 

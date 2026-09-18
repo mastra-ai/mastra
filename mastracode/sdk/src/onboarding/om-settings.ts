@@ -61,8 +61,8 @@ export function applyOmRoleOverride(
   settings.models.activeOmPackId = 'custom';
 }
 
-export function persistOmObserveAttachments(value: 'auto' | boolean): void {
-  const settings = loadSettings();
+export function persistOmObserveAttachments(value: 'auto' | boolean, configDirName?: string): void {
+  const settings = loadSettings(undefined, configDirName);
   settings.models.omObserveAttachments = value;
-  saveSettings(settings);
+  saveSettings(settings, undefined, configDirName);
 }

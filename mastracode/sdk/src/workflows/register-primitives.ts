@@ -55,13 +55,14 @@ export interface RegisterWorkflowBuilderPrimitivesOptions {
    * if MCP is disabled — workflow-builder will just see fewer tools.
    */
   mcpManager?: McpManager;
+  configDirName?: string;
 }
 
 export async function registerWorkflowBuilderPrimitives(
   mastra: Mastra,
   options: RegisterWorkflowBuilderPrimitivesOptions,
 ): Promise<void> {
-  const { projectPath, allowedPaths = [], codeAgent, mcpManager } = options;
+  const { projectPath, allowedPaths = [], codeAgent, mcpManager, configDirName } = options;
 
   // 1. Agents workflows can compose.
   mastra.addAgent(workflowBuilderAgent, 'workflow-builder');
@@ -85,7 +86,7 @@ export async function registerWorkflowBuilderPrimitives(
 
   // 3. Model-independent web tools. Provider-native web tools (Anthropic/OpenAI)
   //    are model-locked and would freeze workflows to one provider.
-  const configuredWebTools = createConfiguredWebTools();
+  const configuredWebTools = createConfiguredWebTools(configDirName);
   if (configuredWebTools) {
     mastra.addTool(configuredWebTools.web_search, 'web-search');
     mastra.addTool(configuredWebTools.web_extract, 'web-extract');

@@ -7,7 +7,7 @@ export const modelsPackActivationPersistenceScenario = {
   description: 'Activates a saved custom model pack through /models and verifies persisted settings.',
   testName: 'activates a saved custom pack from /models and persists active defaults',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -43,7 +43,7 @@ export const modelsPackActivationPersistenceScenario = {
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   },
-  async run({ terminal, runtime }) {
+  async run({ terminal, runtime, readGlobalSettings }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
@@ -59,15 +59,17 @@ export const modelsPackActivationPersistenceScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/Switched to Models Pack E2E pack/i, terminal, 8_000);
 
-    terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("MODELS_ACTIVE="+s.models.activeModelPackId); console.log("MODELS_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("MODELS_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("MODELS_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("MODELS_SUBAGENTS="+Object.keys(s.models.subagentModels||{}).length); console.log("MODELS_PACK_COUNT="+s.customModelPacks.length)'`,
-    );
-    await runtime.waitForScreenText(/MODELS_ACTIVE=custom:Models Pack E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(/MODELS_DEFAULT_PLAN=models-pack-e2e\/plan-e2e/i, terminal, 8_000);
-    await runtime.waitForScreenText(/MODELS_DEFAULT_BUILD=models-pack-e2e\/build-e2e/i, terminal, 8_000);
-    await runtime.waitForScreenText(/MODELS_DEFAULT_FAST=models-pack-e2e\/fast-e2e/i, terminal, 8_000);
-    await runtime.waitForScreenText(/MODELS_SUBAGENTS=0/i, terminal, 8_000);
-    await runtime.waitForScreenText(/MODELS_PACK_COUNT=1/i, terminal, 8_000);
+    const settings = readGlobalSettings();
+    if (
+      settings.models.activeModelPackId !== 'custom:Models Pack E2E' ||
+      settings.models.modeDefaults.plan !== 'models-pack-e2e/plan-e2e' ||
+      settings.models.modeDefaults.build !== 'models-pack-e2e/build-e2e' ||
+      settings.models.modeDefaults.fast !== 'models-pack-e2e/fast-e2e' ||
+      Object.keys(settings.models.subagentModels).length !== 0 ||
+      settings.customModelPacks.length !== 1
+    ) {
+      throw new Error('Expected the activated model pack in global settings');
+    }
 
     terminal.keyCtrlC();
   },

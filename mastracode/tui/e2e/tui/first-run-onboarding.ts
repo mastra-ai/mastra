@@ -8,7 +8,7 @@ export const firstRunOnboardingScenario: McE2eScenario = {
   description: 'Launch with a clean config dir and verify first-run onboarding can be skipped through the real TUI.',
   testName: 'shows first-run onboarding from clean config and returns to the TUI after skip',
   prepare({ appDataDir }) {
-    rmSync(join(appDataDir, 'settings.json'), { force: true });
+    rmSync(join(appDataDir, 'config.json'), { force: true });
     rmSync(join(appDataDir, 'auth.json'), { force: true });
   },
   async run({ terminal, runtime }) {

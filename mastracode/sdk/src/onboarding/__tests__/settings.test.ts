@@ -1,12 +1,24 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import fs, {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { applyOMDefaultIfUnconfigured, hasExplicitOMConfiguration } from '../om-settings.js';
 import {
   createBrowserFromSettings,
   getCustomProviderId,
+  getLegacySettingsPath,
+  getSettingsPath,
+  getStatePath,
   loadSettings,
   migrateLegacyVariedPack,
   parseCustomProviders,
@@ -216,6 +228,393 @@ function withTempSettingsFile(run: (filePath: string) => void): void {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+function withTempDefaultSettings(run: () => void): void {
+  const dir = mkdtempSync(join(tmpdir(), 'mastracode-default-settings-'));
+  const previous = process.env.MASTRA_APP_DATA_DIR;
+  process.env.MASTRA_APP_DATA_DIR = dir;
+  try {
+    run();
+  } finally {
+    if (previous === undefined) delete process.env.MASTRA_APP_DATA_DIR;
+    else process.env.MASTRA_APP_DATA_DIR = previous;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('default config and state storage', () => {
+  it('migrates the legacy settings file into separate config and state files', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(
+        getLegacySettingsPath(),
+        JSON.stringify({
+          onboarding: {
+            completedAt: '2026-09-17T00:00:00.000Z',
+            version: 3,
+            modePackId: 'anthropic',
+            quietModePreferenceSelected: true,
+          },
+          preferences: { theme: 'dark', quietMode: true },
+          models: { activeModelPackId: 'anthropic' },
+          modelUseCounts: { 'anthropic/claude-sonnet-4-5': 4 },
+          updateDismissedVersion: '1.7.0',
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings();
+      const config = JSON.parse(readFileSync(getSettingsPath(), 'utf-8'));
+      const state = JSON.parse(readFileSync(getStatePath(), 'utf-8'));
+
+      expect(settings.preferences.theme).toBe('dark');
+      expect(settings.onboarding.completedAt).toBe('2026-09-17T00:00:00.000Z');
+      expect(config.preferences.theme).toBe('dark');
+      expect(config.models.activeModelPackId).toBe('anthropic');
+      expect(config).not.toHaveProperty('onboarding');
+      expect(config).not.toHaveProperty('modelUseCounts');
+      expect(config).not.toHaveProperty('updateDismissedVersion');
+      expect(state).toEqual({
+        onboarding: settings.onboarding,
+        modelUseCounts: { 'anthropic/claude-sonnet-4-5': 4 },
+        updateDismissedVersion: '1.7.0',
+      });
+      expect(existsSync(getLegacySettingsPath())).toBe(true);
+    });
+  });
+
+  it('loads the split stores without falling back to stale legacy values', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(
+        getLegacySettingsPath(),
+        JSON.stringify({
+          onboarding: { completedAt: 'legacy', quietModePreferenceSelected: true },
+          preferences: { theme: 'dark' },
+        }),
+        'utf-8',
+      );
+      writeFileSync(getSettingsPath(), JSON.stringify({ preferences: { theme: 'light' } }), 'utf-8');
+      writeFileSync(
+        getStatePath(),
+        JSON.stringify({
+          onboarding: { completedAt: 'current', quietModePreferenceSelected: true },
+          modelUseCounts: { 'openai/gpt-5.5': 2 },
+          updateDismissedVersion: null,
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings();
+
+      expect(settings.preferences.theme).toBe('light');
+      expect(settings.onboarding.completedAt).toBe('current');
+      expect(settings.modelUseCounts).toEqual({ 'openai/gpt-5.5': 2 });
+    });
+  });
+
+  it('starts with defaults when the legacy settings path is unreadable', () => {
+    withTempDefaultSettings(() => {
+      mkdirSync(getLegacySettingsPath());
+
+      const settings = loadSettings();
+
+      expect(settings.preferences.quietMode).toBe(true);
+      expect(settings.onboarding.completedAt).toBeNull();
+    });
+  });
+
+  it('does not restore legacy config over an unreadable config file', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), '{invalid', 'utf-8');
+      writeFileSync(
+        getLegacySettingsPath(),
+        JSON.stringify({
+          preferences: { theme: 'dark' },
+          onboarding: { completedAt: 'legacy', quietModePreferenceSelected: true },
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings();
+
+      expect(settings.preferences.theme).toBe('auto');
+      expect(settings.onboarding.completedAt).toBe('legacy');
+    });
+  });
+
+  it('does not restore legacy state over an unreadable state file', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), JSON.stringify({ preferences: { theme: 'dark' } }), 'utf-8');
+      writeFileSync(getStatePath(), '{invalid', 'utf-8');
+      writeFileSync(
+        getLegacySettingsPath(),
+        JSON.stringify({ onboarding: { completedAt: 'legacy', quietModePreferenceSelected: true } }),
+        'utf-8',
+      );
+
+      const settings = loadSettings();
+
+      expect(settings.preferences.theme).toBe('dark');
+      expect(settings.onboarding.completedAt).toBeNull();
+    });
+  });
+
+  it('leaves an unreadable config file untouched while saving state', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), '{invalid', 'utf-8');
+      const legacy = JSON.stringify({ preferences: { theme: 'dark' }, onboarding: { completedAt: 'legacy' } });
+      writeFileSync(getLegacySettingsPath(), legacy, 'utf-8');
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const settings = loadSettings();
+      settings.modelUseCounts['openai/gpt-5.5'] = 1;
+      saveSettings(settings);
+
+      expect(readFileSync(getSettingsPath(), 'utf-8')).toBe('{invalid');
+      expect(readFileSync(getLegacySettingsPath(), 'utf-8')).toBe(legacy);
+      expect(JSON.parse(readFileSync(getStatePath(), 'utf-8')).modelUseCounts).toEqual({ 'openai/gpt-5.5': 1 });
+      expect(warn).toHaveBeenCalledWith(`Skipped saving unreadable settings file: ${getSettingsPath()}`);
+      warn.mockRestore();
+    });
+  });
+
+  it('fills a missing state store from legacy settings without replacing config', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), JSON.stringify({ preferences: { theme: 'light' } }), 'utf-8');
+      writeFileSync(
+        getLegacySettingsPath(),
+        JSON.stringify({
+          preferences: { theme: 'dark' },
+          onboarding: { completedAt: 'legacy', quietModePreferenceSelected: true },
+          modelUseCounts: { 'openai/gpt-5.5': 3 },
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings();
+
+      expect(settings.preferences.theme).toBe('light');
+      expect(settings.onboarding.completedAt).toBe('legacy');
+      expect(settings.modelUseCounts).toEqual({ 'openai/gpt-5.5': 3 });
+    });
+  });
+
+  it('mirrors split settings for older instances and imports their edits', () => {
+    withTempDefaultSettings(() => {
+      const settings = loadSettings();
+      settings.preferences.theme = 'light';
+      saveSettings(settings);
+
+      const legacyPath = getLegacySettingsPath();
+      const legacy = JSON.parse(readFileSync(legacyPath, 'utf-8'));
+      expect(legacy.onboarding).toEqual(settings.onboarding);
+      expect(legacy.modelUseCounts).toEqual(settings.modelUseCounts);
+      legacy.preferences.theme = 'dark';
+      writeFileSync(legacyPath, JSON.stringify(legacy), 'utf-8');
+
+      expect(loadSettings().preferences.theme).toBe('dark');
+      expect(JSON.parse(readFileSync(getSettingsPath(), 'utf-8')).preferences.theme).toBe('dark');
+    });
+  });
+
+  it('loads valid settings when permission hardening fails', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), JSON.stringify({ preferences: { theme: 'dark' } }), 'utf-8');
+      writeFileSync(getStatePath(), JSON.stringify({ onboarding: {}, modelUseCounts: {} }), 'utf-8');
+      const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+        throw new Error('permission denied');
+      });
+
+      const settings = loadSettings();
+      chmod.mockRestore();
+
+      expect(settings.preferences.theme).toBe('dark');
+    });
+  });
+
+  it('persists settings when permission hardening fails', () => {
+    withTempDefaultSettings(() => {
+      const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+        throw new Error('permission denied');
+      });
+
+      expect(() => saveSettings(createSettings())).not.toThrow();
+      chmod.mockRestore();
+
+      expect(JSON.parse(readFileSync(getSettingsPath(), 'utf-8')).models.activeModelPackId).toBe('anthropic');
+      expect(JSON.parse(readFileSync(getLegacySettingsPath(), 'utf-8')).models.activeModelPackId).toBe('anthropic');
+    });
+  });
+
+  it.skipIf(process.platform === 'win32')('protects credential-bearing config and mirror files', () => {
+    withTempDefaultSettings(() => {
+      const settings = createSettings({
+        customProviders: [
+          {
+            name: 'Private Provider',
+            url: 'https://models.example.com/v1',
+            apiKey: 'private-provider-key',
+            models: ['private/model'],
+          },
+        ],
+      });
+
+      saveSettings(settings);
+
+      const configPath = getSettingsPath();
+      const legacyPath = getLegacySettingsPath();
+      expect(readFileSync(configPath, 'utf-8')).toContain('private-provider-key');
+      expect(readFileSync(legacyPath, 'utf-8')).toContain('private-provider-key');
+      expect(statSync(configPath).mode & 0o777).toBe(0o600);
+      expect(statSync(legacyPath).mode & 0o777).toBe(0o600);
+
+      chmodSync(configPath, 0o644);
+      chmodSync(legacyPath, 0o644);
+      loadSettings();
+
+      expect(statSync(configPath).mode & 0o777).toBe(0o600);
+      expect(statSync(legacyPath).mode & 0o777).toBe(0o600);
+    });
+  });
+
+  it.skipIf(process.platform === 'win32')('does not replace an unchanged compatibility mirror', () => {
+    withTempDefaultSettings(() => {
+      const settings = loadSettings();
+      const legacyPath = getLegacySettingsPath();
+      saveSettings(settings);
+      const inode = statSync(legacyPath).ino;
+
+      saveSettings(settings);
+
+      expect(statSync(legacyPath).ino).toBe(inode);
+    });
+  });
+
+  it('keeps old-instance edits made before a new-instance save', () => {
+    withTempDefaultSettings(() => {
+      const settings = loadSettings();
+      const legacy = JSON.parse(readFileSync(getLegacySettingsPath(), 'utf-8'));
+      legacy.preferences.quietMode = true;
+      writeFileSync(getLegacySettingsPath(), JSON.stringify(legacy), 'utf-8');
+
+      settings.preferences.theme = 'dark';
+      saveSettings(settings);
+
+      const merged = loadSettings();
+      expect(merged.preferences.theme).toBe('dark');
+      expect(merged.preferences.quietMode).toBe(true);
+    });
+  });
+
+  it('merges old-instance edits without reverting newer split settings', () => {
+    withTempDefaultSettings(() => {
+      const initial = loadSettings();
+      saveSettings(initial);
+      const staleLegacy = JSON.parse(readFileSync(getLegacySettingsPath(), 'utf-8'));
+
+      const current = loadSettings();
+      current.models.activeModelPackId = 'openai';
+      saveSettings(current);
+
+      staleLegacy.preferences.quietMode = true;
+      writeFileSync(getLegacySettingsPath(), JSON.stringify(staleLegacy), 'utf-8');
+
+      const merged = loadSettings();
+      expect(merged.models.activeModelPackId).toBe('openai');
+      expect(merged.preferences.quietMode).toBe(true);
+    });
+  });
+
+  it('merges saves from settings objects loaded before either write', () => {
+    withTempDefaultSettings(() => {
+      const first = loadSettings();
+      const second = loadSettings();
+
+      first.preferences.theme = 'dark';
+      saveSettings(first);
+      second.preferences.quietMode = true;
+      second.modelUseCounts['openai/gpt-5.5'] = 1;
+      saveSettings(second);
+
+      const merged = loadSettings();
+      expect(merged.preferences.theme).toBe('dark');
+      expect(merged.preferences.quietMode).toBe(true);
+      expect(merged.modelUseCounts).toEqual({ 'openai/gpt-5.5': 1 });
+    });
+  });
+
+  it('migrates auth model ranks into the state store', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), JSON.stringify({ preferences: { theme: 'dark' } }), 'utf-8');
+      writeFileSync(
+        getStatePath(),
+        JSON.stringify({ onboarding: {}, modelUseCounts: {}, updateDismissedVersion: null }),
+        'utf-8',
+      );
+      writeFileSync(
+        join(dirname(getLegacySettingsPath()), 'auth.json'),
+        JSON.stringify({ _modelRanks: { 'my/prov': 9 } }),
+      );
+
+      const settings = loadSettings();
+      const state = JSON.parse(readFileSync(getStatePath(), 'utf-8'));
+      const auth = JSON.parse(readFileSync(join(dirname(getLegacySettingsPath()), 'auth.json'), 'utf-8'));
+
+      expect(settings.modelUseCounts).toEqual({ 'my/prov': 9 });
+      expect(state.modelUseCounts).toEqual({ 'my/prov': 9 });
+      expect(auth).not.toHaveProperty('_modelRanks');
+    });
+  });
+
+  it('uses the configured global directory for config files', () => {
+    expect(getSettingsPath('.mastracode-test')).toBe(join(homedir(), '.mastracode-test', 'config.json'));
+  });
+
+  it('does not retain the last loaded config directory as a module default', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mastracode-config-dirs-'));
+    const previousHome = process.env.HOME;
+    const previousXdgDataHome = process.env.XDG_DATA_HOME;
+    const previousAppDataDir = process.env.MASTRA_APP_DATA_DIR;
+    process.env.HOME = dir;
+    process.env.XDG_DATA_HOME = join(dir, 'xdg-data');
+    delete process.env.MASTRA_APP_DATA_DIR;
+    try {
+      const first = loadSettings(undefined, '.mastracode-first');
+      const second = loadSettings(undefined, '.mastracode-second');
+      first.preferences.theme = 'dark';
+      second.preferences.theme = 'light';
+
+      saveSettings(second);
+      saveSettings(first);
+
+      expect(JSON.parse(readFileSync(getSettingsPath('.mastracode-first'), 'utf-8')).preferences.theme).toBe('dark');
+      expect(JSON.parse(readFileSync(getSettingsPath('.mastracode-second'), 'utf-8')).preferences.theme).toBe('light');
+      expect(getSettingsPath()).toBe(join(dir, '.mastracode', 'config.json'));
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousXdgDataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = previousXdgDataHome;
+      if (previousAppDataDir === undefined) delete process.env.MASTRA_APP_DATA_DIR;
+      else process.env.MASTRA_APP_DATA_DIR = previousAppDataDir;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps explicit settings paths as combined files', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.onboarding.completedAt = '2026-09-17T00:00:00.000Z';
+      settings.preferences.theme = 'dark';
+
+      saveSettings(settings, filePath);
+
+      const stored = JSON.parse(readFileSync(filePath, 'utf-8'));
+      expect(stored.preferences.theme).toBe('dark');
+      expect(stored.onboarding.completedAt).toBe('2026-09-17T00:00:00.000Z');
+      expect(existsSync(join(dirname(filePath), 'state.json'))).toBe(false);
+    });
+  });
+});
 
 describe('MCP discovery settings parsing', () => {
   it('defaults external MCP discovery to disabled', () => {

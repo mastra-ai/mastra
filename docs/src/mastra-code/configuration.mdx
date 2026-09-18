@@ -9,6 +9,10 @@ packages:
 
 Mastra Code is configured through project-level files, global settings, and environment variables. Configuration files live in `.mastracode/` directories at the project and user levels.
 
+Global preferences are stored in `~/.mastracode/config.json`. Durable application state is stored in `state.json` in the operating system's application data directory. The state file contains `onboarding`, `modelUseCounts`, and `updateDismissedVersion`; settings such as `observability.resources` and `memoryGateway` remain in `config.json`.
+
+Mastra Code keeps the previous application-data `settings.json` synchronized as a versioned compatibility mirror for older running versions and downgrades. The mirror can be retired after versions that require `settings.json` are no longer supported. Setting `MASTRA_APP_DATA_DIR` places all three files in that directory. A custom `--settings` path remains a single combined file.
+
 ## Custom configuration directory
 
 When embedding Mastra Code, pass `configDir` to [`createMastraCode()`](/reference#createmastracodeoptions) to replace the `.mastracode` directory name:
@@ -21,7 +25,7 @@ const mastraCode = await createMastraCode({
 })
 ```
 
-This changes the project and global locations used for MCP server configuration, hooks, slash commands, agent instructions, skills, and legacy `database.json` discovery. `configDir` must be a single directory name; absolute paths, `.` and `..`, and names containing `/` or `\` are rejected.
+This changes the project and global locations used for `config.json`, MCP server configuration, hooks, slash commands, agent instructions, skills, and legacy `database.json` discovery. `configDir` must be a single directory name; absolute paths, `.` and `..`, and names containing `/` or `\` are rejected.
 
 ## File autocomplete
 
@@ -127,7 +131,7 @@ Authenticating with a Claude Max subscription through OAuth is a grey area. Anth
 
 Use `/custom-providers` to add OpenAI-compatible providers. Each provider has a name, base URL, optional API key, and one or more model IDs. Saved models appear in selectors such as `/models` and `/subagents` alongside built-in models.
 
-Custom providers are stored in `settings.json` in the application data directory. API keys saved through this flow are stored locally in plaintext, so use it only on a trusted user account and machine.
+Custom providers are stored in global `config.json`. During the legacy compatibility period, `settings.json` contains the same provider data so older Mastra Code versions continue to work. Mastra Code restricts both files to the current operating-system user on macOS and Linux. API keys saved through this flow are stored locally in plaintext, so use it only on a trusted user account and machine.
 
 ## Direct shell passthrough
 
@@ -149,9 +153,9 @@ Mastra Code does not use `$SHELL` automatically and does not switch Windows user
 
 ### Shell passthrough settings
 
-Set the shell in global `settings.json` with the `shellPassthrough` block:
+Set the shell in global `config.json` with the `shellPassthrough` block:
 
-```json title="settings.json"
+```json title="config.json"
 {
   "shellPassthrough": {
     "mode": "path",
@@ -252,9 +256,9 @@ Project config overrides global config by server name. Servers that Mastra Code 
 
 ### Reuse servers from Claude Code and Codex
 
-Mastra Code can read the MCP servers you already configured globally in Claude Code and Codex CLI, so you do not have to copy them into `~/.mastracode/mcp.json`. Both sources are off by default. Turn them on in global `settings.json` with the `mcp` block:
+Mastra Code can read the MCP servers you already configured globally in Claude Code and Codex CLI, so you do not have to copy them into `~/.mastracode/mcp.json`. Both sources are off by default. Turn them on in global `config.json` with the `mcp` block:
 
-```json title="settings.json"
+```json title="config.json"
 {
   "mcp": {
     "claudeCodeGlobal": true,
@@ -652,7 +656,7 @@ Mastra Code stores threads, messages, state, and observational memory in a datab
 | Linux | `~/.local/share/mastracode/` |
 | Windows | `%APPDATA%\mastracode\` |
 
-Credentials and global settings are stored alongside the database. To switch to a remote LibSQL (Turso) or PostgreSQL backend, run `/settings` and select a storage backend. You'll be prompted for a connection URL.
+Credentials and durable application state are stored alongside the database. Global preferences are stored in `~/.mastracode/config.json`. To switch to a remote LibSQL (Turso) or PostgreSQL backend, run `/settings` and select a storage backend. You'll be prompted for a connection URL.
 
 If a PostgreSQL connection fails on startup, Mastra Code falls back to LibSQL and shows a warning so you can fix the connection via `/settings`.
 
@@ -693,7 +697,7 @@ Mastra Code detects your terminal's color scheme and applies a matching dark or 
 ### Detection order
 
 1. `MASTRA_THEME` environment variable: explicit `dark` or `light`
-1. Persisted setting from `/theme` command (stored in `settings.json`)
+1. Persisted setting from `/theme` command (stored in `config.json`)
 1. OSC 11 query: asks your terminal for its actual background color
 1. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
 1. Falls back to dark theme

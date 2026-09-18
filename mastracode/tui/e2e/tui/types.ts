@@ -1,4 +1,5 @@
 import type { Terminal } from '@earendil-works/pi-tui';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 
 import type { createMastraCode, MastraCodeConfig } from '../../src/index.js';
 import type { MastraTUIOptions } from '../../src/tui/index.js';
@@ -271,6 +272,11 @@ export type McE2eScenario = {
   inProcessApp?: (context: McE2eInProcessAppContext) => Promise<McE2eInProcessApp> | McE2eInProcessApp;
   terminalBackend?: 'subprocess';
   prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
-  run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime; dbPath: string }) => Promise<void>;
+  run: (context: {
+    terminal: McE2eTerminal;
+    runtime: McE2eScenarioRuntime;
+    dbPath: string;
+    readGlobalSettings: () => GlobalSettings;
+  }) => Promise<void>;
   verifyAimockRequests?: (requests: unknown[]) => void;
 };

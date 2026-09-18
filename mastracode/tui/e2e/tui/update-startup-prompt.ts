@@ -27,7 +27,7 @@ export const updateStartupPromptScenario: McE2eScenario = {
 
     await runtime.waitForScreenText(/Update skipped\. Run \/update to update later\./i, terminal, 8_000);
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("STARTUP_UPDATE_DISMISSED="+s.updateDismissedVersion);'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/state.json","utf8")); console.log("STARTUP_UPDATE_DISMISSED="+s.updateDismissedVersion);'`,
     );
     await runtime.waitForScreenText(/STARTUP_UPDATE_DISMISSED=99\.1\.0/i, terminal, 8_000);
     await (expect(terminal.getByText(/›|>/gi, { full: true, strict: false })) as any).toBeVisible();

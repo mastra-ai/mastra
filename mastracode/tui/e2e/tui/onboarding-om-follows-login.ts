@@ -14,7 +14,7 @@ export const onboardingOmFollowsLoginScenario = {
   description: 'Preselects the OM pack of the provider signed in during onboarding, not the first reachable one.',
   testName: 'preselects the OM pack matching the provider signed in during setup',
   prepare({ appDataDir, projectDir }) {
-    rmSync(join(appDataDir, 'settings.json'), { force: true });
+    rmSync(join(appDataDir, 'config.json'), { force: true });
     rmSync(join(appDataDir, 'auth.json'), { force: true });
     mkdirSync(projectDir, { recursive: true });
   },
@@ -48,7 +48,7 @@ export const onboardingOmFollowsLoginScenario = {
       CEREBRAS_API_KEY: '',
     };
   },
-  async run({ terminal, runtime }) {
+  async run({ terminal, runtime, readGlobalSettings }) {
     runtime.startLiveOutput(terminal);
 
     await runtime.waitForScreenText(/Welcome to Mastra Code/i, terminal);
@@ -79,10 +79,10 @@ export const onboardingOmFollowsLoginScenario = {
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
-    terminal.submit(
-      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); console.log("ONBOARDING_OM_PACK="+s.onboarding.omPackId+":"+s.models.activeOmPackId);'`,
-    );
-    await runtime.waitForScreenText(/ONBOARDING_OM_PACK=anthropic:anthropic/i, terminal, 8_000);
+    const settings = readGlobalSettings();
+    if (settings.onboarding.omPackId !== 'anthropic' || settings.models.activeOmPackId !== 'anthropic') {
+      throw new Error('Expected onboarding and model settings to use the Anthropic pack');
+    }
 
     terminal.keyCtrlC();
   },

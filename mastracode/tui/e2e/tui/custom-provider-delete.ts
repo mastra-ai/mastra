@@ -7,7 +7,7 @@ export const customProviderDeleteScenario = {
   description: 'deletes a configured OpenAI-compatible provider through the real TUI custom-providers modal flow',
   testName: 'deletes a custom provider through the real TUI and persists removal',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.onboarding = {
       ...settings.onboarding,
@@ -60,7 +60,7 @@ export const customProviderDeleteScenario = {
     await runtime.waitForScreenText(/Deleted custom provider: Delete Me E2E/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("CUSTOM_PROVIDER_COUNT="+s.customProviders.length); console.log("CUSTOM_PROVIDER_NAMES="+s.customProviders.map(p=>p.name).join("|")); console.log("CUSTOM_PACK_COUNT="+s.customModelPacks.length)'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); console.log("CUSTOM_PROVIDER_COUNT="+s.customProviders.length); console.log("CUSTOM_PROVIDER_NAMES="+s.customProviders.map(p=>p.name).join("|")); console.log("CUSTOM_PACK_COUNT="+s.customModelPacks.length)'`,
     );
     await runtime.waitForScreenText(/CUSTOM_PROVIDER_COUNT=0/i, terminal, 8_000);
     await runtime.waitForScreenText(/CUSTOM_PROVIDER_NAMES=/i, terminal, 8_000);

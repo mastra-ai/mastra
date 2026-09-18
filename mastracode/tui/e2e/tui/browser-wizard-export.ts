@@ -14,7 +14,7 @@ export const browserWizardExportScenario = {
   description: 'Configures AgentBrowser through the interactive /browser wizard and exports storage state.',
   testName: 'saves browser wizard settings and exports AgentBrowser storage state',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
     settings.onboarding = {
       ...((typeof settings.onboarding === 'object' && settings.onboarding !== null
@@ -98,7 +98,7 @@ export const browserWizardExportScenario = {
     );
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; const exported=JSON.parse(fs.readFileSync("${exportPath}","utf8")); console.log("BROWSER_WIZARD_PROVIDER="+b.provider); console.log("BROWSER_WIZARD_ENABLED="+b.enabled+":"+b.headless); console.log("BROWSER_WIZARD_CDP="+(b.cdpUrl||"missing").includes("browser-wizard-export-e2e")); console.log("BROWSER_WIZARD_LAUNCH_OPTS="+(b.profile||"missing")+":"+(b.executablePath||"missing")); console.log("BROWSER_WIZARD_EXPORT="+exported.source+":"+exported.provider);'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); const b=s.browser||{}; const exported=JSON.parse(fs.readFileSync("${exportPath}","utf8")); console.log("BROWSER_WIZARD_PROVIDER="+b.provider); console.log("BROWSER_WIZARD_ENABLED="+b.enabled+":"+b.headless); console.log("BROWSER_WIZARD_CDP="+(b.cdpUrl||"missing").includes("browser-wizard-export-e2e")); console.log("BROWSER_WIZARD_LAUNCH_OPTS="+(b.profile||"missing")+":"+(b.executablePath||"missing")); console.log("BROWSER_WIZARD_EXPORT="+exported.source+":"+exported.provider);'`,
     );
     await runtime.waitForScreenText(/BROWSER_WIZARD_PROVIDER=agent-browser/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSER_WIZARD_ENABLED=true:false/i, terminal, 8_000);

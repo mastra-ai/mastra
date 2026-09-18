@@ -15,7 +15,7 @@ export const backgroundPlaceholderOptOutScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'background-placeholder-opt-out.json',
   prepare({ appDataDir }) {
-    const path = join(appDataDir, 'settings.json');
+    const path = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(path, 'utf8'));
     settings.backgroundTools = { enabled: false };
     writeFileSync(path, JSON.stringify(settings));

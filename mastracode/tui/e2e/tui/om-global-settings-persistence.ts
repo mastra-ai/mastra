@@ -36,7 +36,7 @@ export const omGlobalSettingsPersistenceScenario: McE2eScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("OM_GLOBAL_CAVEMAN="+s.models.omCavemanObservations); console.log("OM_GLOBAL_ATTACH="+s.models.omObserveAttachments)'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/config.json","utf8")); console.log("OM_GLOBAL_CAVEMAN="+s.models.omCavemanObservations); console.log("OM_GLOBAL_ATTACH="+s.models.omObserveAttachments)'`,
     );
     await runtime.waitForScreenText(/OM_GLOBAL_CAVEMAN=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/OM_GLOBAL_ATTACH=true/i, terminal, 8_000);

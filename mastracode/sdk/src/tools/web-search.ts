@@ -188,8 +188,8 @@ export function resolveWebSearchProvider(
  * Create the configured model-independent web tools for the provider selected
  * via the `webSearchProvider` preference (set in the TUI settings panel).
  */
-export function createConfiguredWebTools() {
-  const provider = resolveWebSearchProvider(loadSettings().preferences.webSearchProvider);
+export function createConfiguredWebTools(configDirName?: string) {
+  const provider = resolveWebSearchProvider(loadSettings(undefined, configDirName).preferences.webSearchProvider);
 
   if (provider === 'parallel') {
     return {

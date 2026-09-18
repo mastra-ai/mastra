@@ -35,7 +35,7 @@ function sqlString(value: string) {
 }
 
 export function enableGithubSignals(context: McE2ePrepareContext, extraSignals: Record<string, unknown> = {}) {
-  const settingsPath = join(context.appDataDir, 'settings.json');
+  const settingsPath = join(context.appDataDir, 'config.json');
   const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as { signals?: Record<string, unknown> };
   settings.signals = {
     ...settings.signals,

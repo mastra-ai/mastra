@@ -33,7 +33,7 @@ export const skillsCommandActivationScenario: McE2eScenario = {
     writeSkill(projectDir, GOAL_SKILL_NAME, 'user-invocable: true\nmetadata:\n  goal: true\n', GOAL_INSTRUCTIONS);
     writeSkill(projectDir, HIDDEN_SKILL_NAME, 'user-invocable: false\n', 'Hidden skill instructions must stay hidden.');
 
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.models = {
       ...settings.models,

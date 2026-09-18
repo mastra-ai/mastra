@@ -26,7 +26,7 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'plan-approval-goal-handoff.json',
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.models = {
       ...settings.models,

@@ -8,10 +8,10 @@ export const backgroundToolsSettingsScenario: McE2eScenario = {
   description: 'Toggle background tools through settings without changing the running session.',
   testName: 'persists background tools on and off with a restart notice',
   env({ appDataDir }) {
-    return { MC_E2E_BACKGROUND_SETTINGS_PATH: join(appDataDir, 'settings.json') };
+    return { MC_E2E_BACKGROUND_SETTINGS_PATH: join(appDataDir, 'config.json') };
   },
   prepare({ appDataDir }) {
-    const settingsPath = join(appDataDir, 'settings.json');
+    const settingsPath = join(appDataDir, 'config.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
     settings.signals = {
       unixSocketPubSub: false,
