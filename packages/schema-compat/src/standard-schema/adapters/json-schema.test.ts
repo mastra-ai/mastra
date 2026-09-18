@@ -292,6 +292,51 @@ describe('json-schema standard-schema adapter', () => {
     });
   });
 
+  describe('draft 2019-09 schema support', () => {
+    // Schemas produced from Zod v3 advertise draft 2019-09. The validator must
+    // dispatch on the declared dialect instead of defaulting to draft-07 Ajv,
+    // which rejects such schemas with "no schema with key or ref".
+    // See https://github.com/mastra-ai/mastra/issues/24403
+    it('should validate correctly when $schema is draft 2019-09', async () => {
+      const jsonSchema = {
+        $schema: 'https://json-schema.org/draft/2019-09/schema#',
+        type: 'object' as const,
+        properties: {
+          operation: { enum: ['add', 'subtract'] },
+          a: { type: 'number' as const },
+          b: { type: 'number' as const },
+        },
+        required: ['operation', 'a', 'b'],
+        additionalProperties: false,
+      };
+
+      const standardSchema = toStandardSchema(jsonSchema);
+
+      // Valid input should pass (previously failed with
+      // "no schema with key or ref .../draft/2019-09/schema#")
+      const validResult = await standardSchema['~standard'].validate({
+        operation: 'add',
+        a: 10,
+        b: 32,
+      });
+      expect('value' in validResult).toBe(true);
+
+      // Invalid input should fail with real validation issues, not a dialect error
+      const invalidResult = await standardSchema['~standard'].validate({
+        operation: 'add',
+        a: 10,
+        // missing required 'b'
+      });
+      expect('issues' in invalidResult).toBe(true);
+      if ('issues' in invalidResult && invalidResult.issues) {
+        expect(invalidResult.issues.length).toBeGreaterThan(0);
+        for (const issue of invalidResult.issues) {
+          expect(issue.message).not.toContain('no schema with key or ref');
+        }
+      }
+    });
+  });
+
   describe('isStandardSchemaWithJSON', () => {
     it('should return true for JSON Schema wrapped schemas', () => {
       const jsonSchema: JSONSchema7 = { type: 'string' };

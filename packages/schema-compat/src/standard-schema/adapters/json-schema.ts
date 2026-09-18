@@ -1,5 +1,6 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import { Ajv } from 'ajv';
+import Ajv2019 from 'ajv/dist/2019.js';
 import Ajv2020 from 'ajv/dist/2020.js';
 import type { JSONSchema7 } from 'json-schema';
 import traverse from 'json-schema-traverse';
@@ -206,8 +207,11 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
    */
   #getAjvValidator(): ReturnType<Ajv['compile']> {
     if (!this.#ajvValidateCache) {
-      const is2020 = typeof this.#schema.$schema === 'string' && this.#schema.$schema.includes('2020-12');
-      const AjvClass = is2020 ? Ajv2020 : Ajv;
+      const dialect = typeof this.#schema.$schema === 'string' ? this.#schema.$schema : '';
+      // Dispatch on the declared dialect. Schemas produced from Zod v3 advertise
+      // draft 2019-09, which classic (draft-07) Ajv cannot compile
+      // ("no schema with key or ref"). See mastra-ai/mastra#24403.
+      const AjvClass = dialect.includes('2020-12') ? Ajv2020 : dialect.includes('2019-09') ? Ajv2019 : Ajv;
       this.#ajvInstance = new AjvClass({
         allErrors: true,
         strict: false,
