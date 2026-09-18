@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import stripAnsi from 'strip-ansi';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
@@ -11,11 +12,13 @@ const FOLLOW_UP = 'Looks good, please keep going.';
  * Regression: once a goal has consumed its full run budget while still
  * `active` (the judge answered `waiting` on the final run, so the loop did not
  * pause it), every later chat turn hits the core goal step's budget guard. The
- * guard emits a `goal` chunk with `status: 'active'` and `passed: false` without
- * invoking the judge, which the TUI renders as `Goal ○ continue (N/N)` forever.
+ * guard emitted a `goal` chunk with `status: 'active'` and `passed: false`
+ * without invoking the judge or writing the record, which the TUI rendered as
+ * `Goal ○ continue (N/N)` forever.
  *
  * Expected: reaching max runs ends the goal — no `continue` verdict is rendered
- * for the follow-up turn and `/goal status` no longer reports it as active.
+ * for the follow-up turn, `/goal status` no longer reports it active, and the
+ * persisted objective is parked rather than left `active`.
  */
 export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
   name: 'goal-max-runs-ends-goal',
@@ -33,7 +36,7 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   },
-  async run({ terminal, runtime }) {
+  async run({ terminal, runtime, dbPath }) {
     runtime.startLiveOutput(terminal);
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
 
@@ -43,7 +46,9 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
     await runtime.waitForScreenText(/First max-runs goal turn completed\./i, terminal, 15_000);
     await runtime.waitForScreenText(/Goal\s+◌\s+waiting\s+\(1\/1\)/i, terminal, 15_000);
 
-    // A normal chat turn after the budget is spent.
+    // A normal chat turn after the budget is spent. The fixture resolves this
+    // turn whether the goal is still `active` when the request is built (it is
+    // parked during the turn) or was already parked on an earlier turn.
     terminal.submit(FOLLOW_UP);
     await runtime.waitForScreenText(/Follow-up turn after max runs completed\./i, terminal, 15_000);
 
@@ -66,6 +71,32 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
     }
 
     terminal.keyCtrlC();
+    await runtime.stopApp?.();
+
+    // The rendered verdict and `/goal status` both read the in-memory goal
+    // mirror, so assert the durable record too: a change confined to the TUI
+    // could satisfy the checks above while thread state stayed `active`.
+    const db = new DatabaseSync(dbPath);
+    try {
+      const rows = db.prepare(`select value from mastra_thread_state where type = 'goal'`).all() as Array<{
+        value: string;
+      }>;
+      if (rows.length !== 1) {
+        throw new Error(`Expected exactly one persisted goal record, found ${rows.length}`);
+      }
+      const record = JSON.parse(rows[0]!.value) as { objective?: string; status?: string; runsUsed?: number };
+      if (record.objective !== OBJECTIVE) {
+        throw new Error(`Expected persisted objective ${JSON.stringify(OBJECTIVE)}, found ${JSON.stringify(record.objective)}`);
+      }
+      if (record.status === 'active') {
+        throw new Error('Expected the persisted goal to end after reaching max runs, but thread state is still active');
+      }
+      if (record.runsUsed !== 1) {
+        throw new Error(`Expected 1 persisted run, found ${JSON.stringify(record.runsUsed)}`);
+      }
+    } finally {
+      db.close();
+    }
   },
   verifyAimockRequests(requests) {
     if (requests.length < 3) {

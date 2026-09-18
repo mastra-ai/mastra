@@ -30,6 +30,16 @@
       "response": {
         "content": "Follow-up turn after max runs completed."
       }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "<current-objective status=\"none\">"
+      },
+      "response": {
+        "content": "Follow-up turn after max runs completed."
+      }
     }
   ]
 }

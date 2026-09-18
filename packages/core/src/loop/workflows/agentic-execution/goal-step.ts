@@ -150,16 +150,24 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         maxSteps: goal.maxSteps,
       });
 
-      // Defensive budget guard. Normally an objective that exhausts its budget is
-      // parked as `paused` (below), and the `status !== 'active'` gate above stops
-      // it re-entering. This guard only matters if an `active` record somehow
-      // re-enters already at/over budget (e.g. maxRuns was lowered below the
-      // current runsUsed): never burn another judge call or push runsUsed past
-      // the budget — stop the loop and emit a terminal goal chunk without scoring.
+      // Budget guard. A `waiting` verdict deliberately keeps the record `active`
+      // so the next user turn is still judged, which leaves an active objective
+      // sitting at its budget. Re-entering here means there is no budget left to
+      // judge with, so park the objective for good instead of emitting a stale
+      // `active` chunk (which the UI renders as `continue` forever): never burn
+      // another judge call or push runsUsed past the budget.
       if (record.runsUsed >= effective.maxRuns) {
+        const pausedReason = `Ran out of evaluation budget (${effective.maxRuns} runs) before reaching the goal — raise maxRuns to resume.`;
         if (inputData.stepResult) {
           inputData.stepResult.isContinued = false;
         }
+        const parked: GoalObjectiveRecord = {
+          ...record,
+          status: 'paused',
+          pausedReason,
+          updatedAt: Date.now(),
+        };
+        await writeObjective(store, threadId, parked, requestContext);
         safeEnqueue(controller, {
           type: 'goal',
           runId,
@@ -169,9 +177,10 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
             iteration: record.runsUsed,
             maxRuns: effective.maxRuns,
             passed: false,
-            status: record.status,
+            status: 'paused',
+            pausedReason,
             results: [],
-            reason: undefined,
+            reason: pausedReason,
             duration: 0,
             timedOut: false,
             maxRunsReached: true,
