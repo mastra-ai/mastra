@@ -17,7 +17,7 @@ type InputShared_Auxiliary_21 =
       [key: string]: InputShared_Auxiliary_21;
     };
 
-type InputShared_Auxiliary_201 =
+type InputShared_Auxiliary_203 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,41 +52,41 @@ type InputShared_Auxiliary_201 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_201[];
+      args: InputShared_Auxiliary_203[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_201;
+      arg: InputShared_Auxiliary_203;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_221;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_221;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_221;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_221;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_221;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_221;
           };
     };
 
-type InputShared_Auxiliary_219 =
+type InputShared_Auxiliary_221 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -121,33 +121,33 @@ type InputShared_Auxiliary_219 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_219[];
+      args: InputShared_Auxiliary_221[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_219;
+      arg: InputShared_Auxiliary_221;
     };
 
-type InputShared_Auxiliary_246 =
+type InputShared_Auxiliary_248 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_246[];
+      args: InputShared_Auxiliary_248[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_246;
+      arg: InputShared_Auxiliary_248;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_201;
+            some: InputShared_Auxiliary_203;
           }
         | {
-            none: InputShared_Auxiliary_201;
+            none: InputShared_Auxiliary_203;
           };
     };
 
-type InputShared_Auxiliary_662 =
+type InputShared_Auxiliary_664 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -192,19 +192,19 @@ type InputShared_Auxiliary_662 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_662[];
+      args: InputShared_Auxiliary_664[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_662;
+      arg: InputShared_Auxiliary_664;
     };
 
-type InputShared_Auxiliary_736 = {
+type InputShared_Auxiliary_738 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_736[] | undefined;
+  children?: InputShared_Auxiliary_738[] | undefined;
 };
 
 type Shared_Auxiliary_745 = {
@@ -1725,7 +1725,7 @@ type InputShared_Type_86 = {
       }
     | undefined;
   steps: InputShared_Type_81[];
-  predicates: InputShared_Auxiliary_662[];
+  predicates: InputShared_Auxiliary_664[];
 };
 
 type InputShared_Type_87 = {
@@ -1739,7 +1739,7 @@ type InputShared_Type_87 = {
     | undefined;
   step: InputShared_Type_81;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_662;
+  predicate: InputShared_Auxiliary_664;
 };
 
 type InputShared_Type_88 =
@@ -5053,6 +5053,7 @@ export type PostAgentsAgentIdThreadsAbort_PathParams = GetAgentsAgentId_PathPara
 export type PostAgentsAgentIdThreadsAbort_Body = {
   resourceId?: string | undefined;
   threadId: string;
+  clearPendingSignals?: boolean | undefined;
 };
 
 export type PostAgentsAgentIdThreadsAbort_Response = {
@@ -5079,11 +5080,50 @@ export interface PostAgentsAgentIdThreadsAbort_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agents/:agentId/threads/signals/cancel
+// ============================================================================
+export type PostAgentsAgentIdThreadsSignalsCancel_PathParams = GetAgentsAgentId_PathParams;
+
+export type PostAgentsAgentIdThreadsSignalsCancel_Body = {
+  resourceId?: string | undefined;
+  threadId: string;
+  signalIds: string[];
+};
+
+export type PostAgentsAgentIdThreadsSignalsCancel_Response = {
+  cancelledSignalIds: string[];
+};
+
+export type PostAgentsAgentIdThreadsSignalsCancel_Request = Simplify<
+  (PostAgentsAgentIdThreadsSignalsCancel_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdThreadsSignalsCancel_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdThreadsSignalsCancel_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdThreadsSignalsCancel_Body
+        ? { body?: PostAgentsAgentIdThreadsSignalsCancel_Body }
+        : { body: PostAgentsAgentIdThreadsSignalsCancel_Body })
+>;
+
+export interface PostAgentsAgentIdThreadsSignalsCancel_RouteContract {
+  pathParams: PostAgentsAgentIdThreadsSignalsCancel_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdThreadsSignalsCancel_Body;
+  request: PostAgentsAgentIdThreadsSignalsCancel_Request;
+  response: PostAgentsAgentIdThreadsSignalsCancel_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/threads/subscribe
 // ============================================================================
 export type PostAgentsAgentIdThreadsSubscribe_PathParams = GetAgentsAgentId_PathParams;
 
-export type PostAgentsAgentIdThreadsSubscribe_Body = PostAgentsAgentIdThreadsAbort_Body;
+export type PostAgentsAgentIdThreadsSubscribe_Body = {
+  resourceId?: string | undefined;
+  threadId: string;
+};
 
 export type PostAgentsAgentIdThreadsSubscribe_Response = PostAgentsAgentIdGenerate_Response;
 
@@ -10043,7 +10083,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_201 | undefined;
+  where?: InputShared_Auxiliary_203 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10120,9 +10160,9 @@ export type PostObservabilityThreadsQuery_Body = {
       from: string;
       to: string;
     };
-    where?: InputShared_Auxiliary_201 | undefined;
+    where?: InputShared_Auxiliary_203 | undefined;
   };
-  where?: InputShared_Auxiliary_246 | undefined;
+  where?: InputShared_Auxiliary_248 | undefined;
   page?: {
     limit?: number;
     after?: (string | null) | undefined;
@@ -17943,7 +17983,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_736[] | undefined;
+  files?: InputShared_Auxiliary_738[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18001,7 +18041,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_736[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_738[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -23401,6 +23441,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/queue-message': PostAgentsAgentIdQueueMessage_RouteContract;
   'POST /agents/:agentId/signals': PostAgentsAgentIdSignals_RouteContract;
   'POST /agents/:agentId/threads/abort': PostAgentsAgentIdThreadsAbort_RouteContract;
+  'POST /agents/:agentId/threads/signals/cancel': PostAgentsAgentIdThreadsSignalsCancel_RouteContract;
   'POST /agents/:agentId/threads/subscribe': PostAgentsAgentIdThreadsSubscribe_RouteContract;
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
   'POST /agents/:agentId/approve-tool-call': PostAgentsAgentIdApproveToolCall_RouteContract;
@@ -24083,6 +24124,9 @@ export interface Client {
   };
   '/agents/:agentId/threads/abort': {
     POST: PostAgentsAgentIdThreadsAbort_RouteContract;
+  };
+  '/agents/:agentId/threads/signals/cancel': {
+    POST: PostAgentsAgentIdThreadsSignalsCancel_RouteContract;
   };
   '/agents/:agentId/threads/subscribe': {
     POST: PostAgentsAgentIdThreadsSubscribe_RouteContract;

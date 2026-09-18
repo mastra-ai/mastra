@@ -329,7 +329,9 @@ export type AgentThreadEventListener = (event: AgentThreadEvent) => void;
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
 export type CancelQueuedAgentMessagesOptions =
-  | { resourceId: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  /** Cancel selected pending input across all Agents sharing this runtime and thread. */
+  | { resourceId?: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  /** Cancel only the calling Agent's queued messages in this owner group. */
   | { resourceId: string; threadId: string; queueOwnerId: string; signalIds?: never };
 
 /**
@@ -436,6 +438,12 @@ export interface AgentThreadIdentityOptions {
 }
 
 /** @experimental Agent signals are experimental and may change in a future release. */
+export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
+  /** Clear this runtime's pending signals before aborting. Forwarded aborts also clear the receiving owner's queues. */
+  clearPendingSignals?: boolean;
+}
+
+/** @experimental Agent signals are experimental and may change in a future release. */
 export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
   /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
   hideSignals?: boolean | AgentSignalType[];
@@ -449,7 +457,7 @@ export interface AgentThreadSubscription<OUTPUT = unknown> {
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
-  abort: () => boolean;
+  abort: (options?: Pick<AgentAbortThreadOptions, 'clearPendingSignals'>) => boolean;
   unsubscribe: () => void;
 }
 

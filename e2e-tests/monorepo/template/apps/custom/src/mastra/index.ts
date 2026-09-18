@@ -30,7 +30,7 @@ export const mastra = new Mastra({
     ],
   },
   bundler: {
-    externals: ['bcrypt', '@inner/subpath-only'],
+    externals: ['bcrypt', '@inner/subpath-only', 'unicorn-magic'],
   },
   logger: new ConsoleLogger({ level: 'info' }),
 });

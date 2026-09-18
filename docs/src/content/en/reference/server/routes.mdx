@@ -21,6 +21,8 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `POST` | `/api/agents/:agentId/queue-message` | Queue a user message for the next thread turn |
 | `POST` | `/api/agents/:agentId/signals` | Send a lower-level signal to an active or idle thread |
 | `POST` | `/api/agents/:agentId/threads/subscribe` | Subscribe to a thread stream |
+| `POST` | `/api/agents/:agentId/threads/abort` | Abort a thread, optionally clearing pending signals |
+| `POST` | `/api/agents/:agentId/threads/signals/cancel` | Cancel selected pending thread signals |
 | `POST` | `/api/agents/:agentId/send-tool-approval` | Approve or decline a tool call and resume through a thread subscription |
 | `POST` | `/api/agents/:agentId/resume-stream` | Resume a suspended agent stream with custom data |
 | `GET` | `/api/agents/:agentId/tools` | List agent tools |
@@ -147,6 +149,28 @@ Both routes return:
   signal?: CreatedAgentSignal;
 }
 ```
+
+### Thread cancellation routes
+
+`POST /api/agents/:agentId/threads/abort` accepts `{ resourceId?: string, threadId: string, clearPendingSignals?: boolean }` and returns `{ aborted: boolean }`. Pending input survives unless `clearPendingSignals` is `true`. The clear happens locally before aborting and is forwarded to the active owner when necessary. For a remote owner, `aborted: true` means the request was sent, not acknowledged.
+
+`POST /api/agents/:agentId/threads/signals/cancel` cancels selected pending input without aborting. Its JSON body contains:
+
+<PropertiesTable
+  content={[
+  { name: 'resourceId', type: 'string', isOptional: true, description: 'Resource ID for the memory thread.' },
+  { name: 'threadId', type: 'string', description: 'Thread containing the pending signals.' },
+  { name: 'signalIds', type: 'string[]', description: 'Between 1 and 1,000 nonempty signal IDs to cancel.' },
+]}
+/>
+
+The response is `{ cancelledSignalIds: string[] }`, containing only IDs cancelled on the server process handling the request. Duplicates appear once. Unknown IDs and signals already handed to execution or another owner aren't included. Invalid bodies return HTTP 400.
+
+Both routes require `agents:execute` permission and apply thread ownership checks using the authenticated request context. When fine-grained authorization is configured, they also require `memory:write` permission on the thread, including threads not yet saved. Cancellation covers Agents sharing the memory thread, not only the Agent named in the URL. It doesn't undo persisted messages, state updates, notification records, or acceptance acknowledgements, and it excludes continuations from `continueWithMessages()`.
+
+Locally cancelled IDs are published through the shared PubSub backend to other processes subscribed to the thread. Each subscriber removes matching pending copies. Propagation is best-effort and asynchronous, and the HTTP response doesn't confirm remote cancellation. IDs missing locally aren't published. Clear-on-abort affects the receiving process and the active owner, not every process's queues. See the [client cancellation methods](/reference/client-js/agents#cancelqueuedmessages) for SDK usage.
+
+Upgrade `@mastra/core` alongside `@mastra/server` to use thread-wide cancellation and clear-on-abort. In multi-process deployments, upgrade every worker that can own the thread. If the Agent's core version doesn't support these semantics, the server returns HTTP 501 without cancelling input. Ordinary abort requests without `clearPendingSignals: true` remain supported on older cores that provide thread aborts.
 
 ### Subscription tool approval routes
 

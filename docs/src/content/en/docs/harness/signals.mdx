@@ -103,6 +103,37 @@ agent.queueMessage('Also check whether the tests need updates.', {
 
 When the thread is idle, `queueMessage()` starts a run immediately. When the thread is active, it preserves turn order by starting a new run after the active run completes.
 
+### Cancel pending input
+
+Use [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) to remove selected pending input without stopping the active run. Cancellation is scoped to the memory thread, including input submitted by other Agents sharing the same runtime and PubSub instance.
+
+The thread must still have a pending message to cancel. This example assumes a run is active when you queue the message. An idle thread starts the message immediately instead.
+
+```typescript
+const queued = agent.queueMessage('Also check the tests.', thread)
+await queued.accepted
+
+const { cancelledSignalIds } = agent.cancelQueuedMessages({
+  ...thread,
+  signalIds: [queued.signal.id],
+})
+console.log(cancelledSignalIds)
+```
+
+Only IDs removed locally by this call appear in `cancelledSignalIds`. Mastra publishes those IDs through PubSub so other processes subscribed to the thread can cancel matching pending copies, but this asynchronous propagation doesn't confirm remote cancellation. IDs missing locally aren't published, and input already handed to execution can't be cancelled this way. Cancellation doesn't delete saved messages, notification records, or state updates. It doesn't revoke an earlier acceptance acknowledgement.
+
+### Stop the run and clear pending input
+
+By default, aborting a thread preserves its queued input. To clear pending signals before stopping the active run, pass `clearPendingSignals: true`:
+
+```typescript
+subscription.abort({ clearPendingSignals: true })
+```
+
+Without a subscription, use `agent.abortThreadStream({ ...thread, clearPendingSignals: true })`. Existing listeners stay subscribed after cancellation, and later messages can still start a new run.
+
+With a shared PubSub backend, the runtime receives remote signals, cancellation, and abort requests independently of `subscribeToThread()` observers. Clear-on-abort sends the clear flag to a remote active owner through PubSub, but it doesn't clear every process's local queues. Neither operation cancels continuations created by `continueWithMessages()`.
+
 ## Signal context
 
 ### Control low-level signal behavior

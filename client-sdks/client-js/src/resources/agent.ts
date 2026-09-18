@@ -44,6 +44,9 @@ import type {
   SendAgentSignalParams,
   QueueAgentMessageParams,
   SubscribeAgentThreadParams,
+  AbortAgentThreadParams,
+  CancelQueuedAgentMessagesParams,
+  CancelQueuedAgentMessagesResponse,
   ListAgentSuspendedRunsParams,
   ListAgentSuspendedRunsResponse,
   GetAgentPlanResponse,
@@ -641,7 +644,7 @@ export class Agent extends BaseResource {
   async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
     Response & {
       processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
-      abort: () => Promise<boolean>;
+      abort: (options?: Pick<AbortAgentThreadParams, 'clearPendingSignals'>) => Promise<boolean>;
       unsubscribe: () => void;
     }
   > {
@@ -655,7 +658,7 @@ export class Agent extends BaseResource {
 
     const streamResponse = (await requestSubscription()) as Response & {
       processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
-      abort: () => Promise<boolean>;
+      abort: (options?: Pick<AbortAgentThreadParams, 'clearPendingSignals'>) => Promise<boolean>;
       unsubscribe: () => void;
     };
 
@@ -664,7 +667,7 @@ export class Agent extends BaseResource {
     }
 
     const agent = this;
-    streamResponse.abort = async () => (await agent.abortThread({ resourceId, threadId })).aborted;
+    streamResponse.abort = async options => (await agent.abortThread({ resourceId, threadId, ...options })).aborted;
 
     let unsubscribed = false;
     let processAbortController: AbortController | undefined;
@@ -977,11 +980,20 @@ export class Agent extends BaseResource {
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  async abortThread(params: SubscribeAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
-    const { resourceId, threadId } = params;
+  async abortThread(params: AbortAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
+    const { resourceId, threadId, clearPendingSignals } = params;
     return this.request<RouteResponse<'POST /agents/:agentId/threads/abort'>>(`/agents/${this.agentId}/threads/abort`, {
       method: 'POST',
-      body: { resourceId, threadId },
+      body: { resourceId, threadId, ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }) },
+    });
+  }
+
+  /** @experimental Cancels pending thread signals and propagates locally cancelled IDs through shared PubSub. */
+  cancelQueuedMessages(params: CancelQueuedAgentMessagesParams): Promise<CancelQueuedAgentMessagesResponse> {
+    const { resourceId, threadId, signalIds } = params;
+    return this.request<CancelQueuedAgentMessagesResponse>(`/agents/${this.agentId}/threads/signals/cancel`, {
+      method: 'POST',
+      body: { resourceId, threadId, signalIds },
     });
   }
 

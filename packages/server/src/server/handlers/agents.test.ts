@@ -16,6 +16,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
+  cancelPendingAgentSignalsBodySchema,
   agentExecutionBodySchema,
   approveToolCallBodySchema,
   declineToolCallBodySchema,
@@ -44,6 +45,7 @@ import {
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
   ABORT_AGENT_THREAD_ROUTE,
+  CANCEL_AGENT_PENDING_SIGNALS_ROUTE,
   SUBSCRIBE_AGENT_THREAD_ROUTE,
   isProviderConnected,
   extractVersionOptions,
@@ -2101,6 +2103,19 @@ describe('Agent Routes Authorization', () => {
       ).toBe(false);
     });
 
+    it.each([undefined, false, true])(
+      'requires a nonempty abort thread ID with clearPendingSignals=%s',
+      clearPendingSignals => {
+        for (const threadId of [undefined, '', null, 123]) {
+          expect(abortAgentThreadBodySchema.safeParse({ threadId, clearPendingSignals }).success).toBe(false);
+        }
+        expect(abortAgentThreadBodySchema.parse({ threadId: 'thread-123', clearPendingSignals })).toEqual({
+          threadId: 'thread-123',
+          clearPendingSignals,
+        });
+      },
+    );
+
     it('should accept subscribe, abort, and tool approval bodies', () => {
       const body = {
         resourceId: 'resource-123',
@@ -2119,6 +2134,8 @@ describe('Agent Routes Authorization', () => {
 
       expect(subscribeAgentThreadBodySchema.safeParse(body).success).toBe(true);
       expect(abortAgentThreadBodySchema.safeParse(body).success).toBe(true);
+      expect(abortAgentThreadBodySchema.parse({ ...body, clearPendingSignals: true }).clearPendingSignals).toBe(true);
+      expect(abortAgentThreadBodySchema.safeParse({ ...body, clearPendingSignals: 'true' }).success).toBe(false);
       expect(approveToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
       expect(declineToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
       expect(sendToolApprovalBodySchema.safeParse(subscriptionToolCallBody).success).toBe(true);
@@ -2811,33 +2828,167 @@ describe('Agent Routes Authorization', () => {
       }
     });
 
-    it('should abort an active thread run without unsubscribing listeners', async () => {
-      await mockMemory.createThread({
-        threadId: 'abort-thread-owned-by-context',
-        resourceId: 'user-a',
-        title: 'Abort Thread',
-      });
-      const requestContext = createContextWithReservedKeys({
-        resourceId: 'user-a',
-        threadId: 'abort-thread-owned-by-context',
-      });
-      const abortThreadStream = vi.fn(() => true);
-      (mockAgent as any).abortThreadStream = abortThreadStream;
+    it.each([undefined, false, true])(
+      'should abort a thread with clearPendingSignals=%s without unsubscribing',
+      async clearPendingSignals => {
+        await mockMemory.createThread({
+          threadId: 'abort-thread-owned-by-context',
+          resourceId: 'user-a',
+          title: 'Abort Thread',
+        });
+        const requestContext = createContextWithReservedKeys({
+          resourceId: 'user-a',
+          threadId: 'abort-thread-owned-by-context',
+        });
+        const abortThreadStream = vi.fn(() => true);
+        (mockAgent as any).abortThreadStream = abortThreadStream;
 
+        await expect(
+          ABORT_AGENT_THREAD_ROUTE.handler({
+            mastra,
+            agentId: 'test-agent',
+            requestContext,
+            clearPendingSignals,
+            resourceId: 'ignored-resource',
+            threadId: 'ignored-thread',
+          } as any),
+        ).resolves.toEqual({ aborted: true });
+
+        expect(abortThreadStream).toHaveBeenCalledWith({
+          resourceId: 'user-a',
+          threadId: 'abort-thread-owned-by-context',
+          ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
+        });
+      },
+    );
+
+    it.each(
+      (['cancel', 'abort'] as const).flatMap(operation =>
+        (['owned', 'unscoped', 'missing', 'no-memory'] as const).flatMap(scope =>
+          [false, true].map(allowed => [operation, scope, allowed] as const),
+        ),
+      ),
+    )('enforces thread write access for %s with %s scope and allowed=%s', async (operation, scope, allowed) => {
+      if (scope === 'owned' || scope === 'unscoped') {
+        await mockMemory.createThread({ threadId: 'fga-cancel', resourceId: 'user-a', title: 'Private' });
+      }
+      if (scope === 'no-memory') vi.spyOn(mockAgent, 'getMemory').mockResolvedValue(undefined);
+      const require = vi.fn();
+      if (allowed) require.mockResolvedValue(undefined);
+      else require.mockRejectedValue(Object.assign(new Error('FGA denied'), { status: 403 }));
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const requestContext = createContextWithReservedKeys(scope === 'unscoped' ? {} : { resourceId: 'user-a' });
+      const user = { id: 'user-a' };
+      requestContext.set('user', user);
+      const cancel = vi
+        .spyOn(mockAgent, 'cancelQueuedMessages')
+        .mockReturnValue({ cancelledSignalIds: ['private-input'] });
+      const abort = vi.spyOn(mockAgent, 'abortThreadStream').mockReturnValue(true);
+      const params = {
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        threadId: 'fga-cancel',
+        signalIds: ['private-input'],
+        clearPendingSignals: true,
+        abortSignal: new AbortController().signal,
+      };
+      const result =
+        operation === 'cancel'
+          ? CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler(params)
+          : ABORT_AGENT_THREAD_ROUTE.handler(params);
+      if (allowed) {
+        await expect(result).resolves.toEqual(
+          operation === 'cancel' ? { cancelledSignalIds: ['private-input'] } : { aborted: true },
+        );
+        expect(operation === 'cancel' ? cancel : abort).toHaveBeenCalledOnce();
+      } else {
+        await expect(result).rejects.toThrow('FGA denied');
+        expect(cancel).not.toHaveBeenCalled();
+        expect(abort).not.toHaveBeenCalled();
+      }
+      expect(require).toHaveBeenCalledWith(user, {
+        resource: { type: 'thread', id: 'fga-cancel' },
+        permission: 'memory:write',
+        context: expect.objectContaining({ resourceId: 'user-a' }),
+      });
+    });
+
+    it('rejects enhanced cancellation without core support while preserving ordinary abort', async () => {
+      vi.spyOn(mockAgent, '__supportsThreadSignalCancellation', 'get').mockReturnValue(false);
+      const cancel = vi.spyOn(mockAgent, 'cancelQueuedMessages');
+      const abort = vi.spyOn(mockAgent, 'abortThreadStream').mockReturnValue(true);
+      const params = {
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        threadId: 'legacy-core-thread',
+        signalIds: ['pending-input'],
+        abortSignal: new AbortController().signal,
+      };
+      await expect(CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler(params)).rejects.toMatchObject({ status: 501 });
+      await expect(ABORT_AGENT_THREAD_ROUTE.handler({ ...params, clearPendingSignals: true })).rejects.toMatchObject({
+        status: 501,
+      });
+      expect(cancel).not.toHaveBeenCalled();
+      expect(abort).not.toHaveBeenCalled();
+      await expect(ABORT_AGENT_THREAD_ROUTE.handler(params)).resolves.toEqual({ aborted: true });
+      await expect(ABORT_AGENT_THREAD_ROUTE.handler({ ...params, clearPendingSignals: false })).resolves.toEqual({
+        aborted: true,
+      });
+      expect(abort).toHaveBeenCalledTimes(2);
+    });
+
+    it('validates bounded nonempty signal IDs before selective cancellation', () => {
+      const body = { threadId: 'thread', signalIds: ['first', 'first', 'second'] };
+      expect(cancelPendingAgentSignalsBodySchema.parse(body)).toEqual(body);
+      for (const signalIds of [undefined, [], [''], [123], 'first', Array(1001).fill('first')]) {
+        expect(cancelPendingAgentSignalsBodySchema.safeParse({ ...body, signalIds }).success).toBe(false);
+      }
+      expect(cancelPendingAgentSignalsBodySchema.safeParse({ ...body, threadId: '' }).success).toBe(false);
+      expect(cancelPendingAgentSignalsBodySchema.safeParse(undefined).success).toBe(false);
+      expect(CANCEL_AGENT_PENDING_SIGNALS_ROUTE.requiresAuth).toBe(true);
+      expect(CANCEL_AGENT_PENDING_SIGNALS_ROUTE.requiresPermission).toBe('agents:execute');
+      expect(AGENTS_ROUTES).toContain(CANCEL_AGENT_PENDING_SIGNALS_ROUTE);
+    });
+
+    it('cancels selected signals using the authenticated resource and thread scope', async () => {
+      await mockMemory.createThread({ threadId: 'cancel-owned', resourceId: 'user-a', title: 'Owned' });
+      const cancelQueuedMessages = vi
+        .spyOn(mockAgent, 'cancelQueuedMessages')
+        .mockReturnValue({ cancelledSignalIds: ['first'] });
+      const result = await CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a', threadId: 'cancel-owned' }),
+        abortSignal: new AbortController().signal,
+        resourceId: 'ignored-resource',
+        threadId: 'ignored-thread',
+        signalIds: ['first', 'missing', 'first'],
+      });
+      expect(result).toEqual({ cancelledSignalIds: ['first'] });
+      expect(cancelQueuedMessages).toHaveBeenCalledWith({
+        resourceId: 'user-a',
+        threadId: 'cancel-owned',
+        signalIds: ['first', 'missing', 'first'],
+      });
+    });
+
+    it('rejects cancellation on a thread belonging to another resource without mutating the queue', async () => {
+      await mockMemory.createThread({ threadId: 'cancel-forbidden', resourceId: 'user-b', title: 'Other' });
+      const cancelQueuedMessages = vi.spyOn(mockAgent, 'cancelQueuedMessages');
       await expect(
-        ABORT_AGENT_THREAD_ROUTE.handler({
+        CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler({
           mastra,
           agentId: 'test-agent',
-          requestContext,
-          resourceId: 'ignored-resource',
-          threadId: 'ignored-thread',
-        } as any),
-      ).resolves.toEqual({ aborted: true });
-
-      expect(abortThreadStream).toHaveBeenCalledWith({
-        resourceId: 'user-a',
-        threadId: 'abort-thread-owned-by-context',
-      });
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          resourceId: 'user-b',
+          threadId: 'cancel-forbidden',
+          signalIds: ['first'],
+        }),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      expect(cancelQueuedMessages).not.toHaveBeenCalled();
     });
 
     it('should reject subscribing to a thread owned by a different resource', async () => {
