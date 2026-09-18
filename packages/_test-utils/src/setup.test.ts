@@ -31,14 +31,16 @@ describe('deterministic Web Crypto test setup', () => {
     }
 
     it('isolates the first concurrent test UUID sequence', async () => {
-      expect(globalThis.crypto.randomUUID()).toBe(firstUUID);
+      const initialUUID = globalThis.crypto.randomUUID();
       await waitForBoth();
+      expect(initialUUID).toBe(firstUUID);
       expect(globalThis.crypto.randomUUID()).toBe(secondUUID);
     });
 
     it('isolates the second concurrent test UUID sequence', async () => {
-      expect(globalThis.crypto.randomUUID()).toBe(firstUUID);
+      const initialUUID = globalThis.crypto.randomUUID();
       await waitForBoth();
+      expect(initialUUID).toBe(firstUUID);
       expect(globalThis.crypto.randomUUID()).toBe(secondUUID);
     });
   });
