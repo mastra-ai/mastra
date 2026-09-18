@@ -6,7 +6,17 @@ import type { FilesystemFile, FilesystemStorage } from '../storage/domains/files
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { isMeaningfulToolName } from './first-exec-capture.js';
 
-const GIT_STATUS_ARGS = ['status', '--porcelain=v1', '-z', '--untracked-files=all'];
+const GIT_CHANGED_FILES_SCRIPT = `
+set -e
+workdir=$1
+base_branch=$2
+base=HEAD
+if merge_base=$(git -C "$workdir" merge-base HEAD "origin/$base_branch" 2>/dev/null); then
+  base=$merge_base
+fi
+git -C "$workdir" diff --name-only -z --find-renames --diff-filter=ACMRTUXB "$base"
+git -C "$workdir" ls-files --others --exclude-standard -z
+`;
 const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true';
 
 export interface FilesystemCaptureSession {
@@ -30,7 +40,12 @@ export function parseFilesystemCaptureFiles(output: string): FilesystemFile[] {
 
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index];
-    if (!record || record.length < 4) continue;
+    if (!record) continue;
+    if (record.length < 4 || record[2] !== ' ') {
+      const path = record.replace(/^\.\//, '');
+      if (path) files.set(path, { path });
+      continue;
+    }
 
     const code = record.slice(0, 2);
     let path = record.slice(3);
@@ -75,11 +90,13 @@ export async function captureSessionFilesystem(
     const workdir = entry.workdir;
     if (!workdir) return;
 
-    const result = await sandbox.executeCommand('git', ['-C', workdir, ...GIT_STATUS_ARGS], {
-      timeout: 30_000,
-    });
+    const result = await sandbox.executeCommand(
+      'sh',
+      ['-c', GIT_CHANGED_FILES_SCRIPT, 'mastracode-changed-files', workdir, sourceSession.baseBranch],
+      { timeout: 30_000 },
+    );
     if (result.exitCode !== 0) {
-      console.warn('[Factory filesystem capture] Unable to inspect Git status.', result.stderr);
+      console.warn('[Factory filesystem capture] Unable to inspect Git changes.', result.stderr);
       return;
     }
 

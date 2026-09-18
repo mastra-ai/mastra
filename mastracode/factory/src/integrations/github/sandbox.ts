@@ -16,6 +16,7 @@
  */
 
 import { repoCloneCommand } from '@internal/workspace';
+import type { RepositoryAccess } from '../../capabilities/version-control.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
@@ -434,13 +435,6 @@ export interface SessionBranchOptions {
 const GH_CREDENTIAL_HELPER = '!gh auth git-credential';
 
 /**
- * Provider-neutral HTTPS credentials stay in the sandbox environment. The
- * repository-local helper contains only variable names, never the token.
- */
-const SOURCE_CONTROL_CREDENTIAL_HELPER =
-  '!f() { test -n "$MASTRA_SOURCE_CONTROL_USERNAME" && test -n "$MASTRA_SOURCE_CONTROL_TOKEN" || exit 1; printf "%s\n" "username=$MASTRA_SOURCE_CONTROL_USERNAME" "password=$MASTRA_SOURCE_CONTROL_TOKEN"; }; f';
-
-/**
  * A pull-request session first fetches the base's whole commit history without
  * file contents, so `git log` and `git blame` work in the review, then the PR
  * head. Every other session starts from the shallow base tip as it is.
@@ -476,20 +470,24 @@ async function checkoutSessionBranchImpl(
   }
 
   const pullRequestSession = pullRequestNumber !== undefined;
-  // Every session pushes its branch over plain HTTPS. GitHub delegates to
-  // `gh`; other providers read the credential from the sandbox environment.
-  // Install before the already-on-branch early return so resumed sessions heal.
-  // Neither helper persists a credential in the repository.
+  // GitHub delegates later authenticated operations to `gh`. Other providers
+  // deliberately receive no persistent credential helper: their bearer token
+  // is scoped to the authenticated remote used below and scrubbed in `finally`.
+  // Remove the legacy environment-backed helper when reopening an older
+  // checkout so a stale sandbox cannot keep using a previously injected token.
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
-  const credentialHelper = authUsername ? SOURCE_CONTROL_CREDENTIAL_HELPER : GH_CREDENTIAL_HELPER;
   const credentialKey = authUsername
     ? 'credential.' + credentialScope(cleanCloneUrl) + '.helper'
     : 'credential.helper';
   const credentialKeyArg = authUsername ? shellQuote(credentialKey) : credentialKey;
-  await sh(
-    sandbox,
-    'git -C ' + shellQuote(workdir) + ' config ' + credentialKeyArg + ' ' + shellQuote(credentialHelper),
-  );
+  if (authUsername) {
+    await sh(sandbox, 'git -C ' + shellQuote(workdir) + ' config --unset-all ' + credentialKeyArg + ' || :');
+  } else {
+    await sh(
+      sandbox,
+      'git -C ' + shellQuote(workdir) + ' config ' + credentialKeyArg + ' ' + shellQuote(GH_CREDENTIAL_HELPER),
+    );
+  }
 
   const current = await sh(sandbox, `git -C ${shellQuote(workdir)} branch --show-current`);
   if (current.exitCode === 0 && current.stdout.trim() === branch) return;
@@ -826,6 +824,55 @@ export async function pushBranch(
       throw classifyGitFailure(push, 'push-failed');
     }
   });
+}
+
+/**
+ * Push the active session branch through the provider-neutral repository
+ * access contract. Authentication exists in the remote URL only while the
+ * server-brokered push is running and is always replaced by the clean clone
+ * URL before the tool returns.
+ */
+export async function pushRepositoryBranch(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  branch: string,
+  access: RepositoryAccess,
+  repoFullName: string,
+): Promise<void> {
+  if (!isValidGitRef(branch)) {
+    throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
+  }
+  const authorization = access.authorization;
+  if (!authorization?.token) {
+    throw new MaterializeError('Repository access did not include push credentials.', 'push-failed');
+  }
+  let authenticatedCloneUrl: string;
+  try {
+    authenticatedCloneUrl = authenticatedUrl(
+      access.cloneUrl,
+      authorization.token,
+      authorization.username ?? 'x-access-token',
+    );
+  } catch {
+    throw new MaterializeError('Refusing to push: invalid repository clone URL.', 'push-failed');
+  }
+
+  const setUrl = await sh(
+    sandbox,
+    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authenticatedCloneUrl)}`,
+  );
+  if (setUrl.exitCode !== 0) {
+    await scrubRemote(sandbox, workdir, repoFullName, false, access.cloneUrl);
+    throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr.trim()}`, 'push-failed');
+  }
+
+  try {
+    const push = await sh(sandbox, `git -C ${shellQuote(workdir)} push -u origin ${shellQuote(branch)}`);
+    if (push.exitCode !== 0) throw classifyGitFailure(push, 'push-failed');
+  } catch (primary) {
+    throw await scrubbedFailure(sandbox, workdir, repoFullName, true, primary, 'push-failed', access.cloneUrl);
+  }
+  await scrubRemote(sandbox, workdir, repoFullName, true, access.cloneUrl);
 }
 
 export interface CommitResult {
