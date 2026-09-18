@@ -36,6 +36,7 @@ import { CreateOSProcessManager } from './process-manager';
 
 export const DEFAULT_CREATEOS_SHAPE = 's-2vcpu-2gb';
 export const DEFAULT_CREATEOS_DESKTOP_ROOTFS = 'desktop:1';
+export const DEFAULT_CREATEOS_ROOTFS = 'devbox:1';
 
 const TERMINAL_STATUSES = new Set<SandboxStatus>(['error', 'failed', 'destroying', 'destroyed']);
 const MOUNT_POLL_INTERVAL_MS = 500;
@@ -144,7 +145,8 @@ export class CreateOSSandbox extends MastraSandbox<Sandbox> {
       options.computerUse === true ||
       typeof options.computerUse === 'object' ||
       (options.computerUse === undefined && options.rootfs?.startsWith('desktop:'));
-    this.rootfs = options.rootfs ?? (computerEnabled ? DEFAULT_CREATEOS_DESKTOP_ROOTFS : undefined);
+    this.rootfs =
+      options.rootfs?.trim() || (computerEnabled ? DEFAULT_CREATEOS_DESKTOP_ROOTFS : DEFAULT_CREATEOS_ROOTFS);
     this.sandboxName = options.sandboxName ?? deterministicName(this.id);
     this.timeout = timeout;
     this._providerSandboxId = options.sandboxId;
