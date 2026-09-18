@@ -368,7 +368,7 @@ export async function getCopilotModelCatalog(
     const credential = await storage.getOAuthCredential(COPILOT_PROVIDER_ID);
     if (!credential || credential.type !== 'oauth') return [];
     accessToken = credential.access;
-    accountInstanceId = credential.accountInstanceId;
+    accountInstanceId = credential.accountInstanceId ?? storage.getActiveAccount?.(COPILOT_PROVIDER_ID)?.id;
     enterpriseUrl = (credential as GitHubCopilotCredentials).enterpriseUrl;
   } else {
     accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
@@ -377,15 +377,26 @@ export async function getCopilotModelCatalog(
     if (stored?.type === 'oauth') {
       enterpriseUrl = (stored as GitHubCopilotCredentials).enterpriseUrl;
     }
+    // A rotation-capable deployed store has no OAuth snapshot API but still
+    // exposes its active registry entry. Use that non-secret id so the catalog
+    // cache stays per account: entitlements are per account, and a constant key
+    // would serve the first account's models to every other one for the rest of
+    // the TTL. Deriving the key from the token is what `cba11389e7` removed.
+    accountInstanceId = storage.getActiveAccount?.(COPILOT_PROVIDER_ID)?.id;
   }
   const baseUrl = getGitHubCopilotBaseUrl(accessToken, enterpriseUrl);
-  const credentialKey = `${accountInstanceId ?? 'legacy'}\0${baseUrl}`;
+  // No identity means the store cannot name the account it just served, so the
+  // TTL cache cannot be keyed per account — one entry would outlive the request
+  // and serve those models to every other account of the store. Skip it and
+  // keep the concurrent-fetch dedupe, which cannot outlive the in-flight fetch.
+  const credentialKey = accountInstanceId === undefined ? undefined : `${accountInstanceId}\0${baseUrl}`;
+  const dedupeKey = credentialKey ?? `${COPILOT_PROVIDER_ID}\0${baseUrl}`;
 
   const now = Date.now();
-  const cached = catalogCache.get(credentialKey);
+  const cached = credentialKey ? catalogCache.get(credentialKey) : undefined;
   if (cached && now - cached.fetchedAt < cached.ttl) return cached.models;
 
-  const existingFetch = inflightFetches.get(credentialKey);
+  const existingFetch = inflightFetches.get(dedupeKey);
   if (existingFetch) return existingFetch;
 
   const fetchPromise = (async (): Promise<CopilotModelEntry[]> => {
@@ -398,26 +409,28 @@ export async function getCopilotModelCatalog(
           bearerToken: accessToken,
           signal: controller.signal,
         });
-        catalogCache.set(credentialKey, { fetchedAt: Date.now(), ttl: CATALOG_TTL_MS, models });
+        if (credentialKey) catalogCache.set(credentialKey, { fetchedAt: Date.now(), ttl: CATALOG_TTL_MS, models });
         return models;
       } finally {
         clearTimeout(timer);
       }
     } catch (error) {
-      catalogCache.set(credentialKey, {
-        fetchedAt: Date.now(),
-        ttl: CATALOG_FAILURE_TTL_MS,
-        models: COPILOT_FALLBACK_MODELS,
-      });
+      if (credentialKey) {
+        catalogCache.set(credentialKey, {
+          fetchedAt: Date.now(),
+          ttl: CATALOG_FAILURE_TTL_MS,
+          models: COPILOT_FALLBACK_MODELS,
+        });
+      }
       console.warn(
         'Failed to fetch live GitHub Copilot models, using fallback list:',
         error instanceof Error ? error.message : error,
       );
       return COPILOT_FALLBACK_MODELS;
     } finally {
-      inflightFetches.delete(credentialKey);
+      inflightFetches.delete(dedupeKey);
     }
   })();
-  inflightFetches.set(credentialKey, fetchPromise);
+  inflightFetches.set(dedupeKey, fetchPromise);
   return fetchPromise;
 }

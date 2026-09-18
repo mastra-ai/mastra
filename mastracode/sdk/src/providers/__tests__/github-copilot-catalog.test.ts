@@ -48,6 +48,133 @@ describe('getCopilotModelCatalog', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('falls back to getApiKey when the store has no OAuth snapshot API', async () => {
+    // Deployed per-tenant stores implement only the required CredentialStore
+    // surface. Returning [] here would make Copilot models vanish from the
+    // catalog for those callers even though a usable token exists.
+    const deployedStore = {
+      reload: vi.fn(),
+      get: vi.fn(() => ({
+        type: 'oauth',
+        access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
+        refresh: 'ghu_x',
+        expires: Date.now() + 60_000,
+      })),
+      getStoredApiKey: vi.fn(),
+      getApiKey: vi.fn(async () => 'tid=deployed;proxy-ep=proxy.individual.githubcopilot.com;'),
+    };
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        data: [{ id: 'gpt-4.1', capabilities: { supports: { tool_calls: true } }, model_picker_enabled: true }],
+      }),
+    );
+
+    const { getCopilotModelCatalog } = await import('../github-copilot.js');
+    const models = await getCopilotModelCatalog({ authStorage: deployedStore as any });
+
+    expect(deployedStore.getApiKey).toHaveBeenCalledWith('github-copilot');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(models.map(m => m.id)).toContain('gpt-4.1');
+  });
+
+  it('returns an empty list when the fallback store has no token', async () => {
+    const deployedStore = {
+      reload: vi.fn(),
+      get: vi.fn(() => undefined),
+      getStoredApiKey: vi.fn(),
+      getApiKey: vi.fn(async () => undefined),
+    };
+
+    const { getCopilotModelCatalog } = await import('../github-copilot.js');
+    const models = await getCopilotModelCatalog({ authStorage: deployedStore as any });
+
+    expect(models).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keys the fallback catalog by the store active account so a rotation re-fetches', async () => {
+    // A rotation-capable deployed store has no `getOAuthCredential` but does
+    // expose its registry. Entitlements are per account, so the cache entry for
+    // the first account must not answer for the second after a rotation.
+    let activeAccountId = 'github-copilot:tenant-a';
+    const deployedStore = {
+      reload: vi.fn(),
+      get: vi.fn(() => ({
+        type: 'oauth',
+        access: 'tid=a;exp=9999999999;',
+        refresh: 'ghu_a',
+        expires: Date.now() + 60_000,
+      })),
+      getStoredApiKey: vi.fn(),
+      getApiKey: vi.fn(async () => `tid=${activeAccountId};exp=9999999999;`),
+      listAccounts: vi.fn(() => []),
+      getActiveAccount: vi.fn(() => ({ id: activeAccountId })),
+      activateAccount: vi.fn(),
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'model-a', model_picker_enabled: true }] }))
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'model-b', model_picker_enabled: true }] }));
+
+    const { getCopilotModelCatalog } = await import('../github-copilot.js');
+    const first = await getCopilotModelCatalog({ authStorage: deployedStore as any });
+    activeAccountId = 'github-copilot:tenant-b';
+    const second = await getCopilotModelCatalog({ authStorage: deployedStore as any });
+
+    expect(first.map(model => model.id)).toEqual(['model-a']);
+    expect(second.map(model => model.id)).toEqual(['model-b']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((fetchMock.mock.calls[0]![1].headers as Record<string, string>).Authorization).toContain('tenant-a');
+    expect((fetchMock.mock.calls[1]![1].headers as Record<string, string>).Authorization).toContain('tenant-b');
+  });
+
+  it('does not TTL-cache the fallback catalog when the store cannot name its account', async () => {
+    // With no account identity the cache cannot be made credential-distinct, so
+    // caching would serve whatever account came first to every later one. The
+    // store is expected to be single-credential here; a fetch per call is the
+    // price of never returning another account's models.
+    const deployedStore = {
+      reload: vi.fn(),
+      get: vi.fn(() => undefined),
+      getStoredApiKey: vi.fn(),
+      getApiKey: vi.fn(async () => 'tid=deployed;proxy-ep=proxy.individual.githubcopilot.com;'),
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'model-a', model_picker_enabled: true }] }))
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'model-b', model_picker_enabled: true }] }));
+
+    const { getCopilotModelCatalog } = await import('../github-copilot.js');
+    const first = await getCopilotModelCatalog({ authStorage: deployedStore as any });
+    const second = await getCopilotModelCatalog({ authStorage: deployedStore as any });
+
+    expect(first.map(model => model.id)).toEqual(['model-a']);
+    expect(second.map(model => model.id)).toEqual(['model-b']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('still dedupes concurrent fetches on the account-less fallback path', async () => {
+    const deployedStore = {
+      reload: vi.fn(),
+      get: vi.fn(() => undefined),
+      getStoredApiKey: vi.fn(),
+      getApiKey: vi.fn(async () => 'tid=deployed;proxy-ep=proxy.individual.githubcopilot.com;'),
+    };
+    let resolveFetch: (r: Response) => void;
+    const fetchDeferred = new Promise<Response>(resolve => {
+      resolveFetch = resolve;
+    });
+    fetchMock.mockReturnValueOnce(fetchDeferred);
+
+    const { getCopilotModelCatalog } = await import('../github-copilot.js');
+    const promiseA = getCopilotModelCatalog({ authStorage: deployedStore as any });
+    const promiseB = getCopilotModelCatalog({ authStorage: deployedStore as any });
+
+    resolveFetch!(jsonResponse({ data: [{ id: 'model-a', model_picker_enabled: true }] }));
+
+    const [a, b] = await Promise.all([promiseA, promiseB]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(a).toBe(b);
+  });
+
   it('fetches /models against the proxy-ep base URL with the bearer token', async () => {
     githubCopilotStorage.getOAuthCredential.mockResolvedValue({
       type: 'oauth',
@@ -94,6 +221,8 @@ describe('getCopilotModelCatalog', () => {
       access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
       refresh: 'ghu_x',
       expires: Date.now() + 60_000,
+      // A real snapshot names its account; the cache is keyed by that identity.
+      accountInstanceId: 'github-copilot:test-account',
     });
     fetchMock.mockResolvedValue(
       jsonResponse({
