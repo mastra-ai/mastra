@@ -14,8 +14,6 @@ import { TabContent } from '@/ds/components/Tabs';
 import { cn } from '@/lib/utils';
 
 export interface ThreadTraceSpansTabProps extends Omit<ComponentProps<'div'>, 'children'> {
-  /** Class name of the `TabContent` wrapping the timeline. */
-  tabClassName?: string;
   /** Class name of the measured wrapper around the timeline. */
   timelineClassName?: string;
 }
@@ -26,12 +24,7 @@ export interface ThreadTraceSpansTabProps extends Omit<ComponentProps<'div'>, 'c
  * Clamping needs the measured heights from `ThreadTrace.Messages` and `ThreadTrace.DetailsHeader`;
  * without them the timeline is shown in full.
  */
-export function ThreadTraceSpansTab({
-  className,
-  tabClassName,
-  timelineClassName,
-  ...props
-}: ThreadTraceSpansTabProps) {
+export function ThreadTraceSpansTab({ className, timelineClassName, ...props }: ThreadTraceSpansTabProps) {
   const { selectSpan } = useThreadTrace();
   const {
     traceId,
@@ -60,7 +53,7 @@ export function ThreadTraceSpansTab({
   const isClamped = overflows && !isExpanded;
 
   return (
-    <TabContent value={THREAD_TRACE_SPANS_TAB} className={cn('min-h-0 py-0', tabClassName)}>
+    <TabContent value={THREAD_TRACE_SPANS_TAB} flush>
       {/* The clamp is applied whenever the row is collapsed, not only once `overflows` is known:
           the timeline remounts on every tab switch and its measurement lags a frame, which
           would otherwise let the cell grow and snap back. A short timeline ignores it anyway. */}

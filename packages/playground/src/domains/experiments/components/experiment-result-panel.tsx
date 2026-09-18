@@ -306,7 +306,7 @@ function ExperimentResultPanelBody({
       {feedbackTraceId ? (
         <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
           <DataPanel.Header>
-            <TabList variant="pill-ghost">
+            <TabList variant="pill-ghost" size="sm">
               <Tab value="details">Details</Tab>
               <Tab value="feedback">
                 Feedback
@@ -314,10 +314,10 @@ function ExperimentResultPanelBody({
               </Tab>
             </TabList>
           </DataPanel.Header>
-          <TabContent value="details" className="min-h-0 py-0">
+          <TabContent value="details" flush>
             {details}
           </TabContent>
-          <TabContent value="feedback" className="h-full min-h-0 py-0">
+          <TabContent value="feedback" flush>
             <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
           </TabContent>
         </Tabs>

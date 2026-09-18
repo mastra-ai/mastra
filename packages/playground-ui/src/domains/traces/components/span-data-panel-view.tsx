@@ -250,14 +250,12 @@ function SpanDataPanelContent({
   return (
     <div className={BODY_CLASS}>
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
-        <TabList variant="pill-ghost">
+        <TabList variant="pill-ghost" size="sm">
           <Tab value="details">Details</Tab>
           <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
         </TabList>
 
-        <TabContent value="details" className="pt-1">
-          {detailsBody}
-        </TabContent>
+        <TabContent value="details">{detailsBody}</TabContent>
         <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>
       </Tabs>
     </div>

@@ -50,10 +50,13 @@ export function ThreadTraceDetailsHeader({ className, children, ...props }: Thre
   );
 }
 
-export type ThreadTraceTabListProps = Omit<TabListProps, 'variant'> & { variant?: TabListProps['variant'] };
+export type ThreadTraceTabListProps = Omit<TabListProps, 'variant' | 'size'> & {
+  variant?: TabListProps['variant'];
+  size?: TabListProps['size'];
+};
 
-export function ThreadTraceTabList({ variant = 'pill-ghost', ...props }: ThreadTraceTabListProps) {
-  return <TabList variant={variant} {...props} />;
+export function ThreadTraceTabList({ variant = 'pill-ghost', size = 'sm', ...props }: ThreadTraceTabListProps) {
+  return <TabList variant={variant} size={size} {...props} />;
 }
 
 export type ThreadTraceDetailsActionsProps = ComponentProps<'div'>;
