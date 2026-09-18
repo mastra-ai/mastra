@@ -693,6 +693,16 @@ export const environmentRoute = registerApiRoute('/environment', {
       expect([...outputDependencies.keys()]).toEqual(expect.arrayContaining(Object.keys(packageJson.dependencies)));
     });
 
+    // Guards against `writeFactoryMarker()` accidentally firing for non-factory
+    // monorepo builds. The Factory-project marker is only written when the
+    // deployer detects a Software Factory project; a vanilla monorepo build
+    // must never emit `mastra-project.json` into the deploy artifact.
+    it('should not write a factory marker for non-factory monorepo builds', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const outputFiles = await readdir(outputDir);
+      expect(outputFiles).not.toContain('mastra-project.json');
+    });
+
     it('should emit a worker runtime entry with a readiness endpoint', async () => {
       const workerEntryPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'worker.mjs');
       const workerEntry = await readFile(workerEntryPath, 'utf-8');

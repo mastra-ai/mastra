@@ -1,8 +1,6 @@
-import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MastraError } from '@mastra/core/error';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Bundler } from './index';
 
@@ -24,45 +22,22 @@ class TestBundler extends Bundler {
 }
 
 describe('Bundler.writeFactoryMarker', () => {
-  it('writes mastra-project.json with the agreed schema when factory/index.html exists', async () => {
+  it('writes mastra-project.json without an assets.ui path', async () => {
+    // The Factory SPA is resolved at runtime from node_modules/mastra/dist/
+    // factory/, so the marker no longer needs to advertise a bundled path.
     const tempDir = await mkdtemp(join(tmpdir(), 'factory-marker-'));
     tempDirs.push(tempDir);
 
-    // Simulate the output directory structure after copyPublic
-    const outputDir = join(tempDir, 'output');
-    await mkdir(join(outputDir, 'factory'), { recursive: true });
-    await writeFile(join(outputDir, 'factory', 'index.html'), '<html></html>');
-
-    const bundler = new TestBundler('Test');
-    await bundler.writeFactoryMarkerForTest(tempDir);
-
-    const markerPath = join(outputDir, 'mastra-project.json');
-    expect(existsSync(markerPath)).toBe(true);
-
-    const marker = JSON.parse(await readFile(markerPath, 'utf-8'));
-    expect(marker).toEqual({
-      schemaVersion: 1,
-      projectType: 'factory',
-      assets: { ui: 'factory' },
-    });
-  });
-
-  it('throws when factory/index.html is missing', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'factory-marker-'));
-    tempDirs.push(tempDir);
-
-    // No factory/index.html created
     const outputDir = join(tempDir, 'output');
     await mkdir(outputDir, { recursive: true });
 
     const bundler = new TestBundler('Test');
+    await bundler.writeFactoryMarkerForTest(tempDir);
 
-    const error = await bundler.writeFactoryMarkerForTest(tempDir).catch((error: unknown) => error);
-    expect(error).toBeInstanceOf(MastraError);
-    expect(error).toMatchObject({ id: 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' });
-    expect((error as Error).message).toMatch(/factory\/index\.html.*not found/);
-
-    // Marker should not have been written
-    expect(existsSync(join(outputDir, 'mastra-project.json'))).toBe(false);
+    const marker = JSON.parse(await readFile(join(outputDir, 'mastra-project.json'), 'utf-8'));
+    expect(marker).toEqual({
+      schemaVersion: 1,
+      projectType: 'factory',
+    });
   });
 });

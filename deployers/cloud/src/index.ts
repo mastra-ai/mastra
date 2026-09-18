@@ -2,7 +2,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
-import { copy, readJSON } from 'fs-extra/esm';
+import { copy, readJSON, remove } from 'fs-extra/esm';
 
 import { getAuthEntrypoint } from './utils/auth.js';
 import { MASTRA_DIRECTORY, BUILD_ID, PROJECT_ID, TEAM_ID } from './utils/constants.js';
@@ -89,6 +89,17 @@ export class CloudDeployer extends Deployer {
       },
       discoveredTools,
     );
+
+    // Software Factory projects: the CLI build copies the Factory SPA into
+    // <mastraDir>/public/factory/, which copyPublic() then places at
+    // <outputDirectory>/<outputDir>/factory/. In Mastra Cloud that ~4 MB of
+    // SPA assets is dead weight in the deploy artifact — edge-router serves
+    // the Factory SPA from R2 upstream of the container, so the origin
+    // never answers a request for it. Strip it here, after the bundle is
+    // assembled, so only cloud deploys are slimmed while other targets
+    // (standalone docker, self-hosted) keep serving the SPA themselves.
+    await remove(join(outputDirectory, this.outputDir, 'factory'));
+
     process.chdir(currentCwd);
   }
 
