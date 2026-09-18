@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../api/keys';
-import type { FactoryProject, FactoryProjectPayload, GithubRepo } from '../services/github';
+import type { FactoryProject, FactoryProjectPayload, SourceControlRepository } from '../services/github';
 
 // Separate sessionStorage keys from onboarding so the two flows never collide.
 const STEP_KEY = 'mastracode.factory-create.step';
@@ -26,18 +26,23 @@ function canResume(step: Exclude<CreateFactoryFlowStep, 'name'>, draft: Omit<Cre
   return step === 'vcs' ? Boolean(draft.name) : Boolean(draft.name && draft.repository);
 }
 
-function isGithubRepo(value: unknown): value is GithubRepo {
+function isSourceControlRepository(value: unknown): value is SourceControlRepository {
   if (typeof value !== 'object' || value === null) return false;
-  const candidate: Partial<Record<keyof GithubRepo, unknown>> = value;
+  const candidate = value as Record<string, unknown>;
   return (
-    typeof candidate.id === 'number' &&
+    (typeof candidate.id === 'number' || typeof candidate.id === 'string') &&
     typeof candidate.fullName === 'string' &&
     typeof candidate.defaultBranch === 'string' &&
-    typeof candidate.installationStorageId === 'string'
+    typeof candidate.installationStorageId === 'string' &&
+    (candidate.provider === undefined ||
+      (candidate.provider === 'gitlab' &&
+        typeof candidate.externalId === 'string' &&
+        typeof candidate.sandboxProvider === 'string' &&
+        typeof candidate.sandboxWorkdir === 'string'))
   );
 }
 
-function readRepository(): GithubRepo | undefined {
+function readRepository(): SourceControlRepository | undefined {
   const stored = sessionStorage.getItem(REPO_KEY);
   if (!stored) return undefined;
 
@@ -47,7 +52,7 @@ function readRepository(): GithubRepo | undefined {
   } catch {
     parsed = undefined;
   }
-  if (isGithubRepo(parsed)) return parsed;
+  if (isSourceControlRepository(parsed)) return parsed;
 
   sessionStorage.removeItem(REPO_KEY);
   return undefined;
@@ -62,7 +67,7 @@ function readRepository(): GithubRepo | undefined {
 export interface CreateFactoryDraft {
   step: CreateFactoryFlowStep;
   name?: string;
-  repository?: GithubRepo;
+  repository?: SourceControlRepository;
   /** The Linear project whose issues feed the new board, when the user picked one. */
   linearProjectId?: string;
   /** The Jira project whose issues feed the new board, when the user picked one. */
@@ -164,7 +169,8 @@ export function useCreateFactoryFlow() {
   return {
     draft: draftQuery.data,
     startVcs: (name: string) => patchDraft.mutateAsync({ step: 'vcs', name }),
-    chooseRepository: (repository: GithubRepo) => patchDraft.mutateAsync({ step: 'project-management', repository }),
+    chooseRepository: (repository: SourceControlRepository) =>
+      patchDraft.mutateAsync({ step: 'project-management', repository }),
     chooseLinearProject: (linearProjectId: string) =>
       patchDraft.mutateAsync({ step: 'model-provider', linearProjectId, jiraProjectId: undefined }),
     chooseJiraProject: (jiraProjectId: string) =>

@@ -2,9 +2,11 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
+import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
+import { sanitizeSegment } from '../../sandbox/workdir.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { GitLabApiError } from './api.js';
-import { decodeSourceId, encodeIssueReference } from './integration.js';
+import { decodeSourceId, encodeIssueReference, gitlabConnection } from './integration.js';
 import type { GitLabIntegrationBase } from './integration.js';
 import { handleGitLabWebhook } from './webhook.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
@@ -19,6 +21,7 @@ export interface BuildGitLabRoutesOptions {
   gitlab?: GitLabIntegrationBase;
   auth?: RouteAuth;
   intake?: IntakeStorage;
+  sandbox?: MastraFactorySandboxConfig;
   webhookSecret?: string;
   ingestFactoryEvent?: (event: ParsedGitLabWebhook) => Promise<unknown>;
 }
@@ -113,16 +116,53 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           if ('response' in resolved) return resolved.response;
           try {
             const sources = await gitlab.intake.listSources(resolved.tenant);
+            const installations = new Map<string, Awaited<ReturnType<typeof gitlab.versionControl.registerInstallation>>>();
+            for (const source of sources) {
+              const connectionId =
+                typeof source.metadata?.connectionId === 'string' ? source.metadata.connectionId : null;
+              if (!connectionId || installations.has(connectionId)) continue;
+              installations.set(
+                connectionId,
+                await gitlab.versionControl.registerInstallation({
+                  orgId: resolved.tenant.orgId,
+                  userId: resolved.tenant.userId,
+                  installation: {
+                    externalId: connectionId,
+                    accountName:
+                      typeof source.metadata?.accountLabel === 'string' ? source.metadata.accountLabel : 'GitLab',
+                    accountType: 'GitLab',
+                    metadata: { connection: gitlabConnection(connectionId) },
+                  },
+                }),
+              );
+            }
             return c.json({
-              projects: sources.map(source => ({
-                id: source.id,
-                name: source.name,
-                connectionId:
-                  typeof source.metadata?.connectionId === 'string' ? source.metadata.connectionId : null,
-                accountLabel: typeof source.metadata?.accountLabel === 'string' ? source.metadata.accountLabel : null,
-                defaultBranch:
-                  typeof source.metadata?.defaultBranch === 'string' ? source.metadata.defaultBranch : null,
-              })),
+              projects: sources.flatMap(source => {
+                const connectionId =
+                  typeof source.metadata?.connectionId === 'string' ? source.metadata.connectionId : null;
+                const projectId = typeof source.metadata?.projectId === 'string' ? source.metadata.projectId : null;
+                const projectPath =
+                  typeof source.metadata?.projectPath === 'string' ? source.metadata.projectPath : source.name;
+                const installation = connectionId ? installations.get(connectionId) : undefined;
+                if (!connectionId || !projectId || !installation) return [];
+                const repositoryName = projectPath.split('/').filter(Boolean).at(-1) ?? 'repo';
+                return [
+                  {
+                    id: source.id,
+                    name: source.name,
+                    projectId,
+                    projectPath,
+                    installationStorageId: installation.id,
+                    connectionId,
+                    accountLabel:
+                      typeof source.metadata?.accountLabel === 'string' ? source.metadata.accountLabel : null,
+                    defaultBranch:
+                      typeof source.metadata?.defaultBranch === 'string' ? source.metadata.defaultBranch : 'main',
+                    sandboxProvider: options.sandbox ? 'custom' : 'none',
+                    sandboxWorkdir: `~/${sanitizeSegment(repositoryName)}`,
+                  },
+                ];
+              }),
             });
           } catch (error) {
             return gitlabFetchError(loose(c), error);
