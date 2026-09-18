@@ -88,6 +88,13 @@ describe('SearchFieldBlock — the field itself', () => {
     expect(fieldColumn(container)?.childElementCount).toBe(3);
   });
 
+  it('preserves an explicit error state without a message', () => {
+    render(<SearchFieldBlock name="search" error />);
+
+    expect(screen.getByRole('textbox').getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByRole('textbox').getAttribute('aria-describedby')).toBeNull();
+  });
+
   it('puts nothing under the field when it has nothing to say', () => {
     const { container } = render(<SearchFieldBlock name="search" />);
 

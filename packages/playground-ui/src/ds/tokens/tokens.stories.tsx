@@ -132,10 +132,16 @@ const semanticEntries: [string, string][] = [
   ['muted', Colors.muted],
   ['foreground', Colors.foreground],
   ['muted-foreground', Colors['muted-foreground']],
-  ['destructive', Colors.destructive],
   ['ring', Colors.ring],
   ['sidebar-accent', Colors['sidebar-accent']],
   ['selected', Colors.selected],
+];
+
+// The one chromatic pair in the contract. Both themes share the same red so a white
+// glyph or label on the filled surface clears WCAG AA at 4.77:1.
+const semanticChromaticEntries: [string, string][] = [
+  ['destructive', Colors.destructive],
+  ['destructive-foreground', Colors['destructive-foreground']],
 ];
 
 const semanticBorderEntries: [string, string][] = [
@@ -225,6 +231,16 @@ export const SemanticNeutrals: Story = {
         Semantic neutrals
       </SectionTitle>
       <SwatchGrid entries={[...semanticEntries, ...semanticBorderEntries]} />
+      <SectionTitle note="The only chromatic roles in the contract. Pair them: a glyph or label on `destructive` uses `destructive-foreground`, which clears WCAG AA at 4.77:1.">
+        Semantic destructive
+      </SectionTitle>
+      <SwatchGrid entries={semanticChromaticEntries} />
+      <div className="mb-6 flex items-center gap-3">
+        <span className="bg-destructive text-ui-sm text-destructive-foreground inline-flex rounded-full px-3 py-1 font-medium">
+          Delete thread
+        </span>
+        <span className="text-ui-sm text-destructive">Delete thread</span>
+      </div>
       <SectionTitle note="Use these combinations after a consumer opts into the semantic layer.">
         Representative combinations
       </SectionTitle>

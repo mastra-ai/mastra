@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Updated settings and destructive controls to use semantic colors and the shared text hierarchy.
+Updated the settings components to use semantic colors and the shared text hierarchy.

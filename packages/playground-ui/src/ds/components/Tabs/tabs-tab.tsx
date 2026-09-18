@@ -107,7 +107,7 @@ export const Tab = ({
   if (disabled && disabledTooltip) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{tab}</TooltipTrigger>
+        <TooltipTrigger render={<span tabIndex={0} className="inline-flex" />}>{tab}</TooltipTrigger>
         <TooltipContent>{disabledTooltip}</TooltipContent>
       </Tooltip>
     );

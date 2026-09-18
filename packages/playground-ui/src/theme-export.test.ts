@@ -35,11 +35,13 @@ const semanticTokens = [
   'muted',
   'foreground',
   'muted-foreground',
-  'destructive',
   'border',
   'ring',
   'sidebar-accent',
   'selected',
+  // The only chromatic pair in the contract. Everything else here is neutral.
+  'destructive',
+  'destructive-foreground',
 ] as const;
 
 const deferredSemanticTokens = [
@@ -67,7 +69,6 @@ const darkAliases = {
   muted: 'gray-1',
   foreground: 'gray-10',
   'muted-foreground': 'gray-9',
-  destructive: 'accent2',
   border: 'gray-alpha-2',
   ring: 'gray-8',
   'sidebar-accent': 'gray-alpha-1',
