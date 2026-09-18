@@ -463,7 +463,6 @@ function BoardContent({
                           onRun={(move, prompt) =>
                             items.handleDrop(candidatePayload(candidate, prompt), move.stage, 'card_action')
                           }
-                          onFile={() => items.handleDrop(candidatePayload(candidate), candidate.column)}
                         />
                       )}
                     />

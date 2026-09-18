@@ -740,14 +740,18 @@ describe('Board card pending states', () => {
 
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Add to board' })).toBeVisible();
+    expect(screen.queryByRole('menuitem', { name: 'Add to board' })).not.toBeInTheDocument();
     const jiraLink = screen.getByRole('menuitem', { name: 'Open in Jira' });
     expect(jiraLink).toHaveAttribute('href', jiraIssue.url);
     expect(jiraLink).toHaveAttribute('target', '_blank');
   });
 
-  it('files a Jira intake candidate on the Work board', async () => {
+  it.each([
+    ['Investigate', 'triage'],
+    ['Build', 'execute'],
+  ] as const)('%s files the Jira intake candidate and starts its run', async (action, stage) => {
     const createRequests: unknown[] = [];
+    const transitionRequests: unknown[] = [];
     stubBoardEndpoints();
     stubJiraCandidate();
     server.use(
@@ -784,14 +788,32 @@ describe('Board card pending states', () => {
           },
         });
       }),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/jira-item/transition`,
+        async ({ request }) => {
+          transitionRequests.push(await request.json());
+          return HttpResponse.json({
+            result: {
+              status: 'accepted',
+              transitionId: 'jira-transition-1',
+              itemId: 'jira-item',
+              revision: 2,
+              stage,
+              decisions: [],
+            },
+          });
+        },
+      ),
     );
     const user = userEvent.setup();
     const { client } = renderWorkBoard();
 
-    await user.click(await screen.findByRole('button', { name: 'Actions for Fix Jira intake sync' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Add to board' }));
+    expect(await screen.findByText('ENG-42 · To Do · ada')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Actions for Fix Jira intake sync' }));
+    await user.click(await screen.findByRole('menuitem', { name: action }));
 
     await waitFor(() => expect(createRequests).toHaveLength(1));
+    await waitFor(() => expect(transitionRequests).toHaveLength(1));
     await waitForMutationsIdle(client);
     expect(createRequests[0]).toMatchObject({
       board: 'work',
@@ -809,6 +831,7 @@ describe('Board card pending states', () => {
         labels: jiraIssue.labels,
       },
     });
+    expect(transitionRequests[0]).toMatchObject({ stage, cause: 'card_action' });
   });
 
   it('offers "Open in GitHub" on unfiled Intake candidates', async () => {
