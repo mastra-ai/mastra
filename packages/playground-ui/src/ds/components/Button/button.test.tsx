@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import * as React from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '../Tooltip';
 import { Button, buttonVariants } from './Button';
@@ -63,6 +64,31 @@ describe('Button', () => {
     expect(screen.getByRole('button', { name: 'Save' }).getAttribute('type')).toBe('submit');
   });
 
+  // The removed `as` API still has to navigate. Without the shim a Button given
+  // `as={Link}` renders a plain <button>, which looks fine and silently stops linking.
+  it('still renders a link for a call site on the removed as API', () => {
+    render(
+      <Button as="a" href="/agents" target="_blank">
+        Agents
+      </Button>,
+    );
+
+    const link = screen.getByRole('link', { name: 'Agents' });
+    expect(link.getAttribute('href')).toBe('/agents');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.className).toContain('new-theme');
+  });
+
+  it('prefers render over the deprecated as API', () => {
+    render(
+      <Button as="a" href="/old" render={<a href="/new" />}>
+        Agents
+      </Button>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Agents' }).getAttribute('href')).toBe('/new');
+  });
+
   it('composes with links through render', () => {
     render(<Button render={<a href="/docs" />}>Read docs</Button>);
     const link = screen.getByRole('link', { name: 'Read docs' });
@@ -111,6 +137,52 @@ describe('Button', () => {
         </TooltipProvider>,
       );
       expect(screen.getByRole('button', { name: 'Add' }).getAttribute('aria-label')).toBeNull();
+    });
+  });
+
+  // Stand-in for react-router's Link: navigates from `to`, not `href`.
+  const RouterLink = React.forwardRef<HTMLAnchorElement, { to?: string; children?: React.ReactNode }>(
+    ({ to, children, ...rest }, ref) => (
+      <a ref={ref} href={to} data-router-link {...rest}>
+        {children}
+      </a>
+    ),
+  );
+
+  describe('deprecated as API', () => {
+    it('passes `to` through to a router link', () => {
+      render(
+        <Button as={RouterLink} to="/agents">
+          Agents
+        </Button>,
+      );
+      const link = screen.getByRole('link', { name: 'Agents' });
+      expect(link.getAttribute('href')).toBe('/agents');
+      expect(link.hasAttribute('data-router-link')).toBe(true);
+    });
+
+    it('does not leak a `to` attribute onto a plain anchor', () => {
+      const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+      render(
+        <Button as="a" href="/agents">
+          Agents
+        </Button>,
+      );
+      const link = screen.getByRole('link', { name: 'Agents' });
+      expect(link.hasAttribute('to')).toBe(false);
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it('keeps onClick working through the shim', () => {
+      const onClick = vi.fn();
+      render(
+        <Button as="a" href="/agents" onClick={onClick}>
+          Agents
+        </Button>,
+      );
+      screen.getByRole('link', { name: 'Agents' }).click();
+      expect(onClick).toHaveBeenCalledTimes(1);
     });
   });
 });

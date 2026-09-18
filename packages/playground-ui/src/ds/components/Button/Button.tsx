@@ -105,6 +105,14 @@ export interface ButtonProps
   /** Leading icon, always rendered on the left of the label inside `<Icon>`. Ignored in icon-mode sizes. */
   icon?: React.ReactNode;
   tooltip?: React.ReactNode;
+  /** @deprecated Pass the element through `render` instead: `render={<Link href="/x" />}`. */
+  as?: React.ElementType;
+  /** @deprecated Set it on the element passed to `render`. */
+  href?: string;
+  /** @deprecated Set it on the element passed to `render`. */
+  to?: string;
+  /** @deprecated Set it on the element passed to `render`. */
+  target?: string;
 }
 
 // Button's icon-* sizes don't match `<Icon>`'s own size scale (`sm | default | lg`).
@@ -156,6 +164,10 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
     {
       className,
       render,
+      as: asProp,
+      href,
+      to,
+      target,
       size,
       variant = 'default',
       disabled,
@@ -187,19 +199,38 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       </>
     );
 
-    const button = (
-      <BaseButton
-        ref={ref}
-        render={render}
-        disabled={disabled}
-        aria-label={ariaLabel}
-        // Expose the variant so a parent ButtonsGroup can detect FILLED segments in CSS
-        // (filled buttons have an opaque background that hides a border seam, so the group
-        // paints their divider as an inset box-shadow instead — see buttons-group.tsx).
-        data-variant={variant}
-        className={cn(buttonVariants({ variant, size: resolvedSize }), isLabelless && '[&>svg]:opacity-75', className)}
-        {...props}
-      >
+    const sharedProps = {
+      disabled,
+      'aria-label': ariaLabel,
+      // Expose the variant so a parent ButtonsGroup can detect FILLED segments in CSS
+      // (filled buttons have an opaque background that hides a border seam, so the group
+      // paints their divider as an inset box-shadow instead — see buttons-group.tsx).
+      'data-variant': variant,
+      className: cn(buttonVariants({ variant, size: resolvedSize }), isLabelless && '[&>svg]:opacity-75', className),
+      ...props,
+    };
+
+    // The deprecated `as` API keeps its original element path rather than going through
+    // Base UI. Routing it through `render` drops props Base UI does not know about — a
+    // router link loses its `to` and stops navigating — and Base UI warns that a
+    // non-<button> contradicts `nativeButton`.
+    const LegacyComponent = render ? undefined : asProp;
+
+    // Only forward what the caller actually set. Passing `href={undefined}` through to a
+    // router link overwrites the href that link derives from `to`, leaving an anchor that
+    // renders correctly and navigates nowhere.
+    const legacyLinkProps = {
+      ...(href === undefined ? null : { href }),
+      ...(to === undefined ? null : { to }),
+      ...(target === undefined ? null : { target }),
+    };
+
+    const button = LegacyComponent ? (
+      <LegacyComponent ref={ref} {...legacyLinkProps} {...sharedProps}>
+        {content}
+      </LegacyComponent>
+    ) : (
+      <BaseButton ref={ref} render={render} {...sharedProps}>
         {content}
       </BaseButton>
     );

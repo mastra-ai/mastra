@@ -1,19 +1,19 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Updated Button to use semantic color roles and Base UI composition.
 
-**Breaking change**
-
-Use the `render` prop instead of `as`, `href`, or `to` when rendering a Button as a link.
+Compose a Button with another element through `render` instead of `as`:
 
 ```tsx
 // Before
 <Button as={Link} to="/agents">Agents</Button>
 
 // After
-<Button render={<Link href="/agents" />}>Agents</Button>
+<Button render={<Link to="/agents" />}>Agents</Button>
 ```
 
-Native buttons now default to `type="button"`.
+`as`, `href`, `to`, and `target` still work and are deprecated. They keep their original element path, so a router link still receives its `to` and still navigates.
+
+Native buttons now default to `type="button"`. A button inside a form that relied on the implicit `submit` needs `type="submit"` set explicitly.
