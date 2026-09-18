@@ -223,9 +223,6 @@ export function FilterBarInput({
         onOpenChange={(next, details) => {
           // Escape is handled by the input (it steps back rather than closing).
           if (!next && details.reason === 'escape-key') return;
-          // Base UI closes after a selection (reason 'none'); each step routes its own selection and
-          // the draft resets to the field step, so closing here would only flash that list on the way out.
-          if (!next && details.reason === 'none') return;
           // The input is the anchor, not a trigger: clicking it must keep the draft open.
           if (
             !next &&
