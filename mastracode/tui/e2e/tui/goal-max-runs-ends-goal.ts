@@ -86,7 +86,9 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
       }
       const record = JSON.parse(rows[0]!.value) as { objective?: string; status?: string; runsUsed?: number };
       if (record.objective !== OBJECTIVE) {
-        throw new Error(`Expected persisted objective ${JSON.stringify(OBJECTIVE)}, found ${JSON.stringify(record.objective)}`);
+        throw new Error(
+          `Expected persisted objective ${JSON.stringify(OBJECTIVE)}, found ${JSON.stringify(record.objective)}`,
+        );
       }
       if (record.status === 'active') {
         throw new Error('Expected the persisted goal to end after reaching max runs, but thread state is still active');
