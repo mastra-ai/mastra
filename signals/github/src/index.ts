@@ -28,7 +28,7 @@ let _execFileAsync: ((...a: any[]) => Promise<{ stdout: string; stderr: string }
 async function execFileAsync(
   file: string,
   args: readonly string[],
-  options?: { cwd?: string; signal?: AbortSignal; maxBuffer?: number },
+  options?: { cwd?: string; signal?: AbortSignal; maxBuffer?: number; env?: NodeJS.ProcessEnv },
 ): Promise<{ stdout: string; stderr: string }> {
   if (!_execFileAsync) {
     const cp = await import('node:child_process');
@@ -1025,6 +1025,45 @@ export class GitRemoteRepositoryResolver implements GithubRepositoryResolver {
   }
 }
 
+/** Environment variables both gitcrawl and the `gh` CLI treat as a GitHub credential. */
+const GITHUB_TOKEN_ENV_VARS = ['GH_TOKEN', 'GITHUB_TOKEN'] as const;
+
+/**
+ * Resolve a GitHub credential from the global `gh` CLI and return an environment
+ * that presents it to a child process.
+ *
+ * gitcrawl takes the first non-empty value of the environment variable named by
+ * `[github].token_env` (default `GITHUB_TOKEN`) and only discovers it is invalid
+ * when GitHub rejects it, so a stale exported token fails `sync` outright even
+ * when `gh` can still mint a working credential. Injecting a credential here
+ * makes gitcrawl's own env lookup win, so the stale value is never consulted.
+ *
+ * `gh auth token` is asked with the token variables removed: `gh` answers with
+ * `GH_TOKEN`/`GITHUB_TOKEN` verbatim when either is set, which would hand back
+ * the very credential that is being replaced.
+ *
+ * Returns `undefined` when no credential can be resolved, so callers leave the
+ * inherited environment untouched rather than stripping a working token.
+ */
+async function resolveGithubAuthEnv(): Promise<NodeJS.ProcessEnv | undefined> {
+  const scrubbed: NodeJS.ProcessEnv = { ...process.env };
+  for (const name of GITHUB_TOKEN_ENV_VARS) delete scrubbed[name];
+
+  let token: string;
+  try {
+    const { stdout } = await execFileAsync('gh', ['auth', 'token'], { env: scrubbed });
+    token = stdout.trim();
+  } catch {
+    return undefined;
+  }
+  if (!token) return undefined;
+
+  // Both names are set: gitcrawl reads the configured one (`GITHUB_TOKEN` by
+  // default) while `gh` itself, including gitcrawl's fallback to `gh auth token`,
+  // reads `GH_TOKEN` first.
+  return { ...process.env, GH_TOKEN: token, GITHUB_TOKEN: token };
+}
+
 export class GitcrawlSyncClient implements GithubSignalsSyncClient {
   readonly #command: string;
   #dbPathPromise?: Promise<string>;
@@ -1094,6 +1133,7 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
         cwd: input.cwd,
         signal: input.abortSignal,
         maxBuffer: 10 * 1024 * 1024,
+        env: await resolveGithubAuthEnv(),
       });
       return { ok: true, stdout, stderr };
     } catch (error) {
@@ -2258,12 +2298,11 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       if (this.#options.permissionResolver) {
         permission = await this.#options.permissionResolver.getPermission(owner, repo, user);
       } else {
-        const { stdout } = await execFileAsync('gh', [
-          'api',
-          `repos/${owner}/${repo}/collaborators/${user}/permission`,
-          '--jq',
-          '.permission',
-        ]);
+        const { stdout } = await execFileAsync(
+          'gh',
+          ['api', `repos/${owner}/${repo}/collaborators/${user}/permission`, '--jq', '.permission'],
+          { env: await resolveGithubAuthEnv() },
+        );
         const raw = stdout.trim();
         permission = (['admin', 'maintain', 'write', 'triage', 'read', 'none'] as const).includes(
           raw as GithubPermission,
