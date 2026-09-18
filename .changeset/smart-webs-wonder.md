@@ -4,13 +4,13 @@
 
 Deprecated grouped results from `queryTraces()`. Existing grouped queries continue to work until the next major release; use `queryTraceThreads()` for new code.
 
-Before:
+**Before:**
 
 ```ts
 await mastraClient.queryTraces({ timeRange, group: { by: ['threadId'] } });
 ```
 
-After:
+**After:**
 
 ```ts
 await mastraClient.queryTraceThreads({ traces: { timeRange } });

@@ -2,16 +2,20 @@
 '@mastra/core': minor
 ---
 
-Deprecated thread grouping in `queryTraces()`. Grouping remains functional until the next major release; use `queryTraceThreads()` for new code.
+Deprecated the `group` option on the trace-query request contract. Grouping remains functional until the next major release; use the `queryThreads` thread-query contract for new code (exposed as `queryTraceThreads()` in `@mastra/client-js`).
 
-Before:
+**Before:**
 
 ```ts
-await mastraClient.queryTraces({ timeRange, group: { by: ['threadId'] } });
+import type { TraceQueryRequest } from '@mastra/core/storage';
+
+const request: TraceQueryRequest = { timeRange, group: { by: ['threadId'] } };
 ```
 
-After:
+**After:**
 
 ```ts
-await mastraClient.queryTraceThreads({ traces: { timeRange } });
+import type { QueryThreadsInput } from '@mastra/core/storage';
+
+const input: QueryThreadsInput = { traces: { timeRange } };
 ```
