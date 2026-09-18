@@ -606,6 +606,15 @@ export class MessageList {
    * `parts` — the in-flight step *is* the whole message and it is removed outright. That is the
    * pre-#12799 behaviour, so the degradation is never worse than the path this replaced.
    *
+   * The one way a boundary goes missing mid-turn is a processor that returns an *array* instead
+   * of mutating the list: the runner re-adds each returned message with `{ merge: false }`
+   * (`processors/runner.ts`), so a processor that maps or clones its messages hands back parts
+   * this list has never seen, and accepted steps are discarded along with the rejected one.
+   * Holding a reference is still the only option that does not persist provenance — `model` is
+   * copied onto synthetic markers by `MessageMerger`, and a new field on the part would have to
+   * be threaded through every mastra-only-part consumer, cache keys included, to survive a round
+   * trip it never needs to make.
+   *
    * Mirrors: `content.content` and `content.toolInvocations` are re-derived below, because
    * `MessageMerger` keeps both in step with the parts as a turn streams. `content.reasoning`
    * and `content.experimental_attachments` are deliberately *not* touched: the merger never

@@ -107,22 +107,22 @@ describe('MessageList#rollbackToStepBoundary', () => {
     expect(JSON.stringify(list.get.all.v1())).not.toContain('call-rejected');
   });
 
-  it('keeps an accepted step whose response also synthesized a marker after it', () => {
-    // Same shape one iteration later: the accepted step ends in tool-call-then-text, so it holds
-    // a synthetic marker of its own, and the loop's boundary is the *later* one. Anchoring on
-    // identity keeps the accepted tool call; anchoring on the last marker would have kept the
-    // rejected text as well.
+  it('keeps the accepted step when the rejected response synthesizes a marker of its own', () => {
+    // Tyler's case one iteration later. The *rejected* response is tool-call-then-text, so it
+    // synthesizes a marker after the loop's boundary. "The last step-start" is now that synthetic
+    // one, and anchoring on it would keep the rejected tool call; identity drops the whole step.
     const { list, id } = listWith(
       assistant([toolCall('call-kept'), { type: 'step-start' }, text('accepted', 'msg_1')]),
     );
     const boundary = openBoundary(list);
-    partsOf(list, id)!.push(toolCall('call-rejected', 'no'), text('rejected', 'msg_2'));
+    partsOf(list, id)!.push(toolCall('call-rejected', 'no'), { type: 'step-start' }, text('rejected', 'msg_2'));
 
     expect(list.rollbackToStepBoundary(id, boundary)).toBe(true);
 
     const parts = partsOf(list, id)!;
     expect(parts.map(p => p.type)).toEqual(['tool-invocation', 'step-start', 'text']);
     expect(JSON.stringify(parts)).not.toContain('rejected');
+    expect(JSON.stringify(parts)).not.toContain('call-rejected');
     expect(JSON.stringify(parts)).toContain('call-kept');
   });
 
@@ -166,6 +166,34 @@ describe('MessageList#rollbackToStepBoundary', () => {
     const stale = { type: 'step-start' } as MastraStepStartPart;
 
     expect(list.rollbackToStepBoundary(id, stale)).toBe(true);
+    expect(list.get.all.db().find(m => m.id === id)).toBeUndefined();
+  });
+
+  it('splices at a boundary handed back by the dedupe branch', () => {
+    // The message already ends in a marker — a synthetic one closing a tool-call-then-text
+    // response — so `openStepBoundary` returns it instead of appending a second. It still
+    // delimits the coming iteration, and rolling back to it must behave like any other boundary.
+    const { list, id } = listWith(assistant([toolCall('call-kept'), { type: 'step-start' }]));
+    const { boundary, appended } = list.openStepBoundary();
+    expect(appended).toBe(false);
+    partsOf(list, id)!.push(text('rejected', 'msg_1'));
+
+    expect(list.rollbackToStepBoundary(id, boundary)).toBe(true);
+
+    expect(partsOf(list, id)!.map(p => p.type)).toEqual(['tool-invocation']);
+  });
+
+  it('degrades to whole-message removal when a processor replaced the parts array', () => {
+    // A processor may return an *array* instead of mutating the list, and the runner re-adds each
+    // returned message with `{ merge: false }`. A processor that clones its messages therefore
+    // hands back parts this list has never seen, and the held marker is not among them. There is
+    // nothing to anchor on, so the accepted step goes too — the behaviour this path replaced.
+    const { list, id } = listWith(assistant([text('accepted', 'msg_1')]));
+    const boundary = openBoundary(list);
+    const message = list.get.all.db().find(m => m.id === id)!;
+    message.content.parts = message.content.parts!.map(part => structuredClone(part));
+
+    expect(list.rollbackToStepBoundary(id, boundary)).toBe(true);
     expect(list.get.all.db().find(m => m.id === id)).toBeUndefined();
   });
 

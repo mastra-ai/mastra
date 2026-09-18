@@ -1255,7 +1255,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Held for the rollback below: it identifies *this* iteration's boundary, which
       // "the last step-start part" does not — markers are also synthesized within a single
       // response when a tool call is followed by text, and nothing stored tells them apart.
-      // Undefined on the first iteration, which opens no boundary and so rolls back whole.
+      // Undefined on the first iteration, and on any iteration with no open assistant message to
+      // append to — both roll the message back whole, which is what the rejection means there.
       const iterationBoundary = currentIteration > 1 ? messageList.openStepBoundary().boundary : undefined;
 
       let currentMessageId = inputData.isTaskCompleteCheckFailed
