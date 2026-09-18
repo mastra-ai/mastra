@@ -416,21 +416,26 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         },
       });
     },
-    registerRepositories: async ({ orgId, installationId, repositories }) =>
-      await Promise.all(
-        repositories.map(repository =>
+    registerRepositories: async ({ orgId, installationId, repositories }) => {
+      const normalizedRepositories = repositories.map(repository => ({
+        ...repository,
+        slug: normalizeSlug(repository.slug),
+      }));
+      return await Promise.all(
+        normalizedRepositories.map(repository =>
           sourceControlStorage().repositories.upsert({
             orgId,
             input: {
               installationId,
               externalId: repository.externalId,
-              slug: normalizeSlug(repository.slug),
+              slug: repository.slug,
               defaultBranch: repository.defaultBranch,
               providerMetadata: repository.metadata,
             },
           }),
         ),
-      ),
+      );
+    },
     getRepositoryTarget: async ({ orgId, repositoryId }) => {
       const repository = await sourceControlStorage().repositories.get({ orgId, id: repositoryId });
       if (!repository) throw new Error('Version-control repository not found.');
@@ -441,7 +446,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       if (!installation) throw new Error('Version-control installation not found.');
       const connection = parseConnection(installation.providerMetadata.connection);
       if (!connection) throw new GitLabApiError('GitLab installation connection metadata is invalid.', 500);
-      return { connection, sourceId: repository.externalId };
+      return { connection, sourceId: repository.slug };
     },
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       const repository = await sourceControlStorage().repositories.get({ orgId, id: repositoryId });
@@ -516,6 +521,7 @@ async function submitReviewAction(
   }
   if (input.event === 'approve') {
     const body = input.body?.trim();
+    await context.api.approveMergeRequest(input.sourceId, mergeRequestIid, input.commitId);
     const comment = body
       ? toPullRequestComment(
           context.host,
@@ -524,7 +530,6 @@ async function submitReviewAction(
           await context.api.createMergeRequestNote(input.sourceId, mergeRequestIid, body),
         )
       : null;
-    await context.api.approveMergeRequest(input.sourceId, mergeRequestIid, input.commitId);
     return {
       id: String(mergeRequestIid) + ':approval',
       url: comment?.url ?? mergeRequestUrl(context.host, input.sourceId, mergeRequestIid),
