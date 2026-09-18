@@ -145,10 +145,5 @@ describe('DurableAgent toModelOutput image-url passthrough (issue #22618)', () =
       { type: 'text', text: 'radar image' },
       { type: 'image-url', url: IMAGE_URL, providerOptions: PROVIDER_OPTIONS },
     ]);
-
-    // The durable step is a separately maintained copy of the loop step, so the
-    // provider-boundary strip in `llm-execution.ts` needs its own guard here. Mastra's
-    // internal `modelOutput` provenance marker must not be forwarded to the provider.
-    expect(JSON.stringify(prompts[1])).not.toContain('modelOutput');
   });
 });

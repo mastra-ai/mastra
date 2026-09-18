@@ -673,8 +673,7 @@ export class MessageList {
                 // The stored modelOutput is substituted into `output` here. The
                 // internal `mastra.modelOutput` marker stays on the part: input
                 // processors read it to tell a toModelOutput-mapped result apart
-                // from a raw fallback (see ToolCallFilter). It is removed at the
-                // provider boundary by `stripInternalPromptMetadata`.
+                // from a raw fallback (see ToolCallFilter).
                 modelMsg.content[i] = {
                   ...part,
                   output: storedModelOutputs.get(part.toolCallId) as any,
