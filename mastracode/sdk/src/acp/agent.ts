@@ -48,6 +48,8 @@ interface SessionEntry extends AcpSessionRuntime {
 /** One ACP connection, with an independent Mastra Code runtime for each conversation. */
 export class MastraCodeAcpAgent implements Agent {
   private readonly sessions = new Map<string, SessionEntry>();
+  private readonly pendingCreations = new Set<Promise<NewSessionResponse>>();
+  private readonly startupCleanupFailures: unknown[] = [];
   private disposed = false;
   private disposal?: Promise<void>;
 
@@ -76,8 +78,10 @@ export class MastraCodeAcpAgent implements Agent {
     this.disposed = true;
     const entries = [...this.sessions.values()];
     this.sessions.clear();
-    this.disposal = Promise.allSettled(
-      entries.map(async entry => {
+    this.disposal = Promise.allSettled([
+      // A runtime under construction owns its cleanup until it joins sessions.
+      Promise.allSettled([...this.pendingCreations]),
+      ...entries.map(async entry => {
         for (const turn of entry.turns) turn.cancelled = true;
         if (entry.state) {
           entry.state.cancelled = true;
@@ -87,8 +91,9 @@ export class MastraCodeAcpAgent implements Agent {
         entry.unsubscribe();
         await entry.cleanup?.();
       }),
-    ).then(results => {
+    ]).then(results => {
       const failures = results.filter(result => result.status === 'rejected').map(result => result.reason);
+      failures.push(...this.startupCleanupFailures);
       if (failures.length) throw new AggregateError(failures, 'ACP session cleanup failed');
     });
     return this.disposal;
@@ -106,7 +111,17 @@ export class MastraCodeAcpAgent implements Agent {
     throw RequestError.invalidParams(undefined, 'Configure authentication through Mastra Code before starting ACP');
   }
 
-  async newSession(request: NewSessionRequest): Promise<NewSessionResponse> {
+  newSession(request: NewSessionRequest): Promise<NewSessionResponse> {
+    const creating = Promise.resolve().then(() => this.createNewSession(request));
+    this.pendingCreations.add(creating);
+    void creating.then(
+      () => this.pendingCreations.delete(creating),
+      () => this.pendingCreations.delete(creating),
+    );
+    return creating;
+  }
+
+  private async createNewSession(request: NewSessionRequest): Promise<NewSessionResponse> {
     if (this.disposed) throw RequestError.internalError(undefined, 'ACP connection is closed');
     if (!isAbsolute(request.cwd)) throw RequestError.invalidParams(undefined, 'cwd must be an absolute path');
     const runtime = await this.createSession(request);
@@ -194,7 +209,12 @@ export class MastraCodeAcpAgent implements Agent {
       });
       return response;
     } catch (error) {
-      await runtime.cleanup?.();
+      try {
+        await runtime.cleanup?.();
+      } catch (cleanupError) {
+        if (this.disposed) this.startupCleanupFailures.push(cleanupError);
+        throw cleanupError;
+      }
       throw error;
     }
   }

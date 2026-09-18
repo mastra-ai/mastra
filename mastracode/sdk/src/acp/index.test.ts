@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { acpMain } from './index.js';
 import { runAcpServer } from './server.js';
+import { acpMain } from './index.js';
 
 vi.mock('./server.js', () => ({ runAcpServer: vi.fn() }));
 vi.mock('./runtime.js', () => ({ createAcpSession: vi.fn() }));

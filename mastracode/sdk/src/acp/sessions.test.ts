@@ -41,6 +41,67 @@ function runtime(id: string) {
 const connection = () => ({ sessionUpdate: vi.fn().mockResolvedValue(undefined) }) as unknown as AgentSideConnection;
 
 describe('ACP session isolation', () => {
+  it('reports cleanup failures from a session that was still starting at shutdown', async () => {
+    const state = runtime('starting');
+    const startup = Promise.withResolvers<typeof state>();
+    const entered = Promise.withResolvers<void>();
+    const failure = new Error('Startup cleanup failed');
+    state.cleanup.mockRejectedValueOnce(failure);
+    const agent = new MastraCodeAcpAgent(connection(), () => {
+      entered.resolve();
+      return startup.promise;
+    });
+    const creating = agent.newSession({ cwd: '/one', mcpServers: [] });
+    const rejected = expect(creating).rejects.toBe(failure);
+    await entered.promise;
+    const disposal = agent.dispose();
+    const failed = expect(disposal).rejects.toMatchObject({ errors: [failure] });
+    startup.resolve(state);
+    await Promise.all([rejected, failed]);
+  });
+
+  it.each(['factory', 'model discovery'])(
+    'waits for a session still starting during %s before disposing',
+    async phase => {
+      const state = runtime('starting');
+      const entered = Promise.withResolvers<void>();
+      const startup = Promise.withResolvers<void>();
+      const cleanup = Promise.withResolvers<void>();
+      state.cleanup.mockReturnValueOnce(cleanup.promise);
+      const block = async () => {
+        entered.resolve();
+        await startup.promise;
+      };
+      if (phase === 'model discovery')
+        state.controller.listAvailableModels = async () => {
+          await block();
+          return [];
+        };
+      const agent = new MastraCodeAcpAgent(connection(), async () => {
+        if (phase === 'factory') await block();
+        return state;
+      });
+      const creating = agent.newSession({ cwd: '/one', mcpServers: [] });
+      const rejected = expect(creating).rejects.toMatchObject({ code: -32603 });
+      await entered.promise;
+      const settled = vi.fn();
+      const a = agent.dispose().then(settled);
+      const b = agent.dispose().then(settled);
+      try {
+        await new Promise<void>(resolve => setImmediate(resolve));
+        expect(settled).not.toHaveBeenCalled();
+        startup.resolve();
+        await vi.waitFor(() => expect(state.cleanup).toHaveBeenCalledOnce());
+        expect(settled).not.toHaveBeenCalled();
+      } finally {
+        startup.resolve();
+        cleanup.resolve();
+        await Promise.all([a, b, rejected]);
+      }
+      expect(settled).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it('makes concurrent disposal callers wait for every session cleanup', async () => {
     const first = runtime('first');
     const second = runtime('second');
