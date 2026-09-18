@@ -412,8 +412,8 @@ export function TraceDataPanelView({
                 // Shared by the Spans and Timeline tabs: both views render the same
                 // filtered `hierarchicalSpans`, so one query drives both.
                 const isTimeline = spanView === 'timeline';
-                const leadingSlot = (
-                  <div className="flex items-center gap-2">
+                const searchHeader = (
+                  <DataPanel.Header className="border-border1 gap-2 border-b">
                     <SearchFieldBlock
                       name={searchFieldName}
                       label="Search spans"
@@ -446,7 +446,7 @@ export function TraceDataPanelView({
                         <ChartGanttIcon />
                       </Button>
                     </ButtonsGroup>
-                  </div>
+                  </DataPanel.Header>
                 );
                 const noSearchResults = !isLoading && hierarchicalSpans.length === 0 && (
                   <DataPanel.NoData>No spans match your search.</DataPanel.NoData>
@@ -458,31 +458,33 @@ export function TraceDataPanelView({
                   expandedSpanIds,
                   setExpandedSpanIds,
                   featuredSpanIds,
-                  leadingSlot,
                   isLoading,
                 };
 
                 return (
-                  <DataPanel.Content>
-                    {!isOnTracePage &&
-                      !onEvaluateTrace &&
-                      !onSaveAsDatasetItem &&
-                      !onAddTraceMocksToItem &&
-                      showUnavailableFeaturesMsg && (
-                        <Notice variant="info" className="mb-6">
-                          <Notice.Message>
-                            Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                            deployed).
-                          </Notice.Message>
-                        </Notice>
-                      )}
+                  <>
+                    {searchHeader}
+                    <DataPanel.Content>
+                      {!isOnTracePage &&
+                        !onEvaluateTrace &&
+                        !onSaveAsDatasetItem &&
+                        !onAddTraceMocksToItem &&
+                        showUnavailableFeaturesMsg && (
+                          <Notice variant="info" className="mb-6">
+                            <Notice.Message>
+                              Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                              deployed).
+                            </Notice.Message>
+                          </Notice>
+                        )}
 
-                    {/* Both views share selection + expansion state, and stay mounted with no
+                      {/* Both views share selection + expansion state, and stay mounted with no
                     results because they host the search field: unmounting would strand the
                     user with a query they can no longer clear. */}
-                    {isTimeline ? <TraceSpanTimeline {...viewProps} /> : <TraceSpanTree {...viewProps} />}
-                    {noSearchResults}
-                  </DataPanel.Content>
+                      {isTimeline ? <TraceSpanTimeline {...viewProps} /> : <TraceSpanTree {...viewProps} />}
+                      {noSearchResults}
+                    </DataPanel.Content>
+                  </>
                 );
               })()
             )}
