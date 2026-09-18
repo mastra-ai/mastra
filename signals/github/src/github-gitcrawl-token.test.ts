@@ -121,6 +121,20 @@ describe('GitcrawlSyncClient GitHub credential injection', () => {
     expect(env.GITHUB_TOKEN).toBeUndefined();
   });
 
+  it('removes every casing of the token variables when asking gh', async () => {
+    // Windows environment names are case-insensitive, so a lowercase variant
+    // would otherwise survive the deletion and be handed back as the answer.
+    vi.stubEnv('gh_token', 'ghp_stale');
+    vi.stubEnv('github_token', 'ghp_stale');
+    mockCommands({ 'gh auth token': freshToken('gho_fresh'), 'gitcrawl sync': ok('{}') });
+
+    await new GitcrawlSyncClient().syncPullRequest({ owner: 'mastra-ai', repo: 'mastra', number: 1 });
+
+    const env = envOf('gh', 'auth token')!;
+    const tokenVars = Object.keys(env).filter(name => /^(gh|github)_token$/i.test(name));
+    expect(tokenVars).toEqual([]);
+  });
+
   it.each([
     ['fails', async () => Promise.reject(new Error('gh failed'))],
     ['returns nothing', ok('\n')],

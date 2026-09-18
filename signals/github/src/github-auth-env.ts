@@ -13,6 +13,17 @@ let execFileAsync: ExecFileAsync | undefined;
 /** Environment variables both gitcrawl and the `gh` CLI treat as a GitHub credential. */
 const GITHUB_TOKEN_ENV_VARS = ['GH_TOKEN', 'GITHUB_TOKEN'] as const;
 
+/** Remove every casing of the token variables: Windows treats environment names case-insensitively. */
+function withoutGithubTokens(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const scrubbed: NodeJS.ProcessEnv = { ...env };
+  for (const name of Object.keys(scrubbed)) {
+    if (GITHUB_TOKEN_ENV_VARS.some(tokenEnv => tokenEnv.toLowerCase() === name.toLowerCase())) {
+      delete scrubbed[name];
+    }
+  }
+  return scrubbed;
+}
+
 /**
  * Resolve a GitHub credential from the global `gh` CLI and return an environment
  * that presents it to a child process.
@@ -31,8 +42,7 @@ const GITHUB_TOKEN_ENV_VARS = ['GH_TOKEN', 'GITHUB_TOKEN'] as const;
  * inherited environment untouched rather than stripping a working token.
  */
 export async function resolveGithubAuthEnv(): Promise<NodeJS.ProcessEnv | undefined> {
-  const scrubbed: NodeJS.ProcessEnv = { ...process.env };
-  for (const name of GITHUB_TOKEN_ENV_VARS) delete scrubbed[name];
+  const scrubbed = withoutGithubTokens(process.env);
 
   if (!execFileAsync) {
     const { execFile } = await import('node:child_process');
