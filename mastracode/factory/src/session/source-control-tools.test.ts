@@ -217,6 +217,23 @@ describe('createSourceControlTools', () => {
     });
   });
 
+  it('validates review bodies before execution', async () => {
+    const setup = await fixture();
+    const tools = createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+    const schema = tools.source_control_review_change_request!.inputSchema as {
+      safeParse(input: unknown): { success: boolean };
+    };
+
+    expect(schema.safeParse({ changeRequestId: 17, event: 'approve' }).success).toBe(true);
+    expect(schema.safeParse({ changeRequestId: 17, event: 'comment', body: 'Ship it' }).success).toBe(true);
+    expect(schema.safeParse({ changeRequestId: 17, event: 'request-changes', body: '   ' }).success).toBe(false);
+    expect(schema.safeParse({ changeRequestId: 17, event: 'comment' }).success).toBe(false);
+  });
+
   it('fails closed before provider access for a cross-organization caller', async () => {
     const setup = await fixture();
     const tools = createSourceControlTools({

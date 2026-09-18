@@ -90,6 +90,35 @@ describe('provider-aware source-control resolution', () => {
       orgId: 'org-1',
     });
   });
+
+  it('propagates connection-list storage failures instead of selecting another provider', async () => {
+    const { seeded, sourceControl: gitlab, project } = await seedLinkedRepository({ integrationId: 'gitlab' });
+    const github = seeded.sourceControl.forIntegration('github');
+    vi.spyOn(github.connections, 'list').mockRejectedValueOnce(new Error('connection storage unavailable'));
+
+    await expect(
+      resolveFactorySourceControl({
+        sourceControls: [github, gitlab],
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+      }),
+    ).rejects.toThrow('connection storage unavailable');
+  });
+
+  it('propagates repository-list storage failures', async () => {
+    const { sourceControl, project } = await seedLinkedRepository({ integrationId: 'gitlab' });
+    vi.spyOn(sourceControl.projectRepositories, 'list').mockRejectedValueOnce(
+      new Error('repository storage unavailable'),
+    );
+
+    await expect(
+      resolveFactorySourceControl({
+        sourceControls: [sourceControl],
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+      }),
+    ).rejects.toThrow('repository storage unavailable');
+  });
 });
 
 describe('ensureFactorySourceSession', () => {

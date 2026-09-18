@@ -388,6 +388,8 @@ const factory = new MastraFactory({ storage, integrations: [gitlab] });
 
 With no constructor options, the integration reads `GITLAB_ACCESS_TOKEN`, `GITLAB_ACCESS_TOKEN_TYPE` (`personal` or `group`), `GITLAB_BASE_URL`, and `GITLAB_WEBHOOK_SECRET`. See GitLab's [access-token scopes](https://docs.gitlab.com/security/tokens/access_token_scopes/), [personal token](https://docs.gitlab.com/user/profile/personal_access_tokens/), and [group token](https://docs.gitlab.com/user/group/settings/group_access_tokens/) documentation when creating the credential.
 
+`GITLAB_BASE_URL` must use HTTPS. Plain HTTP is accepted only for loopback development instances (`localhost`, `127.0.0.0/8`, or `::1`), where the access token is sent without transport encryption.
+
 For a Mastra Platform/Nango connection, use `PlatformGitLabIntegration`. It proxies provider requests through `/v2/connections/{connectionId}/proxy` and reads `MASTRA_GITLAB_CONNECTION_ID` unless `connectionId` is passed to the constructor. `MastraFactory` installs it automatically when Platform credentials and that connection ID are present; an explicit integration with id `gitlab` takes precedence.
 
 ```typescript
