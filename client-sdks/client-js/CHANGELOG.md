@@ -1,5 +1,94 @@
 # @mastra/client-js
 
+## 1.47.0-alpha.5
+
+### Minor Changes
+
+- Added page-based pagination for advanced trace queries. Paginated responses include `pagination` metadata with `total`, `page`, `perPage`, and `hasMore`. ([#24061](https://github.com/mastra-ai/mastra/pull/24061))
+
+  ```ts
+  const result = await client.queryTraces({
+    timeRange,
+    pagination: { page: 0, perPage: 25 },
+  });
+  ```
+
+- Added Client JS methods for bounded trace-query field and value discovery. Requests can now override client-level retry and abort settings with the per-request `retries` and `signal` options. Retry counts must be non-negative safe integers, and aborted requests stop without retrying. ([#24109](https://github.com/mastra-ai/mastra/pull/24109))
+
+  ```ts
+  const fields = await mastraClient.getTraceQueryFields({
+    timeRange,
+    predicateScope: 'trace',
+  });
+
+  const values = await mastraClient.getTraceQueryValues({
+    timeRange,
+    predicateScope: 'spans',
+    path: 'model',
+  });
+  ```
+
+### Patch Changes
+
+- Fixed an uncaught `ERR_INVALID_STATE` error when a consumer cancels an agent stream after its `finish` chunk. ([#24303](https://github.com/mastra-ai/mastra/pull/24303))
+
+  Stream cancellation no longer produces an unhandled rejection.
+
+- Fixed `agent.stream()` cancellation in `@mastra/client-js`. Cancelling a returned stream now aborts the underlying HTTP request and stops pending client-tool executions and follow-up requests. Fixes #24271. ([#24310](https://github.com/mastra-ai/mastra/pull/24310))
+
+  Added a per-call `abortSignal` option to `stream()`, `streamUntilIdle()`, `resumeStream()`, `resumeStreamUntilIdle()`, `approveToolCall()`, `declineToolCall()`, `streamLegacy()`, `generate()` and `generateLegacy()`. It is merged with the client-wide `abortSignal`, and aborted requests are not retried.
+
+  ```ts
+  const controller = new AbortController();
+  const response = await agent.stream('Hello', { abortSignal: controller.signal });
+  // later
+  controller.abort();
+  ```
+
+- `GetWorkflowRunByIdResponse.serializedStepGraph` is typed as the core `SerializedStepFlowEntry[]`, like `GetWorkflowResponse.stepGraph`, instead of the generated route shape. ([#24030](https://github.com/mastra-ai/mastra/pull/24030))
+
+- Updated dependencies [[`4266b67`](https://github.com/mastra-ai/mastra/commit/4266b677d33bb20651ca296f64aa91fa3b3d4e82), [`bec18d0`](https://github.com/mastra-ai/mastra/commit/bec18d05e7f997ead6ada04a4dc0179c3cad8aa2), [`abecb67`](https://github.com/mastra-ai/mastra/commit/abecb6709643785fd87a3ff9251032a61479ccab), [`ee7187e`](https://github.com/mastra-ai/mastra/commit/ee7187e7bf66db46630f33c64e86b1ff7bb0c0b7), [`babda00`](https://github.com/mastra-ai/mastra/commit/babda005397d2780aa21be0a7670688b704bdb2f), [`2476423`](https://github.com/mastra-ai/mastra/commit/24764233246dc85d7bcba8f8bb610110449a54d6), [`bdab4a8`](https://github.com/mastra-ai/mastra/commit/bdab4a889808d502f398a8086af3b50cc3bfbcd5), [`53cdd63`](https://github.com/mastra-ai/mastra/commit/53cdd6368b12aea743f95118a49fc6b93985fd20)]:
+  - @mastra/core@1.68.0-alpha.5
+
+## 1.47.0-alpha.4
+
+### Patch Changes
+
+- Accept A2A v1 PascalCase JSON-RPC method names when the `A2A-Version: 1.0` header is present. Normalize method names before dispatch and streaming response selection while preserving legacy slash-style methods. ([#24260](https://github.com/mastra-ai/mastra/pull/24260))
+
+  For example, retrieve an existing task with `GetTask` (replace the agent and task IDs with your own):
+
+  ```http
+  POST /api/a2a/my-agent HTTP/1.1
+  Content-Type: application/json
+  A2A-Version: 1.0
+
+  {"jsonrpc":"2.0","id":"request-1","method":"GetTask","params":{"id":"task-1"}}
+  ```
+
+- **Added** ([#24261](https://github.com/mastra-ai/mastra/pull/24261))
+
+  Added methods to `MastraClient.getA2AV1()` to create, get, list, and delete task push-notification configurations without switching to the v0.3 client. List results include pagination metadata.
+
+  For an existing `MastraClient` instance, register a callback for a task:
+
+  ```ts
+  const a2a = client.getA2AV1('agent-id');
+  await a2a.createTaskPushNotificationConfig({
+    tenant: 'tenant-1',
+    id: 'config-1',
+    taskId: 'task-1',
+    url: 'https://example.com/callback',
+    token: 'callback-token',
+    authentication: { scheme: 'Bearer', credentials: 'callback-secret' },
+  });
+  ```
+
+- Fix `getA2AV1()` to send PascalCase A2A v1 JSON-RPC method names for message and task operations, enabling interoperability with v1-compliant servers. The v0.3 client is unchanged. ([#24262](https://github.com/mastra-ai/mastra/pull/24262))
+
+- Updated dependencies [[`697fecc`](https://github.com/mastra-ai/mastra/commit/697feccaa4ad5df913c22e47bf16f493dd7956a8), [`0bf287c`](https://github.com/mastra-ai/mastra/commit/0bf287c36ec14b45f5a4fdd0d279698694f592dd), [`6249741`](https://github.com/mastra-ai/mastra/commit/6249741f8463bdc5a05ded2b35b143f92f33afbf), [`2480359`](https://github.com/mastra-ai/mastra/commit/248035940aa048c7bcd8cfe7845915dc4734b571), [`b26e528`](https://github.com/mastra-ai/mastra/commit/b26e5288891641044a3c26a498c06259985fed10), [`b2f412a`](https://github.com/mastra-ai/mastra/commit/b2f412ae77fa5379471d103ebcc1ba69b22dd353)]:
+  - @mastra/core@1.68.0-alpha.4
+
 ## 1.47.0-alpha.3
 
 ### Patch Changes

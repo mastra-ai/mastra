@@ -1,6 +1,6 @@
 {
   "name": "@mastra/longmemeval",
-  "version": "1.1.27-alpha.3",
+  "version": "1.1.27-alpha.5",
   "description": "LongMemEval benchmark implementation for Mastra Memory",
   "scripts": {
     "test": "vitest",
@@ -31,7 +31,7 @@
     "@ai-sdk/google": "^2.0.62",
     "@ai-sdk/openai": "^2.0.99",
     "@ai-sdk/provider": "^2.0.1",
-    "@ai-sdk/provider-utils": "^3.0.22",
+    "@ai-sdk/provider-utils": "^3.0.28",
     "@huggingface/hub": "^0.15.2",
     "@mastra/core": "workspace:*",
     "@mastra/fastembed": "workspace:*",

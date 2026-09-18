@@ -78,7 +78,6 @@ function ReviewQueuePage() {
         targetType={targetType}
         targetId={targetId}
         featuredItemId={featuredResultId}
-        detailPanelVariant="overlay"
         toolbarStart={
           <>
             <TargetFilter

@@ -134,15 +134,15 @@ describe('TraceSpanPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when the thread has other traces and no in-place swap is wired, then "View full thread" links to the advanced thread view', async () => {
+    it('when the thread has other traces but no in-place swap is wired, then no "View full thread" action is shown', async () => {
       installHandlers({ threadTraceCount: 2 });
       const { queryClient } = renderPanel({ showPartialThread: true });
 
-      const link = await screen.findByRole('link', { name: 'View full thread' });
-      expect(link.getAttribute('href')).toBe(
-        '/agents/weather-agent/threads/weather-thread?variant=advanced&traceId=trace-panel',
-      );
+      await screen.findByText('No rain is expected.');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      expect(screen.queryByRole('link', { name: 'View full thread' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'View full thread' })).toBeNull();
     });
 
     it('when this trace is the only one in its thread, then no "View full thread" action is shown', async () => {
@@ -255,14 +255,14 @@ describe('TraceSpanPanel', () => {
     expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByLabelText('Next span'));
+    fireEvent.click(screen.getByLabelText('Go to next span'));
     expect(await screen.findByRole('heading', { name: /span-child-2/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByLabelText('Previous span'));
+    fireEvent.click(screen.getByLabelText('Go to previous span'));
     expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
 
-    fireEvent.click(screen.getByLabelText('Previous span'));
+    fireEvent.click(screen.getByLabelText('Go to previous span'));
     expect(await screen.findByRole('heading', { name: /span-root/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });

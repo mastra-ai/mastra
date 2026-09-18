@@ -2,7 +2,7 @@
 '@mastra/mcp': minor
 ---
 
-Added an `MCP_SERVER_REQUEST` root span for every request an `MCPServer` handles (`tools/list`, `tools/call`, `resources/*`, `prompts/*`, `logging/setLevel`) and for `executeTool()`. The span records the method, target, request params, response, server name and version, negotiated protocol version, and client name and version.
+Added an `MCP_SERVER_REQUEST` root span for every request an `MCPServer` handles (`tools/list`, `tools/call`, `resources/*`, `prompts/*`) and for `executeTool()`. The span records the method, target, request params, response, server name and version, negotiated protocol version, and client name and version.
 
 Register the server on a Mastra instance that has observability configured and served requests are traced, with no extra setup:
 

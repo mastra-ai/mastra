@@ -77,10 +77,14 @@ createFilesystemTestSuite({
     supportsConcurrency: true,
     supportsPermissions: false,
     supportsMounting: false,
-    // Write payloads travel as base64 inside a single `sh -c` argument, so
-    // they are bounded by the host's ARG_MAX (~1MB on macOS). Keep test
-    // payloads comfortably under that.
-    maxTestFileSize: 128 * 1024,
+    // Write payloads travel as base64 inside a single `sh -c` argument.
+    // macOS bounds the whole argument list by ARG_MAX (~1MB), but Linux also
+    // caps a *single* argument at MAX_ARG_STRLEN (128 KiB). base64 inflates the
+    // payload by 4/3, so a 128 KiB file becomes a ~171 KiB argument and fails
+    // with E2BIG before the shell ever runs. Keep the payload well under that
+    // per-argument ceiling — and note this is a real limit of the write path
+    // (base64 in one argument), not just a test-size choice.
+    maxTestFileSize: 64 * 1024,
   },
   // Every operation shells out (often several commands), so give slow CI
   // hosts more headroom than the 5s default.

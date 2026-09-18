@@ -12,6 +12,10 @@ import type {
   ListTracesLightResponse,
   TraceQueryRequest,
   TraceQueryResponse,
+  GetTraceQueryFieldsArgs,
+  GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesArgs,
+  GetTraceQueryValuesResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -122,10 +126,22 @@ export interface LegacyGetTracesResponse {
 
 export type ListScoresBySpanParams = SpanIds & PaginationArgs;
 
-export type QueryTracesInput = Omit<TraceQueryRequest, 'group' | 'where'> & {
+type QueryTracesBaseInput = Omit<TraceQueryRequest, 'group' | 'where' | 'page' | 'pagination'> & {
   where?: TraceQueryPredicate;
   group?: never;
 };
+
+type QueryTracesKeysetInput = QueryTracesBaseInput & {
+  page?: TraceQueryRequest['page'];
+  pagination?: never;
+};
+
+type QueryTracesPaginatedInput = QueryTracesBaseInput & {
+  page?: never;
+  pagination: NonNullable<TraceQueryRequest['pagination']>;
+};
+
+export type QueryTracesInput = QueryTracesKeysetInput | QueryTracesPaginatedInput;
 export type QueryTraceThreadsInput = QueryThreadsInput;
 export type QueryTraceThreadsResult = QueryThreadsResult;
 
@@ -248,6 +264,32 @@ export class Observability extends BaseResource {
    */
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.request('/observability/traces/query', { method: 'POST', body: params });
+  }
+
+  /** Returns canonical and observed fields available to the advanced trace-query grammar. */
+  getTraceQueryFields(
+    params: GetTraceQueryFieldsArgs,
+    options?: { signal?: AbortSignal },
+  ): Promise<GetTraceQueryFieldsResponse> {
+    return this.request('/observability/traces/query/fields', {
+      method: 'POST',
+      body: params,
+      retries: 0,
+      signal: options?.signal,
+    });
+  }
+
+  /** Returns bounded string suggestions for one eligible trace-query field. */
+  getTraceQueryValues(
+    params: GetTraceQueryValuesArgs,
+    options?: { signal?: AbortSignal },
+  ): Promise<GetTraceQueryValuesResponse> {
+    return this.request('/observability/traces/query/values', {
+      method: 'POST',
+      body: params,
+      retries: 0,
+      signal: options?.signal,
+    });
   }
 
   /**

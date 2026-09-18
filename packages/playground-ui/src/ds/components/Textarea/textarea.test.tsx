@@ -19,6 +19,14 @@ describe('Textarea', () => {
     expect(textarea.className).not.toContain('bg-surface-overlay-soft');
   });
 
+  it('uses the shared neutral6 text color at rest', () => {
+    render(<Textarea placeholder="Description" />);
+
+    const cls = screen.getByPlaceholderText('Description').className;
+    expect(cls).toContain('text-neutral6');
+    expect(cls).not.toContain('text-neutral5');
+  });
+
   it.each([
     ['xs', 'text-ui-xs'],
     ['sm', 'text-ui-sm'],

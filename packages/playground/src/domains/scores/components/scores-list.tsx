@@ -1,6 +1,5 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { ScoresDataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ScoresColumnsState } from '@/domains/scores/hooks/use-scores-columns';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
@@ -108,12 +107,8 @@ export function ScoresList({
     return null;
   }
 
-  const hasSidePanel = !!selectedScore;
-
   return (
-    <div
-      className={cn('grid h-full max-h-full min-h-0 gap-4', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
-    >
+    <>
       <div className="flex h-full min-h-0 min-w-0 flex-col">
         <ScoresDataList columns={columns} className="min-h-0" scrollRef={containerRef}>
           {header}
@@ -141,11 +136,7 @@ export function ScoresList({
         </ScoresDataList>
       </div>
 
-      {selectedScore && (
-        <div className="grid h-full max-h-full min-h-0 grid-rows-[1fr] overflow-hidden">
-          <ScoreDataPanel score={selectedScore} onClose={handleClose} onPrevious={handlePrevious} onNext={handleNext} />
-        </div>
-      )}
-    </div>
+      <ScoreDataPanel score={selectedScore} onClose={handleClose} onPrevious={handlePrevious} onNext={handleNext} />
+    </>
   );
 }

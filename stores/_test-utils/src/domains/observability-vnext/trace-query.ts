@@ -10,6 +10,7 @@ import {
   type QueryThreadsInput,
   type QueryThreadsResult,
   type TraceQueryGroupResponse,
+  type TraceQueryPaginatedTraceResponse,
   type TraceQueryPredicate,
   type TraceQueryRequest,
   type TraceQueryResponse,
@@ -17,6 +18,7 @@ import {
   type TraceQueryTraceResponse,
   type TrustedThreadPredicate,
   type TrustedThreadQueryPlan,
+  type TrustedTraceQueryKeysetTracesPlan,
   type TrustedTraceQueryPlan,
   type TrustedTraceQueryPredicate,
   type TrustedTraceQueryScalarPredicate,
@@ -871,6 +873,73 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
   ],
 };
 
+const scoreReplacementRoot = (traceId: string): RawTraceQuerySpan =>
+  span(1, traceId, `root-${traceId}`, {
+    startedAt: '2026-08-15T00:00:00.000Z',
+    endedAt: '2026-08-15T00:00:01.000Z',
+  });
+
+const scoreReplacementTimestamp = '2026-08-15T00:00:02.000Z';
+
+/**
+ * Current-score contract fixture. Array order models accepted write order via
+ * cursorId; caller-controlled timestamps intentionally do not distinguish
+ * rewrites.
+ */
+export const TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA: TraceQueryFixtureData = {
+  spans: [
+    scoreReplacementRoot('score-current-a'),
+    scoreReplacementRoot('score-current-b'),
+    scoreReplacementRoot('score-move-a'),
+    scoreReplacementRoot('score-move-b'),
+  ],
+  scores: [
+    scoreRecord(1, 'score-rewritten', 'score-current-a', 'quality', 0.2, {
+      timestamp: scoreReplacementTimestamp,
+      scorerVersion: 'stale',
+      scoreSource: 'manual',
+    }),
+    scoreRecord(2, 'score-low-a', 'score-current-a', 'quality', 0.1, {
+      timestamp: scoreReplacementTimestamp,
+    }),
+    scoreRecord(3, 'score-rewritten', 'score-current-a', 'quality', 0.8, {
+      timestamp: scoreReplacementTimestamp,
+      scorerVersion: 'current',
+      scoreSource: 'automated',
+    }),
+    scoreRecord(4, 'score-low-b', 'score-current-b', 'quality', 0.1, {
+      timestamp: scoreReplacementTimestamp,
+    }),
+    scoreRecord(5, 'score-moved', 'score-move-a', 'old-target', 0.9, {
+      spanId: 'old-span',
+      timestamp: scoreReplacementTimestamp,
+    }),
+    scoreRecord(6, 'score-moved', 'score-move-b', 'current-target', 0.4, {
+      spanId: 'current-span',
+      timestamp: scoreReplacementTimestamp,
+    }),
+  ],
+  feedback: [],
+};
+
+/**
+ * Malformed/equal fixture cursors use an evaluator-only deterministic fallback.
+ * Storage adapters may resolve rows without distinct durable recency according
+ * to their physical engine; supported sequential writes must not tie.
+ */
+export const TRACE_QUERY_SCORE_TIE_FIXTURE_DATA: TraceQueryFixtureData = {
+  spans: [scoreReplacementRoot('score-tie')],
+  scores: [
+    scoreRecord(1, 'score-equal-cursor', 'score-tie', 'quality', 0.2, {
+      timestamp: scoreReplacementTimestamp,
+    }),
+    scoreRecord(1, 'score-equal-cursor', 'score-tie', 'quality', 0.8, {
+      timestamp: scoreReplacementTimestamp,
+    }),
+  ],
+  feedback: [],
+};
+
 export const THREAD_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [...TRACE_QUERY_FIXTURE_DATA.spans],
   scores: [...TRACE_QUERY_FIXTURE_DATA.scores],
@@ -1213,6 +1282,83 @@ export interface TraceQueryConformanceCase {
   expected: Array<{ traceId: string } | { threadId: string }>;
   requiresStrictFeedbackValueTypes?: boolean;
 }
+
+const scoreReplacementRequest = (
+  traceId: string,
+  quantifier: 'some' | 'none',
+  predicate: TraceQueryPredicate,
+): TraceQueryRequest => ({
+  timeRange: fullRange,
+  where: {
+    op: 'and',
+    args: [
+      { op: 'eq', left: { path: 'traceId' }, right: { literal: traceId } },
+      { scores: { [quantifier]: predicate } },
+    ],
+  },
+});
+
+const scoreAboveHalf: TraceQueryPredicate = {
+  op: 'gt',
+  left: { path: 'score' },
+  right: { literal: 0.5 },
+};
+
+export const TRACE_QUERY_SCORE_REPLACEMENT_CASES: TraceQueryConformanceCase[] = [
+  {
+    name: 'current rewritten score satisfies some',
+    request: scoreReplacementRequest('score-current-a', 'some', scoreAboveHalf),
+    expected: [{ traceId: 'score-current-a' }],
+  },
+  {
+    name: 'current rewritten score does not satisfy none',
+    request: scoreReplacementRequest('score-current-a', 'none', scoreAboveHalf),
+    expected: [],
+  },
+  {
+    name: 'trace containing only a low score does not satisfy some',
+    request: scoreReplacementRequest('score-current-b', 'some', scoreAboveHalf),
+    expected: [],
+  },
+  {
+    name: 'trace containing only a low score satisfies none',
+    request: scoreReplacementRequest('score-current-b', 'none', scoreAboveHalf),
+    expected: [{ traceId: 'score-current-b' }],
+  },
+  {
+    name: 'stale scorer fields do not satisfy score predicates',
+    request: scoreReplacementRequest('score-current-a', 'some', {
+      op: 'eq',
+      left: { path: 'scorerVersion' },
+      right: { literal: 'stale' },
+    }),
+    expected: [],
+  },
+  {
+    name: 'moved score is absent from its stale target',
+    request: scoreReplacementRequest('score-move-a', 'some', {
+      op: 'eq',
+      left: { path: 'scorerId' },
+      right: { literal: 'old-target' },
+    }),
+    expected: [],
+  },
+  {
+    name: 'moved score is visible on its current target',
+    request: scoreReplacementRequest('score-move-b', 'some', {
+      op: 'eq',
+      left: { path: 'scorerId' },
+      right: { literal: 'current-target' },
+    }),
+    expected: [{ traceId: 'score-move-b' }],
+  },
+];
+
+export const TRACE_QUERY_SCORE_TIE_CASE: TraceQueryConformanceCase = {
+  name: 'breaks malformed equal score cursors deterministically in the evaluator',
+  request: scoreReplacementRequest('score-tie', 'some', scoreAboveHalf),
+  expected: [{ traceId: 'score-tie' }],
+};
 
 export const TRACE_QUERY_TIED_TIMESTAMP_CASES: TraceQueryConformanceCase[] = [
   {
@@ -1962,6 +2108,20 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
   }
 
   let traces = roots.map(toTraceQueryTrace).sort((left, right) => compareTraces(left, right, plan));
+  if (plan.paginationMode === 'page') {
+    const total = traces.length;
+    const start = plan.page * plan.perPage;
+    return {
+      traces: traces.slice(start, start + plan.perPage),
+      pagination: {
+        total,
+        page: plan.page,
+        perPage: plan.perPage,
+        hasMore: (plan.page + 1) * plan.perPage < total,
+      },
+    } satisfies TraceQueryPaginatedTraceResponse;
+  }
+
   if (plan.cursor) traces = traces.filter(trace => isTraceAfterCursor(trace, plan));
   const visible = traces.slice(0, plan.limit + 1);
   const hasNext = visible.length > plan.limit;
@@ -2060,7 +2220,7 @@ export async function collectTraceQueryPages(
     });
     const response = await execute(normalized);
     results.push(...normalizeTraceQueryResponse(response));
-    after = response.page.next;
+    after = 'page' in response ? response.page.next : undefined;
   } while (after);
   return results;
 }
@@ -2092,11 +2252,33 @@ function currentSpans(spans: RawTraceQuerySpan[]): RawTraceQuerySpan[] {
   return [...records.values()];
 }
 
+function scoreTieBreakKey(score: RawTraceQueryScore): string {
+  return JSON.stringify([
+    score.timestamp,
+    score.traceId,
+    score.spanId,
+    score.scorerId,
+    score.scorerVersion,
+    score.scoreSource,
+    score.score,
+    score.entityVersionId,
+    score.parentEntityVersionId,
+    score.rootEntityVersionId,
+  ]);
+}
+
+function compareCurrentScores(left: RawTraceQueryScore, right: RawTraceQueryScore): number {
+  if (left.cursorId !== right.cursorId) return left.cursorId - right.cursorId;
+  const timestampComparison = compareTraceQueryStrings(left.timestamp, right.timestamp);
+  if (timestampComparison !== 0) return timestampComparison;
+  return compareTraceQueryStrings(scoreTieBreakKey(left), scoreTieBreakKey(right));
+}
+
 function currentScores(scores: RawTraceQueryScore[]): RawTraceQueryScore[] {
   const records = new Map<string, RawTraceQueryScore>();
   for (const candidate of scores) {
     const current = records.get(candidate.scoreId);
-    if (!current || candidate.cursorId > current.cursorId) records.set(candidate.scoreId, candidate);
+    if (!current || compareCurrentScores(candidate, current) > 0) records.set(candidate.scoreId, candidate);
   }
   return [...records.values()];
 }
@@ -2268,10 +2450,7 @@ function compareTraces(
   return compareTraceQueryStrings(left.traceId, right.traceId);
 }
 
-function isTraceAfterCursor(
-  trace: TraceQueryTrace,
-  plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
-): boolean {
+function isTraceAfterCursor(trace: TraceQueryTrace, plan: TrustedTraceQueryKeysetTracesPlan): boolean {
   const cursor = plan.cursor!;
   const sortComparison = compareTraceQueryStrings(trace[plan.orderBy.field], cursor.sortValue);
   if (sortComparison === 0) return compareTraceQueryStrings(trace.traceId, cursor.traceId) > 0;

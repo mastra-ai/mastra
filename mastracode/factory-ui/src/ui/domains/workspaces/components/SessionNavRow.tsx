@@ -10,7 +10,7 @@ import type { RefObject } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionRowStatus } from '../services/sessionStatus';
-import { SessionActivityBelt } from './SessionActivity';
+import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
@@ -89,7 +89,7 @@ export function SessionNavRow({
   const trailing = trailingKind({ loading, status, merged });
   const action = (
     <>
-      {belt ? <SessionActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
+      {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
       <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
         {trailing === 'loading' ? <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3" /> : null}
         {trailing === 'merged' ? (

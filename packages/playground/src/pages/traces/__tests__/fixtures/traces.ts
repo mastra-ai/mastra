@@ -20,13 +20,13 @@ const baseSystemPackages: GetSystemPackagesResponse = {
 export const metricsCapableSystemPackages: GetSystemPackagesResponse = {
   ...baseSystemPackages,
   observabilityStorageType: 'ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: { metrics: true, logs: true },
+  observabilityStorageCapabilities: { metrics: true, logs: true, traceQueryDiscovery: false },
 };
 
 export const metricsUnavailableSystemPackages: GetSystemPackagesResponse = {
   ...baseSystemPackages,
   observabilityStorageType: 'ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: { metrics: false, logs: true },
+  observabilityStorageCapabilities: { metrics: false, logs: true, traceQueryDiscovery: false },
 };
 
 const trace = {
@@ -140,3 +140,4 @@ export const emptyTags: Awaited<ReturnType<MastraClient['getTags']>> = { tags: [
 export const emptyEntityNames: Awaited<ReturnType<MastraClient['getEntityNames']>> = { entityNames: [] };
 export const emptyServiceNames: Awaited<ReturnType<MastraClient['getServiceNames']>> = { serviceNames: [] };
 export const emptyEnvironments: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: [] };
+export const environmentsWithProd: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: ['prod'] };
