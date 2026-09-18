@@ -114,6 +114,8 @@ The root URL for the endpoints below is: `/v1/gateway`
 
 The hosted feedback query API lists and analyzes feedback exported to Mastra Platform Observability. Because the API is unversioned, backwards compatibility isn't guaranteed. Rate limits, retention, and ingestion-to-query freshness aren't published contracts.
 
+The endpoints share their query parameters, request bodies, and response types with the Mastra runtime feedback routes. See the [feedback reference](/reference/observability/feedback) for the full contract, including [list query parameters](/reference/observability/feedback#list-query-parameters) and [`FeedbackFilter`](/reference/observability/feedback#feedbackfilter).
+
 Use the root URL for your environment's data-residency region:
 
 | Region | Root URL |
