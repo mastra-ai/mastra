@@ -54,7 +54,18 @@ type AISDKToolOutputDenied = {
   dynamic?: boolean;
 };
 
-export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
+export type ToolOutputAncestryEntry = {
+  toolCallId: string;
+  toolName?: string;
+  agentId?: string;
+};
+
+export type ToolAgentChunkType = {
+  type: 'tool-agent';
+  toolCallId: string;
+  payload: any;
+  ancestry: ToolOutputAncestryEntry[];
+};
 export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
 export type ToolNetworkChunkType = { type: 'tool-network'; toolCallId: string; payload: any };
 
@@ -564,32 +575,60 @@ export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
   });
 }
 
+type ConvertedToolOutput = {
+  type: 'tool-output';
+  toolCallId: string;
+  toolName?: string;
+  output: any;
+};
+
+type NormalizedToolOutput = {
+  output: any;
+  ancestry: ToolOutputAncestryEntry[];
+};
+
+function createToolOutputAncestryEntry(toolCallId: string, toolName?: string): ToolOutputAncestryEntry {
+  const agentId = toolName?.startsWith('agent-') ? toolName.slice('agent-'.length) : undefined;
+
+  return {
+    toolCallId,
+    ...(toolName ? { toolName } : {}),
+    ...(agentId ? { agentId } : {}),
+  };
+}
+
 /**
- * Each level of agent-as-tool delegation wraps the sub-agent's chunks in another
- * `tool-output` envelope (see ToolStream in @mastra/core), and those envelopes carry
- * `from: 'USER'` rather than the originating primitive. Without unwrapping, chunks from
- * agents nested two or more levels deep match none of the `from` branches below and are
- * dropped, so the client only sees them once the outermost tool call resolves.
+ * Each agent-as-tool delegation wraps progressive chunks in another `tool-output`
+ * envelope. Preserve every boundary for routing while returning only the originating
+ * leaf chunk to downstream transformers.
  */
-const MAX_TOOL_OUTPUT_NESTING = 10;
+function normalizeNestedToolOutput(part: ConvertedToolOutput): NormalizedToolOutput | undefined {
+  const ancestry = [createToolOutputAncestryEntry(part.toolCallId, part.toolName)];
+  const seen = new Set<object>();
+  let current = part.output;
 
-function unwrapNestedToolOutput(output: any): any | undefined {
-  let current = output;
+  while (current !== null && typeof current === 'object') {
+    if (seen.has(current)) {
+      return undefined;
+    }
+    seen.add(current);
 
-  for (let depth = 0; depth < MAX_TOOL_OUTPUT_NESTING; depth++) {
-    if (current === null || typeof current !== 'object') {
+    if (current.type !== 'tool-output') {
+      return { output: current, ancestry };
+    }
+
+    const toolCallId = current.payload?.toolCallId ?? current.toolCallId;
+    if (typeof toolCallId !== 'string') {
       return undefined;
     }
 
-    if (current.type !== 'tool-output') {
-      return current;
-    }
+    const toolName = current.payload?.toolName ?? current.toolName;
+    ancestry.push(createToolOutputAncestryEntry(toolCallId, typeof toolName === 'string' ? toolName : undefined));
 
     const nested = current.payload?.output ?? current.output;
     if (nested === undefined) {
       return undefined;
     }
-
     current = nested;
   }
 
@@ -607,12 +646,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   responseMessageId,
 }: {
   // tool-output is a custom mastra chunk type used in ToolStream
-  part:
-    | TextStreamPart<ToolSet>
-    | AISDKToolOutputDenied
-    | DataChunkType
-    | ToolApprovalRequest
-    | { type: 'tool-output'; toolCallId: string; output: any };
+  part: TextStreamPart<ToolSet> | AISDKToolOutputDenied | DataChunkType | ToolApprovalRequest | ConvertedToolOutput;
   messageMetadataValue?: unknown;
   sendReasoning?: boolean;
   sendSources?: boolean;
@@ -798,16 +832,18 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'tool-output': {
-      const output = unwrapNestedToolOutput(part.output);
-      if (output === undefined) {
+      const normalized = normalizeNestedToolOutput(part);
+      if (!normalized) {
         return;
       }
+      const { output, ancestry } = normalized;
 
       if (output.from === 'AGENT') {
         return {
           type: 'tool-agent',
           toolCallId: part.toolCallId,
           payload: output,
+          ancestry,
         };
       } else if (output.from === 'WORKFLOW') {
         return {

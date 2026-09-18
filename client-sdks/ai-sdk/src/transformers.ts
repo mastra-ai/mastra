@@ -130,13 +130,25 @@ export type AgentRunSnapshot = LLMStepResult & {
   toolErrors?: AgentToolError[];
 };
 
-export type AgentDataPart = {
+export type AgentStreamAncestryEntry = {
+  toolCallId: string;
+  toolName?: string;
+  agentId?: string;
+};
+
+type AgentStreamAncestryMetadata = {
+  ancestry: AgentStreamAncestryEntry[];
+  depth: number;
+  parentAgentId?: string;
+};
+
+export type AgentDataPart = AgentStreamAncestryMetadata & {
   type: 'data-tool-agent';
   id: string;
   data: AgentRunSnapshot;
 };
 
-export type AgentStepDataPart = {
+export type AgentStepDataPart = AgentStreamAncestryMetadata & {
   type: 'data-tool-agent-step';
   id: string;
   data: {
@@ -438,8 +450,8 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
 
       if (transformedChunk) {
         if (transformedChunk.type === 'tool-agent') {
-          const payload = transformedChunk.payload;
-          const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
+          const { payload, ancestry } = transformedChunk;
+          const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps, ancestry);
           if (agentTransformed) {
             if (Array.isArray(agentTransformed)) {
               for (const part of agentTransformed) {
@@ -781,13 +793,24 @@ function serializeAgentRun(
   };
 }
 
+function createAgentStreamAncestryMetadata(ancestry: AgentStreamAncestryEntry[]): AgentStreamAncestryMetadata {
+  const agentIds = ancestry.flatMap(entry => (entry.agentId ? [entry.agentId] : []));
+
+  return {
+    ancestry,
+    depth: agentIds.length,
+    ...(agentIds.length > 1 ? { parentAgentId: agentIds.at(-2) } : {}),
+  };
+}
+
 function createAgentDataPart(args: {
   current: Record<string, any>;
   runId: string;
+  ancestry: AgentStreamAncestryEntry[];
   includeCompletedStepDetails: boolean;
   includeResponseMessages: boolean;
 }): AgentDataPart {
-  const { current, runId, includeCompletedStepDetails, includeResponseMessages } = args;
+  const { current, runId, ancestry, includeCompletedStepDetails, includeResponseMessages } = args;
 
   return {
     type: 'data-tool-agent',
@@ -796,6 +819,7 @@ function createAgentDataPart(args: {
       includeCompletedStepDetails,
       includeResponseMessages,
     }) as unknown as AgentRunSnapshot,
+    ...createAgentStreamAncestryMetadata(ancestry),
   };
 }
 
@@ -803,8 +827,9 @@ function createAgentStepDataPart(args: {
   runId: string;
   stepIndex: number;
   step: Record<string, any>;
+  ancestry: AgentStreamAncestryEntry[];
 }): AgentStepDataPart {
-  const { runId, stepIndex, step } = args;
+  const { runId, stepIndex, step, ancestry } = args;
 
   return {
     type: 'data-tool-agent-step',
@@ -814,12 +839,14 @@ function createAgentStepDataPart(args: {
       stepIndex,
       step: cloneAgentStep(step, { includeDetails: true }) as unknown as AgentRunSnapshot,
     },
+    ...createAgentStreamAncestryMetadata(ancestry),
   };
 }
 
 export function transformAgent<OUTPUT>(
   payload: ChunkType<OUTPUT>,
   bufferedSteps: Map<string, any>,
+  ancestry: AgentStreamAncestryEntry[] = [],
 ): TransformAgentResult | null {
   let hasChanged = false;
   let completedStep: { stepIndex: number; step: Record<string, any> } | null = null;
@@ -1085,6 +1112,7 @@ export function transformAgent<OUTPUT>(
     const snapshot = createAgentDataPart({
       current,
       runId: payload.runId!,
+      ancestry,
       includeCompletedStepDetails: payload.type === 'finish',
       includeResponseMessages: payload.type === 'finish',
     });
@@ -1096,6 +1124,7 @@ export function transformAgent<OUTPUT>(
           runId: payload.runId!,
           stepIndex: completedStep.stepIndex,
           step: completedStep.step,
+          ancestry,
         }),
       ] as const;
     }
