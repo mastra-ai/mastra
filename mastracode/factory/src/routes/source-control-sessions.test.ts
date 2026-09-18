@@ -122,21 +122,24 @@ describe('source-control session routes', () => {
     });
   });
 
-  it('rejects leading-dash refs before creating a session', async () => {
-    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
-    const app = buildApp([sourceControl], seed.memorySettings);
-    const sessionId = '22222222-2222-4222-8222-222222222222';
+  it.each(['-feature', 'topic..fix', 'topic/', 'topic//fix', 'topic.lock'])(
+    'rejects invalid ref %s before creating a session',
+    async branch => {
+      const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+      const app = buildApp([sourceControl], seed.memorySettings);
+      const sessionId = '22222222-2222-4222-8222-222222222222';
 
-    const response = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId, branch: '-feature' }),
-    });
+      const response = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId, branch }),
+      });
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: 'Invalid branch' });
-    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toBeNull();
-  });
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({ error: 'Invalid branch' });
+      await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toBeNull();
+    },
+  );
 
   it('keeps the legacy GitHub project URL as a compatibility alias', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
