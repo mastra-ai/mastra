@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../boards/index.js';
-import type { VersionControl } from '../../capabilities/version-control.js';
+import type { PullRequest, VersionControl } from '../../capabilities/version-control.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { IntegrationContext } from '../base.js';
 import { resolveGitLabRules } from './default-rules.js';
@@ -54,8 +54,8 @@ describe('GitLab merge-request reconciler', () => {
     const wrongInstallation = await sourceControl.installations.upsert({
       orgId: project.orgId,
       connectedByUserId: project.createdBy,
-      externalId: 'aaa-wrong-host',
-      providerMetadata: { host: 'other-gitlab.example.com' },
+      externalId: 'aaa-platform',
+      providerMetadata: { host: HOST },
     });
     const wrongRepository = await sourceControl.repositories.upsert({
       orgId: project.orgId,
@@ -116,7 +116,7 @@ describe('GitLab merge-request reconciler', () => {
       },
     });
 
-    const getPullRequest = vi.fn<VersionControl['getPullRequest']>().mockResolvedValue({
+    const closedPullRequest: PullRequest = {
       id: '17',
       title: 'MR 17',
       url: `https://${HOST}/${PROJECT_PATH}/-/merge_requests/17`,
@@ -134,7 +134,11 @@ describe('GitLab merge-request reconciler', () => {
       headSha: 'abc123',
       createdAt: '2026-09-01T00:00:00Z',
       updatedAt: '2026-09-18T00:00:00Z',
-    });
+    };
+    const getPullRequest = vi
+      .fn<VersionControl['getPullRequest']>()
+      .mockResolvedValueOnce(closedPullRequest)
+      .mockResolvedValue({ ...closedPullRequest, updatedAt: '2026-09-18T01:00:00Z' });
     const getProjectMemberAccessLevel = vi.fn().mockResolvedValueOnce(40).mockResolvedValue(10);
     const gitlab = {
       versionControl: { getPullRequest } as VersionControl,

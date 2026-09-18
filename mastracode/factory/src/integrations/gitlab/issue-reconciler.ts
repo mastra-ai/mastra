@@ -20,6 +20,10 @@ function numberMetadata(item: WorkItemRow, key: string): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
+function normalizeHost(host: string): string {
+  return host.trim().toLowerCase().replace(/\.$/, '');
+}
+
 function closedIssueEvent(item: WorkItemRow, issue: IntakeIssue): ParsedGitLabWebhook {
   const projectId = numberMetadata(item, 'gitlabProjectId');
   const issueIid = numberMetadata(item, 'gitlabIssueIid');
@@ -31,7 +35,7 @@ function closedIssueEvent(item: WorkItemRow, issue: IntakeIssue): ParsedGitLabWe
   const username = issue.author?.trim() || 'factory-reconciler';
   return {
     event: 'Issue Hook',
-    deliveryId: `reconcile:issue:${projectId}:${issueIid}:${issue.updatedAt}:closed`,
+    deliveryId: `reconcile:issue:${normalizeHost(host)}:${projectId}:${issueIid}:${issue.updatedAt}:closed`,
     instanceHost: host,
     payload: {
       user_username: username,
@@ -73,9 +77,7 @@ export function attachGitLabIssueReconciler(
     state: issue.state,
     stateType: issue.stateType,
     author: issue.author,
-    authorTrusted: issue.author
-      ? await gitlab.isProjectMemberTrustedForSource(sourceId, issue.author)
-      : undefined,
+    authorTrusted: issue.author ? await gitlab.isProjectMemberTrustedForSource(sourceId, issue.author) : undefined,
     assignee: issue.assignee,
     assignees: issue.assignees ?? [],
     labels: issue.labels,
