@@ -96,7 +96,16 @@ export function createRequestScopedCredentialStore(
       const selected = selectedAccount(providerId);
       return selected ? accountCredential(selected) : undefined;
     },
-    getStoredApiKey: providerId => (rejectAll(providerId) ? undefined : base.getStoredApiKey(providerId)),
+    getStoredApiKey: providerId => {
+      if (rejectAll(providerId)) return undefined;
+      // The provider-wide `apikey:` slot is never the credential routing
+      // selected, so serving it to a routed request is an OAuth -> API-key
+      // fallback of the same provider — the one combination this feature
+      // forbids. Unlike `get`, this read has no account argument to pass
+      // through, so a selection fails it closed instead.
+      if (selectedId(providerId) !== undefined) return undefined;
+      return base.getStoredApiKey(providerId);
+    },
     getApiKey: providerId =>
       rejectAll(providerId) ? Promise.resolve(undefined) : base.getApiKey(providerId, selectedId(providerId)),
     getOAuthCredential: base.getOAuthCredential

@@ -135,6 +135,38 @@ describe('request-scoped credentials', () => {
 
     expect(scoped.get('anthropic')).toMatchObject({ access: 'active-token' });
   });
+
+  it('fails closed on the stored API-key slot when the request selected an account', () => {
+    const base = {
+      reload: vi.fn(),
+      get: vi.fn(),
+      getStoredApiKey: vi.fn((provider: string) => (provider === 'anthropic' ? 'sk-ant-provider-wide' : 'sk-other')),
+      getApiKey: vi.fn(async () => 'active-token'),
+      listAccounts: vi.fn(() => [
+        {
+          type: 'oauth-account' as const,
+          id: 'anthropic:b',
+          label: 'Account B',
+          addedAt: '2026-01-01T00:00:00.000Z',
+          active: false,
+          access: 'token-b',
+          refresh: 'refresh-b',
+          expires: Date.now() + 60_000,
+        },
+      ]),
+    } satisfies CredentialStore;
+    const requestContext = new RequestContext();
+    setRequestAccountSelection(requestContext, 'anthropic', 'anthropic:b');
+    const scoped = createRequestScopedCredentialStore(base, requestContext);
+
+    // The `apikey:` slot is provider-wide, not the account routing selected.
+    // Serving it would be an OAuth -> API-key fallback for the same provider.
+    expect(scoped.getStoredApiKey('anthropic')).toBeUndefined();
+    expect(base.getStoredApiKey).not.toHaveBeenCalled();
+    // An unrouted provider on the same request still reads its stored key.
+    expect(scoped.getStoredApiKey('openai-codex')).toBe('sk-other');
+    expect(base.getStoredApiKey).toHaveBeenCalledWith('openai-codex');
+  });
 });
 
 describe('getDynamicModel error branches', () => {
