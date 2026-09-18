@@ -26,6 +26,9 @@ const { mastra, controller } = await mountAgentControllerOnMastra({
 
 ### ACP server
 
+See the [ACP server reference](https://mastra.ai/reference/code-sdk/acp-server) for
+startup options, capabilities, and client behavior.
+
 Start the installed CLI with `mastracode --acp`, or start the SDK server directly:
 
 ```ts
@@ -100,9 +103,11 @@ before the first run:
 ```sh
 pnpm turbo build --filter @mastra/core...
 pnpm --filter @mastra/code-sdk test:acp
+pnpm --filter @mastra/code-sdk check:acp
 ```
 
 This suite runs the adapter and stdio protocol tests without building the TUI.
+`check:acp` checks the adapter against the repository's ES2023 library target.
 It requires built workspace imports, including `@mastra/core/workspace`; the signal
 factory alone is aliased to source. Runtime factory tests mock SDK startup. Use a running
 ACP client to verify provider authentication and actual tool execution.
@@ -130,7 +135,11 @@ Mastra Code implements [Agent Client Protocol v1](https://agentclientprotocol.co
 The similarly named `@acprotocol/conformance` package tests **Agent Control
 Protocol**, a different protocol, and cannot validate this server.
 
-The release gate tests the built SDK by default:
+The Mastra Code CI job builds matching workspace packages, runs the SDK typecheck
+and ACP unit tests, then tests the built SDK with the conformance gate. Reports
+are uploaded as the `acp-conformance` artifact.
+
+Run that same conformance gate locally against a built SDK:
 
 ```sh
 pnpm --filter @mastra/code-sdk test:acp:conformance

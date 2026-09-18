@@ -34,7 +34,8 @@
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:acp:dev": "node scripts/build-acp-dev.mjs",
-    "test:acp:conformance": "node scripts/run-acp-conformance.mjs"
+    "test:acp:conformance": "node scripts/run-acp-conformance.mjs",
+    "check:acp": "tsc --noEmit -p tsconfig.acp.json"
   },
   "keywords": [],
   "author": "",

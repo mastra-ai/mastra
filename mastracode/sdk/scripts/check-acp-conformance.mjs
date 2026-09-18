@@ -343,12 +343,19 @@ process.on('SIGTERM', () => {
   remoteMcp.close();
 });
 const updates = [];
+const knownSessions = new Set();
+const commandsReceived = Promise.withResolvers();
 const inspectClient = inspectWire('client');
 const piping = inspectClient.readable.pipeTo(Writable.toWeb(child.stdin));
 piping.catch(() => {});
 const client = new ClientSideConnection(
   () => ({
     sessionUpdate: async update => {
+      if (update.update.sessionUpdate === 'available_commands_update') commandsReceived.resolve();
+      if (!knownSessions.has(update.sessionId)) {
+        wireErrors.push(`Session update before session/new response: ${update.update.sessionUpdate}`);
+        return;
+      }
       updates.push(update);
       if (update.update.sessionUpdate === 'agent_message_chunk' && update.update.content.text === 'ACP_STREAMING')
         streamingSeen.resolve();
@@ -404,6 +411,8 @@ async function runChecks() {
   });
   const sessionId = session.sessionId;
   assert(sessionId);
+  knownSessions.add(sessionId);
+  await commandsReceived.promise;
   const commands = updates
     .filter(item => item.sessionId === sessionId && item.update.sessionUpdate === 'available_commands_update')
     .at(-1)?.update.availableCommands;
@@ -564,6 +573,7 @@ async function runChecks() {
   const secondCwd = join(work, 'second-project');
   await mkdir(secondCwd);
   const second = await client.newSession({ cwd: secondCwd, mcpServers: [] });
+  knownSessions.add(second.sessionId);
   assert.notEqual(second.sessionId, sessionId);
   await client.setSessionMode({ sessionId: second.sessionId, modeId: 'plan' });
   const firstConfig = await client.setSessionConfigOption({ sessionId, configId: 'thought_level', value: 'high' });
