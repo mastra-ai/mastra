@@ -176,7 +176,7 @@ Title generation runs asynchronously after the agent responds and doesn't affect
 
 ### Streaming the generated title
 
-By default the title is written to storage after the run's stream has closed, so HTTP clients only see it on their next thread fetch. Set `emitEvent: true` to deliver the title on the run's stream instead: the stream waits for the title and emits a transient `data-thread-title` chunk before `finish`.
+By default title generation runs in the background and the run's stream doesn't wait for it, so HTTP clients only see the title on their next thread fetch. Set `emitEvent: true` to deliver the title on the run's stream instead: the stream waits for the title and emits a transient `data-thread-title` chunk before `finish`.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'

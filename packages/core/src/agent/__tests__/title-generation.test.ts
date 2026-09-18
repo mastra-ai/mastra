@@ -3636,6 +3636,14 @@ describe('generateTitle.emitEvent', () => {
       openTitleGate = resolve;
     });
 
+    // Resolves once the title model is actually invoked, i.e. the run is inside
+    // the finish-time title wait. Tests use it to act deterministically instead
+    // of sleeping a fixed amount and hoping the wait was entered.
+    let markTitleGenerationStarted: (() => void) | undefined;
+    const titleGenerationStarted = new Promise<void>(resolve => {
+      markTitleGenerationStarted = resolve;
+    });
+
     const agentModel = new MockLanguageModelV2({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
@@ -3664,6 +3672,7 @@ describe('generateTitle.emitEvent', () => {
 
     const titleModel = new MockLanguageModelV2({
       doGenerate: async () => {
+        markTitleGenerationStarted?.();
         if (delayTitleGeneration) {
           await titleGate;
         }
@@ -3680,6 +3689,7 @@ describe('generateTitle.emitEvent', () => {
     return {
       agentModel,
       titleModel,
+      titleGenerationStarted,
       resolveTitleGeneration: () => openTitleGate?.(),
     };
   }
@@ -3764,7 +3774,7 @@ describe('generateTitle.emitEvent', () => {
   });
 
   it('should release finish immediately when aborted during the title wait, and still persist the title', async () => {
-    const { agentModel, titleModel, resolveTitleGeneration } = createEmitEventMockModels(true);
+    const { agentModel, titleModel, resolveTitleGeneration, titleGenerationStarted } = createEmitEventMockModels(true);
     const { agent, mockMemory } = createEmitEventAgent(agentModel, titleModel, { model: titleModel, emitEvent: true });
 
     const abortController = new AbortController();
@@ -3777,12 +3787,13 @@ describe('generateTitle.emitEvent', () => {
     const types: string[] = [];
     for await (const chunk of streamResult.fullStream) {
       types.push(chunk?.type);
-      // finish is being held by the deferred title generation at this point —
-      // give the run a moment to enter the title wait, then abort mid-wait.
-      // (Aborting immediately would race ahead of #executeOnFinish, which
-      // map-results-step skips entirely when the signal is already aborted.)
+      // `finish` is being held by the deferred title generation. Wait until the
+      // title model has actually been entered (a deterministic signal that the
+      // run is inside the title wait), then abort mid-wait. Aborting earlier
+      // would race ahead of #executeOnFinish, which map-results-step skips
+      // entirely when the signal is already aborted.
       if (chunk?.type === 'step-finish') {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await titleGenerationStarted;
         abortController.abort();
       }
     }
@@ -3837,7 +3848,8 @@ describe('generateTitle.emitEvent', () => {
     const threadAfterFirstTurn = await mockMemory.getThreadById({ threadId: 'thread-emit-5' });
     expect(threadAfterFirstTurn?.title).toBeFalsy();
 
-    // Second turn: thread now has two messages — threshold met, emit before finish
+    // Second turn: the thread now has four messages (two per turn) — threshold
+    // met, emit before finish
     const secondTurn = await agent.stream('Follow up', {
       memory: { resource: 'user-1', thread: { id: 'thread-emit-5' } },
     });
