@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Switch } from '@mastra/playground-ui/components/Switch';
@@ -6,11 +7,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
 import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
-import type { PlatformConnectProviderId } from '../../factory/services/platformConnect';
 import { ProviderConnectControl, ProviderConnectionsList } from './PlatformProviderConnections';
 import { useLinearProjectsQuery, useLinearStatusQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
 import { isJiraAuthError } from '../../factory/services/jira';
@@ -272,20 +273,21 @@ function JiraIntakeSection({
   );
 }
 
-/** Connection management for a Platform-managed provider without a source picker. */
-function PlatformProviderIntakeSection({
-  provider,
-  description,
-}: {
-  provider: PlatformConnectProviderId;
-  description: string;
-}) {
+function IncidentioIntakeSection({
+  config,
+  busy,
+  update,
+  factories,
+}: SourceSectionProps & { factories: { id: string; name: string }[] }) {
+  const provider = 'incident-io';
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const connectionsQuery = usePlatformConnectionsQuery(provider);
+  const active = connectionsQuery.data?.filter(connection => connection.status === 'active') ?? [];
+  const sourcesQuery = useIncidentioSourcesQuery(active.length > 0);
   if (connectionsQuery.isError || connectionsQuery.isPending) return null;
   const connections = connectionsQuery.data;
-  const active = connections.filter(connection => connection.status === 'active');
   const needsReauth = connections.some(connection => connection.status === 'needs_reauth');
+  const sources = sourcesQuery.data ?? [];
 
   const action =
     connections.length === 0 ? (
@@ -301,19 +303,82 @@ function PlatformProviderIntakeSection({
       </span>
     );
 
+  const sourceIds = config.incidentio.sourceIds ?? [];
   return (
-    <SettingsSubsection
-      scope="org"
-      title={`${meta.displayName} issues`}
-      description={needsReauth ? `A ${meta.displayName} account needs to be reconnected to keep syncing.` : description}
-      action={action}
-    >
-      {connections.length > 0 && (
-        <SettingsContainer>
-          <ProviderConnectionsList provider={provider} connections={connections} />
-        </SettingsContainer>
+    <>
+      <SettingsSubsection
+        scope="org"
+        title="incident.io follow-ups"
+        description={
+          needsReauth
+            ? 'An incident.io account needs to be reconnected to keep syncing follow-ups.'
+            : 'Choose where outstanding follow-ups from connected incident.io accounts should be routed. Incidents stay out of intake.'
+        }
+        action={action}
+      >
+        {connections.length > 0 && (
+          <SettingsContainer>
+            <SettingsRow label="Sync incident.io follow-ups">
+              <Switch
+                aria-label="Sync incident.io follow-ups"
+                checked={config.incidentio.enabled}
+                disabled={busy || active.length === 0}
+                onCheckedChange={enabled => update({ ...config, incidentio: { ...config.incidentio, enabled } })}
+              />
+            </SettingsRow>
+            <ProviderConnectionsList provider={provider} connections={connections} />
+            <SettingsRow
+              label="Incident board configuration"
+              description="Configure a dedicated board for incident response."
+            >
+              <Badge size="sm" variant="neutral">
+                Coming soon
+              </Badge>
+            </SettingsRow>
+            {config.incidentio.enabled && active.length > 0 && (
+              <SourcePicker
+                label="Follow-up sources"
+                groups={[
+                  {
+                    id: 'incidentio-follow-ups',
+                    items: sources.map(source => ({ id: source.id, label: source.name })),
+                  },
+                ]}
+                selectedIds={config.incidentio.sourceIds}
+                disabled={busy}
+                pending={sourcesQuery.isPending || busy}
+                onToggleItem={sourceId =>
+                  update({
+                    ...config,
+                    incidentio: {
+                      ...config.incidentio,
+                      sourceIds: toggleId(config.incidentio.sourceIds, sourceId),
+                    },
+                  })
+                }
+              />
+            )}
+          </SettingsContainer>
+        )}
+      </SettingsSubsection>
+      {config.incidentio.enabled && sourceIds.length > 0 && (
+        <SettingsSubsection
+          scope="org"
+          title="incident.io routing"
+          description="Choose which Factory and board should receive each follow-up source. Incidents remain unrouted."
+        >
+          <SettingsContainer>
+            <IntakeSourceRouting
+              integrationId="incidentio"
+              label="incident.io"
+              sourceIds={sourceIds}
+              sources={sources}
+              factories={factories}
+            />
+          </SettingsContainer>
+        </SettingsSubsection>
       )}
-    </SettingsSubsection>
+    </>
   );
 }
 
@@ -346,7 +411,7 @@ export function IntakeSection() {
   if (configQuery.isError || !config) {
     return (
       <Txt as="p" variant="ui-sm" className="text-icon3">
-        Intake configuration is unavailable. Connect GitHub, Linear, or Jira first.
+        Intake configuration is unavailable. Connect GitHub, Linear, Jira, or incident.io first.
       </Txt>
     );
   }
@@ -449,10 +514,7 @@ export function IntakeSection() {
           </SettingsContainer>
         </SettingsSubsection>
       )}
-      <PlatformProviderIntakeSection
-        provider="incident-io"
-        description="Incidents and follow-ups from connected incident.io accounts feed every member's board."
-      />
+      <IncidentioIntakeSection config={config} busy={busy} update={update} factories={factoriesQuery.data ?? []} />
     </div>
   );
 }
