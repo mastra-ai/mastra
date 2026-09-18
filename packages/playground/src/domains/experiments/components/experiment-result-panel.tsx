@@ -18,7 +18,6 @@ import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
-import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -309,8 +308,7 @@ function ExperimentResultPanelBody({
             <TabList variant="pill-ghost" size="sm">
               <Tab value="details">Details</Tab>
               <Tab value="feedback">
-                Feedback
-                <NeedsReviewDot feedback={traceFeedback?.feedback} />
+                Feedback{traceFeedback?.pagination?.total != null && <> ({traceFeedback.pagination.total})</>}
               </Tab>
             </TabList>
           </DataPanel.Header>

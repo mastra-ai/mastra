@@ -11,7 +11,6 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { ThreadViewSkeleton } from '@/domains/traces/components/thread-view-skeleton';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
@@ -124,6 +123,7 @@ function ThreadTraceRowContent() {
   const { data: traceData } = useTraceSpans(traceId, { passive: true });
   const rootSpanId = traceData?.spans.find(span => span.parentSpanId == null)?.spanId;
   const { data: spanScoresData } = useTraceSpanScores({ traceId, spanId: rootSpanId });
+  const feedbackTotal = feedbackData?.pagination?.total;
   const scoresTotal = spanScoresData?.pagination?.total;
 
   return (
@@ -141,8 +141,7 @@ function ThreadTraceRowContent() {
               <Icon size="sm">
                 <MessageSquareReplyIcon />
               </Icon>
-              Feedback
-              <NeedsReviewDot feedback={feedbackData?.feedback} />
+              Feedback{feedbackTotal != null && <> ({feedbackTotal})</>}
             </ThreadTrace.Tab>
             <ThreadTrace.Tab value="scores">
               <Icon size="sm">

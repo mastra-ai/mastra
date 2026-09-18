@@ -97,13 +97,15 @@ function FeedbackItems({
     const canMarkReviewed = Boolean(onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed');
     const canDelete = Boolean(onRequestDelete && feedbackId);
     const actions = feedbackId && (canMarkReviewed || canDelete) && (
-      <CommentItemActions className="ml-auto">
+      <CommentItemActions>
         <DropdownMenu>
-          <DropdownMenu.Trigger asChild>
-            <Button size="icon-sm" variant="ghost" aria-label="Feedback actions">
-              <EllipsisIcon />
-            </Button>
-          </DropdownMenu.Trigger>
+          <DropdownMenu.Trigger
+            render={
+              <Button size="icon-sm" variant="ghost" aria-label="Feedback actions">
+                <EllipsisIcon />
+              </Button>
+            }
+          />
           <DropdownMenu.Content align="end">
             {canMarkReviewed && (
               <DropdownMenu.Item

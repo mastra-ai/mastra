@@ -105,7 +105,7 @@ export interface TraceDataPanelViewProps {
    * feedback UI. Trace feedback is not scoped to a span — the span panel owns that.
    */
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
-  /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
+  /** Optional count rendered after the "Feedback" tab label, e.g. `Feedback (3)`. */
   feedbackTabBadge?: ReactNode;
   /** Span ids to feature in the timeline; every other span is faded. */
   featuredSpanIds?: string[];
@@ -189,8 +189,7 @@ export function TraceDataPanelView({
             <Icon size="sm">
               <MessageSquareReplyIcon />
             </Icon>
-            Feedback
-            {feedbackTabBadge}
+            Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}
           </>
         ),
       });

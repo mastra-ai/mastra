@@ -255,7 +255,7 @@ function SpanDataPanelContent({
       <DataPanel.Header>
         <TabList variant="pill-ghost" size="sm">
           <Tab value="details">Details</Tab>
-          <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
+          <Tab value="feedback">Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}</Tab>
         </TabList>
       </DataPanel.Header>
 

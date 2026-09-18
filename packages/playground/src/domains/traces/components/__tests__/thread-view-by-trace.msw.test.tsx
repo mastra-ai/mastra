@@ -571,7 +571,7 @@ describe('ThreadViewByTrace', () => {
       expect(await firstRow.findByText('No scores yet')).not.toBeNull();
     });
 
-    it('marks the Feedback tab only when some feedback still needs review', async () => {
+    it('shows the feedback count on the Feedback tab', async () => {
       installHandlers();
       installFeedbackHandlers(
         listFeedbackResponse([
@@ -581,19 +581,16 @@ describe('ThreadViewByTrace', () => {
       renderView();
 
       await screen.findByText('Chef agent run');
-      const feedbackTabs = screen.getAllByRole('tab', { name: /Feedback/ });
-      await waitFor(() => expect(within(feedbackTabs[0]).queryByTestId('needs-review-dot')).not.toBeNull());
+      expect((await screen.findAllByRole('tab', { name: /^Feedback \(1\)/ })).length).toBeGreaterThan(0);
     });
 
-    it('shows no badge on the Feedback tab when there is no feedback', async () => {
+    it('shows a zero count on the Feedback tab when there is no feedback', async () => {
       installHandlers();
       installFeedbackHandlers(listFeedbackResponse([]));
       renderView();
 
       await screen.findByText('Chef agent run');
-      // Give the feedback query a chance to resolve before asserting the absence of the dot.
-      await waitFor(() => expect(screen.getAllByRole('tab', { name: /Feedback/ }).length).toBeGreaterThan(0));
-      expect(screen.queryByTestId('needs-review-dot')).toBeNull();
+      expect((await screen.findAllByRole('tab', { name: /^Feedback \(0\)/ })).length).toBeGreaterThan(0);
     });
 
     it('submits trace-level feedback from the Feedback tab', async () => {
