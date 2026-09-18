@@ -138,7 +138,7 @@ describe('buildGitLabVersionControl', () => {
       result.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository.id }),
     ).resolves.toEqual({
       connection: { type: 'oauth', accessToken: 'gitlab-connection:connection-1' },
-      sourceId: '101',
+      sourceId: 'acme/app',
     });
   });
 
@@ -409,6 +409,7 @@ describe('buildGitLabVersionControl', () => {
     expect(approve).toHaveBeenCalledWith('acme/app', 17, 'head-sha');
     expect(createNote).toHaveBeenNthCalledWith(1, 'acme/app', 17, 'Approved with note');
     expect(createNote).toHaveBeenNthCalledWith(2, 'acme/app', 17, 'Reviewed');
+    expect(approve.mock.invocationCallOrder[0]!).toBeLessThan(createNote.mock.invocationCallOrder[0]!);
   });
 
   it('rejects ambiguous review operations with explicit 501 errors', async () => {
@@ -689,14 +690,18 @@ describe('buildGitLabVersionControl', () => {
       result.versionControl.registerRepositories({
         orgId: 'org-1',
         installationId: installation.id,
-        repositories: [{ externalId: '102', slug: '../escape', defaultBranch: 'main' }],
+        repositories: [
+          { externalId: '102', slug: 'acme/valid', defaultBranch: 'main' },
+          { externalId: '103', slug: '../escape', defaultBranch: 'main' },
+        ],
       }),
     ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 400 });
+    expect(result.storage.repositoriesRows).toHaveLength(1);
     await expect(
       result.versionControl.registerRepositories({
         orgId: 'org-1',
         installationId: installation.id,
-        repositories: [{ externalId: '103', slug: 'acme/repo?token=leak', defaultBranch: 'main' }],
+        repositories: [{ externalId: '104', slug: 'acme/repo?token=leak', defaultBranch: 'main' }],
       }),
     ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 400 });
   });
