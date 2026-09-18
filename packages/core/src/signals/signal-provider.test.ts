@@ -533,6 +533,38 @@ describe('SignalProvider', () => {
       expect(registerSpy).toHaveBeenCalledWith(fakeMastra);
     });
 
+    // A provider is free to hand out fresh instances per call. Registration has
+    // to land on the instances the agent actually wired, so the getters must not
+    // be consulted again during registration.
+    it('registers the processor instance the agent wired, not a fresh one', () => {
+      const created: Array<{ id: string; __registerMastra: ReturnType<typeof vi.fn> }> = [];
+
+      class FreshProcessorProvider extends SignalProvider<'fresh-provider'> {
+        readonly id = 'fresh-provider' as const;
+        getInputProcessors() {
+          const processor = { id: `fresh-${created.length}`, __registerMastra: vi.fn() };
+          created.push(processor);
+          return [processor as any];
+        }
+      }
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'test',
+        model: { provider: 'test', name: 'test', toolChoice: 'auto' } as any,
+        signals: [new FreshProcessorProvider()],
+      });
+
+      const wired = created[0]!;
+      const lookupsAfterConstruction = created.length;
+
+      const fakeMastra = createFakeMastra();
+      agent.__registerMastra(fakeMastra);
+
+      expect(wired.__registerMastra).toHaveBeenCalledWith(fakeMastra);
+      expect(created.length).toBe(lookupsAfterConstruction);
+    });
+
     it('wires multiple providers independently', async () => {
       class ProviderA extends SignalProvider<'provider-a'> {
         readonly id = 'provider-a' as const;

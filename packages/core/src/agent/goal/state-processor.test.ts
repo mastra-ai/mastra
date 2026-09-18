@@ -279,9 +279,7 @@ describe('GoalStateProcessor', () => {
 
   it('still retracts when the store resolves and reports no objective', async () => {
     const { processor } = await createProcessor();
-    const result = await processor.computeStateSignal(
-      createArgs({ lastSnapshot: objective(), hasSnapshot: true }),
-    );
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), hasSnapshot: true }));
 
     expect(result?.attributes).toMatchObject({ status: 'none' });
   });

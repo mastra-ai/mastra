@@ -13,9 +13,12 @@ import { getObjectiveFromRequestContext, GOAL_STATE_ID, GOAL_STATE_TYPE, resolve
 //
 // Unlike the task list, the objective is small and changes infrequently, so this
 // processor is snapshot-only: every emission is a full `<current-objective>`
-// snapshot. It emits when the objective (text/status/runsUsed/maxRuns) changes,
-// re-snapshots when observational memory drops the base from the window, and
-// otherwise stays silent so the cached prefix is not invalidated.
+// snapshot. It emits when the objective text or status changes, re-snapshots
+// when observational memory drops the base from the window, and otherwise stays
+// silent so the cached prefix is not invalidated. Progress fields (`runsUsed`,
+// `maxRuns`) are deliberately not part of the projection: a snapshot is
+// append-only, so it cannot keep a per-attempt counter current, and the goal
+// judge reminder already reports the live attempt count.
 //
 // The objective itself lives in the thread-scoped `threadState` domain under
 // `type: 'goal'`; this processor projects it onto the model context. State
