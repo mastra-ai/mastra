@@ -414,11 +414,13 @@ describe('TraceDataPanelView — the header', () => {
 });
 
 describe('TraceDataPanelView — the body', () => {
-  it('says it is loading rather than showing an empty trace', () => {
+  it('keeps the tabs and shows a tree-shaped placeholder while loading, rather than an empty trace', () => {
     render(<TraceDataPanelView {...baseProps} spans={[]} isLoading />);
 
-    expect(screen.getByText('Loading trace...')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Spans' })).toBeTruthy();
+    expect(screen.getAllByRole('status', { name: 'Loading spans' }).length).toBeGreaterThan(0);
     expect(screen.queryByText('No spans found for this trace.')).toBeNull();
+    expect(screen.queryByText('No spans match your search.')).toBeNull();
   });
 
   it('says a settled trace has no spans', () => {

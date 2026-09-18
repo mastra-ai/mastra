@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
@@ -8,6 +7,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ListTreeIcon } from 'lucide-react';
 
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
+import { TraceMessagesSkeleton } from './trace-messages-skeleton';
 import { MessageRow } from '@/lib/ai-ui/messages/message-row';
 
 export interface TraceThreadItemViewProps {
@@ -22,13 +22,7 @@ const noop = () => {};
 export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
   const { data, isLoading, error } = useTraceSpans(traceId, { passive: true });
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center" aria-label="Loading partial thread">
-        <Spinner />
-      </div>
-    );
-  }
+  if (isLoading) return <TraceMessagesSkeleton className={className} />;
 
   if (error) {
     return (

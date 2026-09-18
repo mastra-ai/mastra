@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
 import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
+import { ThreadViewSkeleton } from '@/domains/traces/components/thread-view-skeleton';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { useThreadRailTurns } from '@/domains/traces/hooks/use-thread-rail-turns';
@@ -47,15 +48,7 @@ export function ThreadViewByTrace({ threadId, onSelectedSpanChange }: ThreadView
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-3 p-4" aria-hidden="true">
-        {['80%', '60%', '90%', '70%', '65%'].map((width, idx) => (
-          <div key={idx} className="bg-surface6 h-4 animate-pulse rounded-lg" style={{ width }} />
-        ))}
-      </div>
-    );
-  }
+  if (isLoading) return <ThreadViewSkeleton />;
 
   if (traceIds.length === 0) {
     return (

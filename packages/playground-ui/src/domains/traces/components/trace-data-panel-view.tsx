@@ -316,9 +316,7 @@ export function TraceDataPanelView({
             highlightQuery={query}
             spanPanelKey={selectedSpanId}
           >
-            {isLoading ? (
-              <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
-            ) : !spans?.length ? (
+            {!isLoading && !spans?.length ? (
               <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
             ) : (
               (() => {
@@ -338,7 +336,7 @@ export function TraceDataPanelView({
                     className="w-full"
                   />
                 );
-                const noSearchResults = hierarchicalSpans.length === 0 && (
+                const noSearchResults = !isLoading && hierarchicalSpans.length === 0 && (
                   <DataPanel.NoData>No spans match your search.</DataPanel.NoData>
                 );
 
@@ -387,6 +385,7 @@ export function TraceDataPanelView({
                           setExpandedSpanIds={setExpandedSpanIds}
                           featuredSpanIds={featuredSpanIds}
                           leadingSlot={searchField}
+                          isLoading={isLoading}
                         />
                         {noSearchResults}
                       </DataPanel.Content>
@@ -402,6 +401,7 @@ export function TraceDataPanelView({
                           setExpandedSpanIds={setExpandedSpanIds}
                           featuredSpanIds={featuredSpanIds}
                           leadingSlot={searchField}
+                          isLoading={isLoading}
                         />
                         {noSearchResults}
                       </DataPanel.Content>
