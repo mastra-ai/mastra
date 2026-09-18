@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { PageHeader } from '../page-header';
 import { PageLayout } from '@/ds/components/PageLayout';
+import { cn } from '@/lib/utils';
 
 export interface PageShellProps {
   title: ReactNode;
@@ -39,7 +40,7 @@ export function PageShell({
   className = 'px-6',
 }: PageShellProps) {
   return (
-    <PageLayout width={width} height={height} className={className}>
+    <PageLayout width={width} height={height} className={cn('new-theme', className)}>
       <PageLayout.TopArea>
         <PageHeader>
           {icon != null && !isLoading ? <PageHeader.Icon>{icon}</PageHeader.Icon> : null}

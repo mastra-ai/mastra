@@ -2,7 +2,7 @@
 '@mastra/playground-ui': patch
 ---
 
-Added shared breadcrumb bar composition, configurable separators, and semantic breadcrumb colors.
+Added shared breadcrumb composition, configurable separators, an optional AppShell page-header slot, and semantic colors across the new layout components.
 
 ```tsx
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
@@ -17,4 +17,20 @@ import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
     </Crumb>
   </Breadcrumb.Item>
 </Breadcrumb.Bar>;
+```
+
+```tsx
+import { AppShell } from '@mastra/playground-ui/new/layout/app-shell';
+import { PageHeader } from '@mastra/playground-ui/new/layout/page-header';
+
+<AppShell
+  mainLabel="Project content"
+  pageHeader={
+    <PageHeader>
+      <PageHeader.Title>Production project</PageHeader.Title>
+    </PageHeader>
+  }
+>
+  <ProjectContent />
+</AppShell>;
 ```

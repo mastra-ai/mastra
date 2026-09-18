@@ -4,7 +4,6 @@ import type { ReactElement, ReactNode } from 'react';
 import { BreadcrumbItemContext } from './breadcrumb-context';
 import type { BreadcrumbSeparator } from './breadcrumb-context';
 import { BreadcrumbRoot } from './breadcrumb-root';
-import { Header } from '@/ds/components/Header';
 
 export interface BreadcrumbItemProps {
   children: ReactNode;
@@ -30,7 +29,12 @@ export function BreadcrumbBar({ actions, children, separator = 'slash' }: Breadc
   const leafIndex = crumbs.length - 1;
 
   return (
-    <Header className="new-theme h-10 min-h-10 gap-2 overflow-hidden px-2">
+    <header
+      role="group"
+      aria-label="Route header"
+      data-slot="breadcrumb-bar"
+      className="new-theme border-border z-50 flex h-10 min-h-10 w-full items-center gap-2 overflow-hidden border-b bg-transparent px-2"
+    >
       {crumbs.length > 0 && (
         <BreadcrumbRoot
           label="Breadcrumb"
@@ -49,6 +53,6 @@ export function BreadcrumbBar({ actions, children, separator = 'slash' }: Breadc
         </BreadcrumbRoot>
       )}
       <div className="ml-auto flex shrink-0 items-center gap-2 overflow-hidden">{actions}</div>
-    </Header>
+    </header>
   );
 }

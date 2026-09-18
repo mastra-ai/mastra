@@ -35,7 +35,7 @@ function SidebarBrand() {
   return (
     <div className="flex items-center gap-2 px-3 py-2">
       <Boxes className="size-5 shrink-0" />
-      <span className="text-ui-md text-neutral6 font-semibold">Workspace</span>
+      <span className="text-ui-md text-foreground font-medium">Workspace</span>
       {!isMobile && <MainSidebar.Trigger />}
     </div>
   );
@@ -64,10 +64,10 @@ function Sidebar() {
 
 function MobileHeader() {
   return (
-    <div className="border-border1 bg-surface1 flex h-12 shrink-0 items-center justify-between border-b px-3 lg:hidden">
+    <div className="border-border bg-sidebar flex h-12 shrink-0 items-center justify-between border-b px-3 lg:hidden">
       <span className="flex items-center gap-3">
         <MainSidebar.MobileTrigger />
-        <span className="text-ui-md text-neutral6 font-semibold">Workspace</span>
+        <span className="text-ui-md text-foreground font-medium">Workspace</span>
       </span>
       <button type="button" aria-label="Search">
         <Search className="size-5" />
@@ -88,20 +88,27 @@ function ExampleRouteHeader() {
   );
 }
 
+function ExamplePageHeader() {
+  return (
+    <PageHeader className="px-5 pt-5">
+      <PageHeader.Icon>
+        <Bot />
+      </PageHeader.Icon>
+      <PageHeader.Title>Research agent</PageHeader.Title>
+      <PageHeader.Description>Configuration and recent activity.</PageHeader.Description>
+    </PageHeader>
+  );
+}
+
 function MainContent() {
   return (
     <main className="grid min-h-full content-start gap-4 p-5">
-      <PageHeader>
-        <PageHeader.Icon>
-          <Bot />
-        </PageHeader.Icon>
-        <PageHeader.Title>Research agent</PageHeader.Title>
-        <PageHeader.Description>Configuration and recent activity.</PageHeader.Description>
-      </PageHeader>
       {Array.from({ length: 14 }, (_, index) => (
-        <article key={index} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
-          <p className="text-ui-sm text-neutral6 font-medium">Activity {index + 1}</p>
-          <p className="text-ui-xs text-neutral4 mt-1">A representative row that makes the content area scroll.</p>
+        <article key={index} className="rounded-studio-panel border-border bg-card border p-4">
+          <p className="text-ui-sm text-foreground font-medium">Activity {index + 1}</p>
+          <p className="text-ui-xs text-muted-foreground mt-1">
+            A representative row that makes the content area scroll.
+          </p>
         </article>
       ))}
     </main>
@@ -113,9 +120,11 @@ function FrameWithPanel({ children, className }: AppShellFrameProps) {
     <div className={className}>
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">{children}</div>
-        <aside className="border-border1 bg-surface1 hidden w-72 shrink-0 border-l p-4 xl:block">
-          <p className="text-ui-sm text-neutral6 font-medium">Details panel</p>
-          <p className="text-ui-xs text-neutral3 mt-1">A consumer-owned panel rendered outside the framed content.</p>
+        <aside className="border-border bg-sidebar hidden w-72 shrink-0 border-l p-4 xl:block">
+          <p className="text-ui-sm text-foreground font-medium">Details panel</p>
+          <p className="text-ui-xs text-muted-foreground mt-1">
+            A consumer-owned panel rendered outside the framed content.
+          </p>
         </aside>
       </div>
     </div>
@@ -136,10 +145,11 @@ export const StandardDesktop: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider defaultWidth={240} minWidth={200} maxWidth={360} collapseBelow={160}>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="new-theme bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
+            pageHeader={<ExamplePageHeader />}
             mobileHeader={<MobileHeader />}
             routeHeader={<ExampleRouteHeader />}
           >
@@ -162,10 +172,11 @@ export const CollapsedSidebar: Story = {
         collapseBelow={160}
         storageKey="app-shell-story-collapsed"
       >
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="new-theme bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
+            pageHeader={<ExamplePageHeader />}
             mobileHeader={<MobileHeader />}
             routeHeader={<ExampleRouteHeader />}
           >
@@ -182,10 +193,11 @@ export const Mobile: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="new-theme bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
+            pageHeader={<ExamplePageHeader />}
             mobileHeader={<MobileHeader />}
             routeHeader={<ExampleRouteHeader />}
           >
@@ -201,9 +213,13 @@ export const WithoutRouteHeader: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="new-theme bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
-          <AppShell mainLabel="Research agent content" mobileHeader={<MobileHeader />}>
+          <AppShell
+            mainLabel="Research agent content"
+            pageHeader={<ExamplePageHeader />}
+            mobileHeader={<MobileHeader />}
+          >
             <MainContent />
           </AppShell>
         </div>
@@ -224,10 +240,11 @@ export const WithFrameWrapper: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="new-theme bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
+            pageHeader={<ExamplePageHeader />}
             mobileHeader={<MobileHeader />}
             routeHeader={<ExampleRouteHeader />}
             renderFrame={FrameWithPanel}
@@ -245,10 +262,11 @@ export const LightTheme: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="new-theme bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
+            pageHeader={<ExamplePageHeader />}
             mobileHeader={<MobileHeader />}
             routeHeader={<ExampleRouteHeader />}
           >
@@ -265,10 +283,11 @@ export const DarkTheme: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="new-theme bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
+            pageHeader={<ExamplePageHeader />}
             mobileHeader={<MobileHeader />}
             routeHeader={<ExampleRouteHeader />}
           >

@@ -10,7 +10,6 @@ import { WorkspacesIcon } from '../../icons/WorkspacesIcon';
 import { Button } from '../Button';
 import { Combobox } from '../Combobox';
 import { CopyButton } from '../CopyButton';
-import { Header } from '../Header';
 import { Txt } from '../Txt';
 import { Breadcrumb } from './Breadcrumb';
 import { Crumb } from './breadcrumb-crumb';
@@ -210,15 +209,15 @@ export const TruncatedLabel: Story = {
 };
 
 const Usage = ({ title, children }: { title: string; children: ReactNode }) => (
-  <div className="flex flex-col gap-1">
-    <Txt variant="ui-xs" className="text-neutral3">
+  <div className="new-theme flex flex-col gap-1">
+    <Txt variant="ui-xs" className="text-muted-foreground">
       {title}
     </Txt>
-    <Header className="h-10 min-h-10 w-220 gap-2 overflow-hidden px-2">
+    <header className="border-border flex h-10 min-h-10 w-220 items-center gap-2 overflow-hidden border-b px-2">
       <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
         {children}
       </Breadcrumb>
-    </Header>
+    </header>
   </div>
 );
 
@@ -331,7 +330,7 @@ export const AllAppUsages: Story = {
  */
 export const ControlAlignment: Story = {
   render: () => (
-    <div className="bg-surface2 flex items-center gap-1 rounded-lg p-2">
+    <div className="new-theme bg-background flex items-center gap-1 rounded-lg p-2">
       <Breadcrumb label="Breadcrumb">
         <Crumb as="span" isCurrent>
           Span

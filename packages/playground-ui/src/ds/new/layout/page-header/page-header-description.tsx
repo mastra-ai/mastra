@@ -11,8 +11,8 @@ export function PageHeaderDescription({ children, className, isLoading, ...props
     <p
       data-slot="page-header-description"
       className={cn(
-        'max-w-140 col-[title/end] flex flex-wrap gap-x-4 gap-y-1 text-ui-sm text-neutral3',
-        isLoading && 'w-160 max-w-[80%] animate-pulse rounded-md bg-surface4',
+        'max-w-140 col-[title/end] flex flex-wrap gap-x-4 gap-y-1 text-ui-sm text-muted-foreground',
+        isLoading && 'w-160 max-w-[80%] animate-pulse rounded-md bg-muted',
         className,
       )}
       {...props}

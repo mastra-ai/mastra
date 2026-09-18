@@ -35,6 +35,8 @@ describe('BreadcrumbBar', () => {
 
       expect(markup).toContain('data-testid="route-icon"');
       expect(markup).toMatch(/<span[^>]*aria-hidden="true"[^>]*><svg data-testid="route-icon"/);
+      expect(markup).toContain('role="group"');
+      expect(markup).toContain('aria-label="Route header"');
       expect(markup).toContain('aria-label="Breadcrumb"');
       expect(markup).toContain('Create agent');
       expect(markup).toContain('Agents');

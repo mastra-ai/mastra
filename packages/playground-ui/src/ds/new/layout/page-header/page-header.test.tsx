@@ -21,6 +21,9 @@ describe('PageHeader', () => {
     );
 
     expect(markup).toContain('<header');
+    expect(markup).toContain('new-theme');
+    expect(markup).toContain('text-foreground');
+    expect(markup).toContain('text-muted-foreground');
     expect(markup).toContain('<h1');
     expect(markup).toContain('Icon');
     expect(markup).toContain('Production');
@@ -47,6 +50,7 @@ describe('PageHeader', () => {
     expect(markup).not.toContain('Legacy title');
     expect(markup).not.toContain('Legacy description');
     expect(markup).not.toContain('Legacy icon');
+    expect(markup).toContain('bg-muted');
   });
 
   it('supports beside metadata', () => {
