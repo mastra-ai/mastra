@@ -45,13 +45,7 @@ export function Crumb({
 
   return (
     <>
-      <li
-        className={cn(
-          'group flex h-form-sm min-w-0 items-center rounded-full',
-          action && [transitions.colors, 'hover:bg-foreground/4 active:bg-foreground/10'],
-          isCurrent ? 'shrink' : 'shrink-0',
-        )}
-      >
+      <li className={cn('group flex h-form-sm min-w-0 items-center', isCurrent ? 'shrink' : 'shrink-0')}>
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
@@ -59,7 +53,10 @@ export function Crumb({
             controlSizeClasses.sm,
             transitions.colors,
             isCurrent
-              ? 'max-w-xs cursor-default font-medium text-foreground'
+              ? cn(
+                  'max-w-xs cursor-default',
+                  action ? 'text-muted-foreground group-hover:text-foreground' : 'text-foreground',
+                )
               : cn(
                   'max-w-48 cursor-pointer text-muted-foreground hover:text-foreground',
                   !action && 'hover:bg-foreground/4 active:bg-foreground/10',

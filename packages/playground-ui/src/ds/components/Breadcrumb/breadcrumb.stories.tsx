@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ChevronDownIcon, CircleCheckIcon, LoaderIcon, XIcon } from 'lucide-react';
+import { CircleCheckIcon, LoaderIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { AgentIcon } from '../../icons/AgentIcon';
@@ -10,7 +10,6 @@ import { WorkspacesIcon } from '../../icons/WorkspacesIcon';
 import { Button } from '../Button';
 import { Combobox } from '../Combobox';
 import { CopyButton } from '../CopyButton';
-import { DropdownMenu } from '../DropdownMenu';
 import { Header } from '../Header';
 import { Txt } from '../Txt';
 import { Breadcrumb } from './Breadcrumb';
@@ -103,48 +102,46 @@ const AgentSwitcher = () => (
   <Combobox options={agents} value="weather" variant="ghost" size="icon-sm" aria-label="Switch agent" />
 );
 
-const ProjectSwitcher = () => (
-  <DropdownMenu>
-    <DropdownMenu.Trigger
-      variant="ghost"
-      size="sm"
-      className="!gap-0 !px-0 hover:!bg-transparent active:!bg-transparent data-[popup-open]:!bg-transparent"
-    >
-      Production project
-      <span
-        className={cn(
-          'flex max-w-0 shrink-0 items-center overflow-hidden opacity-0',
-          'transition-[max-width,opacity] duration-normal ease-in-out motion-reduce:transition-none',
-          'group-focus-within:max-w-5 group-focus-within:opacity-100 group-hover:max-w-5 group-hover:opacity-100 pointer-coarse:max-w-5 pointer-coarse:opacity-100',
-        )}
-      >
-        <ChevronDownIcon className="ml-1 size-3.5" aria-hidden />
-      </span>
-    </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="start">
-      <DropdownMenu.Item>Production project</DropdownMenu.Item>
-      <DropdownMenu.Item>Staging project</DropdownMenu.Item>
-      <DropdownMenu.Item>Development project</DropdownMenu.Item>
-    </DropdownMenu.Content>
-  </DropdownMenu>
-);
+const projects = [
+  { label: 'Production project', value: 'production' },
+  { label: 'Staging project', value: 'staging' },
+  { label: 'Development project', value: 'development' },
+];
 
-const ProjectExitAction = ({ onExit }: { onExit: () => void }) => (
-  <span
-    className={cn(
-      'flex max-w-0 shrink-0 items-center overflow-hidden opacity-0',
-      'transition-[max-width,opacity] duration-normal ease-in-out motion-reduce:transition-none',
-      'group-focus-within:max-w-6 group-focus-within:opacity-100 group-hover:max-w-6 group-hover:opacity-100 pointer-coarse:max-w-6 pointer-coarse:opacity-100',
-    )}
-  >
-    <Button variant="ghost" size="icon-xs" aria-label="Exit Production project" onClick={onExit}>
-      <XIcon />
-    </Button>
+interface ProjectActionsProps {
+  onExit: () => void;
+  onProjectChange: (value: string) => void;
+  project: string;
+}
+
+const ProjectActions = ({ onExit, onProjectChange, project }: ProjectActionsProps) => (
+  <span className="flex items-center">
+    <Combobox
+      options={projects}
+      value={project}
+      onValueChange={onProjectChange}
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Switch project"
+    />
+    <span
+      className={cn(
+        'flex max-w-0 shrink-0 items-center overflow-hidden opacity-0',
+        'transition-[max-width,opacity] duration-normal ease-in-out motion-reduce:transition-none',
+        'group-focus-within:max-w-6 group-focus-within:opacity-100 group-hover:max-w-6 group-hover:opacity-100 pointer-coarse:max-w-6 pointer-coarse:opacity-100',
+      )}
+    >
+      <Button variant="ghost" size="icon-xs" aria-label="Exit project" onClick={onExit}>
+        <XIcon />
+      </Button>
+    </span>
   </span>
 );
 
 function WithActionExample() {
+  const [project, setProject] = useState('production');
   const [showProject, setShowProject] = useState(true);
+  const projectLabel = projects.find(option => option.value === project)?.label;
 
   return (
     <Breadcrumb.Bar icon={<WorkspacesIcon />} actions={<Button size="sm">Deploy</Button>}>
@@ -154,9 +151,15 @@ function WithActionExample() {
         </Crumb>
       </Breadcrumb.Item>
       {showProject && (
-        <Breadcrumb.Item pathname="/projects/production">
-          <Crumb as="span" isCurrent action={<ProjectExitAction onExit={() => setShowProject(false)} />}>
-            <ProjectSwitcher />
+        <Breadcrumb.Item pathname={`/projects/${project}`}>
+          <Crumb
+            as="span"
+            isCurrent
+            action={
+              <ProjectActions project={project} onProjectChange={setProject} onExit={() => setShowProject(false)} />
+            }
+          >
+            {projectLabel}
           </Crumb>
         </Breadcrumb.Item>
       )}
