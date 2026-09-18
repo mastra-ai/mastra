@@ -246,6 +246,7 @@ function BoardContent({
       if (item.id === targetItemId) return true;
       if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
+      if (intake.active === 'gitlab') return item.source === 'gitlab-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
       if (intake.active === 'jira') return item.source === 'jira-issue';
       if (intake.active === 'incidentio') return item.source === 'incidentio-follow-up';

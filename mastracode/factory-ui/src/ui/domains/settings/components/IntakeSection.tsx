@@ -502,7 +502,11 @@ export function IntakeSection() {
   const config = configQuery.data;
 
   const linkedSlugs = [
-    ...new Set((factoriesQuery.data ?? []).flatMap(factory => factory.repositories.map(r => r.slug))),
+    ...new Set(
+      (factoriesQuery.data ?? []).flatMap(factory =>
+        factory.repositories.filter(repository => repository.provider !== 'gitlab').map(repository => repository.slug),
+      ),
+    ),
   ];
 
   if (configQuery.isPending) {
@@ -552,7 +556,7 @@ export function IntakeSection() {
           description="Issues carrying a routed label file onto that board in the Factory; everything else stays on Work."
         >
           {(factoriesQuery.data ?? [])
-            .filter(factory => factory.repositories.length > 0)
+            .filter(factory => factory.repositories.some(repository => repository.provider !== 'gitlab'))
             .map(factory => (
               <SettingsContainer key={factory.id}>
                 <GithubLabelRouting

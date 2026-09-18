@@ -1017,6 +1017,42 @@ describe('IntakeSection', () => {
   });
 
   describe('given GitLab is configured', () => {
+    it('does not offer a linked GitLab repository as a GitHub intake source', async () => {
+      useGitLabHandlers({
+        ...baseConfig(),
+        gitlab: { enabled: true, sourceIds: null },
+      });
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+          HttpResponse.json({
+            connections: [
+              {
+                id: 'gitlab-connection',
+                integrationId: 'gitlab',
+                installationId: 'gitlab-installation',
+                repositories: [
+                  {
+                    id: 'gitlab-link',
+                    branch: 'main',
+                    sandboxWorkdir: '~/app',
+                    repository: { slug: 'acme/app', defaultBranch: 'main' },
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      const githubSection = await screen.findByRole('region', { name: 'GitHub issues' });
+      expect(await within(githubSection).findByText(/No linked repositories yet/)).toBeInTheDocument();
+      expect(within(githubSection).queryByRole('checkbox', { name: 'acme/app' })).not.toBeInTheDocument();
+      const gitlabProjects = await screen.findByRole('group', { name: 'GitLab projects' });
+      expect(within(gitlabProjects).getByRole('checkbox', { name: 'acme/app' })).toBeInTheDocument();
+    });
+
     it('selects a project and routes it to a Factory board', async () => {
       const { saved, savedBindings } = useGitLabHandlers({
         ...baseConfig(),
