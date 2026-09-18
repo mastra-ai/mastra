@@ -24,6 +24,24 @@ const { mastra, controller } = await mountAgentControllerOnMastra({
 });
 ```
 
+## Plugin background execution
+
+With the experimental `backgroundTools.enabled` setting on, plugin tools are eligible for native background execution only when they declare their own configuration:
+
+```ts
+background: {
+  enabled: true,
+  defaultDisposition: 'foreground',
+  maxRetries: 0,
+}
+```
+
+The SDK doesn't infer support from tool names or serialize plugin calls. When the setting is off, it disables plugin-declared background execution without modifying the original tool.
+
+Declaring support means the tool's `execute()` promise must represent the complete operation for native background calls, including cleanup. Tools that already await their work need no separate execution path. A tool that normally returns an acknowledgement while continuing independently must check `context.agent?.isBackgroundTask` and await that operation in the background path. It must also forward `context.abortSignal` and reject on failure. The plugin owns any conversation-level queue.
+
+`defaultDisposition: 'foreground'` preserves normal calls unless the caller explicitly requests `_background.disposition: 'deferred'` or `'awaited'`. Plugins without a declaration remain usable in the foreground, including older versions of `mastra_expert`.
+
 ## Documentation
 
 - [@mastra/code-sdk documentation](https://mastra.ai/reference/code-sdk/mount-agent-controller)
