@@ -46,7 +46,7 @@ function getInputPlugins(
       mastraToolsAliasPlugin(),
       tsConfigPaths(),
       json(),
-      esbuild({ define: env, include: isVirtualFile ? undefined : entry }),
+      esbuild({ define: env }),
       commonjs({
         strictRequires: 'debug',
         ignoreTryCatch: false,

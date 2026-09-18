@@ -93,6 +93,26 @@ describe('analyzeEntry', () => {
     expect(result.output.code).toBeTruthy();
   });
 
+  it('should transpile imported TypeScript files', async () => {
+    const tempDir = await mkdtemp(join(import.meta.dirname, '__fixtures__', 'typescript-import-'));
+    const entryFilePath = join(tempDir, 'entry.ts');
+    await writeFile(entryFilePath, `import { value } from './dependency';\nconsole.log(value);`);
+    await writeFile(join(tempDir, 'dependency.ts'), `export const value = process.env.NODE_ENV!;`);
+
+    try {
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: process.cwd(),
+      });
+
+      expect(result.output.code).toContain('production');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     {
       name: 'production by default',
