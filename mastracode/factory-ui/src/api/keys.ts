@@ -37,13 +37,13 @@ export const queryKeys = {
     ['github', 'repository-settings', githubProjectId ?? null] as const,
   githubCommits: (projectRepositoryId: string | undefined, limit: number) =>
     ['github', 'commits', projectRepositoryId ?? null, limit] as const,
-  gitlabStatus: () => ['gitlab', 'status'] as const,
-  gitlabProjects: () => ['gitlab', 'projects'] as const,
-  gitlabIssuesAll: () => ['gitlab', 'issues'] as const,
-  gitlabIssues: (factoryProjectId: string | undefined, board: string | undefined) =>
-    [...queryKeys.gitlabIssuesAll(), factoryProjectId ?? null, board ?? null] as const,
-  gitlabIssue: (factoryProjectId: string | undefined, issueId: string | undefined) =>
-    ['gitlab', 'issue', factoryProjectId ?? null, issueId ?? null] as const,
+  gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
+  gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
+  gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,
+  gitlabIssues: (baseUrl: string, factoryProjectId: string | undefined, board: string | undefined) =>
+    [...queryKeys.gitlabIssuesAll(baseUrl), factoryProjectId ?? null, board ?? null] as const,
+  gitlabIssue: (baseUrl: string, factoryProjectId: string | undefined, issueId: string | undefined) =>
+    ['gitlab', 'issue', baseUrl, factoryProjectId ?? null, issueId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearTeams: () => ['linear', 'teams'] as const,

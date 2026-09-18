@@ -207,7 +207,7 @@ export interface MastraFactoryConfig {
    * `FactoryIntegration` instance provides — HTTP routes, storage domains,
    * agent/session tools, intake, source control, and diagnostics — into the
    * system. When Platform credentials are configured, missing GitHub, GitLab,
-   * Linear, and Jira integrations default to their Platform-backed implementations.
+   * and Linear integrations default to their Platform-backed implementations.
    */
   integrations?: FactoryIntegration[];
   /**
