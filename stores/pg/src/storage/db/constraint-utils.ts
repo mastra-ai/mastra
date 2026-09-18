@@ -51,11 +51,18 @@ export function buildConstraintName({
   const prefix = schemaName ? `${schemaName}_` : '';
   const fullName = `${prefix}${baseName}`.toLowerCase();
   if (hashWhenTruncated && Buffer.byteLength(fullName, 'utf-8') > maxLength) {
+    // Cap the suffix to the available budget so the result never exceeds
+    // maxLength. Below 2 bytes there is no room for `_` + at least one hex
+    // char, so fall back to plain truncation.
+    const suffixLength = Math.min(TRUNCATION_HASH_SUFFIX_LENGTH, maxLength);
+    if (suffixLength < 2) {
+      return truncateIdentifier(fullName, maxLength);
+    }
     const hash = createHash('sha256')
       .update(fullName)
       .digest('hex')
-      .slice(0, TRUNCATION_HASH_SUFFIX_LENGTH - 1);
-    return `${truncateIdentifier(fullName, maxLength - TRUNCATION_HASH_SUFFIX_LENGTH)}_${hash}`;
+      .slice(0, suffixLength - 1);
+    return `${truncateIdentifier(fullName, maxLength - suffixLength)}_${hash}`;
   }
   return truncateIdentifier(fullName, maxLength);
 }
