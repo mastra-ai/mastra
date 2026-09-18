@@ -94,7 +94,17 @@ export class GoalStateProcessor {
     } else if (carried !== undefined) {
       current = carried;
     } else if (cached?.objective) {
-      current = cached.objective;
+      if (cached.objective.status === 'active') {
+        current = cached.objective;
+      } else {
+        // A cached record whose status is not active may be stale: the run-start
+        // read happened before the objective was restarted. Prefer the store;
+        // only trust the cached record when no store resolves.
+        const store = await this.resolveStore();
+        current = store
+          ? await store.getState<GoalObjectiveRecord>({ threadId: args.threadId, type: GOAL_STATE_TYPE })
+          : cached.objective;
+      }
     } else {
       // No carried write and no cached objective: read the store. A cache entry
       // without an objective carries no information — treating it as "no goal"

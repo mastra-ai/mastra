@@ -260,6 +260,42 @@ describe('GoalStateProcessor', () => {
     await stopGoalActivity({ agentId: 'goal-agent', runId: 'cached-hit-run' });
   });
 
+  // A cached record is read at run start, before a restart may have landed in
+  // the store. A non-active cached record must not shadow a store that reports
+  // the objective as active — the same shadowing class as a cached miss.
+  it('does not retract when a cached non-active record is stale', async () => {
+    const { processor } = await createProcessor(objective());
+    const requestContext = new RequestContext();
+    cacheGoalObjective(requestContext, THREAD_ID, objective({ status: 'paused' }));
+
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), requestContext }));
+
+    // The store reports the objective active and unchanged: no retraction, no
+    // re-projection.
+    expect(result).toBeUndefined();
+  });
+
+  it('retracts when the store agrees with a cached non-active record', async () => {
+    const { processor } = await createProcessor(objective({ status: 'paused' }));
+    const requestContext = new RequestContext();
+    cacheGoalObjective(requestContext, THREAD_ID, objective({ status: 'paused' }));
+
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), requestContext }));
+
+    expect(result?.attributes).toMatchObject({ status: 'none' });
+  });
+
+  it('trusts a cached non-active record when no store resolves', async () => {
+    const { processor } = await createProcessor(objective({ status: 'paused' }));
+    (processor as any).mastra = undefined;
+    const requestContext = new RequestContext();
+    cacheGoalObjective(requestContext, THREAD_ID, objective({ status: 'paused' }));
+
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), requestContext }));
+
+    expect(result?.attributes).toMatchObject({ status: 'none' });
+  });
+
   // Regression: a processor that never received a Mastra instance (e.g. one
   // contributed by a signal provider while `inputProcessors` is configured as a
   // function) resolves no store. An unreadable store is not an absent goal:
