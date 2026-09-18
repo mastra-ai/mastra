@@ -131,20 +131,23 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       const serveFixtures = String(params.projectRepositoryId) === FIRST_REPOSITORY_ID;
       return HttpResponse.json({ pullRequests: serveFixtures ? intakePullRequests : [], nextPage: null });
     }),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, async ({ params, request }) => {
-      const repositoryId = String(params.projectRepositoryId);
-      state.sessionRequests[repositoryId] = (state.sessionRequests[repositoryId] ?? 0) + 1;
-      if (repositoryId === SECOND_REPOSITORY_ID && options.secondRepositoryGate) {
-        request.signal.addEventListener('abort', () => options.onSecondRepositoryAbort?.(), { once: true });
-        await options.secondRepositoryGate;
-      }
-      const failedAttempts = options.failRepositoryAttempts?.[repositoryId] ?? 1;
-      if (failRepositories.has(repositoryId) && state.sessionRequests[repositoryId] <= failedAttempts) {
-        return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
-      }
-      return HttpResponse.json({ sessions: sessionsByRepository[repositoryId] ?? [] });
-    }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, async ({ request }) => {
+    http.get(
+      `${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`,
+      async ({ params, request }) => {
+        const repositoryId = String(params.projectRepositoryId);
+        state.sessionRequests[repositoryId] = (state.sessionRequests[repositoryId] ?? 0) + 1;
+        if (repositoryId === SECOND_REPOSITORY_ID && options.secondRepositoryGate) {
+          request.signal.addEventListener('abort', () => options.onSecondRepositoryAbort?.(), { once: true });
+          await options.secondRepositoryGate;
+        }
+        const failedAttempts = options.failRepositoryAttempts?.[repositoryId] ?? 1;
+        if (failRepositories.has(repositoryId) && state.sessionRequests[repositoryId] <= failedAttempts) {
+          return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
+        }
+        return HttpResponse.json({ sessions: sessionsByRepository[repositoryId] ?? [] });
+      },
+    ),
+    http.post(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, async ({ request }) => {
       state.createSessionRequests += 1;
       const body = (await request.json()) as { branch?: string };
       return HttpResponse.json({
