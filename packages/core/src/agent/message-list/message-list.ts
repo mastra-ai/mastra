@@ -607,7 +607,7 @@ export class MessageList {
     if (!message) return false;
 
     const parts = message.content?.parts;
-    if (!parts?.length) {
+    if (!parts) {
       this.removeByIds([messageId]);
       return true;
     }

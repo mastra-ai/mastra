@@ -111,23 +111,22 @@ describe('MessageList#rollbackToLastStepBoundary', () => {
     expect(parts.filter(p => p.type === 'text').map(p => (p as { text: string }).text)).toEqual(['one', 'two']);
   });
 
-  it('is idempotent enough to survive consecutive retries', () => {
-    const list = listWith(
-      assistant([
-        text('one', 'msg_1'),
-        { type: 'step-start' },
-        text('rejected-a', 'msg_2'),
-        { type: 'step-start' },
-        text('rejected-b', 'msg_3'),
-      ]),
-    );
+  it('survives back-to-back rejections, each retry opening and losing its own step', () => {
+    // Mirrors the real loop: reject -> rollback -> the retry opens a fresh step and writes into
+    // it -> reject again -> rollback again. Only the accepted first step may survive.
+    const list = listWith(assistant([text('one', 'msg_1'), { type: 'step-start' }, text('rejected-a', 'msg_2')]));
 
-    list.rollbackToLastStepBoundary('a1');
     list.rollbackToLastStepBoundary('a1');
 
     const parts = partsOf(list, 'a1')!;
-    expect(parts.filter(p => p.type === 'text').map(p => (p as { text: string }).text)).toEqual(['one']);
-    expect(JSON.stringify(parts)).not.toContain('rejected');
+    parts.push({ type: 'step-start' }, text('rejected-b', 'msg_3'));
+
+    list.rollbackToLastStepBoundary('a1');
+
+    const final = partsOf(list, 'a1')!;
+    expect(final.filter(p => p.type === 'text').map(p => (p as { text: string }).text)).toEqual(['one']);
+    expect(final.some(p => p.type === 'step-start')).toBe(false);
+    expect(JSON.stringify(final)).not.toContain('rejected');
   });
 
   it('removes the message when the rollback empties it', () => {
@@ -168,13 +167,20 @@ describe('MessageList#rollbackToLastStepBoundary', () => {
     expect(list.get.all.db().find(m => m.id === 'a1')!.content.content).toBe('');
   });
 
-  it('keeps the rolled-back message drainable so the rollback is persisted', () => {
+  it('re-sources a message already flushed mid-turn, so the rollback reaches storage', () => {
+    // The loop flushes the assistant message mid-turn (around tool steps), which clears it from
+    // the unsaved set. A rollback after that flush must put it back, or the rejected text stays
+    // on disk from the earlier flush and only the in-memory copy is ever corrected.
     const list = listWith(assistant([text('kept', 'msg_1'), { type: 'step-start' }, text('rejected', 'msg_2')]));
+
+    const firstDrain = list.drainUnsavedMessages();
+    expect(firstDrain.map(m => m.id)).toContain('a1');
+    expect(list.drainUnsavedMessages()).toHaveLength(0);
 
     list.rollbackToLastStepBoundary('a1');
 
-    const drained = list.drainUnsavedMessages();
-    const a1 = drained.find(m => m.id === 'a1');
+    const secondDrain = list.drainUnsavedMessages();
+    const a1 = secondDrain.find(m => m.id === 'a1');
     expect(a1).toBeDefined();
     expect(JSON.stringify(a1!.content.parts)).not.toContain('rejected');
   });
