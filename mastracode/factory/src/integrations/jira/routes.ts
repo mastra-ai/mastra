@@ -352,7 +352,11 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
 
         try {
           const issue = await jira.intake.getIssue({ connection: DEPLOYMENT_CONNECTION, issueId: issueRef });
-          if (!issue || issue.identifier.toUpperCase() !== identifier.toUpperCase()) {
+          // The issue's project must be a source routed to this Factory — an
+          // issue from an unbound project reads exactly like one that doesn't
+          // exist (same stance as the Linear detail route).
+          const routed = issue?.sourceId != null && issue.sourceId in intakeBoards;
+          if (!issue || issue.identifier.toUpperCase() !== identifier.toUpperCase() || !routed) {
             return c.json({ error: 'issue_not_found' }, 404);
           }
           return c.json({

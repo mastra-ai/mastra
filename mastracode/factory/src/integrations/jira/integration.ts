@@ -395,6 +395,7 @@ export class JiraIntegration implements FactoryIntegration {
       priority: fields.priority?.name ?? null,
       assignee: fields.assignee?.displayName ?? null,
       source: fields.project?.key ?? null,
+      sourceId: fields.project?.id ?? null,
       labels: fields.labels ?? [],
       commentCount: null,
       createdAt: fields.created ?? '',

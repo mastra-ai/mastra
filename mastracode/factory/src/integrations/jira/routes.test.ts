@@ -373,3 +373,66 @@ describe('issues route — Factory source bindings', () => {
     expect(ingestFactoryIssues).not.toHaveBeenCalled();
   });
 });
+
+describe('issue detail route', () => {
+  const projectA = '11111111-1111-4111-8111-111111111111';
+
+  const issueDetail = (projectId: string) => ({
+    id: '10001',
+    identifier: 'ENG-42',
+    title: 'Fix intake sync',
+    url: 'https://acme.atlassian.net/browse/ENG-42',
+    description: 'It syncs the wrong way.',
+    author: 'Grace',
+    state: 'To Do',
+    stateType: 'unstarted',
+    priority: 'High',
+    assignee: 'Ada',
+    source: 'ENG',
+    sourceId: projectId,
+    labels: ['bug'],
+    commentCount: 0,
+    createdAt: '2026-07-01T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+    comments: [],
+  });
+
+  const detailUrl = `/web/jira/issues/ENG-42?factoryProjectId=${projectA}&issueRef=ENG-42`;
+
+  beforeEach(async () => {
+    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-a' } });
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'jira',
+      sourceId: '1',
+      factoryProjectId: projectA,
+      board: 'work',
+    });
+  });
+
+  it('returns the description for an issue from a source routed to the Factory', async () => {
+    vi.spyOn(jira.intake, 'getIssue').mockResolvedValue(issueDetail('1'));
+
+    const res = await buildApp(org1()).request(detailUrl);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      identifier: 'ENG-42',
+      title: 'Fix intake sync',
+      url: 'https://acme.atlassian.net/browse/ENG-42',
+      description: 'It syncs the wrong way.',
+    });
+  });
+
+  it('reads like a missing issue when its project is not routed to the Factory', async () => {
+    // The Jira account can see the whole site, but the issue's project ("99")
+    // is neither selected nor bound to this Factory — the caller must not be
+    // able to read arbitrary site issues through the detail route.
+    vi.spyOn(jira.intake, 'getIssue').mockResolvedValue(issueDetail('99'));
+
+    const res = await buildApp(org1()).request(detailUrl);
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'issue_not_found' });
+  });
+});
