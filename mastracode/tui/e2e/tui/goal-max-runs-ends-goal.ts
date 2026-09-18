@@ -17,8 +17,8 @@ const FOLLOW_UP = 'Looks good, please keep going.';
  * `Goal ○ continue (N/N)` forever.
  *
  * Expected: reaching max runs ends the goal — no `continue` verdict is rendered
- * for the follow-up turn, `/goal status` no longer reports it active, and the
- * persisted objective is parked rather than left `active`.
+ * for the follow-up turn, `/goal status` reports it `paused` with the budget
+ * reason, and the persisted objective is parked as `paused`.
  */
 export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
   name: 'goal-max-runs-ends-goal',
@@ -64,9 +64,9 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
     }
 
     const status = view.match(/Goal \((\w+)\): "Complete the max-runs goal e2e objective\."/i)?.[1];
-    if (status === 'active') {
+    if (status !== 'paused') {
       throw new Error(
-        `Expected the goal to end after reaching max runs, but /goal status still reports it active:\n${view}`,
+        `Expected /goal status to report paused after reaching max runs, found ${JSON.stringify(status)}:\n${view}`,
       );
     }
 
@@ -90,8 +90,10 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
           `Expected persisted objective ${JSON.stringify(OBJECTIVE)}, found ${JSON.stringify(record.objective)}`,
         );
       }
-      if (record.status === 'active') {
-        throw new Error('Expected the persisted goal to end after reaching max runs, but thread state is still active');
+      if (record.status !== 'paused') {
+        throw new Error(
+          `Expected the persisted goal to be paused after reaching max runs, found ${JSON.stringify(record.status)}`,
+        );
       }
       if (record.runsUsed !== 1) {
         throw new Error(`Expected 1 persisted run, found ${JSON.stringify(record.runsUsed)}`);
