@@ -148,6 +148,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       gitlab: this,
       auth: ctx.auth,
       intake: ctx.storage?.intake,
+      sandbox: ctx.sandbox,
       webhookSecret: this.webhookSecret,
     });
   }

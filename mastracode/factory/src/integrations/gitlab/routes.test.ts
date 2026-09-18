@@ -92,6 +92,9 @@ describe('GitLab UI routes', () => {
 
   it('lists projects for the authenticated organization', async () => {
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
+    vi.spyOn(gitlab.versionControl, 'registerInstallation').mockResolvedValue({
+      id: 'gitlab-installation-1',
+    } as never);
     vi.spyOn(gitlab.intake, 'listSources').mockResolvedValue([
       {
         id: 'gitlab-project:encoded',
@@ -100,6 +103,8 @@ describe('GitLab UI routes', () => {
         metadata: {
           connectionId: 'direct',
           accountLabel: 'gitlab.com',
+          projectId: '10',
+          projectPath: 'acme/app',
           defaultBranch: 'main',
         },
       },
@@ -112,11 +117,26 @@ describe('GitLab UI routes', () => {
         {
           id: 'gitlab-project:encoded',
           name: 'acme/app',
+          projectId: '10',
+          projectPath: 'acme/app',
+          installationStorageId: 'gitlab-installation-1',
           connectionId: 'direct',
           accountLabel: 'gitlab.com',
           defaultBranch: 'main',
+          sandboxProvider: 'none',
+          sandboxWorkdir: '~/app',
         },
       ],
+    });
+    expect(gitlab.versionControl.registerInstallation).toHaveBeenCalledWith({
+      orgId: 'org1',
+      userId: 'u1',
+      installation: {
+        externalId: 'direct',
+        accountName: 'gitlab.com',
+        accountType: 'GitLab',
+        metadata: { connection: { type: 'oauth', accessToken: 'gitlab-connection:direct' } },
+      },
     });
     expect(gitlab.intake.listSources).toHaveBeenCalledWith({ orgId: 'org1', userId: 'u1' });
   });
