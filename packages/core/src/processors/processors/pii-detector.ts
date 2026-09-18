@@ -696,8 +696,9 @@ export class PIIDetector implements Processor<'pii-detector'> {
    * Hash PII value using SHA256
    */
   private async hashValue(value: string): Promise<string> {
-    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-    return `[HASH:${Buffer.from(digest).toString('hex').slice(0, 8)}]`;
+    const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
+    const hash = Array.from(digest.subarray(0, 4), byte => byte.toString(16).padStart(2, '0')).join('');
+    return `[HASH:${hash}]`;
   }
 
   /**

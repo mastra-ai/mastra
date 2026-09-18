@@ -136,7 +136,7 @@ export function createDurableScorerStep() {
             filter,
           };
 
-          // Resolve sampling before dispatching hooks.
+          // Call runScorer (fire-and-forget via hooks)
           runScorer({
             mastra: mastra as Mastra | undefined,
             runId,
