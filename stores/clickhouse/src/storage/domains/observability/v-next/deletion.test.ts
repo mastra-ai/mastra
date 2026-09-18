@@ -144,7 +144,11 @@ describe('ClickHouse deletion lifecycle', () => {
     expect(feedbackClient.insert.mock.invocationCallOrder[1]).toBeLessThan(
       feedbackClient.command.mock.invocationCallOrder[1]!,
     );
-    expect(scoresClient.command).toHaveBeenCalledTimes(1);
+    // Scores delete from the current-score and event tables, then mark applied.
+    expect(scoresClient.command).toHaveBeenCalledTimes(2);
+    expect(scoresClient.insert.mock.invocationCallOrder[1]).toBeGreaterThan(
+      Math.max(...scoresClient.command.mock.invocationCallOrder),
+    );
 
     for (const { insert, command } of [feedbackClient, scoresClient]) {
       expect(insert).toHaveBeenCalledTimes(2);
