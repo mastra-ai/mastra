@@ -1,6 +1,7 @@
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AssistantRenderRegistry } from './assistant-render-registry.js';
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import type { TUIState } from './state.js';
@@ -68,6 +69,8 @@ function createMockEctx(): EventHandlerContext {
     renderTaskDeltaInline: vi.fn(),
     addUserMessage: vi.fn(),
     updateStatusLine: vi.fn(),
+    addUserMessage: vi.fn(),
+    addChildBeforeFollowUps: vi.fn(),
   } as unknown as EventHandlerContext;
 }
 
@@ -357,5 +360,121 @@ describe('dispatchEvent task updates', () => {
     await dispatchEvent({ type: 'task_updated', tasks: [] }, ectx, state);
 
     expect(ectx.renderClearedTasksInline).toHaveBeenCalledWith(previousTasks, expect.anything());
+  });
+});
+
+describe('dispatchEvent compact message lifecycle', () => {
+  let controller: ReturnType<typeof createMockAgentController>;
+  let state: TUIState;
+  let ectx: EventHandlerContext;
+
+  function assistantMessage(parts: unknown[], id = 'msg-1'): any {
+    return { id, role: 'assistant', createdAt: new Date(), content: { format: 2, parts } };
+  }
+
+  beforeEach(() => {
+    controller = createMockAgentController();
+    state = createMockTUIState(controller);
+    // The compact lifecycle drives the real assistant render registry, so give
+    // the shared mock the streaming state it needs.
+    state.assistantRenderRegistry = new AssistantRenderRegistry();
+    state.seenToolCallIds = new Set();
+    state.subagentToolCallIds = new Set();
+    state.currentRunSystemReminderKeys = new Set();
+    state.pendingTools = new Map();
+    state.allToolComponents = [];
+    state.allSlashCommandComponents = [];
+    state.allSystemReminderComponents = [];
+    state.messageComponentsById = new Map();
+    state.pendingSubagents = new Map();
+    state.followUpComponents = [];
+    state.hideThinkingBlock = false;
+    state.toolOutputExpanded = false;
+    ectx = createMockEctx();
+    (ectx as { state: TUIState }).state = state;
+  });
+
+  it('folds text deltas into the streaming message and finalizes on message_end', async () => {
+    await dispatchEvent(
+      { type: 'message_start', message: assistantMessage([{ type: 'text', text: '' }]) },
+      ectx,
+      state,
+    );
+    expect(state.streamingMessage?.id).toBe('msg-1');
+
+    await dispatchEvent(
+      { type: 'message_update', id: 'msg-1', event: { type: 'text-delta', delta: 'hello' } },
+      ectx,
+      state,
+    );
+    await dispatchEvent(
+      { type: 'message_update', id: 'msg-1', event: { type: 'text-delta', delta: ' world' } },
+      ectx,
+      state,
+    );
+
+    expect(state.streamingMessage?.content.parts).toEqual([{ type: 'text', text: 'hello world' }]);
+
+    await dispatchEvent({ type: 'message_end', id: 'msg-1' }, ectx, state);
+
+    expect(state.streamingMessage).toBeUndefined();
+    expect(state.streamingComponent).toBeUndefined();
+  });
+
+  it('ignores a message_update addressed to a different message id', async () => {
+    await dispatchEvent(
+      { type: 'message_start', message: assistantMessage([{ type: 'text', text: 'keep' }]) },
+      ectx,
+      state,
+    );
+
+    await dispatchEvent(
+      { type: 'message_update', id: 'other', event: { type: 'text-delta', delta: ' nope' } },
+      ectx,
+      state,
+    );
+
+    expect(state.streamingMessage?.content.parts).toEqual([{ type: 'text', text: 'keep' }]);
+  });
+
+  it('pushes a text part for a text-delta when the message has no text part', async () => {
+    await dispatchEvent(
+      { type: 'message_start', message: assistantMessage([{ type: 'reasoning', reasoning: '', details: [] }]) },
+      ectx,
+      state,
+    );
+
+    await dispatchEvent(
+      { type: 'message_update', id: 'msg-1', event: { type: 'text-delta', delta: 'first' } },
+      ectx,
+      state,
+    );
+
+    expect(state.streamingMessage?.content.parts).toEqual([
+      { type: 'reasoning', reasoning: '', details: [] },
+      { type: 'text', text: 'first' },
+    ]);
+  });
+
+  it('stores a clone of a part update rather than the caller object', async () => {
+    await dispatchEvent(
+      { type: 'message_start', message: assistantMessage([{ type: 'text', text: '' }]) },
+      ectx,
+      state,
+    );
+
+    const replacement = {
+      type: 'tool-invocation',
+      toolInvocation: { state: 'call', toolCallId: 't1', toolName: 'read_file', args: {} },
+    };
+
+    await dispatchEvent(
+      { type: 'message_update', id: 'msg-1', event: { type: 'part', index: 0, part: replacement } },
+      ectx,
+      state,
+    );
+
+    expect(state.streamingMessage?.content.parts[0]).toEqual(replacement);
+    expect(state.streamingMessage?.content.parts[0]).not.toBe(replacement);
   });
 });

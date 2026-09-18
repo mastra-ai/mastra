@@ -2,6 +2,7 @@
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
+import { applyUpdate } from '@mastra/core/agent-controller';
 import type { AgentControllerEvent, AgentControllerThread, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
@@ -67,30 +68,6 @@ function isMessageForCurrentThread(message: MastraDBMessage, state: TUIState): b
   return !message.threadId || message.threadId === state.session.thread.getId();
 }
 
-function applyMessageUpdate(
-  message: MastraDBMessage,
-  update: Extract<AgentControllerEvent, { type: 'message_update' }>['event'],
-): MastraDBMessage | undefined {
-  if (message.role !== 'assistant' || typeof message.content === 'string') return undefined;
-
-  const parts = [...message.content.parts];
-  if (update.type === 'text-delta') {
-    const textIndex = parts.findLastIndex(part => part.type === 'text');
-    const textPart = parts[textIndex];
-    if (!textPart || textPart.type !== 'text') return undefined;
-    parts[textIndex] = { ...textPart, text: textPart.text + update.delta };
-  } else if (update.type === 'reasoning-delta') {
-    const reasoningPart = parts[update.index];
-    if (!reasoningPart || reasoningPart.type !== 'reasoning') return undefined;
-    const reasoning = reasoningPart.reasoning + update.delta;
-    parts[update.index] = { ...reasoningPart, reasoning, details: [{ type: 'text', text: reasoning }] };
-  } else {
-    parts[update.index] = update.part;
-  }
-
-  return { ...message, content: { ...message.content, parts } };
-}
-
 export async function dispatchEvent(
   event: AgentControllerEvent,
   ectx: EventHandlerContext,
@@ -148,7 +125,7 @@ export async function dispatchEvent(
       const message = state.streamingMessage;
       if (!message || message.id !== event.id || !isMessageForCurrentThread(message, state)) break;
 
-      const updated = applyMessageUpdate(message, event.event);
+      const updated = applyUpdate(message, event.event);
       if (!updated) break;
 
       // Only open the decode window when an assistant message carries actual

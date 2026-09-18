@@ -8,6 +8,8 @@ import type { MastraVector } from '@mastra/core/vector';
 import type { MastraCodeState } from './schema.js';
 
 export { createTool } from '@mastra/core/tools';
+export { applyUpdate } from '@mastra/core/agent-controller';
+export type { AgentControllerMessageUpdate } from '@mastra/core/agent-controller';
 export { RequestContext } from '@mastra/core/di';
 export type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 export { SignalProvider } from '@mastra/core/signals';
