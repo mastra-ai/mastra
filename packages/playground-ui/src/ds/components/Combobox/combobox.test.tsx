@@ -373,12 +373,27 @@ describe('Combobox', () => {
   it('greys out the invitation only while nothing is chosen', () => {
     const { rerender } = render(<Combobox multiple options={options} value={[]} placeholder="Pick providers" />);
     const label = () => getFirstHTMLElement(screen.getByRole('combobox'));
-    expect(label().classList.contains('text-neutral3')).toBe(true);
+    expect(label().classList.contains('text-neutral2')).toBe(true);
 
     rerender(<Combobox multiple options={options} value={['openai']} placeholder="Pick providers" />);
 
     expect(label().textContent).toBe('1 selected');
-    expect(label().classList.contains('text-neutral3')).toBe(false);
+    expect(label().classList.contains('text-neutral2')).toBe(false);
+  });
+
+  it('uses the Input overlay surface (not the Button surface) for the default variant', () => {
+    render(<Combobox options={options} placeholder="Pick provider" />);
+
+    const trigger = screen.getByRole('combobox');
+    expect(trigger.classList.contains('bg-surface-overlay-soft')).toBe(true);
+    expect(trigger.classList.contains('border-border1')).toBe(true);
+    expect(trigger.classList.contains('data-[placeholder]:text-neutral2')).toBe(true);
+    expect(trigger.classList.contains('data-[popup-open]:bg-surface-overlay-strong')).toBe(true);
+    expect(trigger.className).not.toContain('button-default');
+
+    const chevron = trigger.querySelector('svg');
+    expect(chevron?.classList.contains('text-neutral3')).toBe(true);
+    expect(chevron?.className.baseVal).not.toContain('opacity');
   });
 
   it('keeps up with a selection that changes from outside', () => {
