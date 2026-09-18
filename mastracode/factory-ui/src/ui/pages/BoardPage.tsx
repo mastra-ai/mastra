@@ -246,6 +246,7 @@ function BoardContent({
       if (item.id === targetItemId) return true;
       if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
+      if (intake.active === 'gitlab') return item.source === 'gitlab-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
       return false;
     });
