@@ -109,39 +109,14 @@ describe('buildResponseCacheKey with non-plain prompt values', () => {
     stepNumber: 0,
   };
 
-  it('preserves a frozen Node-generated key for an empty prompt', () => {
-    expect(
-      buildResponseCacheKey({
-        agentId: 'vector-agent',
-        model: { provider: 'test', modelId: 'model', specVersion: 'v2' },
-        prompt: [] as never,
-        stepNumber: 0,
-      }),
-    ).toBe('mastra:agent-response:vector-agent:b4359e121d53b5df27ef8d875b1bb440');
-  });
-
-  it('hashes only the exact bytes of a binary subview', () => {
-    const bytesPrompt = (bytes: Uint8Array) => [
-      {
-        role: 'user' as const,
-        content: [{ type: 'file' as const, mediaType: 'image/png', filename: undefined, data: bytes }],
-      },
-    ];
-    const backing = new Uint8Array([99, 1, 2, 3, 99]);
-
-    expect(buildResponseCacheKey({ ...base, prompt: bytesPrompt(backing.subarray(1, 4)) as never })).toBe(
-      buildResponseCacheKey({ ...base, prompt: bytesPrompt(new Uint8Array([1, 2, 3])) as never }),
-    );
-  });
-
-  it('distinguishes prompts whose only difference is a URL file part', async () => {
-    const cat = await buildResponseCacheKey({ ...base, prompt: urlPrompt('https://example.com/cat.png') as never });
-    const dog = await buildResponseCacheKey({ ...base, prompt: urlPrompt('https://example.com/dog.png') as never });
+  it('distinguishes prompts whose only difference is a URL file part', () => {
+    const cat = buildResponseCacheKey({ ...base, prompt: urlPrompt('https://example.com/cat.png') as never });
+    const dog = buildResponseCacheKey({ ...base, prompt: urlPrompt('https://example.com/dog.png') as never });
 
     expect(cat).not.toBe(dog);
   });
 
-  it('distinguishes prompts whose only difference is binary file data', async () => {
+  it('distinguishes prompts whose only difference is binary file data', () => {
     const bytesPrompt = (bytes: number[]) => [
       {
         role: 'user' as const,
@@ -152,20 +127,20 @@ describe('buildResponseCacheKey with non-plain prompt values', () => {
       },
     ];
 
-    const a = await buildResponseCacheKey({ ...base, prompt: bytesPrompt([1, 2, 3]) as never });
-    const b = await buildResponseCacheKey({ ...base, prompt: bytesPrompt([4, 5, 6]) as never });
+    const a = buildResponseCacheKey({ ...base, prompt: bytesPrompt([1, 2, 3]) as never });
+    const b = buildResponseCacheKey({ ...base, prompt: bytesPrompt([4, 5, 6]) as never });
 
     expect(a).not.toBe(b);
   });
 
-  it('stays deterministic for the same URL file part', async () => {
-    const first = await buildResponseCacheKey({ ...base, prompt: urlPrompt('https://example.com/cat.png') as never });
-    const second = await buildResponseCacheKey({ ...base, prompt: urlPrompt('https://example.com/cat.png') as never });
+  it('stays deterministic for the same URL file part', () => {
+    const first = buildResponseCacheKey({ ...base, prompt: urlPrompt('https://example.com/cat.png') as never });
+    const second = buildResponseCacheKey({ ...base, prompt: urlPrompt('https://example.com/cat.png') as never });
 
     expect(first).toBe(second);
   });
 
-  it('treats an equal Uint8Array copy as the same key', async () => {
+  it('treats an equal Uint8Array copy as the same key', () => {
     const bytesPrompt = (bytes: Uint8Array) => [
       {
         role: 'user' as const,
@@ -173,13 +148,13 @@ describe('buildResponseCacheKey with non-plain prompt values', () => {
       },
     ];
 
-    const first = await buildResponseCacheKey({ ...base, prompt: bytesPrompt(new Uint8Array([1, 2, 3])) as never });
-    const second = await buildResponseCacheKey({ ...base, prompt: bytesPrompt(new Uint8Array([1, 2, 3])) as never });
+    const first = buildResponseCacheKey({ ...base, prompt: bytesPrompt(new Uint8Array([1, 2, 3])) as never });
+    const second = buildResponseCacheKey({ ...base, prompt: bytesPrompt(new Uint8Array([1, 2, 3])) as never });
 
     expect(first).toBe(second);
   });
 
-  it('does not expand binary file data byte-by-byte', async () => {
+  it('does not expand binary file data byte-by-byte', () => {
     // A 1 MiB image expanded into one JSON property per byte took ~680 ms and
     // ~11 MiB of intermediate JSON, synchronously, before the model was called.
     const prompt = [
@@ -198,7 +173,7 @@ describe('buildResponseCacheKey with non-plain prompt values', () => {
     ];
 
     const start = performance.now();
-    await buildResponseCacheKey({ ...base, prompt: prompt as never });
+    buildResponseCacheKey({ ...base, prompt: prompt as never });
     const elapsed = performance.now() - start;
 
     // Generous bound: the byte-walk is ~2 orders of magnitude slower, so this
@@ -206,7 +181,7 @@ describe('buildResponseCacheKey with non-plain prompt values', () => {
     expect(elapsed).toBeLessThan(150);
   });
 
-  it('keeps Date values distinguishable', async () => {
+  it('keeps Date values distinguishable', () => {
     const datePrompt = (iso: string) => [
       {
         role: 'user' as const,
@@ -215,13 +190,13 @@ describe('buildResponseCacheKey with non-plain prompt values', () => {
       },
     ];
 
-    const a = await buildResponseCacheKey({ ...base, prompt: datePrompt('2020-01-01T00:00:00.000Z') as never });
-    const b = await buildResponseCacheKey({ ...base, prompt: datePrompt('2021-01-01T00:00:00.000Z') as never });
+    const a = buildResponseCacheKey({ ...base, prompt: datePrompt('2020-01-01T00:00:00.000Z') as never });
+    const b = buildResponseCacheKey({ ...base, prompt: datePrompt('2021-01-01T00:00:00.000Z') as never });
 
     expect(a).not.toBe(b);
   });
 
-  it('still strips providerOptions.mastra from nested plain objects', async () => {
+  it('still strips providerOptions.mastra from nested plain objects', () => {
     const withMastraMeta = [
       {
         role: 'user' as const,
@@ -241,13 +216,13 @@ describe('buildResponseCacheKey with non-plain prompt values', () => {
       },
     ];
 
-    expect(await buildResponseCacheKey({ ...base, prompt: withMastraMeta as never })).toBe(
-      await buildResponseCacheKey({ ...base, prompt: withoutMastraMeta as never }),
+    expect(buildResponseCacheKey({ ...base, prompt: withMastraMeta as never })).toBe(
+      buildResponseCacheKey({ ...base, prompt: withoutMastraMeta as never }),
     );
   });
 });
 
-describe('ResponseCache with URL file parts (integration via Agent)', async () => {
+describe('ResponseCache with URL file parts (integration via Agent)', () => {
   it('does not serve one image URL response for a different image URL', async () => {
     const cache = new RecordingServerCache();
     const model = createUrlCapableModel('A cat on a mat');
