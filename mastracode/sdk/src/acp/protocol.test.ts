@@ -4,13 +4,14 @@ import type { AgentController, AgentControllerEvent, Session } from '@mastra/cor
 import { createSignal } from '@mastra/core/signals';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MastraCodeAcpAgent } from './agent.js';
+import type { AcpSessionRuntime } from './agent.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
   await Promise.all(cleanups.splice(0).map(cleanup => cleanup()));
 });
 
-async function connect() {
+async function connect(getSkills?: AcpSessionRuntime['getSkills']) {
   let toAgent!: ReadableStreamDefaultController<Uint8Array>;
   let toClient!: ReadableStreamDefaultController<Uint8Array>;
   const agentInput = new ReadableStream<Uint8Array>({
@@ -52,19 +53,22 @@ async function connect() {
         controller: { listAvailableModels: async () => [] } as unknown as AgentController,
         session,
         modes: [],
+        getSkills,
       }));
       return agent;
     },
     ndJsonStream(agentOutput, agentInput),
   );
   const updates: SessionNotification[] = [];
+  const dropped: SessionNotification[] = [];
+  let knownSessionId: string | undefined;
   const permission = vi
     .fn<() => Promise<RequestPermissionResponse>>()
     .mockResolvedValue({ outcome: { outcome: 'selected', optionId: 'approve' } });
   const client = new ClientSideConnection(
     () => ({
       sessionUpdate: async notification => {
-        updates.push(notification);
+        (notification.sessionId === knownSessionId ? updates : dropped).push(notification);
       },
       requestPermission: permission,
     }),
@@ -78,6 +82,7 @@ async function connect() {
   });
   await client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} });
   const { sessionId } = await client.newSession({ cwd: '/tmp', mcpServers: [] });
+  knownSessionId = sessionId;
   return {
     client,
     sessionId,
@@ -88,6 +93,7 @@ async function connect() {
     abort,
     permission,
     updates,
+    dropped,
   };
 }
 
@@ -107,6 +113,31 @@ function assistant(text: string): AgentControllerEvent[] {
 }
 
 describe('ACP JSON-RPC conversation', () => {
+  it('advertises skills after the client registers the new session, before any prompt', async () => {
+    const getSkills = async () =>
+      ({
+        maybeRefresh: async () => {},
+        list: async () => [{ name: 'review', description: 'Review changes', path: '/skills/review' }],
+        get: async () => null,
+      }) as unknown as Awaited<ReturnType<NonNullable<AcpSessionRuntime['getSkills']>>>;
+    const { client, sessionId, updates, dropped, sendMessage, emit } = await connect(getSkills);
+    expect(dropped).toEqual([]);
+    await vi.waitFor(() =>
+      expect(updates).toContainEqual({
+        sessionId,
+        update: {
+          sessionUpdate: 'available_commands_update',
+          availableCommands: [
+            { name: 'skill/review', description: 'Review changes', input: { hint: 'Additional instructions' } },
+          ],
+        },
+      }),
+    );
+    sendMessage.mockImplementationOnce(async () => emit({ type: 'agent_end', reason: 'complete' }));
+    await client.prompt({ sessionId, prompt: [] });
+    expect(updates.filter(item => item.update.sessionUpdate === 'available_commands_update')).toHaveLength(1);
+  });
+
   it('delivers only assistant text to the client', async () => {
     const { client, sessionId, emit, sendMessage, updates } = await connect();
     sendMessage.mockImplementationOnce(async () => {

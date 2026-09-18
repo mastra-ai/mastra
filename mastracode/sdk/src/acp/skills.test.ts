@@ -59,6 +59,7 @@ async function setup(catalog = [skill('review')]) {
   };
   const agent = new MastraCodeAcpAgent(connection as AgentSideConnection, async () => state);
   await agent.newSession({ cwd: '/project', mcpServers: [] });
+  await new Promise<void>(resolve => setImmediate(resolve));
   const prompt = (text: string) => agent.prompt({ sessionId: 'one', prompt: [{ type: 'text', text }] });
   return { agent, state, updates, prompt };
 }
