@@ -562,7 +562,9 @@ export function IntakeSection() {
                 <GithubLabelRouting
                   factoryProjectId={factory.id}
                   name={factory.name}
-                  repositories={factory.repositories.map(r => r.slug)}
+                  repositories={factory.repositories
+                    .filter(repository => repository.provider !== 'gitlab')
+                    .map(repository => repository.slug)}
                 />
               </SettingsContainer>
             ))}

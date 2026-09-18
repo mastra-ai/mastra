@@ -217,4 +217,37 @@ describe('VCS Factory step', () => {
     expect(screen.getByRole('separator')).toHaveAttribute('aria-orientation', 'vertical');
     expect(screen.queryByLabelText('Search repositories')).not.toBeInTheDocument();
   });
+
+  it('does not show server environment variables when GitLab authorization must be renewed', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          configured: false,
+          mode: 'direct',
+          connections: [],
+          accounts: [],
+          reauthRequired: true,
+          reason: 'auth_required',
+        }),
+      ),
+    );
+
+    renderWithProviders(
+      <VcsFactoryStep
+        connectingRepositoryId={null}
+        githubRedirecting={false}
+        mutationPending={false}
+        mutationError={null}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText('Sign in again to connect GitLab.')).toBeInTheDocument();
+    expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
+    expect(screen.queryByText('GITLAB_ACCESS_TOKEN_TYPE')).not.toBeInTheDocument();
+  });
 });

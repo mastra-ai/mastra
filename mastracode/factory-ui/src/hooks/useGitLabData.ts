@@ -13,7 +13,7 @@ import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
 export function useGitLabStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.gitlabStatus(),
+    queryKey: queryKeys.gitlabStatus(baseUrl),
     queryFn: () => fetchGitLabStatus(baseUrl),
     enabled,
   });
@@ -22,7 +22,7 @@ export function useGitLabStatusQuery(enabled: boolean = true) {
 export function useGitLabProjectsQuery(enabled: boolean) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.gitlabProjects(),
+    queryKey: queryKeys.gitlabProjects(baseUrl),
     queryFn: () => fetchGitLabProjects(baseUrl),
     enabled,
   });
@@ -31,7 +31,7 @@ export function useGitLabProjectsQuery(enabled: boolean) {
 export function useGitLabIssuesQuery(factoryProjectId: string | undefined, board: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
-    queryKey: queryKeys.gitlabIssues(factoryProjectId, board),
+    queryKey: queryKeys.gitlabIssues(baseUrl, factoryProjectId, board),
     queryFn:
       factoryProjectId && board
         ? ({ pageParam }) => listGitLabIssues(baseUrl, factoryProjectId, board, pageParam || undefined)
@@ -48,7 +48,7 @@ export function useGitLabIssuesQuery(factoryProjectId: string | undefined, board
 export function useGitLabIssueDetail(factoryProjectId: string | undefined, issueId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.gitlabIssue(factoryProjectId, issueId),
+    queryKey: queryKeys.gitlabIssue(baseUrl, factoryProjectId, issueId),
     queryFn:
       factoryProjectId !== undefined && issueId !== undefined
         ? () => getGitLabIssue(baseUrl, factoryProjectId, issueId)

@@ -188,9 +188,7 @@ function ProviderChoice({
             ? 'GitLab is not configured for this deployment.'
             : 'Connect GitLab to choose a repository.';
   const gitlabMissingEnvVars =
-    gitlabUnavailable && gitlabReason !== 'organization_required'
-      ? ['GITLAB_ACCESS_TOKEN', 'GITLAB_ACCESS_TOKEN_TYPE']
-      : [];
+    gitlabUnavailable && gitlabReason === 'missing_config' ? ['GITLAB_ACCESS_TOKEN', 'GITLAB_ACCESS_TOKEN_TYPE'] : [];
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] items-stretch gap-5">
