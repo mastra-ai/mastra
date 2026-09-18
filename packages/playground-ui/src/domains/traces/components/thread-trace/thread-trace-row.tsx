@@ -7,7 +7,7 @@ import type { ThreadTraceRowContextValue } from './thread-trace-row-context';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
 
-export const THREAD_TRACE_SPANS_TAB = 'spans';
+export const THREAD_TRACE_MESSAGES_TAB = 'messages';
 
 export interface ThreadTraceRowProps extends ComponentProps<'div'> {
   traceId: string;
@@ -43,16 +43,12 @@ export function ThreadTraceRow({ traceId, isFirst = false, className, children, 
   const timeline = useMeasuredAutoHeight<HTMLDivElement>();
   const detailsHeader = useMeasuredAutoHeight<HTMLDivElement>();
 
-  // Controlled so a highlight can bring the span tree back: the timeline is unmounted on other
-  // tabs, and a highlight nobody can see is just a no-op.
-  const [tab, setTab] = useState<string>(THREAD_TRACE_SPANS_TAB);
+  // Which view the messages column shows (Messages / Feedback / Scores), one per row.
+  const [tab, setTab] = useState<string>(THREAD_TRACE_MESSAGES_TAB);
 
   const { highlightSpans: rootHighlightSpans, setTraceExpanded } = root;
   const highlightSpans = useCallback(
-    (spanIds: string[]) => {
-      setTab(THREAD_TRACE_SPANS_TAB);
-      rootHighlightSpans(traceId, spanIds);
-    },
+    (spanIds: string[]) => rootHighlightSpans(traceId, spanIds),
     [rootHighlightSpans, traceId],
   );
   const setExpanded = useCallback(

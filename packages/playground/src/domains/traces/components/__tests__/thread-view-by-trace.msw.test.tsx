@@ -17,6 +17,7 @@ import {
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { emptyMcpServers } from '@/lib/ai-ui/__tests__/fixtures/agent';
+import { emptyTraceSpanScores } from '@/pages/traces/__tests__/fixtures/traces';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -39,6 +40,9 @@ const installHandlers = ({ list = newestFirstList }: { list?: typeof threadTrace
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(list)),
     http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(list)),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () => HttpResponse.json(spanADetail)),
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
+      HttpResponse.json(emptyTraceSpanScores),
+    ),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
       HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans),
     ),
@@ -538,42 +542,36 @@ describe('ThreadViewByTrace', () => {
       expect(firstRow.getByRole('link', { name: 'Go to trace' }).getAttribute('href')).toBe('/traces?traceId=trace-a');
     });
 
-    it('shows the span tree by default and switches to the feedback thread on the Feedback tab', async () => {
+    it('shows the messages by default and swaps them for the feedback thread on the Feedback tab, keeping the span tree', async () => {
       installHandlers();
       installFeedbackHandlers();
       renderView();
 
       const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
 
-      // The old hover toggle is gone; each row carries a Spans / Feedback tab list instead.
+      // The messages column carries the Messages / Feedback / Scores tabs; the details column only has the tree.
       expect(screen.queryByRole('button', { name: 'Toggle feedback' })).toBeNull();
-      expect(firstRow.getByRole('tab', { name: /Spans/ }).getAttribute('aria-selected')).toBe('true');
+      expect(firstRow.queryByRole('tab', { name: /Spans/ })).toBeNull();
+      expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('true');
       expect(firstRow.queryByPlaceholderText('Leave feedback...')).toBeNull();
 
       fireEvent.click(firstRow.getByRole('tab', { name: /Feedback/ }));
 
       expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
-      await waitFor(() => expect(firstRow.queryByTestId('trace-row-timeline')).toBeNull());
+      expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('false');
+      expect(firstRow.getByText('Chef agent run')).not.toBeNull();
     });
 
-    it('returns to the Spans tab when a message highlights its spans while Feedback is open', async () => {
+    it('shows the scores of the root span on the Scores tab', async () => {
       installHandlers();
       installFeedbackHandlers();
       renderView();
 
       const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
-      fireEvent.click(firstRow.getByRole('tab', { name: /Feedback/ }));
-      await waitFor(() => expect(firstRow.queryByTestId('trace-row-timeline')).toBeNull());
 
-      fireEvent.click(firstRow.getAllByRole('button', { name: 'Highlight spans' })[0]);
+      fireEvent.click(firstRow.getByRole('tab', { name: /Scores/ }));
 
-      // The highlight lives in the span tree, so it would be invisible on the Feedback tab.
-      expect(firstRow.getByRole('tab', { name: /Spans/ }).getAttribute('aria-selected')).toBe('true');
-      await waitFor(() => expect(firstRow.queryByTestId('trace-row-timeline')).not.toBeNull());
-      // The user message is backed by the root span only, so the tool span is faded.
-      await waitFor(() =>
-        expect(screen.getByLabelText('View details for span Recipe lookup').className).toContain('opacity-30'),
-      );
+      expect(await firstRow.findByText('No scores yet')).not.toBeNull();
     });
 
     it('marks the Feedback tab only when some feedback still needs review', async () => {

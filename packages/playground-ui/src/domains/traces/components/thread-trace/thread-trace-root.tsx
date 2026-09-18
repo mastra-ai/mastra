@@ -14,6 +14,8 @@ export interface ThreadTraceRootProps extends ComponentProps<'div'> {
    * so a row that arrives on a later page is left alone.
    */
   anchorTraceId?: string | null;
+  /** Fires when a span detail opens or closes (`null`). */
+  onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
 }
 
 /**
@@ -22,7 +24,14 @@ export interface ThreadTraceRootProps extends ComponentProps<'div'> {
  * through `useThreadTrace()` / `useThreadTraceRow()`; the root itself is the outer grid that gains a
  * side column while a span is selected.
  */
-export function ThreadTraceRoot({ traceIds, anchorTraceId, className, children, ...props }: ThreadTraceRootProps) {
+export function ThreadTraceRoot({
+  traceIds,
+  anchorTraceId,
+  onSelectedSpanChange,
+  className,
+  children,
+  ...props
+}: ThreadTraceRootProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const { visibleTraceIds, currentTraceId } = useVisibleTraceRows(listRef, traceIds);
 
@@ -46,11 +55,12 @@ export function ThreadTraceRoot({ traceIds, anchorTraceId, className, children, 
     (traceId: string, spanId: string | undefined) => {
       const next = spanId ? { traceId, spanId } : null;
       setSelected(next);
+      onSelectedSpanChange?.(next);
       if (spanId) setTraceExpanded(traceId, true);
       // Closing the panel also ends the highlight, like clearing the URL param on the traces page.
       if (!spanId) setHighlight(null);
     },
-    [setTraceExpanded],
+    [setTraceExpanded, onSelectedSpanChange],
   );
 
   // Fades the other spans and brings the last (most specific, deepest) span into view, since it is

@@ -91,13 +91,18 @@ describe('TraceThreadPanel', () => {
       expect(wrapper?.className).toContain('[&_[data-slot=thread-trace-details]]:border-y-0');
     });
 
-    it('when rendered, then the panel covers the full frame like the trace panel', async () => {
+    it('when rendered, then the panel opens wide and only takes the full frame once a span is selected', async () => {
       installHandlers();
       const { queryClient } = renderPanel();
+      const dialog = () => screen.getByRole('dialog', { name: `Thread ${THREAD_ID}` });
 
       expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.getByRole('dialog', { name: `Thread ${THREAD_ID}` }).className).toContain('w-full');
+      expect(dialog().className).toContain('w-4/5');
+
+      fireEvent.click(await screen.findByText('Chef agent run'));
+
+      await waitFor(() => expect(dialog().className).toContain('w-full'));
     });
 
     it('when "Back to trace" is clicked, then onBack is called', async () => {

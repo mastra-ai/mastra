@@ -400,7 +400,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
       <TraceSpanPanel
         title="Trace details"
-        size="full"
+        size={url.spanIdParam ? 'full' : 'wide'}
         traceId={selectedTraceId}
         spans={traceSpans}
         anchorSpanId={anchorSpanId}

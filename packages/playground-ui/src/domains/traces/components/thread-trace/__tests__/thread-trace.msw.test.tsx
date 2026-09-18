@@ -119,20 +119,24 @@ const renderView = ({
         {traceIds.map((traceId, index) => (
           <ThreadTrace.Row key={traceId} traceId={traceId} isFirst={index === 0}>
             <ThreadTrace.Messages>
-              <MessagesSlot />
+              <ThreadTrace.MessagesHeader>
+                <ThreadTrace.TabList>
+                  <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
+                  <ThreadTrace.Tab value="extra">Extra</ThreadTrace.Tab>
+                </ThreadTrace.TabList>
+              </ThreadTrace.MessagesHeader>
+              <ThreadTrace.TabContent value="messages">
+                <MessagesSlot />
+              </ThreadTrace.TabContent>
+              <ThreadTrace.TabContent value="extra">Extra content {traceId}</ThreadTrace.TabContent>
             </ThreadTrace.Messages>
             <ThreadTrace.Details data-testid={`details-${traceId}`}>
               <ThreadTrace.DetailsHeader>
-                <ThreadTrace.TabList>
-                  <ThreadTrace.Tab value="spans">Spans</ThreadTrace.Tab>
-                  <ThreadTrace.Tab value="extra">Extra</ThreadTrace.Tab>
-                </ThreadTrace.TabList>
                 <ThreadTrace.DetailsActions>
                   <button type="button">Action {traceId}</button>
                 </ThreadTrace.DetailsActions>
               </ThreadTrace.DetailsHeader>
-              <ThreadTrace.SpansTab />
-              <ThreadTrace.TabContent value="extra">Extra content {traceId}</ThreadTrace.TabContent>
+              <ThreadTrace.Spans />
             </ThreadTrace.Details>
           </ThreadTrace.Row>
         ))}
@@ -238,19 +242,32 @@ describe('ThreadTrace', () => {
     });
   });
 
+  describe('messages column tabs', () => {
+    it('swaps the messages column body per row and leaves the span tree in place', async () => {
+      renderView();
+      await screen.findByText('Chef agent run');
+      const rowA = getRow('trace-a');
+      const rowB = getRow('trace-b');
+
+      fireEvent.click(within(rowA).getByRole('tab', { name: 'Extra' }));
+
+      expect(within(rowA).getByText('Extra content trace-a')).toBeTruthy();
+      expect(within(rowA).queryByRole('button', { name: 'Highlight trace-a' })).toBeNull();
+      expect(within(rowA).getByText('Chef agent run')).toBeTruthy();
+      expect(within(rowB).queryByText('Extra content trace-b')).toBeNull();
+      expect(within(rowB).getByRole('button', { name: 'Highlight trace-b' })).toBeTruthy();
+    });
+  });
+
   describe('highlighting spans from the messages slot', () => {
-    it('scopes the highlight to that row and brings the spans tab back', async () => {
+    it('scopes the highlight to that row', async () => {
       renderView();
       await screen.findByText('Chef agent run');
       const rowA = getRow('trace-a');
 
-      fireEvent.click(within(rowA).getByRole('tab', { name: 'Extra' }));
-      expect(within(rowA).getByText('Extra content trace-a')).toBeTruthy();
-
       fireEvent.click(within(rowA).getByRole('button', { name: 'Highlight trace-a' }));
 
       expect(screen.getByTestId('root-state').textContent).toBe('none;trace-a');
-      expect(within(rowA).queryByText('Extra content trace-a')).toBeNull();
       await within(rowA).findByText('Recipe lookup');
       // Closing the panel clears the highlight, so opening and closing a span resets it.
       fireEvent.click(within(rowA).getByText('Chef agent run'));
