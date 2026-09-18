@@ -402,6 +402,27 @@ describe('MessageList#rollbackToStepBoundary', () => {
     expect(JSON.stringify(a1!.content.parts)).not.toContain('rejected');
   });
 
+  it('re-sources a flushed message when it reuses and stamps an existing marker', () => {
+    // The reused branch stamps the marker it hands back, so it mutates a message that the mid-turn
+    // flush already wrote. Without re-sourcing, that `createdAt` lives only in memory and the
+    // stored copy keeps an unstamped marker — which is exactly what the timestamp recovery reads.
+    const { list, id } = listWith(assistant([text('kept', 'msg_1')]));
+    openBoundary(list);
+    expect(list.drainUnsavedMessages().map(m => m.id)).toContain(id);
+    expect(list.drainUnsavedMessages()).toHaveLength(0);
+
+    // Strip the stamp so the reused branch has something to write, then reuse the marker.
+    const marker = partsOf(list, id)!.at(-1)!;
+    expect(marker.type).toBe('step-start');
+    delete (marker as { createdAt?: Date }).createdAt;
+
+    const reused = list.openStepBoundary();
+    expect(reused.appended).toBe(false);
+    expect(reused.boundary!.createdAt).toBeDefined();
+
+    expect(list.drainUnsavedMessages().map(m => m.id)).toContain(id);
+  });
+
   it('prunes the rejected step from the legacy content.toolInvocations mirror', () => {
     // `content.toolInvocations` is the AIV4 mirror MessageMerger maintains alongside `parts`.
     // Anything left there but absent from `parts` is treated as an *unprocessed* invocation by

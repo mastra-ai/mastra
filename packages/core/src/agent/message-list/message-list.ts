@@ -110,9 +110,11 @@ type MessageListAddOptions = {
 /**
  * Locate the step boundary a loop iteration opened, for `rollbackToStepBoundary`.
  *
- * In order: the held reference; else the marker with the boundary's `createdAt`, if exactly one
- * has it, in the message the boundary was opened in, with the same parts still in front of it.
- * Anything else is -1 and the caller removes the message whole.
+ * In order: the held reference, wherever it sits in the parts being rolled back; else the marker
+ * carrying the boundary's `createdAt`, if exactly one does, provided the boundary was opened in
+ * this message and the same parts still stand in front of it. Anything else is -1 and the caller
+ * removes the message whole. The reference needs no such corroboration — a part physically
+ * present in this message's array is the boundary, and nothing else can be.
  *
  * Reference first because it is exact. It is lost when a processor returns an array rather than
  * mutating the list: the runner re-adds each returned message with `{ merge: false }`
@@ -149,25 +151,34 @@ function findBoundaryIndex(
   const index = matches[0]!;
   const prefix = prefixFingerprint(parts, index);
   const held = checkpoint.prefix;
-  return prefix.length === held.length && prefix.every((token, i) => token === held[i]) ? index : -1;
+  const same =
+    prefix.length === held.length && prefix.every((token, i) => token[0] === held[i]![0] && token[1] === held[i]![1]);
+  return same ? index : -1;
 }
 
+/** A preceding part, named by its type and by whatever identifies it within that type. */
+type BoundaryToken = [type: string, identity: string | undefined];
+
 /** Where a boundary was opened, and what stood in front of it there. */
-type BoundaryCheckpoint = { messageId: string; prefix: string[] };
+type BoundaryCheckpoint = { messageId: string; prefix: BoundaryToken[] };
 
 /**
  * Identify the parts preceding an index — what a splice at that index is actually a statement
  * about. A tool call is named by its id, text and reasoning by their own string, anything else by
- * its type. The strings are held by reference, never concatenated or hashed, so capturing this
- * every iteration costs an array while the comparing only happens on a rejection.
+ * its type alone. Each token holds that string as-is rather than building one out of it, so the
+ * capture every iteration allocates a pair per preceding part and copies no content; the
+ * comparing happens only on a rejection.
  */
-function prefixFingerprint(parts: MastraMessagePart[], index: number): string[] {
-  return parts.slice(0, index).map(part => {
-    if (part.type === 'text') return `text:${part.text ?? ''}`;
-    if (part.type === 'tool-invocation') return `tool:${part.toolInvocation?.toolCallId ?? ''}`;
-    if (part.type === 'reasoning') return `reasoning:${part.reasoning ?? ''}`;
-    return part.type;
-  });
+function prefixFingerprint(parts: MastraMessagePart[], index: number): BoundaryToken[] {
+  const tokens: BoundaryToken[] = [];
+  for (let i = 0; i < index; i++) {
+    const part = parts[i]!;
+    if (part.type === 'text') tokens.push([part.type, part.text]);
+    else if (part.type === 'tool-invocation') tokens.push([part.type, part.toolInvocation?.toolCallId]);
+    else if (part.type === 'reasoning') tokens.push([part.type, part.reasoning]);
+    else tokens.push([part.type, undefined]);
+  }
+  return tokens;
 }
 
 export class MessageList {
@@ -1711,24 +1722,23 @@ export class MessageList {
 
     // Don't add a duplicate step-start
     const lastPart = lastMsg.content.parts[lastMsg.content.parts.length - 1];
-    if (lastPart?.type === 'step-start') {
-      // A reused marker may be unstamped (MessageMerger leaves one so when no step-start precedes
-      // it), which would cost this iteration its recovery. stampPart is a no-op if already set.
-      this.#rememberBoundaryFingerprint(lastMsg.id, lastMsg.content.parts, stampPart(lastPart));
-      return { boundary: lastPart, appended: false };
-    }
+    const appended = lastPart?.type !== 'step-start';
 
-    const boundary = stampPart({ type: 'step-start' as const });
-    lastMsg.content.parts.push(boundary);
+    // A reused marker can be unstamped — `MessageMerger` leaves one so when the marker before it
+    // carries no `model` — which would cost this iteration its recovery in `findBoundaryIndex`.
+    // `stampPart` is a no-op on a marker that already has a `createdAt`.
+    const boundary = appended ? stampPart({ type: 'step-start' as const }) : stampPart(lastPart);
+    if (appended) lastMsg.content.parts.push(boundary);
     this.#rememberBoundaryFingerprint(lastMsg.id, lastMsg.content.parts, boundary);
 
-    // Ensure the mutated message is persisted
+    // Ensure the mutated message is persisted. The reused branch stamps too, so it needs this as
+    // much as the appended one does.
     if (!this.stateManager.isResponseMessage(lastMsg)) {
       this.stateManager.removeMessage(lastMsg);
       this.stateManager.addToSource(lastMsg, 'response');
     }
 
-    return { boundary, appended: true };
+    return { boundary, appended };
   }
 
   /**
