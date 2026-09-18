@@ -1,3 +1,4 @@
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -368,7 +369,7 @@ describe('dispatchEvent compact message lifecycle', () => {
   let state: TUIState;
   let ectx: EventHandlerContext;
 
-  function assistantMessage(parts: unknown[], id = 'msg-1'): any {
+  function assistantMessage(parts: MastraMessagePart[], id = 'msg-1'): MastraDBMessage {
     return { id, role: 'assistant', createdAt: new Date(), content: { format: 2, parts } };
   }
 

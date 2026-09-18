@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { describe, it, expect } from 'vitest';
 import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list/state/types';
 import { applyUpdate } from './apply-update';
 import type { AgentControllerEvent } from './types';
@@ -90,20 +90,26 @@ describe('changelog migration snippet', () => {
     expect(textOf(messages.get(MESSAGE_ID))).toBe('');
   });
 
-  it('publishes a Migration snippet that carries the guard and the Session alternative', () => {
-    // The changeset is the published guidance; this file is its executable form.
-    // Reading the block here is what keeps the two from drifting: the snippets
-    // above are a re-typed copy, so without this check a change to the changeset
-    // would leave every test above green.
-    const changeset = readFileSync(
-      resolve(import.meta.dirname, '../../../../.changeset/fresh-parrots-fix.md'),
-      'utf8',
-    );
-    const migration = changeset.slice(changeset.indexOf('**Migration**'));
-    const snippet = migration.match(/```ts\n([\s\S]*?)```/)?.[1] ?? '';
+  const changesetPath = resolve(import.meta.dirname, '../../../../.changeset/fresh-parrots-fix.md');
 
-    expect(snippet).toContain("import { applyUpdate } from '@mastra/core/agent-controller'");
-    expect(snippet).toContain('if (updated) messages.set(event.id, updated)');
-    expect(migration).toContain('session.displayState.get().currentMessage');
-  });
+  // `changeset version` deletes a changeset once it ships and moves its text
+  // into the released CHANGELOG, so this only applies while the guidance is
+  // still pending. Skipped, not failed, after that.
+  it.skipIf(!existsSync(changesetPath))(
+    'publishes a Migration snippet that carries the fold, the guard, and the Session alternative',
+    () => {
+      // The changeset is the published guidance; this file is its executable form.
+      // Reading the block here is what keeps the two from drifting: the snippets
+      // above are a re-typed copy, so without this check a change to the changeset
+      // would leave every test above green.
+      const changeset = readFileSync(changesetPath, 'utf8');
+      const migration = changeset.slice(changeset.indexOf('**Migration**'));
+      const snippet = migration.match(/```ts\n([\s\S]*?)```/)?.[1] ?? '';
+
+      expect(snippet).toContain("import { applyUpdate } from '@mastra/core/agent-controller'");
+      expect(snippet).toContain('applyUpdate(messages.get(event.id), event.event)');
+      expect(snippet).toContain('if (updated) messages.set(event.id, updated)');
+      expect(migration).toContain('session.displayState.get().currentMessage');
+    },
+  );
 });

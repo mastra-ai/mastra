@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list/state/types';
 import { applyUpdate } from './apply-update';
-import { createTestSession } from './test-utils';
 import type { Session } from './session';
+import { createTestSession } from './test-utils';
 import type { AgentControllerEvent } from './types';
 
 function assistantMessage(parts: MastraMessagePart[], id = 'm1'): MastraDBMessage {
