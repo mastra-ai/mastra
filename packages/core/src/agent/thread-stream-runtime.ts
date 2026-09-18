@@ -1007,14 +1007,26 @@ export class AgentThreadStreamRuntime {
     signal: CreatedAgentSignal,
     expiresAt: number,
     isOwnerActive: () => boolean,
-  ): Promise<{ runId: string; error?: string } | undefined> {
+    incomingStreamOptions?: AgentExecutionOptions<any>,
+  ): Promise<{ runId: string; error?: string; output?: MastraModelOutput<OUTPUT> } | undefined> {
     if (!isOwnerActive()) {
       return { runId, error: `Claimed thread owner was released for ${key}` };
     }
     if (Date.now() >= expiresAt) {
       return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
     }
-    const streamOptions = typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
+    const ownerStreamOptions =
+      typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
+    // `owner.streamOptions` belongs to whichever run claimed the thread, so it
+    // carries that run's context. A wake can carry its own — a dispatcher waking
+    // a session on behalf of an authenticated caller — and that context has to
+    // win, otherwise the run starts anonymously and downstream workspace
+    // resolution rejects the caller. The no-owner path below already prefers the
+    // incoming options; this keeps the two paths consistent.
+    const streamOptions: AgentExecutionOptions<any> | undefined =
+      incomingStreamOptions?.requestContext === undefined
+        ? ownerStreamOptions
+        : { ...ownerStreamOptions, requestContext: incomingStreamOptions.requestContext };
     if (!isOwnerActive()) {
       return { runId, error: `Claimed thread owner was released for ${key}` };
     }
@@ -1038,6 +1050,9 @@ export class AgentThreadStreamRuntime {
       if (activeRecord) {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
       }
+      // No run starts here — the signal joins the in-flight run and is drained
+      // later. Returning without `output` is what tells the caller this queued
+      // instead of running, so it reports `deliver` rather than `wake`.
       return { runId };
     }
     if (activeRunId) {
@@ -1063,12 +1078,12 @@ export class AgentThreadStreamRuntime {
     }
 
     try {
-      await owner.agent.stream(signal, {
+      const output = await owner.agent.stream(signal, {
         ...(streamOptions as any),
         runId,
         memory: withThreadMemory(streamOptions?.memory, owner.resourceId, owner.threadId),
       });
-      return { runId };
+      return { runId, output };
     } catch (error) {
       const message = getErrorFromUnknown(error).message;
       state.threadKeysByRunId.delete(runId);
@@ -3901,12 +3916,20 @@ export class AgentThreadStreamRuntime {
           signal,
           Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
           () => state.claimedThreadOwners.get(reservedKey)?.unsubscribe === localClaimedOwner.unsubscribe,
+          target.ifIdle?.streamOptions,
         );
         if (!localAcceptance) {
           throw new Error(`Claimed thread owner could not acquire the execution lease for ${reservedKey}`);
         }
         if (localAcceptance.error) throw new Error(localAcceptance.error);
-        return { action: 'deliver' as const, runId: localAcceptance.runId };
+        if (!localAcceptance.output) {
+          // The signal joined a run that was still in flight, so nothing ran here.
+          return { action: 'deliver' as const, runId: localAcceptance.runId };
+        }
+        // This owner ran the turn. Reporting `deliver` would claim no run started,
+        // leaving the caller waiting on a delivery that already happened and
+        // re-sending into a run it believes is still in flight.
+        return { action: 'wake' as const, runId: localAcceptance.runId, output: localAcceptance.output };
       }
 
       if (target.ifIdle?.requireClaimedOwner) {
