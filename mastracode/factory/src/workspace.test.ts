@@ -134,6 +134,14 @@ function lastGhToken(): string | undefined {
   return update?.({}).GH_TOKEN;
 }
 
+function lastSandboxEnv(): Record<string, string | undefined> {
+  const calls = mocks.setEnv.mock.calls;
+  const update = calls[calls.length - 1]?.[0] as
+    | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
+    | undefined;
+  return update?.({}) ?? {};
+}
+
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(tempDir => fs.rm(tempDir, { recursive: true, force: true })));
   mocks.projects.splice(0);
@@ -801,6 +809,56 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it('materializes a GitLab-backed session through its provider storage and clone URL', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-gitlab-sessions-'));
+    tempDirs.push(root);
+    mocks.localRoot = root;
+    const sourceControl = fakeGithubIntegration().sourceControlStorage;
+    const getRepositoryAccess = vi.fn(async () => ({
+      cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+      authorization: { scheme: 'bearer' as const, token: 'glpat-secret', username: 'oauth2' },
+    }));
+    const workspace = eager(
+      createWorkspaceFactory({
+        sandbox: mocks.createSandbox as any,
+        sourceControls: [
+          {
+            id: 'gitlab',
+            versionControl: { getRepositoryAccess },
+            storage: sourceControl as any,
+          },
+        ],
+      }),
+    );
+    addProject({ repoFullName: 'acme/platform/app' });
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
+    expect(mocks.materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoInfo: expect.objectContaining({
+          repoFullName: 'acme/platform/app',
+          cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+          authUsername: 'oauth2',
+        }),
+        token: 'glpat-secret',
+      }),
+    );
+    expect(mocks.checkoutSessionBranch).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(String),
+      expect.objectContaining({
+        repoFullName: 'acme/platform/app',
+        cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+        authUsername: 'oauth2',
+      }),
+    );
+    expect(lastGhToken()).toBeUndefined();
+    expect(mocks.setEnv).not.toHaveBeenCalled();
   });
 
   it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {

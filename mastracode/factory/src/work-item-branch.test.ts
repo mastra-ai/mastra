@@ -8,7 +8,8 @@ describe('workItemBranchSource', () => {
     expect(workItemBranchSource({ integrationId: 'github', type: 'issue', externalId: '1' })).toBe('github-issue');
     expect(workItemBranchSource({ integrationId: 'github', type: 'pull-request', externalId: '2' })).toBe('github-pr');
     expect(workItemBranchSource({ integrationId: 'linear', type: 'issue', externalId: '3' })).toBe('linear-issue');
-    expect(workItemBranchSource({ integrationId: 'slack', type: 'slack-thread', externalId: '4' })).toBe('manual');
+    expect(workItemBranchSource({ integrationId: 'gitlab', type: 'issue', externalId: '4' })).toBe('gitlab-issue');
+    expect(workItemBranchSource({ integrationId: 'slack', type: 'slack-thread', externalId: '5' })).toBe('manual');
   });
 });
 
@@ -38,6 +39,27 @@ describe('workItemBranch', () => {
   it('lowercases the linear identifier', () => {
     expect(workItemBranch({ id, source: 'linear-issue', metadata: { identifier: 'ENG-42' } })).toBe(
       'factory/linear-eng-42',
+    );
+  });
+
+  it('sanitizes the GitLab identifier into a bounded branch name', () => {
+    expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { identifier: 'Acme/App #42' } })).toBe(
+      'factory/gitlab-acme-app-42-000000000001',
+    );
+    expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { identifier: '  ' } })).toBe(`factory/item-${id}`);
+    const longPrefix = 'group/'.repeat(30);
+    expect(
+      workItemBranch({
+        id: 'aaaaaaaa-0000-4000-8000-000000000002',
+        source: 'gitlab-issue',
+        metadata: { identifier: longPrefix + '#42' },
+      }),
+    ).not.toBe(
+      workItemBranch({
+        id: 'aaaaaaaa-0000-4000-8000-000000000003',
+        source: 'gitlab-issue',
+        metadata: { identifier: longPrefix + '#43' },
+      }),
     );
   });
 

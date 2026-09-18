@@ -19,6 +19,7 @@ import {
   listWorkspaceRenderedPath,
   parseWorkspaceChanges,
   parseWorkspaceChangeStats,
+  parseWorkspaceTrackedChanges,
   readSessionWorkspaceDiff,
   readSessionWorkspaceFile,
   readWorkspaceFile,
@@ -210,6 +211,7 @@ describe('readWorkspaceFile', () => {
 // ── Session-backed (sandbox) workspace access ────────────────────────────────
 
 const WORKDIR = '/workspaces/acme/repo';
+const BASE_SHA = '0123456789abcdef0123456789abcdef01234567';
 
 function makeSession(overrides: Partial<SourceControlSession> = {}): SourceControlSession {
   return {
@@ -238,9 +240,22 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
  */
 function seedSessionSandbox(
   respond: (script: string, command: string, args: string[]) => { exitCode: number; stdout: string; stderr?: string },
-  { sessionRowId = 'row-1', workdir = WORKDIR } = {},
+  {
+    sessionRowId = 'row-1',
+    workdir = WORKDIR,
+    comparisonBase = BASE_SHA,
+    trackedChanges,
+  }: { sessionRowId?: string; workdir?: string; comparisonBase?: string; trackedChanges?: string } = {},
 ) {
   const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
+    if (command === 'git' && args[2] === 'merge-base') {
+      return { exitCode: 0, stdout: comparisonBase + '\n', stderr: '' };
+    }
+    if (command === 'git' && args[2] === 'diff' && args.includes('--name-status')) {
+      return trackedChanges === undefined
+        ? { exitCode: 1, stdout: '', stderr: 'tracked diff not configured' }
+        : { exitCode: 0, stdout: trackedChanges, stderr: '' };
+    }
     const script = args[1] ?? '';
     const result = respond(script, command, args);
     return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
@@ -504,6 +519,14 @@ describe('workspace changes', () => {
     ]);
   });
 
+  it('parses committed add, delete, and rename records from null-delimited name-status output', () => {
+    expect(parseWorkspaceTrackedChanges('A\0src/added.ts\0D\0src/deleted.ts\0R100\0src/old.ts\0src/new.ts\0')).toEqual([
+      { path: 'src/added.ts', status: 'added' },
+      { path: 'src/deleted.ts', status: 'deleted' },
+      { path: 'src/new.ts', previousPath: 'src/old.ts', status: 'renamed' },
+    ]);
+  });
+
   it('parses text, binary, and renamed file counts from null-delimited numstat output', () => {
     const output = ['12\t3\tsrc/edited.ts', '-\t-\tpublic/image.png', '4\t2\t', 'src/old.ts', 'src/new.ts', ''].join(
       '\0',
@@ -527,7 +550,7 @@ describe('workspace changes', () => {
       expect(script).toContain('diff --numstat -z --find-renames');
       expect(script).toContain('ls-files --others --exclude-standard -z');
       expect(script).toContain('GIT_OBJECT_DIRECTORY="$object_dir"');
-      expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR]);
+      expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR, BASE_SHA]);
       return { exitCode: 0, stdout: '3\t1\tsrc/edited.ts\0' + '5\t0\t\0/dev/null\0src/new.ts\0' };
     });
 
@@ -542,7 +565,27 @@ describe('workspace changes', () => {
         { path: 'src/new.ts', status: 'untracked', additions: 5, deletions: 0 },
       ],
     });
-    expect(executeCommand).toHaveBeenCalledTimes(2);
+    expect(executeCommand).toHaveBeenCalledTimes(4);
+  });
+
+  it('keeps committed session-branch changes visible after the worktree is clean', async () => {
+    const { executeCommand } = seedSessionSandbox(
+      (_script, command) =>
+        command === 'git' ? { exitCode: 0, stdout: '' } : { exitCode: 0, stdout: '7\t2\tsrc/committed.ts\0' },
+      { trackedChanges: 'M\0src/committed.ts\0' },
+    );
+
+    const session = makeSession({ branch: 'factory/issue-42', baseBranch: 'main' });
+    await expect(listSessionWorkspaceChanges(session)).resolves.toEqual({
+      workspacePath: session.sessionId,
+      available: true,
+      additions: 7,
+      deletions: 2,
+      changes: [{ path: 'src/committed.ts', status: 'modified', additions: 7, deletions: 2 }],
+    });
+    expect(executeCommand).toHaveBeenCalledWith('git', ['-C', WORKDIR, 'merge-base', 'HEAD', 'origin/main'], {
+      timeout: 30_000,
+    });
   });
 
   it('keeps file statuses available when line counting fails', async () => {
@@ -583,7 +626,7 @@ describe('workspace changes', () => {
         '--no-ext-diff',
         '--no-color',
         '--unified=3',
-        'HEAD',
+        BASE_SHA,
         '--',
         'src/edited.ts',
       ]);
@@ -597,7 +640,7 @@ describe('workspace changes', () => {
       patch,
       truncated: false,
     });
-    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledTimes(2);
   });
 
   it('marks and limits a diff that exceeds the output boundary', async () => {
@@ -635,7 +678,7 @@ describe('workspace changes', () => {
         '--no-ext-diff',
         '--no-color',
         '--unified=3',
-        'HEAD',
+        BASE_SHA,
         '--',
         'src/old.ts',
         'src/renamed.ts',
@@ -662,7 +705,7 @@ describe('workspace changes', () => {
         '--no-ext-diff',
         '--no-color',
         '--unified=3',
-        'HEAD',
+        BASE_SHA,
         '--',
         path,
       ]);
@@ -717,7 +760,7 @@ describe('workspace changes', () => {
     await expect(readSessionWorkspaceDiff(makeSession(), 'src/new.ts')).resolves.toEqual(
       expect.objectContaining({ path: 'src/new.ts', patch: 'new file diff' }),
     );
-    expect(executeCommand).toHaveBeenCalledTimes(3);
+    expect(executeCommand).toHaveBeenCalledTimes(4);
   });
 
   it('rejects diff paths that escape the workspace before running git', async () => {

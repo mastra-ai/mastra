@@ -245,7 +245,11 @@ describe('Create Factory wizard', () => {
     expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
     // The picked repository feeds Work intake without a trip to Settings.
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
+      },
     ]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
@@ -374,6 +378,61 @@ describe('Create Factory wizard', () => {
     expect(row).toHaveTextContent('Set GITHUB_APP_ID on the server and restart.');
   });
 
+  it('lets a GitLab-only deployment choose a GitLab repository', async () => {
+    seedDraft('vcs');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: false,
+          connected: false,
+          installations: [],
+          reason: 'missing_config',
+          diagnostics: { missingGithubAppEnvVars: ['GITHUB_APP_ID'] },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          configured: true,
+          accounts: ['gitlab.com'],
+          reauthRequired: false,
+          reason: 'ready',
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: 'gitlab-project:encoded',
+              name: 'acme/app',
+              projectId: '10',
+              projectPath: 'acme/app',
+              installationStorageId: 'gitlab-inst-1',
+              connectionId: 'direct',
+              accountLabel: 'gitlab.com',
+              defaultBranch: 'main',
+              sandboxProvider: 'local',
+              sandboxWorkdir: '/workspace/app',
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /acme\/app/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Connect the work behind the code' })).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject({
+      provider: 'gitlab',
+      id: 'gitlab-project:encoded',
+      externalId: '10',
+      fullName: 'acme/app',
+    });
+  });
+
   it('keeps the Linear step skippable when Linear is not configured on the server', async () => {
     seedDraft('project-management');
     server.use(
@@ -454,8 +513,16 @@ describe('Create Factory wizard', () => {
     expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1', board: 'work' }]);
     // The link feeds the repository first; the Linear pick lands on top of it.
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: true, sourceIds: ['lin-1'] } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
+      },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
+        linear: { enabled: true, sourceIds: ['lin-1'] },
+      },
     ]);
   });
 
@@ -484,7 +551,11 @@ describe('Create Factory wizard', () => {
     // No Linear routing without a picked project; only the repository feeds intake.
     expect(bindings).toEqual([]);
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
+      },
     ]);
   });
 

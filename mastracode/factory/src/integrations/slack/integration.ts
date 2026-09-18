@@ -126,10 +126,11 @@ export class SlackIntegration implements FactoryIntegration {
   }
 
   channels(ctx: IntegrationContext): FactoryChannelsConfig {
-    // Repo-backed sessions come from the factory's source-control owner
-    // (GitHub, when registered) — no config-level wiring by the entry.
-    const sourceControlOwner = ctx.storage.sourceControlOwner;
-    this.#repoBackedSessions = Boolean(sourceControlOwner);
+    // Repo-backed sessions select the source-control provider from the linked
+    // repository on each Factory project.
+    const sourceControls =
+      ctx.storage.sourceControls ?? (ctx.storage.sourceControlOwner ? [ctx.storage.sourceControlOwner] : []);
+    this.#repoBackedSessions = sourceControls.length > 0;
     return createSlackChannelsConfig({
       slack: {
         clientId: this.#config.clientId,
@@ -139,7 +140,7 @@ export class SlackIntegration implements FactoryIntegration {
       },
       accountLinks: ctx.storage.channelIdentity,
       projects: ctx.storage.projects,
-      sourceControl: sourceControlOwner,
+      sourceControls,
       memorySettings: ctx.storage.memorySettings,
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
