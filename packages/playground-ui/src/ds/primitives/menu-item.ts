@@ -26,7 +26,7 @@ export const menuItemClass = cn(buttonVariants({ variant: 'ghost', size: 'md' })
 export const menuItemDestructiveClass = cn(
   buttonVariants({ variant: 'destructive-ghost', size: 'md' }),
   MENU_ITEM_OVERRIDES,
-  'data-highlighted:bg-accent2/10 data-highlighted:text-accent2',
+  'data-highlighted:bg-destructive/20 data-highlighted:text-destructive',
 );
 
 // Trailing indicator (check / submenu chevron) — applied to a wrapper element, not the

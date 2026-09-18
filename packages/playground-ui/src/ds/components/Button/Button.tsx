@@ -5,7 +5,7 @@ import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
-import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
+import { controlHeight, controlIconClasses, controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   controlFocusBorderVisible,
   disabledFilledSurfaceStyle,
@@ -23,19 +23,25 @@ import { cn } from '@/lib/utils';
 // `rounded-full` (circle).
 const TEXT_MODE_ADORNMENTS = cn(
   'gap-[.75em] rounded-full',
-  '[&>[data-slot=button-icon]]:-ml-[.3em] [&>[data-slot=button-icon]]:opacity-50',
-  '[&:hover>[data-slot=button-icon]]:opacity-100',
-  '[&>[data-slot=button-icon]]:transition-opacity [&>[data-slot=button-icon]]:duration-normal',
-  '[&>[data-slot=button-icon]]:ease-out-custom motion-reduce:[&>[data-slot=button-icon]]:transition-none',
-  '[&>svg]:mx-[-.3em] [&>svg]:size-[1.1em]',
-  '[&:hover>svg]:opacity-100 [&>svg]:opacity-50',
-  '[&>svg]:transition-opacity [&>svg]:duration-normal [&>svg]:ease-out-custom motion-reduce:[&>svg]:transition-none',
+  '[&>[data-slot=button-icon]]:-ml-[.3em]',
+  '[&>svg]:mx-[-.3em]',
+);
+
+// An icon is secondary to the label beside it, and on a neutral surface it says so with
+// a colour token rather than opacity. Opacity dims against whatever sits behind the
+// control, so the same glyph clears contrast on one surface and fails on another, and it
+// left icon-only buttons with no hover response at all: only their background moved.
+// Filled variants opt out because there the glyph colour carries the meaning.
+const NEUTRAL_ICON_STATE = cn(
+  '[&_svg]:text-muted-foreground not-disabled:hover:[&_svg]:text-foreground',
+  '[&_svg]:transition-colors [&_svg]:duration-normal [&_svg]:ease-out-custom',
+  'motion-reduce:[&_svg]:transition-none',
 );
 
 // eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API
 export const buttonVariants = cva(
   cn(
-    'new-theme inline-flex cursor-pointer items-center justify-center leading-0',
+    'new-theme inline-flex cursor-pointer items-center justify-center',
     'transition-[background-color,border-color,color] duration-normal ease-out-custom motion-reduce:transition-none',
     sharedFormElementDisabledStyle,
     controlFocusBorderVisible,
@@ -45,6 +51,7 @@ export const buttonVariants = cva(
       variant: {
         default: cn(
           'border border-border bg-foreground/10 font-medium text-foreground not-disabled:hover:bg-foreground/14 not-disabled:active:bg-foreground/18',
+          NEUTRAL_ICON_STATE,
           disabledFilledSurfaceStyle,
         ),
         primary: cn(
@@ -52,34 +59,35 @@ export const buttonVariants = cva(
           'disabled:bg-foreground/45 disabled:text-background/75',
         ),
         destructive: cn(
-          'border border-transparent bg-accent2 font-medium text-white not-disabled:hover:bg-accent2/80 not-disabled:active:bg-accent2/70',
-          'disabled:bg-accent2/40 disabled:text-white/80',
+          'border border-transparent bg-destructive font-medium text-destructive-foreground not-disabled:hover:bg-destructive/80 not-disabled:active:bg-destructive/70',
+          'disabled:bg-destructive/45 disabled:text-destructive-foreground/75',
         ),
         'destructive-ghost': cn(
-          'border border-transparent bg-transparent text-accent2 not-disabled:hover:bg-accent2/20 not-disabled:hover:text-accent2 not-disabled:active:bg-accent2/30',
-          'disabled:bg-transparent disabled:text-accent2/50',
+          'border border-transparent bg-transparent text-destructive not-disabled:hover:bg-destructive/20 not-disabled:hover:text-destructive not-disabled:active:bg-destructive/30',
+          'disabled:bg-transparent disabled:text-destructive/50',
         ),
         ghost: cn(
-          'border border-transparent bg-transparent text-foreground/90 not-disabled:hover:bg-foreground/4 not-disabled:hover:text-foreground not-disabled:active:bg-foreground/10',
+          'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-foreground/4 not-disabled:hover:text-foreground not-disabled:active:bg-foreground/10',
           'disabled:bg-transparent',
         ),
         outline: cn(
           'border border-foreground/30 bg-transparent text-foreground not-disabled:hover:border-foreground/45 not-disabled:hover:bg-foreground/4 not-disabled:active:bg-foreground/10',
+          NEUTRAL_ICON_STATE,
           disabledOutlineSurfaceStyle,
         ),
       },
       size: {
-        xs: cn(controlSizeClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),
-        sm: cn(controlSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        md: cn(controlSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        lg: cn(controlSizeClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
+        xs: cn(controlSizeClasses.xs, controlIconClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),
+        sm: cn(controlSizeClasses.sm, controlIconClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
+        md: cn(controlSizeClasses.md, controlIconClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
+        lg: cn(controlSizeClasses.lg, controlIconClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
-        // so icon-mode and text-mode use the same press feedback.
-        // `icon-lg` is intentionally 32px (larger than text-mode `lg`, which shares the 28px `md` height).
+        // so icon-mode and text-mode use the same press feedback. Every size comes off the shared
+        // scale, so an icon-only button matches a labelled one at the same size in the same row.
         'icon-xs': cn(controlHeight.xs, 'w-form-xs rounded-full'),
         'icon-sm': cn(controlHeight.sm, 'w-form-sm rounded-full'),
         'icon-md': cn(controlHeight.md, 'w-form-md rounded-full'),
-        'icon-lg': 'size-8 rounded-full',
+        'icon-lg': cn(controlHeight.lg, 'w-form-lg rounded-full'),
       },
     },
     defaultVariants: {
@@ -128,20 +136,20 @@ function isLinkElement(element: React.ReactElement): boolean {
   return href !== undefined || to !== undefined;
 }
 
-// Button's icon-* sizes don't match `<Icon>`'s own size scale (`sm | default | lg`).
-const iconChildSizeMap: Record<IconButtonSize, 'sm' | 'default' | 'lg'> = {
+// One icon step per control step, so the same nominal size renders the same icon
+// whether it arrives as an icon-mode child, the `icon` prop, or a bare SVG.
+const iconChildSizeMap: Record<IconButtonSize, 'sm' | 'smd' | 'default' | 'lg'> = {
   'icon-xs': 'sm',
-  'icon-sm': 'sm',
+  'icon-sm': 'smd',
   'icon-md': 'default',
   'icon-lg': 'lg',
 };
 
-// `<Icon>` size for the `icon` prop in text-mode, keyed by button size.
-const textIconSizeMap: Record<TextButtonSize, 'sm' | 'default'> = {
+const textIconSizeMap: Record<TextButtonSize, 'sm' | 'smd' | 'default' | 'lg'> = {
   xs: 'sm',
-  sm: 'sm',
+  sm: 'smd',
   md: 'default',
-  lg: 'default',
+  lg: 'lg',
 };
 
 // Walks React children, expanding `<></>` fragments so `isIconOnly` can inspect the real
@@ -225,7 +233,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       // (filled buttons have an opaque background that hides a border seam, so the group
       // paints their divider as an inset box-shadow instead — see buttons-group.tsx).
       'data-variant': variant,
-      className: cn(buttonVariants({ variant, size: resolvedSize }), isLabelless && '[&>svg]:opacity-75', className),
+      className: cn(buttonVariants({ variant, size: resolvedSize }), className),
       ...props,
     };
 

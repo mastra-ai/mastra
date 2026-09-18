@@ -35,9 +35,9 @@ describe('Button', () => {
         'not-disabled:hover:bg-foreground/75',
         'not-disabled:active:bg-foreground/60',
       ],
-      destructive: ['not-disabled:hover:bg-accent2/80', 'not-disabled:active:bg-accent2/70'],
-      'destructive-ghost': ['not-disabled:hover:bg-accent2/20', 'not-disabled:active:bg-accent2/30'],
-      ghost: ['text-foreground/90', 'not-disabled:hover:bg-foreground/4', 'not-disabled:active:bg-foreground/10'],
+      destructive: ['not-disabled:hover:bg-destructive/80', 'not-disabled:active:bg-destructive/70'],
+      'destructive-ghost': ['not-disabled:hover:bg-destructive/20', 'not-disabled:active:bg-destructive/30'],
+      ghost: ['text-muted-foreground', 'not-disabled:hover:bg-foreground/4', 'not-disabled:active:bg-foreground/10'],
       outline: [
         'border-foreground/30',
         'bg-transparent',
@@ -97,6 +97,31 @@ describe('Button', () => {
     const link = screen.getByRole('link', { name: 'Read docs' });
     expect(link.getAttribute('href')).toBe('/docs');
     expect(link.className).toContain('new-theme');
+  });
+
+  // One icon step per control step. Before this, the same nominal size rendered a
+  // 20px, 16px, or 15.39px icon depending on whether it arrived as an icon-mode
+  // child, the `icon` prop, or a bare SVG.
+  it.each([
+    ['xs', 'icon-xs', 'h-icon-sm'],
+    ['sm', 'icon-sm', 'h-icon-smd'],
+    ['md', 'icon-md', 'h-icon-default'],
+    ['lg', 'icon-lg', 'h-icon-lg'],
+  ] as const)('sizes the %s icon the same through every path', (textSize, iconSize, expected) => {
+    const { container } = render(
+      <>
+        <Button size={iconSize} aria-label="icon mode">
+          <svg />
+        </Button>
+        <Button size={textSize} icon={<svg />}>
+          label
+        </Button>
+      </>,
+    );
+
+    for (const slot of container.querySelectorAll('span[class*="h-icon"]')) {
+      expect(slot.className).toContain(expected);
+    }
   });
 
   describe('icon prop', () => {
@@ -262,5 +287,52 @@ describe('Button', () => {
       );
       expect(seen.prefetch).toBe(false);
     });
+  });
+
+  // Signal state with colour, not opacity: an opacity wash dims against whatever sits
+  // behind the control, and it left icon-only buttons with no hover response at all.
+  it.each(['default', 'outline'] as const)(
+    'moves the %s icon from muted to full on hover, labelled or not',
+    variant => {
+      const { container } = render(
+        <>
+          <Button variant={variant} icon={<svg data-testid="labelled" />}>
+            label
+          </Button>
+          <Button variant={variant} size="icon-md" aria-label="alone">
+            <svg />
+          </Button>
+        </>,
+      );
+
+      for (const button of container.querySelectorAll('button')) {
+        expect(button.className).toContain('[&_svg]:text-muted-foreground');
+        expect(button.className).toContain('not-disabled:hover:[&_svg]:text-foreground');
+      }
+    },
+  );
+
+  // Ghost dims its whole label, so the glyph inherits the same move without a
+  // separate rule. Asserting the inherited path keeps a redundant class off the recipe.
+  it('moves the ghost icon by dimming the whole control', () => {
+    render(
+      <Button variant="ghost" icon={<svg />}>
+        label
+      </Button>,
+    );
+
+    const cls = screen.getByRole('button').className;
+    expect(cls).toContain('text-muted-foreground');
+    expect(cls).toContain('not-disabled:hover:text-foreground');
+  });
+
+  it.each(['primary', 'destructive'] as const)('leaves the %s glyph colour alone', variant => {
+    render(
+      <Button variant={variant} icon={<svg />}>
+        label
+      </Button>,
+    );
+
+    expect(screen.getByRole('button').className).not.toContain('[&_svg]:text-muted-foreground');
   });
 });
