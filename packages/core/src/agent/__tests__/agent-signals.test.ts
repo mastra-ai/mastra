@@ -6219,8 +6219,12 @@ describe('Agent signals', () => {
     const stderr: Buffer[] = [];
     child.stderr?.on('data', chunk => stderr.push(chunk));
 
-    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
+    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
       const timeout = setTimeout(() => child.kill('SIGKILL'), 5_000);
+      child.once('error', error => {
+        clearTimeout(timeout);
+        reject(error);
+      });
       child.once('close', (code, signal) => {
         clearTimeout(timeout);
         resolve({ code, signal });
