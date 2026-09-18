@@ -19,5 +19,8 @@ const refundJudge = createScorer({
       ? { tools }
       : notScorable('refundCustomer was not called')
   })
-  .generateScore({ createPrompt: ({ run }) => `Rate the refund handling: ${JSON.stringify(run.output)}` })
+  .generateScore({
+    description: 'Score the refund handling from 0 to 1',
+    createPrompt: ({ run }) => `Rate the refund handling: ${JSON.stringify(run.output)}`,
+  })
 ```
