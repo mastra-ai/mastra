@@ -9,8 +9,7 @@ export interface DataPanelHeaderContentProps {
  * A vertical separator is rendered between the heading and the metadata when both are present.
  */
 export function DataPanelHeaderContent({ children }: DataPanelHeaderContentProps) {
-  const [heading, ...rest] = Children.toArray(children);
-  const metadata = rest.filter(Boolean);
+  const [heading, ...metadata] = Children.toArray(children);
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
