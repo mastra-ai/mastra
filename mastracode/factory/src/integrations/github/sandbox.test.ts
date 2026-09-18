@@ -18,6 +18,7 @@ import {
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
   pushBranch,
+  pushRepositoryBranch,
   resolveGitIdentity,
   runSetupCommand,
   runTeardownCommand,
@@ -411,7 +412,7 @@ describe('materializeRepo', () => {
 describe('checkoutSessionBranch', () => {
   const opts = { branch: 'factory/pr-1', baseBranch: 'main', token: 'tok-secret', repoFullName: 'octocat/hello' };
 
-  it('installs a tokenless environment credential helper for GitLab pushes', async () => {
+  it('removes the legacy environment credential helper for GitLab sessions', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'factory/pr-1\n', stderr: '' };
       return OK;
@@ -425,14 +426,12 @@ describe('checkoutSessionBranch', () => {
       authUsername: 'oauth2',
     });
 
-    const helper = sandbox.calls.find(call => call.includes('MASTRA_SOURCE_CONTROL_USERNAME'));
+    const helper = sandbox.calls.find(call => call.includes('credential.https://gitlab.example.com'));
+    expect(helper).toContain('config --unset-all');
     expect(helper).toContain('credential.https://gitlab.example.com/acme/platform/app.git.helper');
-    expect(helper).not.toContain('credential.https://gitlab.example.com/acme/platform/other.git.helper');
-    expect(helper).not.toContain('config credential.helper');
-    expect(helper).toContain('MASTRA_SOURCE_CONTROL_USERNAME');
-    expect(helper).toContain('MASTRA_SOURCE_CONTROL_TOKEN');
-    expect(helper).not.toContain('glpat-secret');
-    expect(helper).not.toContain('gh auth git-credential');
+    expect(helper).not.toContain('MASTRA_SOURCE_CONTROL_USERNAME');
+    expect(helper).not.toContain('MASTRA_SOURCE_CONTROL_TOKEN');
+    expect(sandbox.calls.join('\\n')).not.toContain('glpat-secret');
   });
 
   it('keeps the current branch when uncommitted work blocks the switch', async () => {
@@ -852,6 +851,57 @@ describe('pushBranch', () => {
     const err = await pushBranch(sandbox, '/workspace/hello', 'feat/x', 'tok', 'octocat/hello').catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('egress-blocked');
+  });
+});
+
+describe('pushRepositoryBranch', () => {
+  const access = {
+    cloneUrl: 'https://gitlab.com/acme/hello.git',
+    authorization: { scheme: 'bearer' as const, token: 'glpat-secret', username: 'oauth2' },
+  };
+
+  it('uses provider repository access for one push and restores the clean remote', async () => {
+    const sandbox = new FakeSandbox();
+    await pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello');
+
+    const remotes = sandbox.calls.filter(call => call.includes('remote set-url origin'));
+    expect(remotes[0]).toContain('https://oauth2:glpat-secret@gitlab.com/acme/hello.git');
+    expect(sandbox.calls.join('\\n')).toContain("push -u origin 'feat/gitlab'");
+    expect(remotes.at(-1)).toContain('https://gitlab.com/acme/hello.git');
+    expect(remotes.at(-1)).not.toContain('glpat-secret');
+  });
+
+  it('restores the clean provider remote when push fails', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('push -u origin') ? { exitCode: 1, stdout: '', stderr: 'rejected' } : OK,
+    );
+    const error = await pushRepositoryBranch(
+      sandbox,
+      '/workspace/hello',
+      'feat/gitlab',
+      access,
+      'acme/hello',
+    ).catch(value => value);
+
+    expect(error).toBeInstanceOf(MaterializeError);
+    const scrub = sandbox.calls.filter(call => call.includes('remote set-url origin')).at(-1);
+    expect(scrub).toContain('https://gitlab.com/acme/hello.git');
+    expect(scrub).not.toContain('glpat-secret');
+  });
+
+  it('rejects missing credentials before modifying the remote', async () => {
+    const sandbox = new FakeSandbox();
+    const error = await pushRepositoryBranch(
+      sandbox,
+      '/workspace/hello',
+      'feat/gitlab',
+      { cloneUrl: 'https://gitlab.com/acme/hello.git' },
+      'acme/hello',
+    ).catch(value => value);
+
+    expect(error).toBeInstanceOf(MaterializeError);
+    expect(error.code).toBe('push-failed');
+    expect(sandbox.calls).toHaveLength(0);
   });
 });
 

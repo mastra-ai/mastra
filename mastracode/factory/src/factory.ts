@@ -87,6 +87,7 @@ import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
+import { createSourceControlTools } from './session/source-control-tools.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -407,10 +408,7 @@ export class MastraFactory {
       ) {
         integrations.push(new PlatformIncidentioIntegration());
       }
-      if (
-        process.env.MASTRA_GITLAB_CONNECTION_ID?.trim() &&
-        !integrations.some(integration => integration.id === 'gitlab')
-      ) {
+      if (!integrations.some(integration => integration.id === 'gitlab')) {
         integrations.push(new PlatformGitLabIntegration());
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
@@ -554,15 +552,17 @@ export class MastraFactory {
     registerCustomProvidersSource({ storage: customProvidersStorage, authEnabled: Boolean(auth) });
 
     for (const integration of integrations) {
+      const integrationSourceControl = integration.versionControl
+        ? sourceControlStorage.forIntegration(integration.id)
+        : undefined;
       integration.initialize?.({
         storage: integrationStorage.forIntegration(integration.id),
         projects: factoryProjectsStorage,
         auth: routeAuth,
+        ...(integrationSourceControl ? { sourceControl: integrationSourceControl } : {}),
       });
-      if (integration.versionControl) {
-        integration.versionControl.initialize({
-          storage: sourceControlStorage.forIntegration(integration.id),
-        });
+      if (integration.versionControl && integrationSourceControl) {
+        integration.versionControl.initialize({ storage: integrationSourceControl });
       }
     }
     // Keep the legacy GitHub partition readable even when no GitHub
@@ -828,6 +828,17 @@ export class MastraFactory {
     const toolIntegrations = integrationRegistrations.filter(
       ({ integration }) => integration.agentTools || integration.sessionTools,
     );
+    const sourceControlToolProviders = integrations.flatMap(integration =>
+      integration.versionControl
+        ? [
+            {
+              id: integration.id,
+              versionControl: integration.versionControl,
+              storage: sourceControlStorage.forIntegration(integration.id),
+            },
+          ]
+        : [],
+    );
 
     // Build the real production controller (agents, modes, tools, memory, OM,
     // MCP, providers) — identical to the terminal app. Agent state lives in
@@ -889,7 +900,9 @@ export class MastraFactory {
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
         ...(vector ? { vector } : {}),
-        ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
+        ...(toolIntegrations.length > 0 ||
+        sourceControlToolProviders.length > 0 ||
+        (workItemsStorage && transitionService)
           ? {
               extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
                 const tools: IntegrationTools = {};
@@ -906,6 +919,16 @@ export class MastraFactory {
                     tools[name] = tool;
                   }
                 };
+                if (storage.isDomainReady('source-control')) {
+                  mergeTools(
+                    'source-control',
+                    createSourceControlTools({
+                      requestContext,
+                      providers: sourceControlToolProviders,
+                      audit: auditDomain,
+                    }),
+                  );
+                }
                 if (workItemsStorage && transitionService) {
                   mergeTools(
                     'factory',

@@ -725,15 +725,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         const setupGhToken =
           (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, setupPatKind)) ?? token;
         target.setEnv?.(env => ({ ...env, GH_TOKEN: setupGhToken }));
-      } else if (access.authorization?.username) {
-        if (!target.setEnv) {
-          throw new Error('The active sandbox provider does not support runtime source-control credentials.');
-        }
-        target.setEnv(env => ({
-          ...env,
-          MASTRA_SOURCE_CONTROL_USERNAME: access.authorization?.username,
-          MASTRA_SOURCE_CONTROL_TOKEN: token,
-        }));
       }
       await materializeRepo({
         row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },

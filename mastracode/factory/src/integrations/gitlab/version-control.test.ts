@@ -25,9 +25,9 @@ function setup(repositoryAccessToken: string | null = 'glpat-secret') {
   });
   const contextForConnection = vi.fn(async () => ({
     api,
-    connection: { type: 'oauth' as const, accessToken: 'glpat-secret' },
+    connection: { type: 'oauth' as const, accessToken: 'gitlab-connection:connection-1' },
     host: 'gitlab.example.com',
-    repositoryAccessToken: repositoryAccessToken ?? undefined,
+    repositoryAccessToken: repositoryAccessToken ? async () => repositoryAccessToken : undefined,
   }));
   const versionControl = buildGitLabVersionControl({ contextForConnection });
   versionControl.initialize({ storage });
@@ -117,7 +117,7 @@ describe('buildGitLabVersionControl', () => {
       connectedByUserId: 'user-2',
       accountName: 'Acme Group',
       providerMetadata: {
-        connection: { type: 'oauth', accessToken: 'glpat-secret' },
+        connection: { type: 'oauth', accessToken: 'gitlab-connection:connection-1' },
         host: 'gitlab.example.com',
       },
     });
@@ -128,6 +128,18 @@ describe('buildGitLabVersionControl', () => {
     });
     expect(result.storage.installationsRows).toHaveLength(1);
     expect(result.storage.repositoriesRows).toHaveLength(1);
+  });
+
+  it('resolves the provider target without exposing repository credentials', async () => {
+    const result = setup();
+    const { repository } = await register(result);
+
+    await expect(
+      result.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository.id }),
+    ).resolves.toEqual({
+      connection: { type: 'oauth', accessToken: 'gitlab-connection:connection-1' },
+      sourceId: '101',
+    });
   });
 
   it('returns repository clone access from the stored installation connection', async () => {
@@ -142,7 +154,7 @@ describe('buildGitLabVersionControl', () => {
     });
     expect(result.contextForConnection).toHaveBeenLastCalledWith({
       type: 'oauth',
-      accessToken: 'glpat-secret',
+      accessToken: 'gitlab-connection:connection-1',
     });
   });
 
@@ -453,6 +465,10 @@ describe('buildGitLabVersionControl', () => {
       position: null,
     });
     const deleteNote = vi.spyOn(result.api, 'deleteMergeRequestDiscussionNote').mockResolvedValue();
+    const resolveDiscussion = vi.spyOn(result.api, 'resolveMergeRequestDiscussion').mockResolvedValue({
+      id: 'discussion-1',
+      notes: [{ ...note({ id: 201, body: 'Please revise' }), position: POSITION, resolved: true }],
+    });
 
     await expect(
       result.versionControl.createReviewComment({
@@ -543,10 +559,17 @@ describe('buildGitLabVersionControl', () => {
       sourceId: 'acme/app',
       commentId: '17:discussion-1:201',
     });
+    await result.versionControl.resolveReviewThread?.({
+      connection: CONNECTION,
+      sourceId: 'acme/app',
+      commentId: '17:discussion-1:202',
+      resolved: true,
+    });
 
     expect(addNote).toHaveBeenCalledWith('acme/app', 17, 'discussion-1', 'Reply');
     expect(updateNote).toHaveBeenCalledWith('acme/app', 17, 'discussion-1', 202, 'Updated reply');
     expect(deleteNote).toHaveBeenCalledWith('acme/app', 17, 'discussion-1', 201);
+    expect(resolveDiscussion).toHaveBeenCalledWith('acme/app', 17, 'discussion-1', true);
   });
 
   it('rejects new diff comments while GitLab diff refs are unavailable', async () => {

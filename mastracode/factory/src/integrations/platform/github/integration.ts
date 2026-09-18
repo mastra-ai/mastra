@@ -404,6 +404,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           }),
         ),
       ),
+    getRepositoryTarget: async ({ orgId, repositoryId }) => {
+      const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
+      if (!repository) throw new Error('Version-control repository not found.');
+      const installation = await this.storage.installations.get({ orgId, id: repository.installationId });
+      if (!installation) throw new Error('Version-control installation not found.');
+      const installationId = parsePositiveInteger(installation.externalId);
+      if (installationId === null) throw new Error('GitHub installation id is invalid.');
+      return {
+        connection: { type: 'app-installation', installationId },
+        sourceId: repository.slug,
+      };
+    },
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       // Every session materialization requests access; reuse a recent grant
       // instead of re-minting through the Platform each time. The TTL keeps

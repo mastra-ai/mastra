@@ -30,7 +30,7 @@ export interface GitLabVersionControlContext {
   api: GitLabApiClient;
   connection: IntegrationConnection;
   host: string;
-  repositoryAccessToken?: string;
+  repositoryAccessToken?: () => Promise<string>;
 }
 
 export interface GitLabVersionControlDependencies {
@@ -347,6 +347,17 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     );
   };
 
+  const resolveReviewThread: NonNullable<VersionControl['resolveReviewThread']> = async input => {
+    const context = await deps.contextForConnection(input.connection);
+    const reference = parseDiscussionNoteId(input.commentId);
+    await context.api.resolveMergeRequestDiscussion(
+      input.sourceId,
+      reference.mergeRequestIid,
+      reference.discussionId,
+      input.resolved,
+    );
+  };
+
   const listRequestedReviewers: VersionControl['listRequestedReviewers'] = async input => {
     const context = await deps.contextForConnection(input.connection);
     const mergeRequest = await context.api.getMergeRequest(
@@ -420,6 +431,18 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
           }),
         ),
       ),
+    getRepositoryTarget: async ({ orgId, repositoryId }) => {
+      const repository = await sourceControlStorage().repositories.get({ orgId, id: repositoryId });
+      if (!repository) throw new Error('Version-control repository not found.');
+      const installation = await sourceControlStorage().installations.get({
+        orgId,
+        id: repository.installationId,
+      });
+      if (!installation) throw new Error('Version-control installation not found.');
+      const connection = parseConnection(installation.providerMetadata.connection);
+      if (!connection) throw new GitLabApiError('GitLab installation connection metadata is invalid.', 500);
+      return { connection, sourceId: repository.externalId };
+    },
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       const repository = await sourceControlStorage().repositories.get({ orgId, id: repositoryId });
       if (!repository) throw new Error('Version-control repository not found.');
@@ -431,10 +454,10 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       const connection = parseConnection(installation.providerMetadata.connection);
       if (!connection) throw new GitLabApiError('GitLab installation connection metadata is invalid.', 500);
       const context = await deps.contextForConnection(connection);
-      const token = context.repositoryAccessToken;
-      if (!token) {
+      if (!context.repositoryAccessToken) {
         throw notSupported('This GitLab connection does not expose credentials for repository cloning.');
       }
+      const token = await context.repositoryAccessToken();
       const host = normalizeHost(context.host);
       const slug = normalizeSlug(repository.slug);
       return {
@@ -449,6 +472,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     closePullRequest,
     mergePullRequest,
     listComments,
+    resolveReviewThread,
     createComment,
     updateComment,
     deleteComment,

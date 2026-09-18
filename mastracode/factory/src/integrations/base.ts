@@ -193,7 +193,12 @@ export interface FactoryIntegration {
    * agent tools, intake capability calls — reach storage without a service
    * locator. Mirrors `sourceControl.initialize`.
    */
-  initialize?(args: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage; auth: RouteAuth }): void;
+  initialize?(args: {
+    storage: IntegrationStorageHandle;
+    projects: FactoryProjectsStorage;
+    auth: RouteAuth;
+    sourceControl?: SourceControlStorageHandle;
+  }): void;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds
