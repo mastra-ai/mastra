@@ -1,6 +1,7 @@
-import { XIcon } from 'lucide-react';
+import { ArrowLeftIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
+import { cn } from '@/lib/utils';
 
 export interface DataPanelCloseButtonProps {
   onClick: () => void;
@@ -9,6 +10,7 @@ export interface DataPanelCloseButtonProps {
   variant?: ButtonProps['variant'];
 }
 
+/** Leading "leave this panel" arrow; render it as the first child of `DataPanel.Header`. */
 export function DataPanelCloseButton({
   onClick,
   tooltip = 'Close panel',
@@ -22,9 +24,9 @@ export function DataPanelCloseButton({
       onClick={onClick}
       aria-label="Close Panel"
       tooltip={tooltip}
-      className={className}
+      className={cn('shrink-0', className)}
     >
-      <XIcon />
+      <ArrowLeftIcon />
     </Button>
   );
 }

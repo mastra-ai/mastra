@@ -65,6 +65,7 @@ export function SpanDataPanelView({
   return (
     <section className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={onClose} />
         <DataPanel.HeaderContent>
           <DataPanel.Heading>
             Span
@@ -76,10 +77,9 @@ export function SpanDataPanelView({
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}
             onNext={onNext}
-            previousLabel="Previous span"
-            nextLabel="Next span"
+            previousLabel="Go to previous span"
+            nextLabel="Go to next span"
           />
-          <DataPanel.CloseButton onClick={onClose} />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 

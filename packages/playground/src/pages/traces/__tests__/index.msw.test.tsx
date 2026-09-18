@@ -380,7 +380,7 @@ describe('Traces side panel header actions', () => {
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     expect(await screen.findByRole('button', { name: 'Score trace' })).not.toBeNull();
-    fireEvent.click(await screen.findByRole('button', { name: 'Trace actions' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open trace actions' }));
 
     expect(screen.queryByRole('menuitem', { name: 'Evaluate trace' })).toBeNull();
     expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).not.toBeNull();

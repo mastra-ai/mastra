@@ -227,9 +227,9 @@ describe('ThreadTrace', () => {
       fireEvent.click(screen.getByText('Chef agent run'));
       await screen.findByTestId('span-panel');
 
-      fireEvent.click(screen.getByRole('button', { name: 'Next span' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Go to next span' }));
       await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a-tool;none'));
-      fireEvent.click(screen.getByRole('button', { name: 'Previous span' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Go to previous span' }));
       await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none'));
     });
   });

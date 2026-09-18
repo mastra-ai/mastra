@@ -80,7 +80,7 @@ const renderExperimentRoute = (initialPath = `/experiments/${EXPERIMENT_ID}`) =>
  */
 const findResultDialog = async (resultId: string) => {
   const dialog = await screen.findByRole('dialog', { name: `Experiment item ${resultId.replace('res-', 'item-')}` });
-  await within(dialog).findByRole('heading', { name: `Result # ${resultId}` });
+  await within(dialog).findByRole('heading', { name: `Result ${resultId}` });
   return dialog;
 };
 
@@ -385,7 +385,7 @@ describe('experiment item sub-route', () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await findResultDialog('res-1');
-      fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
 
       const scoresTab = await screen.findByRole('tab', { name: /scores \(1\)/i });
       const feedbackTab = screen.getAllByRole('tab', { name: /^feedback/i }).at(-1)!;
@@ -407,7 +407,7 @@ describe('experiment item sub-route', () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await findResultDialog('res-1');
-      fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       fireEvent.click(await screen.findByRole('tab', { name: /scores \(1\)/i }));
       fireEvent.click(await screen.findByRole('button', { name: /0\.9Experiment relevance/i }));
 
@@ -418,7 +418,7 @@ describe('experiment item sub-route', () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await findResultDialog('res-1');
-      fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       const scoresTab = await screen.findByRole('tab', { name: /scores \(1\)/i });
       fireEvent.click(scoresTab);
       fireEvent.click(await screen.findByRole('button', { name: /0\.9Experiment relevance/i }));
@@ -432,7 +432,7 @@ describe('experiment item sub-route', () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       const dialog = await findResultDialog('res-1');
-      fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       // The trace opens as a wide sibling drawer on top of the result drawer.
       const traceDialog = await screen.findByRole('dialog', { name: 'Trace experiment-trace-1' });
       expect(traceDialog.className).toContain('w-4/5');
@@ -459,7 +459,7 @@ describe('experiment item sub-route', () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       const dialog = await findResultDialog('res-1');
-      fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
 
       const spanHeading = await screen.findByRole('heading', { name: /span-child/ });
@@ -475,14 +475,14 @@ describe('experiment item sub-route', () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await findResultDialog('res-1');
-      fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
       expect(await screen.findByRole('heading', { name: /span-child/ })).toBeDefined();
 
-      fireEvent.click(screen.getByLabelText('Previous span'));
+      fireEvent.click(screen.getByLabelText('Go to previous span'));
       expect(await screen.findByRole('heading', { name: /span-root/ })).toBeDefined();
 
-      fireEvent.click(screen.getByLabelText('Next span'));
+      fireEvent.click(screen.getByLabelText('Go to next span'));
       expect(await screen.findByRole('heading', { name: /span-child/ })).toBeDefined();
     });
 
@@ -490,7 +490,7 @@ describe('experiment item sub-route', () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       const dialog = await findResultDialog('res-1');
-      fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
       expect(await screen.findByRole('heading', { name: /span-child/ })).toBeDefined();
 
@@ -507,7 +507,7 @@ describe('experiment item sub-route', () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       const dialog = await findResultDialog('res-1');
-      fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
       expect(await screen.findByText('Experiment agent run')).toBeDefined();
 
       const traceSection = screen.getByText('Experiment agent run').closest('section');
