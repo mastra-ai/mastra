@@ -1,0 +1,211 @@
+---
+title: "Reference: EvaluationModerationProcessor | Processors"
+description: "Use EvaluationModerationProcessor for input moderation backed by evaluation models — classifiers that return typed verdicts instead of generated text."
+packages:
+  - "@mastra/core"
+---
+
+# EvaluationModerationProcessor
+
+The `EvaluationModerationProcessor` is an **input processor** that guards agent input with an evaluation model — a classifier that answers typed questions (a probability, a one-of-N choice) and emits no text. Use it when moderation should be decided by a dedicated evaluation model such as TypeSafe Jev rather than by a language model whose verdict is parsed out of generated text, which is what [`ModerationProcessor`](/reference/processors/moderation-processor) does.
+
+The processor evaluates the text of the last message only, truncated to `maxChars`, and aborts the turn with a fixed reason code when the returned score reaches `threshold`. It fails open on evaluation failure — timeout, transport error, or an open circuit breaker lets the message through with one log line. The message text is never logged.
+
+## Usage example
+
+```typescript
+import { EvaluationModerationProcessor, createJevEvaluator } from '@mastra/core/processors'
+
+const processor = new EvaluationModerationProcessor({
+  evaluate: createJevEvaluator({
+    apiKey: process.env.TYPESAFE_API_KEY!,
+    // Optional: one sentence about your assistant sharpens the verdicts.
+    context: 'A general-purpose customer support assistant.',
+  }),
+  threshold: 0.7,
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options for evaluation-based moderation',
+    isOptional: false,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'evaluate',
+            type: '(text: string, signal: AbortSignal) => Promise<EvaluationVerdict>',
+            description:
+              "The evaluation call. Receives the last message's text (truncated to maxChars) and an abort signal capped at timeoutMs. Resolves with a verdict ({ score, category?, model?, tokensIn? }) or throws on failure.",
+            isOptional: false,
+          },
+          {
+            name: 'threshold',
+            type: 'number',
+            description: 'Block when the verdict score is greater than or equal to this value (0-1)',
+            isOptional: true,
+            default: '0.7',
+          },
+          {
+            name: 'reason',
+            type: 'string',
+            description:
+              'Reason passed to abort() when content is blocked. A fixed code lets callers distinguish a moderation block from other tripwires.',
+            isOptional: true,
+            default: "'MESSAGE_BLOCKED'",
+          },
+          {
+            name: 'maxChars',
+            type: 'number',
+            description:
+              'Maximum characters of the message sent for evaluation. Evaluation models reject oversized inputs.',
+            isOptional: true,
+            default: '8000',
+          },
+          {
+            name: 'timeoutMs',
+            type: 'number',
+            description: 'Deadline for one evaluation call in milliseconds',
+            isOptional: true,
+            default: '5000',
+          },
+          {
+            name: 'breaker',
+            type: '{ threshold?: number; cooldownMs?: number }',
+            description:
+              'Circuit breaker. After threshold consecutive evaluation failures, calls stop for cooldownMs so a down vendor adds no latency; while open, messages pass unevaluated.',
+            isOptional: true,
+            default: '{ threshold: 3, cooldownMs: 60000 }',
+          },
+          {
+            name: 'errorStrategy',
+            type: "'warn' | 'strict'",
+            description:
+              "How evaluation failures are handled. 'warn' fails open: the failure is logged and the message goes through unevaluated. 'strict' fails closed: processing stops with a tripwire.",
+            isOptional: true,
+            default: "'warn'",
+          },
+          {
+            name: 'onVerdict',
+            type: '(verdict: EvaluationVerdict) => void',
+            description: 'Called after every answered evaluation, blocked or not — for cost accounting and metrics.',
+            isOptional: true,
+            default: 'undefined',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## `createJevEvaluator(options)`
+
+Builds an `evaluate` function backed by TypeSafe Jev's System One API. One request per call asks two questions: `blocking` (a yes/no probability — the gate) and `category` (a choice label used only for logging, optional in parsing so a missing label never turns a block into a pass). Throws on HTTP errors and unparsable answers; the processor's `errorStrategy` decides what a failure means.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options for the Jev evaluator',
+    isOptional: false,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'TypeSafe API key (TYPESAFE_API_KEY)',
+            isOptional: false,
+          },
+          {
+            name: 'context',
+            type: 'string',
+            description: 'One sentence about your assistant and its users; sharpens the verdicts',
+            isOptional: true,
+            default: 'undefined',
+          },
+          {
+            name: 'policy',
+            type: '{ allow: string; block: string }',
+            description:
+              'Gate criteria in plain English: what passes (allow) and what must be blocked (block). Add domain carve-outs to allow when legitimate traffic sounds dangerous.',
+            isOptional: true,
+            default: 'JEV_DEFAULT_POLICY',
+          },
+          {
+            name: 'categories',
+            type: 'Record<string, string>',
+            description: 'Category to description for the label Jev reports. The none label is added automatically.',
+            isOptional: true,
+            default: 'JEV_DEFAULT_CATEGORIES',
+          },
+          {
+            name: 'endpoint',
+            type: 'string',
+            description: 'System One API endpoint',
+            isOptional: true,
+            default: "'https://api.typesafe.ai/v1/systemone'",
+          },
+          {
+            name: 'model',
+            type: 'string',
+            description: 'Jev model id',
+            isOptional: true,
+            default: "'jev-latest'",
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## `isModerationBlock(tripwire, reason?)`
+
+Tells a moderation block from an ordinary stop: a user-stopped run carries a tripwire too, with a different reason, so "any tripwire" is not a block. Pass the same `reason` you configured on the processor.
+
+```typescript
+import { isModerationBlock } from '@mastra/core/processors'
+
+if (isModerationBlock(result.tripwire)) {
+  // the input was blocked by the processor
+}
+```
+
+## Extended usage example
+
+```typescript title="src/mastra/agents/moderated-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { EvaluationModerationProcessor, createJevEvaluator } from '@mastra/core/processors'
+
+export const agent = new Agent({
+  id: 'moderated-agent',
+  name: 'moderated-agent',
+  instructions: 'You are a helpful assistant',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  inputProcessors: [
+    new EvaluationModerationProcessor({
+      evaluate: createJevEvaluator({ apiKey: process.env.TYPESAFE_API_KEY! }),
+      threshold: 0.7,
+      onVerdict: verdict => {
+        // verdict.tokensIn / verdict.model for cost accounting
+      },
+    }),
+  ],
+})
+```
+
+## Related
+
+- [Guardrails](/docs/agents/guardrails)
+- [ModerationProcessor](/reference/processors/moderation-processor)

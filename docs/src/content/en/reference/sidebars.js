@@ -675,6 +675,11 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'processors/agents-md-injector', label: 'AgentsMDInjector' },
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
+        {
+          type: 'doc',
+          id: 'processors/evaluation-moderation-processor',
+          label: 'EvaluationModerationProcessor',
+        },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },

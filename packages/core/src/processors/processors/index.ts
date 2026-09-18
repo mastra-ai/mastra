@@ -6,6 +6,22 @@ export {
   type ModerationCategoryScores,
 } from './moderation';
 export {
+  EvaluationModerationProcessor,
+  createJevEvaluator,
+  isModerationBlock,
+  JEV_ENDPOINT,
+  JEV_MODEL,
+  JEV_DEFAULT_CATEGORIES,
+  JEV_DEFAULT_POLICY,
+  type EvaluationModerationOptions,
+  type EvaluationModerationEvaluate,
+  type EvaluationVerdict,
+  type JevEvaluatorOptions,
+  type JevBooleanQuestion,
+  type JevChoiceQuestion,
+  type JevRequest,
+} from './evaluation-moderation';
+export {
   PromptInjectionDetector,
   type PromptInjectionOptions,
   type PromptInjectionResult,
