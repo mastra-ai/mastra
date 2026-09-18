@@ -107,6 +107,32 @@ type MessageListAddOptions = {
   merge?: boolean;
 };
 
+/**
+ * Locate the step boundary a loop iteration opened, for `rollbackToStepBoundary`.
+ *
+ * Reference first. A processor that returns an array rather than mutating the list gets its
+ * messages re-added with `{ merge: false }` (`processors/runner.ts`), so a processor that maps or
+ * clones them hands back parts this list has never seen and identity is lost. `stampPart` gives
+ * every marker a `createdAt`, and cloning carries it, so the timestamp recovers the anchor
+ * afterwards — but only when it names exactly one marker. Two markers sharing a millisecond are
+ * ambiguous, and guessing there is worse than not trying: too early over-splices accepted content,
+ * too late strands the rejected step, which is the bug this anchoring exists to prevent. An
+ * unstamped marker (`MessageMerger` leaves one unstamped when there is no preceding step-start)
+ * is likewise not identifying. Both bail to -1, and the caller removes the message whole.
+ */
+function findBoundaryIndex(parts: MastraMessagePart[], boundary: MastraStepStartPart): number {
+  const byReference = parts.indexOf(boundary);
+  if (byReference !== -1) return byReference;
+
+  const stampedAt = boundary.createdAt;
+  if (stampedAt == null) return -1;
+
+  const matches = parts.flatMap((part, index) =>
+    part.type === 'step-start' && part.createdAt != null && +part.createdAt === +stampedAt ? [index] : [],
+  );
+  return matches.length === 1 ? matches[0]! : -1;
+}
+
 export class MessageList {
   private messages: MastraDBMessage[] = [];
 
@@ -602,18 +628,10 @@ export class MessageList {
    * iteration, which opens no boundary at all, that is the whole bug: a rejected tool call
    * survives, unexecuted and still carrying its `fc_…` item id.
    *
-   * With no boundary — a first iteration, a sealed message, or a marker that is no longer in
-   * `parts` — the in-flight step *is* the whole message and it is removed outright. That is the
-   * pre-#12799 behaviour, so the degradation is never worse than the path this replaced.
-   *
-   * The one way a boundary goes missing mid-turn is a processor that returns an *array* instead
-   * of mutating the list: the runner re-adds each returned message with `{ merge: false }`
-   * (`processors/runner.ts`), so a processor that maps or clones its messages hands back parts
-   * this list has never seen, and accepted steps are discarded along with the rejected one.
-   * Holding a reference is still the only option that does not persist provenance — `model` is
-   * copied onto synthetic markers by `MessageMerger`, and a new field on the part would have to
-   * be threaded through every mastra-only-part consumer, cache keys included, to survive a round
-   * trip it never needs to make.
+   * Where no boundary can be located — a first iteration, which opens none; a sealed message; or
+   * a marker `findBoundaryIndex` cannot resolve — the message is removed whole. That is not a
+   * claim that no accepted step exists, only that this cannot tell where one ends, and it is the
+   * pre-#12799 behaviour, so the fallback is never worse than the path it replaced.
    *
    * Mirrors: `content.content` and `content.toolInvocations` are re-derived below, because
    * `MessageMerger` keeps both in step with the parts as a turn streams. `content.reasoning`
@@ -641,7 +659,7 @@ export class MessageList {
     // Identity, not position: the marker is matched by reference because no stored field
     // distinguishes it from a synthetic one. -1 covers the marker having been spliced away by
     // an earlier rollback in the same turn, and a boundary opened on a different message.
-    const boundaryIndex = boundary ? parts.indexOf(boundary) : -1;
+    const boundaryIndex = boundary ? findBoundaryIndex(parts, boundary) : -1;
 
     // No boundary of our own: the rejected attempt is the entire message.
     if (boundaryIndex === -1) {

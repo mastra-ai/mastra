@@ -170,8 +170,8 @@ describe('MessageList#rollbackToStepBoundary', () => {
   });
 
   it('splices at a boundary handed back by the dedupe branch', () => {
-    // The message already ends in a marker — a synthetic one closing a tool-call-then-text
-    // response — so `openStepBoundary` returns it instead of appending a second. It still
+    // The message already ends in a marker, so `openStepBoundary` returns it instead of
+    // appending a second (whichever writer left it is irrelevant here). It still
     // delimits the coming iteration, and rolling back to it must behave like any other boundary.
     const { list, id } = listWith(assistant([toolCall('call-kept'), { type: 'step-start' }]));
     const { boundary, appended } = list.openStepBoundary();
@@ -183,13 +183,44 @@ describe('MessageList#rollbackToStepBoundary', () => {
     expect(partsOf(list, id)!.map(p => p.type)).toEqual(['tool-invocation']);
   });
 
-  it('degrades to whole-message removal when a processor replaced the parts array', () => {
+  it('recovers the boundary by timestamp when a processor cloned the parts array', () => {
     // A processor may return an *array* instead of mutating the list, and the runner re-adds each
-    // returned message with `{ merge: false }`. A processor that clones its messages therefore
-    // hands back parts this list has never seen, and the held marker is not among them. There is
-    // nothing to anchor on, so the accepted step goes too — the behaviour this path replaced.
+    // returned message with `{ merge: false }`. A processor that clones its messages hands back
+    // parts this list has never seen, so reference identity is gone — but `stampPart` put a
+    // `createdAt` on the marker and the clone carries it, so the accepted step still survives.
     const { list, id } = listWith(assistant([text('accepted', 'msg_1')]));
     const boundary = openBoundary(list);
+    const message = list.get.all.db().find(m => m.id === id)!;
+    message.content.parts = message.content.parts!.map(part => structuredClone(part));
+    partsOf(list, id)!.push(text('rejected', 'msg_2'));
+
+    expect(list.rollbackToStepBoundary(id, boundary)).toBe(true);
+
+    const parts = partsOf(list, id)!;
+    expect(parts.map(p => p.type)).toEqual(['text']);
+    expect(JSON.stringify(parts)).not.toContain('rejected');
+  });
+
+  it('removes the message whole rather than guess between two markers sharing a timestamp', () => {
+    // Timestamps are millisecond-resolution, so a synthesized marker can tie with the iteration's
+    // own. Picking wrong is worse than not picking: too early discards accepted content, too late
+    // strands the rejected step — the bug this anchoring exists to prevent.
+    const { list, id } = listWith(assistant([text('accepted', 'msg_1')]));
+    const boundary = openBoundary(list);
+    const message = list.get.all.db().find(m => m.id === id)!;
+    message.content.parts = message.content.parts!.map(part => structuredClone(part));
+    partsOf(list, id)!.push({ type: 'step-start', createdAt: boundary!.createdAt }, text('rejected', 'msg_2'));
+
+    expect(list.rollbackToStepBoundary(id, boundary)).toBe(true);
+    expect(list.get.all.db().find(m => m.id === id)).toBeUndefined();
+  });
+
+  it('removes the message whole when the boundary carries no timestamp to recover by', () => {
+    // `MessageMerger` leaves a synthesized marker unstamped when no step-start precedes it, so a
+    // deduped boundary can have no `createdAt`. Nothing identifies it once identity is lost.
+    const { list, id } = listWith(assistant([text('accepted', 'msg_1')]));
+    const boundary = openBoundary(list);
+    delete boundary!.createdAt;
     const message = list.get.all.db().find(m => m.id === id)!;
     message.content.parts = message.content.parts!.map(part => structuredClone(part));
 
