@@ -625,7 +625,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
   it('suspends normally when the tool swallows the eager bailout and throws its own error', async () => {
     // The other shape of the same hole: the tool catches the bailout and then fails on its
     // own. That failure belongs to a call that was denied, so it must not be resolved as this
-    // call's error result — adoption would record it and the suspension would never happen.
+    // call's error result. Adoption would record it and the suspension would never happen.
     const run = async (eager: boolean) => {
       const { record } = createRecorder();
       const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
@@ -646,7 +646,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
               } catch {
                 throw new Error('tool decided to fail instead');
               }
-              return { value: 'unreachable' };
+              return { value: 'suspend returned' };
             },
           }),
         },
