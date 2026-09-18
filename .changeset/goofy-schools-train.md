@@ -17,8 +17,7 @@ const memory = new Memory({
   },
 });
 
-// In-process consumers read it from the run's stream. HTTP clients receive the
-// same chunk with @mastra/client-js's `processDataStream`.
+// Consumers read it from the run's stream before the `finish` chunk.
 for await (const chunk of stream.fullStream) {
   if (chunk.type === 'data-thread-title') {
     console.log(chunk.data.threadId, chunk.data.title);
