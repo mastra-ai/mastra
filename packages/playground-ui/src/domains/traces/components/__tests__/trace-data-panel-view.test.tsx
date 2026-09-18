@@ -1174,7 +1174,7 @@ describe('TraceDataPanelView — span search', () => {
     renderDeep();
 
     // The field gets a whole row so it is never squeezed by a wide legend.
-    const legendRow = screen.getByText('Tool').closest('div')?.parentElement;
+    const legendRow = screen.getByText('Tool').closest('[data-slot="span-type-legend"]');
     const field = searchField();
 
     expect(legendRow?.contains(field)).toBe(false);

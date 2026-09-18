@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import type { UISpan } from '../types';
 import { getSpanTypeUi, spanTypePrefixes } from './shared';
+import { Badge } from '@/ds/components/Badge';
 
-export function useUsedSpanTypes(spans: UISpan[]) {
+function useUsedSpanTypes(spans: UISpan[]) {
   return useMemo(() => {
     const collectTypes = (list: UISpan[]): Set<string> => {
       const types = new Set<string>();
@@ -23,20 +24,30 @@ export function useUsedSpanTypes(spans: UISpan[]) {
   }, [spans]);
 }
 
-/** Colored-dot legend of the span types present in `spans`. Renders nothing when empty. */
+/**
+ * Legend of the span types present in `spans`, one small badge per type carrying the
+ * type's own color dot. Sits in its own bordered section above the rows. Renders nothing when empty.
+ */
 export function SpanTypeLegend({ spans }: { spans: UISpan[] }) {
   const usedSpanTypes = useUsedSpanTypes(spans);
   if (usedSpanTypes.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center justify-start gap-3 px-2 py-1.5">
+    <div
+      data-slot="span-type-legend"
+      className="border-border1 flex flex-wrap items-center gap-1.5 border-b px-2 py-1.5"
+    >
       {usedSpanTypes.map(type => {
         const spanUI = getSpanTypeUi(type);
         return (
-          <div key={type} className="text-ui-sm text-neutral3 flex shrink-0 items-center gap-1">
-            <span className="inline-block size-1.5 shrink-0 rounded-full" style={{ backgroundColor: spanUI?.color }} />
+          <Badge
+            key={type}
+            size="sm"
+            emphasis="muted"
+            icon={<span className="inline-block size-1.5 rounded-full" style={{ backgroundColor: spanUI?.color }} />}
+          >
             {spanUI?.label || type}
-          </div>
+          </Badge>
         );
       })}
     </div>
