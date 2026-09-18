@@ -191,4 +191,63 @@ describe('MessageList#rollbackToLastStepBoundary', () => {
     expect(a1).toBeDefined();
     expect(JSON.stringify(a1!.content.parts)).not.toContain('rejected');
   });
+
+  it('prunes the rejected step from the legacy content.toolInvocations mirror', () => {
+    // `content.toolInvocations` is the AIV4 mirror MessageMerger maintains alongside `parts`.
+    // Anything left there but absent from `parts` is treated as an *unprocessed* invocation by
+    // convert-to-mastra-v1 and pushed back into the prompt, which would resurrect the very tool
+    // call the rejection discarded.
+    const list = listWith(
+      assistant([
+        text('kept', 'msg_1'),
+        { type: 'step-start' },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            toolCallId: 'call-rejected',
+            toolName: 'lookup',
+            args: {},
+            state: 'result',
+            result: 'rejected-result',
+          },
+        },
+      ]),
+    );
+    const stored = list.get.all.db().find(m => m.id === 'a1')!;
+    stored.content.toolInvocations = [
+      { toolCallId: 'call-rejected', toolName: 'lookup', args: {}, state: 'result', result: 'rejected-result' },
+    ] as MastraDBMessage['content']['toolInvocations'];
+
+    list.rollbackToLastStepBoundary('a1');
+
+    const after = list.get.all.db().find(m => m.id === 'a1')!;
+    expect(after.content.toolInvocations ?? []).toHaveLength(0);
+    expect(JSON.stringify(list.get.all.v1())).not.toContain('call-rejected');
+  });
+
+  it('keeps accepted invocations in the mirror while pruning the rejected one', () => {
+    const list = listWith(
+      assistant([
+        {
+          type: 'tool-invocation',
+          toolInvocation: { toolCallId: 'call-kept', toolName: 'lookup', args: {}, state: 'result', result: 'ok' },
+        },
+        { type: 'step-start' },
+        {
+          type: 'tool-invocation',
+          toolInvocation: { toolCallId: 'call-rejected', toolName: 'lookup', args: {}, state: 'result', result: 'no' },
+        },
+      ]),
+    );
+    const stored = list.get.all.db().find(m => m.id === 'a1')!;
+    stored.content.toolInvocations = [
+      { toolCallId: 'call-kept', toolName: 'lookup', args: {}, state: 'result', result: 'ok' },
+      { toolCallId: 'call-rejected', toolName: 'lookup', args: {}, state: 'result', result: 'no' },
+    ] as MastraDBMessage['content']['toolInvocations'];
+
+    list.rollbackToLastStepBoundary('a1');
+
+    const after = list.get.all.db().find(m => m.id === 'a1')!;
+    expect((after.content.toolInvocations ?? []).map(t => t.toolCallId)).toEqual(['call-kept']);
+  });
 });

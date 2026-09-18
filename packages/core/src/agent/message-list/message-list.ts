@@ -630,6 +630,21 @@ export class MessageList {
       return true;
     }
 
+    // `content.toolInvocations` is the legacy AIV4 mirror of the tool-invocation parts, also
+    // maintained by MessageMerger. convert-to-mastra-v1 treats any entry that is in the mirror
+    // but not in `parts` as an *unprocessed* invocation and pushes it back into the prompt, so
+    // leaving the rejected step's calls behind would resurrect exactly what the rollback dropped.
+    if (Array.isArray(message.content.toolInvocations)) {
+      const survivingCallIds = new Set(
+        parts.flatMap(part =>
+          part.type === 'tool-invocation' && part.toolInvocation ? [part.toolInvocation.toolCallId] : [],
+        ),
+      );
+      message.content.toolInvocations = message.content.toolInvocations.filter(invocation =>
+        survivingCallIds.has(invocation.toolCallId),
+      );
+    }
+
     // `content.content` mirrors the latest text part (see MessageMerger), and readers such as
     // AIV4Adapter prefer it over `parts` when it is non-empty. Re-derive it from what survived,
     // otherwise the rejected attempt's text outlives the rollback whenever the retry emits no
