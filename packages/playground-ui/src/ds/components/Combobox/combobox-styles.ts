@@ -111,7 +111,10 @@ export const comboboxStyles = {
 
   /** Options list */
   // `empty:p-0` — Empty renders outside the List, so an empty List must not leave its padding behind.
-  list: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1 empty:p-0',
+  list: 'p-1 empty:p-0',
+
+  /** Scroll container around the List; hosts the fluid highlight so it scrolls with the rows. */
+  listScroller: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden',
 
   /** Option item base — rounded-lg sits concentrically inside rounded-xl + p-1. */
   item: comboboxItemClass({ multiple: false }),
