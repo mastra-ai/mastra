@@ -133,7 +133,12 @@ export function listBuiltinModePacks(): ModePack[] {
 /** A pack id is known when it is a builtin mode pack or a saved custom pack. */
 export function isKnownModePackId(packId: string, savedCustomPacks: Array<{ name: string }> = []): boolean {
   if (BUILTIN_MODE_PACKS.some(pack => pack.id === packId)) return true;
-  return packId.startsWith('custom:') && savedCustomPacks.some(pack => `custom:${pack.name}` === packId);
+  if (!packId.startsWith('custom:')) return false;
+  // Settings files are user-editable: a malformed entry (null, or an element
+  // without `name`) would throw on `pack.name` and the loader's catch-all would
+  // replace the whole saved settings object with defaults. An unusable entry is
+  // simply not a known pack id.
+  return savedCustomPacks.some(pack => typeof pack?.name === 'string' && `custom:${pack.name}` === packId);
 }
 
 /**

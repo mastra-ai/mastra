@@ -1672,6 +1672,10 @@ export class MastraTUI {
       await this.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
     }
     await this.state.session.state.set({ activeModelPackId: activeModePackId, fallbackStatus: undefined });
+    // The status line reads the TUI's own field, not the controller session
+    // state — clearing only the latter would leave "Using fallback …" on screen
+    // until the next thread sync.
+    this.state.fallbackStatus = undefined;
 
     settings.models.activeOmPackId = omPack?.id ?? null;
     settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;

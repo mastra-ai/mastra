@@ -298,9 +298,15 @@ export const accountRotationScenario: McE2eScenario = {
     await runtime.waitForScreenText(new RegExp(RESPONSE_TEXT), terminal, 30_000);
     runtime.printScreen('after preferred routing failover', terminal);
 
-    if (outbound.length === 0 || outbound[0]!.bearer !== ACCOUNT_B_ACCESS) {
+    // Bearer plus device header: a request can carry account B's token with
+    // account A's device id and still look "preferred" on the token alone.
+    if (
+      outbound.length === 0 ||
+      outbound[0]!.bearer !== ACCOUNT_B_ACCESS ||
+      outbound[0]!.deviceId !== ACCOUNT_B_DEVICE
+    ) {
       throw new Error(
-        `Expected the first Kimi request to use preferred account B: ${JSON.stringify(outboundSummary())}`,
+        `Expected the first Kimi request to use preferred account B and its device header: ${JSON.stringify(outboundSummary())}`,
       );
     }
     const lastSuccess = outbound[outbound.length - 1]!;
@@ -343,7 +349,12 @@ export const accountRotationScenario: McE2eScenario = {
     terminal.submit('Confirm sticky routing on the next message.');
     await runtime.waitForScreenText(new RegExp(FOLLOWUP_RESPONSE_TEXT), terminal, 30_000);
     const followupRequests = outbound.slice(requestsBeforeFollowup);
-    if (followupRequests.length === 0 || followupRequests.some(request => request.bearer !== ACCOUNT_A_ACCESS)) {
+    // Token *and* device header: pairing the surviving account's bearer with the
+    // exhausted account's device id would still present as sticky on bearer alone.
+    if (
+      followupRequests.length === 0 ||
+      followupRequests.some(request => request.bearer !== ACCOUNT_A_ACCESS || request.deviceId !== ACCOUNT_A_DEVICE)
+    ) {
       throw new Error(`Expected sticky routing to skip exhausted preferred B: ${JSON.stringify(outboundSummary())}`);
     }
 

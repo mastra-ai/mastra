@@ -755,7 +755,9 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ vector: vector as any });
 
-    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector);
+    // Third argument is the settings path threaded through for pack-driven
+    // observational-memory resolution; no `settingsPath` was configured here.
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector, undefined);
     expect(createVectorStoreMock).not.toHaveBeenCalled();
   });
 

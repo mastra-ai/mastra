@@ -1,6 +1,7 @@
 import {
   ACCOUNT_SWITCH_PART_TYPE,
   isAccountSwitchReason,
+  isPackFallbackReason,
   type AccountSwitchPartData,
   type PackFallbackPartData,
 } from '@mastra/code-sdk/auth/account-rotation-processor';
@@ -95,12 +96,12 @@ function packFallbackRenderPart(data: unknown): PackFallbackRenderPart | null {
   };
   const from = endpoint(record.from);
   const to = endpoint(record.to);
-  if (!from || !to || typeof record.reason !== 'string') return null;
+  if (!from || !to || !isPackFallbackReason(record.reason)) return null;
   return {
     kind: 'pack-fallback',
     from,
     to,
-    reason: record.reason as PackFallbackPartData['reason'],
+    reason: record.reason,
     at: typeof record.at === 'string' ? record.at : '',
   };
 }

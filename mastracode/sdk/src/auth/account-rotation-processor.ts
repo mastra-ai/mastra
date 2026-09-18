@@ -385,6 +385,17 @@ export function packFallbackNoticeText(data: PackFallbackPartData): string {
   return `Switched model pack: ${data.from.label} → ${data.to.label} (${reason})`;
 }
 
+/**
+ * Whether a persisted pack-fallback reason is one this build understands.
+ * `REASON_TEXT` also covers the account-switch reasons, so the notice text
+ * alone would happily render a foreign value such as `rate-limit` as a
+ * pack-fallback reason; history parsed from another build's part must be
+ * rejected instead.
+ */
+export function isPackFallbackReason(value: unknown): value is PackFallbackPartData['reason'] {
+  return value === 'pool-exhausted' || value === 'persistent-outage';
+}
+
 async function emitAccountSwitchPart(
   args: Pick<ProcessAPIErrorArgs, 'writer' | 'requestContext'> | Pick<ProcessInputArgs, 'writer' | 'requestContext'>,
   data: AccountSwitchPartData,
@@ -1015,14 +1026,14 @@ export class AccountStartNoticeProcessor implements Processor {
   async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
     if (args.state.startNoticeEmitted) return args.messageList;
 
+    // Deployed requests resolve the tenant-scoped store so host accounts are
+    // never listed, activated, or announced for a tenant run. Local mode keeps
+    // the constructor's storage.
+    const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
+
     const route = resolveAccountRoute(args, this.options.settingsPath);
     if (route) {
-      const switched = await applyPreferredAccountRoute(
-        args,
-        this.options.credentialStore,
-        this.options.settingsPath,
-        route,
-      );
+      const switched = await applyPreferredAccountRoute(args, store, this.options.settingsPath, route);
       if (switched) {
         args.state.startNoticeEmitted = true;
         return args.messageList;
@@ -1037,10 +1048,6 @@ export class AccountStartNoticeProcessor implements Processor {
 
     const providerId = route?.providerId ?? providerFromSession(args);
     if (!providerId) return args.messageList;
-
-    // Deployed requests resolve the tenant-scoped store so host accounts are
-    // never listed or announced for a tenant run.
-    const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
 
     const accounts = store.listAccounts?.(providerId) ?? [];
     if (accounts.length < 2) return args.messageList;
