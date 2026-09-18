@@ -830,10 +830,7 @@ export const tools = [${toolsExports.join(', ')}]`,
         }
       }
     } catch (error) {
-      if (
-        error instanceof MastraError &&
-        error.id === 'DEPLOYER_PNPM_IGNORED_BUILDS'
-      ) {
+      if (error instanceof MastraError && error.id === 'DEPLOYER_PNPM_IGNORED_BUILDS') {
         throw error;
       }
 
