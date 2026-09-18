@@ -1017,12 +1017,16 @@ export class AgentThreadStreamRuntime {
     }
     const ownerStreamOptions =
       typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
-    // `owner.streamOptions` belongs to whichever run claimed the thread, so it
-    // carries that run's context. A wake can carry its own — a dispatcher waking
-    // a session on behalf of an authenticated caller — and that context has to
-    // win, otherwise the run starts anonymously and downstream workspace
-    // resolution rejects the caller. The no-owner path below already prefers the
-    // incoming options; this keeps the two paths consistent.
+    // The run executes inside the claiming owner's session, so the owner's
+    // options stay authoritative for everything that shapes the run — memory,
+    // toolsets, provider options. Only `requestContext` crosses over: it
+    // identifies the caller this wake acts for rather than the shape of the run.
+    // A dispatcher waking a session on behalf of an authenticated caller needs
+    // that identity visible downstream, or the run starts anonymously and a
+    // workspace resolver that requires a caller rejects it.
+    //
+    // Deliberately narrower than the no-owner path below, which spreads the whole
+    // incoming `streamOptions` because there is no owner configuration to keep.
     const streamOptions: AgentExecutionOptions<any> | undefined =
       incomingStreamOptions?.requestContext === undefined
         ? ownerStreamOptions
@@ -1153,6 +1157,12 @@ export class AgentThreadStreamRuntime {
         AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
       );
 
+      // This event can reach a claimed owner in another process. It carries the
+      // signal, the request/reply ids and the timeout — not `requestContext`,
+      // which is an open map that may hold non-serializable values and has no
+      // wire contract. A remote owner therefore starts the run with its own
+      // options, so the caller-context handling in `#startClaimedIdleRun` covers
+      // a locally claimed owner only.
       void pubsub
         .subscribe(replyTopic, onReply)
         .then(() =>

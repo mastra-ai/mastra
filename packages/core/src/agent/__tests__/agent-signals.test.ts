@@ -1588,7 +1588,7 @@ describe('Agent signals', () => {
     expect(wrapper.stream.mock.calls[0]?.[1]).toMatchObject({ untilIdle: true, runId: accepted.runId });
   });
 
-  it('delivers directly when the current runtime owns the thread claim', async () => {
+  it('wakes the claimed owner when the current runtime owns the thread claim', async () => {
     const pubsub = new EventEmitterPubSub();
     const agent = new Agent({
       id: 'local-owner-agent',
