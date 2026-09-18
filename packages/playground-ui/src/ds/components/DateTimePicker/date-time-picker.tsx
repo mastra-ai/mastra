@@ -229,7 +229,7 @@ export const DateTimePickerContent = ({
         <div
           className={cn(
             'm-4 mb-0 text-ui-md text-neutral3',
-            '[&>svg]:float-left [&>svg]:mt-0.5 [&>svg]:mr-2 [&>svg]:size-[1.1em] [&>svg]:text-red-500',
+            '[&>svg]:float-left [&>svg]:mt-0.5 [&>svg]:mr-2 [&>svg]:size-[1.1em] [&>svg]:text-error',
           )}
         >
           <CircleAlertIcon /> {localErrorMsg}

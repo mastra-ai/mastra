@@ -44,6 +44,13 @@ export class TemporalExecutionEngine {
         return out;
       }
 
+      case 'mapping': {
+        log.info('mapping', { mappingId: entry.id });
+        const out = await this.activityHandle[entry.id]({ inputData, initData: this.initData });
+        stepResults[entry.id] = out;
+        return out;
+      }
+
       case 'sleep': {
         const duration = entry.duration ?? (entry.fn ? await this.activityHandle[entry.fn]({ inputData }) : 0);
         log.info('sleep', { id: entry.id, duration });
@@ -65,13 +72,14 @@ export class TemporalExecutionEngine {
       }
 
       case 'parallel': {
-        log.info('parallel', { steps: entry.steps.map(s => s.step.id) });
-        const results = await Promise.all(entry.steps.map(s => this.activityHandle[s.step.id]({ inputData })));
+        const entryId = parallelEntry =>
+          parallelEntry.type === 'childWorkflow' ? parallelEntry.workflowType : parallelEntry.step.id;
+        log.info('parallel', { steps: entry.steps.map(entryId) });
+        const results = await Promise.all(entry.steps.map(step => this.executeEntry(step, inputData, stepResults)));
         const out = {};
 
-        entry.steps.forEach((s, i) => {
-          out[s.step.id] = results[i];
-          stepResults[s.step.id] = results[i];
+        entry.steps.forEach((step, i) => {
+          out[entryId(step)] = results[i];
         });
 
         return out;
@@ -187,6 +195,13 @@ export function createWorkflow(workflowId, options) {
       });
       return workflow;
     },
+    map(mappingId) {
+      stepFlow.push({
+        type: 'mapping',
+        id: mappingId,
+      });
+      return workflow;
+    },
     sleep(durationOrFnId) {
       if (typeof durationOrFnId === 'number') {
         stepFlow.push({
@@ -225,15 +240,10 @@ export function createWorkflow(workflowId, options) {
       }
       return workflow;
     },
-    parallel(stepIds) {
+    parallel(entries) {
       stepFlow.push({
         type: 'parallel',
-        steps: stepIds.map(id => ({
-          type: 'step',
-          step: {
-            id,
-          },
-        })),
+        steps: entries,
       });
       return workflow;
     },

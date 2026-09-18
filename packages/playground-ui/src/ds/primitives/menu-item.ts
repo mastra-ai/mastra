@@ -71,5 +71,5 @@ export const menuSearchClasses = {
   container: 'flex items-center gap-[.75em] border-b border-border1 px-[.9em] py-0.5 text-ui-smd',
   icon: 'size-[1.1em] shrink-0 text-neutral3',
   input:
-    'h-form-md w-full bg-transparent text-ui-smd leading-ui-sm text-neutral6 outline-none placeholder:text-neutral3',
+    'h-form-md w-full bg-transparent text-ui-smd leading-ui-sm text-neutral6 outline-none placeholder:text-neutral2',
 };

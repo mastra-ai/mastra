@@ -29,8 +29,12 @@ export const controlSizeClasses: Record<ControlSize, string> = {
 
 export type ControlTriggerVisualVariant = 'default' | 'outline' | 'ghost';
 
-export const controlTriggerOpenState: Record<ControlTriggerVisualVariant, string> = {
+// Open ("popup-open") state per variant. `default` is the Button's own hover
+// (for Button-shaped triggers: DropdownMenu, Popover, DateTimePicker); `field`
+// is the Input-family overlay used by the filled Select/Combobox triggers.
+export const controlTriggerOpenState: Record<ControlTriggerVisualVariant | 'field', string> = {
   default: 'data-[popup-open]:bg-button-default-bg-hover data-[popup-open]:text-neutral6',
+  field: 'data-[popup-open]:bg-surface-overlay-strong data-[popup-open]:text-neutral6',
   outline: 'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
   ghost: 'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
 };

@@ -8,6 +8,7 @@ import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { fieldTriggerSurfaceStyle } from '@/ds/primitives/form-element';
 import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
@@ -103,11 +104,12 @@ const SelectValue = React.forwardRef<HTMLSpanElement, SelectValueProps>(({ class
 SelectValue.displayName = 'SelectValue';
 
 /**
- * A select is a form field, so it reuses the same button looks consumers see
- * everywhere: `default` (the Button's filled default surface — the default
- * here too), `outline` (bordered, transparent) and `ghost` (borderless, for
- * dense toolbars/inline pickers). The high-emphasis `primary` look is the only
- * one intentionally NOT offered (a field is not a call-to-action).
+ * A select is a form field, so it reuses the Button's size/shape recipe with
+ * these looks: `default` (the Input's overlay surface — the default here too,
+ * so a select sits next to an Input as the same kind of thing), `outline`
+ * (bordered, transparent) and `ghost` (borderless, for dense toolbars/inline
+ * pickers). The high-emphasis `primary` look is the only one intentionally NOT
+ * offered (a field is not a call-to-action).
  */
 export type SelectTriggerVariant = 'default' | 'outline' | 'ghost';
 type SelectTriggerLegacyVariant = 'primary';
@@ -137,12 +139,14 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         // focus, disabled) and layer only the select-specific extras.
         className={cn(
           buttonVariants({ variant: visualVariant, size }),
+          // The filled look is the Input surface, not the Button one.
+          visualVariant === 'default' && fieldTriggerSurfaceStyle,
           // Fill the field and push the value left / chevron right (Button's
           // base centers its content with `justify-center`).
           'w-full justify-between',
           // Read as "active" while the menu is open, per variant (see map above).
-          controlTriggerOpenState[visualVariant],
-          'data-[placeholder]:text-neutral3',
+          controlTriggerOpenState[visualVariant === 'default' ? 'field' : visualVariant],
+          'data-[placeholder]:text-neutral2',
           '[&>span]:truncate',
           className,
         )}
@@ -155,11 +159,11 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
             `[&>svg]` rules (negative `mx`, forced 50% opacity, 1.1em sizing)
             would distort and mis-position it. Wrapping it in a `<span>` keeps
             the svg one level deep so those rules can't reach it, leaving the
-            chevron pinned at the right edge at its intended size and opacity. */}
+            chevron pinned at the right edge at its intended size and color. */}
         <SelectPrimitive.Icon
           render={
             <span className="flex shrink-0 items-center">
-              <ChevronDown className={cn('size-4 opacity-60', transitions.colors)} />
+              <ChevronDown className={cn('size-4 text-neutral3', transitions.colors)} />
             </span>
           }
         />

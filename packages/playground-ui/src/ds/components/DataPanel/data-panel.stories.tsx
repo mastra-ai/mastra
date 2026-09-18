@@ -42,10 +42,8 @@ export const Default: Story = {
   render: () => (
     <DataPanel open title="Span details">
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={() => {}} />
         <DataPanel.Heading>Span Details</DataPanel.Heading>
-        <DataPanel.HeaderActions>
-          <DataPanel.CloseButton onClick={() => {}} />
-        </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
         <p className="text-ui-sm text-neutral3">Panel content goes here.</p>
@@ -58,12 +56,12 @@ export const WithNavigation: Story = {
   render: () => (
     <DataPanel open title="Trace abc123">
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={() => {}} />
         <DataPanel.Heading>
           <b>Trace</b> abc123
         </DataPanel.Heading>
         <DataPanel.HeaderActions>
           <DataPanel.NextPrevNav onPrevious={() => {}} onNext={() => {}} />
-          <DataPanel.CloseButton onClick={() => {}} />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
@@ -77,6 +75,7 @@ export const WithMetadata: Story = {
   render: () => (
     <DataPanel open title="Trace abc123">
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={() => {}} />
         <DataPanel.HeaderContent>
           <DataPanel.Heading>
             Trace <b>abc123</b>
@@ -98,11 +97,10 @@ export const WithMetadata: Story = {
             Score trace
           </Button>
           <DataPanel.NextPrevNav onPrevious={() => {}} onNext={() => {}} />
-          <DataPanel.CloseButton onClick={() => {}} />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-neutral3">Actions are centred against heading + metadata.</p>
+        <p className="text-ui-sm text-neutral3">Metadata renders inline next to the heading and truncates.</p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -112,10 +110,8 @@ export const NoData: Story = {
   render: () => (
     <DataPanel open title="Empty panel">
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={() => {}} />
         <DataPanel.Heading>Empty Panel</DataPanel.Heading>
-        <DataPanel.HeaderActions>
-          <DataPanel.CloseButton onClick={() => {}} />
-        </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.NoData />
     </DataPanel>
@@ -126,10 +122,8 @@ export const Loading: Story = {
   render: () => (
     <DataPanel open title="Loading panel">
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={() => {}} />
         <DataPanel.Heading>Loading Panel</DataPanel.Heading>
-        <DataPanel.HeaderActions>
-          <DataPanel.CloseButton onClick={() => {}} />
-        </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.LoadingData>Fetching trace data...</DataPanel.LoadingData>
     </DataPanel>
@@ -140,10 +134,8 @@ export const Wide: Story = {
   render: () => (
     <DataPanel open title="Wide panel" size="wide">
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={() => {}} />
         <DataPanel.Heading>Wide Panel</DataPanel.Heading>
-        <DataPanel.HeaderActions>
-          <DataPanel.CloseButton onClick={() => {}} />
-        </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
         <p className="text-ui-sm text-neutral3">
@@ -159,12 +151,12 @@ export const DisabledNav: Story = {
   render: () => (
     <DataPanel open title="First item">
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={() => {}} />
         <DataPanel.Heading>
           <b>First Item</b> (no previous)
         </DataPanel.Heading>
         <DataPanel.HeaderActions>
           <DataPanel.NextPrevNav onNext={() => {}} />
-          <DataPanel.CloseButton onClick={() => {}} />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
@@ -184,12 +176,10 @@ const StackedDemo = () => {
 
       <DataPanel open={outerOpen} onClose={() => setOuterOpen(false)} title="Span details">
         <DataPanel.Header>
+          <DataPanel.CloseButton onClick={() => setOuterOpen(false)} />
           <DataPanel.Heading>
             <b>Span</b> agent.generate
           </DataPanel.Heading>
-          <DataPanel.HeaderActions>
-            <DataPanel.CloseButton onClick={() => setOuterOpen(false)} />
-          </DataPanel.HeaderActions>
         </DataPanel.Header>
         <DataPanel.Content>
           <p className="text-ui-sm text-neutral3">
@@ -205,12 +195,10 @@ const StackedDemo = () => {
             className="ml-auto w-80"
           >
             <DataPanel.Header>
+              <DataPanel.CloseButton onClick={() => setInnerOpen(false)} />
               <DataPanel.Heading>
                 <b>Score</b> answer-relevancy
               </DataPanel.Heading>
-              <DataPanel.HeaderActions>
-                <DataPanel.CloseButton onClick={() => setInnerOpen(false)} />
-              </DataPanel.HeaderActions>
             </DataPanel.Header>
             <DataPanel.Content>
               <p className="text-ui-sm text-neutral3">
@@ -243,12 +231,10 @@ const SiblingsWithDepthDemo = () => {
 
       <DataPanel open={resultOpen} onClose={closeResult} title="Result" depth={1}>
         <DataPanel.Header>
+          <DataPanel.CloseButton onClick={closeResult} />
           <DataPanel.Heading>
             <b>Result</b> item-42
           </DataPanel.Heading>
-          <DataPanel.HeaderActions>
-            <DataPanel.CloseButton onClick={closeResult} />
-          </DataPanel.HeaderActions>
         </DataPanel.Header>
         <DataPanel.Content>
           <p className="text-ui-sm text-neutral3">
@@ -261,12 +247,10 @@ const SiblingsWithDepthDemo = () => {
 
       <DataPanel open={scoreOpen} onClose={() => setScoreOpen(false)} title="Score" depth={2}>
         <DataPanel.Header>
+          <DataPanel.CloseButton onClick={() => setScoreOpen(false)} />
           <DataPanel.Heading>
             <b>Score</b> answer-relevancy
           </DataPanel.Heading>
-          <DataPanel.HeaderActions>
-            <DataPanel.CloseButton onClick={() => setScoreOpen(false)} />
-          </DataPanel.HeaderActions>
         </DataPanel.Header>
         <DataPanel.Content>
           <p className="text-ui-sm text-neutral3">Escape closes this panel first; the result stays open beneath.</p>
