@@ -210,28 +210,87 @@ describe('getCopilotModelCatalog', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('still dedupes concurrent fetches on the account-less fallback path', async () => {
+  it('does not share one in-flight fetch across accounts of a store that cannot name them', async () => {
+    // An unnamed store is exactly the one that rotates inside the credential read,
+    // so its id is not stable across the await and cannot key anything. Two
+    // overlapping callers then both come up unidentified: a shared in-flight
+    // promise would hand the second the first one's models. The first request is
+    // held open so the overlap is forced rather than left to request timing.
+    let activeAccountId = 'github-copilot:tenant-a';
+    let releaseToken: () => void;
+    const tokenGate = new Promise<void>(resolve => {
+      releaseToken = resolve;
+    });
+    let tokenRequested: () => void;
+    const firstTokenRequested = new Promise<void>(resolve => {
+      tokenRequested = resolve;
+    });
     const deployedStore = {
       reload: vi.fn(),
       get: vi.fn(() => undefined),
       getStoredApiKey: vi.fn(),
-      getApiKey: vi.fn(async () => 'tid=deployed;proxy-ep=proxy.individual.githubcopilot.com;'),
+      getApiKey: vi.fn(async () => {
+        const served = activeAccountId;
+        if (served === 'github-copilot:tenant-a') {
+          tokenRequested!();
+          await tokenGate;
+        }
+        // A rotation lands inside the credential read, which is what makes the
+        // identity unavailable to this caller.
+        activeAccountId = served === 'github-copilot:tenant-a' ? 'github-copilot:tenant-b' : 'github-copilot:tenant-c';
+        return `tid=${served};proxy-ep=proxy.individual.githubcopilot.com;`;
+      }),
+      listAccounts: vi.fn(() => []),
+      getActiveAccount: vi.fn(() => ({ id: activeAccountId })),
+      activateAccount: vi.fn(),
     };
-    let resolveFetch: (r: Response) => void;
-    const fetchDeferred = new Promise<Response>(resolve => {
-      resolveFetch = resolve;
+    let releaseFirstFetch: (r: Response) => void;
+    const firstFetchDeferred = new Promise<Response>(resolve => {
+      releaseFirstFetch = resolve;
     });
-    fetchMock.mockReturnValueOnce(fetchDeferred);
+    let releaseSecondFetch: (r: Response) => void;
+    const secondFetchDeferred = new Promise<Response>(resolve => {
+      releaseSecondFetch = resolve;
+    });
+    let firstFetchStarted: () => void;
+    const fetchStarted = new Promise<void>(resolve => {
+      firstFetchStarted = resolve;
+    });
+    let secondFetchStarted = false;
+    let fetchCount = 0;
+    fetchMock.mockImplementation(() => {
+      fetchCount += 1;
+      if (fetchCount === 1) {
+        firstFetchStarted!();
+        return firstFetchDeferred;
+      }
+      secondFetchStarted = true;
+      return secondFetchDeferred;
+    });
 
     const { getCopilotModelCatalog } = await import('../github-copilot.js');
-    const promiseA = getCopilotModelCatalog({ authStorage: deployedStore as any });
-    const promiseB = getCopilotModelCatalog({ authStorage: deployedStore as any });
+    const first = getCopilotModelCatalog({ authStorage: deployedStore as any });
+    await firstTokenRequested;
+    releaseToken!();
+    await fetchStarted;
+    const second = getCopilotModelCatalog({ authStorage: deployedStore as any });
+    // Let the second caller reach its decision point while the first request is
+    // still open: sharing would mean it never issues one of its own.
+    await new Promise(resolve => setTimeout(resolve, 0));
 
-    resolveFetch!(jsonResponse({ data: [{ id: 'model-a', model_picker_enabled: true }] }));
+    releaseFirstFetch!(jsonResponse({ data: [{ id: 'model-a', model_picker_enabled: true }] }));
+    if (secondFetchStarted) {
+      releaseSecondFetch!(jsonResponse({ data: [{ id: 'model-b', model_picker_enabled: true }] }));
+    }
 
-    const [a, b] = await Promise.all([promiseA, promiseB]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(a).toBe(b);
+    const [a, b] = await Promise.all([first, second]);
+
+    expect(secondFetchStarted).toBe(true);
+    expect(a.map(model => model.id)).toEqual(['model-a']);
+    expect(b.map(model => model.id)).toEqual(['model-b']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((fetchMock.mock.calls[0]![1].headers as Record<string, string>).Authorization).toContain('tenant-a');
+    expect((fetchMock.mock.calls[1]![1].headers as Record<string, string>).Authorization).toContain('tenant-b');
   });
 
   it('fetches /models against the proxy-ep base URL with the bearer token', async () => {
@@ -304,12 +363,14 @@ describe('getCopilotModelCatalog', () => {
     expect(a).toBe(b);
   });
 
-  it('shares the inflight fetch across concurrent callers', async () => {
+  it('shares the inflight fetch across concurrent callers of one account', async () => {
     githubCopilotStorage.getOAuthCredential.mockResolvedValue({
       type: 'oauth',
       access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
       refresh: 'ghu_x',
       expires: Date.now() + 60_000,
+      // Sharing is only safe once the account is known — see the unnamed-store case below.
+      accountInstanceId: 'github-copilot:test-account',
     });
 
     let resolveFetch: (r: Response) => void;

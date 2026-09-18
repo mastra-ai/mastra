@@ -411,16 +411,19 @@ export async function getCopilotModelCatalog(
   const baseUrl = getGitHubCopilotBaseUrl(accessToken, enterpriseUrl);
   // No identity means the store cannot name the account it just served, so the
   // TTL cache cannot be keyed per account — one entry would outlive the request
-  // and serve those models to every other account of the store. Skip it and
-  // keep the concurrent-fetch dedupe, which cannot outlive the in-flight fetch.
+  // and serve those models to every other account of the store. The in-flight
+  // map is no safer: two callers that resolved *different* accounts of an
+  // unnamed store would otherwise collide on one key and share whichever
+  // catalog was fetched first. So both caches are identified-only, and an
+  // unnamed store pays one `/models` request per call.
   const credentialKey = accountInstanceId === undefined ? undefined : `${accountInstanceId}\0${baseUrl}`;
-  const dedupeKey = credentialKey ?? `${COPILOT_PROVIDER_ID}\0${baseUrl}`;
+  const dedupeKey = credentialKey;
 
   const now = Date.now();
   const cached = credentialKey ? catalogCache.get(credentialKey) : undefined;
   if (cached && now - cached.fetchedAt < cached.ttl) return cached.models;
 
-  const existingFetch = inflightFetches.get(dedupeKey);
+  const existingFetch = dedupeKey === undefined ? undefined : inflightFetches.get(dedupeKey);
   if (existingFetch) return existingFetch;
 
   const fetchPromise = (async (): Promise<CopilotModelEntry[]> => {
@@ -452,9 +455,9 @@ export async function getCopilotModelCatalog(
       );
       return COPILOT_FALLBACK_MODELS;
     } finally {
-      inflightFetches.delete(dedupeKey);
+      if (dedupeKey !== undefined) inflightFetches.delete(dedupeKey);
     }
   })();
-  inflightFetches.set(dedupeKey, fetchPromise);
+  if (dedupeKey !== undefined) inflightFetches.set(dedupeKey, fetchPromise);
   return fetchPromise;
 }
