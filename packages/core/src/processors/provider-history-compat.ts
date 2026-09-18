@@ -708,6 +708,95 @@ export const azureSystemReminderTransform: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
+// Built-in rule: OpenAI orphaned message itemId
+// ---------------------------------------------------------------------------
+
+function openaiItemId(part: MastraMessagePart): string | undefined {
+  const meta = (part as { providerMetadata?: { openai?: { itemId?: unknown } } }).providerMetadata?.openai;
+  return typeof meta?.itemId === 'string' ? meta.itemId : undefined;
+}
+
+function hasReasoningPart(message: MastraDBMessage): boolean {
+  return (message.content?.parts ?? []).some(p => p.type === 'reasoning');
+}
+
+/**
+ * Strips `itemId` from a part's OpenAI metadata, leaving every other field
+ * (cache counts, reasoning-token counts, logprobs) intact. Mirrors the narrow
+ * destructure in `client-sdks/ai-sdk/src/helpers.ts` (PR #23323).
+ */
+function stripItemId(part: MastraMessagePart): void {
+  const meta = (part as { providerMetadata?: { openai?: Record<string, unknown> } }).providerMetadata;
+  if (!meta?.openai) return;
+  const { itemId: _itemId, ...rest } = meta.openai;
+  meta.openai = rest;
+}
+
+/**
+ * OpenAI's Responses API replays a persisted assistant message by reference
+ * (`item_reference`) when the message carries an `itemId` (`msg_…`). If that
+ * message has no accompanying `reasoning` item, the request is rejected with a
+ * non-retryable 400:
+ *
+ * ```
+ * Item 'msg_…' of type 'message' was provided without its required 'reasoning' item: 'rs_…'
+ * ```
+ *
+ * Because the offending message is already persisted, that 400 repeats on every
+ * subsequent turn, permanently breaking the thread. This rule is a recovery
+ * seatbelt for histories that are *already* corrupted: dropping the `itemId`
+ * makes the message replay by value instead of by reference, which OpenAI
+ * accepts. The content the user sees is unchanged.
+ *
+ * Reactive by design — it fires only after OpenAI has actually rejected the
+ * request, so a legitimately reasoning-free message (e.g.
+ * `reasoning.effort: 'none'`, or a non-reasoning model) is never touched.
+ *
+ * Deliberately narrow:
+ * - Matches only the `of type 'message'` phrasing. The sibling `function_call`
+ *   (`fc_…`) variant is a different failure, addressed by PR #19408.
+ * - Strips only `itemId`; all other `providerMetadata.openai` fields survive.
+ * - Skips a message whose reasoning lives on the immediately preceding
+ *   assistant message. Stored history can split one turn across adjacent
+ *   assistant rows (adjacent rows are merged when streamed, but not when
+ *   loaded from storage), and in that case the reasoning item *is* present in
+ *   the prompt — stripping the id there would fix nothing and would discard a
+ *   valid reference.
+ *
+ * This is a seatbelt, not the cure: the path that produces these orphans is
+ * fixed separately in the processor-retry rollback (#22291).
+ */
+export const openaiOrphanItemId: CompatRule = {
+  name: 'openai-orphan-item-id',
+  errorPatterns: [/Item '[^']*' of type 'message' was provided without its required 'reasoning' item/i],
+  fix(messages) {
+    let mutated = false;
+
+    messages.forEach((message, index) => {
+      if (message.role !== 'assistant') return;
+
+      const parts = message.content?.parts;
+      if (!parts?.length) return;
+      if (hasReasoningPart(message)) return;
+
+      // Split-history guard: the reasoning item for this turn may sit on the
+      // preceding assistant row, in which case the reference is satisfiable.
+      const previous = messages[index - 1];
+      if (previous?.role === 'assistant' && hasReasoningPart(previous)) return;
+
+      for (const part of parts) {
+        if (part.type !== 'text') continue;
+        if (!openaiItemId(part)) continue;
+        stripItemId(part);
+        mutated = true;
+      }
+    });
+
+    return mutated;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
 
@@ -723,6 +812,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicStripForeignReasoningContent,
   anthropicStripForeignSignedReasoning,
   azureSystemReminderTransform,
+  openaiOrphanItemId,
 ];
 
 // ---------------------------------------------------------------------------
@@ -758,6 +848,11 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   provider different from the current target (preemptive). Turns emptied of
  *   all content by the drop are removed from the prompt. Unstamped history is
  *   left untouched.
+ * - **openai-orphan-item-id** — drops the OpenAI `itemId` from an assistant
+ *   message that carries one but has no `reasoning` part, so it replays by
+ *   value instead of as an unsatisfiable `item_reference`. Reactive (matches
+ *   the specific `of type 'message' … without its required 'reasoning' item`
+ *   400); a recovery seatbelt for already-corrupted history.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts

@@ -1336,3 +1336,248 @@ describe('anthropicStripForeignSignedReasoning', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// openai-orphan-item-id (#22291)
+// ---------------------------------------------------------------------------
+
+describe('openaiOrphanItemId', () => {
+  const ORPHAN_ID = 'msg_68ab1c9f0orphan';
+  const REASONING_ID = 'rs_68ab1c9f0reason';
+
+  /** The real OpenAI 400 from #22291. */
+  function createOrphanItemError() {
+    const message =
+      `Item '${ORPHAN_ID}' of type 'message' was provided without its required ` +
+      `'reasoning' item: '${REASONING_ID}'.`;
+    return new APICallError({
+      message,
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message, type: 'invalid_request_error', code: null } }),
+      isRetryable: false,
+    });
+  }
+
+  /** The sibling `fc_…` variant already fixed by #19408 — must NOT match this rule. */
+  function createOrphanFunctionCallError() {
+    const message =
+      `Item 'fc_68ab1c9f0tool' of type 'function_call' was provided without its required ` +
+      `'reasoning' item: '${REASONING_ID}'.`;
+    return new APICallError({
+      message,
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message, type: 'invalid_request_error' } }),
+      isRetryable: false,
+    });
+  }
+
+  /** Assistant message carrying an OpenAI itemId on its text part and no reasoning part. */
+  function orphanAssistant(itemId: string = ORPHAN_ID) {
+    return {
+      id: `msg-orphan-${itemId}`,
+      role: 'assistant' as const,
+      content: {
+        format: 2 as const,
+        parts: [
+          {
+            type: 'text' as const,
+            text: 'Lyon has a population of 522,969.',
+            providerMetadata: {
+              openai: {
+                itemId,
+                cachedPromptTokens: 1024,
+                reasoningTokens: 256,
+                logprobs: [{ token: 'Lyon', logprob: -0.01 }],
+              },
+            },
+          },
+        ],
+      },
+      createdAt: new Date(),
+    };
+  }
+
+  /** A healthy assistant message: itemId present AND a reasoning part alongside it. */
+  function healthyAssistant() {
+    return {
+      id: 'msg-healthy',
+      role: 'assistant' as const,
+      content: {
+        format: 2 as const,
+        parts: [
+          {
+            type: 'reasoning' as const,
+            text: 'Recall the population figure.',
+            providerMetadata: { openai: { itemId: REASONING_ID } },
+          },
+          {
+            type: 'text' as const,
+            text: 'About 522,969.',
+            providerMetadata: { openai: { itemId: 'msg_healthy_text' } },
+          },
+        ],
+      },
+      createdAt: new Date(),
+    };
+  }
+
+  function orphanArgs(
+    build: (list: MessageList) => void,
+    overrides: Partial<ProcessAPIErrorArgs> = {},
+  ): ProcessAPIErrorArgs {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    build(messageList);
+    return {
+      error: createOrphanItemError(),
+      messages: messageList.get.all.db(),
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('abort');
+      }) as any,
+      ...overrides,
+    };
+  }
+
+  function textPartMetadata(args: ProcessAPIErrorArgs, messageId: string) {
+    const msg = args.messageList.get.all.db().find(m => m.id === messageId);
+    const part = msg!.content.parts.find(p => p.type === 'text');
+    return (part as { providerMetadata?: { openai?: Record<string, unknown> } }).providerMetadata?.openai;
+  }
+
+  // --- SC4: the corrupted history recovers instead of hard-failing -----------
+
+  it('A1: signals a retry when OpenAI rejects an orphaned message item', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+  });
+
+  it('A2: strips the orphaned itemId so the replay no longer sends an item_reference', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).not.toHaveProperty('itemId');
+  });
+
+  // --- SC5: nothing else under providerMetadata.openai is collateral --------
+
+  it('A3: preserves every other providerMetadata.openai field', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).toEqual({
+      cachedPromptTokens: 1024,
+      reasoningTokens: 256,
+      logprobs: [{ token: 'Lyon', logprob: -0.01 }],
+    });
+  });
+
+  // --- Blast-radius guards --------------------------------------------------
+
+  it('A4: leaves a healthy itemId+reasoning message untouched', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([healthyAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, 'msg-healthy')).toEqual({ itemId: 'msg_healthy_text' });
+  });
+
+  it('A5: does not fire on an unrelated 400', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(
+      list => {
+        list.add([createUserMessage('population of Lyon?')], 'input');
+        list.add([orphanAssistant()], 'memory');
+        list.add([createUserMessage('and Paris?')], 'input');
+      },
+      { error: createRateLimitError() },
+    );
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toBeUndefined();
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).toHaveProperty('itemId', ORPHAN_ID);
+  });
+
+  it('A6: does not claim the fc_… variant already handled by #19408', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(
+      list => {
+        list.add([createUserMessage('population of Lyon?')], 'input');
+        list.add([orphanAssistant()], 'memory');
+        list.add([createUserMessage('and Paris?')], 'input');
+      },
+      { error: createOrphanFunctionCallError() },
+    );
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toBeUndefined();
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).toHaveProperty('itemId', ORPHAN_ID);
+  });
+
+  it('A7: split-history guard — keeps the itemId when the reasoning sits on the preceding assistant message', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-split-reasoning',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'reasoning' as const,
+                  text: 'Recall the figure.',
+                  providerMetadata: { openai: { itemId: REASONING_ID } },
+                },
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([orphanAssistant('msg_split_text')], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, 'msg-orphan-msg_split_text')).toHaveProperty('itemId', 'msg_split_text');
+  });
+});
