@@ -136,7 +136,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       }
 
       // Inject CDP URL into all browser CLI commands in the chain
-      command = await browserCliHandler.injectCdpUrl(command, cdpUrl, threadId);
+      command = browserCliHandler.injectCdpUrl(command, cdpUrl, threadId);
     }
   } else if (browser && browserClis.length > 0 && usingExternalCdp && externalCdpUrl) {
     // Agent is using their own external CDP - connect BrowserViewer to it for screencast

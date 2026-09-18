@@ -15,7 +15,7 @@ describe('BrowserCliHandler', () => {
   });
 
   describe('Browser Use stdin', () => {
-    it.each(['browser-use', 'browseruse', 'browser', 'bu'])('preserves %s stdin through a real shell', async alias => {
+    it.each(['browser-use', 'browseruse', 'browser', 'bu'])('preserves %s stdin through a real shell', alias => {
       const directory = mkdtempSync(join(tmpdir(), 'browser-use-'));
       const payload = `print("a; b && c || d")\nprint('--cdp-url ws://external/browser')\nprint("$HOME $(echo unexpected) \\\"")\n`;
       const cdpUrl = `ws://localhost/browser/a'b?x=$(echo unexpected)&y=1`;
@@ -31,7 +31,7 @@ describe('BrowserCliHandler', () => {
         expect(analysis.browserClis.map(cli => cli.name)).toEqual(['browser-use']);
         expect(analysis.usingExternalCdp).toBe(false);
         expect(analysis.externalCdpUrl).toBeNull();
-        const transformed = await handler.injectCdpUrl(command, cdpUrl, `thread'; echo unexpected`);
+        const transformed = handler.injectCdpUrl(command, cdpUrl, `thread'; echo unexpected`);
         const output = execFileSync('sh', ['-c', transformed], {
           encoding: 'utf8',
           env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
@@ -55,7 +55,7 @@ describe('BrowserCliHandler', () => {
       'true; browser-use > result.txt < script.py; cat result.txt',
       'browser-use > result.txt < script.py; cat result.txt',
       "true && browser-use <<'PY'\nPAYLOADPY\n",
-    ])('preserves stdin and environment for %s', async template => {
+    ])('preserves stdin and environment for %s', template => {
       const directory = mkdtempSync(join(tmpdir(), 'browser-use-chain-'));
       const payload = 'print("a; b && c || d")\nprint("browser-use --cdp-url external")\n';
       try {
@@ -67,15 +67,11 @@ describe('BrowserCliHandler', () => {
         writeFileSync(join(directory, 'script.py'), payload);
         const command = template.replace('PAYLOAD', payload);
         expect(handler.analyzeCommand(command).usingExternalCdp).toBe(false);
-        const output = execFileSync(
-          'sh',
-          ['-c', await handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread')],
-          {
-            cwd: directory,
-            encoding: 'utf8',
-            env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
-          },
-        );
+        const output = execFileSync('sh', ['-c', handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread')], {
+          cwd: directory,
+          encoding: 'utf8',
+          env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
+        });
         const [argc, endpoint, name, ...stdin] = output.split('\n');
         expect(argc).toBe('0');
         expect(endpoint).toBe('ws://localhost/browser');
@@ -101,7 +97,7 @@ describe('BrowserCliHandler', () => {
       "agent-browser open https://example.com &&\nbrowser-use <<'PY'\nPAYLOADPY\n",
       "agent-browser open https://example.com && browser-use <<'PY'\nPAYLOADPY\n",
       "browser-use <<'PY' && agent-browser open https://example.com\nPAYLOADPY\n",
-    ])('retains both CLI transports and warmup for %s', async template => {
+    ])('retains both CLI transports and warmup for %s', template => {
       const directory = mkdtempSync(join(tmpdir(), 'browser-use-mixed-'));
       const payload = 'print("agent-browser --cdp ws://external; browser-use && bu")\n';
       const endpoint = 'ws://localhost/managed';
@@ -122,7 +118,7 @@ describe('BrowserCliHandler', () => {
         expect(handler.getWarmupCommands('browser', analysis.browserClis, endpoint, 'thread')).toEqual([
           { cliName: 'agent-browser', command: `agent-browser --session thread connect ${endpoint}` },
         ]);
-        const output = execFileSync('sh', ['-c', await handler.injectCdpUrl(command, endpoint, 'thread')], {
+        const output = execFileSync('sh', ['-c', handler.injectCdpUrl(command, endpoint, 'thread')], {
           cwd: directory,
           encoding: 'utf8',
           env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
@@ -142,21 +138,21 @@ describe('BrowserCliHandler', () => {
 
     it.each(['browser-use', 'bu  ', 'browser< script.py', 'browseruse < script.py'])(
       'uses environment transport for %s',
-      async command => {
+      command => {
         expect(handler.analyzeCommand(command).browserClis.map(cli => cli.name)).toEqual(['browser-use']);
-        const result = await handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread');
+        const result = handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread');
         expect(result).toMatch(/^BU_CDP_WS=/);
         expect(result).not.toMatch(/--cdp-url|--session/);
       },
     );
 
-    it('isolates daemon names by thread and endpoint while keeping repeated calls stable', async () => {
-      const name = async (thread?: string, endpoint = 'ws://localhost/one') =>
-        (await handler.injectCdpUrl('bu', endpoint, thread)).match(/BU_NAME=(\S+)/)?.[1];
-      expect(await name('one')).toBe(await name('one'));
-      expect(await name('one')).not.toBe(await name('two'));
-      expect(await name('one')).not.toBe(await name('one', 'ws://localhost/two'));
-      expect(await name()).toBe(await name('default'));
+    it('isolates daemon names by thread and endpoint while keeping repeated calls stable', () => {
+      const name = (thread?: string, endpoint = 'ws://localhost/one') =>
+        handler.injectCdpUrl('bu', endpoint, thread).match(/BU_NAME=(\S+)/)?.[1];
+      expect(name('one')).toBe(name('one'));
+      expect(name('one')).not.toBe(name('two'));
+      expect(name('one')).not.toBe(name('one', 'ws://localhost/two'));
+      expect(name()).toBe(name('default'));
     });
 
     it.each([
@@ -166,20 +162,20 @@ describe('BrowserCliHandler', () => {
       'browser-use > result.txt open https://example.com',
       'echo browser-use',
       'echo "true && browser-use < script.py"',
-    ])('does not select stdin transport for %s', async command => {
-      expect(await handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread')).not.toMatch(/^BU_CDP_WS=/);
+    ])('does not select stdin transport for %s', command => {
+      expect(handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread')).not.toMatch(/^BU_CDP_WS=/);
     });
   });
 
   describe('getBrowserCliConfig', () => {
-    it('detects agent-browser commands', async () => {
+    it('detects agent-browser commands', () => {
       const result = handler.getBrowserCliConfig('agent-browser open https://google.com');
       expect(result).not.toBeNull();
       expect(result!.name).toBe('agent-browser');
       expect(result!.config.flag).toBe('--cdp');
     });
 
-    it('detects browser-use commands with various aliases', async () => {
+    it('detects browser-use commands with various aliases', () => {
       const aliases = ['browser-use', 'browseruse', 'browser', 'bu'];
       for (const alias of aliases) {
         const result = handler.getBrowserCliConfig(`${alias} open google.com`);
@@ -189,27 +185,27 @@ describe('BrowserCliHandler', () => {
       }
     });
 
-    it('detects browse commands', async () => {
+    it('detects browse commands', () => {
       const result = handler.getBrowserCliConfig('browse navigate https://example.com');
       expect(result).not.toBeNull();
       expect(result!.name).toBe('browse');
       expect(result!.config.flag).toBe('--ws');
     });
 
-    it('returns null for non-browser commands', async () => {
+    it('returns null for non-browser commands', () => {
       expect(handler.getBrowserCliConfig('ls -la')).toBeNull();
       expect(handler.getBrowserCliConfig('npm install')).toBeNull();
       expect(handler.getBrowserCliConfig('echo hello')).toBeNull();
     });
 
-    it('does not match when CLI name is in the middle of another word', async () => {
+    it('does not match when CLI name is in the middle of another word', () => {
       // "mybrowser" should not match "browser" pattern
       expect(handler.getBrowserCliConfig('mybrowser test')).toBeNull();
       // "notbrowse" should not match "browse" pattern
       expect(handler.getBrowserCliConfig('notbrowse test')).toBeNull();
     });
 
-    it('matches hyphenated extensions due to word boundary behavior', async () => {
+    it('matches hyphenated extensions due to word boundary behavior', () => {
       // `\b` treats hyphens as word boundaries, so "browser-use-extra" matches "browser-use"
       // This is expected behavior - the command still starts with a valid CLI name
       const result = handler.getBrowserCliConfig('browser-use-extra test');
@@ -220,90 +216,90 @@ describe('BrowserCliHandler', () => {
 
   describe('hasExternalCdpFlag', () => {
     describe('agent-browser', () => {
-      it('detects connect subcommand with wss URL', async () => {
+      it('detects connect subcommand with wss URL', () => {
         const parts = ['agent-browser connect wss://cdp.example.com/devtools'];
         expect(handler.hasExternalCdpFlag(parts)).toBe(true);
       });
 
-      it('detects connect subcommand with ws URL', async () => {
+      it('detects connect subcommand with ws URL', () => {
         const parts = ['agent-browser connect ws://localhost:9222'];
         expect(handler.hasExternalCdpFlag(parts)).toBe(true);
       });
 
-      it('detects --cdp flag with full wss URL', async () => {
+      it('detects --cdp flag with full wss URL', () => {
         const parts = ['agent-browser --cdp wss://cdp.example.com open https://google.com'];
         expect(handler.hasExternalCdpFlag(parts)).toBe(true);
       });
 
-      it('detects --cdp flag with port number as external', async () => {
+      it('detects --cdp flag with port number as external', () => {
         // Port-only --cdp connects to existing Chrome on that port
         const parts = ['agent-browser --cdp 9222 open https://google.com'];
         expect(handler.hasExternalCdpFlag(parts)).toBe(true);
       });
 
-      it('does not detect connect without URL', async () => {
+      it('does not detect connect without URL', () => {
         const parts = ['agent-browser connect'];
         expect(handler.hasExternalCdpFlag(parts)).toBe(false);
       });
     });
 
     describe('browser-use', () => {
-      it('detects --cdp-url flag', async () => {
+      it('detects --cdp-url flag', () => {
         const parts = ['browser --cdp-url wss://cdp.example.com open google.com'];
         expect(handler.hasExternalCdpFlag(parts)).toBe(true);
       });
 
-      it('detects --cdp-url with quoted URL', async () => {
+      it('detects --cdp-url with quoted URL', () => {
         const parts = ['browser --cdp-url "wss://cdp.example.com" open google.com'];
         expect(handler.hasExternalCdpFlag(parts)).toBe(true);
       });
     });
 
     describe('browse', () => {
-      it('detects --ws flag', async () => {
+      it('detects --ws flag', () => {
         const parts = ['browse --ws wss://cdp.example.com navigate https://example.com'];
         expect(handler.hasExternalCdpFlag(parts)).toBe(true);
       });
     });
 
-    it('detects external CDP in chained commands', async () => {
+    it('detects external CDP in chained commands', () => {
       const parts = ['echo hello', 'agent-browser connect wss://cdp.example.com', 'ls'];
       expect(handler.hasExternalCdpFlag(parts)).toBe(true);
     });
 
-    it('returns false when no external CDP detected', async () => {
+    it('returns false when no external CDP detected', () => {
       const parts = ['agent-browser open https://google.com', 'echo done'];
       expect(handler.hasExternalCdpFlag(parts)).toBe(false);
     });
   });
 
   describe('extractExternalCdpUrl', () => {
-    it('extracts URL from agent-browser connect command', async () => {
+    it('extracts URL from agent-browser connect command', () => {
       const parts = ['agent-browser connect wss://cdp.example.com/devtools/browser/123'];
       expect(handler.extractExternalCdpUrl(parts)).toBe('wss://cdp.example.com/devtools/browser/123');
     });
 
-    it('extracts URL from agent-browser --cdp flag', async () => {
+    it('extracts URL from agent-browser --cdp flag', () => {
       const parts = ['agent-browser --cdp wss://cdp.example.com open https://google.com'];
       expect(handler.extractExternalCdpUrl(parts)).toBe('wss://cdp.example.com');
     });
 
-    it('extracts URL from browser-use --cdp-url flag', async () => {
+    it('extracts URL from browser-use --cdp-url flag', () => {
       const parts = ['browser --cdp-url wss://cdp.example.com/ws open google.com'];
       expect(handler.extractExternalCdpUrl(parts)).toBe('wss://cdp.example.com/ws');
     });
 
-    it('extracts URL from quoted strings', async () => {
+    it('extracts URL from quoted strings', () => {
       const parts = ['agent-browser connect "wss://cdp.example.com/devtools"'];
       expect(handler.extractExternalCdpUrl(parts)).toBe('wss://cdp.example.com/devtools');
     });
 
-    it('extracts URL from single-quoted strings', async () => {
+    it('extracts URL from single-quoted strings', () => {
       const parts = ["agent-browser connect 'wss://cdp.example.com/devtools'"];
       expect(handler.extractExternalCdpUrl(parts)).toBe('wss://cdp.example.com/devtools');
     });
 
-    it('returns first CDP URL found in chained commands', async () => {
+    it('returns first CDP URL found in chained commands', () => {
       const parts = [
         'agent-browser connect wss://first.example.com',
         'browse --ws wss://second.example.com navigate https://test.com',
@@ -311,7 +307,7 @@ describe('BrowserCliHandler', () => {
       expect(handler.extractExternalCdpUrl(parts)).toBe('wss://first.example.com');
     });
 
-    it('returns null when no external CDP URL present', async () => {
+    it('returns null when no external CDP URL present', () => {
       const parts = ['agent-browser open https://google.com'];
       expect(handler.extractExternalCdpUrl(parts)).toBeNull();
     });
@@ -322,54 +318,54 @@ describe('BrowserCliHandler', () => {
     const threadId = 'thread-001';
 
     describe('agent-browser', () => {
-      it('injects CDP URL and session flag', async () => {
-        const result = await handler.injectCdpUrl('agent-browser open https://google.com', cdpUrl, threadId);
+      it('injects CDP URL and session flag', () => {
+        const result = handler.injectCdpUrl('agent-browser open https://google.com', cdpUrl, threadId);
         expect(result).toContain('--cdp');
         expect(result).toContain('--session');
         expect(result).toMatch(/agent-browser --cdp .+ --session .+ open/);
       });
 
-      it('does not inject if CDP flag already present', async () => {
+      it('does not inject if CDP flag already present', () => {
         const original = 'agent-browser --cdp wss://other.com open https://google.com';
-        const result = await handler.injectCdpUrl(original, cdpUrl, threadId);
+        const result = handler.injectCdpUrl(original, cdpUrl, threadId);
         expect(result).toBe(original);
       });
 
-      it('does not inject session flag if already present', async () => {
+      it('does not inject session flag if already present', () => {
         const original = 'agent-browser --session existing-session open https://google.com';
-        const result = await handler.injectCdpUrl(original, cdpUrl, threadId);
+        const result = handler.injectCdpUrl(original, cdpUrl, threadId);
         expect(result).toContain('--cdp');
         expect(result).not.toMatch(/--session.*--session/); // Only one --session
       });
     });
 
     describe('browser-use', () => {
-      it('injects CDP URL and session flag', async () => {
-        const result = await handler.injectCdpUrl('browser open google.com', cdpUrl, threadId);
+      it('injects CDP URL and session flag', () => {
+        const result = handler.injectCdpUrl('browser open google.com', cdpUrl, threadId);
         expect(result).toContain('--cdp-url');
         expect(result).toContain('--session');
       });
 
-      it('works with all aliases', async () => {
+      it('works with all aliases', () => {
         for (const alias of ['browser-use', 'browseruse', 'browser', 'bu']) {
-          const result = await handler.injectCdpUrl(`${alias} open google.com`, cdpUrl, threadId);
+          const result = handler.injectCdpUrl(`${alias} open google.com`, cdpUrl, threadId);
           expect(result).toContain('--cdp-url');
         }
       });
     });
 
     describe('browse', () => {
-      it('injects CDP URL without session flag (browse has no session flag)', async () => {
-        const result = await handler.injectCdpUrl('browse navigate https://example.com', cdpUrl, threadId);
+      it('injects CDP URL without session flag (browse has no session flag)', () => {
+        const result = handler.injectCdpUrl('browse navigate https://example.com', cdpUrl, threadId);
         expect(result).toContain('--ws');
         expect(result).not.toContain('--session');
       });
     });
 
     describe('chained commands', () => {
-      it('injects into multiple browser CLI commands', async () => {
+      it('injects into multiple browser CLI commands', () => {
         const command = 'agent-browser open https://google.com && agent-browser snapshot';
-        const result = await handler.injectCdpUrl(command, cdpUrl, threadId);
+        const result = handler.injectCdpUrl(command, cdpUrl, threadId);
 
         // Both commands should have injection
         const parts = result.split('&&');
@@ -377,18 +373,18 @@ describe('BrowserCliHandler', () => {
         expect(parts[1]).toContain('--cdp');
       });
 
-      it('only injects into browser CLI parts', async () => {
+      it('only injects into browser CLI parts', () => {
         const command = 'echo "Starting" && agent-browser open https://google.com && echo "Done"';
-        const result = await handler.injectCdpUrl(command, cdpUrl, threadId);
+        const result = handler.injectCdpUrl(command, cdpUrl, threadId);
 
         expect(result).toContain('echo "Starting"');
         expect(result).toContain('--cdp');
         expect(result).toContain('echo "Done"');
       });
 
-      it('handles || and ; operators', async () => {
+      it('handles || and ; operators', () => {
         const command = 'agent-browser open https://google.com || browse navigate https://example.com';
-        const result = await handler.injectCdpUrl(command, cdpUrl, threadId);
+        const result = handler.injectCdpUrl(command, cdpUrl, threadId);
 
         expect(result).toContain('--cdp');
         expect(result).toContain('--ws');
@@ -396,18 +392,18 @@ describe('BrowserCliHandler', () => {
       });
     });
 
-    it('escapes special characters in URLs', async () => {
+    it('escapes special characters in URLs', () => {
       const specialUrl = "ws://localhost:9222/devtools?foo=bar&baz='test'";
-      const result = await handler.injectCdpUrl('agent-browser open https://google.com', specialUrl, threadId);
+      const result = handler.injectCdpUrl('agent-browser open https://google.com', specialUrl, threadId);
 
       // Should be shell-escaped - verify the full escaped URL is present
       // Single quotes in URL get escaped as '\'' (end quote, escaped quote, start quote)
       expect(result).toContain("'ws://localhost:9222/devtools?foo=bar&baz='\\''test'\\'''");
     });
 
-    it('escapes special characters in thread IDs', async () => {
+    it('escapes special characters in thread IDs', () => {
       const specialThreadId = 'thread;rm -rf /';
-      const result = await handler.injectCdpUrl('agent-browser open https://google.com', cdpUrl, specialThreadId);
+      const result = handler.injectCdpUrl('agent-browser open https://google.com', cdpUrl, specialThreadId);
 
       // Should be shell-escaped to prevent command injection
       expect(result).toContain("'thread;rm -rf /'");
@@ -419,7 +415,7 @@ describe('BrowserCliHandler', () => {
     const cliName = 'agent-browser';
     const threadId = 'thread-001';
 
-    it('tracks warmup state correctly', async () => {
+    it('tracks warmup state correctly', () => {
       expect(handler.isWarmedUp(browserId, cliName, threadId)).toBe(false);
 
       handler.markWarmedUp(browserId, cliName, threadId);
@@ -427,28 +423,28 @@ describe('BrowserCliHandler', () => {
       expect(handler.isWarmedUp(browserId, cliName, threadId)).toBe(true);
     });
 
-    it('isolates warmup state by browser ID', async () => {
+    it('isolates warmup state by browser ID', () => {
       handler.markWarmedUp('browser-1', cliName, threadId);
 
       expect(handler.isWarmedUp('browser-1', cliName, threadId)).toBe(true);
       expect(handler.isWarmedUp('browser-2', cliName, threadId)).toBe(false);
     });
 
-    it('isolates warmup state by CLI name', async () => {
+    it('isolates warmup state by CLI name', () => {
       handler.markWarmedUp(browserId, 'agent-browser', threadId);
 
       expect(handler.isWarmedUp(browserId, 'agent-browser', threadId)).toBe(true);
       expect(handler.isWarmedUp(browserId, 'browser-use', threadId)).toBe(false);
     });
 
-    it('isolates warmup state by thread ID', async () => {
+    it('isolates warmup state by thread ID', () => {
       handler.markWarmedUp(browserId, cliName, 'thread-1');
 
       expect(handler.isWarmedUp(browserId, cliName, 'thread-1')).toBe(true);
       expect(handler.isWarmedUp(browserId, cliName, 'thread-2')).toBe(false);
     });
 
-    it('registers cleanup callback and clears state on browser close', async () => {
+    it('registers cleanup callback and clears state on browser close', () => {
       const cleanupCallback = vi.fn();
       let onBrowserClosedCallback: (() => void) | undefined;
 
@@ -470,7 +466,7 @@ describe('BrowserCliHandler', () => {
       expect(handler.isWarmedUp(browserId, cliName, threadId)).toBe(false);
     });
 
-    it('does not register duplicate cleanup callbacks', async () => {
+    it('does not register duplicate cleanup callbacks', () => {
       const mockBrowser = {
         onBrowserClosed: vi.fn(() => () => {}),
       } as unknown as MastraBrowser;
@@ -487,7 +483,7 @@ describe('BrowserCliHandler', () => {
     const cdpUrl = 'ws://localhost:9222/devtools/browser/abc123';
     const threadId = 'thread-001';
 
-    it('returns warmup command for agent-browser', async () => {
+    it('returns warmup command for agent-browser', () => {
       const clis = [{ name: 'agent-browser', config: handler.getBrowserCliConfig('agent-browser open')!.config }];
       const warmups = handler.getWarmupCommands(browserId, clis, cdpUrl, threadId);
 
@@ -498,21 +494,21 @@ describe('BrowserCliHandler', () => {
       expect(warmups[0].command).toContain(threadId);
     });
 
-    it('returns empty array for browser-use (no warmup needed)', async () => {
+    it('returns empty array for browser-use (no warmup needed)', () => {
       const clis = [{ name: 'browser-use', config: handler.getBrowserCliConfig('browser open')!.config }];
       const warmups = handler.getWarmupCommands(browserId, clis, cdpUrl, threadId);
 
       expect(warmups).toHaveLength(0);
     });
 
-    it('returns empty array for browse (no warmup needed)', async () => {
+    it('returns empty array for browse (no warmup needed)', () => {
       const clis = [{ name: 'browse', config: handler.getBrowserCliConfig('browse navigate')!.config }];
       const warmups = handler.getWarmupCommands(browserId, clis, cdpUrl, threadId);
 
       expect(warmups).toHaveLength(0);
     });
 
-    it('deduplicates warmup commands for same CLI appearing multiple times', async () => {
+    it('deduplicates warmup commands for same CLI appearing multiple times', () => {
       const clis = [
         { name: 'agent-browser', config: handler.getBrowserCliConfig('agent-browser open')!.config },
         { name: 'agent-browser', config: handler.getBrowserCliConfig('agent-browser snapshot')!.config },
@@ -522,7 +518,7 @@ describe('BrowserCliHandler', () => {
       expect(warmups).toHaveLength(1);
     });
 
-    it('skips already warmed up CLIs', async () => {
+    it('skips already warmed up CLIs', () => {
       handler.markWarmedUp(browserId, 'agent-browser', threadId);
 
       const clis = [{ name: 'agent-browser', config: handler.getBrowserCliConfig('agent-browser open')!.config }];
@@ -533,7 +529,7 @@ describe('BrowserCliHandler', () => {
   });
 
   describe('analyzeCommand', () => {
-    it('detects single browser CLI', async () => {
+    it('detects single browser CLI', () => {
       const result = handler.analyzeCommand('agent-browser open https://google.com');
 
       expect(result.browserClis).toHaveLength(1);
@@ -542,7 +538,7 @@ describe('BrowserCliHandler', () => {
       expect(result.externalCdpUrl).toBeNull();
     });
 
-    it('detects multiple browser CLIs in chained command', async () => {
+    it('detects multiple browser CLIs in chained command', () => {
       const result = handler.analyzeCommand(
         'agent-browser open https://google.com && browse navigate https://example.com',
       );
@@ -551,14 +547,14 @@ describe('BrowserCliHandler', () => {
       expect(result.browserClis.map(c => c.name)).toEqual(['agent-browser', 'browse']);
     });
 
-    it('detects external CDP with URL extraction', async () => {
+    it('detects external CDP with URL extraction', () => {
       const result = handler.analyzeCommand('agent-browser connect wss://cdp.example.com/devtools');
 
       expect(result.usingExternalCdp).toBe(true);
       expect(result.externalCdpUrl).toBe('wss://cdp.example.com/devtools');
     });
 
-    it('returns empty arrays for non-browser commands', async () => {
+    it('returns empty arrays for non-browser commands', () => {
       const result = handler.analyzeCommand('npm install && ls -la');
 
       expect(result.browserClis).toHaveLength(0);
@@ -566,7 +562,7 @@ describe('BrowserCliHandler', () => {
       expect(result.usingExternalCdp).toBe(false);
     });
 
-    it('handles mixed browser and non-browser commands', async () => {
+    it('handles mixed browser and non-browser commands', () => {
       const result = handler.analyzeCommand('echo "Starting" && agent-browser open https://google.com && echo "Done"');
 
       expect(result.browserClis).toHaveLength(1);

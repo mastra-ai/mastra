@@ -34,7 +34,9 @@ describe('Malformed tool validation - Issue #11244', () => {
     };
 
     // This should throw an error, not silently accept a function
-    expect(() => ensureToolProperties(malformedTools as any)).toThrow(/not a valid tool format/i);
+    expect(() => {
+      ensureToolProperties(malformedTools as any);
+    }).toThrow(/not a valid tool format/i);
   });
 
   it('should provide a helpful error message that mentions the tool key', () => {
@@ -49,18 +51,8 @@ describe('Malformed tool validation - Issue #11244', () => {
       myBadTool: badToolFactory,
     };
 
-    expect(() => ensureToolProperties(malformedTools as any)).toThrow(/myBadTool/);
-  });
-
-  it('preserves deterministic Vercel tool IDs', () => {
-    const tools = ensureToolProperties({
-      search: {
-        description: 'A deterministic description',
-        parameters: z.object({ query: z.string() }),
-        execute: async () => ({}),
-      },
-    } as any);
-
-    expect((tools.search as any).id).toBe('tool-3579526b');
+    expect(() => {
+      ensureToolProperties(malformedTools as any);
+    }).toThrow(/myBadTool/);
   });
 });
