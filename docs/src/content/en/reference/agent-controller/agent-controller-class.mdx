@@ -44,14 +44,16 @@ await controller.init()
 
 const session = await controller.createSession({ resourceId: 'project-42' })
 const unsubscribe = session.subscribe(event => {
-  if (event.type === 'message_update') {
-    console.log(event.message)
+  if (event.type === 'message_update' && event.event.type === 'text-delta') {
+    process.stdout.write(event.event.delta)
   }
 })
 
 await session.sendMessage({ content: 'Review the project structure.' })
 unsubscribe()
 ```
+
+A message lifecycle starts with the initial message in `message_start`. Compact `message_update` events address the message by ID and carry text, reasoning, or part changes. `message_end` carries the ID to finalize.
 
 ## Constructor parameters
 

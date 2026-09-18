@@ -270,20 +270,79 @@ Returns: `Promise<SendNotificationResult>`
 | Workspace | `workspace_ready`, `workspace_error`, `workspace_status_changed` |
 | Notification | `notification`, `notification_summary`, `info`, `error` |
 
-`message_*` events carry a `MastraDBMessage` and `thread_created` carries a thread, with timestamps hydrated to `Date`.
+A message lifecycle uses three event shapes:
 
-A controller can also emit events the SDK doesn't type. `AgentControllerEvent` is the union of `KnownAgentControllerEvent` and `OtherAgentControllerEvent`. Because `OtherAgentControllerEvent.type` is `string`, comparing `event.type` to a literal doesn't narrow the union. Narrow with `isKnownAgentControllerEvent(event)` first:
+- `message_start` carries the initial `MastraDBMessage`, with `createdAt` hydrated to `Date`.
+- `message_update` carries the message `id` and a compact text, reasoning, or part update.
+- `message_end` carries the `id` of the completed message.
+
+`thread_created` also carries a thread with timestamps hydrated to `Date`.
+
+A controller can emit events the SDK doesn't type. `AgentControllerEvent` is the union of `KnownAgentControllerEvent` and `OtherAgentControllerEvent`. Because `OtherAgentControllerEvent.type` is `string`, comparing `event.type` to a literal doesn't narrow the union. Narrow with `isKnownAgentControllerEvent(event)` first, then reconstruct messages by ID:
 
 ```typescript
-import { isKnownAgentControllerEvent } from '@mastra/client-js'
+import {
+  isKnownAgentControllerEvent,
+  type AgentControllerEvent,
+  type KnownAgentControllerEvent,
+  type MastraDBMessage,
+} from '@mastra/client-js'
+
+type MessageUpdate = Extract<KnownAgentControllerEvent, { type: 'message_update' }>['event']
+
+const activeMessages = new Map<string, MastraDBMessage>()
+
+function applyUpdate(message: MastraDBMessage, update: MessageUpdate): MastraDBMessage {
+  if (typeof message.content === 'string') return message
+
+  const parts = [...message.content.parts]
+
+  if (update.type === 'text-delta') {
+    const index = parts.findLastIndex(part => part.type === 'text')
+    const part = parts[index]
+
+    if (part?.type === 'text') {
+      parts[index] = { ...part, text: part.text + update.delta }
+    } else {
+      parts.push({ type: 'text', text: update.delta })
+    }
+  } else if (update.type === 'reasoning-delta') {
+    const part = parts[update.index]
+    if (part?.type === 'reasoning') {
+      const reasoning = part.reasoning + update.delta
+      parts[update.index] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] }
+    }
+  } else {
+    parts[update.index] = update.part
+  }
+
+  return { ...message, content: { ...message.content, parts } }
+}
 
 function handleEvent(event: AgentControllerEvent) {
   if (!isKnownAgentControllerEvent(event)) return
 
   switch (event.type) {
-    case 'message_update':
-      render(event.message)
+    case 'message_start':
+      activeMessages.set(event.message.id, structuredClone(event.message))
       break
+    case 'message_update': {
+      const message = activeMessages.get(event.id)
+      if (!message) break
+
+      const updated = applyUpdate(message, event.event)
+      activeMessages.set(event.id, updated)
+      render(updated)
+      break
+    }
+    case 'message_end': {
+      const message = activeMessages.get(event.id)
+      if (!message) break
+
+      renderComplete(message)
+      activeMessages.delete(event.id)
+      break
+    }
     case 'tool_approval_required':
       showApproval(event.toolCallId)
       break
@@ -291,7 +350,7 @@ function handleEvent(event: AgentControllerEvent) {
 }
 ```
 
-Use `agentControllerMessageText(message)` to pull the plain text out of a message's nested content parts.
+Use `agentControllerMessageText(message)` to pull the plain text out of a reconstructed message's nested content parts.
 
 ## Related
 
