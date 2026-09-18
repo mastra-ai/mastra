@@ -1209,9 +1209,30 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
-    const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
-    const standardSchema = toStandardSchema(schema);
-    const complexityError = getJsonSchemaComplexityError(schema);
+    const rawSchema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+
+    // Fix common schema malformation: `required` nested inside `properties`
+    // instead of at the object level. Example of the bug:
+    //   { "properties": { "coin": { "type": "string" }, "required": ["coin"] } }
+    // Should be:
+    //   { "properties": { "coin": { "type": "string" } }, "required": ["coin"] }
+    // Only string arrays are hoisted, so a valid property literally named
+    // `required` is preserved; an existing top-level list wins; nothing is mutated.
+    let schema = rawSchema;
+    if (schema && typeof schema === 'object' && 'properties' in schema) {
+      const props = schema.properties;
+      const required: unknown = props?.required;
+      if (props && Array.isArray(required) && required.every((value: unknown) => typeof value === 'string')) {
+        this.log('debug', 'Normalizing misplaced required list in MCP tool input schema');
+        const properties = { ...props };
+        delete properties.required;
+        schema = { ...schema, properties, required: schema.required ?? required };
+      }
+    }
+
+    const dialectSchema = withDefaultDialect(schema);
+    const standardSchema = toStandardSchema(dialectSchema);
+    const complexityError = getJsonSchemaComplexityError(dialectSchema);
     if (!complexityError) return standardSchema;
 
     return {
