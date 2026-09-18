@@ -109,7 +109,7 @@ export class MastraCodeAcpAgent implements Agent {
     return {
       protocolVersion: PROTOCOL_VERSION,
       agentInfo: { name: 'mastracode', title: 'Mastra Code', version: getCurrentVersion() },
-      agentCapabilities: { loadSession: false, mcpCapabilities: { http: true, sse: true } },
+      agentCapabilities: { loadSession: false, mcpCapabilities: { http: true, sse: false } },
     };
   }
 
