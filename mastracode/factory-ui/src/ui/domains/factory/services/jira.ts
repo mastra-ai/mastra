@@ -34,6 +34,7 @@ export interface JiraIssue {
   identifier: string;
   title: string;
   url: string;
+  author?: string | null;
   /** Workflow status name, e.g. `In Progress`. */
   state: string;
   /** Status category mapped to the shared state type, e.g. `unstarted` / `started`. */
@@ -42,11 +43,19 @@ export interface JiraIssue {
   assignee: string | null;
   /** Jira project key, e.g. `ENG`. */
   project: string | null;
+  site?: string | null;
   labels: string[];
   createdAt: string;
   updatedAt: string;
   /** Jira project the issue was read from; matches an intake binding's `sourceId`. */
   sourceId?: string | null;
+}
+
+export interface JiraIssueDetail {
+  identifier: string;
+  title: string;
+  url: string;
+  description: string | null;
 }
 
 export interface JiraIssuePage {
@@ -132,6 +141,19 @@ export async function listJiraIssues(
   const params = new URLSearchParams({ factoryProjectId });
   if (after) params.set('after', after);
   return getJiraResource<JiraIssuePage>(baseUrl, `/web/jira/issues?${params.toString()}`);
+}
+
+export async function getJiraIssue(
+  baseUrl: string,
+  factoryProjectId: string,
+  identifier: string,
+  issueRef: string,
+): Promise<JiraIssueDetail> {
+  const params = new URLSearchParams({ factoryProjectId, issueRef });
+  return getJiraResource<JiraIssueDetail>(
+    baseUrl,
+    `/web/jira/issues/${encodeURIComponent(identifier)}?${params.toString()}`,
+  );
 }
 
 /** List the Jira site's projects (Settings intake-source picker). */

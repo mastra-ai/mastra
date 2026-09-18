@@ -18,7 +18,7 @@ import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
 import { isJiraAuthError } from '../../ui/domains/factory/services/jira';
 import type { JiraIssue, JiraProject, JiraStatus } from '../../ui/domains/factory/services/jira';
 import { useIntakeConfigQuery, useSaveIntakeBindingMutation, useSaveIntakeConfigMutation } from '../useIntakeConfig';
-import { useJiraIssuesQuery, useJiraProjectsQuery, useJiraStatusQuery } from '../useJiraData';
+import { useJiraIssueDetail, useJiraIssuesQuery, useJiraProjectsQuery, useJiraStatusQuery } from '../useJiraData';
 
 const STATUS_URL = `${TEST_BASE_URL}/web/jira/status`;
 const ISSUES_URL = `${TEST_BASE_URL}/web/jira/issues`;
@@ -33,6 +33,7 @@ const issue: JiraIssue = {
   identifier: 'ENG-42',
   title: 'Fix intake sync',
   url: 'https://acme.atlassian.net/browse/ENG-42',
+  author: 'grace',
   state: 'To Do',
   stateType: 'unstarted',
   priorityLabel: 'High',
@@ -190,6 +191,40 @@ describe('useJiraIssuesQuery', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect((result.current.error as Error).message).toBe('boom');
     expect(isJiraAuthError(result.current.error)).toBe(false);
+  });
+});
+
+describe('useJiraIssueDetail', () => {
+  it('loads a routed Jira issue description with its opaque issue reference', async () => {
+    const requested = vi.fn();
+    server.use(
+      http.get(`${ISSUES_URL}/:identifier`, ({ params, request }) => {
+        const url = new URL(request.url);
+        requested({
+          identifier: params.identifier,
+          factoryProjectId: url.searchParams.get('factoryProjectId'),
+          issueRef: url.searchParams.get('issueRef'),
+        });
+        return HttpResponse.json({
+          identifier: 'ENG-42',
+          title: 'Fix intake sync',
+          url: issue.url,
+          description: 'Detailed Jira task body',
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() =>
+      useJiraIssueDetail(FACTORY_A, issue.identifier, 'jira-issue:encoded-reference'),
+    );
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.description).toBe('Detailed Jira task body');
+    expect(requested).toHaveBeenCalledWith({
+      identifier: 'ENG-42',
+      factoryProjectId: FACTORY_A,
+      issueRef: 'jira-issue:encoded-reference',
+    });
   });
 });
 

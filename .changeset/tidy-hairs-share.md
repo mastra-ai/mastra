@@ -3,4 +3,4 @@
 '@mastra/factory': minor
 ---
 
-Added complete Platform-managed Jira intake. Factory settings and onboarding now connect accounts in-app, support multiple sites, route a selected Jira project to a Factory board, and reconcile imported work items in the background.
+Added complete Platform-managed Jira intake. Factory settings and onboarding now connect accounts in-app, support multiple sites, route a selected Jira project to a Factory board, reconcile imported work items in the background, and preserve Jira descriptions, labels, reporters, assignees, priority, project, site, state, and timestamps on work cards.

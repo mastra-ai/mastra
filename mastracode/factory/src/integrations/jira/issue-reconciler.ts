@@ -33,6 +33,7 @@ export function attachJiraIssueReconciler(
       creator: issue.author,
       author: issue.author,
       labels: issue.labels ?? [],
+      createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
     }),
   });

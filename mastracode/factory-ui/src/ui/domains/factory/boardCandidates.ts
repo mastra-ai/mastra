@@ -106,10 +106,19 @@ export function jiraCandidate(issue: JiraIssue): BoardCandidate {
     column: 'intake',
     metadata: {
       identifier: issue.identifier,
-      issueReference: issue.id,
+      issueRef: issue.id,
       state: issue.state,
+      stateType: issue.stateType,
+      priority: issue.priorityLabel,
+      project: issue.project,
+      site: issue.site ?? null,
       assignee: issue.assignee,
+      assignees: issue.assignee ? [issue.assignee] : [],
+      creator: issue.author ?? null,
+      author: issue.author ?? null,
       labels: issue.labels,
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
     },
   };
 }

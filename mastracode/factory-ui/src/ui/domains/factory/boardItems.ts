@@ -44,9 +44,15 @@ export function linearIssueIdForItem(item: Pick<WorkItem, 'source' | 'metadata'>
   return item.metadata.linearIssueId;
 }
 
-function jiraIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+export function jiraIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   if (item.source !== 'jira-issue' || typeof item.metadata.identifier !== 'string') return;
   return item.metadata.identifier;
+}
+
+export function jiraIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'jira-issue') return;
+  const reference = item.metadata.issueRef ?? item.metadata.issueReference;
+  return typeof reference === 'string' && reference ? reference : undefined;
 }
 
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';

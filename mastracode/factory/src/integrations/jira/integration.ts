@@ -242,9 +242,18 @@ export class JiraIntegration implements FactoryIntegration {
         updatedAt: issue.updatedAt,
         metadata: {
           identifier: issue.identifier,
+          issueRef: issue.identifier,
+          state: issue.state,
           stateType: issue.stateType,
           priority: issue.priority,
           project: issue.source,
+          assignee: issue.assignee,
+          assignees: issue.assignees ?? [],
+          creator: issue.author,
+          author: issue.author,
+          labels: issue.labels,
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
         },
       })),
       nextCursor: page.nextCursor,
@@ -434,11 +443,7 @@ function buildIntakeJql(projectIds?: string[], labels?: string[]): string {
     clauses.push(`project IN (${safeProjects.join(', ')})`);
   }
   clauses.push('statusCategory != Done');
-  const safeLabels = [
-    ...new Set(
-      (labels ?? []).map(label => label.trim().replace(/["\\]/g, '')).filter(Boolean),
-    ),
-  ];
+  const safeLabels = [...new Set((labels ?? []).map(label => label.trim().replace(/["\\]/g, '')).filter(Boolean))];
   if (safeLabels.length > 0) {
     clauses.push(`labels IN (${safeLabels.map(label => `"${label}"`).join(', ')})`);
   }

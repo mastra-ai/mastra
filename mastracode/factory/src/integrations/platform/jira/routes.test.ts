@@ -209,7 +209,10 @@ describe('issues route', () => {
       state: 'To Do',
       stateType: 'unstarted',
       priorityLabel: 'High',
+      assignee: 'Ada',
+      author: 'Grace',
       project: 'ENG',
+      labels: ['bug'],
     });
     expect(json.nextCursor).toBe('page-2');
     expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1']);
@@ -313,6 +316,46 @@ describe('issues route — Factory source bindings', () => {
 
     expect(res.status).toBe(200);
     expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1']);
+  });
+
+  it('returns the description for a Jira issue routed to the viewed Factory', async () => {
+    await seedProjects(1);
+    await bind('1', projectA);
+    const issueRef = 'jira-issue:encoded-reference';
+    vi.spyOn(jira.intake, 'resolveIntakeDispatch').mockResolvedValue({
+      connection: { type: 'oauth', accessToken: 'jira-connection:a1b_acme' },
+      sourceId: '1',
+      issueId: 'ENG-42',
+    });
+    vi.spyOn(jira.intake, 'getIssue').mockResolvedValue({
+      id: '10001',
+      identifier: 'ENG-42',
+      title: 'Fix intake sync',
+      url: 'https://acme.atlassian.net/browse/ENG-42',
+      author: 'Grace',
+      state: 'To Do',
+      stateType: 'unstarted',
+      priority: 'High',
+      assignee: 'Ada',
+      source: 'ENG',
+      labels: ['bug'],
+      commentCount: 0,
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+      description: 'Detailed Jira task body',
+      comments: [],
+    });
+
+    const params = new URLSearchParams({ factoryProjectId: projectA, issueRef });
+    const res = await buildApp(org1()).request(`/web/jira/issues/ENG-42?${params.toString()}`);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      identifier: 'ENG-42',
+      title: 'Fix intake sync',
+      url: 'https://acme.atlassian.net/browse/ENG-42',
+      description: 'Detailed Jira task body',
+    });
   });
 
   it('hides sources routed to another Factory from this board', async () => {

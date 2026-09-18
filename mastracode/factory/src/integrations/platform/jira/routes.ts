@@ -24,6 +24,7 @@ import type { PlatformJiraIntegration } from './integration.js';
 type RouteContext = Context;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISSUE_KEY_RE = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
 
 /** Erase a route handler's path-parameterized context to a plain `Context`. */
 function loose(c: unknown): RouteContext {
@@ -293,17 +294,75 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
               identifier: issue.identifier,
               title: issue.title,
               url: issue.url,
+              author: issue.author,
               state: issue.state ?? '',
               stateType: issue.stateType ?? '',
               priorityLabel: issue.priority ?? '',
               assignee: issue.assignee,
               project: issue.source,
+              site: issue.site,
               labels: issue.labels,
               createdAt: issue.createdAt,
               updatedAt: issue.updatedAt,
               sourceId: issue.sourceId || null,
             })),
             nextCursor,
+          });
+        } catch (err) {
+          return jiraFetchError(loose(c), err);
+        }
+      },
+    }),
+  );
+
+  routes.push(
+    registerApiRoute('/web/jira/issues/:identifier', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+
+        const identifier = c.req.param('identifier');
+        const factoryProjectId = c.req.query('factoryProjectId');
+        const issueRef = c.req.query('issueRef');
+        if (!ISSUE_KEY_RE.test(identifier)) return c.json({ error: 'invalid_issue_identifier' }, 400);
+        if (!factoryProjectId || !UUID_RE.test(factoryProjectId)) {
+          return c.json({ error: 'invalid_factory_project_id' }, 400);
+        }
+        if (!issueRef || issueRef.length > 2_048) return c.json({ error: 'invalid_issue_ref' }, 400);
+
+        await intake.ensureReady();
+        const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['jira'] });
+        const selection = config.jira!;
+        if (!selection.enabled) {
+          return c.json({ error: 'jira_intake_disabled', message: 'Jira intake is turned off in Settings.' }, 404);
+        }
+
+        const intakeBoards = await scopeSourceIdsToProject({
+          intake,
+          orgId: resolved.tenant.orgId,
+          factoryProjectId,
+          selectedIds: selection.sourceIds ?? [],
+        });
+        const dispatch = await jira.intake.resolveIntakeDispatch?.({
+          orgId: resolved.tenant.orgId,
+          externalSource: { type: 'issue', externalId: issueRef },
+        });
+        if (!dispatch?.sourceId || !(dispatch.sourceId in intakeBoards)) {
+          return c.json({ error: 'issue_not_found' }, 404);
+        }
+
+        try {
+          const issue = await jira.intake.getIssue(dispatch);
+          if (!issue || issue.identifier.toUpperCase() !== identifier.toUpperCase()) {
+            return c.json({ error: 'issue_not_found' }, 404);
+          }
+          return c.json({
+            identifier: issue.identifier,
+            title: issue.title,
+            url: issue.url,
+            description: issue.description,
           });
         } catch (err) {
           return jiraFetchError(loose(c), err);

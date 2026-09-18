@@ -166,6 +166,7 @@ describe('PlatformJiraIntegration discovery', () => {
       assignee: 'Ada',
       author: 'Grace',
       labels: ['bug'],
+      createdAt: '2026-07-01T00:00:00Z',
       updatedAt: '2026-07-02T00:00:00Z',
     });
   });
