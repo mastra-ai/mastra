@@ -1,7 +1,9 @@
 import {
+  ChartGanttIcon,
   CircleGaugeIcon,
   DownloadIcon,
   Link2Icon,
+  ListTreeIcon,
   Loader2Icon,
   MessageSquareReplyIcon,
   MessageSquareTextIcon,
@@ -22,13 +24,13 @@ import { TraceSpanTimeline } from './trace-span-timeline';
 import { TraceSpanTree } from './trace-span-tree';
 import { TraceSummaryDescription } from './trace-summary-description';
 import { Button } from '@/ds/components/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import type { LinkComponent } from '@/ds/types/link-component';
@@ -38,7 +40,7 @@ import { cn } from '@/lib/utils';
 
 export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 
-export type TraceDataPanelTab = 'details' | 'timeline';
+export type TraceSpanView = 'tree' | 'timeline';
 
 /** What the side column next to the span tree shows. */
 export type TraceSideView = 'messages' | 'feedback' | 'scores';
@@ -105,8 +107,6 @@ export interface TraceDataPanelViewProps {
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
   /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
   feedbackTabBadge?: ReactNode;
-  activeTab?: TraceDataPanelTab;
-  onTabChange?: (tab: TraceDataPanelTab) => void;
   /** Span ids to feature in the timeline; every other span is faded. */
   featuredSpanIds?: string[];
   /**
@@ -114,8 +114,9 @@ export interface TraceDataPanelViewProps {
    * trace as one reconstructed agent turn). Rendered without content padding.
    */
   messagesPanelSlot?: ReactNode;
-  /** Header actions shown while the side column is on its "Messages" view. */
-  messagesPanelActions?: ReactNode;
+  /** Controlled span view (tree or timeline); falls back to local state starting on the tree. */
+  spanView?: TraceSpanView;
+  onSpanViewChange?: (view: TraceSpanView) => void;
   /** Controlled side column view; falls back to the first available view. */
   sideView?: TraceSideView;
   onSideViewChange?: (view: TraceSideView) => void;
@@ -153,13 +154,12 @@ export function TraceDataPanelView({
   scoresTabBadge,
   feedbackTabSlot,
   feedbackTabBadge,
-  activeTab,
-  onTabChange,
   featuredSpanIds,
   messagesPanelSlot,
-  messagesPanelActions,
   sideView: controlledSideView,
   onSideViewChange,
+  spanView: controlledSpanView,
+  onSpanViewChange,
   spanPanelSlot,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
@@ -172,12 +172,12 @@ export function TraceDataPanelView({
       views.push({
         value: 'messages',
         label: (
-          <span className="inline-flex items-center gap-1.5">
+          <>
             <Icon size="sm">
               <MessageSquareTextIcon />
             </Icon>
             Messages
-          </span>
+          </>
         ),
       });
     }
@@ -185,13 +185,13 @@ export function TraceDataPanelView({
       views.push({
         value: 'feedback',
         label: (
-          <span className="inline-flex items-center gap-1.5">
+          <>
             <Icon size="sm">
               <MessageSquareReplyIcon />
             </Icon>
             Feedback
             {feedbackTabBadge}
-          </span>
+          </>
         ),
       });
     }
@@ -199,12 +199,12 @@ export function TraceDataPanelView({
       views.push({
         value: 'scores',
         label: (
-          <span className="inline-flex items-center gap-1.5">
+          <>
             <Icon size="sm">
               <ScorersIcon />
             </Icon>
             Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}
-          </span>
+          </>
         ),
       });
     }
@@ -212,15 +212,17 @@ export function TraceDataPanelView({
   }, [messagesPanelSlot, feedbackTabSlot, feedbackTabBadge, scoresTabSlot, scoresTabBadge]);
   const [uncontrolledSideView, setUncontrolledSideView] = useState<TraceSideView>();
   const chosenSideView = controlledSideView ?? uncontrolledSideView;
-  const activeSideView = sideViews.find(view => view.value === chosenSideView) ?? sideViews[0];
-  const sideView = activeSideView?.value;
+  const sideView = (sideViews.find(view => view.value === chosenSideView) ?? sideViews[0])?.value;
   const handleSideViewChange = (view: TraceSideView) => {
     setUncontrolledSideView(view);
     onSideViewChange?.(view);
   };
 
-  const handleTabChange = (tab: TraceDataPanelTab) => {
-    onTabChange?.(tab);
+  const [uncontrolledSpanView, setUncontrolledSpanView] = useState<TraceSpanView>('tree');
+  const spanView = controlledSpanView ?? uncontrolledSpanView;
+  const setSpanView = (view: TraceSpanView) => {
+    setUncontrolledSpanView(view);
+    onSpanViewChange?.(view);
   };
 
   const { download: downloadTraceJson, isPending: isDownloadingTrace } = useDownloadTraceJson();
@@ -319,6 +321,30 @@ export function TraceDataPanelView({
     </DropdownMenu>
   );
 
+  const sideColumn =
+    traceId && sideView ? (
+      <div data-trace-side-column className="border-border1 flex min-h-0 min-w-0 flex-col overflow-hidden border-r">
+        {/* Same chrome as the trace column's Spans/Timeline header, so the two tab rows line up. */}
+        <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
+          <DataPanel.Header className="border-border1 border-b">
+            <TabList variant="pill-ghost" size="sm">
+              {sideViews.map(view => (
+                <Tab key={view.value} value={view.value}>
+                  {view.label}
+                </Tab>
+              ))}
+            </TabList>
+          </DataPanel.Header>
+        </Tabs>
+        {/* The turn view brings its own padding; feedback and scores use the panel's. */}
+        {sideView === 'messages' && <DataPanel.Content className="p-0">{messagesPanelSlot}</DataPanel.Content>}
+        {sideView === 'feedback' && <DataPanel.Content>{feedbackTabSlot?.({ traceId })}</DataPanel.Content>}
+        {sideView === 'scores' && (
+          <DataPanel.Content>{scoresTabSlot?.({ traceId, rootSpanId: rootSpan?.spanId })}</DataPanel.Content>
+        )}
+      </div>
+    ) : null;
+
   return (
     <DataPanel
       open={!!traceId}
@@ -375,7 +401,7 @@ export function TraceDataPanelView({
           </DataPanel.Header>
 
           <TracePanelColumns
-            hasMessagesColumn={!!sideView}
+            sideColumnSlot={sideColumn}
             spanPanelSlot={spanPanelSlot}
             highlightQuery={query}
             spanPanelKey={selectedSpanId}
@@ -386,146 +412,78 @@ export function TraceDataPanelView({
               (() => {
                 // Shared by the Spans and Timeline tabs: both views render the same
                 // filtered `hierarchicalSpans`, so one query drives both.
-                const searchField = (
-                  <SearchFieldBlock
-                    name={searchFieldName}
-                    label="Search spans"
-                    labelIsHidden
-                    placeholder="Search spans..."
-                    value={query}
-                    onChange={e => setQuery(e.target.value)}
-                    onReset={() => setQuery('')}
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                  />
+                const isTimeline = spanView === 'timeline';
+                const leadingSlot = (
+                  <div className="flex items-center gap-2">
+                    <SearchFieldBlock
+                      name={searchFieldName}
+                      label="Search spans"
+                      labelIsHidden
+                      placeholder="Search spans..."
+                      value={query}
+                      onChange={e => setQuery(e.target.value)}
+                      onReset={() => setQuery('')}
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                    />
+                    <ButtonsGroup spacing="close" className="shrink-0">
+                      <Button
+                        size="sm"
+                        variant={isTimeline ? 'default' : 'primary'}
+                        aria-pressed={!isTimeline}
+                        tooltip="Span tree"
+                        onClick={() => setSpanView('tree')}
+                      >
+                        <ListTreeIcon />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={isTimeline ? 'primary' : 'default'}
+                        aria-pressed={isTimeline}
+                        tooltip="Timeline"
+                        onClick={() => setSpanView('timeline')}
+                      >
+                        <ChartGanttIcon />
+                      </Button>
+                    </ButtonsGroup>
+                  </div>
                 );
                 const noSearchResults = !isLoading && hierarchicalSpans.length === 0 && (
                   <DataPanel.NoData>No spans match your search.</DataPanel.NoData>
                 );
+                const viewProps = {
+                  hierarchicalSpans,
+                  onSpanClick: handleSpanClick,
+                  selectedSpanId,
+                  expandedSpanIds,
+                  setExpandedSpanIds,
+                  featuredSpanIds,
+                  leadingSlot,
+                  isLoading,
+                };
 
                 return (
-                  <Tabs<TraceDataPanelTab>
-                    defaultTab="details"
-                    value={activeTab}
-                    onValueChange={handleTabChange}
-                    className="grid h-full min-h-0 grid-rows-[auto_1fr]"
-                  >
-                    <DataPanel.Header>
-                      <TabList variant="pill-ghost" size="sm">
-                        <Tab value="details">Spans</Tab>
-                        <Tab value="timeline">Timeline</Tab>
-                      </TabList>
-                    </DataPanel.Header>
+                  <DataPanel.Content>
+                    {!isOnTracePage &&
+                      !onEvaluateTrace &&
+                      !onSaveAsDatasetItem &&
+                      !onAddTraceMocksToItem &&
+                      showUnavailableFeaturesMsg && (
+                        <Notice variant="info" className="mb-6">
+                          <Notice.Message>
+                            Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                            deployed).
+                          </Notice.Message>
+                        </Notice>
+                      )}
 
-                    {/* Tab contents share the tab list's horizontal padding so their edges line up. */}
-                    <TabContent value="details" flush>
-                      {/* The side column only makes sense beside the span tree, so it lives in this tab
-                          rather than as a sibling column: switching tabs takes it away with the tree. */}
-                      <div
-                        className={cn(
-                          'grid h-full min-h-0',
-                          sideView
-                            ? 'grid-cols-[18rem_minmax(0,1fr)] lg:grid-cols-[24rem_minmax(0,1fr)]'
-                            : 'grid-cols-[minmax(0,1fr)]',
-                        )}
-                      >
-                        {sideView && (
-                          <div
-                            data-trace-side-column
-                            className="border-border1 flex min-h-0 min-w-0 flex-col overflow-hidden border-r"
-                          >
-                            {/* Same chrome as the Span column header, so the two side columns line up. */}
-                            <DataPanel.Header>
-                              <DataPanel.HeaderContent>
-                                {sideViews.length > 1 ? (
-                                  <Select<TraceSideView> value={sideView} onValueChange={handleSideViewChange}>
-                                    <SelectTrigger
-                                      variant="ghost"
-                                      size="sm"
-                                      className="w-fit"
-                                      aria-label="Side column view"
-                                    >
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {sideViews.map(view => (
-                                        <SelectItem key={view.value} value={view.value}>
-                                          {view.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <DataPanel.Heading>{activeSideView.label}</DataPanel.Heading>
-                                )}
-                              </DataPanel.HeaderContent>
-                              {sideView === 'messages' && messagesPanelActions && (
-                                <DataPanel.HeaderActions>{messagesPanelActions}</DataPanel.HeaderActions>
-                              )}
-                            </DataPanel.Header>
-                            {/* The turn view brings its own padding; feedback and scores use the panel's. */}
-                            {sideView === 'messages' && (
-                              <DataPanel.Content className="p-0">{messagesPanelSlot}</DataPanel.Content>
-                            )}
-                            {sideView === 'feedback' && (
-                              <DataPanel.Content>{feedbackTabSlot?.({ traceId })}</DataPanel.Content>
-                            )}
-                            {sideView === 'scores' && (
-                              <DataPanel.Content>
-                                {scoresTabSlot?.({ traceId, rootSpanId: rootSpan?.spanId })}
-                              </DataPanel.Content>
-                            )}
-                          </div>
-                        )}
-                        <DataPanel.Content>
-                          {!isOnTracePage &&
-                            !onEvaluateTrace &&
-                            !onSaveAsDatasetItem &&
-                            !onAddTraceMocksToItem &&
-                            showUnavailableFeaturesMsg && (
-                              <Notice variant="info" className="mb-6">
-                                <Notice.Message>
-                                  Evaluating traces and saving them as dataset items is available in Mastra Studio
-                                  (local or deployed).
-                                </Notice.Message>
-                              </Notice>
-                            )}
-
-                          {/* The tree stays mounted even with no results, because it
-                          hosts the search field: unmounting it would strand the user
-                          with a query they can no longer clear. */}
-                          <TraceSpanTree
-                            hierarchicalSpans={hierarchicalSpans}
-                            onSpanClick={handleSpanClick}
-                            selectedSpanId={selectedSpanId}
-                            expandedSpanIds={expandedSpanIds}
-                            setExpandedSpanIds={setExpandedSpanIds}
-                            featuredSpanIds={featuredSpanIds}
-                            leadingSlot={searchField}
-                            isLoading={isLoading}
-                          />
-                          {noSearchResults}
-                        </DataPanel.Content>
-                      </div>
-                    </TabContent>
-                    <TabContent value="timeline" flush>
-                      <DataPanel.Content>
-                        {/* Same selection + expansion state as the Spans tab, so switching views keeps context. */}
-                        <TraceSpanTimeline
-                          hierarchicalSpans={hierarchicalSpans}
-                          onSpanClick={handleSpanClick}
-                          selectedSpanId={selectedSpanId}
-                          expandedSpanIds={expandedSpanIds}
-                          setExpandedSpanIds={setExpandedSpanIds}
-                          featuredSpanIds={featuredSpanIds}
-                          leadingSlot={searchField}
-                          isLoading={isLoading}
-                        />
-                        {noSearchResults}
-                      </DataPanel.Content>
-                    </TabContent>
-                  </Tabs>
+                    {/* Both views share selection + expansion state, and stay mounted with no
+                    results because they host the search field: unmounting would strand the
+                    user with a query they can no longer clear. */}
+                    {isTimeline ? <TraceSpanTimeline {...viewProps} /> : <TraceSpanTree {...viewProps} />}
+                    {noSearchResults}
+                  </DataPanel.Content>
                 );
               })()
             )}
@@ -537,22 +495,24 @@ export function TraceDataPanelView({
 }
 
 /**
- * Lays out the card body as two columns — `[trace] [span]` — inside the same
- * card. The span cell always exists and collapses to zero when hidden, so
- * opening/closing it animates via `grid-template-columns` rather than
- * mounting/unmounting a DOM column (which cannot be transitioned).
+ * Lays out the card body as three columns — `[side] [trace] [span]` — inside the
+ * same card. The side column (messages / feedback / scores) is independent of the
+ * Spans/Timeline tabs, so it sits beside them rather than inside a tab. The span
+ * cell always exists and collapses to zero when hidden, so opening/closing it
+ * animates via `grid-template-columns` rather than mounting/unmounting a DOM
+ * column (which cannot be transitioned).
  * Search matches — span names in the timeline tree as well as values in the span
  * detail — are highlighted while a query is active.
  */
 function TracePanelColumns({
-  hasMessagesColumn,
+  sideColumnSlot,
   spanPanelSlot,
   highlightQuery,
   spanPanelKey,
   children,
 }: {
-  /** The Spans tab hosts a side column; the trace track then gets more room than the span detail. */
-  hasMessagesColumn: boolean;
+  /** Fixed-width column on the left; the trace and span tracks share the remaining space. */
+  sideColumnSlot?: ReactNode;
   spanPanelSlot?: ReactNode;
   highlightQuery: string;
   /** Identity of the span shown in the panel; changing it re-triggers the match scroll. */
@@ -574,9 +534,16 @@ function TracePanelColumns({
       data-trace-columns
       className={cn(
         'grid min-h-0 flex-1 transition-[grid-template-columns] duration-300 ease-in-out',
-        spanPanelSlot ? (hasMessagesColumn ? 'grid-cols-[2fr_1fr]' : 'grid-cols-[1fr_1fr]') : 'grid-cols-[1fr_0fr]',
+        sideColumnSlot
+          ? spanPanelSlot
+            ? 'grid-cols-[18rem_1fr_1fr] lg:grid-cols-[24rem_1fr_1fr]'
+            : 'grid-cols-[18rem_1fr_0fr] lg:grid-cols-[24rem_1fr_0fr]'
+          : spanPanelSlot
+            ? 'grid-cols-[0px_1fr_1fr]'
+            : 'grid-cols-[0px_1fr_0fr]',
       )}
     >
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{sideColumnSlot}</div>
       <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{children}</div>
       {/* Searchable: the span detail is where a match hides inside a large payload. */}
       <div

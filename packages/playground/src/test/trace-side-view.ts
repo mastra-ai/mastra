@@ -1,15 +1,19 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, within } from '@testing-library/react';
 
-const switcher = (container?: HTMLElement) =>
-  (container ? within(container) : screen).getByRole('combobox', { name: 'Side column view' });
+const sideColumn = (container?: HTMLElement) => {
+  const root = container ?? document.body;
+  const column = root.querySelector('[data-trace-side-column]');
+  if (!column) throw new Error('trace side column not found');
+  return column as HTMLElement;
+};
 
-/** Picks a view (Messages / Feedback / Scores) in the trace panel's side column dropdown. */
+/** Picks a view (Messages / Feedback / Scores) in the trace panel's side column tabs. */
 export const pickTraceSideView = async (name: RegExp, container?: HTMLElement) => {
-  fireEvent.click(switcher(container));
-  const option = await screen.findByRole('option', { name });
-  fireEvent.pointerDown(option, { pointerType: 'mouse' });
-  fireEvent.click(option, { detail: 1 });
+  fireEvent.click(within(sideColumn(container)).getByRole('tab', { name }));
 };
 
 /** Accessible name of the currently selected side column view. */
-export const traceSideViewLabel = (container?: HTMLElement) => switcher(container).textContent ?? '';
+export const traceSideViewLabel = (container?: HTMLElement) =>
+  within(sideColumn(container))
+    .getAllByRole('tab')
+    .find(tab => tab.getAttribute('aria-selected') === 'true')?.textContent ?? '';

@@ -414,10 +414,9 @@ describe('TraceDataPanelView — the header', () => {
 });
 
 describe('TraceDataPanelView — the body', () => {
-  it('keeps the tabs and shows a tree-shaped placeholder while loading, rather than an empty trace', () => {
+  it('shows a tree-shaped placeholder while loading, rather than an empty trace', () => {
     render(<TraceDataPanelView {...baseProps} spans={[]} isLoading />);
 
-    expect(screen.getByRole('tab', { name: 'Spans' })).toBeTruthy();
     expect(screen.getAllByRole('status', { name: 'Loading spans' }).length).toBeGreaterThan(0);
     expect(screen.queryByText('No spans found for this trace.')).toBeNull();
     expect(screen.queryByText('No spans match your search.')).toBeNull();
@@ -793,17 +792,13 @@ describe('TraceDataPanelView — messages column', () => {
   const precedes = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
   describe('given a messages slot', () => {
-    it('renders the messages column inside the Spans tab, next to the span tree, with no Messages tab', () => {
+    it('renders the side column beside the span tree', () => {
       render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
 
-      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Timeline']);
       const messagesPanel = screen.getByTestId('messages-panel');
       expect(precedes(messagesPanel, screen.getByText('agent run'))).toBe(true);
-      expect(screen.getByRole('tabpanel').contains(messagesPanel)).toBe(true);
-      expect(messagesPanel.closest('[data-trace-side-column]')?.parentElement?.className).toContain(
-        'grid-cols-[18rem_minmax(0,1fr)] lg:grid-cols-[24rem_minmax(0,1fr)]',
-      );
-      expect(columns().className).toContain('grid-cols-[1fr_0fr]');
+      expect(columns().contains(messagesPanel)).toBe(true);
+      expect(columns().className).toContain('grid-cols-[18rem_1fr_0fr] lg:grid-cols-[24rem_1fr_0fr]');
       expect(columns().className).toContain('transition-[grid-template-columns]');
     });
 
@@ -813,17 +808,13 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       expect(precedes(screen.getByTestId('messages-panel'), trace)).toBe(true);
       expect(precedes(trace, screen.getByTestId('span-detail'))).toBe(true);
-      // The trace track hosts messages + tree, so it takes twice the span detail's share.
-      expect(columns().className).toContain('grid-cols-[2fr_1fr]');
+      expect(columns().className).toContain('grid-cols-[18rem_1fr_1fr] lg:grid-cols-[24rem_1fr_1fr]');
     });
 
-    it('takes the messages column away with the span tree while the Timeline tab is active', () => {
+    it('keeps the side column while the timeline view is active', () => {
       render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
 
-      fireEvent.click(screen.getByRole('tab', { name: 'Timeline' }));
-      expect(screen.queryByTestId('messages-panel')).toBeNull();
-
-      fireEvent.click(screen.getByRole('tab', { name: 'Spans' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
       expect(screen.getByTestId('messages-panel')).not.toBeNull();
     });
   });
@@ -848,26 +839,60 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       const span = screen.getByTestId('span-detail');
       expect(precedes(trace, span)).toBe(true);
-      expect(columns().className).toContain('grid-cols-[1fr_1fr]');
+      expect(columns().className).toContain('grid-cols-[0px_1fr_1fr]');
     });
   });
 
   describe('given no messages slot', () => {
-    it('renders the span tree alone in the Spans tab', () => {
+    it('renders the span tree alone', () => {
       render(<TraceDataPanelView {...baseProps} />);
 
       expect(screen.queryByTestId('messages-panel')).toBeNull();
       expect(document.body.querySelector('[data-trace-side-column]')).toBeNull();
-      expect(columns().className).toContain('grid-cols-[1fr_0fr]');
+      expect(columns().className).toContain('grid-cols-[0px_1fr_0fr]');
     });
   });
 });
 
-describe('TraceDataPanelView — timeline tab', () => {
-  it('always renders Spans and Timeline tabs', () => {
+describe('TraceDataPanelView — timeline view', () => {
+  it('offers a tree/timeline button group next to the search field instead of Spans/Timeline tabs', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Timeline']);
+    expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Timeline' })).toBeNull();
+    const tree = screen.getByRole('button', { name: 'Span tree' });
+    const timeline = screen.getByRole('button', { name: 'Timeline' });
+    expect(tree.getAttribute('aria-pressed')).toBe('true');
+    expect(tree.getAttribute('data-variant')).toBe('primary');
+    expect(timeline.getAttribute('aria-pressed')).toBe('false');
+    expect(timeline.getAttribute('data-variant')).toBe('default');
+    expect(
+      tree
+        .closest('[data-slot="buttons-group"]')
+        ?.parentElement?.contains(screen.getByRole('textbox', { name: 'Search spans' })),
+    ).toBe(true);
+
+    fireEvent.click(timeline);
+    expect(screen.getByRole('button', { name: 'Timeline' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Timeline' }).getAttribute('data-variant')).toBe('primary');
+    expect(screen.getByRole('button', { name: 'Span tree' }).getAttribute('data-variant')).toBe('default');
+  });
+
+  it('follows a controlled spanView and reports picks to the consumer', () => {
+    const onSpanViewChange = vi.fn();
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        spans={nestedSpanFixture}
+        spanView="timeline"
+        onSpanViewChange={onSpanViewChange}
+      />,
+    );
+
+    expect(screen.getByLabelText('Trace time axis')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Span tree' }));
+    expect(onSpanViewChange).toHaveBeenCalledWith('tree');
+    expect(screen.getByLabelText('Trace time axis')).toBeTruthy();
   });
 
   it('shows the spans as bars on a shared time axis', () => {
@@ -876,37 +901,34 @@ describe('TraceDataPanelView — timeline tab', () => {
     expect(screen.queryByLabelText('Trace time axis')).toBeNull();
     const treeRows = screen.getAllByLabelText(/^View details for span/).map(row => row.getAttribute('aria-label'));
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Timeline' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
 
     expect(screen.getByLabelText('Trace time axis')).toBeTruthy();
     const timelineRows = screen.getAllByLabelText(/^View details for span/).map(row => row.getAttribute('aria-label'));
     expect(timelineRows).toEqual(treeRows);
   });
 
-  it('shares span selection between the Timeline and Spans tabs', () => {
+  it('shares span selection between the timeline and tree views', () => {
     const onSpanSelect = vi.fn();
     render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} onSpanSelect={onSpanSelect} />);
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Timeline' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
     fireEvent.click(within(screen.getByLabelText('View details for span weather tool')).getByRole('button'));
     expect(onSpanSelect).toHaveBeenLastCalledWith('child');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Spans' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Span tree' }));
     expect(screen.getByLabelText('View details for span weather tool').className).toContain('bg-surface4');
   });
 });
 
 describe('TraceDataPanelView — side column views', () => {
   const sideColumn = () => document.body.querySelector('[data-trace-side-column]');
-  const viewSwitcher = () => screen.getByRole('combobox', { name: 'Side column view' });
-  const pickView = async (name: RegExp) => {
-    fireEvent.click(viewSwitcher());
-    const option = await screen.findByRole('option', { name });
-    fireEvent.pointerDown(option, { pointerType: 'mouse' });
-    fireEvent.click(option, { detail: 1 });
+  const sideTabs = () => within(sideColumn() as HTMLElement).getAllByRole('tab');
+  const pickView = (name: RegExp) => {
+    fireEvent.click(within(sideColumn() as HTMLElement).getByRole('tab', { name }));
   };
 
-  it('keeps the tab strip to Spans and Timeline whatever slots are provided', () => {
+  it('keeps every tab in the side column, under a bordered header, whatever slots are provided', () => {
     render(
       <TraceDataPanelView
         {...baseProps}
@@ -916,18 +938,19 @@ describe('TraceDataPanelView — side column views', () => {
       />,
     );
 
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Timeline']);
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.every(tab => sideColumn()?.contains(tab))).toBe(true);
+    expect(tabs[0]?.closest('[role="tablist"]')?.parentElement?.parentElement?.className).toContain('border-b');
   });
 
   it('renders no side column when no slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
     expect(sideColumn()).toBeNull();
-    expect(screen.queryByRole('combobox', { name: 'Side column view' })).toBeNull();
   });
 
   describe('given only a scores slot', () => {
-    it('shows the scores in the side column under a plain "Scores" heading', () => {
+    it('shows the scores in the side column under a "Scores" tab carrying the count', () => {
       const scoresTabSlot = vi.fn(({ traceId, rootSpanId }: { traceId: string; rootSpanId: string | undefined }) => (
         <div>
           scores for {traceId}/{rootSpanId}
@@ -937,13 +960,12 @@ describe('TraceDataPanelView — side column views', () => {
 
       expect(scoresTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
       expect(within(sideColumn() as HTMLElement).getByText('scores for trace-1/root')).toBeTruthy();
-      expect(screen.getByRole('heading', { name: 'Scores (3)' })).toBeTruthy();
-      expect(screen.queryByRole('combobox', { name: 'Side column view' })).toBeNull();
+      expect(sideTabs().map(tab => tab.textContent)).toEqual(['Scores (3)']);
     });
   });
 
   describe('given only a feedback slot', () => {
-    it('shows the feedback — with the trace id and no span id — under a "Feedback" heading carrying the badge', () => {
+    it('shows the feedback — with the trace id and no span id — under a "Feedback" tab carrying the badge', () => {
       const feedbackTabSlot = vi.fn(({ traceId }: { traceId: string }) => <div>feedback for {traceId}</div>);
       render(
         <TraceDataPanelView
@@ -955,8 +977,8 @@ describe('TraceDataPanelView — side column views', () => {
 
       expect(feedbackTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1' });
       expect(screen.getByText('feedback for trace-1')).toBeTruthy();
-      const heading = screen.getByRole('heading', { name: /^feedback/i });
-      expect(within(heading).getByTestId('feedback-badge')).toBeTruthy();
+      const tab = within(sideColumn() as HTMLElement).getByRole('tab', { name: /^feedback/i });
+      expect(within(tab).getByTestId('feedback-badge')).toBeTruthy();
     });
   });
 
@@ -972,35 +994,35 @@ describe('TraceDataPanelView — side column views', () => {
         />,
       );
 
-    it('starts on Messages and offers the views in a dropdown in the column header', async () => {
+    it('starts on Messages and offers the views as tabs in the column header', () => {
       renderAll();
 
       expect(screen.getByTestId('messages-panel')).toBeTruthy();
       expect(screen.queryByText('trace feedback here')).toBeNull();
-      expect(viewSwitcher().textContent).toContain('Messages');
-
-      fireEvent.click(viewSwitcher());
-      await waitFor(() =>
-        expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Messages', 'Feedback', 'Scores (3)']),
-      );
+      expect(sideTabs().map(tab => tab.textContent)).toEqual(['Messages', 'Feedback', 'Scores (3)']);
+      expect(
+        within(sideColumn() as HTMLElement)
+          .getByRole('tab', { name: 'Messages' })
+          .getAttribute('aria-selected'),
+      ).toBe('true');
     });
 
-    it('swaps the column body when another view is picked', async () => {
+    it('swaps the column body when another view is picked', () => {
       renderAll();
 
-      await pickView(/^feedback/i);
+      pickView(/^feedback/i);
       expect(within(sideColumn() as HTMLElement).getByText('trace feedback here')).toBeTruthy();
       expect(screen.queryByTestId('messages-panel')).toBeNull();
 
-      await pickView(/^scores/i);
+      pickView(/^scores/i);
       expect(within(sideColumn() as HTMLElement).getByText('trace scores here')).toBeTruthy();
       expect(screen.queryByText('trace feedback here')).toBeNull();
     });
 
-    it('keeps the span tree in place while a view is picked', async () => {
+    it('keeps the span tree in place while a view is picked', () => {
       renderAll();
 
-      await pickView(/^scores/i);
+      pickView(/^scores/i);
       expect(screen.getByText('agent run')).toBeTruthy();
     });
   });
@@ -1021,26 +1043,8 @@ describe('TraceDataPanelView — side column views', () => {
       expect(screen.getByText('trace scores here')).toBeTruthy();
       expect(screen.queryByTestId('messages-panel')).toBeNull();
 
-      await pickView(/^messages/i);
+      pickView(/^messages/i);
       expect(onSideViewChange).toHaveBeenCalledWith('messages');
-    });
-  });
-
-  describe('given messages header actions', () => {
-    it('shows them on the Messages view only', async () => {
-      render(
-        <TraceDataPanelView
-          {...baseProps}
-          messagesPanelSlot={<div data-testid="messages-panel">messages</div>}
-          messagesPanelActions={<button>Open full thread</button>}
-          feedbackTabSlot={() => <div>trace feedback here</div>}
-        />,
-      );
-
-      expect(screen.getByRole('button', { name: 'Open full thread' })).toBeTruthy();
-
-      await pickView(/^feedback/i);
-      expect(screen.queryByRole('button', { name: 'Open full thread' })).toBeNull();
     });
   });
 });

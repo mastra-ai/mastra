@@ -2,11 +2,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  TraceMessagesPanel,
-  TraceMessagesPanelActions,
-  type TraceMessagesPanelActionsProps,
-} from '../trace-messages-panel';
+import { TraceMessagesPanel, type TraceMessagesPanelProps } from '../trace-messages-panel';
 import { TRACE_ID, panelTraceSpans } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -28,11 +24,10 @@ const installHandlers = ({ threadTraceCount = 2 }: { threadTraceCount?: number }
   );
 };
 
-const renderPanel = (actions: Partial<TraceMessagesPanelActionsProps> = {}) =>
+const renderPanel = (props: Partial<TraceMessagesPanelProps> = {}) =>
   renderWithProviders(
     <TestLinkProvider>
-      <TraceMessagesPanelActions threadId={THREAD_ID} {...actions} />
-      <TraceMessagesPanel traceId={TRACE_ID} />
+      <TraceMessagesPanel traceId={TRACE_ID} threadId={THREAD_ID} {...props} />
     </TestLinkProvider>,
     { router: true },
   );
@@ -46,6 +41,13 @@ describe('TraceMessagesPanel', () => {
 
       const button = await screen.findByRole('button', { name: 'Open full thread' });
       expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
+      // The action lives at the top of the conversation, not in the column header.
+      const panel = screen.getByTestId('messages-panel');
+      expect(panel.contains(button)).toBe(true);
+      expect(
+        button.compareDocumentPosition(await screen.findByText('No rain is expected.')) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
 
       fireEvent.click(button);
       expect(onViewFullThread).toHaveBeenCalledTimes(1);

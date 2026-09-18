@@ -389,11 +389,10 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
 
       const traceDialog = await screen.findByRole('dialog', { name: 'Trace experiment-trace-1' });
-      fireEvent.click(within(traceDialog).getByRole('combobox', { name: 'Side column view' }));
-      const feedbackOption = await screen.findByRole('option', { name: /^feedback/i });
-      expect(within(feedbackOption).getByTestId('needs-review-dot')).toBeDefined();
-      expect(await screen.findByRole('option', { name: /scores \(1\)/i })).toBeDefined();
-      fireEvent.keyDown(feedbackOption, { key: 'Escape' });
+      const sideColumn = traceDialog.querySelector('[data-trace-side-column]') as HTMLElement;
+      const feedbackTab = await within(sideColumn).findByRole('tab', { name: /^feedback/i });
+      expect(within(feedbackTab).getByTestId('needs-review-dot')).toBeDefined();
+      expect(await within(sideColumn).findByRole('tab', { name: /scores \(1\)/i })).toBeDefined();
 
       await pickTraceSideView(/^scores/i, traceDialog);
       expect((await screen.findAllByText('Experiment relevance')).length).toBeGreaterThan(0);

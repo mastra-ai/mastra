@@ -428,6 +428,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         scoresTabSlot={({ traceId: tid, rootSpanId }) =>
           rootSpanId ? <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={url.handleScoreChange} /> : null
         }
+        spanView={url.spanViewParam}
+        onSpanViewChange={url.handleSpanViewChange}
         spanActiveTab={url.spanTabParam ?? 'details'}
         onSpanTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
         spanFeedbackTabBadge={<NeedsReviewDot feedback={spanFeedbackData?.feedback} />}

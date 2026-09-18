@@ -5,7 +5,7 @@ import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hoo
 import type { ComponentProps, ReactNode } from 'react';
 
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
-import { TraceMessagesPanel, TraceMessagesPanelActions } from '@/domains/traces/components/trace-messages-panel';
+import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { Link } from '@/lib/link';
@@ -64,6 +64,8 @@ export interface TraceSpanPanelProps {
   /** Accessible drawer name; defaults to the trace id. */
   title?: string;
   showUnavailableFeaturesMsg?: TraceDataPanelViewProps['showUnavailableFeaturesMsg'];
+  spanView?: TraceDataPanelViewProps['spanView'];
+  onSpanViewChange?: TraceDataPanelViewProps['onSpanViewChange'];
 
   // Span-panel pass-through.
   spanActiveTab?: string;
@@ -106,6 +108,8 @@ export function TraceSpanPanel({
   headerSlot,
   title,
   showUnavailableFeaturesMsg,
+  spanView,
+  onSpanViewChange,
   spanActiveTab,
   onSpanTabChange,
   spanFeedbackTabBadge,
@@ -155,19 +159,18 @@ export function TraceSpanPanel({
       headerSlot={headerSlot}
       title={title}
       showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
+      spanView={spanView}
+      onSpanViewChange={onSpanViewChange}
       feedbackTabBadge={feedbackTabBadge}
       feedbackTabSlot={feedbackTabSlot}
       featuredSpanIds={featuredSpanIds}
       messagesPanelSlot={
         traceId && showPartialThread && threadId ? (
-          <TraceMessagesPanel traceId={traceId} onHighlightSpans={onHighlightSpans} />
-        ) : undefined
-      }
-      messagesPanelActions={
-        traceId && showPartialThread && threadId ? (
-          <TraceMessagesPanelActions
+          <TraceMessagesPanel
+            traceId={traceId}
             threadId={threadId}
             onViewFullThread={onFullThreadOpenChange ? () => onFullThreadOpenChange(true) : undefined}
+            onHighlightSpans={onHighlightSpans}
           />
         ) : undefined
       }

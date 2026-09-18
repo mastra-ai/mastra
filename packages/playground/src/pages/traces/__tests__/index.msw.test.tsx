@@ -207,9 +207,26 @@ describe('Traces page usage columns', () => {
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
       expect(await screen.findByTestId('messages-panel')).not.toBeNull();
-      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-full');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    describe('given the spanView query param is timeline', () => {
+      it('opens the trace column on the timeline and writes the pick back to the URL', async () => {
+        setThreadedTraceHandlers();
+
+        const { queryClient } = renderPage('/traces?traceId=trace-a&spanView=timeline');
+
+        expect(await screen.findByLabelText('Trace time axis')).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Timeline' }).getAttribute('aria-pressed')).toBe('true');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Span tree' }));
+
+        await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('spanView='));
+        expect(screen.queryByLabelText('Trace time axis')).toBeNull();
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
     });
 
     describe('given the thread has another trace', () => {
