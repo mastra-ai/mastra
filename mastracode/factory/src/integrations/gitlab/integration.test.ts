@@ -37,7 +37,7 @@ function issue(projectId = 10, iid = 42, path = 'mastra/platform') {
     author: { name: 'Grace', username: 'grace' },
     assignee: { name: 'Ada', username: 'ada' },
     assignees: [{ name: 'Ada', username: 'ada' }],
-    labels: ['bug'],
+    labels: [{ name: 'bug', color: '#d73a4a', text_color: '#ffffff' }],
     user_notes_count: 1,
     created_at: '2026-08-30T00:00:00Z',
     updated_at: '2026-09-01T00:00:00Z',
@@ -193,6 +193,8 @@ describe('GitLabIntegration', () => {
       sourceIds: [sourceId],
     });
     expect(page.issues[0]?.id).toBe('42');
+    expect(page.issues[0]?.labels).toEqual(['bug']);
+    expect(page.issues[0]?.labelColors).toEqual({ bug: '#d73a4a' });
 
     await gitlab.intake.updateIssue({
       connection: { type: 'oauth', accessToken: 'gitlab-direct-access-token' },

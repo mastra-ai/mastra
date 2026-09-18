@@ -26,11 +26,8 @@ function metadataString(source: Record<string, unknown>, key: string): string | 
 }
 
 /**
- * Best-effort creator attribution for external items. GitHub issues/PRs expose
- * the opener under `metadata.author`; Linear issues store the reporter under
- * `metadata.creator`/`metadata.linearCreator`. GitHub also gives us an avatar
- * URL directly from `github.com/<login>.png` — Linear doesn't publish a stable
- * public avatar URL, so those fall through to initials.
+ * Best-effort creator attribution for external items. GitHub exposes a stable
+ * public avatar URL; GitLab and Linear names fall through to initials.
  */
 function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
   if (item.source === 'github-issue' || item.source === 'github-pr') {
@@ -42,10 +39,13 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
       avatarUrl: `https://github.com/${encodeURIComponent(author)}.png?size=64`,
     };
   }
+  if (item.source === 'gitlab-issue') {
+    const author = metadataString(item.metadata, 'author');
+    return author ? { id: `gitlab:${author}`, name: author } : undefined;
+  }
   if (item.source === 'linear-issue') {
     const creator = metadataString(item.metadata, 'creator') ?? metadataString(item.metadata, 'linearCreator');
-    if (!creator) return undefined;
-    return { id: `linear:${creator}`, name: creator };
+    return creator ? { id: `linear:${creator}`, name: creator } : undefined;
   }
   if (item.source === 'jira-issue') {
     const creator = metadataString(item.metadata, 'creator') ?? metadataString(item.metadata, 'author');
@@ -61,12 +61,14 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
 }
 
 /**
- * Best-effort current-assignee attribution for Linear issues. When present the
- * card treats the assignee as the "last worker" (they own the issue right
- * now), and the timeline gets a separate `assigned` event so the reporter and
- * assignee are both visible.
+ * Best-effort current-assignee attribution for GitLab and Linear issues. The
+ * assignee is the current owner and is also represented in the activity rail.
  */
 function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined {
+  if (item.source === 'gitlab-issue') {
+    const assignee = metadataString(item.metadata, 'assignee');
+    return assignee ? { id: `gitlab:${assignee}`, name: assignee } : undefined;
+  }
   if (item.source === 'linear-issue') {
     const assignee = metadataString(item.metadata, 'assignee') ?? metadataString(item.metadata, 'linearAssignee');
     if (!assignee) return undefined;

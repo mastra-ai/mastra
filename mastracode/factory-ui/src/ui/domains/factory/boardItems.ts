@@ -28,6 +28,18 @@ export function metadataLabels(metadata: Record<string, unknown>): string[] {
     : [];
 }
 
+export function metadataLabelColors(metadata: Record<string, unknown>): Record<string, string> {
+  if (!metadata.labelColors || typeof metadata.labelColors !== 'object' || Array.isArray(metadata.labelColors))
+    return {};
+  return Object.fromEntries(
+    Object.entries(metadata.labelColors).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === 'string' &&
+        (/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(entry[1]) || /^[a-z]+$/i.test(entry[1])),
+    ),
+  );
+}
+
 export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>): number | undefined {
   const metadataKey = item.source === 'github-issue' ? 'githubIssueNumber' : 'githubPullRequestNumber';
   const itemNumber = item.metadata[metadataKey] ?? item.metadata.number;

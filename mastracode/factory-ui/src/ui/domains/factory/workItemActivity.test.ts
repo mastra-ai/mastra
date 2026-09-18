@@ -202,6 +202,28 @@ describe('workItemActivity', () => {
     });
   });
 
+  it('shows GitLab authors and assignees as distinct external activity', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'gitlab-issue',
+        metadata: { identifier: 'group/project#7', assignee: 'grace', author: 'ada' },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'gitlab:grace', name: 'grace' });
+    expect(activity.extraActors).toEqual({
+      'gitlab:grace': { id: 'gitlab:grace', name: 'grace' },
+      'gitlab:ada': { id: 'gitlab:ada', name: 'ada' },
+    });
+    expect(activity.events.map(candidate => ({ id: candidate.id, actorId: candidate.actorId }))).toEqual([
+      { id: `synthetic-assigned:${item.id}`, actorId: 'gitlab:grace' },
+      { id: `synthetic-created:${item.id}`, actorId: 'gitlab:ada' },
+    ]);
+  });
+
   it('falls back to the Linear assignee without an avatar url', () => {
     const activity = workItemActivity(
       {

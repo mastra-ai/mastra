@@ -95,9 +95,11 @@ export function gitlabCandidate(issue: GitLabIssue): BoardCandidate {
       identifier: issue.identifier,
       state: issue.state,
       assignee: issue.assignee,
+      assignees: issue.assignees ?? [],
       author: issue.author,
       sourceId: issue.sourceId,
       labels: issue.labels,
+      labelColors: issue.labelColors ?? {},
       sourceCreatedAt: issue.createdAt,
     },
   };

@@ -35,6 +35,16 @@ export interface GitLabUser {
   username: string;
 }
 
+export interface GitLabLabelDetail {
+  name: string;
+  color: string;
+  text_color?: string;
+}
+
+type GitLabIssueResponse = Omit<GitLabIssue, 'labels' | 'labelDetails'> & {
+  labels?: Array<string | GitLabLabelDetail>;
+};
+
 export interface GitLabIssue {
   id: number;
   iid: number;
@@ -47,6 +57,7 @@ export interface GitLabIssue {
   assignee?: GitLabUser | null;
   assignees?: GitLabUser[];
   labels?: string[];
+  labelDetails?: GitLabLabelDetail[];
   weight?: number | null;
   user_notes_count?: number;
   created_at: string;
@@ -220,21 +231,32 @@ export class GitLabApiClient {
   }
 
   async listIssues(projectId: string, options: { page?: number; labels?: string[] } = {}): Promise<GitLabIssue[]> {
-    return this.#request<GitLabIssue[]>('GET', `/api/v4/projects/${encodeURIComponent(projectId)}/issues`, {
-      query: {
-        state: 'opened',
-        scope: 'all',
-        order_by: 'updated_at',
-        sort: 'desc',
-        page: options.page ?? 1,
-        per_page: GITLAB_ISSUES_PAGE_SIZE,
-        labels: options.labels?.length ? options.labels.join(',') : undefined,
+    const issues = await this.#request<GitLabIssueResponse[]>(
+      'GET',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/issues`,
+      {
+        query: {
+          state: 'opened',
+          scope: 'all',
+          order_by: 'updated_at',
+          sort: 'desc',
+          page: options.page ?? 1,
+          per_page: GITLAB_ISSUES_PAGE_SIZE,
+          labels: options.labels?.length ? options.labels.join(',') : undefined,
+          with_labels_details: 'true',
+        },
       },
-    });
+    );
+    return issues.map(normalizeIssue);
   }
 
   async getIssue(projectId: string, issueIid: number): Promise<GitLabIssue> {
-    return this.#request<GitLabIssue>('GET', `/api/v4/projects/${encodeURIComponent(projectId)}/issues/${issueIid}`);
+    const issue = await this.#request<GitLabIssueResponse>(
+      'GET',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/issues/${issueIid}`,
+      { query: { with_labels_details: 'true' } },
+    );
+    return normalizeIssue(issue);
   }
 
   async listNotes(projectId: string, issueIid: number, options: { page?: number } = {}): Promise<GitLabNote[]> {
@@ -610,4 +632,14 @@ async function extractError(response: Response): Promise<string> {
     // Fall through to the status-based message.
   }
   return `GitLab API request failed (${response.status})`;
+}
+
+function normalizeIssue(response: GitLabIssueResponse): GitLabIssue {
+  const { labels, ...issue } = response;
+  const labelDetails = (labels ?? []).filter((label): label is GitLabLabelDetail => typeof label !== 'string');
+  return {
+    ...issue,
+    labels: (labels ?? []).map(label => (typeof label === 'string' ? label : label.name)),
+    ...(labelDetails.length > 0 ? { labelDetails } : {}),
+  };
 }

@@ -61,7 +61,21 @@ describe('GitLabApiClient', () => {
   it('routes issue reads and writes through the integrations v2 proxy', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(json([]))
+      .mockResolvedValueOnce(
+        json([
+          {
+            id: 1,
+            iid: 7,
+            project_id: 9,
+            title: 'Fix it',
+            state: 'opened',
+            web_url: 'https://gitlab.example/group/project/-/issues/7',
+            labels: [{ name: 'bug', color: '#d73a4a', text_color: '#ffffff' }],
+            created_at: '2026-09-01T00:00:00Z',
+            updated_at: '2026-09-01T00:00:00Z',
+          },
+        ]),
+      )
       .mockResolvedValueOnce(json({ id: 9, body: 'done', created_at: '2026-09-01T00:00:00Z' }))
       .mockResolvedValueOnce(json({ id: 7, iid: 42, state: 'closed' }));
     vi.stubGlobal('fetch', fetchMock);
@@ -70,12 +84,16 @@ describe('GitLabApiClient', () => {
       connectionId: 'a1b_gitlab',
     });
 
-    await client.listIssues('group/project', { labels: ['bug', 'urgent'] });
+    const issues = await client.listIssues('group/project', { labels: ['bug', 'urgent'] });
+    expect(issues[0]).toMatchObject({
+      labels: ['bug'],
+      labelDetails: [{ name: 'bug', color: '#d73a4a', text_color: '#ffffff' }],
+    });
     await client.createNote('group/project', 42, 'done');
     await client.updateIssueState('group/project', 42, 'close');
 
     expect(requestOf(fetchMock, 0).url).toBe(
-      'https://integrations.example.com/v2/connections/a1b_gitlab/proxy/api/v4/projects/group%2Fproject/issues?state=opened&scope=all&order_by=updated_at&sort=desc&page=1&per_page=30&labels=bug%2Curgent',
+      'https://integrations.example.com/v2/connections/a1b_gitlab/proxy/api/v4/projects/group%2Fproject/issues?state=opened&scope=all&order_by=updated_at&sort=desc&page=1&per_page=30&labels=bug%2Curgent&with_labels_details=true',
     );
     expect(requestOf(fetchMock, 0).init.headers).toMatchObject({ authorization: 'Bearer platform-token' });
     expect(JSON.parse(String(requestOf(fetchMock, 1).init.body))).toEqual({ body: 'done' });

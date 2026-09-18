@@ -12,7 +12,7 @@ import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
-import { FolderIcon } from '../../../ui/icons';
+import { FolderIcon, GitLabIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
 import { connectGithub, isGitLabRepository } from '../services/github';
@@ -177,14 +177,6 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         </>
       )}
     </div>
-  );
-}
-
-function GitLabIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
-      <path d="M23.955 13.587 20.613 3.307a.54.54 0 0 0-1.025 0l-2.257 6.946H6.67L4.413 3.307a.54.54 0 0 0-1.025 0L.045 13.587a1.08 1.08 0 0 0 .393 1.207L12 23.196l11.562-8.402a1.08 1.08 0 0 0 .393-1.207Z" />
-    </svg>
   );
 }
 
