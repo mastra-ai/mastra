@@ -796,7 +796,7 @@ describe('TraceDataPanelView — messages column', () => {
 
       expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Timeline']);
       expect(precedes(screen.getByTestId('messages-panel'), screen.getByText('agent run'))).toBe(true);
-      expect(columns().className).toContain('grid-cols-[1fr_1fr_0fr]');
+      expect(columns().className).toContain('grid-cols-[24rem_1fr_0fr]');
       expect(columns().className).toContain('transition-[grid-template-columns]');
     });
 
@@ -806,17 +806,17 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       expect(precedes(screen.getByTestId('messages-panel'), trace)).toBe(true);
       expect(precedes(trace, screen.getByTestId('span-detail'))).toBe(true);
-      expect(columns().className).toContain('grid-cols-[1fr_1fr_1fr]');
+      expect(columns().className).toContain('grid-cols-[24rem_1fr_1fr]');
     });
 
     it('folds the messages column away while the Timeline tab is active', () => {
       render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
 
       fireEvent.click(screen.getByRole('tab', { name: 'Timeline' }));
-      expect(columns().className).toContain('grid-cols-[0fr_1fr_0fr]');
+      expect(columns().className).toContain('grid-cols-[0px_1fr_0fr]');
 
       fireEvent.click(screen.getByRole('tab', { name: 'Spans' }));
-      expect(columns().className).toContain('grid-cols-[1fr_1fr_0fr]');
+      expect(columns().className).toContain('grid-cols-[24rem_1fr_0fr]');
     });
   });
 
@@ -840,7 +840,7 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       const span = screen.getByTestId('span-detail');
       expect(precedes(trace, span)).toBe(true);
-      expect(columns().className).toContain('grid-cols-[0fr_1fr_1fr]');
+      expect(columns().className).toContain('grid-cols-[0px_1fr_1fr]');
     });
   });
 
@@ -849,7 +849,7 @@ describe('TraceDataPanelView — messages column', () => {
       render(<TraceDataPanelView {...baseProps} />);
 
       expect(screen.queryByTestId('messages-panel')).toBeNull();
-      expect(columns().className).toContain('grid-cols-[0fr_1fr_0fr]');
+      expect(columns().className).toContain('grid-cols-[0px_1fr_0fr]');
     });
   });
 });

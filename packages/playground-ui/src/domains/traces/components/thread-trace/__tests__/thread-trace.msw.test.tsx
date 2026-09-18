@@ -205,19 +205,22 @@ describe('ThreadTrace', () => {
     it('opens the side panel for that row, marks the row active, and closes back', async () => {
       const { container } = renderView();
       await screen.findByText('Chef agent run');
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)]');
-      expect(screen.queryByTestId('span-panel')).toBeNull();
+      // The span cell stays mounted but collapsed so opening it animates the grid columns.
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_0%]');
+      expect(container.firstElementChild?.className).toContain('transition-[grid-template-columns]');
+      expect(screen.getByTestId('span-panel').childElementCount).toBe(0);
 
       fireEvent.click(screen.getByText('Chef agent run'));
 
-      await screen.findByTestId('span-panel');
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_minmax(0,40%)]');
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_40%]');
       expect(getRow('trace-a').dataset.active).toBe('true');
       expect(getRow('trace-b').dataset.active).toBeUndefined();
       expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none');
 
       fireEvent.click(screen.getByRole('button', { name: /close/i }));
-      await waitFor(() => expect(screen.queryByTestId('span-panel')).toBeNull());
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBe(0));
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_0%]');
       expect(getRow('trace-a').dataset.active).toBeUndefined();
     });
 
@@ -225,7 +228,7 @@ describe('ThreadTrace', () => {
       renderView();
       await screen.findByText('Recipe lookup');
       fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByTestId('span-panel');
+      await screen.findByRole('button', { name: 'Next span' });
 
       fireEvent.click(screen.getByRole('button', { name: 'Next span' }));
       await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a-tool;none'));

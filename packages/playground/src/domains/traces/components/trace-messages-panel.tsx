@@ -31,16 +31,21 @@ export function TraceMessagesPanel({
 
   return (
     <div data-testid="messages-panel" className={cn('flex h-full min-h-0 flex-col', className)}>
-      {/* DataPanel.Content already scrolls (`overflow-y-auto`) and pads with `p-3`, matching the span tree. */}
-      <DataPanel.Content>
-        {/* Sits at the top of the conversation, scrolling with it; no bordered section of its own. */}
+      {/* Same chrome as the Span column header, so the two side columns line up. */}
+      <DataPanel.Header>
+        <DataPanel.HeaderContent>
+          <DataPanel.Heading>Messages</DataPanel.Heading>
+        </DataPanel.HeaderContent>
         {showFullThreadAction && (
-          <div className="flex justify-center pb-3">
-            <Button icon={<MessagesSquareIcon />} variant="ghost" size="xs" onClick={onViewFullThread}>
-              View full thread
+          <DataPanel.HeaderActions>
+            <Button icon={<MessagesSquareIcon />} variant="ghost" size="sm" onClick={onViewFullThread}>
+              Open full thread
             </Button>
-          </div>
+          </DataPanel.HeaderActions>
         )}
+      </DataPanel.Header>
+      {/* The turn view brings its own `p-4`; no extra content padding so the top gap equals the side gap. */}
+      <DataPanel.Content className="p-0">
         <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
       </DataPanel.Content>
     </div>

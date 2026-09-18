@@ -123,37 +123,37 @@ describe('TraceSpanPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when the thread has other traces and the panel can swap in place, then "View full thread" asks to open it', async () => {
+    it('when the thread has other traces and the panel can swap in place, then "Open full thread" asks to open it', async () => {
       installHandlers({ threadTraceCount: 2 });
       const onFullThreadOpenChange = vi.fn();
       const { queryClient } = renderPanel({ showPartialThread: true, onFullThreadOpenChange });
 
-      fireEvent.click(await screen.findByRole('button', { name: 'View full thread' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
       expect(onFullThreadOpenChange).toHaveBeenCalledWith(true);
-      expect(screen.queryByRole('link', { name: 'View full thread' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when the thread has other traces but no in-place swap is wired, then no "View full thread" action is shown', async () => {
+    it('when the thread has other traces but no in-place swap is wired, then no "Open full thread" action is shown', async () => {
       installHandlers({ threadTraceCount: 2 });
       const { queryClient } = renderPanel({ showPartialThread: true });
 
       await screen.findByText('No rain is expected.');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      expect(screen.queryByRole('link', { name: 'View full thread' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'View full thread' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Open full thread' })).toBeNull();
     });
 
-    it('when this trace is the only one in its thread, then no "View full thread" action is shown', async () => {
+    it('when this trace is the only one in its thread, then no "Open full thread" action is shown', async () => {
       installHandlers({ threadTraceCount: 1 });
       const { queryClient } = renderPanel({ showPartialThread: true, onFullThreadOpenChange: vi.fn() });
 
       await screen.findByText('No rain is expected.');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      expect(screen.queryByRole('link', { name: 'View full thread' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'View full thread' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Open full thread' })).toBeNull();
     });
 
     describe('when the full thread is open', () => {

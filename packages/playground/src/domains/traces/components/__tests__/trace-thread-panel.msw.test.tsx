@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -89,6 +89,25 @@ describe('TraceThreadPanel', () => {
       const wrapper = details!.closest<HTMLElement>('[class*="thread-trace-details"]');
       expect(wrapper?.className).toContain('[&_[data-slot=thread-trace-details]]:rounded-t-none');
       expect(wrapper?.className).toContain('[&_[data-slot=thread-trace-details]]:border-y-0');
+    });
+
+    it('when no span is selected, then the panel is wide, and selecting a span makes it full width', async () => {
+      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
+      installHandlers();
+      const { queryClient } = renderPanel();
+      const dialog = () => screen.getByRole('dialog', { name: `Thread ${THREAD_ID}` });
+
+      expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(dialog().className).toContain('w-4/5');
+
+      fireEvent.click(screen.getByText('Chef agent run'));
+      await waitFor(() => expect(dialog().className).toContain('w-full'));
+
+      const spanPanel = dialog().querySelector<HTMLElement>('[data-slot="thread-trace-span-panel"]');
+      expect(spanPanel).not.toBeNull();
+      fireEvent.click(within(spanPanel!).getByRole('button', { name: 'Close Panel' }));
+      await waitFor(() => expect(dialog().className).toContain('w-4/5'));
     });
 
     it('when "Back to trace" is clicked, then onBack is called', async () => {

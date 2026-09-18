@@ -431,7 +431,7 @@ export function TraceDataPanelView({
 
 /**
  * Lays out the card body as three columns — `[messages] [trace] [span]` — inside
- * the same card. The messages and span cells always exist and collapse to `0fr`
+ * the same card. The messages and span cells always exist and collapse to zero
  * when hidden, so opening/closing them animates via `grid-template-columns`
  * rather than mounting/unmounting a DOM column (which cannot be transitioned).
  * Search matches — span names in the timeline tree as well as values in the span
@@ -464,14 +464,16 @@ function TracePanelColumns({
   const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(highlightQuery, spanPanelKey);
 
   const showMessages = !!messagesPanelSlot && !messagesCollapsed;
+  // The messages column has a fixed width so the span tree and span detail share the rest.
+  // It collapses to `0px` (a length, not `0fr`) so `grid-template-columns` still interpolates.
   const columns =
     showMessages && spanPanelSlot
-      ? 'grid-cols-[1fr_1fr_1fr]'
+      ? 'grid-cols-[24rem_1fr_1fr]'
       : showMessages
-        ? 'grid-cols-[1fr_1fr_0fr]'
+        ? 'grid-cols-[24rem_1fr_0fr]'
         : spanPanelSlot
-          ? 'grid-cols-[0fr_1fr_1fr]'
-          : 'grid-cols-[0fr_1fr_0fr]';
+          ? 'grid-cols-[0px_1fr_1fr]'
+          : 'grid-cols-[0px_1fr_0fr]';
 
   return (
     <div

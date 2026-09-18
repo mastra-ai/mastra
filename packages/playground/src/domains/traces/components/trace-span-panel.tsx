@@ -51,7 +51,7 @@ export interface TraceSpanPanelProps {
   onHighlightSpans?: (spanIds: string[]) => void;
   /** When true, the whole panel shows the trace's thread (every turn) instead of the trace timeline. */
   isFullThreadOpen?: boolean;
-  /** Enables the in-place "View full thread" swap; without it the action falls back to a link. */
+  /** Enables the in-place "Open full thread" swap; without it the action falls back to a link. */
   onFullThreadOpenChange?: (open: boolean) => void;
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];

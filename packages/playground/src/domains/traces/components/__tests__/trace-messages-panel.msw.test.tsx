@@ -38,28 +38,39 @@ const renderPanel = (props: Partial<TraceMessagesPanelProps> = {}) =>
 
 describe('TraceMessagesPanel', () => {
   describe('given the thread has other traces', () => {
-    it('when onViewFullThread is provided, then "View full thread" is a button that calls it', async () => {
+    it('when onViewFullThread is provided, then "Open full thread" is a button that calls it', async () => {
       installHandlers({ threadTraceCount: 2 });
       const onViewFullThread = vi.fn();
       const { queryClient } = renderPanel({ onViewFullThread });
 
-      const button = await screen.findByRole('button', { name: 'View full thread' });
-      expect(screen.queryByRole('link', { name: 'View full thread' })).toBeNull();
+      const button = await screen.findByRole('button', { name: 'Open full thread' });
+      expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
 
       fireEvent.click(button);
       expect(onViewFullThread).toHaveBeenCalledTimes(1);
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when onViewFullThread is absent, then no "View full thread" action is shown', async () => {
+    it('when rendered, then a "Messages" heading sits at the top of the column', async () => {
+      installHandlers({ threadTraceCount: 2 });
+      const { queryClient } = renderPanel({ onViewFullThread: vi.fn() });
+
+      await screen.findByText('No rain is expected.');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      const heading = screen.getByRole('heading', { name: 'Messages' });
+      expect(screen.getByTestId('messages-panel').contains(heading)).toBe(true);
+    });
+
+    it('when onViewFullThread is absent, then no "Open full thread" action is shown', async () => {
       installHandlers({ threadTraceCount: 2 });
       const { queryClient } = renderPanel();
 
       await screen.findByText('No rain is expected.');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      expect(screen.queryByRole('button', { name: 'View full thread' })).toBeNull();
-      expect(screen.queryByRole('link', { name: 'View full thread' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Open full thread' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
     });
   });
 
@@ -71,8 +82,8 @@ describe('TraceMessagesPanel', () => {
       await screen.findByText('No rain is expected.');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      expect(screen.queryByRole('button', { name: 'View full thread' })).toBeNull();
-      expect(screen.queryByRole('link', { name: 'View full thread' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Open full thread' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
     });
   });
 });
