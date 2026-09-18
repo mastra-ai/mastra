@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { workItemMeta } from './boardItems';
+import { metadataLabelColors, workItemMeta } from './boardItems';
 import type { WorkItem } from './services/workItems';
 
 function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -51,5 +51,20 @@ describe('workItemMeta', () => {
       metadata: { githubPullRequestNumber: 22765, author: 'LekoArts', sourceCreatedAt: 'not-a-date' },
     });
     expect(workItemMeta(item)).toBe('#22765 · LekoArts · just now');
+  });
+});
+
+describe('metadataLabelColors', () => {
+  it('keeps safe provider colors and rejects arbitrary CSS values', () => {
+    expect(
+      metadataLabelColors({
+        labelColors: {
+          bug: '#d73a4a',
+          documentation: 'rebeccapurple',
+          unsafe: 'url(https://example.com/tracker)',
+          malformed: '#12345',
+        },
+      }),
+    ).toEqual({ bug: '#d73a4a', documentation: 'rebeccapurple' });
   });
 });

@@ -37,7 +37,7 @@ export function boardRelevanceQueryValue(
 }
 
 export interface BoardParticipant extends AuditActorProfile {
-  source: 'factory' | 'github' | 'linear';
+  source: 'factory' | 'github' | 'gitlab' | 'linear';
 }
 
 interface RelevanceTarget {
@@ -58,6 +58,7 @@ function metadataStrings(metadata: Record<string, unknown>, key: string): string
 
 function externalId(source: RelevanceTarget['source'], name: string): string | undefined {
   if (source === 'github-issue' || source === 'github-pr') return `github:${name.toLowerCase()}`;
+  if (source === 'gitlab-issue') return `gitlab:${name.toLowerCase()}`;
   if (source === 'linear-issue') return `linear:${name.toLowerCase()}`;
   return undefined;
 }
@@ -73,11 +74,12 @@ function externalProfile(source: RelevanceTarget['source'], name: string): Board
       source: 'github',
     };
   }
+  if (source === 'gitlab-issue') return { id, name, source: 'gitlab' };
   return { id, name, source: 'linear' };
 }
 
 function externalCreator(target: RelevanceTarget): string | undefined {
-  if (target.source === 'github-issue' || target.source === 'github-pr') {
+  if (target.source === 'github-issue' || target.source === 'github-pr' || target.source === 'gitlab-issue') {
     return metadataString(target.metadata, 'author');
   }
   if (target.source === 'linear-issue') {
@@ -91,7 +93,7 @@ function externalCreator(target: RelevanceTarget): string | undefined {
 }
 
 function externalAssignees(target: RelevanceTarget): string[] {
-  if (target.source === 'github-issue' || target.source === 'github-pr') {
+  if (target.source === 'github-issue' || target.source === 'github-pr' || target.source === 'gitlab-issue') {
     const assignees = metadataStrings(target.metadata, 'assignees');
     const assignee = metadataString(target.metadata, 'assignee');
     return [...new Set([...assignees, ...(assignee ? [assignee] : [])])];

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { issueCandidate, linearCandidate, pullRequestCandidate } from './boardCandidates';
+import { gitlabCandidate, issueCandidate, linearCandidate, pullRequestCandidate } from './boardCandidates';
 import {
   boardLabels,
   boardLabelsFromQuery,
@@ -89,7 +89,7 @@ describe('board relevance', () => {
     expect(workItemMatchesRelevance(item, activityPage, undefined, new Set())).toBe(true);
   });
 
-  it('filters intake candidates by GitHub and Linear provider metadata', () => {
+  it('filters intake candidates by GitHub, GitLab, and Linear provider metadata', () => {
     const githubIssue = issueCandidate({
       number: 7,
       title: 'Fix login bug',
@@ -113,6 +113,24 @@ describe('board relevance', () => {
       createdAt: '2026-08-01T09:00:00.000Z',
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
+    const gitlab = gitlabCandidate({
+      id: '7',
+      externalId: 'gitlab-issue:7',
+      identifier: 'group/project#7',
+      title: 'Match provider metadata',
+      url: 'https://gitlab.com/group/project/-/issues/7',
+      state: 'opened',
+      stateType: 'unstarted',
+      priority: null,
+      assignee: 'Grace Hopper',
+      assignees: ['Grace Hopper', 'Katherine Johnson'],
+      author: 'Ada Lovelace',
+      source: 'group/project',
+      sourceId: 'gitlab-project:7',
+      labels: [],
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+    });
     const linear = linearCandidate({
       id: 'linear-1',
       identifier: 'ENG-12',
@@ -131,6 +149,8 @@ describe('board relevance', () => {
 
     expect(candidateMatchesRelevance(githubIssue, 'github:hubot', new Set(['assigned']))).toBe(true);
     expect(candidateMatchesRelevance(githubPr, 'github:monalisa', new Set(['review-requested']))).toBe(true);
+    expect(candidateMatchesRelevance(gitlab, 'gitlab:ada lovelace', new Set(['authored']))).toBe(true);
+    expect(candidateMatchesRelevance(gitlab, 'gitlab:katherine johnson', new Set(['assigned']))).toBe(true);
     expect(candidateMatchesRelevance(linear, 'linear:ada lovelace', new Set(['authored']))).toBe(true);
     expect(candidateMatchesRelevance(linear, 'linear:grace hopper', new Set(['assigned']))).toBe(true);
   });

@@ -56,6 +56,8 @@ export interface IntakeIssue {
   /** Provider source id the issue was read from (Linear project id); lets callers map issues back to intake bindings. */
   sourceId?: string | null;
   labels: string[];
+  /** Provider label name to its display color, when supplied by the upstream API. */
+  labelColors?: Record<string, string>;
   commentCount: number | null;
   createdAt: string;
   updatedAt: string;

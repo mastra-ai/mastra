@@ -81,6 +81,7 @@ export function attachGitLabIssueReconciler(
     assignee: issue.assignee,
     assignees: issue.assignees ?? [],
     labels: issue.labels,
+    labelColors: issue.labelColors ?? {},
     updatedAt: issue.updatedAt,
   });
 
