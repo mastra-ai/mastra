@@ -1,10 +1,11 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Link, Route, Routes } from 'react-router';
+import { Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptBlocksPage from '..';
 import { fewPromptBlocks, pagedPromptBlocks, systemPackages } from './fixtures/prompt-blocks';
 import { LinkComponentProvider } from '@/lib/framework';
+import { Link } from '@/lib/link';
 import { RouteHeaderActionsProvider } from '@/lib/route-header';
 import { RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { stubLinkPaths, TestLinkProvider } from '@/test/link-provider';

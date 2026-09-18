@@ -1,5 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { MastraWorker } from '@mastra/core/worker';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type {
@@ -20,9 +21,15 @@ import type {
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { adfToText } from '../../jira/adf.js';
 import type { JiraComment, JiraIssue, JiraTransition } from '../../jira/api.js';
 import { JiraApiClient, JiraApiError } from '../../jira/api.js';
+import type { JiraEventRules, JiraRuleOverrides } from '../../jira/default-rules.js';
+import { resolveJiraRules } from '../../jira/default-rules.js';
+import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
+import { jiraReconciliationEnabled, jiraReconciliationInterval } from '../../jira/reconciliation-config.js';
+import { attachJiraRules } from '../../jira/rules.js';
 import {
   logPlatformInfo,
   PlatformApiClient,
@@ -93,6 +100,8 @@ function stateTypeFromCategory(key: string | undefined): string | null {
 
 export interface PlatformJiraIntegrationConfig {
   clientConfig?: PlatformApiClientConfig;
+  /** Per-event replacements; omitted events retain defaults, null disables. */
+  rules?: JiraRuleOverrides;
 }
 
 export class PlatformJiraIntegration implements FactoryIntegration {
@@ -106,7 +115,14 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   #auth: RouteAuth | undefined;
   readonly #orgIdByResourceId = new Map<string, string | null>();
 
+  readonly #rules: JiraEventRules;
+
+  get rules(): JiraEventRules {
+    return this.#rules;
+  }
+
   constructor(config: PlatformJiraIntegrationConfig = {}) {
+    this.#rules = resolveJiraRules(config.rules);
     this.#clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
     this.#platformClient = new PlatformApiClient(this.#clientConfig);
     this.#endpointHost = new URL(this.#clientConfig.baseUrl).host;
@@ -228,10 +244,18 @@ export class PlatformJiraIntegration implements FactoryIntegration {
         metadata: {
           identifier: issue.identifier,
           issueRef: issue.externalId,
+          state: issue.state,
           stateType: issue.stateType,
           priority: issue.priority,
           project: issue.source,
           site: issue.site,
+          assignee: issue.assignee,
+          assignees: issue.assignees ?? [],
+          creator: issue.author,
+          author: issue.author,
+          labels: issue.labels,
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
         },
       })),
       nextCursor: page.nextCursor,
@@ -472,12 +496,27 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     return { connection, api, siteUrl };
   }
 
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    if (!jiraReconciliationEnabled()) return [];
+    const reconcile = attachJiraIssueReconciler(this, ctx);
+    if (!reconcile) return [];
+    const intervalMs = jiraReconciliationInterval();
+    return [
+      new IssueReconcileWorker({
+        integrationId: this.id,
+        reconcile,
+        ...(intervalMs ? { intervalMs } : {}),
+      }),
+    ];
+  }
+
   routes(ctx: IntegrationContext): ApiRoute[] {
     return buildPlatformJiraRoutes({
       jira: this,
       auth: ctx.auth,
       intake: ctx.storage.intake,
       appDbConfigured: Boolean(ctx.factoryStorage),
+      ingestFactoryIssues: attachJiraRules(this, ctx),
     });
   }
 

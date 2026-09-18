@@ -44,9 +44,15 @@ export function linearIssueIdForItem(item: Pick<WorkItem, 'source' | 'metadata'>
   return item.metadata.linearIssueId;
 }
 
-function jiraIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+export function jiraIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   if (item.source !== 'jira-issue' || typeof item.metadata.identifier !== 'string') return;
   return item.metadata.identifier;
+}
+
+export function jiraIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'jira-issue') return;
+  const reference = item.metadata.issueRef ?? item.metadata.issueReference;
+  return typeof reference === 'string' && reference ? reference : undefined;
 }
 
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
@@ -86,6 +92,7 @@ export function externalLinkLabel(source: WorkItemSource): string {
 
 export function workItemMeta(item: WorkItem): string {
   const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
+  const assignee = typeof item.metadata.assignee === 'string' ? item.metadata.assignee : undefined;
   // Prefer when the issue/PR was opened upstream; `item.createdAt` is only
   // when the factory first saw it, which is "just now" for every backfilled card.
   const sourceCreatedAt =
@@ -96,7 +103,8 @@ export function workItemMeta(item: WorkItem): string {
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
   const issueIdentifier = linearIdentifierForItem(item) ?? jiraIdentifierForItem(item);
-  if (issueIdentifier !== undefined) return `${issueIdentifier}${author ? ` · ${author}` : ''} · ${age}`;
+  const issueOwner = assignee ?? author;
+  if (issueIdentifier !== undefined) return `${issueIdentifier}${issueOwner ? ` · ${issueOwner}` : ''} · ${age}`;
   return `${SOURCE_LABELS[item.source]} · ${age}`;
 }
 

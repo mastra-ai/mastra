@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -34,12 +34,12 @@ describe('ProjectManagementFactoryStep', () => {
       renderStep();
 
       expect(await screen.findByRole('button', { name: /Connect Linear/ })).toBeInTheDocument();
-      expect(screen.queryByText('Also sync issues from')).not.toBeInTheDocument();
+      expect(screen.queryByText('Connect Jira')).not.toBeInTheDocument();
     });
   });
 
-  describe('given Platform connect routes are mounted', () => {
-    it('offers Jira and incident.io inline without leaving the wizard', async () => {
+  describe('given the Platform connect routes are mounted', () => {
+    it('offers Jira and incident.io as equivalent choices beside Linear', async () => {
       server.use(
         http.get(`${TEST_BASE_URL}/web/integrations/platform/jira/connections`, () =>
           HttpResponse.json({ connections: [] }),
@@ -50,11 +50,46 @@ describe('ProjectManagementFactoryStep', () => {
       );
       renderStep();
 
-      expect(await screen.findByText('Also sync issues from')).toBeInTheDocument();
-      const list = screen.getByRole('list');
-      expect(within(list).getByText('Jira')).toBeInTheDocument();
-      expect(within(list).getByText('incident.io')).toBeInTheDocument();
-      expect(within(list).getAllByRole('button', { name: 'Connect' })).toHaveLength(2);
+      expect(await screen.findByRole('button', { name: 'Connect Jira' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Connect incident.io' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Connect Linear/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Skip for now' })).toBeInTheDocument();
+      // The incident.io pane is scoped to follow-ups only.
+      expect(screen.getByText(/incident follow-ups/i)).toBeInTheDocument();
+    });
+
+    it('summarizes an active Jira account and unlocks Continue', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/jira/connections`, () =>
+          HttpResponse.json({
+            connections: [
+              { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
+            ],
+          }),
+        ),
+      );
+      renderStep();
+
+      expect(await screen.findByText('Jira connected')).toBeInTheDocument();
+      expect(screen.getByText('Connected to acme.atlassian.net.')).toBeInTheDocument();
+      // Additional accounts are managed in Settings, not during onboarding.
+      expect(screen.queryByRole('button', { name: 'Connect another' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    });
+
+    it('summarizes an active incident.io account', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`, () =>
+          HttpResponse.json({
+            connections: [{ id: 'c1_acme', integrationId: 'incident-io', status: 'active', accountLabel: 'acme' }],
+          }),
+        ),
+      );
+      renderStep();
+
+      expect(await screen.findByText('incident.io connected')).toBeInTheDocument();
+      expect(screen.getByText('Connected to acme.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });
   });
 });

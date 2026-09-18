@@ -45,7 +45,13 @@ const listActiveJiraIssues = vi.fn(async (_after?: string, _projectIds?: string[
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
   user: TestAuthUser | null,
-  options: { authEnabled?: boolean; withJira?: boolean; withIntake?: boolean; appDbConfigured?: boolean } = {},
+  options: {
+    authEnabled?: boolean;
+    withJira?: boolean;
+    withIntake?: boolean;
+    appDbConfigured?: boolean;
+    ingestFactoryIssues?: (input: unknown) => Promise<unknown>;
+  } = {},
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -59,6 +65,7 @@ function buildApp(
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
       appDbConfigured: options.appDbConfigured ?? true,
+      ...(options.ingestFactoryIssues ? { ingestFactoryIssues: options.ingestFactoryIssues } : {}),
     }),
   );
   return app;
@@ -209,7 +216,10 @@ describe('issues route', () => {
       state: 'To Do',
       stateType: 'unstarted',
       priorityLabel: 'High',
+      assignee: 'Ada',
+      author: 'Grace',
       project: 'ENG',
+      labels: ['bug'],
     });
     expect(json.nextCursor).toBe('page-2');
     expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1']);
@@ -315,6 +325,46 @@ describe('issues route — Factory source bindings', () => {
     expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1']);
   });
 
+  it('returns the description for a Jira issue routed to the viewed Factory', async () => {
+    await seedProjects(1);
+    await bind('1', projectA);
+    const issueRef = 'jira-issue:encoded-reference';
+    vi.spyOn(jira.intake, 'resolveIntakeDispatch').mockResolvedValue({
+      connection: { type: 'oauth', accessToken: 'jira-connection:a1b_acme' },
+      sourceId: '1',
+      issueId: 'ENG-42',
+    });
+    vi.spyOn(jira.intake, 'getIssue').mockResolvedValue({
+      id: '10001',
+      identifier: 'ENG-42',
+      title: 'Fix intake sync',
+      url: 'https://acme.atlassian.net/browse/ENG-42',
+      author: 'Grace',
+      state: 'To Do',
+      stateType: 'unstarted',
+      priority: 'High',
+      assignee: 'Ada',
+      source: 'ENG',
+      labels: ['bug'],
+      commentCount: 0,
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+      description: 'Detailed Jira task body',
+      comments: [],
+    });
+
+    const params = new URLSearchParams({ factoryProjectId: projectA, issueRef });
+    const res = await buildApp(org1()).request(`/web/jira/issues/ENG-42?${params.toString()}`);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      identifier: 'ENG-42',
+      title: 'Fix intake sync',
+      url: 'https://acme.atlassian.net/browse/ENG-42',
+      description: 'Detailed Jira task body',
+    });
+  });
+
   it('hides sources routed to another Factory from this board', async () => {
     await seedProjects(2);
     await bind('1', projectA);
@@ -378,5 +428,47 @@ describe('issues route — Factory source bindings', () => {
 
     expect(res.status).toBe(200);
     expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1', '2']);
+  });
+
+  it('ingests a board-scoped listing through the Factory rules', async () => {
+    await seedProjects(2);
+    await bind('1', projectA);
+    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
+
+    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
+      `/web/jira/issues?factoryProjectId=${projectA}`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryIssues).toHaveBeenCalledWith({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: projectA,
+      issues: [
+        expect.objectContaining({
+          id: 'jira-issue:encoded-reference',
+          identifier: 'ENG-42',
+          title: 'Fix intake sync',
+          stateType: 'unstarted',
+          assignee: 'Ada',
+          author: 'Grace',
+          project: 'ENG',
+          site: null,
+          sourceId: '1',
+        }),
+      ],
+      intakeBoards: { '1': 'work' },
+    });
+  });
+
+  it('does not ingest an unscoped listing', async () => {
+    await seedProjects(2);
+    await bind('1', projectA);
+    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
+
+    const res = await buildApp(org1(), { ingestFactoryIssues }).request('/web/jira/issues');
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryIssues).not.toHaveBeenCalled();
   });
 });

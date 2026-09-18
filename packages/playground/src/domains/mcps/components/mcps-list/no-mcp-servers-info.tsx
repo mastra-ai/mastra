@@ -16,10 +16,8 @@ export const NoMCPServersInfo = () => (
       actionSlot={
         <Button
           variant="ghost"
-          as="a"
-          href="https://mastra.ai/docs/tools-mcp/mcp-overview"
-          target="_blank"
-          rel="noopener noreferrer"
+          render={<a href="https://mastra.ai/docs/tools-mcp/mcp-overview" target="_blank" rel="noopener noreferrer" />}
+
           icon={<ExternalLinkIcon />}
         >
           MCP Documentation

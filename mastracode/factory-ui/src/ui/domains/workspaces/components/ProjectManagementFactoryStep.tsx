@@ -1,13 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
-import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
-import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
+import type { PlatformProviderConnection } from '../../factory/services/platformConnect';
 import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
+import { IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 export interface ProjectManagementFactoryStepProps {
@@ -15,102 +14,162 @@ export interface ProjectManagementFactoryStepProps {
   onContinue: () => void;
 }
 
-function providerSummary(meta: { displayName: string }, connections: PlatformProviderConnection[]): string {
+function accountSummary(connections: PlatformProviderConnection[], fallback: string): string {
   const active = connections.filter(connection => connection.status === 'active');
-  if (active.length === 1) return active[0]?.accountLabel ?? `${meta.displayName} connected`;
-  return `${active.length} accounts connected`;
+  if (active.length === 1) return `Connected to ${active[0]?.accountLabel ?? fallback}.`;
+  return `${active.length} accounts connected.`;
 }
 
-/**
- * One optional tracker row in onboarding. Providers connect headlessly in
- * place (no redirect), so the wizard state survives the whole flow.
- */
-function PlatformProviderOption({
-  provider,
-  connections,
-}: {
-  provider: PlatformConnectProviderId;
-  connections: PlatformProviderConnection[];
-}) {
-  const meta = PLATFORM_CONNECT_PROVIDERS[provider];
-  const hasActive = connections.some(connection => connection.status === 'active');
+function LinearPane({ onConnect }: { onConnect: () => void }) {
+  const linearStatus = useLinearStatusQuery();
+  if (linearStatus.isPending) {
+    return <SkeletonRows label="Loading Linear status" rows={2} rowClassName="h-12 w-full rounded-xl" />;
+  }
+  if (linearStatus.data?.connected) {
+    return (
+      <EmptyState
+        className="py-8"
+        iconSlot={<LinearIcon className="text-icon3 size-10" />}
+        titleSlot="Linear connected"
+        descriptionSlot={`Connected to ${linearStatus.data.workspace?.name ?? 'Linear'}.`}
+      />
+    );
+  }
   return (
-    <li className="flex items-center justify-between gap-2 py-1">
-      <Txt as="span" variant="ui-sm" className="text-icon5">
-        {meta.displayName}
-      </Txt>
-      {hasActive ? (
-        <span className="flex items-center gap-2">
-          <Txt as="span" variant="ui-sm" className="text-icon3">
-            {providerSummary(meta, connections)}
-          </Txt>
-          <ProviderConnectControl provider={provider} label="Connect another" size="xs" variant="ghost" />
-        </span>
-      ) : (
-        <ProviderConnectControl provider={provider} label="Connect" size="xs" variant="ghost" />
-      )}
-    </li>
+    <EmptyState
+      className="py-8"
+      iconSlot={<LinearIcon className="text-icon3 size-10" />}
+      titleSlot="Connect Linear"
+      descriptionSlot="Give your Factory the issue context and priorities behind your code."
+      actionSlot={
+        linearStatus.data?.reason !== 'missing_config' &&
+        linearStatus.data?.reason !== 'organization_required' && (
+          <Button variant="primary" onClick={onConnect}>
+            <LinearIcon className="size-4" />
+            {linearStatus.data?.reason === 'not_connected' ? 'Connect Linear' : 'Reconnect Linear'}
+          </Button>
+        )
+      }
+    />
   );
 }
 
+function JiraPane({ connections }: { connections: PlatformProviderConnection[] }) {
+  const hasActive = connections.some(connection => connection.status === 'active');
+  if (hasActive) {
+    return (
+      <EmptyState
+        className="py-8"
+        iconSlot={<JiraIcon className="text-icon3" size={40} />}
+        titleSlot="Jira connected"
+        descriptionSlot={accountSummary(connections, 'Jira')}
+      />
+    );
+  }
+  return (
+    <EmptyState
+      className="py-8"
+      iconSlot={<JiraIcon className="text-icon3" size={40} />}
+      titleSlot="Connect Jira"
+      descriptionSlot="Give your Factory the issue context and priorities behind your code."
+      actionSlot={
+        <ProviderConnectControl
+          provider="jira"
+          label="Connect Jira"
+          variant="primary"
+          size="md"
+          icon={<JiraIcon size={16} />}
+        />
+      }
+    />
+  );
+}
+
+function IncidentIoPane({ connections }: { connections: PlatformProviderConnection[] }) {
+  const hasActive = connections.some(connection => connection.status === 'active');
+  if (hasActive) {
+    return (
+      <EmptyState
+        className="py-8"
+        iconSlot={<IncidentIoIcon className="text-icon3" size={40} />}
+        titleSlot="incident.io connected"
+        descriptionSlot={accountSummary(connections, 'incident.io')}
+      />
+    );
+  }
+  return (
+    <EmptyState
+      className="py-8"
+      iconSlot={<IncidentIoIcon className="text-icon3" size={40} />}
+      titleSlot="Connect incident.io"
+      descriptionSlot="Route incident follow-ups into your Factory. Incidents themselves stay out of intake."
+      actionSlot={
+        <ProviderConnectControl
+          provider="incident-io"
+          label="Connect incident.io"
+          variant="primary"
+          size="md"
+          icon={<IncidentIoIcon size={16} />}
+        />
+      }
+    />
+  );
+}
+
+/**
+ * The optional tracker step in onboarding. Linear, Jira, and incident.io are
+ * equivalent, side-by-side choices; providers connect headlessly in place
+ * (no redirect), so the wizard state survives the whole flow.
+ */
 export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectManagementFactoryStepProps) {
   const linearStatus = useLinearStatusQuery();
   const jiraConnections = usePlatformConnectionsQuery('jira');
   const incidentConnections = usePlatformConnectionsQuery('incident-io');
   // Only providers whose connect routes are mounted (queries succeed) are
   // offered; a server without Platform credentials shows the Linear-only step.
-  const platformProviders: Array<{ provider: PlatformConnectProviderId; connections: PlatformProviderConnection[] }> = [
-    { provider: 'jira' as const, query: jiraConnections },
-    { provider: 'incident-io' as const, query: incidentConnections },
-  ].flatMap(({ provider, query }) => (query.isSuccess ? [{ provider, connections: query.data }] : []));
+  const jiraOffered = jiraConnections.isSuccess;
+  const incidentOffered = incidentConnections.isSuccess;
+  const linearConnected = linearStatus.data?.connected === true;
+  const jiraConnected = jiraConnections.data?.some(connection => connection.status === 'active') ?? false;
+  const incidentConnected = incidentConnections.data?.some(connection => connection.status === 'active') ?? false;
+  const anyConnected = linearConnected || jiraConnected || incidentConnected;
+  const paneCount = 1 + (jiraOffered ? 1 : 0) + (incidentOffered ? 1 : 0);
 
   return (
-    <section aria-label="Linear connection" className="border-border1 bg-surface2/80 max-w-xl rounded-2xl border p-5">
-      {linearStatus.isPending ? (
-        <SkeletonRows label="Loading Linear status" rows={2} rowClassName="h-12 w-full rounded-xl" />
-      ) : linearStatus.data?.connected ? (
-        <div className="flex flex-col gap-4">
-          <Txt as="p" variant="ui-md" className="text-icon5 m-0">
-            Connected to {linearStatus.data.workspace?.name ?? 'Linear'}.
-          </Txt>
+    <section
+      aria-label="Project management connections"
+      className={`border-border1 bg-surface2/80 rounded-2xl border p-5 ${paneCount === 3 ? 'max-w-5xl' : paneCount === 2 ? 'max-w-3xl' : 'max-w-xl'}`}
+    >
+      {paneCount > 1 ? (
+        <div className={`divide-border1 grid divide-x ${paneCount === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <div className="pr-6">
+            <LinearPane onConnect={onConnect} />
+          </div>
+          {jiraOffered && (
+            <div className={incidentOffered ? 'px-6' : 'pl-6'}>
+              <JiraPane connections={jiraConnections.data ?? []} />
+            </div>
+          )}
+          {incidentOffered && (
+            <div className="pl-6">
+              <IncidentIoPane connections={incidentConnections.data ?? []} />
+            </div>
+          )}
+        </div>
+      ) : (
+        <LinearPane onConnect={onConnect} />
+      )}
+      <div className="mt-4 flex items-center justify-center gap-2">
+        {anyConnected ? (
           <Button variant="primary" onClick={onContinue}>
             Continue
           </Button>
-        </div>
-      ) : (
-        <EmptyState
-          className="py-8"
-          iconSlot={<LinearIcon className="text-icon3 size-10" />}
-          titleSlot="Connect Linear"
-          descriptionSlot="Give your Factory the issue context and priorities behind your code."
-          actionSlot={
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {linearStatus.data?.reason !== 'missing_config' &&
-                linearStatus.data?.reason !== 'organization_required' && (
-                  <Button variant="primary" onClick={onConnect}>
-                    <LinearIcon className="size-4" />
-                    {linearStatus.data?.reason === 'not_connected' ? 'Connect Linear' : 'Reconnect Linear'}
-                  </Button>
-                )}
-              <Button variant="ghost" onClick={onContinue}>
-                Skip for now
-              </Button>
-            </div>
-          }
-        />
-      )}
-      {platformProviders.length > 0 && (
-        <div className="border-border1 mt-4 border-t pt-4">
-          <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
-            Also sync issues from
-          </Txt>
-          <ul className="mt-2 flex flex-col">
-            {platformProviders.map(({ provider, connections }) => (
-              <PlatformProviderOption key={provider} provider={provider} connections={connections} />
-            ))}
-          </ul>
-        </div>
-      )}
+        ) : (
+          <Button variant="ghost" onClick={onContinue}>
+            Skip for now
+          </Button>
+        )}
+      </div>
     </section>
   );
 }

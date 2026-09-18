@@ -20,12 +20,19 @@ const createJiraIssueComment = vi.fn();
 let PROJECT_ID = '';
 const ORG_ID = 'org-1';
 
-function requestContextFor(resourceId: string | undefined): RequestContext {
+function requestContextFor(resourceId: string | undefined, factoryProjectId?: string): RequestContext {
   const ctx = new RequestContext();
   if (resourceId !== undefined) {
-    ctx.set('controller', { resourceId });
+    ctx.set('controller', {
+      resourceId,
+      getState: () => ({ factoryProjectId }),
+    });
   }
   return ctx;
+}
+
+function boardRunRequestContext(factoryProjectId: string): RequestContext {
+  return requestContextFor('work-item-session-id', factoryProjectId);
 }
 
 async function seedProject(): Promise<void> {
@@ -68,12 +75,12 @@ beforeEach(async () => {
 });
 
 describe('buildJiraAgentTools — exposure gating', () => {
-  it('exposes only the read-only jira_get_issue tool for org-owned factory projects', async () => {
+  it('exposes the issue-read and comment tools for org-owned factory projects', async () => {
     await seedProject();
     const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
-    // v1 is intake-only: no mutating Jira tool (comment/transition) may leak
-    // into the agent tool record.
-    expect(Object.keys(tools)).toEqual(['jira_get_issue']);
+    // Same tool surface as Linear: read the issue, comment on it. No
+    // transition/update tool may leak into the agent tool record.
+    expect(Object.keys(tools)).toEqual(['jira_get_issue', 'jira_create_comment']);
   });
 
   it('exposes nothing when the host runs without web auth', async () => {
@@ -81,6 +88,12 @@ describe('buildJiraAgentTools — exposure gating', () => {
     jira.initialize({ projects: seed.projects, auth: fakeRouteAuth({ enabled: false }) });
     const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toEqual({});
+  });
+
+  it('exposes the tools on board runs, where the resourceId is a session id', async () => {
+    await seedProject();
+    const tools = await buildJiraAgentTools({ jira, requestContext: boardRunRequestContext(PROJECT_ID) });
+    expect(Object.keys(tools)).toEqual(['jira_get_issue', 'jira_create_comment']);
   });
 
   it('exposes nothing for resources that are not factory projects', async () => {
@@ -131,16 +144,48 @@ describe('jira_get_issue', () => {
   });
 });
 
-describe('mutating tools stay internal in v1', () => {
-  it('never exposes a comment or transition tool, even for org-owned projects', async () => {
+describe('jira_create_comment', () => {
+  it('posts the comment and returns its URL', async () => {
+    await seedProject();
+    createJiraIssueComment.mockResolvedValueOnce({
+      id: '20001',
+      url: 'https://acme.atlassian.net/browse/ENG-42?focusedCommentId=20001',
+    });
+    const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
+    const result = await (tools.jira_create_comment!.execute as any)({ issue: ' ENG-42 ', body: 'Fixed in #7.' });
+    expect(result).toEqual({
+      posted: true,
+      url: 'https://acme.atlassian.net/browse/ENG-42?focusedCommentId=20001',
+    });
+    expect(createJiraIssueComment).toHaveBeenCalledWith('ENG-42', 'Fixed in #7.');
+  });
+
+  it('reports unknown issues as a tool error', async () => {
+    await seedProject();
+    createJiraIssueComment.mockResolvedValueOnce(null);
+    const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
+    const result = await (tools.jira_create_comment!.execute as any)({ issue: 'ENG-404', body: 'ping' });
+    expect(result).toEqual({ error: 'Jira issue "ENG-404" was not found on this site.' });
+  });
+
+  it('maps credential rejections to an operator-facing error', async () => {
+    await seedProject();
+    createJiraIssueComment.mockRejectedValueOnce(new JiraApiError('Jira API request failed (401)', 401));
+    const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
+    const result = await (tools.jira_create_comment!.execute as any)({ issue: 'ENG-42', body: 'ping' });
+    expect(result).toEqual({
+      error: 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.',
+    });
+  });
+});
+
+describe('transition tools stay internal', () => {
+  it('never exposes an update/transition tool, even for org-owned projects', async () => {
     await seedProject();
     const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
-    expect(tools).not.toHaveProperty('jira_create_comment');
     expect(tools).not.toHaveProperty('jira_update_issue');
     // The adapter still implements the full Intake contract internally — only
     // the agent-facing record is narrowed.
-    expect(typeof jira.intake.createComment).toBe('function');
     expect(typeof jira.intake.updateIssue).toBe('function');
-    expect(createJiraIssueComment).not.toHaveBeenCalled();
   });
 });

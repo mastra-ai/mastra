@@ -47,6 +47,11 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
     if (!creator) return undefined;
     return { id: `linear:${creator}`, name: creator };
   }
+  if (item.source === 'jira-issue') {
+    const creator = metadataString(item.metadata, 'creator') ?? metadataString(item.metadata, 'author');
+    if (!creator) return undefined;
+    return { id: `jira:${creator}`, name: creator };
+  }
   return undefined;
 }
 
@@ -57,10 +62,17 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
  * assignee are both visible.
  */
 function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined {
-  if (item.source !== 'linear-issue') return undefined;
-  const assignee = metadataString(item.metadata, 'assignee') ?? metadataString(item.metadata, 'linearAssignee');
-  if (!assignee) return undefined;
-  return { id: `linear:${assignee}`, name: assignee };
+  if (item.source === 'linear-issue') {
+    const assignee = metadataString(item.metadata, 'assignee') ?? metadataString(item.metadata, 'linearAssignee');
+    if (!assignee) return undefined;
+    return { id: `linear:${assignee}`, name: assignee };
+  }
+  if (item.source === 'jira-issue') {
+    const assignee = metadataString(item.metadata, 'assignee');
+    if (!assignee) return undefined;
+    return { id: `jira:${assignee}`, name: assignee };
+  }
+  return undefined;
 }
 
 export const CREATED_ACTION = 'factory.work_item.created' satisfies AuditAction;

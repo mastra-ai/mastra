@@ -51,6 +51,8 @@ export const queryKeys = {
   jiraIssuesAll: () => ['jira', 'issues'] as const,
   jiraIssues: (factoryProjectId: string | undefined) =>
     [...queryKeys.jiraIssuesAll(), factoryProjectId ?? null] as const,
+  jiraIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueRef: string | undefined) =>
+    ['jira', 'issue', factoryProjectId ?? null, identifier ?? null, issueRef ?? null] as const,
   incidentioSources: () => ['incidentio', 'sources'] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,

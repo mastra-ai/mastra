@@ -2,8 +2,8 @@ import { skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchJiraStatus, listJiraIssues, listJiraProjects } from '../ui/domains/factory/services/jira';
-import { INTAKE_POLL_MS } from './useFactoryData';
+import { fetchJiraStatus, getJiraIssue, listJiraIssues, listJiraProjects } from '../ui/domains/factory/services/jira';
+import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
 
 /**
  * Jira feature status through the shared React Query cache. The service
@@ -40,6 +40,22 @@ export function useJiraIssuesQuery(factoryProjectId: string | undefined) {
     // proxies the Jira API, so poll on the gentle intake cadence.
     refetchInterval: INTAKE_POLL_MS,
     refetchOnWindowFocus: true,
+  });
+}
+
+export function useJiraIssueDetail(
+  factoryProjectId: string | undefined,
+  identifier: string | undefined,
+  issueRef: string | undefined,
+) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.jiraIssue(factoryProjectId, identifier, issueRef),
+    queryFn:
+      factoryProjectId && identifier && issueRef
+        ? () => getJiraIssue(baseUrl, factoryProjectId, identifier, issueRef)
+        : skipToken,
+    staleTime: DETAIL_STALE_MS,
   });
 }
 

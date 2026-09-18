@@ -44,7 +44,12 @@ const listActiveJiraIssues = vi.fn(async (_after?: string, _projectIds?: string[
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
   user: TestAuthUser | null,
-  options: { authEnabled?: boolean; withJira?: boolean; withIntake?: boolean } = {},
+  options: {
+    authEnabled?: boolean;
+    withJira?: boolean;
+    withIntake?: boolean;
+    ingestFactoryIssues?: (input: unknown) => Promise<unknown>;
+  } = {},
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -57,6 +62,7 @@ function buildApp(
       jira: (options.withJira ?? true) ? jira : undefined,
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
+      ...(options.ingestFactoryIssues ? { ingestFactoryIssues: options.ingestFactoryIssues } : {}),
     }),
   );
   return app;
@@ -323,5 +329,110 @@ describe('issues route — Factory source bindings', () => {
 
     expect(res.status).toBe(200);
     expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1', '2']);
+  });
+
+  it('ingests a board-scoped listing through the Factory rules', async () => {
+    await seedProjects(2);
+    await bind('1', projectA);
+    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
+
+    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
+      `/web/jira/issues?factoryProjectId=${projectA}`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryIssues).toHaveBeenCalledWith({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: projectA,
+      issues: [
+        expect.objectContaining({
+          id: '10001',
+          identifier: 'ENG-42',
+          title: 'Fix intake sync',
+          stateType: 'unstarted',
+          assignee: 'Ada',
+          author: 'Grace',
+          project: 'ENG',
+          site: null,
+          sourceId: '1',
+        }),
+      ],
+      intakeBoards: { '1': 'work' },
+    });
+  });
+
+  it('does not ingest an unscoped listing', async () => {
+    await seedProjects(2);
+    await bind('1', projectA);
+    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
+
+    const res = await buildApp(org1(), { ingestFactoryIssues }).request('/web/jira/issues');
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryIssues).not.toHaveBeenCalled();
+  });
+});
+
+describe('issue detail route', () => {
+  const projectA = '11111111-1111-4111-8111-111111111111';
+
+  const issueDetail = (projectId: string) => ({
+    id: '10001',
+    identifier: 'ENG-42',
+    title: 'Fix intake sync',
+    url: 'https://acme.atlassian.net/browse/ENG-42',
+    description: 'It syncs the wrong way.',
+    author: 'Grace',
+    state: 'To Do',
+    stateType: 'unstarted',
+    priority: 'High',
+    assignee: 'Ada',
+    source: 'ENG',
+    sourceId: projectId,
+    labels: ['bug'],
+    commentCount: 0,
+    createdAt: '2026-07-01T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+    comments: [],
+  });
+
+  const detailUrl = `/web/jira/issues/ENG-42?factoryProjectId=${projectA}&issueRef=ENG-42`;
+
+  beforeEach(async () => {
+    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-a' } });
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'jira',
+      sourceId: '1',
+      factoryProjectId: projectA,
+      board: 'work',
+    });
+  });
+
+  it('returns the description for an issue from a source routed to the Factory', async () => {
+    vi.spyOn(jira.intake, 'getIssue').mockResolvedValue(issueDetail('1'));
+
+    const res = await buildApp(org1()).request(detailUrl);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      identifier: 'ENG-42',
+      title: 'Fix intake sync',
+      url: 'https://acme.atlassian.net/browse/ENG-42',
+      description: 'It syncs the wrong way.',
+    });
+  });
+
+  it('reads like a missing issue when its project is not routed to the Factory', async () => {
+    // The Jira account can see the whole site, but the issue's project ("99")
+    // is neither selected nor bound to this Factory — the caller must not be
+    // able to read arbitrary site issues through the detail route.
+    vi.spyOn(jira.intake, 'getIssue').mockResolvedValue(issueDetail('99'));
+
+    const res = await buildApp(org1()).request(detailUrl);
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'issue_not_found' });
   });
 });

@@ -474,7 +474,50 @@ describe('Create Factory wizard', () => {
     ]);
   });
 
-  it('keeps Linear out of intake when it is skipped', async () => {
+  it('routes the picked Jira project into the Factory it creates', async () => {
+    const calls: string[] = [];
+    seedDraft('project-management');
+    stubConnectedJira();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: false, connected: false, workspace: null, reason: 'missing_config' }),
+      ),
+    );
+    const { intakeConfigs } = stubModelStepEndpoints(calls);
+    const bindings: unknown[] = [];
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
+        bindings.push(await request.json());
+        return HttpResponse.json({ bindings: [] });
+      }),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /Engineering/ }));
+    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+
+    await waitForMutationsIdle(client);
+    expect(bindings).toEqual([
+      { integrationId: 'jira', sourceId: 'jira-source-1', factoryProjectId: 'fp-1', board: 'work' },
+    ]);
+    expect(intakeConfigs).toEqual([
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        linear: { enabled: false, sourceIds: null },
+        jira: { enabled: false, sourceIds: null },
+      },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        linear: { enabled: false, sourceIds: null },
+        jira: { enabled: true, sourceIds: ['jira-source-1'] },
+      },
+    ]);
+  });
+
+  it('keeps project-management intake disabled when it is skipped', async () => {
     const calls: string[] = [];
     seedDraft('project-management');
     stubConnectedLinear();
@@ -690,6 +733,44 @@ function stubConnectedLinear() {
           { id: 'lin-1', name: 'Mobile App', state: 'started', teams: [{ id: 't1', key: 'ENG', name: 'Engineering' }] },
         ],
       }),
+    ),
+  );
+}
+
+function stubConnectedJira() {
+  const connection = {
+    id: 'jira-connection-1',
+    integrationId: 'jira',
+    status: 'active',
+    accountLabel: 'acme.atlassian.net',
+  };
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/jira/status`, () =>
+      HttpResponse.json({
+        enabled: true,
+        configured: true,
+        mode: 'platform',
+        site: 'acme.atlassian.net',
+        sites: ['acme.atlassian.net'],
+        connections: [connection],
+        reason: 'ready',
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/jira/projects`, () =>
+      HttpResponse.json({
+        projects: [
+          {
+            id: 'jira-source-1',
+            key: 'ENG',
+            name: 'Engineering',
+            connectionId: connection.id,
+            site: connection.accountLabel,
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/integrations/platform/jira/connections`, () =>
+      HttpResponse.json({ connections: [connection] }),
     ),
   );
 }

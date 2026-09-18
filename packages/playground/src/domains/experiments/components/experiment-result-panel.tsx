@@ -18,7 +18,6 @@ import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
-import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -281,8 +280,7 @@ function ExperimentResultPanelBody({
             <Button
               size="sm"
               variant="ghost"
-              as={Link}
-              to={experimentLink}
+              render={<Link href={experimentLink} />}
               tooltip="See experiment"
               aria-label="See experiment"
             >
@@ -306,18 +304,17 @@ function ExperimentResultPanelBody({
       {feedbackTraceId ? (
         <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
           <DataPanel.Header>
-            <TabList variant="pill-ghost">
+            <TabList variant="pill-ghost" size="sm">
               <Tab value="details">Details</Tab>
               <Tab value="feedback">
-                Feedback
-                <NeedsReviewDot feedback={traceFeedback?.feedback} />
+                Feedback{traceFeedback?.pagination?.total != null && <> ({traceFeedback.pagination.total})</>}
               </Tab>
             </TabList>
           </DataPanel.Header>
-          <TabContent value="details" className="min-h-0 py-0">
+          <TabContent value="details" flush>
             {details}
           </TabContent>
-          <TabContent value="feedback" className="h-full min-h-0 py-0">
+          <TabContent value="feedback" flush>
             <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
           </TabContent>
         </Tabs>

@@ -146,7 +146,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
           'w-full justify-between',
           // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant === 'default' ? 'field' : visualVariant],
-          'data-[placeholder]:text-neutral2',
+          'data-[placeholder]:text-muted-foreground',
           '[&>span]:truncate',
           className,
         )}
@@ -163,7 +163,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         <SelectPrimitive.Icon
           render={
             <span className="flex shrink-0 items-center">
-              <ChevronDown className={cn('size-4 text-neutral3', transitions.colors)} />
+              <ChevronDown className={cn('size-4 text-muted-foreground', transitions.colors)} />
             </span>
           }
         />

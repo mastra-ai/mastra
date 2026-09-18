@@ -5,10 +5,14 @@ export type SidebarNewRootProps = MainSidebarRootProps & {
   'aria-label'?: string;
 };
 
-export function SidebarNewRoot({ 'aria-label': ariaLabel = 'Sidebar', ...props }: SidebarNewRootProps) {
+export function SidebarNewRoot({
+  'aria-label': ariaLabel = 'Sidebar',
+  mobileMode = 'takeover',
+  ...props
+}: SidebarNewRootProps) {
   return (
     <aside aria-label={ariaLabel} className="contents">
-      <MainSidebarRoot {...props} />
+      <MainSidebarRoot mobileMode={mobileMode} {...props} />
     </aside>
   );
 }
