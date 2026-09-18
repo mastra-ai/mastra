@@ -30,6 +30,7 @@ import {
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
   classifyRotationError,
+  clearExhaustedAccountRoute,
   isAccountSwitchReason,
   providerFromError,
   providerFromModelId,
@@ -1170,6 +1171,66 @@ describe('pack-fallback parts', () => {
     expect(persisted).toEqual({
       anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id, seeded.accountB.id] },
     });
+  });
+
+  it('does not resurrect a route cleared while a rotation write is in flight', async () => {
+    const seeded = await makeTwoAccountStorage();
+    seedSettingsWithFallbacks({});
+    const routeKey = 'anthropic/claude-fable-5';
+    // Account A is already excluded, so this rotation is leaving B and its write
+    // adds B. A clear issued in that window must land after the write, not between
+    // the write's read and its commit.
+    let persisted: unknown = { anthropic: { [routeKey]: [seeded.accountA.id] } };
+    const writes: unknown[] = [];
+    let releaseRead: () => void = () => {};
+    const readGate = new Promise<void>(resolve => {
+      releaseRead = resolve;
+    });
+    let signalReadStarted: () => void = () => {};
+    const readStarted = new Promise<void>(resolve => {
+      signalReadStarted = resolve;
+    });
+    let gated = false;
+    const controller = {
+      session: { modelId: routeKey, modeId: 'build' },
+      threadId: 'thread-1',
+      getState: () => ({ activeModelPackId: 'anthropic', [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: persisted }),
+      getThreadSetting: vi.fn(async (key: string) => {
+        if (key === THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY) {
+          if (!gated) {
+            gated = true;
+            signalReadStarted();
+            await readGate;
+          }
+          return persisted;
+        }
+        return undefined;
+      }),
+      setThreadSetting: vi.fn(async ({ value }: { value: unknown }) => {
+        writes.push(value);
+        persisted = value;
+      }),
+      setState: vi.fn(async () => {}),
+      isThreadActive: () => true,
+    };
+    const requestContext = new RequestContext();
+    setRequestAccountSelection(requestContext, PROVIDER, seeded.accountB.id);
+    requestContext.set('controller', controller);
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    // Park the rotation between its read and its write.
+    const rotation = processor.processAPIError({ ...makeArgs({ requestContext }), error: apiError(429) } as never);
+    await readStarted;
+    // Issued while the rotation is parked, so it can only land after the commit.
+    const clear = clearExhaustedAccountRoute(controller, { packId: 'anthropic', modelId: routeKey });
+    releaseRead();
+    await Promise.all([rotation, clear]);
+
+    // The rotation committed first, then the clear read that result and removed the
+    // route. Were the clear unsynchronized it would have written `undefined` first
+    // and the rotation's stale snapshot would have put account A back.
+    expect(writes).toEqual([{ anthropic: { [routeKey]: [seeded.accountA.id, seeded.accountB.id] } }, undefined]);
+    expect(persisted).toBeUndefined();
   });
 
   it('does not notify live fallback state when the transcript hop cannot be written', async () => {

@@ -455,7 +455,12 @@ interface AccountRoute {
 
 type RoutingProcessorArgs = Pick<ProcessAPIErrorArgs, 'requestContext' | 'state' | 'writer'> | ProcessInputArgs;
 
-type RoutingControllerContext = {
+/**
+ * Controller-shaped accessors for a thread's routing metadata. Core supplies this
+ * via `requestContext.get('controller')`; the TUI builds the same shape from its
+ * session so both writers share one serialization key and one read source.
+ */
+export type RoutingControllerContext = {
   session?: { modelId?: unknown; modeId?: unknown };
   threadId?: unknown;
   getState?: () => Record<string, unknown>;
@@ -498,6 +503,52 @@ function parseAccountRoutingExhausted(value: unknown): AccountRoutingExhausted {
     if (Object.keys(models).length > 0) result[packId] = models;
   }
   return result;
+}
+
+/**
+ * The single serialized read-modify-write for a thread's exhausted-account map.
+ *
+ * Every writer goes through here — the rotation processor when it excludes an
+ * account, and `/models` subscription routing when the user clears one — so they
+ * share one queue key (`controller.threadId`) and one read source (the persisted
+ * thread setting, falling back to in-memory state). A clear that landed between
+ * another writer's read and write can no longer be resurrected by that writer's
+ * stale snapshot.
+ *
+ * `mutate` returns the next map, or `null` to leave the stored value untouched.
+ */
+export async function updateExhaustedAccountRouting(
+  controller: RoutingControllerContext,
+  mutate: (current: AccountRoutingExhausted) => AccountRoutingExhausted | null,
+): Promise<void> {
+  const queueKey = typeof controller.threadId === 'string' ? controller.threadId : '__threadless__';
+  await serializeExhaustedAccountPersistence(queueKey, async () => {
+    const persisted = await controller.getThreadSetting?.(THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY);
+    const exhausted = parseAccountRoutingExhausted(
+      persisted ?? controller.getState?.()?.[THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY],
+    );
+    const next = mutate(exhausted);
+    if (next === null) return;
+    const value = Object.keys(next).length > 0 ? next : undefined;
+    await controller.setThreadSetting?.({ key: THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY, value });
+    if (controller.isThreadActive?.() !== false) {
+      await controller.setState?.({ [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: value });
+    }
+  });
+}
+
+/** Drop the exhausted-account exclusions for one pack/model, through the shared queue. */
+export async function clearExhaustedAccountRoute(
+  controller: RoutingControllerContext,
+  route: { packId: string; modelId: string },
+): Promise<void> {
+  await updateExhaustedAccountRouting(controller, exhausted => {
+    if (!exhausted[route.packId]?.[route.modelId]) return null;
+    const next = structuredClone(exhausted);
+    delete next[route.packId][route.modelId];
+    if (Object.keys(next[route.packId]).length === 0) delete next[route.packId];
+    return next;
+  });
 }
 
 function getExhaustedAccountIds(args: Pick<RoutingProcessorArgs, 'requestContext'>, route: AccountRoute): string[] {
@@ -574,25 +625,16 @@ async function persistExhaustedAccount(
 ): Promise<void> {
   const controller = getRoutingController(args);
   if (!controller) return;
-  const queueKey = typeof controller.threadId === 'string' ? controller.threadId : '__threadless__';
-  await serializeExhaustedAccountPersistence(queueKey, async () => {
-    const persisted = await controller.getThreadSetting?.(THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY);
-    const exhausted = parseAccountRoutingExhausted(
-      persisted ?? controller.getState?.()?.[THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY],
-    );
+  await updateExhaustedAccountRouting(controller, exhausted => {
     const current = exhausted[route.packId]?.[route.modelId] ?? [];
-    if (current.includes(accountInstanceId)) return;
-    const next: AccountRoutingExhausted = {
+    if (current.includes(accountInstanceId)) return null;
+    return {
       ...exhausted,
       [route.packId]: {
         ...exhausted[route.packId],
         [route.modelId]: [...current, accountInstanceId],
       },
     };
-    await controller.setThreadSetting?.({ key: THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY, value: next });
-    if (controller.isThreadActive?.() !== false) {
-      await controller.setState?.({ [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: next });
-    }
   });
 }
 
