@@ -8,8 +8,17 @@ export async function runAcpServer(createSession: AcpSessionFactory): Promise<vo
   const input = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
   const output = Writable.toWeb(process.stdout) as WritableStream<Uint8Array>;
   let agent: MastraCodeAcpAgent | undefined;
+  let cleanupPromise: Promise<void> | undefined;
+  let shutdownPromise: Promise<void> | undefined;
+  const dispose = () => (cleanupPromise ??= Promise.resolve().then(() => agent?.dispose()));
   const handleSignal = () => {
-    void agent?.dispose().finally(() => process.exit(0));
+    shutdownPromise ??= dispose().then(
+      () => process.exit(0),
+      error => {
+        process.stderr.write(`[acp] Shutdown failed: ${error}\n`);
+        process.exit(1);
+      },
+    );
   };
   process.on('SIGINT', handleSignal);
   process.on('SIGTERM', handleSignal);
@@ -23,8 +32,11 @@ export async function runAcpServer(createSession: AcpSessionFactory): Promise<vo
     );
     await connection.closed;
   } finally {
-    process.off('SIGINT', handleSignal);
-    process.off('SIGTERM', handleSignal);
-    await agent?.dispose();
+    try {
+      await dispose();
+    } finally {
+      process.off('SIGINT', handleSignal);
+      process.off('SIGTERM', handleSignal);
+    }
   }
 }

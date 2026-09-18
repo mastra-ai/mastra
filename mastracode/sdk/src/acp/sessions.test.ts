@@ -41,6 +41,31 @@ function runtime(id: string) {
 const connection = () => ({ sessionUpdate: vi.fn().mockResolvedValue(undefined) }) as unknown as AgentSideConnection;
 
 describe('ACP session isolation', () => {
+  it('makes concurrent disposal callers wait for every session cleanup', async () => {
+    const first = runtime('first');
+    const second = runtime('second');
+    const release = Promise.withResolvers<void>();
+    first.cleanup.mockRejectedValueOnce(new Error('First cleanup failed'));
+    second.cleanup.mockReturnValueOnce(release.promise);
+    const factory = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const agent = new MastraCodeAcpAgent(connection(), factory);
+    await agent.newSession({ cwd: '/one', mcpServers: [] });
+    await agent.newSession({ cwd: '/two', mcpServers: [] });
+    const settled = vi.fn();
+    const a = agent.dispose().then(settled, settled);
+    const b = agent.dispose().then(settled, settled);
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(settled).not.toHaveBeenCalled();
+    } finally {
+      release.resolve();
+      await Promise.all([a, b]);
+    }
+    expect(first.cleanup).toHaveBeenCalledOnce();
+    expect(second.cleanup).toHaveBeenCalledOnce();
+    expect(settled).toHaveBeenCalledTimes(2);
+  });
+
   it('creates an independent runtime from each requested working directory and MCP configuration', async () => {
     const first = runtime('first');
     const second = runtime('second');

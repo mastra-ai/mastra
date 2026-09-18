@@ -49,6 +49,7 @@ interface SessionEntry extends AcpSessionRuntime {
 export class MastraCodeAcpAgent implements Agent {
   private readonly sessions = new Map<string, SessionEntry>();
   private disposed = false;
+  private disposal?: Promise<void>;
 
   constructor(
     private readonly connection: AgentSideConnection,
@@ -70,12 +71,12 @@ export class MastraCodeAcpAgent implements Agent {
     return result;
   }
 
-  async dispose(): Promise<void> {
-    if (this.disposed) return;
+  dispose(): Promise<void> {
+    if (this.disposal) return this.disposal;
     this.disposed = true;
     const entries = [...this.sessions.values()];
     this.sessions.clear();
-    await Promise.all(
+    this.disposal = Promise.allSettled(
       entries.map(async entry => {
         for (const turn of entry.turns) turn.cancelled = true;
         if (entry.state) {
@@ -86,7 +87,11 @@ export class MastraCodeAcpAgent implements Agent {
         entry.unsubscribe();
         await entry.cleanup?.();
       }),
-    );
+    ).then(results => {
+      const failures = results.filter(result => result.status === 'rejected').map(result => result.reason);
+      if (failures.length) throw new AggregateError(failures, 'ACP session cleanup failed');
+    });
+    return this.disposal;
   }
 
   async initialize(_request: InitializeRequest): Promise<InitializeResponse> {
