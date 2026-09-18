@@ -176,7 +176,7 @@ exercise the real runtime without model credentials or inherited user credential
 | Permissions                                                      | Approved writes execute; denied writes leave no file                           |
 | Cancellation                                                     | Streaming, parked approvals, follow-up turns, and core startup regressions     |
 | MCP stdio                                                        | Real tool calls with session working directory and environment                 |
-| MCP HTTP and SSE                                                 | Real tool calls with supplied headers                                          |
+| MCP HTTP                                                         | Real tool calls with supplied headers                                          |
 | Modes, models and reasoning configuration                        | Selection validation, configuration updates and legacy mode notifications      |
 | Errors and stop reasons                                          | Invalid requests, failed MCP setup, provider errors, token limits and refusals |
 | Process lifecycle                                                | Disconnect, SIGINT/SIGTERM, MCP child exit, protocol-only stdout               |

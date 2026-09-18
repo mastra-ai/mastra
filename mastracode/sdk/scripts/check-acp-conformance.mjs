@@ -152,15 +152,14 @@ await writeFile(
 import { appendFileSync } from 'node:fs';
 appendFileSync(${JSON.stringify(mcpPidFile)}, String(process.pid)+'\\n');
 for await (const line of readline.createInterface({input:process.stdin})) {
- const req=JSON.parse(line); if(req.id===undefined)continue; let result={};
+ const req=JSON.parse(line); if(req.id===undefined)continue; let result;
  if(req.method==='initialize')result={protocolVersion:req.params.protocolVersion,capabilities:{tools:{}},serverInfo:{name:'fixture',version:'1'}};
  if(req.method==='tools/list')result={tools:[{name:'context',description:'Test cwd and environment',inputSchema:{type:'object',properties:{}}}]};
  if(req.method==='tools/call')result={content:[{type:'text',text:process.cwd()+' '+process.env.ACP_MCP_MARKER}]};
- process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result})+'\\n');
+ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,...(result ? {result} : {error:{code:-32601,message:'Method not found'}})})+'\\n');
 }`,
 );
 
-let sseResponse;
 const remoteRequests = [];
 const remoteMcp = createServer((req, res) => {
   void (async () => {
@@ -169,13 +168,7 @@ const remoteMcp = createServer((req, res) => {
       res.end();
       return;
     }
-    if (req.method === 'GET' && req.url === '/sse') {
-      sseResponse = res;
-      res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.write('event: endpoint\ndata: /messages\n\n');
-      return;
-    }
-    if (req.method !== 'POST' || !['/http', '/messages'].includes(req.url)) {
+    if (req.method !== 'POST' || req.url !== '/http') {
       res.writeHead(405);
       res.end();
       return;
@@ -183,14 +176,14 @@ const remoteMcp = createServer((req, res) => {
     let body = '';
     for await (const part of req) body += part;
     const request = JSON.parse(body);
-    const transport = req.url === '/http' ? 'http' : 'sse';
+    const transport = 'http';
     remoteRequests.push({ transport, method: request.method });
     if (request.id === undefined) {
       res.writeHead(202);
       res.end();
       return;
     }
-    let result = {};
+    let result;
     if (request.method === 'initialize')
       result = {
         protocolVersion: request.params.protocolVersion,
@@ -209,15 +202,13 @@ const remoteMcp = createServer((req, res) => {
       };
     else if (request.method === 'tools/call')
       result = { content: [{ type: 'text', text: transport + ' ACP_REMOTE_OK' }] };
-    const reply = JSON.stringify({ jsonrpc: '2.0', id: request.id, result });
-    if (transport === 'http') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(reply);
-    } else {
-      res.writeHead(202);
-      res.end();
-      sseResponse.write('event: message\ndata: ' + reply + '\n\n');
-    }
+    const reply = JSON.stringify({
+      jsonrpc: '2.0',
+      id: request.id,
+      ...(result ? { result } : { error: { code: -32601, message: 'Method not found' } }),
+    });
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(reply);
   })().catch(error => {
     deadline.reject(error);
     res.destroy();
@@ -272,10 +263,10 @@ async function handleModel(req, res) {
   }
   res.writeHead(200, { 'Content-Type': 'text/event-stream' });
   const common = { id: 'chatcmpl-acp-probe', object: 'chat.completion.chunk', created: 0, model: 'acp-test' };
-  if (['write', 'deny', 'access', 'mcp', 'http-mcp', 'sse-mcp'].includes(scenario) && !requestedTool) {
+  if (['write', 'deny', 'access', 'mcp', 'http-mcp'].includes(scenario) && !requestedTool) {
     requestedTool = true;
     res.write(
-      `data: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: { role: 'assistant', tool_calls: [{ index: 0, id: `probe-${scenario}-${calls}`, type: 'function', function: { name: scenario === 'access' ? 'request_access' : ['mcp', 'http-mcp', 'sse-mcp'].includes(scenario) ? input.tools.find(t => t.function.name.includes(scenario === 'http-mcp' ? 'http_context' : scenario === 'sse-mcp' ? 'sse_context' : 'context')).function.name : 'write_file', arguments: JSON.stringify(scenario === 'access' ? { path: join(work, 'outside'), reason: 'Test suspension' } : ['mcp', 'http-mcp', 'sse-mcp'].includes(scenario) ? {} : { path: scenario === 'deny' ? 'denied-probe.txt' : 'permission-probe.txt', content: 'ACP_WRITE_OK' }) } }] }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: { role: 'assistant', tool_calls: [{ index: 0, id: `probe-${scenario}-${calls}`, type: 'function', function: { name: scenario === 'access' ? 'request_access' : ['mcp', 'http-mcp'].includes(scenario) ? input.tools.find(t => t.function.name.includes(scenario === 'http-mcp' ? 'http_context' : 'context')).function.name : 'write_file', arguments: JSON.stringify(scenario === 'access' ? { path: join(work, 'outside'), reason: 'Test suspension' } : ['mcp', 'http-mcp'].includes(scenario) ? {} : { path: scenario === 'deny' ? 'denied-probe.txt' : 'permission-probe.txt', content: 'ACP_WRITE_OK' }) } }] }, finish_reason: null }] })}\n\n`,
     );
     res.write(
       `data: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] })}\n\n`,
@@ -384,10 +375,15 @@ async function runChecks() {
   const initialized = await client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} });
   assert.equal(initialized.protocolVersion, 1);
   assert.equal(initialized.agentCapabilities.loadSession, false);
+  assert.deepEqual(initialized.agentCapabilities.mcpCapabilities, { http: true, sse: false });
   passed('protocol v1 negotiation and declared capabilities');
   await assert.rejects(client.newSession({ cwd: 7, mcpServers: [] }), { code: -32602 });
   await assert.rejects(client.newSession({ cwd: 'relative', mcpServers: [] }), { code: -32602 });
-  passed('invalid session parameters rejected');
+  await assert.rejects(
+    client.newSession({ cwd, mcpServers: [{ name: 'legacy', type: 'sse', url: remoteMcpUrl + '/sse', headers: [] }] }),
+    { code: -32602 },
+  );
+  passed('invalid session parameters and unsupported SSE servers rejected');
   await assert.rejects(client.authenticate({ methodId: 'not-advertised' }), { code: -32602 });
   await assert.rejects(client.loadSession({ sessionId: 'missing', cwd, mcpServers: [] }), { code: -32601 });
   passed('unadvertised authentication and session loading rejected');
@@ -401,7 +397,7 @@ async function runChecks() {
         args: [mcpFixture],
         env: [{ name: 'ACP_MCP_MARKER', value: 'ACP_ENV_OK' }],
       },
-      ...['http', 'sse'].map(type => ({
+      ...['http'].map(type => ({
         name: type + '-probe',
         type,
         url: remoteMcpUrl + '/' + type,
@@ -523,7 +519,7 @@ async function runChecks() {
   );
   assert(modelMessages.some(m => m.role === 'tool' && m.content.includes(cwd + ' ACP_ENV_OK')));
   passed('follow-up turn and client MCP subprocess cwd/environment');
-  for (const transport of ['http', 'sse']) {
+  for (const transport of ['http']) {
     scenario = transport + '-mcp';
     requestedTool = false;
     assert.equal(
@@ -535,7 +531,7 @@ async function runChecks() {
     );
     assert(remoteRequests.some(request => request.transport === transport && request.method === 'tools/call'));
   }
-  passed('HTTP and SSE MCP transports preserve headers and execute client tools');
+  passed('HTTP MCP transport preserves headers and executes client tools');
   const existingPids = await readMcpPids();
   await assert.rejects(
     client.newSession({

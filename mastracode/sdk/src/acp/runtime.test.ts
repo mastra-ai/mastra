@@ -40,6 +40,17 @@ function bootResult() {
 }
 
 describe('ACP runtime factory', () => {
+  it('rejects legacy SSE servers before starting a runtime', async () => {
+    vi.mocked(createMastraCode).mockClear();
+    await expect(
+      createAcpSession({
+        cwd: '/project',
+        mcpServers: [{ name: 'legacy', type: 'sse', url: 'https://example.com/sse', headers: [] }],
+      }),
+    ).rejects.toMatchObject({ code: -32602, message: expect.stringContaining('SSE') });
+    expect(createMastraCode).not.toHaveBeenCalled();
+  });
+
   it('reads defaults once while observing live mode and session reasoning changes', async () => {
     vi.mocked(loadSettings).mockClear();
     vi.mocked(resolveDefaultThinkingLevel).mockClear();

@@ -68,7 +68,7 @@ The CLI's `--dangerous-auto-approve` flag enables the same approval override. Se
 
 ## Sessions and MCP servers
 
-Each session has its own runtime and working directory. The server connects client-supplied Model Context Protocol (MCP) servers using stdio, HTTP, or SSE. Stdio processes receive the session's working directory and supplied environment variables. HTTP and SSE connections receive the supplied headers. Duplicate server names and failed client-server initialization return errors.
+Each session has its own runtime and working directory. The server connects client-supplied Model Context Protocol (MCP) servers using stdio or HTTP. Legacy SSE servers are unsupported and return an invalid-parameters error. Stdio processes receive the session's working directory and supplied environment variables. HTTP connections receive the supplied headers. Duplicate server names and failed client-server initialization return errors.
 
 Prompts and configuration changes run in order within a session. Different sessions can run concurrently. `session/cancel` stops the requested session's active turn and cancels its queued prompts.
 

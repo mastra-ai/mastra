@@ -14,7 +14,7 @@ await connection.setSessionConfigOption({
 
 Fixed user prompts and internal system messages appearing as assistant replies. Failed turns now return errors that clients can display; token limits and refusals return their corresponding protocol stop reasons.
 
-Each conversation now has its own runtime and uses the client's requested working directory. Client-supplied MCP servers connect with their configured environment variables or headers.
+Each conversation now has its own runtime and uses the client's requested working directory. Client-supplied stdio and HTTP MCP servers connect with their configured environment variables or headers. Unsupported legacy SSE servers return an error before session startup.
 
 Tool approvals and sandbox access requests now ask the client for permission. Cancelling a session stops its active turn and queued prompts without interrupting other conversations. Shutdown waits for cleanup even when multiple signals arrive.
 
