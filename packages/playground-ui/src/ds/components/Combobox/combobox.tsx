@@ -6,6 +6,7 @@ import type { ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -63,6 +64,11 @@ function isMultipleCombobox(props: ComboboxProps): props is ComboboxMultipleProp
   return props.multiple === true;
 }
 
+const ComboboxItem = React.forwardRef<HTMLDivElement, BaseCombobox.Item.Props>((props, ref) => (
+  <BaseCombobox.Item ref={useFluidMenuItemRef(ref)} {...props} />
+));
+ComboboxItem.displayName = 'ComboboxItem';
+
 function ComboboxOptionText({ option }: { option: ComboboxOption }) {
   return (
     <span className={comboboxStyles.optionText}>
@@ -111,6 +117,7 @@ export function Combobox(props: ComboboxProps) {
   // Default to the nearest SideDialog/Drawer popup so the list stays
   // interactive inside a modal drawer; an explicit `container` still wins.
   const resolvedContainer = usePortalContainer(container);
+  const menu = useFluidMenu<HTMLDivElement>();
   const iconOnly = isIconButtonSize(size);
 
   const comboboxContent = (
@@ -154,41 +161,45 @@ export function Combobox(props: ComboboxProps) {
               <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
             </div>
             <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
-            <BaseCombobox.List className={comboboxStyles.list}>
-              {(option: ComboboxOption) => {
-                const isSelected = selectedValueSet.has(option.value);
+            <div className={cn(comboboxStyles.listScroller, menu.containerClassName)} {...menu.getContainerProps({})}>
+              <FluidMenuItems menu={menu}>
+                <BaseCombobox.List className={comboboxStyles.list}>
+                  {(option: ComboboxOption) => {
+                    const isSelected = selectedValueSet.has(option.value);
 
-                return (
-                  <BaseCombobox.Item key={option.value} value={option} className={comboboxItemClass({ multiple })}>
-                    {multiple ? (
-                      <>
-                        {option.start}
-                        <ComboboxOptionText option={option} />
-                        <span className={comboboxStyles.itemRightSlot}>
-                          {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
-                          <span className={comboboxStyles.checkContainer}>
-                            {isSelected ? <Check className={comboboxStyles.checkIcon} /> : null}
-                          </span>
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        {option.start}
-                        <ComboboxOptionText option={option} />
-                        <span className={comboboxStyles.itemRightSlot}>
-                          {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
-                          <span className={comboboxStyles.checkContainer}>
-                            <BaseCombobox.ItemIndicator>
-                              <Check className={comboboxStyles.checkIcon} />
-                            </BaseCombobox.ItemIndicator>
-                          </span>
-                        </span>
-                      </>
-                    )}
-                  </BaseCombobox.Item>
-                );
-              }}
-            </BaseCombobox.List>
+                    return (
+                      <ComboboxItem key={option.value} value={option} className={comboboxItemClass({ multiple })}>
+                        {multiple ? (
+                          <>
+                            {option.start}
+                            <ComboboxOptionText option={option} />
+                            <span className={comboboxStyles.itemRightSlot}>
+                              {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                              <span className={comboboxStyles.checkContainer}>
+                                {isSelected ? <Check className={comboboxStyles.checkIcon} /> : null}
+                              </span>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            {option.start}
+                            <ComboboxOptionText option={option} />
+                            <span className={comboboxStyles.itemRightSlot}>
+                              {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                              <span className={comboboxStyles.checkContainer}>
+                                <BaseCombobox.ItemIndicator>
+                                  <Check className={comboboxStyles.checkIcon} />
+                                </BaseCombobox.ItemIndicator>
+                              </span>
+                            </span>
+                          </>
+                        )}
+                      </ComboboxItem>
+                    );
+                  }}
+                </BaseCombobox.List>
+              </FluidMenuItems>
+            </div>
             {selectedValues.length > 0 && clearLabel ? (
               <div className={cn('border-t', 'border-border1', 'p-1')}>
                 <Button
