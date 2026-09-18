@@ -993,6 +993,12 @@ export class MCPServer extends MCPServerBase {
         requestSpan?: Span<SpanType.MCP_SERVER_REQUEST>;
         requestContext: RequestContext;
         extra: MCPRequestHandlerExtra;
+        /**
+         * Records the error behind an `isError` result. A handler that turns a
+         * caught error into an error result reports it here so the span carries
+         * the original error rather than its serialized text.
+         */
+        reportError: (error: Error) => void;
       },
     ) => Promise<HandlerResultTypeMap[M]>,
   ): void {
@@ -1004,7 +1010,20 @@ export class MCPServer extends MCPServerBase {
         serverInstance,
         requestContext,
       });
-      return this.traceRequest(requestSpan, () => handler(request, ctx, { requestSpan, requestContext, extra }));
+      let reportedError: Error | undefined;
+      return this.traceRequest(
+        requestSpan,
+        () =>
+          handler(request, ctx, {
+            requestSpan,
+            requestContext,
+            extra,
+            reportError: error => {
+              reportedError = error;
+            },
+          }),
+        () => reportedError,
+      );
     });
   }
 
@@ -1056,25 +1075,26 @@ export class MCPServer extends MCPServerBase {
   private async traceRequest<T>(
     requestSpan: Span<SpanType.MCP_SERVER_REQUEST> | undefined,
     fn: () => Promise<T>,
+    getReportedError?: () => Error | undefined,
   ): Promise<T> {
     try {
       const result = await fn();
-      const errorResult = result as
-        | { isError?: boolean; error?: boolean; content?: Array<{ text?: string }>; message?: string }
-        | undefined;
-      if (errorResult?.isError || errorResult?.error === true) {
+      // Only the protocol's own `isError` marks a failure. The result is otherwise
+      // opaque tool output, which may legitimately contain any field.
+      const errorResult = result as { isError?: boolean; content?: Array<{ text?: string }> } | undefined;
+      if (errorResult?.isError) {
         requestSpan?.error({
-          error: new MastraError({
-            id: 'MCP_SERVER_REQUEST_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.USER,
-            text:
-              errorResult.message ??
-              errorResult.content
+          error:
+            getReportedError?.() ??
+            new MastraError({
+              id: 'MCP_SERVER_REQUEST_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.USER,
+              text: errorResult.content
                 ?.map(c => c.text)
                 .filter(Boolean)
                 .join('\n'),
-          }),
+            }),
         });
       } else {
         requestSpan?.end({ output: result });
@@ -1133,9 +1153,9 @@ export class MCPServer extends MCPServerBase {
     );
 
     // Call tool handler
-    this.setTracedHandler(serverInstance, 'tools/call', async (request, ctx, trace) => {
+    this.setTracedHandler(serverInstance, 'tools/call', async (request, _ctx, trace) => {
       const startTime = Date.now();
-      const extra = toMCPRequestHandlerExtra(ctx);
+      const extra = trace.extra;
       let replayInterrupt: ElicitationReplayInterrupt | undefined;
       try {
         const tool = this.convertedTools[request.params.name];
@@ -1198,7 +1218,7 @@ export class MCPServer extends MCPServerBase {
             };
 
         const proxiedContext = trace.requestContext;
-        await this.resolveMappedFGAUser(proxiedContext, trace.extra as unknown as Record<string, unknown>);
+        await this.resolveMappedFGAUser(proxiedContext, extra as unknown as Record<string, unknown>);
 
         // Session-aware log emission: sends notifications/message to the calling
         // client, honoring the minimum level it set via logging/setLevel.
@@ -1367,6 +1387,9 @@ export class MCPServer extends MCPServerBase {
         }
         this.logger.error('Tool execution failed', { tool: request.params.name, error });
         if (error instanceof MastraError) {
+          // The client still receives the serialized error, but the span keeps the
+          // original so its id and message survive instead of a JSON blob.
+          trace.reportError(error);
           return {
             content: [{ type: 'text', text: JSON.stringify(error.toJSON()) }],
             isError: true,
@@ -3118,10 +3141,21 @@ export class MCPServer extends MCPServerBase {
             errorMessages,
             errors: validationErrors,
           });
-          // Return validation error as a result instead of throwing
+          // Return validation error as a result instead of throwing. The result
+          // shape is not a protocol error, so fail the span explicitly here.
+          const validationMessage = `Tool validation failed. Please fix the following errors and try again:\n${errorMessages || 'Validation failed'}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`;
+          requestSpan?.error({
+            error: new MastraError({
+              id: 'MCP_SERVER_TOOL_VALIDATION_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.USER,
+              details: { toolId },
+              text: validationMessage,
+            }),
+          });
           return {
             error: true,
-            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages || 'Validation failed'}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
+            message: validationMessage,
             validationErrors,
           };
         }

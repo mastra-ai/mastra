@@ -6,6 +6,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mastra/core/mcp';
 import { EntityType, SpanType, TracingEventType } from '@mastra/core/observability';
 import type { InternalCoreTool, Tool } from '@mastra/core/tools';
@@ -3671,11 +3672,41 @@ describe('MCPServer - Tracing', () => {
     }),
   });
 
+  /** A successful tool whose ordinary output happens to use `error` as a data field. */
+  const flagTool = createTool({
+    id: 'flagTool',
+    description: 'Reports a flag using `error` as ordinary data',
+    inputSchema: z.object({ id: z.string() }),
+    execute: async ({ id }) => ({ id, error: true, detail: 'flagged' }),
+  });
+
+  const throwingTool = createTool({
+    id: 'throwingTool',
+    description: 'Throws a MastraError',
+    inputSchema: z.object({}),
+    execute: async () => {
+      throw new MastraError({
+        id: 'UPSTREAM_TIMEOUT',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.THIRD_PARTY,
+        text: 'Upstream timed out',
+      });
+    },
+  });
+
+  const elicitingTool = createTool({
+    id: 'elicitingTool',
+    description: 'Asks the caller for input',
+    inputSchema: z.object({}),
+    execute: async (_args: any, options: any) =>
+      options.mcp.elicitation.sendRequest({ message: 'Confirm?', requestedSchema: { type: 'object' } }),
+  });
+
   const server = new MCPServer({
     id: 'traced-server',
     name: 'Traced Server',
     version: '3.2.1',
-    tools: { echoTool },
+    tools: { echoTool, flagTool, throwingTool, elicitingTool },
     agents: { tracedAgent },
     resources: {
       listResources: async () => [{ uri: 'file://known', name: 'known' }],
@@ -3815,5 +3846,68 @@ describe('MCPServer - Tracing', () => {
     expect(span.name).toBe('tools/call echoTool');
     expect(span.input).toEqual({ name: 'echoTool', arguments: { message: 'direct' } });
     expect(span.output).toEqual(result);
+  });
+
+  it('ends the span successfully when a tool returns `error` as ordinary data', async () => {
+    const result = await server.executeTool('flagTool', { id: 'r1' });
+
+    expect(result).toEqual({ id: 'r1', error: true, detail: 'flagged' });
+    const span = requestSpans()[0];
+    expect(span.errorInfo).toBeUndefined();
+    expect(span.output).toEqual(result);
+  });
+
+  it('fails the span when executeTool rejects the arguments', async () => {
+    const result = await server.executeTool('flagTool', { wrong: 'shape' });
+
+    expect(result.error).toBe(true);
+    const span = requestSpans()[0];
+    expect(span.errorInfo?.id).toBe('MCP_SERVER_TOOL_VALIDATION_FAILED');
+  });
+
+  it('fails the span with the original error id when a tool throws a MastraError', async () => {
+    await handler('tools/call')(
+      { jsonrpc: '2.0', id: '1', method: 'tools/call', params: { name: 'throwingTool', arguments: {} } },
+      makeMockExtra(),
+    );
+
+    // The tool builder wraps the thrown MastraError, so the span carries the
+    // wrapper's id with the original message, not a serialized JSON blob.
+    const span = requestSpans()[0];
+    expect(span.errorInfo?.id).toBe('TOOL_EXECUTION_FAILED');
+    expect(span.errorInfo?.message).toBe('Upstream timed out');
+    expect(span.errorInfo?.message).not.toContain('{');
+  });
+
+  it('ends the span successfully when a tool interrupts for client input', async () => {
+    // The multi-round-trip elicitation path needs a 2026-07-28 server, so this
+    // case gets its own instance wired to the same collecting exporter.
+    const mrtrServer = new MCPServer({
+      id: 'mrtr-server',
+      name: 'MRTR Server',
+      version: '1.0.0',
+      protocolVersion: '2026-07-28',
+      tools: { elicitingTool },
+    });
+    new Mastra({
+      logger: false,
+      mcpServers: { mrtrServer },
+      observability: new Observability({
+        configs: { default: { serviceName: 'mcp-tracing-test', exporters: [collectingExporter] } },
+      }),
+    });
+    const extra = makeMockExtra();
+    (extra.mcpReq as any).envelope = { [PROTOCOL_VERSION_META_KEY]: '2026-07-28' };
+
+    await (mrtrServer.getServer() as any)._requestHandlers.get('tools/call')(
+      { jsonrpc: '2.0', id: '1', method: 'tools/call', params: { name: 'elicitingTool', arguments: {} } },
+      extra,
+    );
+
+    // The span records the handler's own `input_required` return, before the SDK
+    // seam post-processes it for the connection.
+    const span = requestSpans()[0];
+    expect(span.errorInfo).toBeUndefined();
+    expect(span.output?.resultType).toBe('input_required');
   });
 });
