@@ -24,4 +24,4 @@ Disabled controls resolve to `muted` and `muted-foreground` rather than a blanke
 <Input />
 ```
 
-Controls also name the properties they transition instead of using `transition-all`, so a theme switch animates color and nothing else. Interaction motion is unaffected: Switch still animates its thumb, and Checkbox still animates its indicator.
+Menu search fields now show a visible keyboard focus outline. Controls also name the properties they transition instead of using `transition-all`, so a theme switch animates color and nothing else. Interaction motion is unaffected: Switch still animates its thumb, and Checkbox still animates its indicator.

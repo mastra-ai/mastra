@@ -47,12 +47,6 @@ export const Variants: Story = {
         </InputGroupAddon>
         <InputGroupInput placeholder="Default" />
       </InputGroup>
-      <InputGroup>
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput placeholder="Filled" />
-      </InputGroup>
       <InputGroup variant="outline">
         <InputGroupAddon>
           <SearchIcon />

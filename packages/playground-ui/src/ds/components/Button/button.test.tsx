@@ -267,6 +267,35 @@ describe('Button', () => {
       expect(screen.getByRole('link', { name: 'Agents' }).getAttribute('href')).toBe('/agents');
     });
 
+    it('prevents a disabled anchor from activating', () => {
+      const onClick = vi.fn();
+      render(
+        <Button disabled render={<a href="/docs" onClick={onClick} />}>
+          Docs
+        </Button>,
+      );
+      const link = screen.getByText('Docs');
+
+      expect(link.getAttribute('href')).toBeNull();
+      expect(link.getAttribute('aria-disabled')).toBe('true');
+      fireEvent.click(link);
+      expect(onClick).not.toHaveBeenCalled();
+      expect(fireEvent.keyDown(link, { key: 'Enter' })).toBe(false);
+    });
+
+    it('prevents a disabled router link from activating', () => {
+      render(
+        <Button disabled render={<RouterLink to="/agents" />}>
+          Agents
+        </Button>,
+      );
+      const link = screen.getByText('Agents');
+
+      expect(link.getAttribute('href')).toBeNull();
+      expect(link.getAttribute('aria-disabled')).toBe('true');
+      expect(fireEvent.keyDown(link, { key: ' ' })).toBe(false);
+    });
+
     it('still routes a real button through Base UI', () => {
       render(<Button render={<button type="submit" />}>Save</Button>);
       expect(screen.getByRole('button', { name: 'Save' }).getAttribute('type')).toBe('submit');

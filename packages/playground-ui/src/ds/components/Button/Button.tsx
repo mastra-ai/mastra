@@ -130,10 +130,17 @@ export interface ButtonProps
 // is the worse fix: Base UI then adds `role="button"` and Enter/Space handling, so a
 // screen reader announces a link as a button. Render links directly instead and keep
 // `BaseButton` for real buttons.
-function isLinkElement(element: React.ReactElement): boolean {
+function isLinkElement(
+  element: React.ReactElement,
+): element is React.ReactElement<{ href?: unknown; to?: unknown; className?: string }> {
   if (element.type === 'a') return true;
   const { href, to } = element.props as { href?: unknown; to?: unknown };
   return href !== undefined || to !== undefined;
+}
+
+function preventLinkActivation(event: React.SyntheticEvent): void {
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 // One icon step per control step, so the same nominal size renders the same icon
@@ -254,6 +261,21 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
     };
 
     const renderedLink = React.isValidElement(render) && isLinkElement(render) ? render : undefined;
+    const renderedLinkProps = renderedLink?.props;
+    const disabledHref = renderedLink?.type !== 'a' && renderedLinkProps?.href !== undefined ? '' : undefined;
+    const disabledTo = renderedLinkProps?.to !== undefined ? '' : undefined;
+    const disabledLinkProps = disabled
+      ? {
+          href: disabledHref,
+          to: disabledTo,
+          'aria-disabled': true,
+          onClick: preventLinkActivation,
+          onAuxClick: preventLinkActivation,
+          onKeyDown: (event: React.KeyboardEvent) => {
+            if (event.key === 'Enter' || event.key === ' ') preventLinkActivation(event);
+          },
+        }
+      : undefined;
 
     const button = LegacyComponent ? (
       <LegacyComponent ref={ref} {...legacyLinkProps} {...sharedProps}>
@@ -263,7 +285,9 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       React.cloneElement(renderedLink as React.ReactElement<Record<string, unknown>>, {
         ref,
         ...sharedProps,
-        className: cn(sharedProps.className, (renderedLink.props as { className?: string }).className),
+        disabled: undefined,
+        ...disabledLinkProps,
+        className: cn(sharedProps.className, renderedLink.props.className),
         children: content,
       })
     ) : (
