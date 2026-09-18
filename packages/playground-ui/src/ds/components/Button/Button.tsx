@@ -175,6 +175,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       icon,
       tooltip,
       'aria-label': ariaLabelProp,
+      type,
       ...props
     },
     ref,
@@ -201,6 +202,10 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
 
     const sharedProps = {
       disabled,
+      // Base UI renders `type="button"` when the prop is absent, which would quietly stop
+      // a form button that relied on the native `submit` default from submitting. Passing
+      // it through, `undefined` included, keeps native semantics: absent stays absent.
+      type,
       'aria-label': ariaLabel,
       // Expose the variant so a parent ButtonsGroup can detect FILLED segments in CSS
       // (filled buttons have an opaque background that hides a border seam, so the group

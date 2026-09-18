@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -54,9 +54,12 @@ describe('Button', () => {
     }
   });
 
-  it('defaults native buttons to type button', () => {
+  // Base UI renders `type="button"` when the prop is absent. Keeping the attribute off
+  // preserves the native `submit` default, so a form button that never set a type keeps
+  // submitting instead of silently going inert.
+  it('leaves type off so a form button keeps the native submit default', () => {
     render(<Button>Save</Button>);
-    expect(screen.getByRole('button', { name: 'Save' }).getAttribute('type')).toBe('button');
+    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('type')).toBe(false);
   });
 
   it('preserves an explicit submit type', () => {
@@ -183,6 +186,29 @@ describe('Button', () => {
       );
       screen.getByRole('link', { name: 'Agents' }).click();
       expect(onClick).toHaveBeenCalledTimes(1);
+    });
+  });
+  describe('form submission', () => {
+    it('submits its form when no type is set, as a native button does', () => {
+      const onSubmit = vi.fn(e => e.preventDefault());
+      render(
+        <form onSubmit={onSubmit}>
+          <Button>Save</Button>
+        </form>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not submit when the caller opts out with type="button"', () => {
+      const onSubmit = vi.fn(e => e.preventDefault());
+      render(
+        <form onSubmit={onSubmit}>
+          <Button type="button">Cancel</Button>
+        </form>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(onSubmit).not.toHaveBeenCalled();
     });
   });
 });
