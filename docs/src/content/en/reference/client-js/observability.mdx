@@ -288,6 +288,8 @@ const feedback = await mastraClient.listFeedback({
 })
 ```
 
+`filters` accepts every [`FeedbackFilter`](/reference/observability/feedback#feedbackfilter) field. The client sends them as query parameters on `GET /api/observability/feedback`. See [list query parameters](/reference/observability/feedback#list-query-parameters).
+
 ### Aggregating feedback
 
 Aggregate numeric feedback values, such as ratings or thumbs encoded as `1` and `-1`:
