@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod/v4';
@@ -328,10 +329,8 @@ export function isZodType(value: unknown): value is z.ZodType {
 }
 
 // Helper function to create a deterministic hash
-async function createDeterministicId(input: string): Promise<string> {
-  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input)))
-    .toString('hex')
-    .slice(0, 8);
+function createDeterministicId(input: string): string {
+  return createHash('sha256').update(input).digest('hex').slice(0, 8); // Take first 8 characters for a shorter but still unique ID
 }
 
 /**
@@ -339,7 +338,7 @@ async function createDeterministicId(input: string): Promise<string> {
  * @param tool - The tool to set the properties for
  * @returns The tool with the properties set
  */
-async function setVercelToolProperties(tool: VercelTool) {
+function setVercelToolProperties(tool: VercelTool) {
   // Check if the tool already has inputSchema (v5 format)
   // If it does, use it directly (it might be a function)
   // Otherwise, convert the parameters to inputSchema
@@ -347,7 +346,7 @@ async function setVercelToolProperties(tool: VercelTool) {
 
   const toolId = !('id' in tool)
     ? tool.description
-      ? `tool-${await createDeterministicId(tool.description)}`
+      ? `tool-${createDeterministicId(tool.description)}`
       : `tool-${Math.random().toString(36).substring(2, 9)}`
     : tool.id;
 
@@ -363,28 +362,31 @@ async function setVercelToolProperties(tool: VercelTool) {
  * @param tool - The tool to ensure has an ID and inputSchema
  * @returns The tool with an ID and inputSchema
  */
-export async function ensureToolProperties(tools: ToolsInput): Promise<ToolsInput> {
-  const toolsWithProperties: ToolsInput = {};
+export function ensureToolProperties(tools: ToolsInput): ToolsInput {
+  const toolsWithProperties = Object.keys(tools).reduce<ToolsInput>((acc, key) => {
+    const tool = tools?.[key];
+    if (tool) {
+      // Check if the tool is a plain function (not a Tool instance or Vercel tool)
+      // This catches the common mistake of passing a tool factory function instead of the tool itself
+      // We need to cast to unknown first since ToolsInput doesn't include functions in its type,
+      // but users can still pass functions at runtime which causes silent failures
+      if (typeof tool === 'function' && !((tool as unknown) instanceof Tool) && !isVercelTool(tool)) {
+        throw new MastraError({
+          id: 'TOOL_INVALID_FORMAT',
+          domain: ErrorDomain.TOOL,
+          category: ErrorCategory.USER,
+          text: `Tool "${key}" is not a valid tool format. Tools must be created using createTool() or be a valid Vercel AI SDK tool. Received a function.`,
+        });
+      }
 
-  for (const key of Object.keys(tools)) {
-    const tool = tools[key];
-    if (!tool) continue;
-
-    // Check if the tool is a plain function (not a Tool instance or Vercel tool)
-    // This catches the common mistake of passing a tool factory function instead of the tool itself
-    // We need to cast to unknown first since ToolsInput doesn't include functions in its type,
-    // but users can still pass functions at runtime which causes silent failures
-    if (typeof tool === 'function' && !((tool as unknown) instanceof Tool) && !isVercelTool(tool)) {
-      throw new MastraError({
-        id: 'TOOL_INVALID_FORMAT',
-        domain: ErrorDomain.TOOL,
-        category: ErrorCategory.USER,
-        text: `Tool "${key}" is not a valid tool format. Tools must be created using createTool() or be a valid Vercel AI SDK tool. Received a function.`,
-      });
+      if (isVercelTool(tool)) {
+        acc[key] = setVercelToolProperties(tool) as VercelTool;
+      } else {
+        acc[key] = tool;
+      }
     }
-
-    toolsWithProperties[key] = isVercelTool(tool) ? ((await setVercelToolProperties(tool)) as VercelTool) : tool;
-  }
+    return acc;
+  }, {});
 
   return toolsWithProperties;
 }

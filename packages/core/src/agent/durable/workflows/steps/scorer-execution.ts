@@ -137,7 +137,7 @@ export function createDurableScorerStep() {
           };
 
           // Resolve sampling before dispatching hooks.
-          await runScorer({
+          runScorer({
             mastra: mastra as Mastra | undefined,
             runId,
             scorerId: scorerKey,

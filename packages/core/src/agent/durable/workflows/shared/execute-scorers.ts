@@ -94,7 +94,7 @@ export function executeDurableAgentScorers({
         filter,
       };
 
-      void runScorer({
+      runScorer({
         mastra,
         runId: initData.runId,
         scorerId: scorerKey,
@@ -112,13 +112,7 @@ export function executeDurableAgentScorers({
         threadId: initData.state?.threadId,
         resourceId: initData.state?.resourceId,
         ...createObservabilityContext(tracingContext),
-      }).catch(error =>
-        logger?.warn?.(`Error executing scorer ${scorerName}`, {
-          error,
-          runId: initData.runId,
-          scorerKey,
-        }),
-      );
+      });
     } catch (error) {
       // Scoring is observability, not execution: never fail a run over it.
       logger?.warn?.(`Error executing scorer ${scorerName}`, {

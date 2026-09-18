@@ -1,15 +1,5 @@
 ---
-'@mastra/core': minor
+'@mastra/core': patch
 ---
 
-Improved runtime portability by using Web Crypto for IDs, hashes, and asynchronous cryptographic operations.
-
-The exported `hashToUnitInterval`, `buildResponseCacheKey`, `ensureToolProperties`, and `computeScheduleDefinitionHash` helpers now return promises and must be awaited:
-
-```ts
-// Before
-const key = buildResponseCacheKey(input);
-
-// After
-const key = await buildResponseCacheKey(input);
-```
+Improved runtime portability by using Web Crypto for cryptographic operations that do not require changes to existing synchronous APIs.

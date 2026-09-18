@@ -285,12 +285,12 @@ describe('runScorer unrecognized sampling type', () => {
 });
 
 describe('hashToUnitInterval', () => {
-  it('returns a stable value in [0, 1)', async () => {
+  it('returns a stable value in [0, 1)', () => {
     for (const key of makeTraceIds(200)) {
-      const value = await hashToUnitInterval(key);
+      const value = hashToUnitInterval(key);
       expect(value).toBeGreaterThanOrEqual(0);
       expect(value).toBeLessThan(1);
-      await expect(hashToUnitInterval(key)).resolves.toBe(value);
+      expect(hashToUnitInterval(key)).toBe(value);
     }
   });
 

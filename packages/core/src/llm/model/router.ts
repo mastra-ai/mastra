@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
@@ -480,7 +481,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     return streamResult;
   }
 
-  static async computeModelCacheKey({
+  static computeModelCacheKey({
     gatewayId,
     modelId,
     providerId,
@@ -502,21 +503,23 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     websocketKey: string;
     authScopeKey: string;
     api: 'chat' | 'responses';
-  }): Promise<string> {
-    const input = JSON.stringify([
-      gatewayId,
-      modelId,
-      providerId,
-      url,
-      apiKey,
-      headersKey,
-      resolvedTransport,
-      websocketKey,
-      authScopeKey,
-      api,
-    ]);
-    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
-    return Buffer.from(digest).toString('hex');
+  }): string {
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          gatewayId,
+          modelId,
+          providerId,
+          url,
+          apiKey,
+          headersKey,
+          resolvedTransport,
+          websocketKey,
+          authScopeKey,
+          api,
+        ]),
+      )
+      .digest('hex');
   }
 
   private async resolveLanguageModel({
@@ -544,7 +547,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     const useInstanceCache = this.shouldUseInstanceGatewayCache(auth);
     const cache = useInstanceCache ? this.instanceGatewayCache : this.getGatewayCache();
     const authScopeKey = useInstanceCache ? `${auth.source ?? ''}` : '';
-    const key = await ModelRouterLanguageModel.computeModelCacheKey({
+    const key = ModelRouterLanguageModel.computeModelCacheKey({
       gatewayId: this.gatewayId,
       modelId,
       providerId,

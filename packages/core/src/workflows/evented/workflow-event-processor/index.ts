@@ -432,7 +432,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     const expected = (data as { scheduleDefinitionHash?: unknown } | undefined)?.scheduleDefinitionHash;
     if (typeof expected !== 'string' || !expected) return true;
 
-    const localHash = await computeScheduleDefinitionHash(workflow.serializedStepGraph);
+    const localHash = computeScheduleDefinitionHash(workflow.serializedStepGraph);
     if (!localHash || localHash === expected) return true;
 
     const { workflowId, runId } = data as { workflowId: string; runId: string };
