@@ -12,6 +12,7 @@ import {
   unlinkRepository,
 } from '../ui/domains/workspaces/services/github';
 import type { FactoryProject, SourceControlRepository } from '../ui/domains/workspaces/services/github';
+import { registerGitLabRepository } from '../ui/domains/factory/services/gitlab';
 import { fetchIntakeConfig, selectIntakeSource } from '../ui/domains/factory/services/intake';
 import { useSaveIntakeConfigMutation } from './useIntakeConfig';
 
@@ -71,13 +72,14 @@ export function useLinkRepositoryMutation() {
   return useMutation({
     mutationFn: async ({ factoryProjectId, repo }: { factoryProjectId: string; repo: SourceControlRepository }) => {
       const gitlab = isGitLabRepository(repo);
+      const linkableRepo = gitlab ? await registerGitLabRepository(baseUrl, repo.id) : repo;
       const connectionId = await connectInstallation(
         baseUrl,
         factoryProjectId,
-        repo.installationStorageId,
+        linkableRepo.installationStorageId,
         gitlab ? 'gitlab' : 'github',
       );
-      const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, repo);
+      const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, linkableRepo);
       try {
         const config = await fetchIntakeConfig(baseUrl);
         if (gitlab) {
