@@ -8,7 +8,7 @@ import {
 } from '../../../factory-ui/src/ui/domains/chat/services/runtime';
 
 /**
- * Tokens/sec computation — tested by driving the transcript reducer directly
+ * Tokens/sec computation — tested by driving the chat runtime reducer directly
  * with the same event order the real SSE stream produces: content deltas
  * (message_update) stream while the model decodes, then a step-finish reports
  * token usage (usage_update). The rate is measured over the decode window only,

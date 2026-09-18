@@ -293,8 +293,6 @@ type MessageUpdate = Extract<KnownAgentControllerEvent, { type: 'message_update'
 const activeMessages = new Map<string, MastraDBMessage>()
 
 function applyUpdate(message: MastraDBMessage, update: MessageUpdate): MastraDBMessage {
-  if (typeof message.content === 'string') return message
-
   const parts = [...message.content.parts]
 
   if (update.type === 'text-delta') {
