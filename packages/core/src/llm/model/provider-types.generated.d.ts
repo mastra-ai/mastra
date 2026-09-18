@@ -878,6 +878,8 @@ export type ProviderModelsMap = {
   readonly vivgrid: readonly [
     'claude-fable-5',
     'claude-fable-5-1',
+    'claude-opus-5',
+    'claude-sonnet-5',
     'deepseek-v3.2',
     'deepseek-v4-flash',
     'deepseek-v4-pro',
@@ -902,6 +904,7 @@ export type ProviderModelsMap = {
     'gpt-5.6-sol',
     'gpt-5.6-terra',
     'gpt-6-astra',
+    'jev',
     'kimi-k3',
   ];
   readonly auriko: readonly [
@@ -1999,6 +2002,7 @@ export type ProviderModelsMap = {
     'deepseek-v3-2-exp',
     'deepseek-v4-flash',
     'deepseek-v4-pro',
+    'deepseek-v4.1-flash',
     'glm-5',
     'glm-5.1',
     'glm-5.2',
@@ -3286,7 +3290,6 @@ export type ProviderModelsMap = {
     'mistral-nemo-instruct-2407',
     'mistral-small-3.2-24b-instruct-2506',
     'qwen2.5-vl-72b-instruct',
-    'qwen3-32b',
     'qwen3-coder-30b-a3b-instruct',
     'qwen3.5-397b-a17b',
     'qwen3.5-9b',
@@ -3767,6 +3770,7 @@ export type ProviderModelsMap = {
     'zai/glm-5.3',
     'zai/glm-5.3-fast',
     'zai/glm-5.3-flash',
+    'zai/glm-5.3-flashx',
     'zai/glm-5v-turbo',
   ];
   readonly wandb: readonly [
@@ -4412,6 +4416,7 @@ export type ProviderModelsMap = {
     'MiniMax-M2.7-highspeed',
     'MiniMax-M3',
   ];
+  readonly 'kimi-code-plan-global': readonly ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'];
   readonly inferx: readonly [
     'Agents-A1',
     'Devstral-2-123B-Instruct-2512-int4-AutoRound',
@@ -5171,6 +5176,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-flash-vision-exp',
     'deepseek-v4-pro',
   ];
+  readonly 'kimi-code-plan-cn': readonly ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'];
   readonly abacus: readonly [
     'MiniMaxAI/MiniMax-M2.7',
     'MiniMaxAI/MiniMax-M3',
@@ -6894,7 +6900,6 @@ export type ProviderModelsMap = {
   ];
   readonly ai21: readonly ['jamba-large', 'jamba-mini'];
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
-  readonly 'kimi-for-coding': readonly ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'];
   readonly 'alibaba-token-plan-cn': readonly [
     'MiniMax-M2.5',
     'deepseek-v3.2',

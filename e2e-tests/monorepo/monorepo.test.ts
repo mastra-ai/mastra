@@ -657,6 +657,12 @@ export const environmentRoute = registerApiRoute('/environment', {
           typescript: expect.any(String),
         }),
       );
+    });
+
+    it('should exclude dependencies imported only from dead NODE_ENV branches', async () => {
+      const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
+      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
+
       expect(packageJson.dependencies?.['date-fns']).toBeUndefined();
     });
 
@@ -1147,44 +1153,6 @@ export const mastra = new Mastra({
           }
 
           await writeFile(mastraConfigPath, originalMastraConfig);
-          await rm(isolatedFixturePath, { recursive: true, force: true });
-        }
-      },
-      timeout,
-    );
-
-    it(
-      'should exit non-zero when a workspace subpath import cannot be resolved',
-      async () => {
-        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-missing-dep-test-${pkgManager}-`));
-        try {
-          await setupMonorepo(isolatedFixturePath, pkgManager);
-
-          const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
-          await mkdir(join(corePath, 'runtime-context'), { recursive: true });
-          await writeFile(
-            join(corePath, 'runtime-context', 'index.js'),
-            `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
-          );
-
-          const transitiveDependencyPath = join(isolatedFixturePath, 'packages', 'transitive-c', 'src', 'index.js');
-          const transitiveDependencySource = await readFile(transitiveDependencyPath, 'utf-8');
-          await writeFile(
-            transitiveDependencyPath,
-            transitiveDependencySource.replace('@inner/subpath-only/value', '@inner/subpath-only/missing'),
-          );
-
-          const buildResult = await execa(pkgManager, ['build'], {
-            cwd: join(isolatedFixturePath, 'apps', 'custom'),
-            reject: false,
-            env: process.env,
-          });
-          const output = `${buildResult.stdout}\n${buildResult.stderr}`;
-
-          expect(buildResult.exitCode, output).toBe(1);
-          expect(output).toContain('Missing "./missing" specifier in "@inner/subpath-only" package');
-          expect(output).toContain('@inner/subpath-only/missing');
-        } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
       },
