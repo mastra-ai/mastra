@@ -1145,7 +1145,7 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
  */
 export type CustomChunkWriter = {
   custom: (
-    data: { type: string; data?: unknown; transient?: boolean },
+    data: { type: `data-${string}`; data: unknown; transient?: boolean },
     writerOptions?: { messageId?: string },
   ) => Promise<void> | void;
 };
