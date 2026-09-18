@@ -8,10 +8,11 @@ export type AgentControllerMessageUpdate = Extract<AgentControllerEvent, { type:
  * Fold one compact `message_update` delta into a streamed assistant message.
  *
  * Returns a new message (the input is never mutated), or `undefined` when the
- * delta does not apply — no message, a string `content` (no parts to fold), or
- * a reasoning delta whose index is not a reasoning part. There is deliberately
- * no `role` guard: role checks belong to callers. Callers address the message
- * by id: `applyUpdate(messages.get(event.id), event.event)`.
+ * delta does not apply — no message, a string `content` (no parts to fold), a
+ * reasoning delta whose index is not a reasoning part, or a part update whose
+ * index is outside the message's parts. There is deliberately no `role` guard:
+ * role checks belong to callers. Callers address the message by id:
+ * `applyUpdate(messages.get(event.id), event.event)`.
  */
 export function applyUpdate(
   message: MastraDBMessage | undefined,
@@ -34,6 +35,10 @@ export function applyUpdate(
     const reasoning = reasoningPart.reasoning + update.delta;
     parts[update.index] = { ...reasoningPart, reasoning, details: [{ type: 'text', text: reasoning }] };
   } else {
+    // The emitter appends a new part at `parts.length` and replaces existing
+    // ones by index, so anything else — negative, fractional, or past the
+    // append boundary — would write a hole or a non-element property.
+    if (!Number.isInteger(update.index) || update.index < 0 || update.index > parts.length) return undefined;
     parts[update.index] = structuredClone(update.part);
   }
 

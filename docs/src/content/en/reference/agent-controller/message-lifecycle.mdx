@@ -109,12 +109,13 @@ session.subscribe(event => {
 
 ## Accumulate text deltas
 
-A consumer that only needs the assistant's text doesn't have to reconstruct messages. Within this lifecycle `text-delta` is the only event that carries streamed text, so append `event.event.delta` for each one and the turn's text accumulates in arrival order:
+A consumer that only needs the assistant's text doesn't have to reconstruct messages. Within this lifecycle `text-delta` is the only event that carries streamed text, so append `event.event.delta` for each one and the turn's text accumulates in arrival order. Reset the buffer when `agent_start` opens a new turn, or the string keeps growing across turns:
 
 ```typescript
 let text = ''
 
 session.subscribe(event => {
+  if (event.type === 'agent_start') text = ''
   if (event.type === 'message_update' && event.event.type === 'text-delta') {
     text += event.event.delta
   }

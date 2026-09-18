@@ -80,6 +80,20 @@ describe('applyUpdate', () => {
     expect(replacement.toolInvocation.toolName).toBe('read_file');
   });
 
+  it('appends a part at the length boundary and rejects indices beyond it', () => {
+    const message = assistantMessage([{ type: 'text', text: 'hello' }]);
+    const appended: MastraMessagePart = { type: 'text', text: 'appended' };
+
+    // `parts.length` is the emitter's append boundary for a new part.
+    const atBoundary = applyUpdate(message, { type: 'part', index: 1, part: appended });
+    expect(atBoundary?.content.parts).toHaveLength(2);
+    expect(atBoundary?.content.parts[1]).toEqual(appended);
+
+    for (const index of [2, 7, -1, 0.5, Number.NaN]) {
+      expect(applyUpdate(message, { type: 'part', index, part: appended })).toBeUndefined();
+    }
+  });
+
   it('returns undefined for a missing message or a string content', () => {
     expect(applyUpdate(undefined, { type: 'text-delta', delta: 'x' })).toBeUndefined();
 

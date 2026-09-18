@@ -359,7 +359,11 @@ Use `agentControllerMessageText(message)` to pull the plain text out of a recons
 `display_state_changed` carries the folded [`AgentControllerDisplayState`](/reference/agent-controller/session#displaystate), so a client doesn't fold message deltas to render the streaming message. Read `currentMessage` from it and pass the message to `agentControllerMessageText(message)` for its plain text:
 
 ```typescript
-import { agentControllerMessageText, isKnownAgentControllerEvent } from '@mastra/client-js'
+import {
+  agentControllerMessageText,
+  isKnownAgentControllerEvent,
+  type AgentControllerEvent,
+} from '@mastra/client-js'
 
 function renderStreamingMessage(event: AgentControllerEvent) {
   if (!isKnownAgentControllerEvent(event)) return
@@ -376,7 +380,7 @@ The state is coalesced for `message_update` and `tool_input_delta` over a short 
 The `applyUpdate` above is also exported from `@mastra/core/agent-controller`, so a server-side consumer can import it instead of inlining a copy:
 
 ```typescript
-import { isKnownAgentControllerEvent } from '@mastra/client-js'
+import { isKnownAgentControllerEvent, type AgentControllerEvent } from '@mastra/client-js'
 import { applyUpdate } from '@mastra/core/agent-controller'
 import type { MastraDBMessage } from '@mastra/core/agent-controller'
 
