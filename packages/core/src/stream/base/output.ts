@@ -142,8 +142,9 @@ export type FullOutput<OUTPUT = undefined> = {
   /** The structured object output (when using structured output) */
   object: OUTPUT;
   /**
-   * True when `object` is the configured `fallbackValue`, substituted because the
-   * model output failed schema validation under `errorStrategy: 'fallback'`.
+   * True when `object` is the configured `fallbackValue`, substituted because the model
+   * output failed schema validation — or the separate structuring model failed — under
+   * `errorStrategy: 'fallback'`.
    */
   usedFallbackValue: boolean;
   /** Error if the stream failed */
@@ -1258,6 +1259,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   ),
                   // Custom properties (not part of standard callback)
                   ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
+                  usedFallbackValue: self.#usedFallbackValue,
                   object:
                     self.#delayedPromises.object.status.type === 'rejected'
                       ? undefined
@@ -1902,8 +1904,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   /**
-   * Whether the structured object is the configured `fallbackValue`, substituted
-   * because the model output failed schema validation under `errorStrategy: 'fallback'`.
+   * Whether the structured object is the configured `fallbackValue`, substituted because
+   * the model output failed schema validation — or the separate structuring model failed —
+   * under `errorStrategy: 'fallback'`.
+   *
+   * Starts `false` and reflects the most recently processed object. On a live stream, await
+   * `stream.object` or `stream.getFullOutput()` before reading it.
    */
   get usedFallbackValue(): boolean {
     return this.#usedFallbackValue;
