@@ -90,13 +90,19 @@ describe('trace-query reference evaluator', () => {
         if (!('delta' in bootstrap)) throw new Error('Expected delta');
         let after = bootstrap.deltaCursor;
         const ids: string[] = [];
+        let completed = false;
         for (let page = 0; page < 20; page++) {
           const batch = evaluateTraceQueryRequest(TRACE_QUERY_FIXTURE_DATA, { ...request, after });
           if (!('delta' in batch)) throw new Error('Expected delta');
           ids.push(...batch.traces.map(trace => trace.traceId));
+          if (batch.delta.hasMore) expect(batch.deltaCursor).not.toBe(after);
           after = batch.deltaCursor;
-          if (!batch.delta.hasMore) break;
+          if (!batch.delta.hasMore) {
+            completed = true;
+            break;
+          }
         }
+        expect(completed).toBe(true);
         expect(ids.sort()).toEqual(testCase.expected.map(row => ('traceId' in row ? row.traceId : '')).sort());
       });
     }

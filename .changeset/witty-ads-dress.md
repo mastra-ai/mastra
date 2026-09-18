@@ -2,4 +2,4 @@
 "@mastra/playground-ui": patch
 ---
 
-Fixed trace-query cursor pagination types in Playground UI after adding delta polling.
+Fixed a Playground UI type error when querying traces with cursor pagination.

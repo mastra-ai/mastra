@@ -666,6 +666,7 @@ LIMIT 1`,
         expect(reloaded.pagination.total).toBe(expected.length);
         // Reload reconciles every acknowledged insert, including any polling gaps.
         expect([...observed].every(traceId => reloaded.traces.some(trace => trace.traceId === traceId))).toBe(true);
+        expect(reloaded.deltaCursor).toBeTypeOf('string');
         expect((await poll(reloaded.deltaCursor)).traces).toEqual([]);
       });
     });
