@@ -59,6 +59,7 @@ const RUNTIME_DEPENDENCIES = [
   '@mastra/auth-workos',
   '@mastra/code-sdk',
   '@mastra/core',
+  '@mastra/createos',
   '@mastra/e2b',
   '@mastra/factory',
   '@mastra/libsql',

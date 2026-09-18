@@ -1,0 +1,305 @@
+---
+title: "CreateOS | Sandbox"
+description: "Run Mastra workspace commands in isolated CreateOS cloud sandboxes with streaming processes, S3 mounts, desktop controls, and public ingress URLs."
+packages:
+  - "@mastra/createos"
+---
+
+# CreateOS
+
+Executes commands in isolated [CreateOS](https://createos.sh) cloud sandboxes. The integration supports foreground and background processes, streaming output, stdin, file uploads, native S3 mounts, pause and resume, sandbox reconnection, egress controls, public ingress URLs, and desktop computer-use tools. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/createos
+```
+
+Set your CreateOS API key:
+
+```bash
+CREATEOS_SANDBOX_API_KEY=your-api-key
+```
+
+`CREATEOS_SANDBOX_BASE_URL` can override the default CreateOS API endpoint.
+
+## Usage
+
+Add a `CreateOSSandbox` to a workspace:
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { CreateOSSandbox } from '@mastra/createos'
+
+const sandbox = new CreateOSSandbox({
+  id: 'dev-sandbox',
+  shape: 's-2vcpu-2gb',
+  rootfs: 'devbox:1',
+  autoPauseAfterSeconds: 900,
+})
+
+const workspace = new Workspace({ sandbox })
+
+const result = await sandbox.executeCommand('node', ['--version'])
+console.log(result.stdout)
+```
+
+The workspace starts the sandbox lazily when it first executes a command or writes a file.
+
+## Environment variables
+
+Pass default variables to the constructor or update them with `setEnv()`. The integration applies the current values to each new process, so credentials can be rotated after the sandbox starts:
+
+```typescript
+const sandbox = new CreateOSSandbox({
+  id: 'repo-task',
+  env: { NODE_ENV: 'development' },
+})
+
+sandbox.setEnv(env => ({ ...env, GH_TOKEN: process.env.GH_TOKEN! }))
+const result = await sandbox.executeCommand('gh', ['repo', 'view'])
+```
+
+These variables are available to code running inside the process. Scope credentials to the command and permissions it needs.
+
+## Streaming and background processes
+
+Stream command output with callbacks:
+
+```typescript
+await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "$i"; sleep 1; done'], {
+  onStdout: chunk => process.stdout.write(chunk),
+  onStderr: chunk => process.stderr.write(chunk),
+})
+```
+
+Use `sandbox.processes.spawn()` for a long-running process. Its handle supports output events, `sendStdin()`, `closeStdin()`, `wait()`, and `kill()`.
+
+## Reconnection and lifecycle
+
+Using the same logical `id` reconnects to the same non-terminal CreateOS sandbox. `_stop()` pauses the sandbox and preserves its state; starting it again resumes it. `_destroy()` permanently removes it.
+
+```typescript
+const first = new CreateOSSandbox({ id: 'persistent-project' })
+await first._start()
+await first.executeCommand('sh', ['-c', 'echo ready > /tmp/state.txt'])
+await first._stop()
+
+const resumed = new CreateOSSandbox({ id: 'persistent-project' })
+await resumed._start()
+const result = await resumed.executeCommand('cat', ['/tmp/state.txt'])
+console.log(result.stdout) // "ready"
+
+await resumed._destroy()
+```
+
+When available, save the physical CreateOS ID from `sandbox.getInfo().metadata.sandboxId` and pass it as `sandboxId` on the next connection. Without it, the integration finds the sandbox by its deterministic name.
+
+If process creation discovers that the attached sandbox was deleted or became unavailable, the provider reconnects or creates a replacement, restores configured mounts, and retries the operation once. Authentication, quota, command, and generic server errors aren't retried.
+
+## Networking
+
+Enable ingress when creating the sandbox, then resolve a public URL for a listening port:
+
+```typescript
+const sandbox = new CreateOSSandbox({
+  id: 'web-preview',
+  ingress: true,
+})
+
+await sandbox._start()
+const url = await sandbox.networking?.getPortUrl(3000)
+```
+
+Configure outbound access with `egress`, such as `['registry.npmjs.org:443']`. Omitting it uses the CreateOS default.
+
+## Mount S3 storage
+
+Add `@mastra/s3` to mount an Amazon S3 or S3-compatible bucket as a local sandbox directory:
+
+```bash npm2yarn
+npm install @mastra/s3
+```
+
+Pass the filesystem through the workspace `mounts` configuration:
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { CreateOSSandbox } from '@mastra/createos'
+import { S3Filesystem } from '@mastra/s3'
+
+const workspace = new Workspace({
+  mounts: {
+    '/workspace/data': new S3Filesystem({
+      bucket: process.env.S3_BUCKET!,
+      region: process.env.S3_REGION ?? 'us-east-1',
+      endpoint: process.env.S3_ENDPOINT,
+      accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+      prefix: 'projects/demo',
+    }),
+  },
+  sandbox: new CreateOSSandbox({ id: 's3-workspace' }),
+})
+
+await workspace.init()
+const result = await workspace.sandbox.executeCommand('ls', ['/workspace/data'])
+```
+
+The adapter derives a deterministic disk name from the bucket configuration and access-key ID. It registers the bucket through the CreateOS disk API, which encrypts the secret key in the control plane, then live-attaches the disk to the running sandbox. Reusing the same configuration reuses the registered disk and updates its stored credentials.
+
+CreateOS automatically unmounts disks before pause and remounts them after resume. Calling `sandbox.unmount()` detaches the disk from that sandbox but doesn't delete the registered CreateOS disk or any bucket data.
+
+CreateOS native disks currently support:
+
+- S3-compatible storage with static access-key credentials
+- Optional bucket prefixes through `S3Filesystem.prefix`
+- Custom endpoints such as Cloudflare R2 and MinIO
+
+Session-token credentials, read-only mounts, Google Cloud Storage (GCS), and Azure Blob mounts aren't supported by the CreateOS disk API. An S3 filesystem using `region: 'auto'` must provide `endpoint`.
+
+## Computer use
+
+Enable screenshot, mouse, keyboard, screen, cursor, and live noVNC controls with `computerUse`. When no `rootfs` is provided, this selects the CreateOS `desktop:1` root filesystem automatically:
+
+```typescript
+const sandbox = new CreateOSSandbox({
+  id: 'desktop-agent',
+  shape: 's-2vcpu-4gb',
+  computerUse: true,
+  ingress: true,
+})
+
+const screenshot = await sandbox.computer?.screenshot()
+await sandbox.computer?.moveMouse(400, 300)
+await sandbox.computer?.leftClick(400, 300)
+await sandbox.computer?.type('Hello from Mastra')
+
+const viewerUrl = await sandbox.computer?.streamUrl?.()
+```
+
+The provider waits for the desktop stack to become ready before the first operation. Mastra controls `screen-0` by default. To select another CreateOS screen or change the readiness timeout:
+
+```typescript
+const sandbox = new CreateOSSandbox({
+  computerUse: {
+    screenId: 'screen-1',
+    readyTimeoutMs: 180_000,
+  },
+})
+```
+
+Set `ingress: true` to receive a public URL from `streamUrl()`. The remaining computer operations use the authenticated CreateOS API and don't require public ingress.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Logical Mastra sandbox identifier used to derive a stable CreateOS name.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'sandboxId',
+    type: 'string',
+    description: 'Physical CreateOS sandbox identifier used for direct reconnection.',
+    isOptional: true,
+  },
+  {
+    name: 'shape',
+    type: 'string',
+    description: 'CreateOS compute shape identifier.',
+    isOptional: true,
+    defaultValue: "'s-2vcpu-2gb'",
+  },
+  {
+    name: 'rootfs',
+    type: 'string',
+    description: 'Root filesystem catalog name or template identifier.',
+    isOptional: true,
+  },
+  {
+    name: 'computerUse',
+    type: 'boolean | CreateOSComputerUseOptions',
+    description:
+      'Enables Mastra desktop controls. Uses desktop:1 when rootfs is unset. Options select a screen and readiness timeout.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'diskMib',
+    type: 'number',
+    description: 'Overlay disk size in MiB.',
+    isOptional: true,
+  },
+  {
+    name: 'egress',
+    type: 'string[]',
+    description: 'Outbound network allowlist.',
+    isOptional: true,
+  },
+  {
+    name: 'ingress',
+    type: 'boolean',
+    description: 'Enables public HTTP ingress URLs.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'region',
+    type: 'string',
+    description: 'CreateOS region in which to create the sandbox.',
+    isOptional: true,
+  },
+  {
+    name: 'autoPauseAfterSeconds',
+    type: 'number',
+    description: 'Pauses the sandbox after this many idle seconds.',
+    isOptional: true,
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'CreateOS API key. Falls back to CREATEOS_SANDBOX_API_KEY.',
+    isOptional: true,
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description: 'CreateOS API endpoint. Falls back to CREATEOS_SANDBOX_BASE_URL.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Default command and API timeout in milliseconds.',
+    isOptional: true,
+    defaultValue: '300000',
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description: 'Environment variables applied to each new process.',
+    isOptional: true,
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description: 'Default working directory for commands.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Current limitations
+
+The integration doesn't currently implement named checkpoints. S3 filesystem mounts are supported, but the CreateOS native disk API doesn't support GCS, Azure Blob, session-token credentials, or read-only mounts. `writeFiles()` uploads files, while direct file reads can use commands or the native client available as `sandbox.createos`.
+
+## Related
+
+- [Sandbox](/docs/sandbox/overview)
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [SandboxProcessManager reference](/reference/workspace/process-manager)

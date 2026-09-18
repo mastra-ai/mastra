@@ -19,7 +19,7 @@ vi.mock('@mastra/factory', async importOriginal => {
  * (scripts/sync-template.mjs) — the entry must stay a single self-contained
  * file. These tests boot the real entry and exercise that callback directly.
  *
- * Provider precedence: Platform > E2B > Local. Template *definitions* are
+ * Provider precedence: explicit CreateOS/local > Platform > E2B > Local. Template *definitions* are
  * covered by `@mastra/platform-workspace` repo-template tests; here we pin
  * which provider is selected and what session context is forwarded.
  */
@@ -49,6 +49,13 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
       'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
       'E2B_API_KEY',
+      'CREATEOS_SANDBOX_API_KEY',
+      'CREATEOS_SANDBOX_BASE_URL',
+      'CREATEOS_SANDBOX_SHAPE',
+      'CREATEOS_SANDBOX_ROOTFS',
+      'CREATEOS_SANDBOX_COMPUTER_USE',
+      'CREATEOS_SANDBOX_INGRESS',
+      'CREATEOS_SANDBOX_AUTO_PAUSE_SECONDS',
       'SANDBOX_PROVIDER',
       'FACTORY_SANDBOX_PROVIDER',
     ]) {
@@ -159,6 +166,28 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
     const callback = await importSandboxCallback();
 
     expect(callback({ sessionId: 'session-local-e2b' })).toMatchObject({ provider: 'local' });
+  });
+
+  it('selects CreateOSSandbox explicitly and forwards CreateOS configuration', { timeout: 60_000 }, async () => {
+    vi.stubEnv('FACTORY_SANDBOX_PROVIDER', 'createos');
+    vi.stubEnv('CREATEOS_SANDBOX_API_KEY', 'createos-key');
+    vi.stubEnv('CREATEOS_SANDBOX_SHAPE', 's-4vcpu-8gb');
+    vi.stubEnv('CREATEOS_SANDBOX_ROOTFS', 'desktop:1');
+    vi.stubEnv('CREATEOS_SANDBOX_COMPUTER_USE', 'true');
+    vi.stubEnv('CREATEOS_SANDBOX_INGRESS', 'true');
+    vi.stubEnv('CREATEOS_SANDBOX_AUTO_PAUSE_SECONDS', '1200');
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-must-not-win');
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
+    vi.stubEnv('E2B_API_KEY', 'e2b-must-not-win');
+    const callback = await importSandboxCallback();
+
+    const sandbox = callback({ sessionId: 'session-createos', repoFullName: 'acme/widgets' });
+
+    expect(sandbox).toMatchObject({ provider: 'createos', id: 'session-createos' });
+    expect(sandbox.computer).toBeDefined();
+    expect(await sandbox.getInfo?.()).toMatchObject({
+      metadata: { shape: 's-4vcpu-8gb' },
+    });
   });
 
   it('selects direct E2BSandbox when only E2B_API_KEY is configured', { timeout: 60_000 }, async () => {

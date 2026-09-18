@@ -23,6 +23,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
 import { LocalSandbox } from '@mastra/core/workspace';
+import { CreateOSSandbox } from '@mastra/createos';
 import { PlatformSandbox, createRepoTemplate as createPlatformRepoTemplate } from '@mastra/platform-workspace';
 import { E2BSandbox, createRepoTemplate as createE2BRepoTemplate } from '@mastra/e2b';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
@@ -289,7 +290,20 @@ export const factory = new MastraFactory({
   integrations,
   configVersion: factoryConfigVersion,
   sandbox: ctx => {
-    const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
+    const sandboxProvider = process.env.FACTORY_SANDBOX_PROVIDER?.trim();
+    if (sandboxProvider === 'createos') {
+      return new CreateOSSandbox({
+        id: ctx.sessionId,
+        shape: process.env.CREATEOS_SANDBOX_SHAPE?.trim() || undefined,
+        rootfs: process.env.CREATEOS_SANDBOX_ROOTFS?.trim() || undefined,
+        computerUse:
+          ['1', 'true'].includes(process.env.CREATEOS_SANDBOX_COMPUTER_USE?.trim().toLowerCase() ?? '') || undefined,
+        ingress: ['1', 'true'].includes(process.env.CREATEOS_SANDBOX_INGRESS?.trim().toLowerCase() ?? ''),
+        autoPauseAfterSeconds: positiveInt(process.env.CREATEOS_SANDBOX_AUTO_PAUSE_SECONDS) ?? 900,
+      });
+    }
+
+    const useLocalSandbox = sandboxProvider === 'local';
     if (!useLocalSandbox && hasPlatformSandboxEnv) {
       return new PlatformSandbox({
         id: ctx.sessionId,

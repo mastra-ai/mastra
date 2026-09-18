@@ -52,6 +52,21 @@ Generate the state-signing secret with `openssl rand -hex 32` and use it for `GI
 
 See [`.env.schema`](./.env.schema) for other environment variables.
 
+### CreateOS sandboxes
+
+To run Factory sessions in CreateOS instead of the local, Platform, or E2B sandbox, configure:
+
+```dotenv
+FACTORY_SANDBOX_PROVIDER=createos
+CREATEOS_SANDBOX_API_KEY=
+CREATEOS_SANDBOX_SHAPE=s-2vcpu-2gb
+CREATEOS_SANDBOX_COMPUTER_USE=
+CREATEOS_SANDBOX_INGRESS=
+CREATEOS_SANDBOX_AUTO_PAUSE_SECONDS=900
+```
+
+`CREATEOS_SANDBOX_BASE_URL` defaults to the hosted CreateOS control plane. `CREATEOS_SANDBOX_ROOTFS` can select a catalog root filesystem or template. Set computer use and ingress to `true` to enable desktop controls with a public noVNC viewer.
+
 ### Integrated mode
 
 Use this for backend work and production-like checks:
