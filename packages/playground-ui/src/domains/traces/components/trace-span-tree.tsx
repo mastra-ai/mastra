@@ -51,7 +51,7 @@ export function TraceSpanTree({
       {leadingSlot}
       <SpanTypeLegend spans={hierarchicalSpans} />
       <div
-        className={cn('grid content-start items-start gap-y-px overflow-hidden py-1', {
+        className={cn('grid content-start items-start gap-y-px overflow-hidden pb-1', {
           'grid-cols-[minmax(0,1fr)]': !renderTrailing,
           'grid-cols-[minmax(0,1fr)_auto]': !!renderTrailing,
         })}
