@@ -122,8 +122,23 @@ describe('GoalStateProcessor', () => {
     expect(result!.mode).toBe('snapshot');
     expect(result!.tagName).toBe('current-objective');
     expect(result!.contents).not.toContain('Ship the feature');
-    expect(result!.attributes).toMatchObject({ status: 'none' });
+    expect(result!.attributes).toMatchObject({ status: 'none', reason: 'done' });
+    expect(result!.cacheKey).toBe('goal:none');
     expect((result!.metadata as any).value.objective).toBeUndefined();
+  });
+
+  it('carries a "paused" reason when retracting a paused objective', async () => {
+    const { processor } = await createProcessor(objective({ status: 'paused' }));
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), hasSnapshot: true }));
+    expect(result!.attributes).toMatchObject({ status: 'none', reason: 'paused' });
+  });
+
+  it('carries an "absent" reason when retracting because no record exists', async () => {
+    const { processor } = await createProcessor();
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), hasSnapshot: true }));
+    expect(result!.attributes).toMatchObject({ status: 'none', reason: 'absent' });
+    // The reason is diagnostic only: the cacheKey stays stable across causes.
+    expect(result!.cacheKey).toBe('goal:none');
   });
 
   it('retracts a stale snapshot when the objective was cleared this turn but a base is in window', async () => {
@@ -133,7 +148,15 @@ describe('GoalStateProcessor', () => {
     );
 
     expect(result).toBeTruthy();
-    expect(result!.attributes).toMatchObject({ status: 'none' });
+    expect(result!.attributes).toMatchObject({ status: 'none', reason: 'cleared' });
+  });
+
+  it('emits nothing (not a retraction) when the store is unresolvable', async () => {
+    // Never registered with Mastra — the store cannot be resolved. Missing
+    // information must not retract an objective the store may report as active.
+    const processor = new GoalStateProcessor();
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), hasSnapshot: true }));
+    expect(result).toBeUndefined();
   });
 
   it('does not re-emit the retraction once the base snapshot is already empty', async () => {
@@ -141,6 +164,30 @@ describe('GoalStateProcessor', () => {
     // No prior objective in the last snapshot (already retracted) — nothing to do.
     const result = await processor.computeStateSignal(createArgs({ hasSnapshot: true }));
     expect(result).toBeUndefined();
+  });
+
+  // Regression: an unregistered processor (no Mastra instance, so no store) used
+  // to be indistinguishable from "no objective" and retracted a live goal.
+  it('emits nothing when the store cannot be resolved', async () => {
+    const processor = new GoalStateProcessor();
+    const result = await processor.computeStateSignal(
+      createArgs({ hasSnapshot: true, lastSnapshot: objective({ objective: 'Prior objective' }) }),
+    );
+    expect(result).toBeUndefined();
+  });
+
+  it('labels the retraction with the reason the objective is not projected', async () => {
+    const { processor } = await createProcessor(objective({ status: 'paused' }));
+    const paused = await processor.computeStateSignal(
+      createArgs({ hasSnapshot: true, lastSnapshot: objective({ objective: 'Prior objective' }) }),
+    );
+    expect(paused?.attributes).toMatchObject({ status: 'none', reason: 'paused' });
+    expect(paused?.cacheKey).toBe('goal:none');
+
+    const cleared = await processor.computeStateSignal(
+      createArgs({ carried: null, hasSnapshot: true, lastSnapshot: objective({ objective: 'Prior objective' }) }),
+    );
+    expect(cleared?.attributes).toMatchObject({ status: 'none', reason: 'cleared' });
   });
 
   it('reuses the objective resolved by activity tracking', async () => {

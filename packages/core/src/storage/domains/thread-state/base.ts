@@ -49,6 +49,13 @@ export interface GoalObjectiveRecord {
    * or budget exhaustion. Unset for `active`/`done`.
    */
   pausedReason?: string;
+  /**
+   * Consecutive failed judge evaluations (thrown or timed-out judge). Reset to
+   * zero whenever the judge produces a verdict. Failed evaluations do not
+   * consume `runsUsed`; repeated consecutive failures pause the objective.
+   * Missing values represent zero.
+   */
+  judgeFailureCount?: number;
   startedAt: number;
   updatedAt: number;
 }

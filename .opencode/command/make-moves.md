@@ -1,1 +1,1 @@
-../../.mastracode/commands/make-moves.md
+/Users/damienschneider/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/make-moves.md

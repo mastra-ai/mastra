@@ -571,4 +571,36 @@ describe('SignalProvider', () => {
       provider.stop();
     });
   });
+
+  describe('__registerMastra', () => {
+    class ProcessorProvider extends SignalProvider<'processor-signals'> {
+      readonly id = 'processor-signals' as const;
+      readonly registered: any[] = [];
+      readonly input = {
+        id: 'owned-input',
+        __registerMastra: (mastra: any) => this.registered.push(mastra),
+      };
+      readonly output = { id: 'owned-output' };
+
+      getInputProcessors(): any[] {
+        return [this.input];
+      }
+
+      getOutputProcessors(): any[] {
+        return [this.output];
+      }
+    }
+
+    it('forwards to processors it owns and ignores those without the hook', () => {
+      const provider = new ProcessorProvider();
+      const mastra = {} as any;
+
+      expect(() => provider.__registerMastra(mastra)).not.toThrow();
+      expect(provider.registered).toEqual([mastra]);
+    });
+
+    it('is a no-op for providers that expose no processors', () => {
+      expect(() => new TestSignalProvider().__registerMastra({} as any)).not.toThrow();
+    });
+  });
 });
