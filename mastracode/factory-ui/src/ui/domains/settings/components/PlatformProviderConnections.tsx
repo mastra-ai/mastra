@@ -23,6 +23,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import {
   useConnectPlatformProviderMutation,
@@ -85,8 +86,10 @@ export interface ProviderConnectControlProps {
   /** Reconnect an existing connection instead of creating a new one. */
   reconnectConnectionId?: string;
   label: string;
-  size?: 'xs' | 'sm';
-  variant?: 'default' | 'ghost';
+  size?: 'xs' | 'sm' | 'md';
+  variant?: 'default' | 'ghost' | 'primary';
+  /** Leading icon inside the button, e.g. the provider's logomark. */
+  icon?: ReactNode;
   /** Called after the provider confirmed the authorization. */
   onCompleted?: () => void;
 }
@@ -101,6 +104,7 @@ export function ProviderConnectControl({
   label,
   size = 'sm',
   variant = 'default',
+  icon,
   onCompleted,
 }: ProviderConnectControlProps) {
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
@@ -134,6 +138,7 @@ export function ProviderConnectControl({
       <Button
         size={size}
         variant={variant}
+        icon={icon}
         disabled={pending}
         onClick={() => (meta.authKind === 'apiKey' ? setCollectingApiKey(true) : void run())}
       >

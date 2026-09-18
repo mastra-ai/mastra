@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -34,12 +34,12 @@ describe('ProjectManagementFactoryStep', () => {
       renderStep();
 
       expect(await screen.findByRole('button', { name: /Connect Linear/ })).toBeInTheDocument();
-      expect(screen.queryByText('Also sync issues from')).not.toBeInTheDocument();
+      expect(screen.queryByText('Connect Jira')).not.toBeInTheDocument();
     });
   });
 
   describe('given the Jira connect route is mounted', () => {
-    it('offers Jira inline without leaving the wizard', async () => {
+    it('offers Jira as an equivalent choice beside Linear', async () => {
       server.use(
         http.get(`${TEST_BASE_URL}/web/integrations/platform/jira/connections`, () =>
           HttpResponse.json({ connections: [] }),
@@ -47,10 +47,27 @@ describe('ProjectManagementFactoryStep', () => {
       );
       renderStep();
 
-      expect(await screen.findByText('Also sync issues from')).toBeInTheDocument();
-      const list = screen.getByRole('list');
-      expect(within(list).getByText('Jira')).toBeInTheDocument();
-      expect(within(list).getByRole('button', { name: 'Connect' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Connect Jira' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Connect Linear/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Skip for now' })).toBeInTheDocument();
+    });
+
+    it('summarizes an active Jira account and unlocks Continue', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/jira/connections`, () =>
+          HttpResponse.json({
+            connections: [
+              { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
+            ],
+          }),
+        ),
+      );
+      renderStep();
+
+      expect(await screen.findByText('Jira connected')).toBeInTheDocument();
+      expect(screen.getByText('Connected to acme.atlassian.net.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Connect another' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });
   });
 });
