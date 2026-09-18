@@ -2831,15 +2831,17 @@ describe('MongoDBVector autoEmbed', () => {
 });
 
 // ─── Live Automated Embedding ────────────────────────────────────────────────────────────
-// Runs when Automated Embedding credentials are available in the environment or in
-// stores/mongodb/.env, and bills Voyage tokens per document and per query.
+// These write documents and consume Voyage AI embedding tokens, so they need an explicit
+// opt-in as well as credentials:
+//   TEST_MONGODB_AUTOEMBEDDING=1 pnpm --filter @mastra/mongodb test
 //
 // Against Atlas: set MONGODB_AUTOEMBED_URL to a cluster connection string.
 // Against the local container: set VOYAGE_API_KEY and ATLAS_LOCAL_TAG=preview, then recreate
-// the container — the pinned image has no autoEmbed support.
+// the container. The pinned image has no autoEmbed support.
 const AUTOEMBED_URL = process.env.MONGODB_AUTOEMBED_URL;
 const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY;
-const describeAutoEmbed = AUTOEMBED_URL || VOYAGE_API_KEY ? describe : describe.skip;
+const describeAutoEmbed =
+  process.env.TEST_MONGODB_AUTOEMBEDDING && (AUTOEMBED_URL || VOYAGE_API_KEY) ? describe : describe.skip;
 
 describeAutoEmbed('MongoDBVector Automated Embedding (live)', () => {
   const indexName = 'autoembed_movies';

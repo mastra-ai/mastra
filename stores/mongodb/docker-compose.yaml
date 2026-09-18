@@ -21,7 +21,8 @@ services:
     # Pinned to 8.2: $rankFusion (used by hybridQuery) requires MongoDB >= 8.1.
     #
     # Automated Embedding needs the `preview` image, which bundles the Community mongot
-    # build, and a Voyage API key. To run those tests, set both in stores/mongodb/.env:
+    # build, and a Voyage API key. To run those tests, set both in stores/mongodb/.env and
+    # opt in with TEST_MONGODB_AUTOEMBEDDING=1:
     #   ATLAS_LOCAL_TAG=preview
     #   VOYAGE_API_KEY=<key>
     # https://hub.docker.com/r/mongodb/mongodb-atlas-local#current-experimental-features
