@@ -95,6 +95,7 @@ import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
 import {
   EAGER_TOOL_ABORT_SIGNAL,
+  EAGER_TOOL_BAILOUT,
   EAGER_TOOL_EXECUTION_MARKER,
   EagerToolExecutionNotRun,
   isEagerlyExecutableToolCall,
@@ -2123,8 +2124,21 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
                     eagerCoordinator.start(
                       toolCall.toolCallId,
-                      eagerAbortSignal =>
-                        eagerToolCallStep.execute({
+                      async eagerAbortSignal => {
+                        // Raising "did not run" from the stubs below is not enough on its
+                        // own: the throw unwinds through the tool's own body, and a tool
+                        // that wraps its work in try/catch swallows it and returns
+                        // normally. The step would then resolve an ordinary-looking
+                        // envelope, and the foreach would adopt a "result" for a call that
+                        // asked to suspend. This flag is what actually makes the bailout
+                        // fail-safe: whatever the body does with the throw, the settlement
+                        // below is converted back into a rejection, so the call is handed
+                        // to the foreach instead of recorded.
+                        //
+                        // It is created per dispatch rather than kept on the coordinator, so
+                        // a later attempt reusing this toolCallId cannot observe it.
+                        const bailout: { reason?: string } = {};
+                        const settled = await eagerToolCallStep.execute({
                           inputData: toolCall,
                           runId,
                           mastra,
@@ -2136,21 +2150,31 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                           // step, so eager work can be cancelled when its attempt is discarded
                           // without the caller having aborted anything.
                           [EAGER_TOOL_ABORT_SIGNAL]: eagerAbortSignal,
+                          [EAGER_TOOL_BAILOUT]: bailout,
                           writer: outputWriter,
                           // The eligibility whitelist excludes every tool shape that can
                           // suspend or bail, so neither of these should be reachable. They
                           // stay as a loud, fail-safe assertion: raising "did not run" hands
                           // the call back to the foreach rather than half-completing it here.
+                          // The flag is recorded before the throw so the bailout survives a
+                          // tool that catches it.
                           suspend: async () => {
-                            throw new EagerToolExecutionNotRun(`"${toolCall.toolName}" requested suspension`);
+                            bailout.reason = `"${toolCall.toolName}" requested suspension`;
+                            throw new EagerToolExecutionNotRun(bailout.reason);
                           },
                           bail: async () => {
-                            throw new EagerToolExecutionNotRun(`"${toolCall.toolName}" bailed`);
+                            bailout.reason = `"${toolCall.toolName}" bailed`;
+                            throw new EagerToolExecutionNotRun(bailout.reason);
                           },
                           resumeData: undefined,
                           tracingContext,
                           [EAGER_TOOL_EXECUTION_MARKER]: true,
-                        }),
+                        });
+                        if (bailout.reason) {
+                          throw new EagerToolExecutionNotRun(bailout.reason);
+                        }
+                        return settled;
+                      },
                       // Enough to write the call back into the conversation if this
                       // attempt is discarded after the tool has already run.
                       { toolName: toolCall.toolName, args: toolCall.args },

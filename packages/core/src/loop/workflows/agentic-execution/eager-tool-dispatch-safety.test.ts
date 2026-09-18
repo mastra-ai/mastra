@@ -566,6 +566,50 @@ describe('eager tool dispatch — excluded tool classes', () => {
     expect(eager).not.toContain('tool-error');
   });
 
+  it('suspends normally even when the tool swallows the eager bailout', async () => {
+    // Raising "did not run" from the eager `suspend` stub unwinds through the tool's own
+    // body, so a tool that wraps its work in try/catch eats it and returns normally. The
+    // bailout must survive that: otherwise the step resolves an ordinary-looking envelope
+    // and the foreach adopts a result for a call that asked to suspend — the suspension
+    // never happens, and the value the tool returned after being denied is recorded as
+    // though the call had succeeded.
+    const run = async (eager: boolean) => {
+      const { record } = createRecorder();
+      const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+      const agent = new Agent({
+        id: 'eager-swallowed-suspend-agent',
+        name: 'Eager swallowed suspend agent',
+        instructions: 'Call tool-a once.',
+        model,
+        tools: {
+          'tool-a': createTool({
+            id: 'tool-a',
+            description: 'Suspends at runtime and swallows anything the suspend call throws',
+            inputSchema: z.object({ value: z.string() }),
+            outputSchema: z.object({ value: z.string() }),
+            execute: async ({ value }, options?: any) => {
+              try {
+                await options?.agent?.suspend?.({ reason: 'needs input' });
+              } catch {
+                // Exactly the shape that defeats a throw-only bailout.
+              }
+              return { value };
+            },
+          }),
+        },
+      });
+
+      const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
+      return chunks.map(chunk => chunk.type);
+    };
+
+    const base = await run(false);
+    const eager = await run(true);
+
+    expect(eager).toEqual(base);
+    expect(eager).toContain('tool-call-suspended');
+  });
+
   it('does not eagerly execute an agent-derived tool, which can suspend without a suspend schema', async () => {
     const { events, record } = createRecorder();
     const model = createToolCallModel(
