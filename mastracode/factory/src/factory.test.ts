@@ -1008,8 +1008,11 @@ describe('MastraFactory.prepare integrations', () => {
       path: string;
       handler?: (context: unknown) => Promise<Response>;
     }>;
-    const route = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).find(
-      candidate => candidate.path === '/web/gitlab/webhook',
+    const apiRoutes = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} });
+    const route = apiRoutes.find(candidate => candidate.path === '/web/gitlab/webhook');
+
+    expect(apiRoutes.map(candidate => candidate.path)).toEqual(
+      expect.arrayContaining(['/web/source-control/projects/:id/sessions', '/web/user-sessions/:sessionId']),
     );
 
     await route?.handler?.({});

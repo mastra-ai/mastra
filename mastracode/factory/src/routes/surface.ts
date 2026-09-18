@@ -60,6 +60,7 @@ import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
+import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
 import { WorkItemRoutes } from './work-items.js';
 
@@ -508,6 +509,31 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     );
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
   });
+  // Session persistence belongs to the linked source-control provider, not to
+  // GitHub. Replace legacy GitHub-owned handlers with one resolver spanning
+  // every registered source-control partition.
+  const sharedSessionRouteKeys = new Set([
+    'GET /web/github/projects/:id/sessions',
+    'POST /web/github/projects/:id/sessions',
+    'GET /web/user-sessions/:sessionId',
+    'DELETE /web/user-sessions/:sessionId',
+    'POST /web/user-sessions/:sessionId/title',
+  ]);
+  const providerRoutes = integrationRoutes.filter(
+    route => !sharedSessionRouteKeys.has(route.method + ' ' + route.path),
+  );
+  const sourceControlSessionRoutes =
+    sourceControls.length === 0
+      ? []
+      : buildSourceControlSessionRoutes({
+          auth: deps.auth,
+          sourceControls,
+          ...(deps.users ? { users: deps.users } : {}),
+          controller: deps.controller,
+          memorySettings: deps.domains.memorySettings,
+          sessionRetirement: deps.sessionRetirement,
+          ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+        });
   // Absent known integrations still get their disabled-status stub.
   const absentStubs = ['github', 'linear', 'jira']
     .filter(id => !registrations.some(({ integration }) => integration.id === id))
@@ -609,7 +635,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
     }).routes(),
-    ...integrationRoutes,
+    ...sourceControlSessionRoutes,
+    ...providerRoutes,
     ...absentStubs,
     ...slackAbsentStubs,
     ...(deps.intakeReady

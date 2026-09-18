@@ -199,6 +199,7 @@ export interface FactoryIntegration {
     auth: RouteAuth;
     /** Cross-integration intake selection/binding domain, for per-request authorization. */
     intake: IntakeStorage;
+    sourceControl?: SourceControlStorageHandle;
   }): void;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature

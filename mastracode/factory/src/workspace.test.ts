@@ -858,10 +858,7 @@ describe('GitHub session workspace preparation', () => {
       }),
     );
     expect(lastGhToken()).toBeUndefined();
-    expect(lastSandboxEnv()).toMatchObject({
-      MASTRA_SOURCE_CONTROL_USERNAME: 'oauth2',
-      MASTRA_SOURCE_CONTROL_TOKEN: 'glpat-secret',
-    });
+    expect(mocks.setEnv).not.toHaveBeenCalled();
   });
 
   it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {
