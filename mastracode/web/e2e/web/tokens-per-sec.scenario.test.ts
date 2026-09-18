@@ -1,8 +1,11 @@
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent } from '@mastra/client-js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { transcriptReducer, initialTranscript } from '../../../factory-ui/src/ui/domains/chat/services/transcript';
-import type { TranscriptState } from '../../../factory-ui/src/ui/domains/chat/services/transcript';
+import {
+  initialChatRuntime,
+  runtimeReducer,
+  type ChatRuntimeState,
+} from '../../../factory-ui/src/ui/domains/chat/services/runtime';
 
 /**
  * Tokens/sec computation — tested by driving the transcript reducer directly
@@ -12,12 +15,11 @@ import type { TranscriptState } from '../../../factory-ui/src/ui/domains/chat/se
  * so TTFT and inter-step tool gaps do not deflate it. No server round-trip.
  */
 
-function assistantTextMessage(text: string): MastraDBMessage {
+function assistantTextDelta(delta = 'x'): AgentControllerEvent {
   return {
-    id: `assistant-${Date.now()}`,
-    role: 'assistant',
-    createdAt: new Date(),
-    content: { format: 2, parts: [{ type: 'text', text }] },
+    type: 'message_update',
+    id: 'assistant-1',
+    event: { type: 'text-delta', delta },
   };
 }
 
@@ -26,16 +28,16 @@ function assistantTextMessage(text: string): MastraDBMessage {
  * usage_update closes it at `endMs` carrying the step's tokens.
  */
 function decodeStep(
-  state: TranscriptState,
+  state: ChatRuntimeState,
   opts: { startMs: number; endMs: number; completionTokens: number; reasoningTokens?: number },
-): TranscriptState {
+): ChatRuntimeState {
   vi.setSystemTime(opts.startMs);
-  let next = transcriptReducer(state, {
+  let next = runtimeReducer(state, {
     type: 'event',
-    event: { type: 'message_update', message: assistantTextMessage('x') } as any,
+    event: assistantTextDelta(),
   });
   vi.setSystemTime(opts.endMs);
-  next = transcriptReducer(next, {
+  next = runtimeReducer(next, {
     type: 'event',
     event: {
       type: 'usage_update',
@@ -45,7 +47,7 @@ function decodeStep(
         promptTokens: 0,
         totalTokens: opts.completionTokens,
       },
-    } as any,
+    },
   });
   return next;
 }
@@ -61,7 +63,7 @@ describe('tokens/sec (reducer-level)', () => {
 
   it('computes rate over the decode window of a step', () => {
     // Decode opens at t=1000, step-finish at t=2000 → 20 tokens / 1s = 20 tok/s.
-    const state = decodeStep(initialTranscript, { startMs: 1000, endMs: 2000, completionTokens: 20 });
+    const state = decodeStep(initialChatRuntime, { startMs: 1000, endMs: 2000, completionTokens: 20 });
     expect(state.tokensPerSec).toBe(20);
     // Window re-arms after step-finish.
     expect(state._decodeStartedAt).toBe(0);
@@ -71,21 +73,21 @@ describe('tokens/sec (reducer-level)', () => {
     // usage arrives at t=5000 but decoding only began at t=4000, so the rate is
     // 20 tokens / 1s = 20 tok/s, not 20 / 4s.
     vi.setSystemTime(4000);
-    let state = transcriptReducer(initialTranscript, {
+    let state = runtimeReducer(initialChatRuntime, {
       type: 'event',
-      event: { type: 'message_update', message: assistantTextMessage('x') } as any,
+      event: assistantTextDelta(),
     });
     vi.setSystemTime(5000);
-    state = transcriptReducer(state, {
+    state = runtimeReducer(state, {
       type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 20, promptTokens: 0, totalTokens: 20 } } as any,
+      event: { type: 'usage_update', usage: { completionTokens: 20, promptTokens: 0, totalTokens: 20 } },
     });
     expect(state.tokensPerSec).toBe(20);
   });
 
   it('includes reasoning tokens in the decode rate', () => {
     // 10 completion + 10 reasoning = 20 tokens / 1s = 20 tok/s.
-    const state = decodeStep(initialTranscript, {
+    const state = decodeStep(initialChatRuntime, {
       startMs: 1000,
       endMs: 2000,
       completionTokens: 10,
@@ -96,7 +98,7 @@ describe('tokens/sec (reducer-level)', () => {
 
   it('applies EMA smoothing (α=0.3) across decode steps', () => {
     // Step 1: 10 tokens / 1s = 10 tok/s (first EMA value).
-    let state = decodeStep(initialTranscript, { startMs: 1000, endMs: 2000, completionTokens: 10 });
+    let state = decodeStep(initialChatRuntime, { startMs: 1000, endMs: 2000, completionTokens: 10 });
     expect(state.tokensPerSec).toBe(10);
 
     // Step 2: 20 tokens / 1s = 20 instantaneous. EMA = 0.3*20 + 0.7*10 = 13.
@@ -109,22 +111,22 @@ describe('tokens/sec (reducer-level)', () => {
   });
 
   it('keeps the last rate visible after agent_end, clearing only on the next agent_start', () => {
-    let state = decodeStep(initialTranscript, { startMs: 1000, endMs: 2000, completionTokens: 30 });
+    let state = decodeStep(initialChatRuntime, { startMs: 1000, endMs: 2000, completionTokens: 30 });
     expect(state.tokensPerSec).toBe(30); // 30 tokens / 1 second
 
     // agent_end persists the reading (so short turns stay readable) but clears
     // the in-flight decode window.
-    state = transcriptReducer(state, {
+    state = runtimeReducer(state, {
       type: 'event',
-      event: { type: 'agent_end', reason: 'done' } as any,
+      event: { type: 'agent_end', reason: 'done' },
     });
     expect(state.tokensPerSec).toBe(30);
     expect(state._decodeStartedAt).toBe(0);
 
     // The next turn's agent_start clears it for a fresh measurement.
-    state = transcriptReducer(state, {
+    state = runtimeReducer(state, {
       type: 'event',
-      event: { type: 'agent_start' } as any,
+      event: { type: 'agent_start' },
     });
     expect(state.tokensPerSec).toBe(0);
     expect(state._decodeStartedAt).toBe(0);
@@ -134,17 +136,17 @@ describe('tokens/sec (reducer-level)', () => {
     // No message_update means the decode window never opened; a usage_update with
     // 0 completion tokens (pure tool call) must not produce a rate.
     vi.setSystemTime(2000);
-    const state = transcriptReducer(initialTranscript, {
+    const state = runtimeReducer(initialChatRuntime, {
       type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 0, promptTokens: 50, totalTokens: 50 } } as any,
+      event: { type: 'usage_update', usage: { completionTokens: 0, promptTokens: 50, totalTokens: 50 } },
     });
     expect(state.tokensPerSec).toBe(0);
   });
 
   it('shows full streaming lifecycle: start → rate builds → end persists → next start clears', () => {
-    let state = transcriptReducer(initialTranscript, {
+    let state = runtimeReducer(initialChatRuntime, {
       type: 'event',
-      event: { type: 'agent_start' } as any,
+      event: { type: 'agent_start' },
     });
     expect(state.tokensPerSec).toBe(0);
 
@@ -158,16 +160,16 @@ describe('tokens/sec (reducer-level)', () => {
     expect(state.tokensPerSec).toBe(23);
 
     // Turn ends: stop running but keep the last reading visible while idle.
-    state = transcriptReducer(state, {
+    state = runtimeReducer(state, {
       type: 'event',
-      event: { type: 'agent_end', reason: 'done' } as any,
+      event: { type: 'agent_end', reason: 'done' },
     });
     expect(state.tokensPerSec).toBe(23);
 
     // The next turn clears it on agent_start.
-    state = transcriptReducer(state, {
+    state = runtimeReducer(state, {
       type: 'event',
-      event: { type: 'agent_start' } as any,
+      event: { type: 'agent_start' },
     });
     expect(state.tokensPerSec).toBe(0);
   });
