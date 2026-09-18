@@ -6,7 +6,13 @@ import type { ExternalWorkItemSource } from './storage/domains/work-items/base.j
  * board's own `WorkItem['source']` is already this union.
  */
 export type WorkItemBranchSource =
-  'github-issue' | 'github-pr' | 'linear-issue' | 'jira-issue' | 'incidentio-follow-up' | 'slack-thread' | 'manual';
+  | 'github-issue'
+  | 'github-pr'
+  | 'linear-issue'
+  | 'jira-issue'
+  | 'incidentio-follow-up'
+  | 'slack-thread'
+  | 'manual';
 
 export interface WorkItemBranchInput {
   id: string;

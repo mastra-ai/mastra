@@ -175,6 +175,65 @@ describe('PlatformIncidentioIntegration', () => {
     expect(second.nextCursor).toBeNull();
   });
 
+  it('resumes at the sorted successor when the cursor connection disappears between pages', async () => {
+    // Page cursors are keyed by connection ID, not index: when the cursor's
+    // connection disappears between pages, paging resumes at its sorted
+    // successor instead of replaying an earlier connection or skipping one.
+    let listCalls = 0;
+    const fetchImpl = fetchRouter([
+      {
+        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        respond: () => {
+          listCalls += 1;
+          const connections =
+            listCalls > 1
+              ? [connection('connection-a', 'acme'), connection('connection-c', 'gamma')]
+              : [connection('connection-a', 'acme'), connection('connection-b', 'beta')];
+          return json({ connections });
+        },
+      },
+      {
+        match: url => url.includes('/connection-a/proxy/v2/incidents'),
+        respond: () => json({ incidents: [incident], pagination_meta: {} }),
+      },
+      {
+        match: url => url.includes('/connection-c/proxy/v2/incidents'),
+        respond: () =>
+          json({ incidents: [{ ...incident, id: 'incident-3', reference: 'INC-99' }], pagination_meta: {} }),
+      },
+    ]);
+    const integration = new PlatformIncidentioIntegration({
+      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+    });
+    const sourceIds = [
+      encodeScopedSourceId('connection-a', INCIDENTIO_INCIDENTS_SOURCE_ID),
+      encodeScopedSourceId('connection-b', INCIDENTIO_INCIDENTS_SOURCE_ID),
+      encodeScopedSourceId('connection-c', INCIDENTIO_INCIDENTS_SOURCE_ID),
+    ];
+
+    const first = await integration.intake.listItems({ orgId: 'org-1', userId: 'user-1', sourceIds });
+    expect(first.items).toEqual([
+      expect.objectContaining({ metadata: expect.objectContaining({ connectionId: 'connection-a' }) }),
+    ]);
+
+    // The cursor points at connection-b, which is gone by the second page;
+    // paging resumes at connection-c (its sorted successor), never back at
+    // connection-a.
+    const second = await integration.intake.listItems({
+      orgId: 'org-1',
+      userId: 'user-1',
+      sourceIds,
+      cursor: first.nextCursor!,
+    });
+    expect(second.items).toEqual([
+      expect.objectContaining({
+        title: 'INC-99: API unavailable',
+        metadata: expect.objectContaining({ connectionId: 'connection-c' }),
+      }),
+    ]);
+    expect(second.nextCursor).toBeNull();
+  });
+
   it('resolves dispatches against the sole connection and keeps Platform credentials out of Intake connections', async () => {
     const fetchImpl = fetchRouter([
       {

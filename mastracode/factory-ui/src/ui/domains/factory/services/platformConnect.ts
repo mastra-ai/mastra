@@ -64,9 +64,28 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
     }
     const err = new Error(message);
     (err as { code?: string }).code = code;
+    (err as { status?: number }).status = res.status;
     throw err;
   }
   return (await res.json()) as T;
+}
+
+/** Network failures and 5xx responses are worth retrying; 4xx (auth, gating) are not. */
+function isRetryableListFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const status = (error as { status?: number }).status;
+  return status === undefined || status >= 500;
+}
+
+/**
+ * True when the server says Platform connect is not offered here (auth off,
+ * no Platform credentials) — a 403/404, as opposed to a transient failure.
+ * Consumers hide the feature for the former and show a retry for the latter.
+ */
+export function isPlatformConnectUnavailableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const status = (error as { status?: number }).status;
+  return status === 403 || status === 404;
 }
 
 /** List the org's Platform connections for one provider (all auth variants). */
@@ -167,9 +186,16 @@ export async function waitForActiveConnection(
   const intervalMs = options.intervalMs ?? ACTIVE_POLL_INTERVAL_MS;
   const deadline = Date.now() + (options.deadlineMs ?? ACTIVE_POLL_DEADLINE_MS);
   for (;;) {
-    const connections = await listPlatformConnections(baseUrl, provider);
-    const connection = connections.find(candidate => candidate.id === connectionId);
-    if (connection?.status === 'active') return connection;
+    try {
+      const connections = await listPlatformConnections(baseUrl, provider);
+      const connection = connections.find(candidate => candidate.id === connectionId);
+      if (connection?.status === 'active') return connection;
+    } catch (error) {
+      // A transient list failure must not fail the whole connect flow — the
+      // vendor may already have confirmed auth. Keep polling until the
+      // deadline; permanent (4xx) failures still reject.
+      if (!isRetryableListFailure(error)) throw error;
+    }
     if (Date.now() >= deadline) return null;
     await new Promise(resolve => setTimeout(resolve, intervalMs));
   }

@@ -11,7 +11,13 @@ import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/
 import { requestJson } from './request';
 
 export type WorkItemSource =
-  'github-issue' | 'github-pr' | 'linear-issue' | 'jira-issue' | 'incidentio-follow-up' | 'slack-thread' | 'manual';
+  | 'github-issue'
+  | 'github-pr'
+  | 'linear-issue'
+  | 'jira-issue'
+  | 'incidentio-follow-up'
+  | 'slack-thread'
+  | 'manual';
 
 export interface WorkItemSessionRef {
   sessionId: string;

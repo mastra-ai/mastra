@@ -52,8 +52,7 @@ export function jiraIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'
 
 export function jiraIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   if (item.source !== 'jira-issue') return;
-  const reference = item.metadata.issueRef ?? item.metadata.issueReference;
-  return typeof reference === 'string' && reference ? reference : undefined;
+  return nonEmptyString(item.metadata.issueRef) ?? nonEmptyString(item.metadata.issueReference);
 }
 
 /** The human reference an incident.io follow-up card carries (`INC-42` or the item id), when it has one. */
@@ -65,8 +64,12 @@ export function incidentioIdentifierForItem(item: Pick<WorkItem, 'source' | 'met
 /** The prefixed incident.io item reference a card carries, when it has one. */
 export function incidentioIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   if (item.source !== 'incidentio-follow-up') return;
-  const reference = item.metadata.issueRef ?? item.metadata.issueReference;
-  return typeof reference === 'string' && reference ? reference : undefined;
+  return nonEmptyString(item.metadata.issueRef) ?? nonEmptyString(item.metadata.issueReference);
+}
+
+/** Legacy metadata may hold `issueRef: ''` beside a populated `issueReference`; skip empty values. */
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
 }
 
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';

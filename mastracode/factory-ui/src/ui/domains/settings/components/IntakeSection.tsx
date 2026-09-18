@@ -11,7 +11,7 @@ import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
-import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
+import { isPlatformConnectUnavailableError, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
 import { ProviderConnectControl, ProviderConnectionsList } from './PlatformProviderConnections';
 import { useLinearProjectsQuery, useLinearStatusQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
 import { isJiraAuthError } from '../../factory/services/jira';
@@ -284,7 +284,25 @@ function IncidentioIntakeSection({
   const connectionsQuery = usePlatformConnectionsQuery(provider);
   const active = connectionsQuery.data?.filter(connection => connection.status === 'active') ?? [];
   const sourcesQuery = useIncidentioSourcesQuery(active.length > 0);
-  if (connectionsQuery.isError || connectionsQuery.isPending) return null;
+  if (connectionsQuery.isPending) return null;
+  if (connectionsQuery.isError) {
+    // 403/404 means the feature isn't offered here — hide the section. A
+    // transient failure must keep the section reachable with a retry, or an
+    // org with incident.io connected silently loses its sync settings.
+    if (isPlatformConnectUnavailableError(connectionsQuery.error)) return null;
+    return (
+      <SettingsSubsection
+        scope="org"
+        title="incident.io follow-ups"
+        description="Couldn't load incident.io connections."
+        action={
+          <Button size="xs" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
+            Retry
+          </Button>
+        }
+      />
+    );
+  }
   const connections = connectionsQuery.data;
   const needsReauth = connections.some(connection => connection.status === 'needs_reauth');
   const sources = sourcesQuery.data ?? [];

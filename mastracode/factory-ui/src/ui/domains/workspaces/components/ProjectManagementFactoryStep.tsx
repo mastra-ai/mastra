@@ -4,6 +4,7 @@ import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
+import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
 import type { PlatformProviderConnection } from '../../factory/services/platformConnect';
 import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
 import { IncidentIoIcon, JiraIcon } from '../../../ui/icons';
@@ -54,7 +55,22 @@ function LinearPane({ onConnect }: { onConnect: () => void }) {
   );
 }
 
-function JiraPane({ connections }: { connections: PlatformProviderConnection[] }) {
+function JiraPane({ connections, onRetry }: { connections: PlatformProviderConnection[]; onRetry?: () => void }) {
+  if (onRetry) {
+    return (
+      <EmptyState
+        className="py-8"
+        iconSlot={<JiraIcon className="text-icon3" size={40} />}
+        titleSlot="Connect Jira"
+        descriptionSlot="Couldn't load Jira connections."
+        actionSlot={
+          <Button variant="ghost" onClick={onRetry}>
+            Retry
+          </Button>
+        }
+      />
+    );
+  }
   const hasActive = connections.some(connection => connection.status === 'active');
   if (hasActive) {
     return (
@@ -85,7 +101,22 @@ function JiraPane({ connections }: { connections: PlatformProviderConnection[] }
   );
 }
 
-function IncidentIoPane({ connections }: { connections: PlatformProviderConnection[] }) {
+function IncidentIoPane({ connections, onRetry }: { connections: PlatformProviderConnection[]; onRetry?: () => void }) {
+  if (onRetry) {
+    return (
+      <EmptyState
+        className="py-8"
+        iconSlot={<IncidentIoIcon className="text-icon3" size={40} />}
+        titleSlot="Connect incident.io"
+        descriptionSlot="Couldn't load incident.io connections."
+        actionSlot={
+          <Button variant="ghost" onClick={onRetry}>
+            Retry
+          </Button>
+        }
+      />
+    );
+  }
   const hasActive = connections.some(connection => connection.status === 'active');
   if (hasActive) {
     return (
@@ -125,10 +156,15 @@ export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectM
   const linearStatus = useLinearStatusQuery();
   const jiraConnections = usePlatformConnectionsQuery('jira');
   const incidentConnections = usePlatformConnectionsQuery('incident-io');
-  // Only providers whose connect routes are mounted (queries succeed) are
-  // offered; a server without Platform credentials shows the Linear-only step.
-  const jiraOffered = jiraConnections.isSuccess;
-  const incidentOffered = incidentConnections.isSuccess;
+  // A provider pane is hidden only when the server says the feature isn't
+  // offered here (403/404 — auth off, no Platform credentials). A transient
+  // failure keeps the pane visible with a retry, so a flaky request doesn't
+  // silently demote onboarding to the Linear-only step.
+  const jiraOffered =
+    jiraConnections.isSuccess || (jiraConnections.isError && !isPlatformConnectUnavailableError(jiraConnections.error));
+  const incidentOffered =
+    incidentConnections.isSuccess ||
+    (incidentConnections.isError && !isPlatformConnectUnavailableError(incidentConnections.error));
   const linearConnected = linearStatus.data?.connected === true;
   const jiraConnected = jiraConnections.data?.some(connection => connection.status === 'active') ?? false;
   const incidentConnected = incidentConnections.data?.some(connection => connection.status === 'active') ?? false;
@@ -147,12 +183,18 @@ export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectM
           </div>
           {jiraOffered && (
             <div className={incidentOffered ? 'px-6' : 'pl-6'}>
-              <JiraPane connections={jiraConnections.data ?? []} />
+              <JiraPane
+                connections={jiraConnections.data ?? []}
+                {...(jiraConnections.isError ? { onRetry: () => void jiraConnections.refetch() } : {})}
+              />
             </div>
           )}
           {incidentOffered && (
             <div className="pl-6">
-              <IncidentIoPane connections={incidentConnections.data ?? []} />
+              <IncidentIoPane
+                connections={incidentConnections.data ?? []}
+                {...(incidentConnections.isError ? { onRetry: () => void incidentConnections.refetch() } : {})}
+              />
             </div>
           )}
         </div>

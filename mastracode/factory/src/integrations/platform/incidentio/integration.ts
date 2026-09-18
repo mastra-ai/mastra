@@ -23,13 +23,13 @@ import type { FactoryProjectsStorage } from '../../../storage/domains/projects/b
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import { buildIncidentioAgentTools } from '../../incidentio/agent-tools.js';
 import { IncidentioApiClient, IncidentioApiError } from '../../incidentio/api.js';
+import { resolveIncidentioRules } from '../../incidentio/default-rules.js';
+import type { IncidentioEventRules, IncidentioRuleOverrides } from '../../incidentio/default-rules.js';
 import {
   createIncidentioIntake,
   INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
   INCIDENTIO_INCIDENTS_SOURCE_ID,
 } from '../../incidentio/intake.js';
-import { resolveIncidentioRules } from '../../incidentio/default-rules.js';
-import type { IncidentioEventRules, IncidentioRuleOverrides } from '../../incidentio/default-rules.js';
 import { attachIncidentioIssueReconciler } from '../../incidentio/issue-reconciler.js';
 import {
   incidentioReconciliationEnabled,
@@ -69,8 +69,15 @@ interface ScopedSourceId {
   sourceId: string;
 }
 
+/** An intake plus the exact inner connection it was resolved for, so operations discover active connections once. */
+interface ResolvedIncidentioIntake {
+  intake: Intake;
+  connection: IntegrationConnection;
+}
+
 interface AggregatePageCursor {
-  connection: number;
+  /** Connection ID the cursor points at; keyed by ID so the active list can change between pages. */
+  connectionId: string;
   inner?: string;
 }
 
@@ -123,17 +130,17 @@ function encodePageCursor(cursor: AggregatePageCursor): string {
   return Buffer.from(JSON.stringify(cursor)).toString('base64url');
 }
 
-function decodePageCursor(cursor: string | undefined): AggregatePageCursor {
-  if (!cursor) return { connection: 0 };
+function decodePageCursor(cursor: string | undefined): AggregatePageCursor | null {
+  if (!cursor) return null;
   try {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<AggregatePageCursor>;
-    if (!Number.isSafeInteger(parsed.connection) || (parsed.connection ?? -1) < 0) return { connection: 0 };
+    if (typeof parsed.connectionId !== 'string' || !parsed.connectionId) return null;
     return {
-      connection: parsed.connection!,
+      connectionId: parsed.connectionId,
       ...(typeof parsed.inner === 'string' && parsed.inner ? { inner: parsed.inner } : {}),
     };
   } catch {
-    return { connection: 0 };
+    return null;
   }
 }
 
@@ -278,16 +285,19 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
    * must match a connection the deployment actually discovered as active
    * before any proxy request is minted with the Platform credential.
    */
-  async #intakeForConnection(connection: IntegrationConnection): Promise<Intake> {
+  async #intakeForConnection(connection: IntegrationConnection): Promise<ResolvedIncidentioIntake> {
     const connectionId = connectionIdFromConnection(connection);
     const active = await this.#activeConnections();
     if (connectionId) {
       if (!active.some(candidate => candidate.id === connectionId)) {
         throw new IncidentioApiError('incident.io connection is unavailable or requires reauthentication.', 401);
       }
-      return this.#connectionIntake(connectionId);
+      return { intake: this.#connectionIntake(connectionId), connection: incidentioConnection(connectionId) };
     }
-    if (active.length === 1) return this.#connectionIntake(active[0]!.id);
+    if (active.length === 1) {
+      const soleId = active[0]!.id;
+      return { intake: this.#connectionIntake(soleId), connection: incidentioConnection(soleId) };
+    }
     throw new IncidentioApiError(
       active.length === 0
         ? 'incident.io connection is unavailable or requires reauthentication.'
@@ -373,7 +383,21 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
     const contexts = await this.#connectionContexts();
     const cursor = decodePageCursor(input.cursor);
 
-    for (let index = cursor.connection; index < contexts.length; index++) {
+    // Resume by connection ID: the active list can change between pages, so an
+    // index would replay or skip connections. When the cursor's connection is
+    // gone, resume at its sorted successor and drop the inner cursor.
+    let startIndex = 0;
+    let exactMatch = false;
+    if (cursor) {
+      const index = contexts.findIndex(context => context.connection.id === cursor.connectionId);
+      exactMatch = index !== -1;
+      startIndex = exactMatch
+        ? index
+        : contexts.findIndex(context => context.connection.id.localeCompare(cursor.connectionId) > 0);
+      if (startIndex === -1) return { items: [], nextCursor: null };
+    }
+
+    for (let index = startIndex; index < contexts.length; index++) {
       const context = contexts[index]!;
       const baseSourceIds = baseSourceIdsFor(context.connection.id, input.sourceIds);
       if (baseSourceIds.length === 0) continue;
@@ -381,12 +405,12 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
         orgId: input.orgId,
         userId: input.userId,
         sourceIds: baseSourceIds,
-        ...(index === cursor.connection && cursor.inner ? { cursor: cursor.inner } : {}),
+        ...(index === startIndex && exactMatch && cursor?.inner ? { cursor: cursor.inner } : {}),
       });
       const nextCursor = page.nextCursor
-        ? encodePageCursor({ connection: index, inner: page.nextCursor })
+        ? encodePageCursor({ connectionId: context.connection.id, inner: page.nextCursor })
         : index + 1 < contexts.length
-          ? encodePageCursor({ connection: index + 1 })
+          ? encodePageCursor({ connectionId: contexts[index + 1]!.connection.id })
           : null;
       return {
         items: page.items.map(item => ({
@@ -401,49 +425,40 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
   }
 
   async #listIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
-    const intake = await this.#intakeForConnection(input.connection);
+    const resolved = await this.#intakeForConnection(input.connection);
     const connectionId = connectionIdFromConnection(input.connection);
     const baseSourceIds = connectionId
       ? baseSourceIdsFor(connectionId, input.sourceIds)
       : input.sourceIds.map(sourceId => decodeScopedSourceId(sourceId)?.sourceId ?? sourceId);
-    return intake.listIssues({
+    return resolved.intake.listIssues({
       ...input,
-      connection: await this.#innerConnection(input.connection),
+      connection: resolved.connection,
       sourceIds: baseSourceIds,
     });
   }
 
   async #getIssue(input: GetIntakeIssueInput): Promise<IntakeIssueDetail | null> {
-    const intake = await this.#intakeForConnection(input.connection);
-    return intake.getIssue({
+    const resolved = await this.#intakeForConnection(input.connection);
+    return resolved.intake.getIssue({
       ...this.#withBaseSource(input),
-      connection: await this.#innerConnection(input.connection),
+      connection: resolved.connection,
     });
   }
 
   async #createComment(input: CreateIntakeCommentInput): Promise<CreatedIntakeComment | null> {
-    const intake = await this.#intakeForConnection(input.connection);
-    return intake.createComment({
+    const resolved = await this.#intakeForConnection(input.connection);
+    return resolved.intake.createComment({
       ...this.#withBaseSource(input),
-      connection: await this.#innerConnection(input.connection),
+      connection: resolved.connection,
     });
   }
 
   async #updateIssue(input: UpdateIntakeIssueInput): Promise<IntakeIssue | null> {
-    const intake = await this.#intakeForConnection(input.connection);
-    return intake.updateIssue({
+    const resolved = await this.#intakeForConnection(input.connection);
+    return resolved.intake.updateIssue({
       ...this.#withBaseSource(input),
-      connection: await this.#innerConnection(input.connection),
+      connection: resolved.connection,
     });
-  }
-
-  /** Per-connection intakes assert on the exact connection they minted. */
-  async #innerConnection(connection: IntegrationConnection): Promise<IntegrationConnection> {
-    const connectionId = connectionIdFromConnection(connection);
-    if (connectionId) return incidentioConnection(connectionId);
-    const active = await this.#activeConnections();
-    if (active.length === 1) return incidentioConnection(active[0]!.id);
-    return connection;
   }
 
   #withBaseSource<T extends { sourceId?: string }>(input: T): T {

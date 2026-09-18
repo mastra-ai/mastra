@@ -93,11 +93,14 @@ describe('platform connect routes', () => {
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(SESSION);
 
+    // A registered provider that does not own the connection: the ownership
+    // filter itself must reject, not the unknown-provider gate.
     const crossProvider = await app.request(
-      '/web/integrations/platform/notion/connections/conn-jira/reconnect-session',
+      '/web/integrations/platform/incident-io/connections/conn-jira/reconnect-session',
       { method: 'POST' },
     );
     expect(crossProvider.status).toBe(404);
+    await expect(crossProvider.json()).resolves.toEqual({ error: 'connection_not_found' });
   });
 
   it('rejects unknown providers, signed-out callers, and personal accounts', async () => {

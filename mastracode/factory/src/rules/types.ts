@@ -1,7 +1,12 @@
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 
 export type WorkItemSource =
-  'github-issue' | 'github-pr' | 'linear-issue' | 'jira-issue' | 'incidentio-follow-up' | 'manual';
+  | 'github-issue'
+  | 'github-pr'
+  | 'linear-issue'
+  | 'jira-issue'
+  | 'incidentio-follow-up'
+  | 'manual';
 
 /** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
@@ -155,7 +160,12 @@ export const FACTORY_INCIDENTIO_EVENTS = ['followUpObserved', 'followUpClosed'] 
 export type FactoryIncidentioEventName = (typeof FACTORY_INCIDENTIO_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
-  null | boolean | number | string | FactoryRuleJsonValue[] | { [key: string]: FactoryRuleJsonValue };
+  | null
+  | boolean
+  | number
+  | string
+  | FactoryRuleJsonValue[]
+  | { [key: string]: FactoryRuleJsonValue };
 
 export interface FactoryRuleItemContext {
   id: string;
