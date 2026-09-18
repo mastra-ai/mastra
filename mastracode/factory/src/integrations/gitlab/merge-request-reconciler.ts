@@ -19,6 +19,10 @@ function numberMetadata(item: WorkItemRow, key: string): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
+function normalizeHost(host: string): string {
+  return host.trim().toLowerCase().replace(/\.$/, '');
+}
+
 function projectPathFromUrl(url: string, host: string, mergeRequestIid: number): string | undefined {
   try {
     const parsed = new URL(url);
@@ -46,7 +50,7 @@ function terminalEvent(item: WorkItemRow, pullRequest: PullRequest): ParsedGitLa
   const username = pullRequest.author?.trim() || 'factory-reconciler';
   return {
     event: 'Merge Request Hook',
-    deliveryId: `reconcile:merge-request:${projectId}:${mergeRequestIid}:${pullRequest.updatedAt}:${action}`,
+    deliveryId: `reconcile:merge-request:${normalizeHost(host)}:${projectId}:${mergeRequestIid}:${pullRequest.updatedAt}:${action}`,
     instanceHost: host,
     payload: {
       user_username: username,
@@ -86,7 +90,8 @@ async function connectionForItem(
     key => key.repositoryExternalId === projectId,
   );
   for (const key of keys.sort((left, right) => {
-    const directOrder = Number(right.installationExternalId === 'direct') - Number(left.installationExternalId === 'direct');
+    const directOrder =
+      Number(right.installationExternalId === 'direct') - Number(left.installationExternalId === 'direct');
     return directOrder || left.installationExternalId.localeCompare(right.installationExternalId);
   })) {
     const targets = await context.storage.sourceControl.projectRepositories.listByExternalRepository(key);

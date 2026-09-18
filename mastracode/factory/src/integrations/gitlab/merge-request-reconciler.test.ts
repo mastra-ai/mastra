@@ -153,9 +153,17 @@ describe('GitLab merge-request reconciler', () => {
         boards: createBoardRegistry(),
       },
     } as unknown as IntegrationContext;
+    const commitRuleEvaluation = vi.spyOn(seeded.workItems, 'commitRuleEvaluation');
     const reconcile = attachGitLabMergeRequestReconciler(gitlab, context);
 
     await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
+    expect(commitRuleEvaluation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ingress: expect.objectContaining({
+          identity: expect.stringContaining(`reconcile:merge-request:${HOST}:${PROJECT_ID}:17:`),
+        }),
+      }),
+    );
     expect(getProjectMemberAccessLevel).toHaveBeenLastCalledWith('direct', PROJECT_ID, 'maintainer');
     await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
     expect(getPullRequest).toHaveBeenCalledWith({

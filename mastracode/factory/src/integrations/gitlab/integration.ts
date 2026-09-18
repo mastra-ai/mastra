@@ -235,6 +235,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
             ? normalizeGitLabHost(installation.providerMetadata.host)
             : null;
         if (reference?.host && installationHost !== normalizeGitLabHost(reference.host)) continue;
+        if (locator?.host && installationHost !== normalizeGitLabHost(locator.host)) continue;
         matches.push({
           connectionId: installation.externalId,
           projectId: repository.externalId,
@@ -790,6 +791,7 @@ function parsePositiveInteger(value: string): number | null {
 }
 
 function parseIssueLocator(value: string): {
+  host?: string;
   projectPath: string;
   issueIid: number;
 } | null {
@@ -806,7 +808,7 @@ function parseIssueLocator(value: string): {
     const issueIid = parsePositiveInteger(match[2]!);
     if (!issueIid) return null;
     const projectPath = decodeURIComponent(match[1]!);
-    return { projectPath, issueIid };
+    return { host: url.host, projectPath, issueIid };
   } catch {
     return null;
   }
