@@ -9,6 +9,7 @@ import { createFactorySecretEncryption } from '../../../secret-encryption.js';
 import type { FactorySecretEncryption } from '../../../secret-encryption.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
 import { CustomProvidersStorage } from './base.js';
+import { CustomProviderPresets } from './presets.js';
 
 /**
  * File-backed store so a "pre-encryption deployment" can write rows, close,
@@ -207,6 +208,34 @@ describe('CustomProvidersStorage', () => {
 
     expect(created.providerId).toBe('new-name');
     expect(await seed.customProviders.list({ orgId: 'org-1' })).toHaveLength(1);
+  });
+
+  it('appends deployment presets to every org and lets a preset shadow an org row with its id', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { providerId: 'proxy', name: 'Proxy', url: 'https://old.example.com/v1', models: ['old'] },
+    });
+    await seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { providerId: 'mine', name: 'Mine', url: 'https://mine.example.com/v1', models: ['m'] },
+    });
+    seed.customProviders.usePresets(
+      new CustomProviderPresets([{ name: 'Proxy', url: 'https://proxy.example.com/v1', models: ['fast'] }]),
+    );
+
+    const org1 = await seed.customProviders.list({ orgId: 'org-1' });
+    const org2 = await seed.customProviders.list({ orgId: 'org-2' });
+
+    expect(org1.map(r => [r.providerId, r.url, r.preset])).toEqual([
+      ['mine', 'https://mine.example.com/v1', undefined],
+      ['proxy', 'https://proxy.example.com/v1', true],
+    ]);
+    expect(org2.map(r => [r.providerId, r.orgId, r.preset])).toEqual([['proxy', 'org-2', true]]);
+    expect(seed.customProviders.isPreset('proxy')).toBe(true);
+    expect(seed.customProviders.isPreset('mine')).toBe(false);
   });
 
   it('deletes only within the org', async () => {
