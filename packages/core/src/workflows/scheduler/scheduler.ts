@@ -260,13 +260,13 @@ export class Scheduler extends MastraBase {
    * Fails open when no predicate is configured or when the predicate
    * throws — fencing is a safety net, not a reason to stop firing.
    */
-  #ensureTargetCurrent(schedule: Schedule): boolean {
+  async #ensureTargetCurrent(schedule: Schedule): Promise<boolean> {
     const predicate = this.#config.isTargetCurrent;
     if (!predicate) return true;
 
     let current: boolean;
     try {
-      current = predicate(schedule.target);
+      current = await predicate(schedule.target);
     } catch (err) {
       this.logger.error('isTargetCurrent predicate threw; treating target as current', {
         scheduleId: schedule.id,
@@ -338,7 +338,7 @@ export class Scheduler extends MastraBase {
 
   async #fireSchedule(schedule: Schedule): Promise<void> {
     if (!(await this.#ensureTargetReady(schedule))) return;
-    if (!this.#ensureTargetCurrent(schedule)) return;
+    if (!(await this.#ensureTargetCurrent(schedule))) return;
 
     const actualFireAt = Date.now();
 

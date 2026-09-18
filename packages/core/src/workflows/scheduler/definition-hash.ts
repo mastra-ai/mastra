@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 /**
  * Computes a stable content hash of a workflow's serialized step graph.
  *
@@ -17,12 +15,14 @@ import { createHash } from 'node:crypto';
  * callers treat a missing hash as "unfenced" (fail open) so legacy rows and
  * imperative schedules keep firing.
  */
-export function computeScheduleDefinitionHash(serializedStepGraph: unknown): string | undefined {
+export async function computeScheduleDefinitionHash(serializedStepGraph: unknown): Promise<string | undefined> {
   if (serializedStepGraph == null) return undefined;
   try {
     const json = JSON.stringify(serializedStepGraph);
     if (!json || json === '[]' || json === '{}') return undefined;
-    return createHash('sha256').update(json).digest('hex').slice(0, 16);
+    return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(json)))
+      .toString('hex')
+      .slice(0, 16);
   } catch {
     return undefined;
   }
