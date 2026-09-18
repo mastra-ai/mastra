@@ -137,10 +137,17 @@ describe('MessageList#rollbackToLastStepBoundary', () => {
     expect(list.get.all.db().find(m => m.id === 'a1')).toBeUndefined();
   });
 
-  it('removes a message that has no parts at all', () => {
+  it('removes a message whose parts array is empty', () => {
     const list = listWith(assistant([text('seed')]));
-    const message = list.get.all.db().find(m => m.id === 'a1')!;
-    message.content.parts = [];
+    list.get.all.db().find(m => m.id === 'a1')!.content.parts = [];
+
+    expect(list.rollbackToLastStepBoundary('a1')).toBe(true);
+    expect(list.get.all.db().find(m => m.id === 'a1')).toBeUndefined();
+  });
+
+  it('removes a message carrying no parts field at all', () => {
+    const list = listWith(assistant([text('seed')]));
+    delete (list.get.all.db().find(m => m.id === 'a1')!.content as { parts?: unknown }).parts;
 
     expect(list.rollbackToLastStepBoundary('a1')).toBe(true);
     expect(list.get.all.db().find(m => m.id === 'a1')).toBeUndefined();
