@@ -24,6 +24,7 @@ import {
   aiV4CoreMessagesToAIV5ModelMessages as convertAIV4CoreToAIV5ModelMessages,
   systemMessageToAIV4Core,
   StepContentExtractor,
+  findStepBoundaries,
 } from './conversion';
 import type { ToolCallConversionMode } from './conversion';
 import { TypeDetector } from './detection/TypeDetector';
@@ -580,6 +581,62 @@ export class MessageList {
       });
     }
     return removed;
+  }
+
+  /**
+   * Roll a response message back to its last step boundary, discarding the parts produced
+   * by the step currently in flight while keeping every earlier, completed step intact.
+   *
+   * Used by the processor-retry path: the rejected attempt must not survive into the next
+   * prompt (PR #12799), but the accepted steps before it must. Removing the whole message
+   * instead — as that path used to do — also destroyed the reasoning (`rs_…`) and
+   * tool-invocation (`fc_…`) parts of accepted steps, leaving a persisted assistant message
+   * with an OpenAI text `itemId` and no reasoning item to pair with it, which OpenAI rejects
+   * with a non-retryable 400 on replay (issue #22291).
+   *
+   * Step boundaries are the `step-start` markers, read with the same helper
+   * `StepContentExtractor` uses. If the message has no boundary, the in-flight step *is* the
+   * whole message and the message is removed outright — which is the correct degradation:
+   * there is no accepted content to keep.
+   *
+   * @param messageId - ID of the message to roll back
+   * @returns true if a message was found and rolled back or removed
+   */
+  public rollbackToLastStepBoundary(messageId: string): boolean {
+    const message = this.messages.find(m => m.id === messageId);
+    if (!message) return false;
+
+    const parts = message.content?.parts;
+    if (!parts?.length) {
+      this.removeByIds([messageId]);
+      return true;
+    }
+
+    const boundaries = findStepBoundaries(parts);
+    const lastBoundary = boundaries[boundaries.length - 1];
+
+    // No step boundary: the rejected attempt is the entire message.
+    if (lastBoundary === undefined) {
+      this.removeByIds([messageId]);
+      return true;
+    }
+
+    // Drop the marker itself along with the step it opened, so the next iteration's
+    // stepStart() writes a fresh marker for the retry rather than reusing the rejected one.
+    parts.splice(lastBoundary);
+
+    if (parts.length === 0) {
+      this.removeByIds([messageId]);
+      return true;
+    }
+
+    // Ensure the mutated message is persisted.
+    if (!this.stateManager.isResponseMessage(message)) {
+      this.stateManager.removeMessage(message);
+      this.stateManager.addToSource(message, 'response');
+    }
+
+    return true;
   }
 
   private all = {

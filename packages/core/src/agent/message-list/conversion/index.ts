@@ -21,4 +21,4 @@ export {
   systemMessageToAIV4Core,
 } from './output-converter';
 export type { ToolCallConversionMode } from './output-converter';
-export { StepContentExtractor } from './step-content';
+export { StepContentExtractor, findStepBoundaries } from './step-content';

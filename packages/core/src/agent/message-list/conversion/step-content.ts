@@ -9,6 +9,23 @@ import { findToolCallArgs } from '../utils/provider-compat';
 import { sanitizeV5UIMessages } from './output-converter';
 
 /**
+ * Find step boundaries in a flat parts array by locating `step-start` markers.
+ *
+ * Step 1 is everything before the first marker; step N (N >= 2) is the content between
+ * the (N-1)th and Nth markers. Shared by `StepContentExtractor` and by
+ * `MessageList.rollbackToLastStepBoundary`, so both agree on what a step boundary is.
+ */
+export function findStepBoundaries(parts: readonly { type?: string }[]): number[] {
+  const stepBoundaries: number[] = [];
+  parts.forEach((part, index) => {
+    if (part.type === 'step-start') {
+      stepBoundaries.push(index);
+    }
+  });
+  return stepBoundaries;
+}
+
+/**
  * StepContentExtractor - Handles extraction of step content from response messages
  *
  * This class encapsulates the complex logic for:
@@ -33,12 +50,7 @@ export class StepContentExtractor {
     const uiMessagesParts = uiMessages.flatMap(item => item.parts);
 
     // Find step boundaries by looking for step-start markers
-    const stepBoundaries: number[] = [];
-    uiMessagesParts.forEach((part, index) => {
-      if (part.type === 'step-start') {
-        stepBoundaries.push(index);
-      }
-    });
+    const stepBoundaries = findStepBoundaries(uiMessagesParts);
 
     // Handle -1 to get the last step (the current/most recent step)
     if (stepNumber === -1) {

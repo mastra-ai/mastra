@@ -2578,11 +2578,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }),
       );
 
-      // Remove rejected response messages from the messageList before the next iteration.
+      // Remove the rejected response from the messageList before the next iteration.
       // Without this, the LLM sees the rejected assistant response in its prompt on retry,
       // which confuses models and often causes empty text responses.
+      //
+      // Scoped to the rejected step, not the whole message: the response message id is stable
+      // across retry iterations, so removing the message outright also destroyed the reasoning
+      // and tool-invocation parts of steps the processor already accepted. That left a persisted
+      // assistant message carrying an OpenAI text itemId with no reasoning item to pair with,
+      // which OpenAI rejects with a non-retryable 400 on the next turn (issue #22291).
       if (shouldRetry) {
-        messageList.removeByIds([outputStream.messageId]);
+        messageList.rollbackToLastStepBoundary(outputStream.messageId);
       }
 
       const retryFeedbackText =
