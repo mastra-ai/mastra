@@ -14,12 +14,15 @@ import {
 } from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
+import { TracesPageSkeleton } from '@mastra/playground-ui/domains/traces/components/traces-page-skeleton';
 import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
 import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
+import { useTraceQueryFields } from '@mastra/playground-ui/domains/traces/hooks/use-trace-query-fields';
+import { createTraceQueryValuesResolver } from '@mastra/playground-ui/domains/traces/hooks/use-trace-query-values';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
 import {
@@ -31,9 +34,12 @@ import {
 import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import {
   buildTraceQueryRequest,
+  clampTraceDiscoveryTimeRange,
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
+import { useMastraClient } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useTracesListSource } from './hooks/use-traces-list-source';
@@ -147,6 +153,39 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   });
   const { data: discoveredEnvironments = [] } = useEnvironments();
 
+  // Metadata field discovery. The time range is keyed off the date params only (a mount-time
+  // `now`, not the list's rolling one) so the discovery query key — and the page skeleton —
+  // don't churn on every auto-refresh tick.
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+  const [discoveryNow] = useState(() => new Date());
+  const discoveryTimeRange = useMemo(
+    () =>
+      clampTraceDiscoveryTimeRange(
+        buildTraceQueryRequest({
+          dateFrom: url.selectedDateFrom,
+          dateTo: url.selectedDateTo,
+          tokens: [],
+          now: discoveryNow,
+        }).timeRange,
+      ),
+    [url.selectedDateFrom, url.selectedDateTo, discoveryNow],
+  );
+  const { metadataFields, isLoading: isDiscoveryLoading } = useTraceQueryFields({ timeRange: discoveryTimeRange });
+  const metadataFilterFields = useMemo(
+    () =>
+      metadataFields.map(field => ({
+        path: field.path,
+        suggestions: createTraceQueryValuesResolver({
+          client,
+          queryClient,
+          timeRange: discoveryTimeRange,
+          path: field.path,
+        }),
+      })),
+    [metadataFields, client, queryClient, discoveryTimeRange],
+  );
+
   const filterBarFields = useMemo(
     () => [
       TRACE_TIME_RANGE_FIELD,
@@ -154,9 +193,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         availableRootEntityNames: rootEntityNameSuggestions,
         availableEnvironments: discoveredEnvironments,
         hiddenFieldIds,
+        metadataFields: metadataFilterFields,
       }),
     ],
-    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds],
+    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds, metadataFilterFields],
   );
   const allFilterBarItems = useMemo(() => traceTokensToFilterBarItems(url.filterTokens), [url.filterTokens]);
   const filterBarItems = useMemo(
@@ -310,6 +350,19 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       </PageLayout.Row>
     </PageLayout.TopArea>
   );
+
+  // Hold the whole toolbar + list behind one skeleton until field discovery has settled, so the
+  // FilterBar never appears without the metadata fields it will offer. Only `isLoading` (never
+  // `isFetching`) gates this: background refetches after the stale window must not flash it.
+  if (isDiscoveryLoading) {
+    return (
+      <PageLayout width="wide" height="full">
+        <PageLayout.MainArea>
+          <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
+        </PageLayout.MainArea>
+      </PageLayout>
+    );
+  }
 
   if (tracesError) {
     return (

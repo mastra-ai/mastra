@@ -3,6 +3,7 @@ import type { ListTracesArgs } from '@mastra/core/storage';
 import {
   ActivityIcon,
   BoxIcon,
+  BracesIcon,
   BuildingIcon,
   ClockIcon,
   FingerprintIcon,
@@ -22,7 +23,12 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from './trace-query-filters';
 import type { TraceDatePreset } from './types';
-import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
+import type {
+  FilterBarField,
+  FilterBarItem,
+  FilterBarOperator,
+  FilterBarSuggestionsResolver,
+} from '@/ds/components/FilterBar/types';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 import { stringToThemedColor, themedHueColor } from '@/lib/colors';
 
@@ -56,6 +62,23 @@ export const TRACE_STATUS_OPTIONS = [
  *  rather than the generic `filter*` set, but appear as rows in the Filter
  *  popover so users can manage all filters from one place. */
 export const TRACE_SYNTHETIC_FILTER_FIELD_IDS = ['rootEntityType', 'status'] as const;
+
+/** Discovered `metadata.<key>` fields are dynamic, so they use a prefix-based URL
+ *  scheme (`filterMetadata.<key>`) instead of the fixed `filter*` param map. */
+export const TRACE_METADATA_FILTER_FIELD_PREFIX = 'metadata.';
+export const TRACE_METADATA_FILTER_PARAM_PREFIX = 'filterMetadata.';
+
+export const isTraceMetadataFieldId = (fieldId: string) =>
+  fieldId.startsWith(TRACE_METADATA_FILTER_FIELD_PREFIX) && fieldId.length > TRACE_METADATA_FILTER_FIELD_PREFIX.length;
+
+const isTraceMetadataParam = (param: string) =>
+  param.startsWith(TRACE_METADATA_FILTER_PARAM_PREFIX) && param.length > TRACE_METADATA_FILTER_PARAM_PREFIX.length;
+
+export const metadataFieldIdToParam = (fieldId: string) =>
+  TRACE_METADATA_FILTER_PARAM_PREFIX + fieldId.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length);
+
+export const metadataParamToFieldId = (param: string) =>
+  TRACE_METADATA_FILTER_FIELD_PREFIX + param.slice(TRACE_METADATA_FILTER_PARAM_PREFIX.length);
 
 export const TRACE_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
 export const TRACE_STATUS_PARAM = 'status';
@@ -171,6 +194,9 @@ export function hasAnyTraceFilterParams(params: URLSearchParams): boolean {
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     if (params.has(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId])) return true;
   }
+  for (const param of params.keys()) {
+    if (isTraceMetadataParam(param)) return true;
+  }
   return false;
 }
 
@@ -259,10 +285,13 @@ export function createTraceFilterBarFields({
   availableRootEntityNames,
   availableEnvironments,
   hiddenFieldIds = [],
+  metadataFields = [],
 }: {
   availableRootEntityNames: string[];
   availableEnvironments: string[];
   hiddenFieldIds?: readonly string[];
+  /** Discovered `metadata.<key>` paths with a lazy value-suggestions resolver each. */
+  metadataFields?: readonly { path: string; suggestions: FilterBarSuggestionsResolver }[];
 }): FilterBarField[] {
   const pick = (id: string, suggestions: { value: string; label?: string }[]): FilterBarField => ({
     ...traceFieldBase(id),
@@ -291,10 +320,20 @@ export function createTraceFilterBarFields({
     ),
   ];
   const textFields = TRACE_FILTER_BAR_TEXT_FIELD_IDS.map(text);
+  const metadataBarFields: FilterBarField[] = metadataFields
+    .filter(({ path }) => isTraceMetadataFieldId(path))
+    .map(({ path, suggestions }) => ({
+      id: path,
+      label: path.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length),
+      icon: BracesIcon,
+      color: stringToThemedColor(path),
+      operators: ['is'],
+      suggestions,
+    }));
 
   const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
   const hidden = new Set(hiddenFieldIds);
-  return [...pickFields.sort(byLabel), ...textFields.sort(byLabel)]
+  return [...pickFields.sort(byLabel), ...textFields.sort(byLabel), ...metadataBarFields.sort(byLabel)]
     .filter(field => !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id))
     .map(field => (hidden.has(field.id) ? { ...field, hidden: true } : field));
 }
@@ -340,7 +379,7 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Pro
 
   const seen = new Set<string>();
   for (const [paramName] of searchParams.entries()) {
-    const fieldId = paramToFieldId.get(paramName);
+    const fieldId = isTraceMetadataParam(paramName) ? metadataParamToFieldId(paramName) : paramToFieldId.get(paramName);
     if (!fieldId || seen.has(fieldId)) continue;
     seen.add(fieldId);
 
@@ -390,6 +429,10 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
     }
   }
 
+  for (const [param, value] of searchParams.entries()) {
+    if (isTraceMetadataParam(param) && value) next.set(param, value);
+  }
+
   return next;
 }
 
@@ -405,8 +448,15 @@ export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: 
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     params.delete(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId]);
   }
+  for (const param of Array.from(params.keys())) {
+    if (isTraceMetadataParam(param)) params.delete(param);
+  }
 
   for (const token of tokens) {
+    if (isTraceMetadataFieldId(token.fieldId)) {
+      if (typeof token.value === 'string') params.set(metadataFieldIdToParam(token.fieldId), token.value.trim());
+      continue;
+    }
     if (token.fieldId === 'rootEntityType' && typeof token.value === 'string') {
       params.set(TRACE_ROOT_ENTITY_TYPE_PARAM, token.value);
       continue;

@@ -18,6 +18,8 @@ export {
   type TraceQueryArgs,
 } from './use-trace-query';
 export { useTags } from './use-tags';
+export { useTraceQueryFields, type TraceQueryDiscoveryTimeRange } from './use-trace-query-fields';
+export { createTraceQueryValuesResolver, useTraceQueryValues } from './use-trace-query-values';
 export { useEntityNames } from './use-entity-names';
 export { useEnvironments } from './use-environments';
 export { useServiceNames } from './use-service-names';
