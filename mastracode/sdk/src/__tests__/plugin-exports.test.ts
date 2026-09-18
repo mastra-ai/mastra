@@ -15,12 +15,12 @@ describe('plugin exports', () => {
   it('re-exports applyUpdate as a working fold', () => {
     expect(typeof applyUpdate).toBe('function');
 
-    const message = {
+    const message: MastraDBMessage = {
       id: 'm1',
       role: 'assistant',
       createdAt: new Date(),
       content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
-    } as unknown as MastraDBMessage;
+    };
 
     const updated = applyUpdate(message, { type: 'text-delta', delta: ' world' });
 

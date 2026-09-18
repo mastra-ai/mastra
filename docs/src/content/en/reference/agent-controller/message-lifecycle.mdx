@@ -21,7 +21,7 @@ For the surrounding runtime, see the [`Session`](/reference/agent-controller/ses
 
 | Event | Payload | Purpose |
 | - | - | - |
-| `message_start` | `MastraDBMessage` | Opens the message and carries its initial parts. The opening text part is empty. |
+| `message_start` | `MastraDBMessage` | Opens the message and carries its initial parts. A text part opens empty, with its content arriving in deltas. |
 | `message_update` | `{ type: 'text-delta', delta }`, `{ type: 'reasoning-delta', index, delta }`, or `{ type: 'part', index, part }` | Carries one change to the message identified by `event.id`. |
 | `message_end` | Message id | Closes the message after terminal metadata is applied. |
 
@@ -82,14 +82,14 @@ session.subscribe(event => {
 })
 ```
 
-Read the folded parts to get the text and reasoning:
+Read the folded parts to get the text:
 
 ```typescript
-const message = messages.get(messageId)
-const text =
-  message && typeof message.content !== 'string'
-    ? message.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('')
-    : ''
+function messageText(id: string): string {
+  const message = messages.get(id)
+  if (!message || typeof message.content === 'string') return ''
+  return message.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('')
+}
 ```
 
 ## Read the folded message from a session
@@ -105,11 +105,11 @@ session.subscribe(event => {
 })
 ```
 
-`currentMessage` is the live streaming message. It mutates as deltas arrive, so copy or serialize it before retaining it. It holds only the message currently streaming, and a new `message_start` replaces it, so a turn that emits several assistant messages, such as a tool-calling turn, needs a snapshot per message rather than one read at the end.
+`currentMessage` holds only the message currently streaming. Each update replaces it with the accumulated result, and a new `message_start` replaces it with the next message, so a turn that emits several assistant messages, such as a tool-calling turn, needs a snapshot per `message_end` rather than one read at the end.
 
 ## Accumulate text deltas
 
-A consumer that only needs the assistant's text doesn't have to reconstruct messages. `text-delta` is the only event that carries streamed text, so append `event.event.delta` for each one and the turn's text accumulates in arrival order:
+A consumer that only needs the assistant's text doesn't have to reconstruct messages. Within this lifecycle `text-delta` is the only event that carries streamed text, so append `event.event.delta` for each one and the turn's text accumulates in arrival order:
 
 ```typescript
 let text = ''

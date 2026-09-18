@@ -359,9 +359,10 @@ Use `agentControllerMessageText(message)` to pull the plain text out of a recons
 `display_state_changed` carries the folded [`AgentControllerDisplayState`](/reference/agent-controller/session#displaystate), so a client doesn't fold message deltas to render the streaming message. Read `currentMessage` from it and pass the message to `agentControllerMessageText(message)` for its plain text:
 
 ```typescript
-import { agentControllerMessageText } from '@mastra/client-js'
+import { agentControllerMessageText, isKnownAgentControllerEvent } from '@mastra/client-js'
 
 function renderStreamingMessage(event: AgentControllerEvent) {
+  if (!isKnownAgentControllerEvent(event)) return
   if (event.type !== 'display_state_changed') return
   const message = event.displayState.currentMessage
   if (message) render(agentControllerMessageText(message))
@@ -376,9 +377,20 @@ The `applyUpdate` above is also exported from `@mastra/core/agent-controller`, s
 
 ```typescript
 import { applyUpdate } from '@mastra/core/agent-controller'
+import { isKnownAgentControllerEvent } from '@mastra/client-js'
+import { applyUpdate } from '@mastra/core/agent-controller'
+import type { MastraDBMessage } from '@mastra/core/agent-controller'
 
-const updated = applyUpdate(messages.get(event.id), event.event)
-if (updated) messages.set(event.id, updated)
+const messages = new Map<string, MastraDBMessage>()
+
+function handleMessageEvent(event: AgentControllerEvent) {
+  if (!isKnownAgentControllerEvent(event)) return
+  if (event.type === 'message_start') messages.set(event.message.id, event.message)
+  if (event.type === 'message_update') {
+    const updated = applyUpdate(messages.get(event.id), event.event)
+    if (updated) messages.set(event.id, updated)
+  }
+}
 ```
 
 A delta whose part the consumer hasn't seen doesn't apply, and `applyUpdate` returns `undefined` for it, so store the result only when it does. Importing it into a browser bundle also pulls in the `node:crypto`-bearing `AgentController` module, which is why the folded `display_state_changed` state stays the preferred path in a browser app. [Message lifecycle](/reference/agent-controller/message-lifecycle) documents the full contract.
