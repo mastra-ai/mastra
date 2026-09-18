@@ -66,7 +66,8 @@ describe('ProjectManagementFactoryStep', () => {
 
       expect(await screen.findByText('Jira connected')).toBeInTheDocument();
       expect(screen.getByText('Connected to acme.atlassian.net.')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Connect another' })).toBeInTheDocument();
+      // Additional accounts are managed in Settings, not during onboarding.
+      expect(screen.queryByRole('button', { name: 'Connect another' })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });
   });

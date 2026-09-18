@@ -63,7 +63,6 @@ function JiraPane({ connections }: { connections: PlatformProviderConnection[] }
         iconSlot={<JiraIcon className="text-icon3" size={40} />}
         titleSlot="Jira connected"
         descriptionSlot={jiraSummary(connections)}
-        actionSlot={<ProviderConnectControl provider="jira" label="Connect another" variant="ghost" />}
       />
     );
   }
