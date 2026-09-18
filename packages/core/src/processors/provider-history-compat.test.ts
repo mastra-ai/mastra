@@ -1645,8 +1645,8 @@ describe('openaiOrphanItemId', () => {
   it('A11: documents the collateral — a valid reasoning-free message in a mixed history also loses its itemId', async () => {
     // A non-reasoning Responses model produces messages that are orphan-shaped but perfectly
     // valid. Since `fix` never sees the error, it cannot tell them apart, so they are stripped
-    // too. They still replay correctly, by value rather than by reference: the cost is a
-    // forfeited cache hit, not a failure. Under-stripping, by contrast, ends the turn.
+    // too. They still replay correctly, by value rather than by reference: what is lost is the
+    // item reference, not the turn. Under-stripping, by contrast, ends it.
     const handler = new ProviderHistoryCompat();
     const args = orphanArgs(list => {
       list.add([createUserMessage('earlier, on a non-reasoning model')], 'input');
