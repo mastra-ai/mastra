@@ -199,6 +199,27 @@ export const ActionOnly: Story = {
   ),
 };
 
+export const TallAction: Story = {
+  render: () => (
+    <div className="grid w-[min(42rem,calc(100vw-7rem))] gap-6 py-10">
+      <PageHeader>
+        <PageHeader.Title>Environment variables</PageHeader.Title>
+      </PageHeader>
+      <PageHeader>
+        <PageHeader.Title>Environments</PageHeader.Title>
+        <PageHeader.Action>
+          <div className="flex flex-col gap-2">
+            <Button size="sm">Create environment</Button>
+            <Button size="sm" variant="outline">
+              Import
+            </Button>
+          </div>
+        </PageHeader.Action>
+      </PageHeader>
+    </div>
+  ),
+};
+
 export const TitleSizes: Story = {
   render: () => (
     <div className="grid w-[min(42rem,calc(100vw-7rem))] gap-6 py-10">
