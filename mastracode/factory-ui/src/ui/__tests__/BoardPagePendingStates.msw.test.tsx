@@ -834,6 +834,58 @@ describe('Board card pending states', () => {
     expect(transitionRequests[0]).toMatchObject({ stage, cause: 'card_action' });
   });
 
+  it('keeps an auto-materialized Jira card visible with the full work-item menu', async () => {
+    // Auto-ingestion files the issue server-side; the board must show the filed
+    // card (not drop both the candidate and the card) with Linear-equivalent actions.
+    const materializedJiraItem = {
+      ...manualWorkItem,
+      id: 'jira-materialized-1',
+      board: 'work',
+      externalSource: {
+        integrationId: 'jira',
+        type: 'issue',
+        externalId: jiraIssue.id,
+        url: jiraIssue.url,
+      },
+      title: jiraIssue.title,
+      stages: ['intake'],
+      metadata: {
+        identifier: jiraIssue.identifier,
+        issueRef: jiraIssue.id,
+        state: jiraIssue.state,
+        stateType: jiraIssue.stateType,
+        assignee: jiraIssue.assignee,
+        author: jiraIssue.author,
+        labels: jiraIssue.labels,
+      },
+    };
+    stubBoardEndpoints();
+    stubJiraCandidate();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [materializedJiraItem] }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWorkBoard();
+    await waitForMutationsIdle(client);
+
+    // Exactly one card: the filed work item; the live candidate is deduped, not the card.
+    const actions = await screen.findAllByRole('button', { name: 'Actions for Fix Jira intake sync' });
+    expect(actions).toHaveLength(1);
+    await user.click(actions[0]!);
+
+    // The filed Jira card carries the same menu a filed Linear card does.
+    expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Investigate hands-off' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Build hands-off' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Open in Jira' })).toHaveAttribute('href', jiraIssue.url);
+    expect(screen.getByRole('menuitem', { name: 'Ask supervisor' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
+  });
+
   it('offers "Open in GitHub" on unfiled Intake candidates', async () => {
     stubBoardEndpoints();
     server.use(
