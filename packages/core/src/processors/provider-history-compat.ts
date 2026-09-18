@@ -758,10 +758,14 @@ function stripItemId(part: MastraMessagePart): void {
  * ```
  *
  * Because the offending message is already persisted, that 400 repeats on every
- * subsequent turn, permanently breaking the thread. This rule is a recovery
+ * subsequent turn, and the thread stops working. This rule is a recovery
  * seatbelt for histories that are *already* corrupted: dropping the `itemId`
  * makes the message replay by value instead of by reference, which OpenAI
  * accepts. The content the user sees is unchanged.
+ *
+ * The repair is in-memory for the current turn: a message sourced from storage
+ * is not re-drained, so a later turn on the same thread spends one rejected
+ * request before recovering again. Same property as `anthropicToolIdFormat`.
  *
  * Reactive by design — it fires only after OpenAI has actually rejected the
  * request, so a legitimately reasoning-free message (e.g.
@@ -786,10 +790,25 @@ function stripItemId(part: MastraMessagePart): void {
  * unsatisfiable and stripping is the right repair.
  *
  * The rule repairs every orphan-shaped message in the history rather than only
- * the id named in the error. That is intentional: the error names one item, but
- * OpenAI rejects on the first one it hits, so healing only that id would trade a
- * permanent failure for N sequential ones — and `processAPIError` gets a single
- * retry, not N. Any message it touches is one that would itself be rejected.
+ * the id named in the error, because `fix` does not receive the error and the
+ * error names only the first item OpenAI tripped over. Healing that one id
+ * would trade a permanent failure for N sequential ones, and there is a single
+ * retry available, not N.
+ *
+ * The cost of that breadth: in a thread that mixes a reasoning model with a
+ * non-reasoning Responses model, the non-reasoning turns are also orphan-shaped
+ * (an `itemId`, no reasoning) but are perfectly valid, and they lose their item
+ * references too. They still replay correctly — by value instead of by
+ * reference — so the effect is a forfeited server-side cache hit, not a
+ * failure. The asymmetry is deliberate: under-stripping ends the turn,
+ * over-stripping costs a cache hit.
+ *
+ * Known limitation: the guard reasons about message *shape*, because the
+ * required `rs_…` id named in the error is not available to `fix`. A turn whose
+ * reasoning row belongs to a different turn can therefore be skipped when it
+ * should have been repaired. That case degrades to today's behavior — the turn
+ * fails as it already does — so the guard can cost a recovery, never cause a
+ * new failure.
  *
  * This is a seatbelt, not the cure: the path that produces these orphans is
  * fixed separately in the processor-retry rollback (#22291).

@@ -1642,6 +1642,62 @@ describe('openaiOrphanItemId', () => {
     expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).toHaveProperty('itemId', ORPHAN_ID);
   });
 
+  it('A11: documents the collateral — a valid reasoning-free message in a mixed history also loses its itemId', async () => {
+    // A non-reasoning Responses model produces messages that are orphan-shaped but perfectly
+    // valid. Since `fix` never sees the error, it cannot tell them apart, so they are stripped
+    // too. They still replay correctly, by value rather than by reference: the cost is a
+    // forfeited cache hit, not a failure. Under-stripping, by contrast, ends the turn.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('earlier, on a non-reasoning model')], 'input');
+      list.add([orphanAssistant('msg_from_gpt41')], 'memory');
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, 'msg-orphan-msg_from_gpt41')).not.toHaveProperty('itemId');
+  });
+
+  it('A12: documents the guard false-negative — an orphan behind an unrelated reasoning row is left alone', async () => {
+    // The guard reasons about shape, because the required `rs_…` id named in the error is not
+    // available to `fix`. An unrelated reasoning-only row therefore reads as cover and the
+    // orphan is skipped. That degrades to today's behavior (the turn fails as it already does);
+    // it cannot cause a failure that was not already happening.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-unrelated-reasoning',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'reasoning' as const,
+                  text: 'unrelated',
+                  providerMetadata: { openai: { itemId: 'rs_unrelated' } },
+                },
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).toHaveProperty('itemId', ORPHAN_ID);
+  });
+
   it('A7: split-history guard — keeps the itemId when the reasoning sits on the preceding assistant message', async () => {
     const handler = new ProviderHistoryCompat();
     const args = orphanArgs(list => {
