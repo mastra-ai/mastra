@@ -73,6 +73,49 @@ describe('AISDKV7LanguageModel', () => {
       expect(passed.tools[0].type).toBe('provider');
     });
 
+    it('remaps a v2 tool-result media part to a v4 file part in the router adapter', async () => {
+      const model = createMockV4Model();
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      const options = {
+        prompt: [
+          {
+            role: 'assistant',
+            content: [{ type: 'tool-call', toolCallId: 'call_1', toolName: 'read_image', input: {} }],
+          },
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'call_1',
+                toolName: 'read_image',
+                output: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'image result' },
+                    { type: 'media', data: 'iVBORw0KGgo=', mediaType: 'image/png' },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      } as unknown as LanguageModelV4CallOptions;
+
+      await wrapped.doStream(options);
+
+      const passed = (model.doStream as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      const toolMsg = passed.prompt.find((m: any) => m.role === 'tool');
+      const value = toolMsg.content[0].output.value;
+
+      expect(value[1]).toEqual({
+        type: 'file',
+        data: { type: 'data', data: 'iVBORw0KGgo=' },
+        mediaType: 'image/png',
+      });
+    });
+
     it('leaves function tools untouched', async () => {
       const model = createMockV4Model();
       const wrapped = new AISDKV7LanguageModel(model);
