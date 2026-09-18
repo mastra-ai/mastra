@@ -15,4 +15,11 @@ await sandbox.executeCommand('/bin/sh', ['-c', 'rg -n "pattern" --files-with-mat
 
 `execute_command` with `background: true` closes standard input too: a background command that reads stdin now exits at end-of-input instead of staying alive until it is killed.
 
-`processes.spawn()` is unchanged: it still opens a writable stdin by default so long-running processes can be driven with `sendStdin()`. Run-to-completion spawns pass the new `stdinMode: 'ignore'` option instead.
+`processes.spawn()` keeps a writable stdin by default so long-running processes can be driven with `sendStdin()`. It now also accepts a public `stdinMode` option — pass `'ignore'` to close stdin when nothing will feed it:
+
+```ts
+// opt-in: close stdin on a spawned process
+const handle = await sandbox.processes.spawn('node', ['server.js'], { stdinMode: 'ignore' });
+```
+
+Run-to-completion spawns (`executeCommand()` and `execute_command` with `background: true`) pass this option automatically.
