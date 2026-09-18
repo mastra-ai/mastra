@@ -42,7 +42,6 @@ const gitlabRepo: GitLabRepository = {
   owner: 'acme',
   defaultBranch: 'main',
   private: true,
-  installationStorageId: 'gitlab-inst-1',
   sandboxProvider: 'local',
   sandboxWorkdir: '/workspace/app',
 };
@@ -85,6 +84,21 @@ describe('useLinkRepositoryMutation', () => {
   it('links a GitLab project through its provider partition and feeds GitLab intake', async () => {
     const requests: unknown[] = [];
     server.use(
+      http.post(`${TEST_BASE_URL}/web/gitlab/projects/registration`, async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json({
+          project: {
+            id: 'gitlab-project:encoded',
+            name: 'acme/app',
+            projectId: '10',
+            projectPath: 'acme/app',
+            installationStorageId: 'gitlab-inst-1',
+            defaultBranch: 'main',
+            sandboxProvider: 'local',
+            sandboxWorkdir: '/workspace/app',
+          },
+        });
+      }),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
         HttpResponse.json({ connections: [] }),
       ),
@@ -115,6 +129,7 @@ describe('useLinkRepositoryMutation', () => {
     await waitForMutationsIdle(client);
     expect(result.current.isSuccess).toBe(true);
     expect(requests).toEqual([
+      { sourceId: 'gitlab-project:encoded' },
       { integrationId: 'gitlab', installationId: 'gitlab-inst-1' },
       {
         repository: { externalId: '10', slug: 'acme/app' },

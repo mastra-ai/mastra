@@ -33,8 +33,7 @@ function isSourceControlRepository(value: unknown): value is SourceControlReposi
     (typeof candidate.id === 'number' || typeof candidate.id === 'string') &&
     typeof candidate.fullName === 'string' &&
     typeof candidate.defaultBranch === 'string' &&
-    typeof candidate.installationStorageId === 'string' &&
-    (candidate.provider === undefined ||
+    ((candidate.provider === undefined && typeof candidate.installationStorageId === 'string') ||
       (candidate.provider === 'gitlab' &&
         typeof candidate.externalId === 'string' &&
         typeof candidate.sandboxProvider === 'string' &&

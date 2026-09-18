@@ -9,7 +9,7 @@ import { useState, type ReactNode } from 'react';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { gitLabProjectRepository } from '../../factory/services/gitlab';
+import { gitLabProjectRepository, manageGitLabConnection } from '../../factory/services/gitlab';
 import type { GithubStatus, SourceControlRepository } from '../services/github';
 import { SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
@@ -67,12 +67,16 @@ export function VcsFactoryStep({
           githubStatus={githubStatus.data}
           gitlabConfigured={gitlabConfigured}
           gitlabReason={gitlabStatus.data?.reason}
+          gitlabMode={gitlabStatus.data?.mode}
           githubRedirecting={githubRedirecting}
           onChooseGithub={() => {
             if (connected) setSelectedProvider('github');
             else onConnect();
           }}
-          onChooseGitlab={() => setSelectedProvider('gitlab')}
+          onChooseGitlab={() => {
+            if (gitlabConfigured) setSelectedProvider('gitlab');
+            else if (gitlabStatus.data?.mode === 'platform') manageGitLabConnection();
+          }}
         />
       ) : (
         <div className="flex flex-col gap-4">
@@ -142,6 +146,7 @@ function ProviderChoice({
   githubStatus,
   gitlabConfigured,
   gitlabReason,
+  gitlabMode,
   githubRedirecting,
   onChooseGithub,
   onChooseGitlab,
@@ -149,6 +154,7 @@ function ProviderChoice({
   githubStatus: GithubStatus | undefined;
   gitlabConfigured: boolean;
   gitlabReason: 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready' | undefined;
+  gitlabMode: 'direct' | 'platform' | undefined;
   githubRedirecting: boolean;
   onChooseGithub: () => void;
   onChooseGitlab: () => void;
@@ -169,15 +175,18 @@ function ProviderChoice({
           (left, right) => GITHUB_ENV_VAR_DISPLAY_ORDER.indexOf(left) - GITHUB_ENV_VAR_DISPLAY_ORDER.indexOf(right),
         )
       : [];
-  const gitlabUnavailable = !gitlabConfigured;
+  const gitlabPlatformManaged = gitlabMode === 'platform';
+  const gitlabUnavailable = !gitlabConfigured && !gitlabPlatformManaged;
   const gitlabMessage =
     gitlabReason === 'organization_required'
       ? 'Join an organization to connect GitLab repositories.'
       : gitlabReason === 'auth_required'
         ? 'Sign in again to connect GitLab.'
-        : gitlabUnavailable
-          ? 'GitLab is not configured for this deployment.'
-          : 'Connect GitLab to choose a repository.';
+        : !gitlabConfigured && gitlabPlatformManaged
+          ? 'Connect GitLab through Mastra Platform to choose a repository.'
+          : gitlabUnavailable
+            ? 'GitLab is not configured for this deployment.'
+            : 'Connect GitLab to choose a repository.';
   const gitlabMissingEnvVars =
     gitlabUnavailable && gitlabReason !== 'organization_required'
       ? ['GITLAB_ACCESS_TOKEN', 'GITLAB_ACCESS_TOKEN_TYPE']
@@ -245,7 +254,7 @@ function ProviderConnection({
             Connect {provider}
           </Button>
         ) : missingEnvVars.length > 0 ? (
-          <div className="flex min-w-0 max-w-md flex-col items-center gap-2">
+          <div className="flex max-w-md min-w-0 flex-col items-center gap-2">
             <Txt as="p" variant="ui-sm" className="text-icon3 m-0 text-center">
               {setupMessage}
             </Txt>
