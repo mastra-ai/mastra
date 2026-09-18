@@ -1,5 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { MastraWorker } from '@mastra/core/worker';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type {
@@ -20,9 +21,12 @@ import type {
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { adfToText } from '../../jira/adf.js';
 import type { JiraComment, JiraIssue, JiraTransition } from '../../jira/api.js';
 import { JiraApiClient, JiraApiError } from '../../jira/api.js';
+import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
+import { jiraReconciliationEnabled, jiraReconciliationInterval } from '../../jira/reconciliation-config.js';
 import {
   logPlatformInfo,
   PlatformApiClient,
@@ -470,6 +474,20 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       this.#siteUrlByConnectionId.set(connection.id, siteUrl);
     }
     return { connection, api, siteUrl };
+  }
+
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    if (!jiraReconciliationEnabled()) return [];
+    const reconcile = attachJiraIssueReconciler(this, ctx);
+    if (!reconcile) return [];
+    const intervalMs = jiraReconciliationInterval();
+    return [
+      new IssueReconcileWorker({
+        integrationId: this.id,
+        reconcile,
+        ...(intervalMs ? { intervalMs } : {}),
+      }),
+    ];
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {

@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../../../boards/index.js';
 import { fakeRouteAuth } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import { JiraApiError } from '../../jira/api.js';
+import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
 import {
   decodeIssueReference,
   decodeSourceId,
@@ -103,6 +105,71 @@ afterEach(() => {
 });
 
 describe('PlatformJiraIntegration discovery', () => {
+  it('registers a Jira issue reconciliation worker', () => {
+    const workers = integration().workers({
+      storage: { projects: { listAll: async () => [] } },
+      runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
+    } as never);
+
+    expect(workers.map(worker => worker.name)).toEqual(['jira-issue-reconcile']);
+  });
+
+  it('reconciles imported Jira issues through their Platform connection', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const reference = encodeIssueReference({ connectionId: 'a1b_acme', issueId: 'ENG-42', projectId: '1' });
+    await seeded.workItems.upsert({
+      orgId: project.orgId,
+      userId: project.createdBy,
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'jira',
+          type: 'issue',
+          externalId: reference,
+          url: 'https://acme.atlassian.net/browse/ENG-42',
+        },
+        title: 'Stale Jira issue',
+        stages: ['planning'],
+        sessions: {},
+        metadata: { stateType: 'started', labels: ['stale'] },
+      },
+    });
+    stubRoutes([
+      ['GET', `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/issue/ENG-42?`, () => json(issue())],
+      [
+        'GET',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/issue/ENG-42/comment`,
+        () => json({ comments: [], startAt: 0, maxResults: 50, total: 0 }),
+      ],
+    ]);
+    const jira = integration();
+    const reconcile = attachJiraIssueReconciler(jira, {
+      storage: { projects: seeded.projects },
+      runtime: {
+        configVersion: 'test-v1',
+        workItems: seeded.workItems,
+        boards: createBoardRegistry(),
+      },
+    } as never);
+
+    await expect(reconcile?.()).resolves.toMatchObject({ projects: 1, checked: 1, updated: 1, failed: 0 });
+    const [item] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
+    expect(item?.metadata).toMatchObject({
+      identifier: 'ENG-42',
+      issueRef: reference,
+      autoStartCandidate: true,
+      state: 'To Do',
+      stateType: 'unstarted',
+      priority: 'High',
+      project: 'ENG',
+      assignee: 'Ada',
+      author: 'Grace',
+      labels: ['bug'],
+      updatedAt: '2026-07-02T00:00:00Z',
+    });
+  });
+
   it('constructs without a connection ID and logs initialization without connection details', async () => {
     const infoLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const seed = await createFactoryStorageForTests();
