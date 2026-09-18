@@ -1833,6 +1833,41 @@ describe('accumulateChunk - deeply nested agent streaming', () => {
     });
   });
 
+  it('routes delayed progress by tool call id when sibling agents share a name', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('application-call', 'agent-applicationAgent', {}),
+      toolOutputChunk(
+        'application-call',
+        agentLeaf('tool-call', { toolCallId: 'resume-call-1', toolName: 'agent-resumeAgent', args: { attempt: 1 } }),
+      ),
+      toolOutputChunk(
+        'application-call',
+        agentLeaf('tool-call', { toolCallId: 'resume-call-2', toolName: 'agent-resumeAgent', args: { attempt: 2 } }),
+      ),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput('resume-call-1', 'agent-resumeAgent', agentLeaf('text-delta', { text: 'First' })),
+      ),
+    ]);
+
+    expect(rootAgentResult(out)?.childMessages).toEqual([
+      {
+        type: 'tool',
+        toolCallId: 'resume-call-1',
+        toolName: 'agent-resumeAgent',
+        args: { attempt: 1 },
+        toolOutput: { childMessages: [{ type: 'text', content: 'First' }] },
+      },
+      {
+        type: 'tool',
+        toolCallId: 'resume-call-2',
+        toolName: 'agent-resumeAgent',
+        args: { attempt: 2 },
+      },
+    ]);
+  });
+
   it('preserves nested progress when the outer agent tool finishes', () => {
     const out = reduce([
       startChunk(),

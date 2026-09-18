@@ -1678,12 +1678,8 @@ const findAgentChildToolIndex = (
 ): number => {
   for (let index = childMessages.length - 1; index >= 0; index--) {
     const message = childMessages[index];
-    if (
-      message?.type === 'tool' &&
-      ((toolCallId && message.toolCallId === toolCallId) || (toolName && message.toolName === toolName))
-    ) {
-      return index;
-    }
+    if (message?.type !== 'tool') continue;
+    if (toolCallId ? message.toolCallId === toolCallId : toolName && message.toolName === toolName) return index;
   }
   return -1;
 };
