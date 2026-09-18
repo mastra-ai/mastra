@@ -622,6 +622,47 @@ describe('eager tool dispatch — excluded tool classes', () => {
     expect(eager.onOutputCalls).toBe(base.onOutputCalls);
   });
 
+  it('suspends normally when the tool swallows the eager bailout and throws its own error', async () => {
+    // The other shape of the same hole: the tool catches the bailout and then fails on its
+    // own. That failure belongs to a call that was denied, so it must not be resolved as this
+    // call's error result — adoption would record it and the suspension would never happen.
+    const run = async (eager: boolean) => {
+      const { record } = createRecorder();
+      const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+      const agent = new Agent({
+        id: 'eager-swallowed-suspend-throw-agent',
+        name: 'Eager swallowed suspend throw agent',
+        instructions: 'Call tool-a once.',
+        model,
+        tools: {
+          'tool-a': createTool({
+            id: 'tool-a',
+            description: 'Suspends at runtime, swallows the throw, then throws its own error',
+            inputSchema: z.object({ value: z.string() }),
+            outputSchema: z.object({ value: z.string() }),
+            execute: async (_input, options?: any) => {
+              try {
+                await options?.agent?.suspend?.({ reason: 'needs input' });
+              } catch {
+                throw new Error('tool decided to fail instead');
+              }
+              return { value: 'unreachable' };
+            },
+          }),
+        },
+      });
+
+      const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
+      return chunks.map(chunk => chunk.type);
+    };
+
+    const base = await run(false);
+    const eager = await run(true);
+
+    expect(eager).toEqual(base);
+    expect(eager).toContain('tool-call-suspended');
+  });
+
   it('does not eagerly execute an agent-derived tool, which can suspend without a suspend schema', async () => {
     const { events, record } = createRecorder();
     const model = createToolCallModel(
