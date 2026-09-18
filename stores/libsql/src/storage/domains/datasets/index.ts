@@ -51,6 +51,11 @@ function jsonbArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
 }
 
+/** Arbitrary JSON fields distinguish authored JSON null from an absent SQL value. */
+function jsonDataArg(value: unknown): string | null {
+  return value === undefined ? null : JSON.stringify(value);
+}
+
 export class DatasetsLibSQL extends DatasetsStorage {
   #db: LibSQLDB;
   #client: Client;
@@ -160,7 +165,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return {
       id: row.id as string,
       name: row.name as string,
-      description: row.description as string | undefined,
+      description: (row.description as string | null) ?? undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       inputSchema: row.inputSchema ? safelyParseJSON(row.inputSchema) : undefined,
       groundTruthSchema: row.groundTruthSchema ? safelyParseJSON(row.groundTruthSchema) : undefined,
@@ -591,9 +596,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
               args.externalId ?? null,
               args.datasetId,
               args.datasetId,
-              jsonbArg(args.input)!,
-              jsonbArg(args.groundTruth),
-              jsonbArg(args.expectedTrajectory),
+              jsonDataArg(args.input),
+              jsonDataArg(args.groundTruth),
+              jsonDataArg(args.expectedTrajectory),
               jsonbArg(args.toolMocks),
               args.unmockedToolPolicy ?? null,
               jsonbArg(args.scorerIds),
@@ -725,9 +730,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
               existing.externalId ?? null,
               organizationId,
               projectId,
-              jsonbArg(mergedInput)!,
-              jsonbArg(mergedGroundTruth),
-              jsonbArg(mergedExpectedTrajectory),
+              jsonDataArg(mergedInput),
+              jsonDataArg(mergedGroundTruth),
+              jsonDataArg(mergedExpectedTrajectory),
               jsonbArg(mergedToolMocks),
               mergedUnmockedToolPolicy ?? null,
               jsonbArg(mergedScorerIds),
@@ -827,9 +832,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
               existing.externalId ?? null,
               dataset.organizationId ?? null,
               dataset.projectId ?? null,
-              jsonbArg(existing.input)!,
-              jsonbArg(existing.groundTruth),
-              jsonbArg(existing.expectedTrajectory),
+              jsonDataArg(existing.input),
+              jsonDataArg(existing.groundTruth),
+              jsonDataArg(existing.expectedTrajectory),
               jsonbArg(existing.toolMocks),
               existing.unmockedToolPolicy ?? null,
               jsonbArg(existing.scorerIds),
@@ -1257,9 +1262,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
                   item.externalId ?? null,
                   dataset.organizationId ?? null,
                   dataset.projectId ?? null,
-                  jsonbArg(item.input)!,
-                  jsonbArg(item.groundTruth),
-                  jsonbArg(item.expectedTrajectory),
+                  jsonDataArg(item.input),
+                  jsonDataArg(item.groundTruth),
+                  jsonDataArg(item.expectedTrajectory),
                   jsonbArg(item.toolMocks),
                   item.unmockedToolPolicy ?? null,
                   jsonbArg(item.scorerIds),
@@ -1376,9 +1381,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
                 item.externalId ?? null,
                 dataset.organizationId ?? null,
                 dataset.projectId ?? null,
-                jsonbArg(item.input)!,
-                jsonbArg(item.groundTruth),
-                jsonbArg(item.expectedTrajectory),
+                jsonDataArg(item.input),
+                jsonDataArg(item.groundTruth),
+                jsonDataArg(item.expectedTrajectory),
                 jsonbArg(item.toolMocks),
                 item.unmockedToolPolicy ?? null,
                 jsonbArg(item.scorerIds),

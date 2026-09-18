@@ -165,13 +165,15 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       name: row.name,
       description: row.description ?? undefined,
       metadata: typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : (row.metadata ?? undefined),
-      inputSchema: typeof row.inputSchema === 'string' ? safelyParseJSON(row.inputSchema) : row.inputSchema,
+      inputSchema:
+        (typeof row.inputSchema === 'string' ? safelyParseJSON(row.inputSchema) : row.inputSchema) ?? undefined,
       groundTruthSchema:
-        typeof row.groundTruthSchema === 'string' ? safelyParseJSON(row.groundTruthSchema) : row.groundTruthSchema,
+        (typeof row.groundTruthSchema === 'string' ? safelyParseJSON(row.groundTruthSchema) : row.groundTruthSchema) ??
+        undefined,
       requestContextSchema:
-        typeof row.requestContextSchema === 'string'
+        (typeof row.requestContextSchema === 'string'
           ? safelyParseJSON(row.requestContextSchema)
-          : row.requestContextSchema,
+          : row.requestContextSchema) ?? undefined,
       tags: typeof row.tags === 'string' ? safelyParseJSON(row.tags) : (row.tags ?? undefined),
       targetType: row.targetType ?? undefined,
       targetIds: typeof row.targetIds === 'string' ? safelyParseJSON(row.targetIds) : (row.targetIds ?? undefined),
@@ -196,10 +198,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       externalId: row.externalId ?? null,
       organizationId: row.organizationId ?? null,
       projectId: row.projectId ?? null,
-      input: typeof row.input === 'string' ? safelyParseJSON(row.input) : row.input,
-      groundTruth: typeof row.groundTruth === 'string' ? safelyParseJSON(row.groundTruth) : row.groundTruth,
-      expectedTrajectory:
-        typeof row.expectedTrajectory === 'string' ? safelyParseJSON(row.expectedTrajectory) : row.expectedTrajectory,
+      input: row.input,
+      groundTruth: row.groundTruth,
+      expectedTrajectory: row.expectedTrajectory,
       toolMocks: (typeof row.toolMocks === 'string' ? safelyParseJSON(row.toolMocks) : row.toolMocks) ?? emptyValue,
       unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
       scorerIds: (typeof row.scorerIds === 'string' ? safelyParseJSON(row.scorerIds) : row.scorerIds) ?? emptyValue,
@@ -517,8 +518,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             validTo: null,
             isDeleted: false,
             input: args.input,
-            groundTruth: args.groundTruth ?? null,
-            expectedTrajectory: args.expectedTrajectory ?? null,
+            groundTruth: args.groundTruth,
+            expectedTrajectory: args.expectedTrajectory,
             toolMocks: args.toolMocks ?? null,
             unmockedToolPolicy: args.unmockedToolPolicy ?? null,
             scorerIds: args.scorerIds ?? null,
@@ -528,7 +529,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             createdAt: now,
             updatedAt: now,
           },
-          { session },
+          { session, ignoreUndefined: true },
         );
 
         await versionsCollection.insertOne(
@@ -688,7 +689,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             isDeleted: false,
             input: mergedInput,
             groundTruth: mergedGroundTruth,
-            expectedTrajectory: mergedExpectedTrajectory ?? null,
+            expectedTrajectory: mergedExpectedTrajectory,
             toolMocks: mergedToolMocks ?? null,
             unmockedToolPolicy: mergedUnmockedToolPolicy ?? null,
             scorerIds: mergedScorerIds ?? null,
@@ -698,7 +699,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             createdAt: existing.createdAt,
             updatedAt: now,
           },
-          { session },
+          { session, ignoreUndefined: true },
         );
         await versionsCollection.insertOne(
           { id: versionId, datasetId: args.datasetId, version: newVersion, createdAt: now },
@@ -789,7 +790,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             isDeleted: true,
             input: existing.input,
             groundTruth: existing.groundTruth,
-            expectedTrajectory: existing.expectedTrajectory ?? null,
+            expectedTrajectory: existing.expectedTrajectory,
             toolMocks: existing.toolMocks ?? null,
             unmockedToolPolicy: existing.unmockedToolPolicy ?? null,
             scorerIds: existing.scorerIds ?? null,
@@ -799,7 +800,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             createdAt: existing.createdAt,
             updatedAt: now,
           },
-          { session },
+          { session, ignoreUndefined: true },
         );
         await versionsCollection.insertOne(
           { id: versionId, datasetId, version: newVersion, createdAt: now },
@@ -987,7 +988,10 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
               createdAt: now,
               updatedAt: now,
             };
-            await itemsCollection.insertOne({ ...item, validTo: null, isDeleted: false }, { session });
+            await itemsCollection.insertOne(
+              { ...item, validTo: null, isDeleted: false },
+              { session, ignoreUndefined: true },
+            );
             resolved.set(item.id, item);
           }
           await versionsCollection.insertOne(
@@ -1080,7 +1084,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           isDeleted: true,
           input: item.input,
           groundTruth: item.groundTruth,
-          expectedTrajectory: item.expectedTrajectory ?? null,
+          expectedTrajectory: item.expectedTrajectory,
           toolMocks: item.toolMocks ?? null,
           unmockedToolPolicy: item.unmockedToolPolicy ?? null,
           scorerIds: item.scorerIds ?? null,
@@ -1099,7 +1103,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         );
 
         // Insert tombstones in batch
-        await itemsCollection.insertMany(tombstones, { session });
+        await itemsCollection.insertMany(tombstones, { session, ignoreUndefined: true });
 
         // Single dataset_version row
         await versionsCollection.insertOne(

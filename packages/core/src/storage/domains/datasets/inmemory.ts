@@ -71,6 +71,10 @@ function toDatasetRecord(record: InternalDatasetRecord): DatasetRecord {
     inputSchema: record.inputSchema ?? undefined,
     groundTruthSchema: record.groundTruthSchema ?? undefined,
     requestContextSchema: record.requestContextSchema ?? undefined,
+    tags: record.tags ?? undefined,
+    targetType: record.targetType ?? undefined,
+    targetIds: record.targetIds ?? undefined,
+    scorerIds: record.scorerIds ?? undefined,
   };
 }
 

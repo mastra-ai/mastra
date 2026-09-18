@@ -67,6 +67,21 @@ function jsonArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
 }
 
+function jsonDataArg(value: unknown): string | null {
+  return value === undefined ? null : JSON.stringify(value);
+}
+
+// Read authored JSON as text so the driver cannot collapse JSON null into SQL NULL
+// or leave a JSON-looking string indistinguishable from serialized JSON.
+const ITEM_SELECT_COLUMNS = Object.keys(DATASET_ITEMS_SCHEMA)
+  .map(column => {
+    const name = quoteIdentifier(column, 'column name');
+    return ['input', 'groundTruth', 'expectedTrajectory'].includes(column)
+      ? `CAST(${name} AS CHAR CHARACTER SET utf8mb4) AS ${name}`
+      : name;
+  })
+  .join(', ');
+
 export class DatasetsMySQL extends DatasetsStorage {
   private pool: Pool;
   private operations: StoreOperationsMySQL;
@@ -229,15 +244,15 @@ export class DatasetsMySQL extends DatasetsStorage {
     return {
       id: row.id as string,
       name: row.name as string,
-      description: row.description as string | undefined,
+      description: (row.description as string | null) ?? undefined,
       metadata: parseJSON<Record<string, unknown>>(row.metadata),
       inputSchema: parseJSON<Record<string, unknown>>(row.inputSchema),
       groundTruthSchema: parseJSON<Record<string, unknown>>(row.groundTruthSchema),
       requestContextSchema: parseJSON<Record<string, unknown>>(row.requestContextSchema),
-      tags: parseJSON<string[]>(row.tags) ?? null,
-      targetType: (row.targetType as TargetType | null | undefined) ?? null,
-      targetIds: parseJSON<string[]>(row.targetIds) ?? null,
-      scorerIds: parseJSON<string[]>(row.scorerIds) ?? null,
+      tags: parseJSON<string[]>(row.tags),
+      targetType: (row.targetType as TargetType | null | undefined) ?? undefined,
+      targetIds: parseJSON<string[]>(row.targetIds),
+      scorerIds: parseJSON<string[]>(row.scorerIds),
       version: row.version as number,
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
@@ -350,9 +365,9 @@ export class DatasetsMySQL extends DatasetsStorage {
         inputSchema: input.inputSchema ?? undefined,
         groundTruthSchema: input.groundTruthSchema ?? undefined,
         requestContextSchema: input.requestContextSchema ?? undefined,
-        targetType: input.targetType ?? null,
-        targetIds: input.targetIds ?? null,
-        scorerIds: input.scorerIds ?? null,
+        targetType: input.targetType ?? undefined,
+        targetIds: input.targetIds ?? undefined,
+        scorerIds: input.scorerIds ?? undefined,
         version: 0,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
@@ -457,10 +472,10 @@ export class DatasetsMySQL extends DatasetsStorage {
         requestContextSchema:
           (args.requestContextSchema !== undefined ? args.requestContextSchema : existing.requestContextSchema) ??
           undefined,
-        tags: (args.tags !== undefined ? args.tags : existing.tags) ?? null,
-        targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? null,
-        targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? null,
-        scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? null,
+        tags: (args.tags !== undefined ? args.tags : existing.tags) ?? undefined,
+        targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? undefined,
+        targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? undefined,
+        scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? undefined,
         updatedAt: data.updatedAt,
       };
     } catch (error) {
@@ -672,8 +687,8 @@ export class DatasetsMySQL extends DatasetsStorage {
           newVersion,
           parentOrganizationId,
           parentProjectId,
-          jsonArg(args.input),
-          jsonArg(args.groundTruth),
+          jsonDataArg(args.input),
+          jsonDataArg(args.groundTruth),
           args.unmockedToolPolicy ?? null,
           jsonArg(args.scorerIds),
           jsonArg(args.metadata),
@@ -734,7 +749,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       await connection.execute(`SELECT id FROM ${tableDatasetsName} WHERE id = ? FOR UPDATE`, [args.datasetId]);
       const [itemRows] = await connection.execute<RowDataPacket[]>(
-        `SELECT * FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+        `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
         [args.id],
       );
       const itemRow = (itemRows as any[])[0];
@@ -765,9 +780,10 @@ export class DatasetsMySQL extends DatasetsStorage {
         });
       }
 
-      const mergedInput = args.input ?? existing.input;
-      const mergedGroundTruth = args.groundTruth ?? existing.groundTruth;
-      const mergedExpectedTrajectory = args.expectedTrajectory ?? existing.expectedTrajectory;
+      const mergedInput = args.input !== undefined ? args.input : existing.input;
+      const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
+      const mergedExpectedTrajectory =
+        args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
       const mergedToolMocks = args.toolMocks ?? existing.toolMocks;
       const mergedUnmockedToolPolicy = args.unmockedToolPolicy ?? existing.unmockedToolPolicy;
       const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
@@ -805,9 +821,9 @@ export class DatasetsMySQL extends DatasetsStorage {
           existing.externalId ?? null,
           parentOrganizationId,
           parentProjectId,
-          jsonArg(mergedInput),
-          jsonArg(mergedGroundTruth),
-          jsonArg(mergedExpectedTrajectory),
+          jsonDataArg(mergedInput),
+          jsonDataArg(mergedGroundTruth),
+          jsonDataArg(mergedExpectedTrajectory),
           jsonArg(mergedToolMocks),
           mergedUnmockedToolPolicy ?? null,
           jsonArg(mergedScorerIds),
@@ -872,7 +888,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       await connection.execute(`SELECT id FROM ${tableDatasetsName} WHERE id = ? FOR UPDATE`, [datasetId]);
       const [itemRows] = await connection.execute<RowDataPacket[]>(
-        `SELECT * FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+        `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
         [id],
       );
       const itemRow = (itemRows as any[])[0];
@@ -920,9 +936,9 @@ export class DatasetsMySQL extends DatasetsStorage {
           existing.externalId ?? null,
           parentOrganizationId,
           parentProjectId,
-          jsonArg(existing.input),
-          jsonArg(existing.groundTruth),
-          jsonArg(existing.expectedTrajectory),
+          jsonDataArg(existing.input),
+          jsonDataArg(existing.groundTruth),
+          jsonDataArg(existing.expectedTrajectory),
           jsonArg(existing.toolMocks),
           existing.unmockedToolPolicy ?? null,
           jsonArg(existing.scorerIds),
@@ -1020,12 +1036,12 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       if (args.datasetVersion !== undefined) {
         [rows] = await this.pool.execute<RowDataPacket[]>(
-          `SELECT * FROM ${tableItemsName} WHERE \`id\` = ? AND \`datasetVersion\` <= ? AND (\`validTo\` IS NULL OR \`validTo\` > ?) AND \`isDeleted\` = 0 ORDER BY \`datasetVersion\` DESC LIMIT 1`,
+          `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE \`id\` = ? AND \`datasetVersion\` <= ? AND (\`validTo\` IS NULL OR \`validTo\` > ?) AND \`isDeleted\` = 0 ORDER BY \`datasetVersion\` DESC LIMIT 1`,
           [args.id, args.datasetVersion, args.datasetVersion],
         );
       } else {
         [rows] = await this.pool.execute<RowDataPacket[]>(
-          `SELECT * FROM ${tableItemsName} WHERE \`id\` = ? AND \`validTo\` IS NULL AND \`isDeleted\` = 0`,
+          `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE \`id\` = ? AND \`validTo\` IS NULL AND \`isDeleted\` = 0`,
           [args.id],
         );
       }
@@ -1047,7 +1063,7 @@ export class DatasetsMySQL extends DatasetsStorage {
     try {
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${tableItemsName} WHERE \`datasetId\` = ? AND \`datasetVersion\` <= ? AND (\`validTo\` IS NULL OR \`validTo\` > ?) AND \`isDeleted\` = 0 ORDER BY \`createdAt\` DESC, \`id\` ASC`,
+        `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE \`datasetId\` = ? AND \`datasetVersion\` <= ? AND (\`validTo\` IS NULL OR \`validTo\` > ?) AND \`isDeleted\` = 0 ORDER BY \`createdAt\` DESC, \`id\` ASC`,
         [datasetId, version, version],
       );
 
@@ -1068,7 +1084,7 @@ export class DatasetsMySQL extends DatasetsStorage {
     try {
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${tableItemsName} WHERE \`id\` = ? ORDER BY \`datasetVersion\` DESC`,
+        `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE \`id\` = ? ORDER BY \`datasetVersion\` DESC`,
         [itemId],
       );
 
@@ -1140,7 +1156,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${tableItemsName}${whereSql} ORDER BY \`createdAt\` DESC, \`id\` ASC LIMIT ${limitValue} OFFSET ${offset}`,
+        `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName}${whereSql} ORDER BY \`createdAt\` DESC, \`id\` ASC LIMIT ${limitValue} OFFSET ${offset}`,
         params,
       );
 
@@ -1278,7 +1294,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       if (externalIds.length > 0) {
         const placeholders = externalIds.map(() => '?').join(', ');
         const [rows] = await connection.execute<RowDataPacket[]>(
-          `SELECT * FROM ${tableItemsName} WHERE \`datasetId\` = ? AND \`externalId\` IN (${placeholders}) ORDER BY \`datasetVersion\` ASC`,
+          `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE \`datasetId\` = ? AND \`externalId\` IN (${placeholders}) ORDER BY \`datasetVersion\` ASC`,
           [input.datasetId, ...externalIds],
         );
         historyRows = rows.map(row => this.mapItemFull(row));
@@ -1311,9 +1327,9 @@ export class DatasetsMySQL extends DatasetsStorage {
             item.externalId ?? null,
             dataset.organizationId ?? null,
             dataset.projectId ?? null,
-            jsonArg(item.input),
-            jsonArg(item.groundTruth),
-            jsonArg(item.expectedTrajectory),
+            jsonDataArg(item.input),
+            jsonDataArg(item.groundTruth),
+            jsonDataArg(item.expectedTrajectory),
             jsonArg(item.toolMocks),
             item.unmockedToolPolicy ?? null,
             jsonArg(item.scorerIds),
@@ -1385,7 +1401,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const currentItems: DatasetItem[] = [];
       for (const itemId of input.itemIds) {
         const [itemRows] = await connection.execute<RowDataPacket[]>(
-          `SELECT * FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+          `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
           [itemId],
         );
         const row = (itemRows as any[])[0];
@@ -1428,9 +1444,9 @@ export class DatasetsMySQL extends DatasetsStorage {
             item.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
-            jsonArg(item.input),
-            jsonArg(item.groundTruth),
-            jsonArg(item.expectedTrajectory),
+            jsonDataArg(item.input),
+            jsonDataArg(item.groundTruth),
+            jsonDataArg(item.expectedTrajectory),
             jsonArg(item.toolMocks),
             item.unmockedToolPolicy ?? null,
             jsonArg(item.scorerIds),
