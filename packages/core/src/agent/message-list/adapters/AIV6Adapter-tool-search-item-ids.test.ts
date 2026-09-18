@@ -150,6 +150,7 @@ describe('AIV6Adapter — tool_search call/result item id preservation', () => {
     const roundTripped = AIV6Adapter.fromUIMessage(uiMsg);
 
     const toolInvocationPart = findToolInvocationPart(roundTripped, CALL_ITEM_ID);
+    expect(toolInvocationPart?.toolInvocation.state).toBe('output-error');
     const openaiMetadata = toolInvocationPart?.providerMetadata?.openai;
     expect(openaiMetadata?.itemId).toBe(CALL_ITEM_ID);
     expect(openaiMetadata?.[RESPONSE_RESULT_ITEM_ID_KEY]).toBe(RESULT_ITEM_ID);

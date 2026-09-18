@@ -129,8 +129,9 @@ function isUnreplayableHostedToolSearchPart(part: AIV5Type.ToolUIPart): boolean 
     // part's call metadata, so a lone id lands on both. An in-flight call emits no
     // result part, so its call id alone is complete.
     const isCompleted = part.state === 'output-available' || part.state === 'output-error';
-    // Read the result id from the namespace this part actually replays from. A
-    // pair stored under another namespace does not make THIS id replayable.
+    // Read the result id from the same namespace the call id came from -
+    // getResponseProviderItemId picks one namespace, and a pair stored under a
+    // DIFFERENT namespace does not make this id replayable.
     if (!isCompleted || getResponseResultItemId(callProviderMetadata, callItem.provider)) return false;
   }
 
