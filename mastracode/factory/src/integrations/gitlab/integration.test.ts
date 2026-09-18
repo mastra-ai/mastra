@@ -260,6 +260,55 @@ describe('GitLabIntegration', () => {
     expect(detail?.identifier).toBe('mastra/platform#42');
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/projects/mastra%2Fplatform/issues/42');
   });
+
+  it('does not resolve an issue URL through a linked repository on another GitLab host', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    const gitlab = direct(fetchMock);
+    const storage = new SourceControlStorageInMemory('gitlab');
+    gitlab.versionControl.initialize({ storage });
+    gitlab.initialize({ projects: {} as never, auth: fakeRouteAuth({ enabled: false }), sourceControl: storage });
+    const installation = await storage.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'direct',
+      providerMetadata: {
+        host: 'gitlab.other.example',
+        connection: { type: 'oauth', accessToken: 'gitlab-direct-access-token' },
+      },
+    });
+    const repository = await storage.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation.id,
+        externalId: '10',
+        slug: 'mastra/platform',
+        defaultBranch: 'main',
+      },
+    });
+    const connection = await storage.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: 'factory-1',
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    await storage.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace',
+    });
+
+    await expect(
+      gitlab.getIssueForFactoryProject({
+        orgId: 'org-1',
+        factoryProjectId: 'factory-1',
+        issueId: 'https://gitlab.com/mastra/platform/-/issues/42',
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('PlatformGitLabIntegration', () => {
