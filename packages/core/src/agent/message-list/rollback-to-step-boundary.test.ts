@@ -218,8 +218,8 @@ describe('MessageList#rollbackToStepBoundary', () => {
   it('removes the message whole when a processor dropped the boundary and left a twin behind', () => {
     // The dangerous shape: a processor that both clones and *edits* can delete the real boundary
     // while a same-millisecond synthetic marker survives. It is then the only timestamp match, and
-    // believing it would splice below the rejected tool call — exactly the bug being fixed. The
-    // survivor sits at a different marker ordinal than the boundary did, which is how it's caught.
+    // believing it would splice below the rejected tool call — exactly the bug being fixed. What
+    // catches it is the checkpoint: the parts in front of the survivor are not the accepted ones.
     const { list, id } = listWith(assistant([text('accepted', 'msg_1')]));
     const boundary = openBoundary(list);
     partsOf(list, id)!.push(toolCall('call-rejected', 'no'), {
@@ -233,6 +233,42 @@ describe('MessageList#rollbackToStepBoundary', () => {
 
     expect(list.rollbackToStepBoundary(id, boundary)).toBe(true);
     expect(list.get.all.db().find(m => m.id === id)).toBeUndefined();
+  });
+
+  it('removes the message whole when a trim left the survivor with a look-alike prefix', () => {
+    // The harder version of the same attack: the processor drops the accepted tool call *and* the
+    // boundary, so the surviving twin has one tool-invocation in front of it exactly as the
+    // boundary did — the rejected one. Part types alone cannot tell those apart; the tool call id
+    // in the checkpoint can.
+    const { list, id } = listWith(assistant([toolCall('call-accepted')]));
+    const boundary = openBoundary(list);
+    partsOf(list, id)!.push(toolCall('call-rejected', 'no'), {
+      type: 'step-start',
+      createdAt: boundary!.createdAt,
+    });
+    const message = list.get.all.db().find(m => m.id === id)!;
+    const cloned = message.content.parts!.map(part => structuredClone(part));
+    message.content.parts = cloned.slice(2);
+
+    expect(list.rollbackToStepBoundary(id, boundary)).toBe(true);
+    expect(list.get.all.db().find(m => m.id === id)).toBeUndefined();
+  });
+
+  it('will not carry a boundary across to a different message that matches by timestamp', () => {
+    const { list, id } = listWith(assistant([text('accepted', 'msg_1')]));
+    const boundary = openBoundary(list);
+    // Sealed, or the merger folds the next assistant row into this one and there is no twin.
+    list.get.all.db().find(m => m.id === id)!.content.metadata = { mastra: { sealed: true } };
+    const twin = assistant([
+      text('accepted', 'msg_1'),
+      { type: 'step-start', createdAt: boundary!.createdAt },
+      text('rejected', 'msg_2'),
+    ]);
+    list.add([twin], 'response');
+
+    // Same timestamp, same prefix — but a different message, so the checkpoint does not transfer.
+    expect(list.rollbackToStepBoundary(twin.id, boundary)).toBe(true);
+    expect(list.get.all.db().find(m => m.id === twin.id)).toBeUndefined();
   });
 
   it('prefers the held reference even when another marker shares its timestamp', () => {
