@@ -45,7 +45,13 @@ export function Crumb({
 
   return (
     <>
-      <li className={cn('group flex h-form-sm min-w-0 items-center', isCurrent ? 'shrink' : 'shrink-0')}>
+      <li
+        className={cn(
+          'group flex h-form-sm min-w-0 items-center rounded-full',
+          action && [transitions.colors, 'hover:bg-foreground/10 active:bg-foreground/14'],
+          isCurrent ? 'shrink' : 'shrink-0',
+        )}
+      >
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(

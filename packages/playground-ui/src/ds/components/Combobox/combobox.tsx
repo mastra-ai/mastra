@@ -40,6 +40,7 @@ type ComboboxSharedProps = {
   allowCustomValue?: boolean;
   /** Called with the search input text as it changes (and with `''` after a single-mode selection resets it). */
   onInputValueChange?: (value: string) => void;
+  footer?: React.ReactNode;
 };
 
 export type ComboboxSingleProps = ComboboxSharedProps & {
@@ -96,6 +97,7 @@ export function Combobox(props: ComboboxProps) {
     align = 'start',
     allowCustomValue = false,
     onInputValueChange,
+    footer,
   } = props;
   const multiple = isMultipleCombobox(props);
   const clearLabel = multiple ? props.clearLabel : undefined;
@@ -200,6 +202,7 @@ export function Combobox(props: ComboboxProps) {
                 </BaseCombobox.List>
               </FluidMenuItems>
             </div>
+            {footer ? <div className="border-border border-t p-1">{footer}</div> : null}
             {selectedValues.length > 0 && clearLabel ? (
               <div className={cn('border-t', 'border-border', 'p-1')}>
                 <Button

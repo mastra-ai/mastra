@@ -71,6 +71,7 @@ describe('BreadcrumbBar', () => {
       expect(markup).toContain('Production project');
       expect(markup).toContain('aria-label="Exit Production project"');
       expect(markup).toContain('group-hover:text-foreground');
+      expect(markup).toContain('hover:bg-foreground/10');
     });
 
     it('renders separators as hidden list items', () => {

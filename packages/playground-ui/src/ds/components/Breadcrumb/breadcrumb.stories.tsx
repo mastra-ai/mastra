@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CircleCheckIcon, LoaderIcon, XIcon } from 'lucide-react';
+import { ArrowLeftIcon, CircleCheckIcon, LoaderIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { AgentIcon } from '../../icons/AgentIcon';
@@ -108,40 +108,29 @@ const projects = [
   { label: 'Development project', value: 'development' },
 ];
 
-interface ProjectActionsProps {
-  onExit: () => void;
-  onProjectChange: (value: string) => void;
-  project: string;
-}
-
-const ProjectActions = ({ onExit, onProjectChange, project }: ProjectActionsProps) => (
-  <span className="flex items-center">
-    <Combobox
-      options={projects}
-      value={project}
-      onValueChange={onProjectChange}
+const ProjectExitAction = ({ onExit }: { onExit: () => void }) => (
+  <span
+    className={cn(
+      'flex max-w-0 shrink-0 items-center overflow-hidden opacity-0',
+      'transition-[max-width,opacity] duration-normal ease-in-out motion-reduce:transition-none',
+      'group-focus-within:max-w-6 group-focus-within:opacity-100 group-hover:max-w-6 group-hover:opacity-100 pointer-coarse:max-w-6 pointer-coarse:opacity-100',
+    )}
+  >
+    <Button
       variant="ghost"
       size="icon-sm"
-      aria-label="Switch project"
-    />
-    <span
-      className={cn(
-        'flex max-w-0 shrink-0 items-center overflow-hidden opacity-0',
-        'transition-[max-width,opacity] duration-normal ease-in-out motion-reduce:transition-none',
-        'group-focus-within:max-w-6 group-focus-within:opacity-100 group-hover:max-w-6 group-hover:opacity-100 pointer-coarse:max-w-6 pointer-coarse:opacity-100',
-      )}
+      className="shrink-0 hover:!bg-transparent active:!bg-transparent"
+      aria-label="Exit project"
+      onClick={onExit}
     >
-      <Button variant="ghost" size="icon-xs" aria-label="Exit project" onClick={onExit}>
-        <XIcon />
-      </Button>
-    </span>
+      <XIcon className="!size-4" />
+    </Button>
   </span>
 );
 
 function WithActionExample() {
   const [project, setProject] = useState('production');
   const [showProject, setShowProject] = useState(true);
-  const projectLabel = projects.find(option => option.value === project)?.label;
 
   return (
     <Breadcrumb.Bar icon={<WorkspacesIcon />} actions={<Button size="sm">Deploy</Button>}>
@@ -155,11 +144,30 @@ function WithActionExample() {
           <Crumb
             as="span"
             isCurrent
-            action={
-              <ProjectActions project={project} onProjectChange={setProject} onExit={() => setShowProject(false)} />
-            }
+            className="px-0"
+            action={<ProjectExitAction onExit={() => setShowProject(false)} />}
           >
-            {projectLabel}
+            <Combobox
+              options={projects}
+              value={project}
+              onValueChange={setProject}
+              variant="ghost"
+              size="sm"
+              className="hover:!bg-transparent active:!bg-transparent data-[popup-open]:!bg-transparent"
+              aria-label="Switch project"
+              footer={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  className="w-full justify-start"
+                  icon={<ArrowLeftIcon />}
+                  onClick={() => setShowProject(false)}
+                >
+                  Back to projects
+                </Button>
+              }
+            />
           </Crumb>
         </Breadcrumb.Item>
       )}

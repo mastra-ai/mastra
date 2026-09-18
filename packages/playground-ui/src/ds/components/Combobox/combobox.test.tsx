@@ -113,6 +113,25 @@ describe('Combobox', () => {
     });
   });
 
+  it('renders a custom popup footer', async () => {
+    const onBack = vi.fn();
+    render(
+      <Combobox
+        options={options}
+        footer={
+          <button type="button" onClick={onBack}>
+            Back to providers
+          </button>
+        }
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Back to providers' }));
+
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
   it('clears a multi-selection from the popup footer', async () => {
     const onValueChange = vi.fn();
     render(
