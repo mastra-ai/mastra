@@ -26,6 +26,7 @@ import type {
   AgentThreadPeerAdvertisement,
   AgentThreadPeerInfo,
   AgentThreadSubscription,
+  AgentUpdateThreadPeerOptions,
   DiscoverAgentThreadPeersOptions,
   CancelQueuedAgentMessagesOptions,
   CancelQueuedAgentMessagesResult,
@@ -156,9 +157,17 @@ type AgentThreadRunSuspension = {
   kind: 'approval' | 'generic-tool';
 };
 
+type AgentThreadRunContinuation<OUTPUT = unknown> = {
+  sourceOutput: MastraModelOutput<OUTPUT>;
+  canContinue: () => boolean;
+};
+
 type AgentThreadRunRecord<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
+  /** The source output that owns the subscriber-facing broadcast. */
   output: MastraModelOutput<OUTPUT>;
+  /** The latest execution segment attached to a suspension-spanning broadcast. */
+  currentSegmentOutput?: MastraModelOutput<OUTPUT>;
   runId: string;
   streamId: string;
   streamSeq: number;
@@ -172,6 +181,8 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   createSubscriberStream?: () => ReadableStream<unknown>;
   /** Settles once every stream-part broadcast publish for this run completed. */
   broadcastFinished?: Promise<void>;
+  /** Present only while the broadcast may accept resumed execution segments. */
+  continuation?: AgentThreadRunContinuation<OUTPUT>;
 };
 
 type PreparedThreadRun = {
@@ -265,14 +276,22 @@ export type AgentThreadState = 'active' | 'idle';
 
 export type ActiveThreadRun = { runId: string; resourceId?: string; threadId: string };
 
+type AgentThreadRunContinuationMode = 'across-suspension';
+
 export type AgentThreadStrictRegistrationOptions = {
   strict: true;
+  continuation?: AgentThreadRunContinuationMode;
   /**
    * Revalidates ownership held outside this runtime (for example, a durable
    * recovery lease). A validation failure rolls back local registration but
    * deliberately leaves the same-run thread lease intact for the new owner.
    */
   validate?: () => void | Promise<void>;
+};
+
+type AgentThreadStreamRegistrationOptions = {
+  strict?: false;
+  continuation?: AgentThreadRunContinuationMode;
 };
 
 export type AgentThreadRunRegistration = {
@@ -619,14 +638,11 @@ export class AgentThreadStreamRuntime {
     );
   }
 
-  #isActivelyRunning(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>) {
-    return (
-      record.output.status === 'running' &&
-      record.lifecycle !== 'suspending' &&
-      record.lifecycle !== 'suspended' &&
-      !record.suspensions?.size &&
-      !this.#isSuspendedRun(state, record.runId)
-    );
+  #isActivelyRunning(record: AgentThreadRunRecord<any>) {
+    // Activity is derived from the current execution segment and the record lifecycle only.
+    // Pending sibling suspensions legitimately coexist with an actively running resumed
+    // segment (partial resume), so suspension bookkeeping must not make the run look idle.
+    return (record.currentSegmentOutput ?? record.output).status === 'running' && record.lifecycle === 'running';
   }
 
   #serializeSignal(signal: CreatedAgentSignal): SerializableAgentSignal {
@@ -919,6 +935,23 @@ export class AgentThreadStreamRuntime {
     return { claimed: true, unsubscribe };
   }
 
+  updateThreadPeerAdvertisement(
+    agent: Agent<any, any, any, any>,
+    options: { resourceId: string; threadId: string; peer: AgentUpdateThreadPeerOptions },
+    pubsub?: PubSub,
+  ): boolean {
+    const state = this.#getState(this.#getPubSub(pubsub));
+    const key = this.#threadKey(options.resourceId, options.threadId);
+    const owner = state.claimedThreadOwners.get(key);
+    if (!owner?.peer || owner.agent.id !== agent.id) return false;
+
+    const peer = owner.peer;
+    if (Object.hasOwn(options.peer, 'label')) peer.label = options.peer.label;
+    if (Object.hasOwn(options.peer, 'title')) peer.title = options.peer.title;
+    if (Object.hasOwn(options.peer, 'metadata')) peer.metadata = options.peer.metadata;
+    return true;
+  }
+
   async discoverThreadPeers(
     options: DiscoverAgentThreadPeersOptions = {},
     pubsub?: PubSub,
@@ -1194,6 +1227,7 @@ export class AgentThreadStreamRuntime {
     let started = false;
     let done = false;
     let cancelled = false;
+    let failed = false;
     let error: unknown;
     let cancelSource: (() => Promise<void>) | undefined;
     // Resolves once the broadcast pump has drained the source stream AND every
@@ -1241,6 +1275,7 @@ export class AgentThreadStreamRuntime {
       // `broadcastFinished` here so the terminal publish gate (and the lease
       // release/drain behind it) is never stranded on the error path.
       if ((part as { type?: string } | null | undefined)?.type === 'error') {
+        failed = true;
         resolveBroadcastFinished();
       }
     };
@@ -1299,6 +1334,7 @@ export class AgentThreadStreamRuntime {
             }
           }
         } catch (caught) {
+          failed = true;
           error = caught;
         } finally {
           done = true;
@@ -1369,6 +1405,7 @@ export class AgentThreadStreamRuntime {
       createSubscriberStream: createStream,
       startBroadcast: start,
       cancelBroadcast: cancel,
+      canContinueBroadcast: () => started && !done && !cancelled && !failed,
       broadcastFinished,
     };
   }
@@ -1798,6 +1835,58 @@ export class AgentThreadStreamRuntime {
     }
   }
 
+  continueRun<OUTPUT>(
+    agent: Agent<any, any, any, any>,
+    output: MastraModelOutput<OUTPUT>,
+    streamOptions: AgentExecutionOptions<OUTPUT>,
+    pubsub?: PubSub,
+  ): boolean {
+    const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
+    if (!threadId) return false;
+
+    const state = this.#getState(pubsub);
+    this.#sweepStaleSuspendedRecords(state, pubsub);
+    const key = this.#threadKey(resourceId, threadId);
+    const existing = state.threadRunsById.get(output.runId);
+    if (
+      !existing?.continuation?.canContinue() ||
+      existing.agent !== agent ||
+      existing.threadId !== threadId ||
+      existing.resourceId !== resourceId ||
+      state.activeThreadRunIds.get(key) !== output.runId ||
+      state.activeThreadStreamIds.get(key) !== existing.streamId ||
+      (output.status !== 'running' && output.status !== 'suspended') ||
+      existing.lifecycle === 'completed' ||
+      existing.lifecycle === 'failed' ||
+      existing.lifecycle === 'aborted'
+    ) {
+      return false;
+    }
+
+    const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
+    if (resumedToolCallId) this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
+    else this.#clearSuspendedRun(state, output.runId);
+    existing.lifecycle = 'running';
+    existing.streamOptions = streamOptions;
+    existing.currentSegmentOutput = output;
+    // Resume callers may only send an approval and never read this segment.
+    // Drain its native output so completion and subsequent approvals advance.
+    void output.consumeStream();
+    return true;
+  }
+
+  closeRunContinuation<OUTPUT>(ownerOutput: MastraModelOutput<OUTPUT>, pubsub?: PubSub): boolean {
+    const record = this.#getState(pubsub).threadRunsById.get(ownerOutput.runId);
+    if (
+      !record?.continuation ||
+      (record.continuation.sourceOutput !== ownerOutput && record.currentSegmentOutput !== ownerOutput)
+    ) {
+      return false;
+    }
+    record.continuation = undefined;
+    return true;
+  }
+
   registerRun<OUTPUT>(
     agent: Agent<any, any, any, any>,
     output: MastraModelOutput<OUTPUT>,
@@ -1810,13 +1899,14 @@ export class AgentThreadStreamRuntime {
     output: MastraModelOutput<OUTPUT>,
     streamOptions: AgentExecutionOptions<OUTPUT>,
     pubsub?: PubSub,
+    registrationOptions?: AgentThreadStreamRegistrationOptions,
   ): Promise<void> | undefined;
   registerRun<OUTPUT>(
     agent: Agent<any, any, any, any>,
     output: MastraModelOutput<OUTPUT>,
     streamOptions: AgentExecutionOptions<OUTPUT>,
     pubsub?: PubSub,
-    registrationOptions?: AgentThreadStrictRegistrationOptions,
+    registrationOptions?: AgentThreadStrictRegistrationOptions | AgentThreadStreamRegistrationOptions,
   ): Promise<void | AgentThreadRunRegistration> | undefined {
     const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
     if (!threadId) return;
@@ -1833,6 +1923,7 @@ export class AgentThreadStreamRuntime {
       output: outputForSubscribers,
       createSubscriberStream,
       startBroadcast,
+      canContinueBroadcast,
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId);
     const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
@@ -1845,6 +1936,7 @@ export class AgentThreadStreamRuntime {
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
       output: outputForSubscribers,
+      currentSegmentOutput: output,
       runId: output.runId,
       streamId,
       streamSeq,
@@ -1855,6 +1947,10 @@ export class AgentThreadStreamRuntime {
       createSubscriberStream,
       suspensions: state.suspensionMetadataByRunId.get(output.runId),
       broadcastFinished,
+      continuation:
+        registrationOptions?.continuation === 'across-suspension'
+          ? { sourceOutput: output, canContinue: canContinueBroadcast }
+          : undefined,
     };
 
     state.threadRunsById.set(output.runId, record);
@@ -1940,11 +2036,13 @@ export class AgentThreadStreamRuntime {
       createSubscriberStream,
       startBroadcast,
       cancelBroadcast,
+      canContinueBroadcast,
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
       output: outputForSubscribers,
+      currentSegmentOutput: output,
       runId: output.runId,
       streamId,
       streamSeq,
@@ -1955,6 +2053,10 @@ export class AgentThreadStreamRuntime {
       createSubscriberStream,
       suspensions: state.suspensionMetadataByRunId.get(output.runId),
       broadcastFinished,
+      continuation:
+        registrationOptions.continuation === 'across-suspension'
+          ? { sourceOutput: output, canContinue: canContinueBroadcast }
+          : undefined,
     };
 
     let rolledBack = false;
@@ -2607,7 +2709,7 @@ export class AgentThreadStreamRuntime {
         if (!this.#isThreadBlockingRun(state, activeRecord)) {
           return;
         }
-        if (activeRecord.agent.id === agent.id && !this.#isActivelyRunning(state, activeRecord)) {
+        if (activeRecord.agent.id === agent.id && !this.#isActivelyRunning(activeRecord)) {
           // Same-agent record that is suspended/suspending: waiting could block indefinitely
           // on human input (resume/approval), so preserve the historical exemption.
           return;
@@ -3233,7 +3335,10 @@ export class AgentThreadStreamRuntime {
 
     return {
       activeRunId,
-      __getCurrentRunRequestContext: () => currentRunRequestContext,
+      __getCurrentRunRequestContext: () => {
+        const record = activeReaderStreamId ? state.threadRunsByStreamId.get(activeReaderStreamId) : undefined;
+        return record ? record.streamOptions.requestContext : currentRunRequestContext;
+      },
       abort: () => this.abortThread(options, resolvedPubSub),
       unsubscribe,
       stream: (async function* () {

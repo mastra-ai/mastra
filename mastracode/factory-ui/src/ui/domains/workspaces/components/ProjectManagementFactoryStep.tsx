@@ -56,21 +56,13 @@ function PlatformProviderOption({
 export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectManagementFactoryStepProps) {
   const linearStatus = useLinearStatusQuery();
   const jiraConnections = usePlatformConnectionsQuery('jira');
-  const gitlabConnections = usePlatformConnectionsQuery('gitlab');
   const incidentConnections = usePlatformConnectionsQuery('incident-io');
   // Only providers whose connect routes are mounted (queries succeed) are
   // offered; a server without Platform credentials shows the Linear-only step.
-  const platformProviders: Array<{ provider: PlatformConnectProviderId; connections: PlatformProviderConnection[] }> =
-    [];
-  if (jiraConnections.isSuccess) {
-    platformProviders.push({ provider: 'jira', connections: jiraConnections.data });
-  }
-  if (gitlabConnections.isSuccess) {
-    platformProviders.push({ provider: 'gitlab', connections: gitlabConnections.data });
-  }
-  if (incidentConnections.isSuccess) {
-    platformProviders.push({ provider: 'incident-io', connections: incidentConnections.data });
-  }
+  const platformProviders: Array<{ provider: PlatformConnectProviderId; connections: PlatformProviderConnection[] }> = [
+    { provider: 'jira' as const, query: jiraConnections },
+    { provider: 'incident-io' as const, query: incidentConnections },
+  ].flatMap(({ provider, query }) => (query.isSuccess ? [{ provider, connections: query.data }] : []));
 
   return (
     <section aria-label="Linear connection" className="border-border1 bg-surface2/80 max-w-xl rounded-2xl border p-5">

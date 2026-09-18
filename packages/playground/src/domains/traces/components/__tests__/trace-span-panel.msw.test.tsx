@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TraceSpanPanel, type TraceSpanPanelProps } from '../trace-span-panel';
+import { queryPageFromList } from './fixtures/thread-traces';
 import { TRACE_ID, panelTraceSpans, spanDetailById } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -33,6 +34,9 @@ const threadTraceList = (count: number) => ({
 const installHandlers = ({ threadTraceCount = 2 }: { threadTraceCount?: number } = {}) => {
   onSpanDetailRequest.mockClear();
   server.use(
+    http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () =>
+      HttpResponse.json(queryPageFromList(threadTraceList(threadTraceCount))),
+    ),
     // Registered before the `:traceId` route so the literal `traces/light` segment wins.
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () =>
       HttpResponse.json(threadTraceList(threadTraceCount)),
@@ -130,15 +134,15 @@ describe('TraceSpanPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when the thread has other traces and no in-place swap is wired, then "View full thread" links to the advanced thread view', async () => {
+    it('when the thread has other traces but no in-place swap is wired, then no "View full thread" action is shown', async () => {
       installHandlers({ threadTraceCount: 2 });
       const { queryClient } = renderPanel({ showPartialThread: true });
 
-      const link = await screen.findByRole('link', { name: 'View full thread' });
-      expect(link.getAttribute('href')).toBe(
-        '/agents/weather-agent/threads/weather-thread?variant=advanced&traceId=trace-panel',
-      );
+      await screen.findByText('No rain is expected.');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      expect(screen.queryByRole('link', { name: 'View full thread' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'View full thread' })).toBeNull();
     });
 
     it('when this trace is the only one in its thread, then no "View full thread" action is shown', async () => {
@@ -251,14 +255,14 @@ describe('TraceSpanPanel', () => {
     expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByLabelText('Next span'));
+    fireEvent.click(screen.getByLabelText('Go to next span'));
     expect(await screen.findByRole('heading', { name: /span-child-2/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByLabelText('Previous span'));
+    fireEvent.click(screen.getByLabelText('Go to previous span'));
     expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
 
-    fireEvent.click(screen.getByLabelText('Previous span'));
+    fireEvent.click(screen.getByLabelText('Go to previous span'));
     expect(await screen.findByRole('heading', { name: /span-root/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });

@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "756b09eb812bc22a",
+      "hash": "37ee7ac12f135ebd",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -42,6 +42,17 @@
                   "name": {
                     "type": "string"
                   },
+                  "suspendedToolCallId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The toolCallId of the suspended tool to resume"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "anyOf": [
                       {
@@ -66,11 +77,13 @@
                 },
                 "required": [
                   "name",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
                 "additionalProperties": false,
                 "x-optional": [
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]
@@ -88,6 +101,17 @@
                   "name": {
                     "type": "string"
                   },
+                  "suspendedToolCallId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The toolCallId of the suspended tool to resume"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "anyOf": [
                       {
@@ -112,11 +136,13 @@
                 },
                 "required": [
                   "name",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
                 "additionalProperties": false,
                 "x-optional": [
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]
@@ -347,7 +373,7 @@
       }
     },
     {
-      "hash": "71617f04de8e4e37",
+      "hash": "9d29db2844993352",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -356,7 +382,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_GEe6EEmSmSgFafyCAP2iMEMh\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\",\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000003\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+              "content": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_GEe6EEmSmSgFafyCAP2iMEMh\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\"},\"type\":\"suspension\",\"runId\":\"NORMALIZED\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the toolCallId of the suspended tool as suspendedToolCallId to the tool call arguments/input. This identifies the exact framework-persisted suspension to resume.\n                      You may also add the runId as suspendedToolRunId for compatibility, but it does not select the suspension and must match the runId associated with suspendedToolCallId.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolCallId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data.\n                      "
             },
             {
               "role": "user",
@@ -389,6 +415,17 @@
                   "name": {
                     "type": "string"
                   },
+                  "suspendedToolCallId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The toolCallId of the suspended tool to resume"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "anyOf": [
                       {
@@ -413,11 +450,13 @@
                 },
                 "required": [
                   "name",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
                 "additionalProperties": false,
                 "x-optional": [
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]
@@ -435,6 +474,17 @@
                   "name": {
                     "type": "string"
                   },
+                  "suspendedToolCallId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The toolCallId of the suspended tool to resume"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "anyOf": [
                       {
@@ -459,11 +509,13 @@
                 },
                 "required": [
                   "name",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
                 "additionalProperties": false,
                 "x-optional": [
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]
@@ -524,7 +576,7 @@
               "id": "fc_0e40ffa164670c1a006a7d08f82f9481999a866946e7173cc4",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"name\":\"Dero Israel\",\"suspendedToolRunId\":\"00000000-0000-4000-8000-000000000003\",\"resumeData\":{\"age\":25}}",
+              "arguments": "{\"name\":\"Dero Israel\",\"suspendedToolCallId\":\"call_GEe6EEmSmSgFafyCAP2iMEMh\",\"resumeData\":{\"age\":25}}",
               "call_id": "call_ENQq0saqgfoOARq02CJqeQnp",
               "name": "findUserTool"
             }
@@ -686,7 +738,7 @@
       }
     },
     {
-      "hash": "943f5234b0baa179",
+      "hash": "026ccb1031bcb214",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -695,7 +747,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are an agent that can get list of users using findUserTool."
+              "content": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_GEe6EEmSmSgFafyCAP2iMEMh\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\"},\"type\":\"suspension\",\"runId\":\"NORMALIZED\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the toolCallId of the suspended tool as suspendedToolCallId to the tool call arguments/input. This identifies the exact framework-persisted suspension to resume.\n                      You may also add the runId as suspendedToolRunId for compatibility, but it does not select the suspension and must match the runId associated with suspendedToolCallId.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolCallId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data.\n                      "
             },
             {
               "role": "user",
@@ -737,6 +789,17 @@
                   "name": {
                     "type": "string"
                   },
+                  "suspendedToolCallId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The toolCallId of the suspended tool to resume"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "anyOf": [
                       {
@@ -761,11 +824,13 @@
                 },
                 "required": [
                   "name",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
                 "additionalProperties": false,
                 "x-optional": [
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]
@@ -783,6 +848,17 @@
                   "name": {
                     "type": "string"
                   },
+                  "suspendedToolCallId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The toolCallId of the suspended tool to resume"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "anyOf": [
                       {
@@ -807,11 +883,13 @@
                 },
                 "required": [
                   "name",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
                 "additionalProperties": false,
                 "x-optional": [
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]

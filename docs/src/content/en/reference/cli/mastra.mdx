@@ -1079,6 +1079,90 @@ See the [Storage migration guide](/reference/migrations/upgrade-to-v1/storage#du
 
 It accepts [common flags][common-flags].
 
+## `mastra traces import`
+
+Imports historical traces from a supported observability provider into an existing Mastra Platform project. The command prepares complete traces locally, uploads whole-trace batches, supports resume, and verifies a sample through Mastra Platform.
+
+```bash
+mastra traces import <provider> [options]
+```
+
+The following provider is currently supported:
+
+| Provider | Argument | Requirements |
+| - | - | - |
+| Langfuse | `langfuse` | Langfuse Cloud or self-hosted Langfuse v4 or later |
+
+See [Import existing traces](/docs/mastra-platform/observability#import-existing-traces) for the complete workflow, data mapping, local-file lifecycle, and limits.
+
+### Options
+
+#### `--project <name|slug|id>`
+
+Selects the destination Mastra Platform project. `MASTRA_PROJECT_ID` takes precedence when set. Without either value, the command uses the project linked in `.mastra-project.json`.
+
+#### `--from <date>`
+
+Sets the inclusive start of the import window as an ISO 8601 date or timestamp. It defaults to 30 days before `--to`, clamped to the current 30-day Platform retention boundary.
+
+#### `--to <date>`
+
+Sets the exclusive end of the import window as an ISO 8601 date or timestamp. It defaults to the time when the import starts and can't be in the future.
+
+The complete window must fall within the current 30-day Platform retention period, `--from` must be earlier than `--to`, and the window can't exceed 30 days.
+
+#### `--dry-run`
+
+Reads the source and prepares valid traces locally without uploading them. The command writes a report and prints a command that resumes the prepared import.
+
+#### `--resume <import-id>`
+
+Resumes a prepared import using its saved provider, destination project, date window, and acknowledged progress. Use the same destination project shown in the generated resume command. This option can't be combined with `--from`, `--to`, or `--dry-run`.
+
+#### `-y, --yes`
+
+Uploads without asking for confirmation.
+
+### Environment variables
+
+The command loads `.env` and `.env.local` from the current directory.
+
+| Variable | Required | Description |
+| - | - | - |
+| `LANGFUSE_PUBLIC_KEY` | For new Langfuse imports | Public project API key. |
+| `LANGFUSE_SECRET_KEY` | For new Langfuse imports | Secret project API key. |
+| `LANGFUSE_BASE_URL` | No | Langfuse host. Defaults to `https://cloud.langfuse.com`. |
+| `MASTRA_API_TOKEN` | For headless authentication | Mastra Platform API token. Without it, the command uses credentials from `mastra auth login`. |
+| `MASTRA_ORG_ID` | With `MASTRA_API_TOKEN` | Organization that owns the destination project. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | For upload and read-back with interactive login | Mastra Platform access token for the destination. Not required for `--dry-run` or when `MASTRA_API_TOKEN` is set. |
+| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. Takes precedence over `--project`. |
+
+### Examples
+
+Preview the default 30-day window without uploading:
+
+```bash
+mastra traces import langfuse --project my-project --dry-run
+```
+
+Import a smaller date window without a confirmation prompt:
+
+```bash
+mastra traces import langfuse \
+  --project my-project \
+  --from "$FROM" \
+  --to "$TO" \
+  --yes
+```
+
+Resume an existing import:
+
+```bash
+mastra traces import langfuse \
+  --resume 00000000-0000-0000-0000-000000000000 \
+  --project my-project
+```
+
 ## `mastra api`
 
 Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra platform projects, self-hosted Mastra servers, or hosted Mastra Platform Observability APIs.
@@ -1617,7 +1701,7 @@ mastra api metric label-values '{"metricName":"latency_ms","labelKey":"model","p
 
 #### Observability with `curl`
 
-You can call the hosted observability API directly with your platform access token and project ID. The examples below use the United States host. Substitute `https://observability.eu.mastra.ai` for a European Union environment. The [hosted feedback query API](/docs/mastra-platform/api#observability-feedback-query-api) documents feedback endpoints that don't have CLI commands:
+You can call the hosted observability API directly with your platform access token and project ID. The examples below use the United States host. Substitute `https://observability.eu.mastra.ai` for a European Union environment. The [Feedback API](/docs/mastra-platform/api#feedback-api) documents feedback endpoints that don't have CLI commands:
 
 ```bash
 curl -sS "https://observability.mastra.ai/api/observability/traces?page=0&perPage=20" \

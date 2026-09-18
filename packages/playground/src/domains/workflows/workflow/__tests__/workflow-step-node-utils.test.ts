@@ -1,4 +1,4 @@
-import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
+import type { SerializedSingleStepEntry, SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { describe, expect, it } from 'vitest';
 import { constructNodesAndEdges } from '../utils';
 import {
@@ -8,10 +8,10 @@ import {
 } from '../workflow-step-node-utils';
 
 const step = (id: string) => ({ id, description: `${id} description` });
-const stepEntry = (id: string): SerializedStepFlowEntry => ({ type: 'step', step: step(id) });
+const stepEntry = (id: string): SerializedSingleStepEntry => ({ type: 'step', step: step(id) });
 
 describe('resolveWorkflowGraphStep', () => {
-  it.each([
+  it.each<[SerializedStepFlowEntry, string]>([
     [stepEntry('regular'), 'step'],
     [{ type: 'step', step: { ...step('map'), mapConfig: 'return input' } }, 'map-step'],
     [{ type: 'agent', id: 'writer', agentId: 'writer-agent' }, 'agent-step'],
@@ -58,7 +58,7 @@ describe('resolveWorkflowGraphStep', () => {
       },
       'nested-workflow-step',
     ],
-  ] as [SerializedStepFlowEntry, string][])('maps %s to %s', (flow, kind) => {
+  ])('maps %s to %s', (flow, kind) => {
     expect(resolveWorkflowGraphStep(flow).kind).toBe(kind);
   });
 
@@ -66,11 +66,11 @@ describe('resolveWorkflowGraphStep', () => {
     const agent = resolveWorkflowGraphStep({ type: 'agent', id: 'writer', agentId: 'writer-agent' });
     expect(agent.kind).toBe('agent-step');
     expect(agent.id).toBe('writer');
-    expect((agent.flow as Extract<SerializedStepFlowEntry, { type: 'agent' }>).agentId).toBe('writer-agent');
+    expect(agent.flow.type === 'agent' && agent.flow.agentId).toBe('writer-agent');
 
     const tool = resolveWorkflowGraphStep({ type: 'tool', id: 'double', toolId: 'double-tool' });
     expect(tool.kind).toBe('tool-step');
-    expect((tool.flow as Extract<SerializedStepFlowEntry, { type: 'tool' }>).toolId).toBe('double-tool');
+    expect(tool.flow.type === 'tool' && tool.flow.toolId).toBe('double-tool');
 
     // Regression: the nested-workflow shim step used to expose the registry key
     // (workflowId) as step.id instead of the declared call-site id.
@@ -83,7 +83,7 @@ describe('resolveWorkflowGraphStep', () => {
     expect(nested.kind).toBe('nested-workflow-step');
     expect(nested.id).toBe('call-site-id');
     expect(nested.step?.id).toBe('call-site-id');
-    expect((nested.flow as Extract<SerializedStepFlowEntry, { type: 'workflow' }>).workflowId).toBe('registry-wf');
+    expect(nested.flow.type === 'workflow' && nested.flow.workflowId).toBe('registry-wf');
   });
 
   it('preserves mapConfig and declarative fields for entries nested in foreach / loop', () => {
@@ -123,9 +123,7 @@ describe('resolveWorkflowGraphStep', () => {
         { type: 'tool', id: 't', toolId: 't-tool' },
       ],
     };
-    const children = (parallel as Extract<SerializedStepFlowEntry, { type: 'parallel' }>).steps.map(
-      child => resolveWorkflowGraphStep(child).kind,
-    );
+    const children = parallel.steps.map(child => resolveWorkflowGraphStep(child).kind);
     expect(children).toEqual(['agent-step', 'tool-step']);
   });
 
@@ -160,16 +158,12 @@ describe('resolveWorkflowGraphStep', () => {
     });
 
     const stepNodes = nodes.filter(
-      node => node.type === WORKFLOW_STEP_NODE_TYPE && !('nodeRole' in node.data && node.data.nodeRole === 'condition'),
+      (node): node is Extract<typeof node, { type: typeof WORKFLOW_STEP_NODE_TYPE }> =>
+        node.type === WORKFLOW_STEP_NODE_TYPE && node.data.nodeRole !== 'condition',
     );
     expect(stepNodes).toHaveLength(1);
     expect(stepNodes[0].id).toBe('node-sub-wf');
-    const data = stepNodes[0].data as {
-      stepId?: string;
-      workflowStep: { kind: string };
-      stepGraph?: SerializedStepFlowEntry[];
-      description?: string;
-    };
+    const data = stepNodes[0].data;
     expect(data.stepId).toBe('sub-wf');
     expect(data.workflowStep.kind).toBe('nested-workflow-step');
     expect(data.stepGraph).toEqual(nestedFlow);
@@ -192,17 +186,15 @@ describe('resolveWorkflowGraphStep', () => {
           ],
           serializedConditions: [{ id: 'has-blockers', fn: 'stepResults.detect-blockers.hasBlockers' }],
         },
-      ] as SerializedStepFlowEntry[],
+      ],
     });
 
     const stepNodes = nodes.filter(
-      node => node.type === WORKFLOW_STEP_NODE_TYPE && !('nodeRole' in node.data && node.data.nodeRole === 'condition'),
+      (node): node is Extract<typeof node, { type: typeof WORKFLOW_STEP_NODE_TYPE }> =>
+        node.type === WORKFLOW_STEP_NODE_TYPE && node.data.nodeRole !== 'condition',
     );
     expect(stepNodes).toHaveLength(1);
-    const data = stepNodes[0].data as {
-      workflowStep: { kind: string };
-      stepGraph?: SerializedStepFlowEntry[];
-    };
+    const data = stepNodes[0].data;
     expect(data.workflowStep.kind).toBe('nested-workflow-step');
     expect(data.stepGraph).toEqual(nestedFlow);
   });
@@ -231,23 +223,13 @@ describe('resolveWorkflowGraphStep', () => {
     expect(stepNodes.map(node => node.data.workflowStep.kind)).toEqual(['step', 'map-step', 'sleep-step']);
     expect(stepNodes[0].data.withoutTopHandle).toBe(false);
     expect(stepNodes.at(-1)?.data.withoutBottomHandle).toBe(false);
-    expect(
-      edges.some(
-        edge =>
-          edge.id === 'edge-boundary-boundary-start-node-regular' &&
-          edge.source === 'boundary-start' &&
-          edge.target === 'node-regular' &&
-          edge.data?.nextStepId === 'regular',
-      ),
-    ).toBe(true);
-    expect(
-      edges.some(
-        edge =>
-          edge.id === 'edge-boundary-node-sleep-boundary-end' &&
-          edge.source === 'node-sleep' &&
-          edge.target === 'boundary-end',
-      ),
-    ).toBe(true);
+    expect(edges.map(edge => edge.id)).toEqual([
+      'edge-boundary-start-node-regular',
+      'edge-node-regular-node-map',
+      'edge-node-map-node-sleep',
+      'edge-node-sleep-boundary-end',
+    ]);
+    expect(edges[0].data?.nextStepId).toBe('regular');
   });
 
   it('namespaces graph IDs by domain while preserving raw workflow metadata', () => {
@@ -309,7 +291,7 @@ describe('resolveWorkflowGraphStep', () => {
             { id: 'low-branch', fn: 'inputData.value <= 10' },
           ],
         },
-      ] as unknown as SerializedStepFlowEntry[],
+      ],
     });
 
     const conditionNodes = nodes.filter(
@@ -329,11 +311,11 @@ describe('resolveWorkflowGraphStep', () => {
       stepGraph: [
         {
           type: 'loop',
-          step: step('increment'),
+          step: stepEntry('increment'),
           serializedCondition: { id: 'stop-when-three', fn: 'inputData.count >= 3' },
           loopType: 'dountil',
         },
-      ] as unknown as SerializedStepFlowEntry[],
+      ],
     });
 
     const conditionNodes = nodes.filter(
@@ -342,5 +324,47 @@ describe('resolveWorkflowGraphStep', () => {
     );
     expect(conditionNodes).toHaveLength(1);
     expect(conditionNodes[0].data.conditions).toEqual([{ type: 'dountil', fnString: 'inputData.count >= 3' }]);
+  });
+});
+
+describe('Workflow graph connections', () => {
+  describe('when a step is used consecutively', () => {
+    it('connects both occurrences in order without a self-edge that disconnects Start', () => {
+      const { nodes, edges } = constructNodesAndEdges({ stepGraph: [stepEntry('repeat'), stepEntry('repeat')] });
+      const stepNodes = nodes.filter(node => node.type === WORKFLOW_STEP_NODE_TYPE);
+      expect(stepNodes).toHaveLength(2);
+      expect(edges).toHaveLength(3);
+      expect(edges.map(({ source, target }) => [source, target])).toEqual(
+        expect.arrayContaining([
+          ['boundary-start', stepNodes[0].id],
+          [stepNodes[0].id, stepNodes[1].id],
+          [stepNodes[1].id, 'boundary-end'],
+        ]),
+      );
+    });
+  });
+
+  describe('when the same loop is used more than once', () => {
+    it('preserves both loop bodies and conditions in the execution path', () => {
+      const loop: SerializedStepFlowEntry = {
+        type: 'loop',
+        step: stepEntry('retry'),
+        serializedCondition: { id: 'finished', fn: 'input.done' },
+        loopType: 'dountil',
+      };
+      const { nodes, edges } = constructNodesAndEdges({ stepGraph: [loop, loop] });
+      const stepNodes = nodes.filter(node => node.type === WORKFLOW_STEP_NODE_TYPE);
+      expect(new Set(stepNodes.map(node => node.id)).size).toBe(4);
+      expect(edges).toHaveLength(5);
+      expect(edges.map(({ source, target }) => [source, target])).toEqual(
+        expect.arrayContaining([
+          ['boundary-start', stepNodes[0].id],
+          [stepNodes[0].id, stepNodes[1].id],
+          [stepNodes[1].id, stepNodes[2].id],
+          [stepNodes[2].id, stepNodes[3].id],
+          [stepNodes[3].id, 'boundary-end'],
+        ]),
+      );
+    });
   });
 });

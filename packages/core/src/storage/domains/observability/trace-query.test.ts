@@ -34,10 +34,12 @@ import {
   queryThreadsResultSchema,
   resolveTraceQueryTimeoutMs,
   traceQueryGroupResponseSchema,
+  traceQueryPaginatedTraceResponseSchema,
   traceQueryRequestSchema,
   traceQueryTraceResponseSchema,
   TraceQueryCursorError,
   TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
   TraceQueryValidationError,
   type TraceQueryPredicate,
 } from './trace-query';
@@ -70,9 +72,61 @@ function validationError(fn: () => unknown): TraceQueryValidationError {
 }
 
 describe('traceQueryRequestSchema', () => {
-  it('normalizes page defaults without coercing values', () => {
-    expect(parsed()).toMatchObject({ page: { limit: 100 } });
+  it('leaves omitted keyset pagination for the planner and normalizes page-mode defaults', () => {
+    expect(parsed()).not.toHaveProperty('page');
+    expect(planTraceQuery(parsed())).toMatchObject({ paginationMode: 'keyset', limit: 100 });
+    expect(parsed({ ...baseRequest, pagination: {} })).toMatchObject({ pagination: { page: 0, perPage: 10 } });
+    expect(parsed({ ...baseRequest, pagination: { page: 2, perPage: 100 } })).toMatchObject({
+      pagination: { page: 2, perPage: 100 },
+    });
     expect(traceQueryRequestSchema.safeParse({ ...baseRequest, page: { limit: '10' } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { page: -1 } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { perPage: 0 } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { perPage: 101 } }).success).toBe(false);
+  });
+
+  it('rejects mixed and grouped list-compatible pagination in the request schema', () => {
+    const mixedRequest = { ...baseRequest, page: { limit: 10 }, pagination: { page: 0, perPage: 10 } };
+    const mixedResult = traceQueryRequestSchema.safeParse(mixedRequest);
+    expect(mixedResult.error?.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'custom',
+        path: ['pagination'],
+        message: 'Trace queries cannot combine keyset and page pagination',
+      }),
+    );
+    const mixed = validationError(() => parsed(mixedRequest));
+    expect(mixed.issues).toContainEqual(
+      expect.objectContaining({ code: 'pagination_mode_conflict', path: ['pagination'] }),
+    );
+
+    const groupedRequest = {
+      ...baseRequest,
+      group: { by: ['threadId'] },
+      pagination: { page: 0, perPage: 10 },
+    };
+    const groupedResult = traceQueryRequestSchema.safeParse(groupedRequest);
+    expect(groupedResult.error?.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'custom',
+        path: ['pagination'],
+        message: 'Grouped trace queries do not support page pagination',
+      }),
+    );
+    const grouped = validationError(() => parsed(groupedRequest));
+    expect(grouped.issues).toContainEqual(
+      expect.objectContaining({ code: 'group_pagination_not_supported', path: ['pagination'] }),
+    );
+  });
+
+  it('builds a normalized page plan without cursor state', () => {
+    expect(planTraceQuery(parsed({ ...baseRequest, pagination: { page: 3, perPage: 25 } }))).toMatchObject({
+      result: 'traces',
+      paginationMode: 'page',
+      page: 3,
+      perPage: 25,
+      orderBy: { field: 'startedAt', direction: 'desc' },
+    });
   });
 
   it('rejects unknown and experimental request properties', () => {
@@ -1451,10 +1505,14 @@ describe('trace-query execution timeout contract', () => {
     }
   });
 
-  it('exposes a stable timeout identity without a driver message', () => {
+  it('exposes stable execution-budget identities without driver messages', () => {
     expect(new TraceQueryExecutionError()).toMatchObject({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
       message: 'The trace query exceeded its execution timeout',
+    });
+    expect(new TraceQueryResourceLimitError()).toMatchObject({
+      code: 'TRACE_QUERY_RESOURCE_LIMIT',
+      message: 'The trace query exceeded its resource limit',
     });
   });
 });
@@ -1464,6 +1522,12 @@ describe('trace-query responses and storage capability', () => {
     const trace = {
       traceId: 'trace-1',
       rootSpanId: 'span-1',
+      name: 'Agent run',
+      entityId: 'agent-1',
+      parentSpanId: null,
+      createdAt: '2026-08-01T00:00:00Z',
+      metadata: { customer: { id: 'customer-1' }, labels: ['support'], count: 2 },
+      inputPreview: 'Help with my order',
       threadId: null,
       resourceId: null,
       startedAt: '2026-08-01T00:00:00Z',
@@ -1474,6 +1538,22 @@ describe('trace-query responses and storage capability', () => {
       status: 'success',
     };
     expect(traceQueryTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(true);
+    expect(
+      traceQueryPaginatedTraceResponseSchema.safeParse({
+        traces: [trace],
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+      }).success,
+    ).toBe(true);
+    expect(
+      traceQueryTraceResponseSchema.safeParse({
+        traces: [trace],
+        page: { next: null },
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+      }).success,
+    ).toBe(false);
+    expect(traceQueryPaginatedTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(
+      false,
+    );
     expect(
       traceQueryTraceResponseSchema.safeParse({ traces: [{ ...trace, scores: [] }], page: { next: null } }).success,
     ).toBe(false);

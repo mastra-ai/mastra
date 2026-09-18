@@ -39,12 +39,9 @@ describe('ProjectManagementFactoryStep', () => {
   });
 
   describe('given Platform connect routes are mounted', () => {
-    it('offers Jira, GitLab, and incident.io inline without leaving the wizard', async () => {
+    it('offers Jira and incident.io inline without leaving the wizard', async () => {
       server.use(
         http.get(`${TEST_BASE_URL}/web/integrations/platform/jira/connections`, () =>
-          HttpResponse.json({ connections: [] }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/integrations/platform/gitlab/connections`, () =>
           HttpResponse.json({ connections: [] }),
         ),
         http.get(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`, () =>
@@ -56,9 +53,8 @@ describe('ProjectManagementFactoryStep', () => {
       expect(await screen.findByText('Also sync issues from')).toBeInTheDocument();
       const list = screen.getByRole('list');
       expect(within(list).getByText('Jira')).toBeInTheDocument();
-      expect(within(list).getByText('GitLab')).toBeInTheDocument();
       expect(within(list).getByText('incident.io')).toBeInTheDocument();
-      expect(within(list).getAllByRole('button', { name: 'Connect' })).toHaveLength(3);
+      expect(within(list).getAllByRole('button', { name: 'Connect' })).toHaveLength(2);
     });
   });
 });

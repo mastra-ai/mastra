@@ -1,0 +1,9 @@
+/* The submit row is rendered by the shared form, so only the panel that hosts it can pin it. */
+.workflow-information-panel [data-slot='form-submit-row'] {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-block: 12px;
+  background: var(--surface3);
+  box-shadow: 0 -1px var(--border1);
+}
