@@ -333,6 +333,22 @@ interface CatalogCacheEntry {
 const catalogCache = new Map<string, CatalogCacheEntry>();
 const inflightFetches = new Map<string, Promise<CopilotModelEntry[]>>();
 
+/**
+ * Resolve the account identity for a credential read through `getApiKey`, which
+ * may await a refresh with a rotation landing inside it. The registry is
+ * consulted on both sides of that await, and only an id that survived it names
+ * the account that produced the token: an id that moved describes whichever
+ * account is active *now*, so trusting it would file this fetch's models under
+ * the wrong account and serve them to it. Unidentified is the safe answer — the
+ * caller then skips the TTL cache, exactly as it does when the store exposes no
+ * registry at all. (`AuthStorage` never needs this: its snapshots name their
+ * account.)
+ */
+function readStableAccountId(storage: CredentialStore, idBeforeToken: string | undefined): string | undefined {
+  const idAfterToken = storage.getActiveAccount?.(COPILOT_PROVIDER_ID)?.id;
+  return idBeforeToken !== undefined && idBeforeToken === idAfterToken ? idAfterToken : undefined;
+}
+
 /** Reset the in-process Copilot catalog cache (test seam, also useful after logout). */
 export function clearCopilotCatalogCache(): void {
   catalogCache.clear();
@@ -368,21 +384,29 @@ export async function getCopilotModelCatalog(
     const credential = await storage.getOAuthCredential(COPILOT_PROVIDER_ID);
     if (!credential || credential.type !== 'oauth') return [];
     accessToken = credential.access;
-    accountInstanceId = credential.accountInstanceId ?? storage.getActiveAccount?.(COPILOT_PROVIDER_ID)?.id;
+    // A snapshot that names its account is coherent by construction — the store
+    // read the identity and the token in the same breath. One that does not
+    // cannot be attributed to a registry entry we then read afterwards, because
+    // a rotation may have landed in between; leave it unnamed so the caller
+    // skips the TTL cache instead of guessing. (`AuthStorage` always stamps.)
+    accountInstanceId = credential.accountInstanceId;
     enterpriseUrl = (credential as GitHubCopilotCredentials).enterpriseUrl;
   } else {
+    // This store republishes its registry but not the OAuth snapshot API, so the
+    // identity has to come from the registry. `getApiKey` may await a refresh and
+    // a rotation can land inside it, so bracket the fetch: only an id that held
+    // still names the account that produced this token.
+    const idBeforeToken = storage.getActiveAccount?.(COPILOT_PROVIDER_ID)?.id;
     accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
     if (!accessToken) return [];
+    accountInstanceId = readStableAccountId(storage, idBeforeToken);
     const stored = storage.get(COPILOT_PROVIDER_ID);
     if (stored?.type === 'oauth') {
       enterpriseUrl = (stored as GitHubCopilotCredentials).enterpriseUrl;
     }
-    // A rotation-capable deployed store has no OAuth snapshot API but still
-    // exposes its active registry entry. Use that non-secret id so the catalog
-    // cache stays per account: entitlements are per account, and a constant key
-    // would serve the first account's models to every other one for the rest of
-    // the TTL. Deriving the key from the token is what `cba11389e7` removed.
-    accountInstanceId = storage.getActiveAccount?.(COPILOT_PROVIDER_ID)?.id;
+    // The id is non-secret, and keying per account is what keeps entitlements
+    // (per account, per `github-copilot-catalog.test.ts`) from leaking across a
+    // rotation. Deriving the key from the token is what `cba11389e7` removed.
   }
   const baseUrl = getGitHubCopilotBaseUrl(accessToken, enterpriseUrl);
   // No identity means the store cannot name the account it just served, so the

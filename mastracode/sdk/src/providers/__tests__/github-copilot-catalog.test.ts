@@ -127,6 +127,65 @@ describe('getCopilotModelCatalog', () => {
     expect((fetchMock.mock.calls[1]![1].headers as Record<string, string>).Authorization).toContain('tenant-b');
   });
 
+  it('does not file a fetched catalog under an account that rotated mid-fetch', async () => {
+    // A rotation can land while the token fetch is awaiting (a refresh that
+    // switches the active account). Reading the registry again *after* that
+    // await names a different account than the token just returned, so the
+    // entry gets filed under the new account and answers for it — the same
+    // wrong-entitlements delivery, narrowed to a race rather than removed.
+    let activeAccountId = 'github-copilot:tenant-a';
+    let tokenRequested!: () => void;
+    let releaseToken!: () => void;
+    const tokenReached = new Promise<void>(resolve => {
+      tokenRequested = resolve;
+    });
+    const tokenGate = new Promise<void>(resolve => {
+      releaseToken = resolve;
+    });
+    const deployedStore = {
+      reload: vi.fn(),
+      get: vi.fn(() => ({
+        type: 'oauth',
+        access: 'tid=x;exp=9999999999;',
+        refresh: 'ghu_a',
+        expires: Date.now() + 60_000,
+      })),
+      getStoredApiKey: vi.fn(),
+      getApiKey: vi.fn(async () => {
+        const served = activeAccountId;
+        if (served === 'github-copilot:tenant-a') {
+          tokenRequested();
+          await tokenGate;
+        }
+        return `tid=${served};exp=9999999999;`;
+      }),
+      listAccounts: vi.fn(() => []),
+      getActiveAccount: vi.fn(() => ({ id: activeAccountId })),
+      activateAccount: vi.fn(),
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'model-a', model_picker_enabled: true }] }))
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'model-b', model_picker_enabled: true }] }));
+
+    const { getCopilotModelCatalog } = await import('../github-copilot.js');
+    const first = getCopilotModelCatalog({ authStorage: deployedStore as any });
+    await tokenReached;
+    activeAccountId = 'github-copilot:tenant-b';
+    releaseToken();
+    const firstModels = await first;
+
+    // The identity was not stable across the token fetch, so nothing knew which
+    // account this belonged to and the TTL cache must stay out of it.
+    expect((fetchMock.mock.calls[0]![1].headers as Record<string, string>).Authorization).toContain('tenant-a');
+    expect(firstModels.map(model => model.id)).toEqual(['model-a']);
+
+    const second = await getCopilotModelCatalog({ authStorage: deployedStore as any });
+
+    expect(second.map(model => model.id)).toEqual(['model-b']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((fetchMock.mock.calls[1]![1].headers as Record<string, string>).Authorization).toContain('tenant-b');
+  });
+
   it('does not TTL-cache the fallback catalog when the store cannot name its account', async () => {
     // With no account identity the cache cannot be made credential-distinct, so
     // caching would serve whatever account came first to every later one. The
