@@ -70,11 +70,7 @@ describe('TraceThreadPanel', () => {
       expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      expect(screen.getByRole('heading', { name: `Thread ${THREAD_ID}` })).not.toBeNull();
-      // The messages column carries the same kind of title as the trace panel's "Messages" column.
-      expect(
-        within(screen.getByTestId('thread-view-by-trace')).getByRole('heading', { name: 'Thread' }),
-      ).not.toBeNull();
+      expect(screen.getByRole('heading', { name: /Thread/ }).textContent).toContain(THREAD_ID);
       const row = screen.getByTestId('thread-view-by-trace').querySelector('[data-trace-id="trace-a"]');
       await waitFor(() => expect(scrollIntoView.mock.instances).toContain(row));
       expect(screen.getAllByRole('button', { name: 'Show less' })).toHaveLength(1);

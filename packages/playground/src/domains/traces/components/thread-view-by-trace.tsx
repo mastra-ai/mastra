@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ThreadTrace, useThreadTraceRow } from '@mastra/playground-ui/domains/traces/components/thread-trace';
 import type { ThreadTraceRootProps } from '@mastra/playground-ui/domains/traces/components/thread-trace';
@@ -103,15 +102,6 @@ function LoadedThreadViewByTrace({
   return (
     <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId} onSelectedSpanChange={onSelectedSpanChange}>
       <ThreadTrace.List data-testid="thread-view-by-trace">
-        {/* Same header as the trace panel's Messages column, over the messages column only. */}
-        <div className="sticky top-0 z-10 grid grid-cols-[24rem_minmax(0,1fr)] pr-4 pl-14">
-          {/* `mr-4` mirrors the messages column's `pr-4` so the border stops where the messages do. */}
-          <DataPanel.Header className="border-border1 bg-surface2 mr-4 border-b">
-            <DataPanel.HeaderContent>
-              <DataPanel.Heading>Thread</DataPanel.Heading>
-            </DataPanel.HeaderContent>
-          </DataPanel.Header>
-        </div>
         <ThreadTrace.Rail turns={railTurns} />
         {traceIds.map((traceId, index) => (
           <ThreadTrace.Row key={traceId} traceId={traceId} isFirst={index === 0}>
