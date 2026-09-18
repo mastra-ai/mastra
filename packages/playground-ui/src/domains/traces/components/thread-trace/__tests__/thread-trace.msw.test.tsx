@@ -228,7 +228,7 @@ describe('ThreadTrace', () => {
       renderView();
       await screen.findByText('Recipe lookup');
       fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByRole('button', { name: 'Next span' });
+      await screen.findByRole('button', { name: 'Go to next span' });
 
       fireEvent.click(screen.getByRole('button', { name: 'Go to next span' }));
       await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a-tool;none'));

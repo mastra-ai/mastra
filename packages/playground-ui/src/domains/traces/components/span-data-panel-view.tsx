@@ -65,7 +65,6 @@ export function SpanDataPanelView({
   return (
     <section className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
       <DataPanel.Header>
-        <DataPanel.CloseButton onClick={onClose} />
         <DataPanel.HeaderContent>
           <DataPanel.Heading>
             Span
@@ -80,6 +79,8 @@ export function SpanDataPanelView({
             previousLabel="Go to previous span"
             nextLabel="Go to next span"
           />
+          {/* Nested column: dismissed in place with an X; the back arrow stays on the drawer's top header. */}
+          <DataPanel.CloseButton icon="x" onClick={onClose} />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 

@@ -21,8 +21,9 @@ export function ThreadTraceSpanPanel({ className, panelClassName, ...props }: Th
     <div
       data-slot="thread-trace-span-panel"
       className={cn(
-        'min-h-0 min-w-0 overflow-hidden',
-        selected && 'animate-in pr-4 pb-4 duration-300 fade-in-0',
+        // Same chrome as the span column of the trace panel: flush to the edge, divided by a left border.
+        'flex min-h-0 min-w-0 flex-col overflow-hidden',
+        selected && 'animate-in border-l border-border1 duration-300 fade-in-0',
         className,
       )}
       {...props}
@@ -55,7 +56,7 @@ function SelectedSpanPanel({ traceId, spanId, panelClassName }: SelectedSpanPane
 
   return (
     <SpanDataPanelView
-      className={cn('h-full', panelClassName)}
+      className={panelClassName}
       traceId={traceId}
       spanId={spanId}
       span={spanDetailData?.span}

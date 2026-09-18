@@ -120,13 +120,14 @@ describe('TraceThreadPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when the close button is clicked, then onClose is called', async () => {
+    it('when Escape is pressed, then onClose is called', async () => {
       installHandlers();
       const onClose = vi.fn();
       const { queryClient } = renderPanel({ onClose });
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Close Panel' }));
-      expect(onClose).toHaveBeenCalledTimes(1);
+      const dialog = await screen.findByRole('dialog', { name: `Thread ${THREAD_ID}` });
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
   });

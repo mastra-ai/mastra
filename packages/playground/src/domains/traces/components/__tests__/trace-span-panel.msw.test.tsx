@@ -175,8 +175,9 @@ describe('TraceSpanPanel', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
         expect(onFullThreadOpenChange).toHaveBeenCalledWith(false);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
-        expect(onClose).toHaveBeenCalledTimes(1);
+        // The thread view has no dedicated close arrow (the leading arrow goes back to the trace); the drawer closes via Escape.
+        fireEvent.keyDown(screen.getByRole('dialog', { name: /^Thread / }), { key: 'Escape' });
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
         await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       });
     });

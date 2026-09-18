@@ -1,6 +1,4 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
@@ -23,14 +21,14 @@ export function TraceThreadPanel({ threadId, onBack, onClose, title }: TraceThre
   return (
     <DataPanel open onClose={onClose} title={title ?? `Thread ${threadId}`} size={hasSelectedSpan ? 'full' : 'wide'}>
       <DataPanel.Header>
-        <DataPanel.CloseButton onClick={onClose} />
-        <Button size="sm" variant="ghost" onClick={onBack} aria-label="Back to trace" tooltip="Back to trace">
-          <ArrowLeftIcon />
-        </Button>
-        <DataPanel.Heading>
-          Thread
-          <DataPanel.CopyId id={threadId} />
-        </DataPanel.Heading>
+        {/* The leading arrow leaves this view for the trace it replaced; the drawer itself still closes via Escape / backdrop. */}
+        <DataPanel.CloseButton onClick={onBack} label="Back to trace" tooltip="Back to trace" />
+        <DataPanel.HeaderContent>
+          <DataPanel.Heading>
+            Thread
+            <DataPanel.CopyId id={threadId} />
+          </DataPanel.Heading>
+        </DataPanel.HeaderContent>
       </DataPanel.Header>
       {/* Inside the framed panel the turns' details columns read as one strip: no top rounding, no horizontal borders. */}
       <div className="min-h-0 flex-1 [&_[data-slot=thread-trace-details]]:rounded-t-none [&_[data-slot=thread-trace-details]]:border-y-0">
