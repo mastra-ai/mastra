@@ -3,13 +3,10 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { IntegrationConnection } from '../../capabilities/connection.js';
 import { GitLabApiError } from './api.js';
 import type { GitLabIntegrationBase } from './integration.js';
 
-const TOOL_CONNECTION: IntegrationConnection = { type: 'oauth', accessToken: 'gitlab-tool' };
-
-function createGitLabGetIssueTool(gitlab: GitLabIntegrationBase) {
+function createGitLabGetIssueTool(gitlab: GitLabIntegrationBase, scope: { orgId: string; factoryProjectId: string }) {
   return createTool({
     id: 'gitlab_get_issue',
     description:
@@ -23,7 +20,11 @@ function createGitLabGetIssueTool(gitlab: GitLabIntegrationBase) {
     }),
     execute: async ({ issue }: { issue: string }) => {
       try {
-        const detail = await gitlab.intake.getIssue({ connection: TOOL_CONNECTION, issueId: issue.trim() });
+        const detail = await gitlab.getIssueForFactoryProject({
+          orgId: scope.orgId,
+          factoryProjectId: scope.factoryProjectId,
+          issueId: issue,
+        });
         if (!detail) return { error: `GitLab issue "${issue}" was not found.` };
         return detail;
       } catch (error) {
@@ -45,12 +46,11 @@ export async function buildGitLabAgentTools({
 }): Promise<Record<string, ReturnType<typeof createGitLabGetIssueTool>>> {
   if (!gitlab.authEnabled) return {};
   const ctx = requestContext.get('controller') as
-    | AgentControllerRequestContext<{ factoryProjectId?: string }>
-    | undefined;
+    AgentControllerRequestContext<{ factoryProjectId?: string }> | undefined;
   if (!ctx) return {};
   const projectId = ctx.getState().factoryProjectId ?? ctx.resourceId;
   if (!projectId) return {};
   const orgId = await gitlab.resolveOrgId(projectId);
   if (!orgId || !(await gitlab.hasActiveConnections())) return {};
-  return { gitlab_get_issue: createGitLabGetIssueTool(gitlab) };
+  return { gitlab_get_issue: createGitLabGetIssueTool(gitlab, { orgId, factoryProjectId: projectId }) };
 }

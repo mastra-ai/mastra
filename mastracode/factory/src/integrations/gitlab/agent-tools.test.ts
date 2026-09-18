@@ -22,7 +22,11 @@ function requestContextFor(resourceId: string | undefined, factoryProjectId?: st
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   gitlab = new GitLabIntegration({ accessToken: 'group-token' });
-  gitlab.initialize({ projects: seed.projects, auth: fakeRouteAuth() });
+  gitlab.initialize({
+    projects: seed.projects,
+    auth: fakeRouteAuth(),
+    sourceControl: seed.sourceControl.forIntegration('gitlab'),
+  });
   vi.spyOn(gitlab.intake, 'getIssue').mockImplementation(input => getIssue(input.issueId));
   getIssue.mockReset();
   projectId = '';
@@ -33,6 +37,36 @@ async function seedProject(): Promise<void> {
     orgId: 'org-1',
     userId: 'user-1',
     input: { name: 'Acme app' },
+  });
+  const sourceControl = seed.sourceControl.forIntegration('gitlab');
+  const installation = await sourceControl.installations.upsert({
+    orgId: 'org-1',
+    connectedByUserId: 'user-1',
+    externalId: 'direct',
+    providerMetadata: { host: 'gitlab.com' },
+  });
+  const repository = await sourceControl.repositories.upsert({
+    orgId: 'org-1',
+    input: {
+      installationId: installation.id,
+      externalId: '10',
+      slug: 'mastra/platform',
+      defaultBranch: 'main',
+    },
+  });
+  const connection = await sourceControl.connections.create({
+    orgId: 'org-1',
+    factoryProjectId: project.id,
+    installationId: installation.id,
+    createdByUserId: 'user-1',
+  });
+  await sourceControl.projectRepositories.link({
+    orgId: 'org-1',
+    connectionId: connection.id,
+    repositoryId: repository.id,
+    createdByUserId: 'user-1',
+    sandboxProvider: 'local',
+    sandboxWorkdir: '/workspace/platform',
   });
   projectId = project.id;
 }
@@ -69,6 +103,51 @@ describe('buildGitLabAgentTools', () => {
     });
     expect(getIssue).toHaveBeenCalledWith('mastra/platform#42');
     expect((tools.gitlab_get_issue!.inputSchema as any).safeParse({ issue: '   ' }).success).toBe(false);
+  });
+
+  it('rejects issues outside the Factory project organization before provider access', async () => {
+    await seedProject();
+    const sourceControl = seed.sourceControl.forIntegration('gitlab');
+    const otherProject = await seed.projects.create({
+      orgId: 'org-2',
+      userId: 'user-2',
+      input: { name: 'Secret app' },
+    });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-2',
+      connectedByUserId: 'user-2',
+      externalId: 'direct',
+      providerMetadata: { host: 'gitlab.com' },
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-2',
+      input: {
+        installationId: installation.id,
+        externalId: '99',
+        slug: 'other/secret',
+        defaultBranch: 'main',
+      },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-2',
+      factoryProjectId: otherProject.id,
+      installationId: installation.id,
+      createdByUserId: 'user-2',
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-2',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-2',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace/secret',
+    });
+    const tools = await buildGitLabAgentTools({ gitlab, requestContext: requestContextFor(projectId) });
+
+    await expect((tools.gitlab_get_issue!.execute as any)({ issue: 'other/secret#9' })).resolves.toEqual({
+      error: 'Failed to fetch GitLab issue: GitLab issue is outside the active Factory project.',
+    });
+    expect(getIssue).not.toHaveBeenCalled();
   });
 
   it('maps token failures to an operator-facing error', async () => {
