@@ -13,4 +13,6 @@ Commands that read standard input without being given anything to read — a bar
 await sandbox.executeCommand('/bin/sh', ['-c', 'rg -n "pattern" --files-with-matches | head']);
 ```
 
-`processes.spawn()` is unchanged: it still opens a writable stdin by default so long-running processes can be driven with `sendStdin()`.
+`execute_command` with `background: true` closes standard input too: a background command that reads stdin now exits at end-of-input instead of staying alive until it is killed.
+
+`processes.spawn()` is unchanged: it still opens a writable stdin by default so long-running processes can be driven with `sendStdin()`. Spawns that run to completion pass the new `stdinMode: 'ignore'` option, which the local sandbox honors — as do the Docker and E2B providers in their own releases. Providers whose transports expose no stdin control were never affected.

@@ -1126,6 +1126,18 @@ describe('E2BSandbox', () => {
       );
     });
 
+    it('rejects sendStdin on an ignore-mode process', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      // Spawned with stdin detached, so there is no channel for input. Reject
+      // like the local and Docker handles instead of posting an input RPC.
+      const handle = await sandbox.processes.spawn('cat', { stdinMode: 'ignore' });
+
+      await expect(handle.sendStdin('data\n')).rejects.toThrow(/stdin/i);
+      expect(mockSandbox.commands.sendStdin).not.toHaveBeenCalled();
+    });
+
     it('defaults cwd to the configured workingDirectory', async () => {
       const sandbox = new E2BSandbox({ workingDirectory: '/srv/app' });
       await sandbox._start();

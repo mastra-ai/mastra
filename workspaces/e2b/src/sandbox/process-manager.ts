@@ -27,6 +27,7 @@ class E2BProcessHandle extends ProcessHandle {
   private readonly _e2bHandle: E2BCommandHandle;
   private readonly _sandbox: Sandbox;
   private readonly _startTime: number;
+  private readonly _stdinMode: SpawnProcessOptions['stdinMode'];
 
   constructor(e2bHandle: E2BCommandHandle, sandbox: Sandbox, startTime: number, options?: SpawnProcessOptions) {
     super(options);
@@ -34,6 +35,7 @@ class E2BProcessHandle extends ProcessHandle {
     this._e2bHandle = e2bHandle;
     this._sandbox = sandbox;
     this._startTime = startTime;
+    this._stdinMode = options?.stdinMode;
   }
 
   /** Delegates to E2B's handle so exitCode reflects server-side state without needing wait(). */
@@ -94,6 +96,13 @@ class E2BProcessHandle extends ProcessHandle {
   async sendStdin(data: string): Promise<void> {
     if (this.exitCode !== undefined) {
       throw new Error(`Process ${this.pid} has already exited with code ${this.exitCode}`);
+    }
+    // Spawned with `stdinMode: 'ignore'`, so the command was started with
+    // stdin detached and there is nothing to write to. Match the local and
+    // Docker handles, which reject rather than posting an input RPC to a
+    // process that has no stdin channel.
+    if (this._stdinMode === 'ignore') {
+      throw new Error(`Process ${this.pid} was not started with stdin support`);
     }
     await this._sandbox.commands.sendStdin(this._e2bHandle.pid, data);
   }
