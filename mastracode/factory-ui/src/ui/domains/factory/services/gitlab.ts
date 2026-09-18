@@ -2,9 +2,11 @@
 
 export const MASTRA_PROJECTS_URL = 'https://projects.mastra.ai';
 
-export function manageGitLabConnection(): void {
+export function openMastraPlatformIntegrations(): void {
   window.open(MASTRA_PROJECTS_URL, '_blank', 'noopener,noreferrer');
 }
+
+export const manageGitLabConnection = openMastraPlatformIntegrations;
 
 export interface GitLabConnection {
   id: string;
@@ -33,10 +35,12 @@ export interface GitLabIssue {
   stateType: string;
   priority: string | null;
   assignee: string | null;
+  assignees?: string[];
   author: string | null;
   source: string | null;
   sourceId: string | null;
   labels: string[];
+  labelColors?: Record<string, string>;
   createdAt: string;
   updatedAt: string;
 }
