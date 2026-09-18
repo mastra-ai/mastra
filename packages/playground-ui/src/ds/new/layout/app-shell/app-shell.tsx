@@ -9,6 +9,7 @@ export interface AppShellFrameProps {
 
 export interface AppShellProps extends Omit<ComponentPropsWithRef<'div'>, 'children'> {
   children: ReactNode;
+  mainClassName?: string;
   mainLabel: string;
   mobileHeader?: ReactNode;
   renderFrame?: (props: AppShellFrameProps) => ReactNode;
@@ -18,6 +19,7 @@ export interface AppShellProps extends Omit<ComponentPropsWithRef<'div'>, 'child
 export function AppShell({
   children,
   className,
+  mainClassName,
   mainLabel,
   mobileHeader,
   ref,
@@ -34,7 +36,12 @@ export function AppShell({
       )}
     >
       {routeHeader}
-      <div data-slot="app-shell-main" aria-label={mainLabel} role="group" className="min-h-0 overflow-y-auto">
+      <div
+        data-slot="app-shell-main"
+        aria-label={mainLabel}
+        role="group"
+        className={cn('min-h-0 overflow-y-auto', mainClassName)}
+      >
         {children}
       </div>
     </div>

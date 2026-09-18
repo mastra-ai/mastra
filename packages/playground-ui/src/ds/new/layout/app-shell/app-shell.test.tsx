@@ -64,6 +64,18 @@ describe('AppShell', () => {
     });
   });
 
+  describe('when mainClassName is provided', () => {
+    it('extends the scroll container without dropping its own classes', () => {
+      const markup = renderToStaticMarkup(
+        <AppShell mainLabel="Page content" mainClassName="grid grid-rows-[1fr] content-start">
+          Main content
+        </AppShell>,
+      );
+
+      expect(markup).toContain('class="min-h-0 overflow-y-auto grid grid-rows-[1fr] content-start"');
+    });
+  });
+
   describe('when the route header is omitted', () => {
     it('gives the main content the full frame', () => {
       const markup = renderShell({ routeHeader: false });
