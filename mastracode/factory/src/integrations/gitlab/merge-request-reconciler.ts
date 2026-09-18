@@ -85,7 +85,10 @@ async function connectionForItem(
   const keys = (await context.storage.sourceControl.projectRepositories.listConfiguredExternalKeys()).filter(
     key => key.repositoryExternalId === projectId,
   );
-  for (const key of keys.sort((left, right) => left.installationExternalId.localeCompare(right.installationExternalId))) {
+  for (const key of keys.sort((left, right) => {
+    const directOrder = Number(right.installationExternalId === 'direct') - Number(left.installationExternalId === 'direct');
+    return directOrder || left.installationExternalId.localeCompare(right.installationExternalId);
+  })) {
     const targets = await context.storage.sourceControl.projectRepositories.listByExternalRepository(key);
     if (!targets.some(target => target.orgId === project.orgId && target.factoryProjectId === project.id)) continue;
     const installation = await context.storage.sourceControl.installations.findByExternalId({
@@ -125,7 +128,9 @@ export function attachGitLabMergeRequestReconciler(
       errors: [],
     };
     for (const project of await context.storage.projects.listAll()) {
-      const items = (await context.runtime!.workItems.list({ orgId: project.orgId, factoryProjectId: project.id })).filter(
+      const items = (
+        await context.runtime!.workItems.list({ orgId: project.orgId, factoryProjectId: project.id })
+      ).filter(
         item =>
           item.externalSource?.integrationId === 'gitlab' &&
           item.externalSource.type === 'pull-request' &&
@@ -193,7 +198,10 @@ export function attachGitLabMergeRequestReconciler(
             ([key, value]) => JSON.stringify(current[key]) === JSON.stringify(value),
           );
           if (pullRequest.state === 'closed') {
-            await ingest(terminalEvent(item, pullRequest));
+            const terminalTransition = current.state !== 'closed' || current.merged !== pullRequest.merged;
+            if (terminalTransition) {
+              await ingest(terminalEvent(item, pullRequest));
+            }
             if (metadataChanged) {
               await context.runtime!.workItems.update({
                 orgId: project.orgId,
