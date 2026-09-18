@@ -7187,6 +7187,98 @@ describe('Agent signals', () => {
     followerSubscription.unsubscribe();
   });
 
+  it('routes remote abort requests to a parked suspended run on the lease owner', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const followerRuntime = new AgentThreadStreamRuntime();
+    const resourceId = 'parked-remote-abort-resource';
+    const threadId = 'parked-remote-abort-thread';
+    const key = `${resourceId}\u0000${threadId}`;
+    const runId = 'parked-remote-abort-run';
+    const agent = { id: 'parked-remote-abort-agent' } as Agent<any, any, any, any>;
+    pubsub.owners.set(key, runId);
+    const ownerSubscription = await ownerRuntime.subscribeToThread(agent, { resourceId, threadId }, pubsub);
+    const followerSubscription = await followerRuntime.subscribeToThread(agent, { resourceId, threadId }, pubsub);
+    const iterator = ownerSubscription.stream[Symbol.asyncIterator]();
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+
+    try {
+      ownerRuntime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'suspended',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({
+                type: 'tool-call-suspended',
+                runId,
+                payload: { toolCallId: 'parked-remote-abort-call', toolName: 'ask_user' },
+              });
+              controller.close();
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+      await withTimeout(iterator.next(), 'Timed out waiting for parked remote run start');
+      await withTimeout(iterator.next(), 'Timed out waiting for parked remote suspension chunk');
+      await pubsub.flush();
+      await waitForCondition(() => followerSubscription.activeRunId() === runId);
+
+      // Park the run for real: the completion watcher evicts it from
+      // preparedRunsById and marks its record lifecycle 'suspended'.
+      finishRun();
+      await pubsub.flush();
+      await waitForCondition(() =>
+        pubsub.publishedData.some(data => data?.type === 'run-suspended' && data.runId === runId),
+      );
+      expect(ownerRuntime.hasThreadRun(runId, pubsub)).toBe(true);
+      expect(ownerRuntime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+
+      // A forged request with a stale streamId is still dropped: the parked-run
+      // guard relaxation must not weaken the ownership checks.
+      await pubsub.publish(`agent.thread-stream.${encodeURIComponent(key)}`, {
+        type: 'run-abort-requested',
+        runId,
+        data: { type: 'run-abort-requested', runId, streamId: 'stale-stream' },
+      });
+      await pubsub.flush();
+      await nextTick();
+      expect(pubsub.publishedData.some(data => data?.type === 'run-aborted')).toBe(false);
+      expect(ownerRuntime.hasThreadRun(runId, pubsub)).toBe(true);
+      expect(pubsub.owners.get(key)).toBe(runId);
+
+      // The real remote abort releases the parked run on the owner.
+      expect(followerSubscription.abort()).toBe(true);
+      await pubsub.flush();
+      await waitForCondition(() =>
+        pubsub.publishedData.some(data => data?.type === 'run-aborted' && data.runId === runId),
+      );
+      const requestIndex = pubsub.publishedData.findIndex(
+        data => data?.type === 'run-abort-requested' && data.streamId !== 'stale-stream',
+      );
+      const terminalIndex = pubsub.publishedData.findIndex(data => data?.type === 'run-aborted');
+      expect(requestIndex).toBeGreaterThanOrEqual(0);
+      expect(terminalIndex).toBeGreaterThan(requestIndex);
+      expect(ownerRuntime.hasThreadRun(runId, pubsub)).toBe(false);
+      expect(ownerRuntime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBeUndefined();
+      expect(ownerRuntime.getThreadState({ resourceId, threadId }, pubsub)).toBe('idle');
+      expect(pubsub.owners.get(key)).toBeUndefined();
+      expect(ownerRuntime.abortThread({ resourceId, threadId }, pubsub)).toBe(false);
+    } finally {
+      finishRun();
+      ownerSubscription.unsubscribe();
+      followerSubscription.unsubscribe();
+    }
+  });
+
   it('routes active-run signals across runtime instances through PubSub', async () => {
     const pubsub = new EventEmitterPubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
