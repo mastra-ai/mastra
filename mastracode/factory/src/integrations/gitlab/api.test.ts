@@ -20,6 +20,21 @@ describe('GitLabApiClient', () => {
     expect(() => new GitLabApiClient({ baseUrl: 'https://gitlab.com', accessToken: ' ' })).toThrow(/accessToken/);
   });
 
+  it('checks the current identity without listing projects', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json({ id: 7, username: 'rhys' }));
+    const client = new GitLabApiClient({
+      baseUrl: 'https://gitlab.example.com',
+      accessToken: 'personal-token',
+      fetchImpl: fetchMock,
+    });
+
+    await expect(client.getCurrentUser()).resolves.toMatchObject({ username: 'rhys' });
+
+    const request = requestOf(fetchMock);
+    expect(request.url).toBe('https://gitlab.example.com/api/v4/user');
+    expect(request.init.headers).toMatchObject({ 'private-token': 'personal-token' });
+  });
+
   it('lists projects directly with a private token', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json([]));
     const client = new GitLabApiClient({
@@ -95,6 +110,7 @@ describe('GitLabApiClient', () => {
     await client.setMergeRequestReviewers('group/project', 17, [11, 22]);
     await client.listProjectMembers('group/project', { query: 'alice', page: 2 });
     await client.getMergeRequestDiscussion('group/project', 17, 'discussion/1');
+    await client.resolveMergeRequestDiscussion('group/project', 17, 'discussion/1', true);
 
     expect(requestOf(fetchMock, 0)).toMatchObject({
       url: 'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests',
@@ -136,6 +152,11 @@ describe('GitLabApiClient', () => {
     expect(requestOf(fetchMock, 6).url).toBe(
       'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests/17/discussions/discussion%2F1',
     );
+    expect(requestOf(fetchMock, 7)).toMatchObject({
+      url: 'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests/17/discussions/discussion%2F1',
+      init: { method: 'PUT' },
+    });
+    expect(JSON.parse(String(requestOf(fetchMock, 7).init.body))).toEqual({ resolved: true });
   });
 
   it('routes merge request requests through the integrations v2 proxy', async () => {
