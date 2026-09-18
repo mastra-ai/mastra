@@ -1,4 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
+import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { MastraReactProvider } from '@mastra/react';
 import { CalendarClockIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -7,7 +8,8 @@ import type { LoaderFunctionArgs, RouteObject } from 'react-router';
 import { AgentBuilderRootLayout } from './domains/agent-builder/layouts/agent-builder-root-layout';
 import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
 import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
-import { DatasetCrumb } from './domains/datasets/dataset-crumb';
+import { DatasetCrumb, DatasetSwitcherAction } from './domains/datasets/dataset-crumb';
+import { ExperimentCrumb, ExperimentCrumbStatusIcon } from './domains/experiments/experiment-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import SignalsOverviewPage from './ee/signals';
 import { SignalsEntityCrumb } from './ee/signals/signals-entity-crumb';
@@ -35,12 +37,9 @@ import AgentBuilderSkillsCreate from './pages/agent-builder/skills/create';
 import AgentBuilderSkillsEdit from './pages/agent-builder/skills/edit';
 import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
-import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
 import AgentThread from './pages/agents/agent/thread';
-import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
-import AgentReview from './pages/agents/agent-review';
 import AgentTraces from './pages/agents/agent-traces';
 import CmsAgentAgentsPage from './pages/cms/agents/agents';
 import { CreateLayoutWrapper } from './pages/cms/agents/create-layout';
@@ -60,8 +59,6 @@ import CmsScorersEditPage from './pages/cms/scorers/edit';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
-import DatasetItemPage from './pages/datasets/dataset/item';
-import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import CreateDatasetPage from './pages/datasets/new';
@@ -69,7 +66,7 @@ import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
-import ExperimentItemPage from './pages/experiments/experiment/item';
+import ReviewQueuePage from './pages/experiments/review-queue';
 import InboxPage from './pages/inbox';
 import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
@@ -99,7 +96,7 @@ import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
-import { AgentCrumb, AgentToolCrumb } from '@/domains/agents/agent-crumb';
+import { AgentCrumb, AgentSwitcherAction, AgentToolCrumb } from '@/domains/agents/agent-crumb';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
@@ -107,12 +104,18 @@ import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh'
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
-import { McpServerCrumb, McpServerToolCrumb } from '@/domains/mcps/mcp-crumbs';
-import { ProcessorCrumb } from '@/domains/processors/processor-crumb';
+import { McpServerCrumb, McpServerSwitcherAction, McpServerToolCrumb } from '@/domains/mcps/mcp-crumbs';
+import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
+import { ProcessorCrumb, ProcessorSwitcherAction } from '@/domains/processors/processor-crumb';
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
-import { StoredScorerCrumb, ScorerCrumb } from '@/domains/scores/scorer-crumb';
-import { ToolCrumb } from '@/domains/tools/tool-crumb';
-import { WorkflowCrumb, WorkflowRunCrumb } from '@/domains/workflows/workflow-crumbs';
+import { StoredScorerCrumb, ScorerCrumb, ScorerSwitcherAction } from '@/domains/scores/scorer-crumb';
+import { ToolCrumb, ToolSwitcherAction } from '@/domains/tools/tool-crumb';
+import {
+  WorkflowCrumb,
+  WorkflowRunCopyAction,
+  WorkflowRunCrumb,
+  WorkflowSwitcherAction,
+} from '@/domains/workflows/workflow-crumbs';
 import { LinkComponentProvider } from '@/lib/framework';
 import { navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
 import type { CrumbDef, RouteHeaderHandle } from '@/lib/route-header';
@@ -151,11 +154,14 @@ const RootLayout = () => {
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
-      <Layout>
-        <RoutePermissionGuard>
-          <Outlet />
-        </RoutePermissionGuard>
-      </Layout>
+      <KeyboardShortcutsProvider>
+        <GlobalShortcuts />
+        <Layout>
+          <RoutePermissionGuard>
+            <Outlet />
+          </RoutePermissionGuard>
+        </Layout>
+      </KeyboardShortcutsProvider>
     </LinkComponentProvider>
   );
 };
@@ -205,6 +211,45 @@ const decodeRouteParam = (value: string | undefined) => {
     return value;
   }
 };
+
+// Entity crumbs: name (span or link) + icon-only switcher in the crumb `action` slot.
+const agentCrumb = {
+  id: 'agent',
+  Component: AgentCrumb,
+  Action: AgentSwitcherAction,
+  heading: 'Agent',
+} satisfies CrumbDef;
+const scorerCrumb = {
+  id: 'scorer',
+  Component: ScorerCrumb,
+  Action: ScorerSwitcherAction,
+  heading: 'Scorer',
+} satisfies CrumbDef;
+const toolCrumb = { id: 'tool', Component: ToolCrumb, Action: ToolSwitcherAction, heading: 'Tool' } satisfies CrumbDef;
+const processorCrumb = {
+  id: 'processor',
+  Component: ProcessorCrumb,
+  Action: ProcessorSwitcherAction,
+  heading: 'Processor',
+} satisfies CrumbDef;
+const mcpServerCrumb = {
+  id: 'mcp-server',
+  Component: McpServerCrumb,
+  Action: McpServerSwitcherAction,
+  heading: 'MCP server',
+} satisfies CrumbDef;
+const workflowCrumb = {
+  id: 'workflow',
+  Component: WorkflowCrumb,
+  Action: WorkflowSwitcherAction,
+  heading: 'Workflow',
+} satisfies CrumbDef;
+const datasetCrumb = {
+  id: 'dataset',
+  Component: DatasetCrumb,
+  Action: DatasetSwitcherAction,
+  heading: 'Dataset',
+} satisfies CrumbDef;
 
 const truncateItemIdCrumb = (value: string | undefined) => {
   const decoded = decodeRouteParam(value);
@@ -307,8 +352,6 @@ export const routes: RouteObject[] = [
     children: [
       { path: '/agents/:agentId/session', element: <AgentSession /> },
       { path: '/agents/:agentId/session/:threadId', element: <AgentSession /> },
-      { path: '/agents/:agentId/threads', loader: agentThreadsIndexLoader },
-      { path: '/agents/:agentId/threads/:threadId', element: <AgentThread /> },
     ],
   },
   {
@@ -342,7 +385,7 @@ export const routes: RouteObject[] = [
       {
         path: '/scorers/:scorerId',
         element: <Scorer />,
-        handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
+        handle: navHandleWithChildren('/scorers', [scorerCrumb]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
       {
@@ -382,7 +425,7 @@ export const routes: RouteObject[] = [
       {
         path: '/cms/agents/:agentId/edit',
         element: <EditLayoutWrapper />,
-        handle: navHandleWithChildren('/agents', [{ id: 'agent', Component: AgentCrumb, heading: 'Agent' }]),
+        handle: navHandleWithChildren('/agents', [agentCrumb]),
         children: agentCmsChildRoutes,
       },
       {
@@ -411,10 +454,13 @@ export const routes: RouteObject[] = [
       {
         path: '/agents/:agentId/tools/:toolId',
         element: <AgentTool />,
-        handle: navHandleWithChildren('/agents', [
-          { id: 'agent', Component: AgentCrumb, heading: 'Agent' },
-          { id: 'agent-tool', Component: AgentToolCrumb, heading: 'Agent tool' },
-        ]),
+        handle: {
+          crumbs: ({ params }) => [
+            navCrumb('/agents'),
+            { ...agentCrumb, to: params.agentId ? `/agents/${encodeURIComponent(params.agentId)}` : undefined },
+            { id: 'agent-tool', Component: AgentToolCrumb, heading: 'Agent tool' },
+          ],
+        } satisfies RouteHeaderHandle,
       },
       {
         path: '/agents/:agentId',
@@ -423,7 +469,7 @@ export const routes: RouteObject[] = [
             <Outlet />
           </AgentLayout>
         ),
-        handle: navHandleWithChildren('/agents', [{ id: 'agent', Component: AgentCrumb, heading: 'Agent' }]),
+        handle: navHandleWithChildren('/agents', [agentCrumb]),
         children: [
           {
             index: true,
@@ -431,21 +477,17 @@ export const routes: RouteObject[] = [
           },
           { path: 'chat', loader: legacyAgentChatLoader },
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
-          { path: 'overview', element: <Agent /> },
+          { path: 'threads', loader: agentThreadsIndexLoader },
+          { path: 'threads/:threadId', element: <AgentThread /> },
+          { path: 'overview', loader: legacyAgentSettingsLoader },
           { path: 'settings', loader: legacyAgentSettingsLoader },
-          ...(isExperimentalFeatures
-            ? [
-                { path: 'editor', element: <AgentPlayground /> },
-                { path: 'evaluate', element: <AgentEvaluate /> },
-                { path: 'review', element: <AgentReview /> },
-              ]
-            : []),
+          ...(isExperimentalFeatures ? [{ path: 'editor', element: <AgentPlayground /> }] : []),
           { path: 'traces', element: <AgentTraces /> },
           {
             // Channels is configuration, not a tool tab: it now lives in the
-            // agent settings view. Keep old links working.
+            // agent overview side panel. Keep old links working.
             path: 'channels',
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/overview?tab=channels`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/threads/new`),
           },
         ],
       },
@@ -454,7 +496,7 @@ export const routes: RouteObject[] = [
       {
         path: '/tools/:toolId',
         element: <Tool />,
-        handle: navHandleWithChildren('/tools', [{ id: 'tool', Component: ToolCrumb, heading: 'Tool' }]),
+        handle: navHandleWithChildren('/tools', [toolCrumb]),
       },
 
       {
@@ -467,26 +509,25 @@ export const routes: RouteObject[] = [
       {
         path: '/processors/:processorId',
         element: <Processor />,
-        handle: navHandleWithChildren('/processors', [
-          { id: 'processor', Component: ProcessorCrumb, heading: 'Processor' },
-        ]),
+        handle: navHandleWithChildren('/processors', [processorCrumb]),
       },
 
       { path: '/mcps', element: <MCPs />, handle: navHandle('/mcps') },
       {
         path: '/mcps/:serverId',
         element: <McpServerPage />,
-        handle: navHandleWithChildren('/mcps', [
-          { id: 'mcp-server', Component: McpServerCrumb, heading: 'MCP server' },
-        ]),
+        handle: navHandleWithChildren('/mcps', [mcpServerCrumb]),
       },
       {
         path: '/mcps/:serverId/tools/:toolId',
         element: <MCPServerToolExecutor />,
-        handle: navHandleWithChildren('/mcps', [
-          { id: 'mcp-server', Component: McpServerCrumb, heading: 'MCP server' },
-          { id: 'mcp-server-tool', Component: McpServerToolCrumb, heading: 'MCP server tool' },
-        ]),
+        handle: {
+          crumbs: ({ params }) => [
+            navCrumb('/mcps'),
+            { ...mcpServerCrumb, to: params.serverId ? `/mcps/${encodeURIComponent(params.serverId)}` : undefined },
+            { id: 'mcp-server-tool', Component: McpServerToolCrumb, heading: 'MCP server tool' },
+          ],
+        } satisfies RouteHeaderHandle,
       },
 
       { path: '/workspaces', element: <Workspace />, handle: navHandle('/workspaces') },
@@ -531,9 +572,16 @@ export const routes: RouteObject[] = [
             <Outlet />
           </WorkflowLayout>
         ),
-        handle: navHandleWithChildren('/workflows', [
-          { id: 'workflow', Component: WorkflowCrumb, heading: 'Workflow' },
-        ]),
+        handle: {
+          // The `to` link only renders on the nested graph/:runId route.
+          crumbs: ({ params }) => [
+            navCrumb('/workflows'),
+            {
+              ...workflowCrumb,
+              to: params.workflowId ? `/workflows/${encodeURIComponent(params.workflowId)}/graph` : undefined,
+            },
+          ],
+        } satisfies RouteHeaderHandle,
         children: [
           {
             index: true,
@@ -544,7 +592,14 @@ export const routes: RouteObject[] = [
             path: 'graph/:runId',
             element: <Workflow />,
             handle: {
-              crumbs: [{ id: 'workflow-run', Component: WorkflowRunCrumb, heading: 'Workflow run' }],
+              crumbs: [
+                {
+                  id: 'workflow-run',
+                  Component: WorkflowRunCrumb,
+                  Action: WorkflowRunCopyAction,
+                  heading: 'Workflow run',
+                },
+              ],
             } satisfies RouteHeaderHandle,
           },
         ],
@@ -569,9 +624,7 @@ export const routes: RouteObject[] = [
                 crumbs: ({ params }) => [
                   navCrumb('/datasets'),
                   {
-                    id: 'dataset',
-                    Component: DatasetCrumb,
-                    heading: 'Dataset',
+                    ...datasetCrumb,
                     to: params.datasetId ? `/datasets/${encodeURIComponent(params.datasetId)}` : undefined,
                   },
                 ],
@@ -579,7 +632,8 @@ export const routes: RouteObject[] = [
               children: [
                 {
                   path: 'items/:itemId',
-                  element: <DatasetItemPage />,
+                  // Drawer is rendered by the dataset page; this route only carries params + crumbs.
+                  element: null,
                   handle: {
                     crumbs: ({ params }) => [
                       { id: 'dataset-items', label: 'Items' },
@@ -593,11 +647,7 @@ export const routes: RouteObject[] = [
               path: '/datasets/:datasetId/edit',
               element: <EditDatasetPage />,
               handle: {
-                crumbs: () => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-edit', label: 'Edit dataset' },
-                ],
+                crumbs: () => [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-edit', label: 'Edit dataset' }],
               } satisfies RouteHeaderHandle,
             },
             {
@@ -606,7 +656,7 @@ export const routes: RouteObject[] = [
               handle: {
                 crumbs: ({ params }) => [
                   navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
+                  datasetCrumb,
                   {
                     id: 'dataset-item',
                     label: truncateItemIdCrumb(params.itemId),
@@ -615,7 +665,7 @@ export const routes: RouteObject[] = [
                         ? `/datasets/${encodeURIComponent(params.datasetId)}/items/${encodeURIComponent(params.itemId)}`
                         : undefined,
                   },
-                  { id: 'dataset-item-versions', label: 'Versions' },
+                  { id: 'dataset-item-versions', label: 'Item Version History' },
                 ],
               } satisfies RouteHeaderHandle,
             },
@@ -628,6 +678,13 @@ export const routes: RouteObject[] = [
               },
             },
             {
+              path: '/experiments/review-queue',
+              element: <ReviewQueuePage />,
+              handle: {
+                crumbs: () => [navCrumb('/experiments'), navCrumb('/experiments/review-queue')],
+              } satisfies RouteHeaderHandle,
+            },
+            {
               path: '/experiments/:experimentId',
               element: <ExperimentPage />,
               handle: {
@@ -637,7 +694,9 @@ export const routes: RouteObject[] = [
                   navCrumb('/experiments'),
                   {
                     id: 'experiment',
-                    label: truncateItemIdCrumb(params.experimentId),
+                    Component: ExperimentCrumb,
+                    icon: ExperimentCrumbStatusIcon,
+                    heading: 'Experiment',
                     to: params.experimentId ? `/experiments/${encodeURIComponent(params.experimentId)}` : undefined,
                   },
                 ],
@@ -645,7 +704,8 @@ export const routes: RouteObject[] = [
               children: [
                 {
                   path: 'items/:itemId',
-                  element: <ExperimentItemPage />,
+                  // Drawer is rendered by the experiment page; this route only carries params + crumbs.
+                  element: null,
                   handle: {
                     crumbs: ({ params }) => [
                       { id: 'experiment-items', label: 'Items' },
@@ -656,32 +716,10 @@ export const routes: RouteObject[] = [
               ],
             },
             {
-              path: '/datasets/:datasetId/items/:itemId/compare/:secondItemId',
-              element: <DatasetItemsComparePage />,
-              handle: {
-                crumbs: ({ params }) => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-items', label: 'Items' },
-                  {
-                    id: 'dataset-item',
-                    label: truncateItemIdCrumb(params.itemId),
-                    to: `/datasets/${params.datasetId}/items/${params.itemId}`,
-                  },
-                  { id: 'dataset-item-compare', label: 'Compare' },
-                  { id: 'dataset-item-compare-second', label: truncateItemIdCrumb(params.secondItemId) },
-                ],
-              } satisfies RouteHeaderHandle,
-            },
-            {
               path: '/datasets/:datasetId/versions',
               element: <DatasetCompareDatasetVersions />,
               handle: {
-                crumbs: () => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-versions', label: 'Versions' },
-                ],
+                crumbs: () => [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-versions', label: 'Versions' }],
               },
             },
           ]

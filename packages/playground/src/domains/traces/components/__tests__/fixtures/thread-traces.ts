@@ -7,6 +7,32 @@ type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;
 type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
 
+export function queryPageFromList(list: ListTracesLightResponse): Awaited<ReturnType<MastraClient['queryTraces']>> {
+  return {
+    traces: [...list.spans]
+      .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime())
+      .map(span => ({
+        traceId: span.traceId,
+        rootSpanId: span.spanId,
+        name: span.name,
+        startedAt: new Date(span.startedAt).toISOString(),
+        endedAt: span.endedAt ? new Date(span.endedAt).toISOString() : null,
+        createdAt: new Date(span.createdAt).toISOString(),
+        status: 'success',
+        entityId: span.entityId ?? null,
+        entityName: span.entityName ?? null,
+        entityType: span.entityType ?? null,
+        parentSpanId: span.parentSpanId ?? null,
+        metadata: span.metadata ?? null,
+        inputPreview: span.inputPreview ?? null,
+        threadId: span.threadId ?? null,
+        resourceId: span.resourceId ?? null,
+        environment: span.environment ?? null,
+      })),
+    page: { next: null },
+  };
+}
+
 export const THREAD_ID = 'thread-1';
 
 const baseTrace = {
@@ -48,9 +74,26 @@ export const emptyThreadTracesList: ListTracesLightResponse = {
 export const threadTracesFullList: ListTracesResponse = threadTracesList;
 export const emptyThreadTracesFullList: ListTracesResponse = emptyThreadTracesList;
 
+/** A child span of trace-a: the tool call behind the assistant reply. */
+export const traceAToolSpan = {
+  ...baseTrace,
+  spanId: 'span-a-tool',
+  name: 'Recipe lookup',
+  spanType: SpanType.TOOL_CALL,
+  parentSpanId: 'span-a',
+};
+
 export const traceASpans: GetTraceResponse = {
   traceId: 'trace-a',
-  spans: [{ ...baseTrace, parentSpanId: null }],
+  spans: [
+    {
+      ...baseTrace,
+      parentSpanId: null,
+      input: { messages: [{ role: 'user', content: 'cook pasta' }] },
+      output: { text: 'carbonara' },
+    },
+    traceAToolSpan,
+  ],
 };
 
 export const traceBSpans: GetTraceResponse = {

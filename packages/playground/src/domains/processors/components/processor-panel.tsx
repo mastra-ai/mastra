@@ -9,6 +9,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import CodeMirror from '@uiw/react-codemirror';
+import { Play } from 'lucide-react';
 import { useState, useId, useEffect } from 'react';
 import type {
   ProcessorDetail,
@@ -32,6 +33,7 @@ const PHASE_LABELS: Record<ProcessorPhase, string> = {
   outputStream: 'Output Stream - Process streaming chunks',
   outputResult: 'Output Result - Process complete output after streaming',
   outputStep: 'Output Step - Process after each LLM response (before tools)',
+  toolResult: 'Tool Result - Process tool output before it is added to the message list',
 };
 
 export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
@@ -46,7 +48,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <div className="p-4">
         <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -57,7 +59,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 
   if (!processor)
     return (
-      <div className="px-6 py-12 text-center">
+      <div className="px-4 py-8 text-center">
         <Txt variant="header-md" className="text-neutral3">
           Processor not found
         </Txt>
@@ -181,6 +183,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           </div>
 
           <Button
+            icon={<Play />}
             onClick={handleExecute}
             disabled={executeProcessor.isPending || selectedPhase === 'outputStream'}
             className="w-full"

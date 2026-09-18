@@ -2,7 +2,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
-import { Bundler } from '@mastra/deployer/bundler';
+import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
 import { copy } from 'fs-extra';
 import { shouldSkipDotenvLoading } from '../utils.js';
 import { getWorkerEntry } from '../worker/WorkerBundler.js';
@@ -22,18 +22,14 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
   ): Promise<NonNullable<Config['bundler']>> {
     const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
-    const configuredExternals = Array.isArray(bundlerOptions.externals) ? bundlerOptions.externals : [];
 
-    if (bundlerOptions.externals === true || bundlerOptions.externals === false) {
+    if (!bundlerOptions[IS_DEFAULT] && bundlerOptions.externals !== undefined) {
       return bundlerOptions;
     }
-
-    const dynamicPackages = [...new Set([...(bundlerOptions.dynamicPackages ?? []), ...configuredExternals])];
 
     return {
       ...bundlerOptions,
       externals: true,
-      ...(dynamicPackages.length > 0 ? { dynamicPackages } : {}),
     };
   }
 
@@ -65,11 +61,13 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
+    await this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
   }
 
   protected getAdditionalEntries(): Record<string, string> {
-    return { worker: getWorkerEntry() };
+    return {
+      worker: getWorkerEntry(),
+    };
   }
 
   protected getEntry(): string {

@@ -21,13 +21,51 @@ describe('formatTraceThreadMessages', () => {
   });
 
   describe('when an agent turn contains different kinds of tool calls', () => {
-    it('includes each visible tool once in chronological order', () => {
+    it('renders one assistant message per tool call in chronological order, followed by the text response', () => {
       const messages = formatTraceThreadMessages(agentTraceWithTools.spans);
-      const toolNames = messages[1]?.content.parts.flatMap(part =>
-        part.type === 'tool-invocation' ? [part.toolInvocation.toolName] : [],
+
+      expect(messages.map(message => message.role)).toEqual([
+        'user',
+        'assistant',
+        'assistant',
+        'assistant',
+        'assistant',
+        'assistant',
+      ]);
+      const toolNames = messages
+        .slice(1, 5)
+        .map(message =>
+          message.content.parts.map(part =>
+            part.type === 'tool-invocation' ? part.toolInvocation.toolName : part.type,
+          ),
+        );
+      expect(toolNames).toEqual([['workflow-tripPlanner'], ['searchHotels'], ['browser_location'], ['web_search']]);
+      expect(messages[5]?.content.parts).toEqual([{ type: 'text', text: 'Your Paris itinerary is ready.' }]);
+    });
+
+    it('remembers which spans were used to build each message: a tool with its top-level execution, and the text chunks but not reasoning', () => {
+      const messages = formatTraceThreadMessages(agentTraceWithTools.spans);
+
+      expect(messages[0]?.traceSpanIds).toEqual(['agent-root']);
+      expect(messages[1]?.traceSpanIds).toEqual(['agent-root', 'workflow-tool', 'workflow-run']);
+      expect(messages[2]?.traceSpanIds).toEqual(['agent-root', 'mcp-tool']);
+      expect(messages[3]?.traceSpanIds).toEqual(['agent-root', 'client-tool']);
+      expect(messages[4]?.traceSpanIds).toEqual(['agent-root', 'provider-tool']);
+      expect(messages[5]?.traceSpanIds).toEqual(['agent-root', 'text-chunk']);
+      expect(messages.every(message => message.content.metadata === undefined)).toBe(true);
+    });
+
+    it('omits the text message when the agent turn ends without a text response', () => {
+      const spans = agentTraceWithTools.spans.map(span =>
+        span.spanId === 'agent-root' ? { ...span, output: {} } : span,
       );
 
-      expect(toolNames).toEqual(['workflow-tripPlanner', 'searchHotels', 'browser_location', 'web_search']);
+      const messages = formatTraceThreadMessages(spans);
+
+      expect(messages).toHaveLength(5);
+      expect(
+        messages.every(message => message.role === 'user' || message.content.parts[0]?.type === 'tool-invocation'),
+      ).toBe(true);
     });
   });
 

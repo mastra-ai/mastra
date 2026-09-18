@@ -31,20 +31,22 @@ export const ListSearch = ({
   debounceMs = 300,
   size,
   value: controlledValue,
-  variant = 'outline',
+  variant = 'default',
   shortcutDisabled = false,
 }: ListSearchProps) => {
   const id = useId();
   const [internalValue, setInternalValue] = useState(controlledValue ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useKeydown({
-    'mod+shift+f': () => {
-      if (shortcutDisabled) return;
-      inputRef.current?.focus();
-      inputRef.current?.select();
+  useKeydown(
+    {
+      'mod+shift+f': () => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      },
     },
-  });
+    { enabled: !shortcutDisabled },
+  );
 
   const debouncedSearch = useDebouncedCallback((val: string) => {
     onSearch(val);

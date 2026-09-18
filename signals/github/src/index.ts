@@ -8,6 +8,7 @@ import type { AgentSignalInput, Agent, AgentSignalIfIdleOptions } from '@mastra/
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
+import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
@@ -18,6 +19,8 @@ import type {
 import { SignalProvider } from '@mastra/core/signals';
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
+
+import { GithubAppOwnerResolver } from './github-app-owner.js';
 
 // Lazy-init execFileAsync to avoid vitest mock issues when only
 // constants/types are imported from this module.
@@ -226,7 +229,7 @@ type GithubPRSignal = {
 type GithubSignalAgent = {
   sendSignal(signal: AgentSignalInput, target: unknown): { accepted: unknown };
   sendNotificationSignal?(
-    notification: unknown | unknown[],
+    notification: SendNotificationSignalInput | SendNotificationSignalInput[],
     target: unknown,
   ): { accepted?: unknown } | Promise<unknown>;
 };
@@ -1181,12 +1184,12 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
       html_url?: string;
       updated_at?: string;
     }>(`select c.author_login, c.author_type, c.is_bot, c.body, json_extract(c.raw_json, '$.html_url') as html_url,
-                 coalesce(c.updated_at_gh, c.created_at_gh) as updated_at
+                 coalesce(c.updated_at_gh, c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) as updated_at
             from comments c
             join threads t on t.id=c.thread_id
             join repositories r on r.id=t.repo_id
            where r.owner=${owner} and r.name=${repo} and t.number=${number}
-           order by coalesce(c.updated_at_gh, c.created_at_gh) desc
+           order by coalesce(c.updated_at_gh, c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) desc
            limit 20`);
     const latestComment = latestComments[0];
 
@@ -1328,6 +1331,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly #options: GithubSignalsOptions;
   readonly #syncClient: GithubSignalsSyncClient;
   readonly #repositoryResolver: GithubRepositoryResolver;
+  readonly #appOwnerResolver: GithubAppOwnerResolver;
   readonly #polling = new Map<string, GithubPollingState>();
   readonly #pollingThreadGenerations = new Map<string, number>();
   #pollingGeneration = 0;
@@ -1342,6 +1346,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     this.#options = options;
     this.#syncClient = options.syncClient ?? new GitcrawlSyncClient({ command: options.gitcrawlCommand });
     this.#repositoryResolver = options.repositoryResolver ?? new GitRemoteRepositoryResolver();
+    this.#appOwnerResolver = new GithubAppOwnerResolver();
     if (options.getNotificationStreamOptions) {
       this.#agentOptions = { getNotificationStreamOptions: options.getNotificationStreamOptions };
     }
@@ -2071,43 +2076,37 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         ...(input.snapshot.latestCommentUpdatedAt
           ? { latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt }
           : {}),
-        ...(failingChecks.length > 0 ? { failingChecks: failingChecks.map(check => check.name).join(', ') } : {}),
-        ...(pendingChecks.length > 0 ? { pendingChecks: pendingChecks.map(check => check.name).join(', ') } : {}),
+        ...(failingChecks.length
+          ? {
+              failingChecks: failingChecks.map(check => check.name).join(', '),
+              failingCheckUrls: failingChecks
+                .filter(check => check.detailsUrl)
+                .map(check => `${check.name}: ${check.detailsUrl}`)
+                .join('; '),
+            }
+          : {}),
+        ...(pendingChecks.length ? { pendingChecks: pendingChecks.map(check => check.name).join(', ') } : {}),
       },
       metadata: {
         github: {
-          owner: input.subscription.owner,
-          repo: input.subscription.repo,
-          number: input.subscription.number,
-          mode: input.subscription.mode,
-          title: input.snapshot.title,
-          state: input.snapshot.state,
-          htmlUrl: input.snapshot.htmlUrl,
-          githubUpdatedAt: input.snapshot.githubUpdatedAt,
+          // Agent-facing fields (title, state, URL, CI state, comment fields, PR identity) live in
+          // attributes only — they were previously mirrored here, doubling every record's size.
+          // This object keeps just the internal bookkeeping the sync loop needs for change detection.
           previousGithubUpdatedAt: input.previousGithubUpdatedAt,
-          contentHash: input.snapshot.contentHash,
           previousContentHash: input.previousContentHash,
+          contentHash: input.snapshot.contentHash,
           threadContentHash: input.snapshot.threadContentHash,
           headSha: input.snapshot.headSha,
           headRef: input.snapshot.headRef,
-          mergeableState: input.snapshot.mergeableState,
-          ciState: input.snapshot.ciState,
-          closedAt: input.snapshot.closedAt,
-          mergedAt: input.snapshot.mergedAt,
-          unresolvedReviewThreads: input.snapshot.unresolvedReviewThreads,
           reviewStateHash: input.snapshot.reviewStateHash,
           latestReviewThreadAt: input.snapshot.latestReviewThreadAt,
-          latestCommentAuthor: input.snapshot.latestCommentAuthor,
-          latestCommentAuthorType: input.snapshot.latestCommentAuthorType,
-          latestCommentIsBot: input.snapshot.latestCommentIsBot,
+          closedAt: input.snapshot.closedAt,
+          mergedAt: input.snapshot.mergedAt,
           // Intentionally omit the full latestCommentBody here: persisting it verbatim bloats
           // notification payloads (a single CodeRabbit comment can exceed 100KB) and can overflow
           // agent context windows when listed. The 240-char latestCommentExcerpt is stored instead.
-          latestCommentExcerpt,
-          latestCommentUrl: input.snapshot.latestCommentUrl,
-          latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt,
-          failingChecks,
-          pendingChecks,
+          // Check names and failing-check URLs live in attributes as flat strings (signal attributes
+          // must be scalars); full check snapshots ballooned every record by several KB.
         },
       },
     };
@@ -2165,7 +2164,17 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       const ignoredBots = this.#options.ignoredBots ?? [];
       if (ignoredBots.some(bot => bot.toLowerCase() === normalizedUser)) return false;
       const authorizedBots = this.#options.authorizedBots ?? DEFAULT_AUTHORIZED_BOTS;
-      return authorizedBots.some(bot => bot.toLowerCase() === normalizedUser);
+      if (authorizedBots.some(bot => bot.toLowerCase() === normalizedUser)) return true;
+
+      const appOwner = await this.#appOwnerResolver.getOwner(user, isCurrentGeneration);
+      if (!appOwner || (isCurrentGeneration && !isCurrentGeneration())) return false;
+      if (appOwner.type === 'Organization') return appOwner.login.toLowerCase() === owner.toLowerCase();
+      if (appOwner.type !== 'User') return false;
+
+      const permission = await this.#loadAuthorPermission(owner, repo, appOwner.login, isCurrentGeneration);
+      if (isCurrentGeneration && !isCurrentGeneration()) return false;
+      const authorizedPermissions = this.#options.authorizedPermissions ?? DEFAULT_AUTHORIZED_PERMISSIONS;
+      return !!permission && authorizedPermissions.includes(permission);
     }
     const permission = await this.#loadAuthorPermission(owner, repo, user, isCurrentGeneration);
     if (isCurrentGeneration && !isCurrentGeneration()) return false;

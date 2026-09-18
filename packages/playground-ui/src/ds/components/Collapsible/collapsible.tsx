@@ -40,24 +40,28 @@ CollapsibleTrigger.displayName = 'CollapsibleTrigger';
 
 type CollapsibleContentProps = Omit<CollapsiblePrimitive.Panel.Props, 'className'> & {
   className?: string;
+  /** Stretch the content to the space its parent leaves, so a scroll area inside can fill it. */
+  fill?: boolean;
+};
+
+const panelClassNames = {
+  measured:
+    'duration-normal h-[var(--collapsible-panel-height)] transition-[height] ease-out-custom data-[ending-style]:h-0 data-[starting-style]:h-0',
+  fill: 'duration-normal grid min-h-0 grid-rows-[1fr] transition-[grid-template-rows] ease-out-custom data-[ending-style]:grid-rows-[0fr] data-[starting-style]:grid-rows-[0fr]',
 };
 
 const CollapsibleContent = React.forwardRef<HTMLDivElement, CollapsibleContentProps>(
-  ({ className, children, ...props }, ref) => (
+  ({ className, children, fill = false, ...props }, ref) => (
     // Base UI animates the panel's `height` between 0 and `--collapsible-panel-height`.
     // Padding/margin/borders must live on an inner wrapper — if applied to the panel
     // itself they keep it from collapsing to 0, which makes the animation jump.
     <CollapsiblePrimitive.Panel
       ref={ref}
       data-slot="collapsible-content"
-      className={cn(
-        'overflow-hidden',
-        'duration-normal h-[var(--collapsible-panel-height)] transition-[height] ease-out-custom',
-        'data-[ending-style]:h-0 data-[starting-style]:h-0',
-      )}
+      className={cn('overflow-hidden', fill ? panelClassNames.fill : panelClassNames.measured)}
       {...props}
     >
-      <div className={className}>{children}</div>
+      <div className={cn(fill && 'min-h-0 overflow-hidden', className)}>{children}</div>
     </CollapsiblePrimitive.Panel>
   ),
 );

@@ -1,8 +1,14 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { MemoryRunState } from '@mastra/core/memory';
-import type { ObservabilityContext } from '@mastra/core/observability';
-import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
+import type { MemoryOperationAttributes, ObservabilityContext } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
+import type {
+  Processor,
+  ProcessInputStepArgs,
+  ProcessOutputResultArgs,
+  ProcessorSpanPhase,
+} from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
@@ -113,9 +119,34 @@ function injectObservationContextMessages({
   messageList.add(contMsg, 'memory');
 }
 
+/**
+ * Observational memory runs on the processor pipeline, but a user configures
+ * `memory`, not a processor — so its spans are labelled as memory operations
+ * rather than as anonymous pipeline entries.
+ *
+ * The two phases do different things and are named separately: the input step
+ * builds observation context into the system messages (a recall), and the
+ * output result persists what the turn produced (a save).
+ */
+const OM_PHASE_OPERATION: Partial<Record<ProcessorSpanPhase, NonNullable<MemoryOperationAttributes['operationType']>>> =
+  {
+    inputStep: 'recall',
+    output: 'save',
+    outputStep: 'save',
+  };
+
 export class ObservationalMemoryProcessor implements Processor<'observational-memory'> {
   readonly id = 'observational-memory' as const;
   readonly name = 'Observational Memory';
+
+  readonly spanType = SpanType.MEMORY_OPERATION;
+
+  readonly spanName = (phase: ProcessorSpanPhase): string => `memory: ${OM_PHASE_OPERATION[phase] ?? 'observational'}`;
+
+  readonly spanAttributes = (phase: ProcessorSpanPhase): Partial<MemoryOperationAttributes> => {
+    const operationType = OM_PHASE_OPERATION[phase];
+    return operationType ? { operationType } : {};
+  };
 
   /** The underlying ObservationalMemory engine. */
   readonly engine: ObservationalMemory;
@@ -240,6 +271,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // old turn first so any messages tracked on that list are flushed before OM moves on.
         await activeTurn.end().catch(() => {});
         if (this.turn === activeTurn) {
+          this.turn = undefined;
+        }
+        state.__omTurn = undefined;
+      }
+
+      // A turn can be sealed before the loop reaches its next step — for example when a
+      // sub-agent's `finish` / `step-finish` chunks are forwarded into the parent writer.
+      // Reusing an ended turn throws "Turn already ended" from `step()` below, so discard it
+      // and let beginTurn() start a fresh one, mirroring the message-list cleanup above.
+      if (activeTurn?.ended || this.turn?.ended) {
+        if (this.turn?.ended) {
           this.turn = undefined;
         }
         state.__omTurn = undefined;
@@ -383,15 +425,25 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // Retrieve the turn from shared processor state — in production, the input
         // and output processors are separate instances (see comment in processInputStep).
         const turn = asLiveTurn(state.__omTurn) ?? this.turn;
-        if (turn) {
-          await turn.end();
-          this.turn = undefined;
-          state.__omTurn = undefined;
-        } else {
-          // No turn exists — this happens during a resumed stream where input processors
-          // were skipped (isResume=true), so processInputStep never created a turn.
-          // Directly persist any new response messages so the final assistant text
-          // from the resumed turn is not lost.
+        // The turn can already be sealed by the time the loop finalizes — for example when a
+        // sub-agent's `finish` / `step-finish` chunks are forwarded into the parent writer, or
+        // when a mid-loop seal left the shared state pointing at an ended turn. `end()` throws
+        // on an ended turn, and the refs are only cleared after it resolves, so a stale ended
+        // turn would reject finalization and never reach the direct-persist path below. Treat it
+        // as absent, mirroring the ended-turn cleanup in processInputStep.
+        const liveTurn = turn && !turn.ended ? turn : undefined;
+
+        if (liveTurn) {
+          await liveTurn.end();
+        }
+        this.turn = undefined;
+        state.__omTurn = undefined;
+
+        if (!liveTurn) {
+          // No live turn exists — this happens during a resumed stream where input processors
+          // were skipped (isResume=true), so processInputStep never created a turn, or when the
+          // turn was already sealed before finalization. Directly persist any new response
+          // messages so the final assistant text from the resumed turn is not lost.
           const newOutput = messageList.get.response.db();
           const newInput = messageList.get.input.db();
           const messagesToSave = [...newInput, ...newOutput];

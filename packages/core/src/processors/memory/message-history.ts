@@ -1,9 +1,10 @@
-import type { OutputResult, Processor } from '..';
+import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
-import { parseMemoryRequestContext } from '../../memory';
+import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
+import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
-import { SpanType, EntityType } from '../../observability';
+import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
@@ -13,7 +14,9 @@ import type { MemoryStorage } from '../../storage';
  */
 export interface MessageHistoryOptions {
   storage: MemoryStorage;
-  lastMessages?: number;
+  lastMessages?: number | false;
+  tokenLimit?: { maxTokens: number; atMaxRemoveTokens: number };
+  tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
 }
 
 /**
@@ -24,15 +27,46 @@ export interface MessageHistoryOptions {
  * This processor retrieves threadId and resourceId from RequestContext at execution time,
  * making it decoupled from memory-specific context.
  */
+/**
+ * Which memory operation each pipeline phase performs. The input phase recalls
+ * stored history into the context; the output phase saves the turn.
+ */
+const MEMORY_PHASE_OPERATION: Partial<Record<ProcessorSpanPhase, 'recall' | 'save'>> = {
+  input: 'recall',
+  inputStep: 'recall',
+  output: 'save',
+  outputStep: 'save',
+};
+
 export class MessageHistory implements Processor {
   readonly id = 'message-history';
   readonly name = 'MessageHistory';
+
+  /**
+   * Trace as a memory operation rather than an anonymous processor run: a user
+   * configures `memory`, not a processor. The two phases are different memory
+   * operations — the input phase recalls stored history, the output phase saves
+   * the turn — so each is named for what it does.
+   *
+   * This replaces a MEMORY_OPERATION span the processor used to create *inside*
+   * its own processor span, which meant two spans per phase describing one
+   * operation.
+   */
+  readonly spanType = SpanType.MEMORY_OPERATION;
+  readonly spanName = (phase: ProcessorSpanPhase): string => `memory: ${MEMORY_PHASE_OPERATION[phase] ?? 'recall'}`;
+  readonly spanAttributes = (phase: ProcessorSpanPhase): Partial<MemoryOperationAttributes> => ({
+    operationType: MEMORY_PHASE_OPERATION[phase] ?? 'recall',
+  });
   private storage: MemoryStorage;
-  private lastMessages?: number;
+  private lastMessages?: number | false;
+  private tokenLimit?: MessageHistoryOptions['tokenLimit'];
+  private tokenCounter?: MessageHistoryOptions['tokenCounter'];
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
+    this.tokenLimit = options.tokenLimit;
+    this.tokenCounter = options.tokenCounter;
   }
 
   /**
@@ -63,22 +97,14 @@ export class MessageHistory implements Processor {
     return null;
   }
 
-  private createMemorySpan(
-    operationType: MemoryOperationAttributes['operationType'],
-    observabilityContext?: Partial<ObservabilityContext>,
-    input?: any,
-    attributes?: Partial<MemoryOperationAttributes>,
-  ) {
-    const currentSpan = observabilityContext?.tracingContext?.currentSpan;
-    if (!currentSpan) return undefined;
-    return currentSpan.createChildSpan({
-      type: SpanType.MEMORY_OPERATION,
-      name: `memory: ${operationType}`,
-      entityType: EntityType.MEMORY,
-      entityName: 'Memory',
-      input,
-      attributes: { operationType, ...attributes },
-    });
+  /**
+   * This processor's own span, which the runner already typed as the memory
+   * operation. Recording onto it rather than creating a child keeps one span
+   * per memory operation. The runner owns its lifecycle, so this only ever
+   * updates — it never ends or errors the span.
+   */
+  private memorySpan(observabilityContext?: Partial<ObservabilityContext>) {
+    return observabilityContext?.tracingContext?.currentSpan;
   }
 
   async processInput(
@@ -101,25 +127,43 @@ export class MessageHistory implements Processor {
     const { threadId, resourceId } = context;
     const memoryRunState = parseMemoryRequestContext(requestContext)?.runState?.();
 
-    const span = this.createMemorySpan(
-      'recall',
-      observabilityContext,
-      { threadId, resourceId },
-      {
-        lastMessages: this.lastMessages,
-      },
-    );
+    const span = this.memorySpan(observabilityContext);
+    span?.update({ attributes: { lastMessages: this.lastMessages } });
 
     try {
       // 1. Fetch historical messages from storage (as DB format)
-      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}`;
+      const storedBoundary = getMemoryTokenBoundary(parseMemoryRequestContext(requestContext)?.thread);
+      const boundary =
+        this.tokenLimit &&
+        storedBoundary?.maxTokens === this.tokenLimit.maxTokens &&
+        storedBoundary.atMaxRemoveTokens === this.tokenLimit.atMaxRemoveTokens
+          ? storedBoundary
+          : undefined;
+      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}:${JSON.stringify(boundary)}`;
       const loadMessages = async () => {
+        if (this.tokenLimit) {
+          const result = await loadMessageHistory({
+            storage: this.storage,
+            threadId,
+            resourceId,
+            boundary,
+            maxMessages: typeof this.lastMessages === 'number' ? this.lastMessages : undefined,
+            maxTokens: this.tokenLimit.maxTokens,
+            atMaxRemoveTokens: this.tokenLimit.atMaxRemoveTokens,
+            tokenCounter: this.tokenCounter,
+            includeOverflow: true,
+          });
+          return [...result.overflow, ...result.messages].reverse();
+        }
+
         const result = await this.storage.listMessages({
           threadId,
           resourceId,
           page: 0,
           perPage: this.lastMessages,
           orderBy: { field: 'createdAt', direction: 'DESC' },
+          // Last-N history read only consumes `messages`; skip the COUNT(*) work.
+          includeTotal: false,
         });
         return result.messages;
       };
@@ -127,7 +171,7 @@ export class MessageHistory implements Processor {
 
       // 2. Filter out system messages (they should never be stored in DB)
       const filteredMessages = messages.filter((msg: MastraDBMessage) => {
-        return msg.role !== 'system';
+        return msg.role !== 'system' && (!boundary || isAfterMemoryTokenBoundary(msg, boundary));
       });
 
       // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
@@ -140,10 +184,7 @@ export class MessageHistory implements Processor {
       const chronologicalMessages = uniqueHistoricalMessages.reverse();
 
       if (chronologicalMessages.length === 0) {
-        span?.end({
-          output: { success: true },
-          attributes: { messageCount: 0 },
-        });
+        span?.update({ attributes: { messageCount: 0 } });
         return messageList;
       }
 
@@ -156,14 +197,11 @@ export class MessageHistory implements Processor {
         }
       }
 
-      span?.end({
-        output: { success: true },
-        attributes: { messageCount: chronologicalMessages.length },
-      });
+      span?.update({ attributes: { messageCount: chronologicalMessages.length } });
 
       return messageList;
     } catch (error) {
-      span?.error({ error: error as Error, endSpan: true });
+      // The runner records the failure on this span and ends it.
       throw error;
     }
   }
@@ -270,22 +308,17 @@ export class MessageHistory implements Processor {
       return messageList;
     }
 
-    const span = this.createMemorySpan('save', observabilityContext, undefined, {
-      messageCount: messagesToSave.length,
-    });
+    const span = this.memorySpan(observabilityContext);
+    span?.update({ attributes: { messageCount: messagesToSave.length } });
 
     try {
       await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
       // add extra 1ms latency to make sure the next generate has not the same input
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      span?.end({
-        output: { success: true },
-      });
-
       return messageList;
     } catch (error) {
-      span?.error({ error: error as Error, endSpan: true });
+      // The runner records the failure on this span and ends it.
       throw error;
     }
   }

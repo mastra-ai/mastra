@@ -507,6 +507,61 @@ describe('MCP Registry Handlers', () => {
       );
     });
 
+    it('unwraps completed output and reports suspension for a 2026-07-28 server', async () => {
+      const executeTool = vi
+        .fn()
+        .mockResolvedValueOnce({ status: 'completed', output: { charged: 1 } })
+        .mockResolvedValueOnce({
+          status: 'suspended',
+          suspendPayload: { phase: 'confirm' },
+          resumeSchema: { type: 'object', properties: { confirmed: { type: 'boolean' } } },
+        });
+      const v2Server = { ...mockMCPServer, mcpVersion: 2, executeTool };
+      const mastra = { getMCPServerById: vi.fn(() => v2Server) } as unknown as Mastra;
+
+      const completed = await EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        toolId: 'confirm',
+        data: {},
+      });
+      expect(completed).toEqual({ result: { charged: 1 } });
+
+      const suspended = await EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        toolId: 'confirm',
+        data: {},
+      });
+      expect(suspended).toEqual({
+        status: 'suspended',
+        suspendPayload: { phase: 'confirm' },
+        resumeSchema: { type: 'object', properties: { confirmed: { type: 'boolean' } } },
+      });
+    });
+
+    it('forwards resumeData and suspendPayload so a REST caller can answer a suspension', async () => {
+      const executeTool = vi.fn().mockResolvedValue({ status: 'completed', output: { charged: 990 } });
+      const v2Server = { ...mockMCPServer, mcpVersion: 2, executeTool };
+      const mastra = { getMCPServerById: vi.fn(() => v2Server) } as unknown as Mastra;
+
+      const resumed = await EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        toolId: 'confirm',
+        data: { amount: 990 },
+        resumeData: { confirmed: true },
+        suspendPayload: { phase: 'confirm', amount: 990 },
+      });
+
+      expect(resumed).toEqual({ result: { charged: 990 } });
+      expect(executeTool).toHaveBeenCalledWith(
+        'confirm',
+        { amount: 990 },
+        expect.objectContaining({ resumeData: { confirmed: true }, suspendPayload: { phase: 'confirm', amount: 990 } }),
+      );
+    });
+
     it('should handle tool execution errors', async () => {
       const mockError = new Error('Tool execution failed');
       mockMCPServer.executeTool = vi.fn().mockRejectedValue(mockError);

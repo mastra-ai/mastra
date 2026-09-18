@@ -31,7 +31,10 @@ const harness = vi.hoisted(() => {
     getMastra: vi.fn(() => mastra),
     // Delivery reads the subscribed thread first to confirm this deployment
     // holds it and to learn which resource owns it.
-    queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) => ({ id: threadId, resourceId: threadResourceId })),
+    queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) => ({
+      id: threadId,
+      resourceId: threadResourceId,
+    })),
     getSessionByResource: vi.fn<() => Promise<typeof session | undefined>>(async () => session),
     createSession: vi.fn(async (_input: { requestContext: { get(key: string): unknown } }) => session),
     onSessionCreated: vi.fn(),
@@ -81,7 +84,7 @@ function json(data: unknown): Response {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.example.com/v1');
+  vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', 'https://platform.example.com');
   vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'platform-token');
   vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '60000');
   harness.reset();

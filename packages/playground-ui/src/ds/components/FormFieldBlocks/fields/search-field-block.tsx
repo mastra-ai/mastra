@@ -57,8 +57,6 @@ export function SearchFieldBlock({
     inputRef.current = element;
     if (externalInputRef) externalInputRef.current = element;
   };
-  const buttonSize = size === 'default' ? 'lg' : size;
-
   useEffect(() => {
     if (isMinimized === false) {
       inputRef.current?.focus();
@@ -70,7 +68,7 @@ export function SearchFieldBlock({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
-            size={buttonSize || 'sm'}
+            size={size || 'sm'}
             aria-label={label || 'Search'}
             disabled={disabled}
             onClick={() => onMinimizedChange?.(false)}
@@ -110,26 +108,26 @@ export function SearchFieldBlock({
             size={size}
             variant={variant}
             className={cn(
+              size === 'xs' && 'px-7',
               size === 'sm' && 'px-8',
-              size === 'md' && 'px-9',
-              (!size || size === 'default') && 'px-10',
-              size === 'lg' && 'px-11',
+              (!size || size === 'md') && 'px-9',
+              size === 'lg' && 'px-10',
             )}
           />
           <SearchIcon
             aria-hidden="true"
             className={cn(
-              'absolute top-1/2 left-3 -translate-y-1/2 text-neutral4 opacity-50 group-has-focus:opacity-100',
+              'absolute top-1/2 left-3 -translate-y-1/2 text-neutral3',
+              size === 'xs' && 'size-3',
               size === 'sm' && 'size-3.5',
-              size === 'md' && 'size-4',
-              (!size || size === 'default') && 'size-[1.125rem]',
-              size === 'lg' && 'size-5',
+              (!size || size === 'md') && 'size-4',
+              size === 'lg' && 'size-[1.125rem]',
             )}
           />
           {onReset && (value || isMinimized === false) && (
             <Button
               variant="ghost"
-              size={buttonSize || 'lg'}
+              size={size || 'md'}
               aria-label="Clear search"
               onClick={() => {
                 if (value) {

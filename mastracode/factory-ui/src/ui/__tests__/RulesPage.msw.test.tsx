@@ -29,6 +29,18 @@ const proposedDecision: FactoryDecisionSummary = {
   canRetry: false,
 };
 
+const failedDecision: FactoryDecisionSummary = {
+  ...proposedDecision,
+  id: 'decision-failed',
+  type: 'sendMessage',
+  status: 'failed',
+  attempts: 5,
+  lastError: 'No active Factory binding for role plan',
+  failureOccurrence: 1,
+  failureCode: 'unknown',
+  canRetry: true,
+};
+
 function renderRulesPage(onDecisionRequest: (statuses: string | null) => void) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -46,15 +58,33 @@ function renderRulesPage(onDecisionRequest: (statuses: string | null) => void) {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, ({ request }) => {
       const statuses = new URL(request.url).searchParams.get('statuses');
       onDecisionRequest(statuses);
-      return HttpResponse.json({ decisions: statuses === 'proposed' || statuses === null ? [proposedDecision] : [] });
+      const decisions =
+        statuses === 'proposed'
+          ? [proposedDecision]
+          : statuses === 'failed'
+            ? [failedDecision]
+            : statuses === null
+              ? [proposedDecision, failedDecision]
+              : [];
+      return HttpResponse.json({ decisions });
     }),
   );
 
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/rules`] });
   renderWithProviders(<RouterProvider router={router} />);
+  return router;
 }
 
 describe('Rules page filters', () => {
+  it('opens the supervisor from a failed decision row', async () => {
+    const user = userEvent.setup();
+    const router = renderRulesPage(() => undefined);
+
+    await user.click(await screen.findByRole('button', { name: 'Ask supervisor about failed sendMessage decision' }));
+
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/supervisor`);
+  });
+
   it('filters rule decisions with the mobile select', async () => {
     const statuses: Array<string | null> = [];
     const onDecisionRequest = vi.fn((status: string | null) => statuses.push(status));

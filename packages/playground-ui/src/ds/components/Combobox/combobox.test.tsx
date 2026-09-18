@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useRef } from 'react';
+import type { FormEvent } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Combobox } from './combobox';
 
 beforeAll(() => {
   if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
   }
 });
 
@@ -20,7 +22,17 @@ const options = [
   { label: 'Google', value: 'google' },
 ];
 
-function renderCombobox(props?: { onValueChange?: (value: string) => void; value?: string }) {
+function getFirstHTMLElement(element: Element): HTMLElement {
+  const firstElement = element.firstElementChild;
+  if (!(firstElement instanceof HTMLElement)) throw new Error('Expected an HTML element');
+  return firstElement;
+}
+
+function renderCombobox(props?: {
+  onValueChange?: (value: string) => void;
+  value?: string;
+  allowCustomValue?: boolean;
+}) {
   return render(
     <Combobox
       options={options}
@@ -28,6 +40,7 @@ function renderCombobox(props?: { onValueChange?: (value: string) => void; value
       onValueChange={props?.onValueChange}
       placeholder="Pick provider"
       searchPlaceholder="Search providers"
+      allowCustomValue={props?.allowCustomValue}
     />,
   );
 }
@@ -100,6 +113,63 @@ describe('Combobox', () => {
     });
   });
 
+  it('clears a multi-selection from the popup footer', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Combobox
+        multiple
+        options={options}
+        value={['openai', 'anthropic']}
+        onValueChange={onValueChange}
+        clearLabel="Clear"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear' }));
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+  });
+
+  it('does not submit a form when clearing a multi-selection from its portal', async () => {
+    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault());
+    const onValueChange = vi.fn();
+
+    function FormCombobox() {
+      const formRef = useRef<HTMLFormElement>(null);
+
+      return (
+        <form ref={formRef} onSubmit={onSubmit}>
+          <Combobox
+            multiple
+            container={formRef}
+            options={options}
+            value={['openai']}
+            onValueChange={onValueChange}
+            clearLabel="Clear"
+          />
+        </form>
+      );
+    }
+
+    render(<FormCombobox />);
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear' }));
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('shows the clear action only when a selected multi-combobox provides its label', async () => {
+    const { rerender } = render(<Combobox multiple options={options} value={[]} clearLabel="Clear" />);
+
+    fireEvent.click(screen.getByRole('combobox'));
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+
+    rerender(<Combobox multiple options={options} value={['openai']} />);
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+  });
+
   it('selects the first filtered item when pressing Enter after searching', async () => {
     const onValueChange = vi.fn();
     renderCombobox({ onValueChange });
@@ -121,6 +191,86 @@ describe('Combobox', () => {
     });
   });
 
+  it('selects a custom value when custom values are allowed', async () => {
+    const onValueChange = vi.fn();
+    renderCombobox({ onValueChange, allowCustomValue: true });
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'new-provider/new-model' }, inputType: 'insertText' });
+
+    const customOption = await screen.findByRole('option', { name: 'Use “new-provider/new-model”' });
+    fireEvent.pointerDown(customOption, { pointerType: 'mouse' });
+    fireEvent.click(customOption, { detail: 1 });
+
+    await waitFor(() => {
+      expect(onValueChange).toHaveBeenCalledWith('new-provider/new-model');
+    });
+  });
+
+  it('reports the search text through onInputValueChange and resets it after a selection', async () => {
+    const onInputValueChange = vi.fn();
+    render(<Combobox options={options} onInputValueChange={onInputValueChange} searchPlaceholder="Search providers" />);
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'goo' }, inputType: 'insertText' });
+
+    await waitFor(() => {
+      expect(onInputValueChange).toHaveBeenCalledWith('goo');
+    });
+
+    const google = await screen.findByRole('option', { name: 'Google' });
+    fireEvent.pointerDown(google, { pointerType: 'mouse' });
+    fireEvent.click(google, { detail: 1 });
+
+    await waitFor(() => {
+      expect(onInputValueChange).toHaveBeenLastCalledWith('');
+    });
+  });
+
+  it('keeps a consumer-injected option whose label contains the search text as the first option', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Combobox
+        options={[{ label: 'Create "goo"', value: '__create__' }, ...options]}
+        onValueChange={onValueChange}
+        searchPlaceholder="Search providers"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'goo' }, inputType: 'insertText' });
+
+    await screen.findByRole('option', { name: 'Google' });
+    const visible = screen.getAllByRole('option');
+    expect(visible.map(o => o.textContent)).toEqual(['Create "goo"', 'Google']);
+
+    const createOption = screen.getByRole('option', { name: 'Create "goo"' });
+    fireEvent.pointerDown(createOption, { pointerType: 'mouse' });
+    fireEvent.click(createOption, { detail: 1 });
+
+    await waitFor(() => {
+      expect(onValueChange).toHaveBeenCalledWith('__create__');
+    });
+  });
+
+  it('does not offer a custom value unless custom values are allowed', async () => {
+    renderCombobox();
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'new-provider/new-model' }, inputType: 'insertText' });
+
+    expect(await screen.findByText('No option found.')).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /new-provider\/new-model/ })).toBeNull();
+  });
+
   it('renders a pill-shaped trigger from the shared buttonVariants recipe', () => {
     render(<Combobox options={options} placeholder="Pick provider" />);
 
@@ -131,29 +281,18 @@ describe('Combobox', () => {
     expect(trigger.className).toContain('justify-between');
   });
 
-  it('defaults to the filled default variant; outline is transparent-bordered; ghost drops the border', () => {
-    const { rerender } = render(<Combobox options={options} placeholder="Pick provider" />);
-    // Default === the Button `default`: a filled surface.
-    const defaultClass = screen.getByRole('combobox').className;
-    expect(defaultClass).toContain('bg-surface3');
-    expect(defaultClass).not.toContain('bg-transparent');
+  it('renders options on the shared menu item recipe (ghost/md, rounded-lg)', async () => {
+    render(<Combobox options={options} placeholder="Pick provider" />);
 
-    // Outline === a transparent bordered field.
-    rerender(<Combobox options={options} placeholder="Pick provider" variant="outline" />);
-    const outlineClass = screen.getByRole('combobox').className;
-    expect(outlineClass).toContain('bg-transparent');
-    expect(outlineClass).toContain('border-border1');
+    fireEvent.click(screen.getByRole('combobox'));
 
-    // Ghost === borderless: same shape, transparent border instead.
-    rerender(<Combobox options={options} placeholder="Pick provider" variant="ghost" />);
-    const ghostClass = screen.getByRole('combobox').className;
-    expect(ghostClass).toContain('border-transparent');
-    expect(ghostClass).not.toContain('border-border1');
-
-    // Legacy `link` is still accepted for source compatibility, but renders as
-    // the closest field-safe look.
-    rerender(<Combobox options={options} placeholder="Pick provider" variant="link" />);
-    expect(screen.getByRole('combobox').className).toContain('border-transparent');
+    const option = await screen.findByRole('option', { name: 'OpenAI' });
+    expect(option.className).toContain('min-h-form-md');
+    expect(option.className).toContain('text-ui-smd');
+    expect(option.className).toContain('rounded-lg');
+    expect(option.className).not.toContain('rounded-full');
+    expect(option.className).not.toContain('rounded-md');
+    expect(option.className).toContain('data-highlighted:text-neutral6');
   });
 
   it('applies the error border when an error is provided', () => {
@@ -164,13 +303,13 @@ describe('Combobox', () => {
   it('says what went wrong under the field, and nothing when nothing did', () => {
     const withError = render(<Combobox options={options} error="Required" />);
     expect(screen.getByText('Required')).toBeTruthy();
-    const withErrorCount = (withError.container.firstElementChild as HTMLElement).childElementCount;
+    const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
 
     cleanup();
 
     const withoutError = render(<Combobox options={options} />);
 
-    expect((withoutError.container.firstElementChild as HTMLElement).childElementCount).toBe(withErrorCount - 1);
+    expect(getFirstHTMLElement(withoutError.container).childElementCount).toBe(withErrorCount - 1);
   });
 
   it('takes the medium size unless the caller asks otherwise', () => {
@@ -180,6 +319,29 @@ describe('Combobox', () => {
     rerender(<Combobox options={options} size="sm" />);
 
     expect(screen.getByRole('combobox').className).toContain('h-form-sm');
+  });
+
+  it('renders a chevron-only trigger at icon sizes while keeping the value for assistive tech', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Combobox
+        options={options}
+        value="openai"
+        onValueChange={onValueChange}
+        size="icon-sm"
+        aria-label="Switch provider"
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: 'Switch provider' });
+    expect(trigger.className).toContain('w-form-sm');
+    expect(trigger.className).not.toContain('w-full');
+    expect(screen.getByText('OpenAI').className).toContain('sr-only');
+
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole('option', { name: 'Anthropic' }));
+
+    expect(onValueChange).toHaveBeenCalledWith('anthropic');
   });
 
   it('invites a choice in its own words when the caller gives none', () => {
@@ -210,13 +372,28 @@ describe('Combobox', () => {
 
   it('greys out the invitation only while nothing is chosen', () => {
     const { rerender } = render(<Combobox multiple options={options} value={[]} placeholder="Pick providers" />);
-    const label = () => screen.getByRole('combobox').firstElementChild as HTMLElement;
-    expect(label().classList.contains('text-neutral3')).toBe(true);
+    const label = () => getFirstHTMLElement(screen.getByRole('combobox'));
+    expect(label().classList.contains('text-neutral2')).toBe(true);
 
     rerender(<Combobox multiple options={options} value={['openai']} placeholder="Pick providers" />);
 
     expect(label().textContent).toBe('1 selected');
-    expect(label().classList.contains('text-neutral3')).toBe(false);
+    expect(label().classList.contains('text-neutral2')).toBe(false);
+  });
+
+  it('uses the Input overlay surface (not the Button surface) for the default variant', () => {
+    render(<Combobox options={options} placeholder="Pick provider" />);
+
+    const trigger = screen.getByRole('combobox');
+    expect(trigger.classList.contains('bg-surface-overlay-soft')).toBe(true);
+    expect(trigger.classList.contains('border-border1')).toBe(true);
+    expect(trigger.classList.contains('data-[placeholder]:text-neutral2')).toBe(true);
+    expect(trigger.classList.contains('data-[popup-open]:bg-surface-overlay-strong')).toBe(true);
+    expect(trigger.className).not.toContain('button-default');
+
+    const chevron = trigger.querySelector('svg');
+    expect(chevron?.classList.contains('text-neutral3')).toBe(true);
+    expect(chevron?.className.baseVal).not.toContain('opacity');
   });
 
   it('keeps up with a selection that changes from outside', () => {
@@ -245,13 +422,13 @@ describe('Combobox', () => {
   it('says what went wrong under a multi-select field too', () => {
     const withError = render(<Combobox multiple options={options} value={[]} error="Required" />);
     expect(screen.getByText('Required')).toBeTruthy();
-    const withErrorCount = (withError.container.firstElementChild as HTMLElement).childElementCount;
+    const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
 
     cleanup();
 
     const withoutError = render(<Combobox multiple options={options} value={[]} />);
 
-    expect((withoutError.container.firstElementChild as HTMLElement).childElementCount).toBe(withErrorCount - 1);
+    expect(getFirstHTMLElement(withoutError.container).childElementCount).toBe(withErrorCount - 1);
   });
 
   it('picks a single value with nobody listening', async () => {

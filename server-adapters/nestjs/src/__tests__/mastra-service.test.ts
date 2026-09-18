@@ -1,10 +1,11 @@
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import { HttpAdapterHost } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
 
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import { MastraService } from '../mastra.service';
+import { RouteHandlerService } from '../services/route-handler.service';
 import { ShutdownService } from '../services/shutdown.service';
 
 describe('MastraService', () => {
@@ -16,6 +17,10 @@ describe('MastraService', () => {
         providers: [
           MastraService,
           ShutdownService,
+          {
+            provide: RouteHandlerService,
+            useValue: { registerRoute: () => undefined },
+          },
           {
             provide: MASTRA,
             useValue: context.mastra,

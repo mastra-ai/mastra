@@ -2,7 +2,7 @@ import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { resolveModelConfig } from '@mastra/core/llm';
+import { modelSupportsTemperature, resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -236,6 +236,7 @@ import { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange as hasProviderChanged } from './model-context';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
+import { resolveThreadTitleUpdate } from './observation-strategies/thread-title';
 import type { ObservationRunResult } from './observation-strategies/types';
 import { ObservationTurn } from './observation-turn/index';
 import type { ObservationTurnHooks } from './observation-turn/types';
@@ -255,14 +256,17 @@ import {
 } from './thresholds';
 import { TokenCounter } from './token-counter';
 import type { TokenCounterModelContext } from './token-counter';
+import { applyTextTransform } from './transform-hooks';
 import type {
   DataOmStatusPart,
   ObservationDebugEvent,
   ObservationalMemoryConfig,
   ObservationalMemoryModel,
+  WidenedObservationalMemoryModel,
   ObserveHookContext,
   ObserveHookUsage,
   ObserveHooks,
+  ObserveLifecycleHooks,
   ObserveTrigger,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
@@ -489,20 +493,27 @@ export class ObservationalMemory {
     this.mastra = config.mastra;
     this.memory = config.memory;
 
+    // Read the model fields once into the widened type. Combining values of the public type
+    // (`??` / ternaries below) makes TS subtype-reduce the model-id literal union, which grows
+    // with the provider registry and eventually fails with TS2590 "union type is too complex".
+    const topLevelModel: WidenedObservationalMemoryModel | undefined = config.model;
+    const observationConfigModel: WidenedObservationalMemoryModel | undefined = config.observation?.model;
+    const reflectionConfigModel: WidenedObservationalMemoryModel | undefined = config.reflection?.model;
+
     // Resolve "default" to the model default for the agent being configured.
-    const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
+    const resolveModel = (model: WidenedObservationalMemoryModel | undefined, defaultModel: string) =>
       model === 'default' ? defaultModel : model;
 
     // Resolution order: top-level model → sub-config model → the other sub-config model → default.
     const observationModel =
-      resolveModel(config.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
-      resolveModel(config.observation?.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
-      resolveModel(config.reflection?.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
+      resolveModel(topLevelModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
+      resolveModel(observationConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
+      resolveModel(reflectionConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
       OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
     const reflectionModel =
-      resolveModel(config.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
-      resolveModel(config.reflection?.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
-      resolveModel(config.observation?.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
+      resolveModel(topLevelModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
+      resolveModel(reflectionConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
+      resolveModel(observationConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
       OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
 
     // Get base thresholds first (needed for shared budget calculation)
@@ -511,21 +522,51 @@ export class ObservationalMemory {
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
 
-    const isDefaultModelSelection = (model: ObservationalMemoryModel | undefined) =>
+    const supportsDefaultTemperature = (model: WidenedObservationalMemoryModel) => {
+      if (model instanceof ModelByInputTokens || typeof model === 'function') return false;
+
+      if (typeof model === 'string') {
+        return modelSupportsTemperature(model) === true;
+      }
+
+      if (
+        model &&
+        typeof model === 'object' &&
+        'provider' in model &&
+        'modelId' in model &&
+        typeof model.provider === 'string' &&
+        typeof model.modelId === 'string'
+      ) {
+        return modelSupportsTemperature(`${model.provider.split('.')[0]}/${model.modelId}`) === true;
+      }
+
+      return false;
+    };
+    const usesDefaultOutputTokenBudget = (model: WidenedObservationalMemoryModel | undefined) =>
       model === undefined || model === 'default' || model instanceof ModelByInputTokens;
 
-    const observationSelectedModel = config.model ?? config.observation?.model ?? config.reflection?.model;
-    const reflectionSelectedModel = config.model ?? config.reflection?.model ?? config.observation?.model;
+    const observationSelectedModel = topLevelModel ?? observationConfigModel ?? reflectionConfigModel;
+    const reflectionSelectedModel = topLevelModel ?? reflectionConfigModel ?? observationConfigModel;
 
+    const observationTemperature =
+      config.observation?.modelSettings?.temperature ??
+      (supportsDefaultTemperature(observationModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature
+        : undefined);
     const observationDefaultMaxOutputTokens =
       config.observation?.modelSettings?.maxOutputTokens ??
-      (isDefaultModelSelection(observationSelectedModel)
+      (usesDefaultOutputTokenBudget(observationSelectedModel)
         ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens
         : undefined);
 
+    const reflectionTemperature =
+      config.reflection?.modelSettings?.temperature ??
+      (supportsDefaultTemperature(reflectionModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature
+        : undefined);
     const reflectionDefaultMaxOutputTokens =
       config.reflection?.modelSettings?.maxOutputTokens ??
-      (isDefaultModelSelection(reflectionSelectedModel)
+      (usesDefaultOutputTokenBudget(reflectionSelectedModel)
         ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens
         : undefined);
 
@@ -576,9 +617,7 @@ export class ObservationalMemory {
       messageTokens: isSharedBudget ? { min: messageTokens, max: totalBudget } : messageTokens,
       shareTokenBudget: isSharedBudget,
       modelSettings: {
-        temperature:
-          config.observation?.modelSettings?.temperature ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature,
+        ...(observationTemperature !== undefined ? { temperature: observationTemperature } : {}),
         ...(observationDefaultMaxOutputTokens !== undefined
           ? { maxOutputTokens: observationDefaultMaxOutputTokens }
           : {}),
@@ -611,7 +650,9 @@ export class ObservationalMemory {
       previousObserverTokens: config.observation?.previousObserverTokens ?? 2000,
       instruction: config.observation?.instruction,
       threadTitle: config.observation?.threadTitle ?? false,
-      observeAttachments: config.observation?.observeAttachments ?? true,
+      observeAttachments: config.observation?.observeAttachments ?? [
+        ...OBSERVATIONAL_MEMORY_DEFAULTS.observation.observeAttachments,
+      ],
       extractors: composeObservationExtractors({
         threadTitle: config.observation?.threadTitle ?? false,
         extract: config.observation?.extract,
@@ -625,9 +666,7 @@ export class ObservationalMemory {
       observationTokens: observationTokens,
       shareTokenBudget: isSharedBudget,
       modelSettings: {
-        temperature:
-          config.reflection?.modelSettings?.temperature ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature,
+        ...(reflectionTemperature !== undefined ? { temperature: reflectionTemperature } : {}),
         ...(reflectionDefaultMaxOutputTokens !== undefined
           ? { maxOutputTokens: reflectionDefaultMaxOutputTokens }
           : {}),
@@ -671,6 +710,7 @@ export class ObservationalMemory {
       tokenCounter: this.tokenCounter,
       mastra: config.mastra,
       memory: this.memory,
+      hooks: this.hooks,
     });
 
     this.buffering = new BufferingCoordinator({
@@ -694,6 +734,7 @@ export class ObservationalMemory {
       mastra: config.mastra,
       memory: this.memory,
       onReflectionCommitted: config.onReflectionCommitted,
+      hooks: this.hooks,
     });
 
     // Validate buffer configuration
@@ -2293,6 +2334,7 @@ ${formattedMessages}
           writer,
           requestContext,
           observabilityContext,
+          trigger: 'async-buffer',
         }).run(),
     );
 
@@ -2345,6 +2387,7 @@ ${formattedMessages}
           opts.writer,
           opts.unbufferedPendingTokens,
           opts.requestContext,
+          opts.observabilityContext,
         ),
       );
     }
@@ -3283,6 +3326,7 @@ ${formattedMessages}
             requestContext,
             currentModel: opts.currentModel,
             observabilityContext,
+            trigger: 'async-buffer',
           }).run(),
       );
 
@@ -3558,9 +3602,8 @@ ${formattedMessages}
           currentTask: lastActivated.currentTask,
           threadTitle: chunkThreadTitle,
         });
-        const oldTitle = thread.title?.trim();
-        const newTitle = chunkThreadTitle?.trim();
-        const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+        const newTitle = resolveThreadTitleUpdate(thread, chunkThreadTitle);
+        const shouldUpdateThreadTitle = newTitle !== undefined;
         await this.storage.patchThread({
           id: threadId,
           ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
@@ -3585,16 +3628,16 @@ ${formattedMessages}
    * @internal
    */
   composeHooks(
-    callHooks: ObserveHooks | undefined,
+    callHooks: ObserveLifecycleHooks | undefined,
     context: ObserveHookContext,
     execution: 'configured' | 'non-blocking' = 'configured',
-  ): ObserveHooks | undefined {
+  ): ObserveLifecycleHooks | undefined {
     const configHooks = this.hooks;
     if (!configHooks) return callHooks;
     if (!callHooks && !Object.keys(configHooks).length) return undefined;
 
     const shouldAwaitConfig = execution === 'configured' && this.hookExecution === 'await';
-    const invokeConfigHook = async (name: keyof ObserveHooks, arg: unknown) => {
+    const invokeConfigHook = async (name: keyof ObserveLifecycleHooks, arg: unknown) => {
       const hook = configHooks[name] as ((arg?: unknown) => void | Promise<void>) | undefined;
       if (!hook) return;
       if (shouldAwaitConfig) {
@@ -3692,7 +3735,7 @@ ${formattedMessages}
     messages?: MastraDBMessage[];
     /** Live MessageList for the in-flight turn — lets markers land on the pending assistant message. */
     messageList?: MessageList;
-    hooks?: ObserveHooks;
+    hooks?: ObserveLifecycleHooks;
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
     agent?: ProcessorContext['agent'];
@@ -3708,7 +3751,8 @@ ${formattedMessages}
   }> {
     const { threadId, resourceId, messages, requestContext } = opts;
     const lockKey = this.buffering.getLockKey(threadId, resourceId);
-    const hooks = this.composeHooks(opts.hooks, { threadId, resourceId, trigger: opts.trigger ?? 'manual' });
+    const trigger = opts.trigger ?? 'manual';
+    const hooks = this.composeHooks(opts.hooks, { threadId, resourceId, trigger });
     const reflectionHooks = hooks
       ? { onReflectionStart: hooks.onReflectionStart, onReflectionEnd: hooks.onReflectionEnd }
       : undefined;
@@ -3720,10 +3764,12 @@ ${formattedMessages}
     let lifecycleError: unknown;
     let observationStarted = false;
     let generationBefore = -1;
+    let recordInsideLock!: ObservationalMemoryRecord;
 
     try {
       await this.withLock(lockKey, async () => {
         const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
+        recordInsideLock = freshRecord;
         generationBefore = freshRecord.generationCount;
 
         const unobservedMessages = messages
@@ -3752,6 +3798,7 @@ ${formattedMessages}
           messages: unobservedMessages,
           messageList: opts.messageList,
           reflectionHooks,
+          trigger,
           agent: opts.agent,
           sendSignal: opts.sendSignal,
           sendStateSignal: opts.sendStateSignal,
@@ -3785,8 +3832,11 @@ ${formattedMessages}
 
     if (lifecycleError !== undefined) throw lifecycleError;
 
-    // Fetch the latest record after lock release
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    // Fetch the latest record after lock release. It was already created inside
+    // the lock, so a missing record here means the thread was deleted while this
+    // cycle was running — fall back to the record the cycle actually used rather
+    // than recreating a row for a thread that no longer exists.
+    const record = (await this.getRecord(threadId, resourceId)) ?? recordInsideLock;
     const reflected = record.generationCount > generationBefore && generationBefore >= 0;
 
     return { observed, reflected, record };
@@ -3835,7 +3885,8 @@ ${formattedMessages}
     await this.storage.setReflectingFlag(record.id, true);
     registerOp(record.id, 'reflecting');
 
-    const hooks = this.composeHooks(undefined, { threadId, resourceId, trigger: 'manual' });
+    const hookContext: ObserveHookContext = { threadId, resourceId, trigger: 'manual' };
+    const hooks = this.composeHooks(undefined, hookContext);
     let reflectionUsage: ObserveHookUsage | undefined;
     let reflectionProviderMetadata: ProviderMetadata | undefined;
     let reflectionError: Error | undefined;
@@ -3855,7 +3906,7 @@ ${formattedMessages}
       const priorExtractedValues = getPriorExtractedValues(previousOmMetadata, this.reflectionConfig.extractors);
       const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
       const reflectResult = await this.reflector.call(
-        record.activeObservations,
+        await applyTextTransform(this.hooks, 'beforeReflection', record.activeObservations, hookContext),
         prompt,
         undefined,
         reflectThreshold,
@@ -3866,6 +3917,12 @@ ${formattedMessages}
         priorExtractedValues,
         observabilityContext,
         undefined,
+      );
+      reflectResult.observations = await applyTextTransform(
+        this.hooks,
+        'afterReflection',
+        reflectResult.observations,
+        hookContext,
       );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 

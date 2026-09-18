@@ -62,8 +62,8 @@ export const Sizes: Story = {
 };
 
 /**
- * A select is a field, so it offers the same button looks as everywhere:
- * `default` (the filled Button surface, the default here too), `outline`
+ * A select is a field, so it shares the Input's surface rather than the Button's:
+ * `default` (the Input's overlay surface, the default here too), `outline`
  * (bordered, transparent) and `ghost` (borderless, for dense toolbars). It does
  * not expose the high-emphasis `primary` look.
  */
@@ -166,6 +166,27 @@ export const ManyOptions: Story = {
         <SelectItem value="br">Brazil</SelectItem>
         <SelectItem value="in">India</SelectItem>
         <SelectItem value="cn">China</SelectItem>
+      </SelectContent>
+    </Select>
+  ),
+};
+
+/** Selected, disabled and grouped items side by side, to compare against the menu components. */
+export const KitchenSink: Story = {
+  render: () => (
+    <Select defaultValue="selected" defaultOpen>
+      <SelectTrigger className="w-56">
+        <SelectValue placeholder="Select option" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          <SelectItem value="plain">Plain item</SelectItem>
+          <SelectItem value="selected">Selected item</SelectItem>
+          <SelectItem value="disabled" disabled>
+            Disabled item
+          </SelectItem>
+          <SelectItem value="long">A very long option label that should truncate inside the popup</SelectItem>
+        </SelectGroup>
       </SelectContent>
     </Select>
   ),

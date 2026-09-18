@@ -1,6 +1,6 @@
 {
   "name": "@internal/auth",
-  "version": "0.0.20",
+  "version": "0.0.23",
   "description": "Internal Mastra auth primitives and utilities",
   "private": true,
   "type": "module",
@@ -98,7 +98,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "hono": "^4.9.4",
+    "hono": "^4.13.7",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",

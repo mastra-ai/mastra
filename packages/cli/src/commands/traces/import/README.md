@@ -1,0 +1,106 @@
+# Trace import architecture
+
+Trace import is internal to the Mastra CLI. This directory defines the boundary
+between source providers and the shared import pipeline.
+
+## Provider responsibility
+
+A provider reads its own API and yields `TraceImportRecord` values through the
+`TraceImportProvider` contract. It owns:
+
+- authentication and source project discovery;
+- pagination and source rate-limit handling;
+- reconstructing complete source trace trees;
+- source-specific validation and skip reasons;
+- mapping source fields into `TraceImportTrace`;
+- creating stable destination trace and span IDs.
+
+Provider-specific types and behavior stay inside that provider's directory.
+
+## Shared importer responsibility
+
+The shared importer receives only complete Mastra traces or explicit skip
+records. It owns common validation, local preparation, whole-trace batching,
+upload retries, resume, verification, reporting, and cleanup.
+
+The shared importer must not import provider-specific types. Adding another
+provider should require a new adapter, not another upload pipeline.
+
+## Local preparation and resume
+
+Preparation is an upload-free pass over the provider output. It writes two
+private files under `~/.mastra/imports/traces/<target-project>/<import-id>/`:
+
+- `manifest.json` stores source identity, the fixed import window, counts, and
+  acknowledged progress.
+- `traces.jsonl` stores one complete normalized trace per line.
+
+Upload batches are created in memory from whole JSONL records, so a trace is
+never split across requests. After Platform acknowledges a batch, the manifest
+advances by that batch's trace count. Resume skips those acknowledged records
+and starts at the first pending trace. A batch whose response was lost may be
+sent again; provider adapters therefore generate stable destination IDs.
+
+Partial preparation is discarded and downloaded again. The implementation does
+not keep source pages, shards, batch files, checksums, or fsync bookkeeping.
+Prepared trace data is removed only after upload and read-back verification
+succeed.
+
+## Platform upload
+
+The shared upload loop sends each in-memory whole-trace batch to a
+`TraceImportTarget`. The Mastra Platform target posts the exact prepared
+`{"spans": [...]}` payload to the project-scoped collector route and requires a
+successful acknowledgement with the expected span count before advancing the
+manifest checkpoint.
+
+Temporary network and collector failures are retried with bounded backoff. If a
+response is lost after the collector accepted it, the batch remains pending and
+is safely replayed with the same stable IDs. Authentication, quota, payload, and
+other permanent errors are returned immediately without changing progress.
+Consecutive batches are paced to approximately 100 spans per second by default;
+an individual trace remains whole even when it contains more than 100 spans.
+
+## Read-back verification and reports
+
+After every prepared trace is acknowledged, the shared verifier selects a
+deterministic sample of at most ten traces. It uses Platform's lightweight
+trace endpoint to compare span IDs, parent links, names, span types, event
+flags, timestamps, and error presence. It does not download or compare customer
+input, output, attributes, metadata, or tags.
+
+Verification retries briefly for query propagation. A mismatch, timeout, or
+unavailable query API pauses the import, writes `report.json`, and keeps
+`traces.jsonl` so verification can be retried without uploading acknowledged
+traces again. Successful verification marks the import complete, writes the
+report, and removes the prepared trace file.
+
+## CLI workflow
+
+`mastra traces import langfuse` connects these layers into the customer-facing
+workflow. Langfuse credentials come from `LANGFUSE_PUBLIC_KEY`,
+`LANGFUSE_SECRET_KEY`, and optional `LANGFUSE_BASE_URL`. The destination uses
+the normal Mastra login, or `MASTRA_API_TOKEN` together with `MASTRA_ORG_ID`,
+plus `--project`, `MASTRA_PROJECT_ID`, or the linked project configuration.
+Interactive uploads and read-back also require `MASTRA_PLATFORM_ACCESS_TOKEN`;
+headless imports reuse `MASTRA_API_TOKEN` for those requests.
+
+The command prepares a fixed window, displays counts before upload, asks for
+confirmation, uploads pending batches, verifies a sample, and writes a report.
+`--dry-run` stops after preparation. `--resume <import-id>` reuses the saved
+window and starts at the first unfinished phase. Internal size, batching,
+pacing, retry, and verification limits are intentionally not CLI options.
+
+The default window is the current 30-day Platform retention period. `--from`
+and `--to` accept ISO 8601 values inside that period; the end cannot be in the
+future, the start must precede the end, and the window cannot exceed 30 days.
+If only `--to` is set, the implicit start is clamped to the current retention
+boundary. A resumed import must use the original provider and target project,
+and its saved window cannot be changed.
+
+Dry runs, cancelled uploads, interruptions after preparation, and paused
+verification keep `traces.jsonl` for `--resume`. An interruption during
+preparation removes the partial temporary trace file and prepares the source
+again on resume. Successful upload and read-back verification remove
+`traces.jsonl` while retaining `manifest.json` and `report.json`. A completed
+import retries that cleanup when it is resumed.

@@ -1,18 +1,20 @@
 import {
   presentTool,
   stringifyToolValue,
-  ToolCallMono,
+  stripSerializedAnsi,
+  ToolCallArguments,
+  ToolCallOutput,
   ToolCallPresentedHeader,
 } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
+import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
+import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import { BadgeWrapper } from './badge-wrapper';
-import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
-import { SectionLabel } from './section-label';
-import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { ToolApprovalButtons } from './tool-approval-buttons';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 function formatArgs(args: Record<string, unknown> | string): { pretty: string; parsed?: Record<string, unknown> } {
   try {
@@ -51,7 +53,8 @@ export const ToolBadge = ({
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
   const { icon, label, detail } = presentTool(toolName, argsObject);
-  const resultPretty = result !== undefined && result !== null ? stringifyToolValue(result) : undefined;
+  const resultPretty =
+    result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
 
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
@@ -82,34 +85,26 @@ export const ToolBadge = ({
       }
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >
-      {!withoutArgs && (
-        <ToolCallMono copyText={argsPretty} data-testid="tool-args" className="text-icon5">
-          {argsPretty}
-        </ToolCallMono>
-      )}
+      <ToolCallArguments
+        toolName={toolName}
+        args={argsObject}
+        argsText={argsPretty}
+        hideArguments={withoutArgs}
+        data-testid="tool-args"
+      />
 
       {suspendPayload !== undefined && suspendPayload && (
         <div>
           <SectionLabel>Suspend payload</SectionLabel>
           {typeof suspendPayload === 'string' ? (
-            <ToolCallMono copyText={suspendPayload} className="text-icon3">
-              {suspendPayload}
-            </ToolCallMono>
+            <ToolCallOutput text={suspendPayload} />
           ) : (
             <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
           )}
         </div>
       )}
 
-      {resultPretty && (
-        <ToolCallMono
-          copyText={resultPretty}
-          data-testid="tool-result"
-          className={status === 'error' ? 'text-error/90' : 'text-icon3'}
-        >
-          {resultPretty}
-        </ToolCallMono>
-      )}
+      {resultPretty && <ToolCallOutput text={resultPretty} error={status === 'error'} data-testid="tool-result" />}
 
       {toolOutput.length > 0 && (
         <div>

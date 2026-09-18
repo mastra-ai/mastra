@@ -1,5 +1,6 @@
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getFeedbackRefetchInterval } from '../utils/feedback-refetch-interval';
 
 const FEEDBACK_PER_PAGE = 20;
 
@@ -27,6 +28,7 @@ export function useFeedback({ reviewStatus }: { reviewStatus?: FeedbackReviewSta
   };
 }
 
+/** Polls the pending-review total while enabled, stopping on permanent storage errors. */
 export function useFeedbackInboxCount({ enabled }: { enabled: boolean }) {
   const client = useMastraClient();
 
@@ -39,7 +41,7 @@ export function useFeedbackInboxCount({ enabled }: { enabled: boolean }) {
         orderBy: { field: 'timestamp', direction: 'DESC' },
       }),
     enabled,
-    refetchInterval: 3000,
+    refetchInterval: getFeedbackRefetchInterval,
   });
 }
 
@@ -50,6 +52,12 @@ export function useUpdateFeedbackReviewStatus() {
   return useMutation({
     mutationFn: ({ feedbackId, reviewStatus }: { feedbackId: string; reviewStatus: FeedbackReviewStatus }) =>
       client.updateFeedbackReviewStatus({ feedbackId, reviewStatus }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feedback'] }),
+    // Trace/span threads render the same records, so refresh them alongside the inbox list.
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['feedback'] }),
+        queryClient.invalidateQueries({ queryKey: ['trace-feedback'] }),
+        queryClient.invalidateQueries({ queryKey: ['span-feedback'] }),
+      ]),
   });
 }

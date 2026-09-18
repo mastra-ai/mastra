@@ -31,9 +31,20 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import type { OutputResult, Processor, ProcessorStreamWriter, ProcessorStreamWriterOptions } from '../processors';
-import { ProcessorRunner, ProcessorState } from '../processors/runner';
+import type {
+  OutputResult,
+  Processor,
+  ProcessorStepExecutor,
+  ProcessorStreamWriter,
+  ProcessorStreamWriterOptions,
+} from '../processors';
+import { OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX, ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
+import {
+  resolveProcessorSpanAttributes,
+  resolveProcessorSpanName,
+  toProcessorSpanPhase,
+} from '../processors/span-declaration';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -105,6 +116,7 @@ import type {
   StepMetadata,
   WorkflowRunStartOptions,
   ForeachOptions,
+  StepFlowEntryOptions,
 } from './types';
 import {
   cleanStepResult,
@@ -288,6 +300,27 @@ function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): Seri
  * @param params.outputSchema Zod schema defining the output structure
  * @param params.execute Function that performs the step's operations
  * @returns A Step object that can be added to the workflow
+ *
+ * @example
+ * ```typescript
+ * import { createStep } from '@mastra/core/workflows';
+ * import { z } from 'zod';
+ *
+ * const greet = createStep({
+ *   id: 'greet',
+ *   inputSchema: z.string(),
+ *   outputSchema: z.string(),
+ *   execute: async ({ inputData }) => `Hello, ${inputData}!`,
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Workflow documentation](https://mastra.ai/docs/workflows/overview)
+ * if packaged docs are unavailable.
  */
 export function createStep<
   TStepId extends string,
@@ -444,11 +477,7 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
   }
 
   if (isProcessor(params)) {
-    const step = createStepFromProcessor(params) as ReturnType<typeof createStepFromProcessor> & {
-      providesSkillDiscovery?: Processor['providesSkillDiscovery'];
-    };
-    step.providesSkillDiscovery = params.providesSkillDiscovery;
-    return step;
+    return createStepFromProcessor(params);
   }
 
   throw new Error('Invalid input: expected StepParams, Agent, ToolStep, or Processor');
@@ -610,7 +639,21 @@ function toSerializedSingleStepEntry(step: StepWithRefMetadata): SerializedSingl
   };
 }
 
-function createStepFromProcessor<TProcessorId extends string>(
+/**
+ * The identity/display fields of a control-flow entry as a spreadable object,
+ * omitting absent fields so live and serialized graphs stay free of
+ * `undefined`-valued keys (serialized graphs are persisted as JSON).
+ */
+function toEntryOptionFields(options?: StepFlowEntryOptions): StepFlowEntryOptions {
+  const out: StepFlowEntryOptions = {};
+  if (options?.id !== undefined) out.id = options.id;
+  if (options?.description !== undefined) out.description = options.description;
+  if (options?.metadata !== undefined) out.metadata = options.metadata;
+  return out;
+}
+
+/** @internal Builds the adapter shared by processor workflows and direct stream execution. */
+export function createStepFromProcessor<TProcessorId extends string>(
   processor: Processor<TProcessorId>,
 ): Step<
   `processor:${TProcessorId}`,
@@ -620,7 +663,10 @@ function createStepFromProcessor<TProcessorId extends string>(
   unknown,
   unknown,
   DefaultEngineType
-> {
+> & {
+  execute: ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>;
+  providesSkillDiscovery?: Processor['providesSkillDiscovery'];
+} {
   type ProcessorLoadedToolsProvider = {
     getLoadedToolsForRequestContext?: (args: { requestContext: RequestContext }) => unknown | Promise<unknown>;
   };
@@ -693,7 +739,13 @@ function createStepFromProcessor<TProcessorId extends string>(
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: toStandardSchema(ProcessorStepInputSchema) as StandardSchemaWithJSON<ProcessorStepInput>,
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<ProcessorStepOutput>,
-    execute: async ({ inputData, requestContext, tracingContext, outputWriter }) => {
+    providesSkillDiscovery: processor.providesSkillDiscovery,
+    execute: async ({
+      inputData,
+      requestContext,
+      tracingContext,
+      outputWriter,
+    }: Parameters<ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>>[0]) => {
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
@@ -707,6 +759,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         messages,
         messageList,
         stepNumber,
+        runId: agentRunId,
         systemMessages,
         part,
         streamParts,
@@ -936,13 +989,18 @@ function createStepFromProcessor<TProcessorId extends string>(
       const processorSpan =
         phase !== 'outputStream'
           ? parentSpan?.createChildSpan({
-              type: SpanType.PROCESSOR_RUN,
-              name: `${getSpanNamePrefix(phase)}: ${processor.id}`,
+              type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+              name: resolveProcessorSpanName(
+                processor,
+                toProcessorSpanPhase(phase),
+                `${getSpanNamePrefix(phase)}: ${processor.id}`,
+              ),
               entityType: getProcessorEntityType(phase),
               entityId: processor.id,
               entityName: processor.name ?? processor.id,
               input: buildProcessorSpanInput(),
               attributes: {
+                ...resolveProcessorSpanAttributes(processor, toProcessorSpanPhase(phase)),
                 processorExecutor: 'workflow',
                 // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
                 processorIndex: processor.processorIndex,
@@ -1019,6 +1077,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
         phase,
+        runId: agentRunId,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
         messageList: processorMessageList,
@@ -1180,6 +1239,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messages: messages as MastraDBMessage[],
                 messageList: checkedMessageList,
                 stepNumber: stepNumber ?? 0,
+                runId: agentRunId,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 // Pass model/tools configuration fields - types match ProcessInputStepArgs
                 model: model!,
@@ -1219,6 +1279,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                runId: agentRunId,
                 systemMessages: checkedMessageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
@@ -1245,12 +1306,13 @@ function createStepFromProcessor<TProcessorId extends string>(
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
                 processorSpan = parentSpan.createChildSpan({
-                  type: SpanType.PROCESSOR_RUN,
-                  name: `output stream processor: ${processor.id}`,
+                  type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+                  name: resolveProcessorSpanName(processor, 'output', `output stream processor: ${processor.id}`),
                   entityType: EntityType.OUTPUT_PROCESSOR,
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
                   attributes: {
+                    ...resolveProcessorSpanAttributes(processor, 'output'),
                     processorExecutor: 'workflow',
                     processorIndex: processor.processorIndex,
                   },
@@ -1265,21 +1327,32 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               // Handle outputStream span lifecycle explicitly (not via executePhaseWithSpan)
               // because outputStream uses a per-processor span stored in mutableState
+              // Accumulates time spent inside the hook across chunks, beside the span.
+              const hookDurationKey = `${OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX}${processor.id}`;
+              const readHookDurationMs = () => (mutableState[hookDurationKey] as number | undefined) ?? 0;
               let result: ChunkType | null | undefined;
               try {
-                result = await processor.processOutputStream({
-                  ...baseContext,
-                  ...processorObservabilityContext,
-                  part: part as ChunkType,
-                  streamParts: (streamParts ?? []) as ChunkType[],
-                  state: mutableState,
-                  messageList: passThrough.messageList, // Optional for stream processing
-                });
+                const hookStart = performance.now();
+                try {
+                  result = await processor.processOutputStream({
+                    ...baseContext,
+                    ...processorObservabilityContext,
+                    part: part as ChunkType,
+                    streamParts: (streamParts ?? []) as ChunkType[],
+                    state: mutableState,
+                    messageList: passThrough.messageList, // Optional for stream processing
+                  });
+                } finally {
+                  mutableState[hookDurationKey] = readHookDurationMs() + (performance.now() - hookStart);
+                }
 
                 // End span on finish chunk
                 if (part && (part as ChunkType).type === 'finish') {
                   // Output just totalChunks (workflow processors don't track accumulated text yet)
-                  processorSpan?.end({ output: { totalChunks: (streamParts ?? []).length } });
+                  processorSpan?.end({
+                    output: { totalChunks: (streamParts ?? []).length },
+                    attributes: { hookDurationMs: readHookDurationMs() },
+                  });
                   // Keep the ended span reference in mutableState so that
                   // post-finish chunks (e.g. step-finish) don't trigger a
                   // new span creation at the guard above.
@@ -1291,6 +1364,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                     error,
                     endSpan: true,
                     attributes: {
+                      hookDurationMs: readHookDurationMs(),
                       tripwireAbort: {
                         reason: error.message,
                         retry: error.options?.retry,
@@ -1299,7 +1373,11 @@ function createStepFromProcessor<TProcessorId extends string>(
                     },
                   });
                 } else {
-                  processorSpan?.error({ error: error as Error, endSpan: true });
+                  processorSpan?.error({
+                    error: error as Error,
+                    endSpan: true,
+                    attributes: { hookDurationMs: readHookDurationMs() },
+                  });
                 }
                 throw error;
               }
@@ -1556,7 +1634,7 @@ function createStepFromProcessor<TProcessorId extends string>(
     unknown,
     unknown,
     DefaultEngineType
-  >;
+  > & { providesSkillDiscovery?: Processor['providesSkillDiscovery'] };
 
   const toolProvider = processor as ProcessorLoadedToolsProvider;
   if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
@@ -1735,6 +1813,7 @@ export class Workflow<
       onFinish: options.onFinish,
       onError: options.onError,
       sharePubsub: options.sharePubsub,
+      autoRestartActiveRuns: options.autoRestartActiveRuns,
     };
 
     if (!executionEngine) {
@@ -1835,9 +1914,12 @@ export class Workflow<
         return;
       case 'sleep':
       case 'sleepUntil':
-        // Same no-op placeholder the sleep/sleepUntil builder methods register.
+        // Same no-op placeholder the sleep/sleepUntil builder methods register,
+        // including the entry's display fields so steps/allSteps stay in sync.
         this.steps[live.id] = createStep({
           id: live.id,
+          description: live.description,
+          metadata: live.metadata,
           inputSchema: z.object({}),
           outputSchema: z.object({}),
           execute: async () => ({}),
@@ -1997,24 +2079,35 @@ export class Workflow<
   /**
    * Adds a sleep step to the workflow
    * @param duration The duration to sleep for
+   * @param options Optional stable `id`, `description`, and `metadata` for the entry
    * @returns The workflow instance for chaining
    */
-  sleep(duration: number | ExecuteFunction<TState, TPrevSchema, number, any, any, TEngineType>) {
-    const id = `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep' }) || randomUUID()}`;
+  sleep(
+    duration: number | ExecuteFunction<TState, TPrevSchema, number, any, any, TEngineType>,
+    options?: StepFlowEntryOptions,
+  ) {
+    const id =
+      options?.id ||
+      `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep' }) || randomUUID()}`;
+    // Only the display fields: `id` is spelled explicitly from the normalized
+    // value above, so a falsy caller id can never override the generated one.
+    const displayFields = toEntryOptionFields({ description: options?.description, metadata: options?.metadata });
 
     const opts: StepFlowEntry<TEngineType> =
       typeof duration === 'function'
-        ? { type: 'sleep', id, fn: duration }
-        : { type: 'sleep', id, duration: duration as number };
+        ? { type: 'sleep', id, ...displayFields, fn: duration }
+        : { type: 'sleep', id, ...displayFields, duration: duration as number };
     const serializedOpts: SerializedStepFlowEntry =
       typeof duration === 'function'
-        ? { type: 'sleep', id, fn: duration.toString() }
-        : { type: 'sleep', id, duration: duration as number };
+        ? { type: 'sleep', id, ...displayFields, fn: duration.toString() }
+        : { type: 'sleep', id, ...displayFields, duration: duration as number };
 
     this.stepFlow.push(opts);
     this.serializedStepFlow.push(serializedOpts);
     this.steps[id] = createStep({
       id,
+      description: options?.description,
+      metadata: options?.metadata,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
       execute: async () => {
@@ -2036,23 +2129,34 @@ export class Workflow<
   /**
    * Adds a sleep until step to the workflow
    * @param date The date to sleep until
+   * @param options Optional stable `id`, `description`, and `metadata` for the entry
    * @returns The workflow instance for chaining
    */
-  sleepUntil(date: Date | ExecuteFunction<TState, TPrevSchema, Date, any, any, TEngineType>) {
-    const id = `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep-until' }) || randomUUID()}`;
+  sleepUntil(
+    date: Date | ExecuteFunction<TState, TPrevSchema, Date, any, any, TEngineType>,
+    options?: StepFlowEntryOptions,
+  ) {
+    const id =
+      options?.id ||
+      `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep-until' }) || randomUUID()}`;
+    // Only the display fields: `id` is spelled explicitly from the normalized
+    // value above, so a falsy caller id can never override the generated one.
+    const displayFields = toEntryOptionFields({ description: options?.description, metadata: options?.metadata });
     const opts: StepFlowEntry<TEngineType> =
       typeof date === 'function'
-        ? { type: 'sleepUntil', id, fn: date }
-        : { type: 'sleepUntil', id, date: date as Date };
+        ? { type: 'sleepUntil', id, ...displayFields, fn: date }
+        : { type: 'sleepUntil', id, ...displayFields, date: date as Date };
     const serializedOpts: SerializedStepFlowEntry =
       typeof date === 'function'
-        ? { type: 'sleepUntil', id, fn: date.toString() }
-        : { type: 'sleepUntil', id, date: date as Date };
+        ? { type: 'sleepUntil', id, ...displayFields, fn: date.toString() }
+        : { type: 'sleepUntil', id, ...displayFields, date: date as Date };
 
     this.stepFlow.push(opts);
     this.serializedStepFlow.push(serializedOpts);
     this.steps[id] = createStep({
       id,
+      description: options?.description,
+      metadata: options?.metadata,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
       execute: async () => {
@@ -2122,7 +2226,7 @@ export class Workflow<
             | DynamicMapping<TPrevSchema, any>;
         }
       | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
-    stepOptions?: { id?: string | null },
+    stepOptions?: { id?: string | null; description?: string; metadata?: StepMetadata },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
     // Build a declarative `{ type: 'mapping' }` graph entry; the mapping logic is
     // interpreted at execution time by `createMappingStep`, not baked in here.
@@ -2159,11 +2263,17 @@ export class Workflow<
       }
     }
 
+    const mappingDisplayFields = toEntryOptionFields({
+      description: stepOptions?.description,
+      metadata: stepOptions?.metadata,
+    });
+
     if (typeof mappingConfig === 'function') {
-      this.stepFlow.push({ type: 'mapping', id: mappingId, mapConfig: mappingConfig as any });
+      this.stepFlow.push({ type: 'mapping', id: mappingId, ...mappingDisplayFields, mapConfig: mappingConfig as any });
       this.serializedStepFlow.push({
         type: 'mapping',
         id: mappingId,
+        ...mappingDisplayFields,
         mapConfig: truncate(mappingConfig.toString()),
       });
       this.steps[mappingId] = createMappingStep(mappingId, mappingConfig as any) as any;
@@ -2228,10 +2338,16 @@ export class Workflow<
 
     type MappedOutputSchema = any;
 
-    this.stepFlow.push({ type: 'mapping', id: mappingId, mapConfig: mappingConfig as MappingConfig });
+    this.stepFlow.push({
+      type: 'mapping',
+      id: mappingId,
+      ...mappingDisplayFields,
+      mapConfig: mappingConfig as MappingConfig,
+    });
     this.serializedStepFlow.push({
       type: 'mapping',
       id: mappingId,
+      ...mappingDisplayFields,
       mapConfig: truncate(JSON.stringify(newMappingConfig, null, 2)),
     });
     this.steps[mappingId] = createMappingStep(mappingId, mappingConfig as MappingConfig) as any;
@@ -2274,13 +2390,17 @@ export class Workflow<
           >
         : `Error: Expected Step with state schema that is a subset of workflow state`;
     },
+    options?: StepFlowEntryOptions,
   ) {
+    const entryOptionFields = toEntryOptionFields(options);
     this.stepFlow.push({
       type: 'parallel',
+      ...entryOptionFields,
       steps: steps.map(step => toSingleStepEntry(step as StepWithRefMetadata)),
     });
     this.serializedStepFlow.push({
       type: 'parallel',
+      ...entryOptionFields,
       steps: steps.map(step => toSerializedSingleStepEntry(step as StepWithRefMetadata)),
     });
     steps.forEach(step => {
@@ -2311,7 +2431,8 @@ export class Workflow<
         Step<string, any, TPrevSchema, any, any, any, TEngineType, any>,
       ]
     >,
-  >(steps: TBranchSteps) {
+  >(steps: TBranchSteps, options?: StepFlowEntryOptions) {
+    const entryOptionFields = toEntryOptionFields(options);
     const resolved = steps.map(([condOrPred, step]) => {
       const isDeclarative = isDeclarativePredicateArg(condOrPred);
       const predicate = isDeclarative ? (condOrPred as { predicate: Predicate }).predicate : undefined;
@@ -2323,6 +2444,7 @@ export class Workflow<
     });
     this.stepFlow.push({
       type: 'conditional',
+      ...entryOptionFields,
       steps: resolved.map(({ step }) => toSingleStepEntry(step as StepWithRefMetadata)),
       conditions: resolved.map(({ condition }) => condition),
       serializedConditions: resolved.map(({ step, label }) => ({ id: `${step.id}-condition`, fn: label })),
@@ -2332,6 +2454,7 @@ export class Workflow<
     } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
       type: 'conditional',
+      ...entryOptionFields,
       steps: resolved.map(({ step }) => toSerializedSingleStepEntry(step as StepWithRefMetadata)),
       serializedConditions: resolved.map(({ step, label }) => ({ id: `${step.id}-condition`, fn: label })),
       ...(resolved.some(({ predicate }) => predicate)
@@ -2379,7 +2502,9 @@ export class Workflow<
       unknown extends TStepRC ? unknown : TRequestContext
     >,
     condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType> | { predicate: Predicate },
+    options?: StepFlowEntryOptions,
   ) {
+    const entryOptionFields = toEntryOptionFields(options);
     const isDeclarative = isDeclarativePredicateArg(condition);
     const predicate = isDeclarative ? (condition as { predicate: Predicate }).predicate : undefined;
     const runtimeCondition = isDeclarative
@@ -2388,6 +2513,7 @@ export class Workflow<
     const label = predicate ? derivePredicateLabel(predicate) : runtimeCondition.toString();
     this.stepFlow.push({
       type: 'loop',
+      ...entryOptionFields,
       step: toSingleStepEntry(step),
       condition: runtimeCondition,
       loopType: 'dowhile',
@@ -2396,6 +2522,7 @@ export class Workflow<
     } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
       type: 'loop',
+      ...entryOptionFields,
       step: toSerializedSingleStepEntry(step as StepWithRefMetadata),
       serializedCondition: { id: `${step.id}-condition`, fn: label },
       loopType: 'dowhile',
@@ -2428,7 +2555,9 @@ export class Workflow<
       unknown extends TStepRC ? unknown : TRequestContext
     >,
     condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType> | { predicate: Predicate },
+    options?: StepFlowEntryOptions,
   ) {
+    const entryOptionFields = toEntryOptionFields(options);
     const isDeclarative = isDeclarativePredicateArg(condition);
     const predicate = isDeclarative ? (condition as { predicate: Predicate }).predicate : undefined;
     const runtimeCondition = isDeclarative
@@ -2437,6 +2566,7 @@ export class Workflow<
     const label = predicate ? derivePredicateLabel(predicate) : runtimeCondition.toString();
     this.stepFlow.push({
       type: 'loop',
+      ...entryOptionFields,
       step: toSingleStepEntry(step),
       condition: runtimeCondition,
       loopType: 'dountil',
@@ -2445,6 +2575,7 @@ export class Workflow<
     } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
       type: 'loop',
+      ...entryOptionFields,
       step: toSerializedSingleStepEntry(step as StepWithRefMetadata),
       serializedCondition: { id: `${step.id}-condition`, fn: label },
       loopType: 'dountil',
@@ -2485,18 +2616,28 @@ export class Workflow<
           unknown extends TStepRC ? unknown : TRequestContext
         >
       : 'Previous step must return an array type',
-    opts?: ForeachOptions,
+    opts?: Partial<ForeachOptions> & StepFlowEntryOptions,
   ) {
     const concurrency = opts?.concurrency ?? 1;
     const serializedOpts = typeof concurrency === 'function' ? { fn: concurrency.toString() } : { concurrency };
+    const entryOptionFields = toEntryOptionFields(opts);
     const foreachStep = step as StepWithRefMetadata;
     this.stepFlow.push({
       type: 'foreach',
+      ...entryOptionFields,
       step: toSingleStepEntry(foreachStep),
-      opts: opts ?? { concurrency: 1 },
+      // Keep the caller's options object BY REFERENCE when it carries a
+      // concurrency: the agentic execution workflow mutates `concurrency` on it
+      // between build and execution (see createAgenticExecutionWorkflow's
+      // map-tool-calls step), and snapshotting would freeze tool-call
+      // parallelism at its conservative initial value. `.foreach(step, { id })`
+      // has no concurrency to mutate, so give that live entry the engine
+      // default instead of an opts object that lies about the type.
+      opts: opts?.concurrency === undefined ? { ...opts, concurrency: 1 } : (opts as ForeachOptions),
     });
     this.serializedStepFlow.push({
       type: 'foreach',
+      ...entryOptionFields,
       step: toSerializedSingleStepEntry(foreachStep),
       opts: serializedOpts,
     });
@@ -4696,6 +4837,9 @@ export class Run<
       .then(result => {
         if (!params.isVNext && result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
+        }
+        if (result.status !== 'suspended') {
+          this.cleanup?.();
         }
         result.traceId = traceId;
         result.spanId = spanId;

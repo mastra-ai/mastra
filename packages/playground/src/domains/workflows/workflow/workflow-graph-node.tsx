@@ -1,15 +1,19 @@
-import { Handle, Position } from '@xyflow/react';
+import type { WorkflowCardDisplayStatus } from '@mastra/playground-ui/components/Workflow';
+import {
+  WorkflowNodeFrame,
+  WorkflowConditionCard,
+  WorkflowStepCardView,
+} from '@mastra/playground-ui/components/Workflow';
+
 import type { NodeProps } from '@xyflow/react';
-import { useState } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
-import type { WorkflowCardDisplayStatus, WorkflowConditionCodeCondition } from './components/types';
-import { WorkflowConditionCardView } from './components/workflow-condition-card-view';
-import { WorkflowStepCardView } from './components/workflow-step-card-view';
 import { useWaitingStepKey } from './use-workflow-trigger';
+import { WorkflowBodyGraph } from './workflow-body-graph';
+import { getWorkflowCardKind } from './workflow-node-kind';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
 import type { WorkflowStepNode, WorkflowStepNodeData } from './workflow-step-node-utils';
 
@@ -36,7 +40,7 @@ const WorkflowStepCard = ({
   stepsFlow: Record<string, string[]>;
 }) => {
   const { steps } = useCurrentRun();
-  const { selectedStepId, hoverStepId, setHoverStepId } = useWorkflowSelectedStep();
+  const { selectedStepId, setSelectedStepId, hoverStepId, setHoverStepId } = useWorkflowSelectedStep();
   const { showNestedGraph } = useWorkflowStepDetail();
   const waitingStepKey = useWaitingStepKey();
   const { label, stepId, description } = data;
@@ -57,10 +61,17 @@ const WorkflowStepCard = ({
 
   return (
     <WorkflowStepCardView
-      label={label}
-      description={description}
+      label={data.mapContext?.label ?? label}
+      nodeKind={getWorkflowCardKind(data.workflowStep)}
+      onSelect={() => setSelectedStepId(stepKey)}
+      initiallyOpen={!parentWorkflowName}
+      body={
+        stepGraph?.length ? (
+          <WorkflowBodyGraph stepGraph={stepGraph} workflowName={fullLabel} isForEach={data.isForEach} />
+        ) : undefined
+      }
+      description={description ?? data.mapContext?.description}
       displayStatus={displayStatus}
-      hasStep={Boolean(step)}
       isNestedWorkflowStep={data.workflowStep.kind === 'nested-workflow-step'}
       stepKey={stepKey}
       isSelected={isSelected}
@@ -73,7 +84,6 @@ const WorkflowStepCard = ({
       foreachProgress={step?.foreachProgress}
       mapConfig={mapConfig}
       canSuspend={data.canSuspend}
-      isParallel={data.isParallel}
       stepGraph={stepGraph}
       startedAt={step?.startedAt}
       endedAt={step?.endedAt}
@@ -86,7 +96,6 @@ const WorkflowStepCard = ({
           tripwire={isTripwire ? step?.tripwire : undefined}
           mapConfig={mapConfig}
           onShowNestedGraph={stepGraph ? () => showNestedGraph({ label, fullStep: fullLabel, stepGraph }) : undefined}
-          status={displayStatus}
           stepKey={stepKey}
           stepsFlow={stepsFlow}
         />
@@ -95,39 +104,29 @@ const WorkflowStepCard = ({
   );
 };
 
-const WorkflowConditionCard = ({ data }: { data: WorkflowStepNodeData }) => {
-  const [open, setOpen] = useState(true);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [dialogCondition, setDialogCondition] = useState<WorkflowConditionCodeCondition | undefined>();
+const WorkflowConditionNodeCard = ({
+  data,
+  parentWorkflowName,
+}: {
+  data: WorkflowStepNodeData;
+  parentWorkflowName?: string;
+}) => {
   const { steps } = useCurrentRun();
   const conditions = data.conditions ?? [];
-  const type = conditions[0]?.type;
-  const previousStep = data.previousStepId ? steps[data.previousStepId] : undefined;
-  const nextStep = data.nextStepId ? steps[data.nextStepId] : undefined;
+  const previousStepId =
+    data.previousStepId && (parentWorkflowName ? `${parentWorkflowName}.${data.previousStepId}` : data.previousStepId);
+  const previousStep = previousStepId ? steps[previousStepId] : undefined;
   const { displayStatus: previousDisplayStatus, isTripwire } = getDisplayStatus(previousStep);
 
   return (
-    <WorkflowConditionCardView
-      type={type}
+    <WorkflowConditionCard
       conditions={conditions}
       previousDisplayStatus={previousDisplayStatus}
-      hasPreviousStep={Boolean(previousStep)}
-      hasNextStep={Boolean(nextStep)}
-      isOpen={open}
-      onOpenChange={setOpen}
-      openDialog={openDialog}
-      onOpenDialogChange={setOpenDialog}
-      dialogCondition={dialogCondition}
-      onConditionClick={condition => {
-        setDialogCondition(condition);
-        setOpenDialog(true);
-      }}
       actionBar={
         <WorkflowStepActionBar
           stepName={data.nextStepId ?? data.label}
           mapConfig={data.mapConfig}
           tripwire={isTripwire ? previousStep?.tripwire : undefined}
-          status={nextStep ? previousDisplayStatus : undefined}
         />
       }
     />
@@ -141,18 +140,14 @@ export function WorkflowGraphNode({
 }: NodeProps<WorkflowStepNode> & WorkflowGraphNodeProps) {
   const content =
     data.workflowStep.kind === 'conditional' ? (
-      <WorkflowConditionCard data={data} />
+      <WorkflowConditionNodeCard data={data} parentWorkflowName={parentWorkflowName} />
     ) : (
       <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
     );
 
   return (
-    <>
-      {!data.withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
+    <WorkflowNodeFrame withoutTopHandle={data.withoutTopHandle} withoutBottomHandle={data.withoutBottomHandle}>
       {content}
-      {!data.withoutBottomHandle && (
-        <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />
-      )}
-    </>
+    </WorkflowNodeFrame>
   );
 }

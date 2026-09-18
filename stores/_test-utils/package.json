@@ -1,6 +1,6 @@
 {
   "name": "@internal/storage-test-utils",
-  "version": "0.0.126",
+  "version": "0.0.129",
   "description": "",
   "type": "module",
   "main": "src/index.ts",
@@ -16,11 +16,12 @@
   "license": "Apache-2.0",
   "peerDependencies": {
     "@mastra/core": "*",
-    "vitest": "*"
+    "vitest": "catalog:"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
     "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:"
+    "@vitest/ui": "catalog:",
+    "vitest": "catalog:"
   }
 }

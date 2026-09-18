@@ -1,8 +1,40 @@
+export * from './trace-query';
+export * from './trace-query-discovery';
+
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
+import {
+  parseGetTraceQueryFieldsArgs,
+  parseGetTraceQueryValuesArgs,
+  parseQueryThreadsInput,
+  parseTraceQueryRequest,
+  planThreadQuery,
+  planTraceQuery,
+  planTraceQueryObservedFields,
+  planTraceQueryValues,
+} from '@mastra/core/storage';
+import type {
+  CreateFeedbackRecord,
+  CreateScoreRecord,
+  CreateSpanRecord,
+  ObservabilityStorage,
+  TraceQueryRequest,
+} from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
+import { TRACE_QUERY_DISCOVERY_FIXTURE_DATA, TRACE_QUERY_DISCOVERY_TIME_RANGE } from './trace-query-discovery';
+import {
+  normalizeTraceQueryResponse,
+  THREAD_QUERY_CONFORMANCE_CASES,
+  THREAD_QUERY_FIXTURE_DATA,
+  TRACE_QUERY_CONFORMANCE_CASES,
+  TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS,
+  TRACE_QUERY_FIXTURE_DATA,
+  TRACE_QUERY_ORDINAL_FIXTURE_DATA,
+  TRACE_QUERY_SCORE_REPLACEMENT_CASES,
+  TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
+} from './trace-query';
+import type { TraceQueryFixtureData } from './trace-query';
 
 export interface ObservabilityVNextCapabilities {
   /**
@@ -16,6 +48,20 @@ export interface ObservabilityVNextCapabilities {
    * tests live in adapter test files until they are lifted into this suite.
    */
   preferredStrategy: 'event-sourced' | 'insert-only' | 'batch-with-updates';
+  /** Whether this adapter implements the advanced trusted trace-query plan. */
+  traceQuery?: boolean;
+  /** Whether this adapter implements bounded trace-query field and value discovery. */
+  traceQueryDiscovery?: boolean;
+  /** Whether this adapter implements the trusted thread-query plan. */
+  threadQuery?: boolean;
+  /**
+   * The span write model used to seed trace-query conformance fixtures. Completion-only
+   * adapters receive only completed span records. Score and feedback history is always
+   * written unchanged so adapters must implement their own current-record semantics.
+   */
+  traceQuerySpanWriteModel?: 'event-sourced' | 'completion-only';
+  /** Whether feedback value predicates distinguish numbers from numeric-looking strings. Defaults to true. */
+  traceQueryStrictFeedbackValueTypes?: boolean;
 }
 
 export interface CreateObservabilityVNextTestsOptions {
@@ -65,6 +111,109 @@ export interface CreateObservabilityVNextTestsOptions {
  * materialized views) so the assertion isn't racey. Adapters with synchronous
  * reads (InMemory, DuckDB) satisfy the predicate on the first call.
  */
+function traceQueryFixtureForWriteModel(
+  data: TraceQueryFixtureData,
+  writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+) {
+  if (writeModel !== 'completion-only') {
+    return { spans: data.spans, relatedSpans: [], scores: data.scores, feedback: data.feedback };
+  }
+
+  const roots = new Map<string | null, TraceQueryFixtureData['spans'][number]>();
+  const spans = new Map<string, TraceQueryFixtureData['spans'][number]>();
+  for (const span of data.spans) {
+    if (span.parentSpanId === null) {
+      roots.set(span.traceId, span);
+    } else {
+      spans.set(`${span.traceId}\u0000${span.spanId}`, span);
+    }
+  }
+
+  return {
+    spans: [...roots.values()].filter(root => !root.isPending),
+    relatedSpans: [...spans.values()],
+    scores: data.scores,
+    feedback: data.feedback,
+  };
+}
+
+async function writeTraceQueryFixture(
+  storage: ObservabilityStorage,
+  data: TraceQueryFixtureData,
+  writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+) {
+  const fixture = traceQueryFixtureForWriteModel(data, writeModel);
+  const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
+    .filter(span => span.traceId !== null)
+    .map(span => ({
+      traceId: span.traceId!,
+      spanId: span.spanId,
+      parentSpanId: span.parentSpanId,
+      name: span.name,
+      spanType: span.spanType as SpanType,
+      isEvent: false,
+      startedAt: new Date(span.startedAt),
+      endedAt: span.endedAt ? new Date(span.endedAt) : null,
+      threadId: span.threadId,
+      resourceId: span.resourceId,
+      entityType: span.entityType as EntityType,
+      entityId: span.entityId,
+      entityName: span.entityName,
+      entityVersionId: span.entityVersionId,
+      parentEntityVersionId: span.parentEntityVersionId,
+      rootEntityVersionId: span.rootEntityVersionId,
+      environment: span.environment,
+      attributes: span.attributes,
+      metadata: span.metadata,
+      error: span.error as CreateSpanRecord['error'],
+    }));
+  for (const span of records) await storage.createSpan({ span });
+
+  const scores = fixture.scores
+    .filter(score => score.score !== null)
+    .map(score => {
+      const timestamp = new Date(score.timestamp);
+      return {
+        id: score.scoreId,
+        scoreId: score.scoreId,
+        traceId: score.traceId,
+        spanId: score.spanId,
+        scorerId: score.scorerId,
+        scorerVersion: score.scorerVersion,
+        scoreSource: score.scoreSource,
+        score: score.score!,
+        entityVersionId: score.entityVersionId,
+        parentEntityVersionId: score.parentEntityVersionId,
+        rootEntityVersionId: score.rootEntityVersionId,
+        timestamp,
+        createdAt: timestamp,
+        updatedAt: null,
+      };
+    });
+  for (const score of scores) await storage.createScore({ score });
+
+  for (const feedback of fixture.feedback) {
+    await storage.createFeedback({
+      feedback: {
+        feedbackId: feedback.feedbackId,
+        traceId: feedback.traceId,
+        spanId: null,
+        timestamp: new Date(feedback.timestamp),
+        feedbackType: feedback.feedbackType,
+        feedbackSource: feedback.feedbackSource,
+        feedbackUserId: feedback.feedbackUserId,
+        sourceId: feedback.sourceId,
+        value: feedback.value,
+        comment: feedback.comment,
+        entityVersionId: feedback.entityVersionId,
+        parentEntityVersionId: feedback.parentEntityVersionId,
+        rootEntityVersionId: feedback.rootEntityVersionId,
+        metadata: null,
+      },
+    });
+  }
+}
+
 async function waitFor<T>(
   fn: () => Promise<T>,
   predicate: (value: T) => boolean,
@@ -103,6 +252,403 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
     it('reports observability strategy preference', () => {
       expect(storage.observabilityStrategy?.preferred).toBe(capabilities.preferredStrategy);
     });
+
+    if (capabilities.traceQueryDiscovery) {
+      const observedFields = async (args: {
+        predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+        search?: string;
+        limit?: number;
+      }) => {
+        const normalized = parseGetTraceQueryFieldsArgs({
+          timeRange: TRACE_QUERY_DISCOVERY_TIME_RANGE,
+          ...args,
+        });
+        return storage.getTraceQueryObservedFields(planTraceQueryObservedFields(normalized));
+      };
+      const values = async (args: {
+        predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+        path: string;
+        search?: string;
+        limit?: number;
+      }) => {
+        const normalized = parseGetTraceQueryValuesArgs({
+          timeRange: TRACE_QUERY_DISCOVERY_TIME_RANGE,
+          ...args,
+        });
+        return storage.getTraceQueryValues(planTraceQueryValues(normalized));
+      };
+
+      const writeDiscoveryFixture = () =>
+        writeTraceQueryFixture(storage, TRACE_QUERY_DISCOVERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+
+      it('discovers only executable top-level string metadata fields from current qualified roots', async () => {
+        await writeDiscoveryFixture();
+        await expect(observedFields({ predicateScope: 'trace' })).resolves.toEqual({
+          observedFields: [
+            expect.objectContaining({ path: 'metadata.customer', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.region', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.escapedValue', occurrences: 2 }),
+            expect.objectContaining({ path: 'metadata.literalPattern', occurrences: 2 }),
+            expect.objectContaining({ path: 'metadata.unicodeValue', occurrences: 2 }),
+            expect.objectContaining({ path: 'metadata.percent%key', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.under_score', occurrences: 1 }),
+          ],
+          observedFieldsTruncated: false,
+        });
+        await expect(observedFields({ predicateScope: 'trace', search: 'REGION' })).resolves.toEqual({
+          observedFields: [expect.objectContaining({ path: 'metadata.region', occurrences: 3 })],
+          observedFieldsTruncated: false,
+        });
+        await expect(observedFields({ predicateScope: 'trace', search: '%' })).resolves.toEqual({
+          observedFields: [expect.objectContaining({ path: 'metadata.percent%key', occurrences: 1 })],
+          observedFieldsTruncated: false,
+        });
+        await expect(observedFields({ predicateScope: 'trace', search: '_' })).resolves.toEqual({
+          observedFields: [expect.objectContaining({ path: 'metadata.under_score', occurrences: 1 })],
+          observedFieldsTruncated: false,
+        });
+        await expect(observedFields({ predicateScope: 'trace', limit: 2 })).resolves.toEqual({
+          observedFields: [
+            expect.objectContaining({ path: 'metadata.customer', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.region', occurrences: 3 }),
+          ],
+          observedFieldsTruncated: true,
+        });
+        await expect(observedFields({ predicateScope: 'spans' })).resolves.toEqual({
+          observedFields: [],
+          observedFieldsTruncated: false,
+        });
+      });
+
+      it('discovers deterministic string values across every predicate scope', async () => {
+        await writeDiscoveryFixture();
+        await expect(values({ predicateScope: 'trace', path: 'metadata.region' })).resolves.toEqual({
+          values: [
+            { value: 'us-west-2', count: 2 },
+            { value: 'eu-west-1', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'metadata.escapedValue' })).resolves.toEqual({
+          values: [{ value: 'quote" and slash\\ with 雪', count: 2 }],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'metadata.unicodeValue' })).resolves.toEqual({
+          values: [
+            { value: '大阪', count: 1 },
+            { value: '東京', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'environment', limit: 1 })).resolves.toEqual({
+          values: [{ value: 'production', count: 2 }],
+          valuesTruncated: true,
+        });
+        await expect(values({ predicateScope: 'spans', path: 'model' })).resolves.toEqual({
+          values: [
+            { value: 'claude-sonnet-4-6', count: 2 },
+            { value: 'gpt-5', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'scores', path: 'scorerId' })).resolves.toEqual({
+          values: [
+            { value: 'quality', count: 2 },
+            { value: 'safety', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'feedback', path: 'feedbackType' })).resolves.toEqual({
+          values: [
+            { value: 'thumbs', count: 2 },
+            { value: 'rating', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+      });
+
+      it('treats value search wildcard characters as literal substring text', async () => {
+        await writeDiscoveryFixture();
+        await expect(
+          values({ predicateScope: 'trace', path: 'metadata.literalPattern', search: '%PROD_' }),
+        ).resolves.toEqual({
+          values: [{ value: '%prod_', count: 1 }],
+          valuesTruncated: false,
+        });
+      });
+    }
+
+    if (capabilities.traceQuery) {
+      it('matches the shared advanced trace-query conformance cases without merge assistance', async () => {
+        await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+
+        for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
+          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
+            continue;
+          }
+          const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+          const response = await storage.queryTraces(plan);
+          expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
+        }
+
+        const pagedTraceIds: string[] = [];
+        let after: string | undefined;
+        do {
+          const pagePlan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              page: { limit: 2, ...(after ? { after } : {}) },
+            }),
+          );
+          const response = await storage.queryTraces(pagePlan);
+          if (!('traces' in response) || !('page' in response)) throw new Error('Expected keyset trace results');
+          pagedTraceIds.push(...response.traces.map(trace => trace.traceId));
+          after = response.page.next ?? undefined;
+        } while (after);
+        expect(pagedTraceIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
+        expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+      });
+
+      describe('score replacement conformance', () => {
+        it('uses one current score per scoreId before trace predicates', async () => {
+          await writeTraceQueryFixture(
+            storage,
+            TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
+            capabilities.traceQuerySpanWriteModel,
+          );
+
+          for (const testCase of TRACE_QUERY_SCORE_REPLACEMENT_CASES) {
+            const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+            const response = await storage.queryTraces(plan);
+            expect.soft(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
+          }
+        });
+      });
+
+      it('matches list-compatible trace-query page boundaries and metadata', async () => {
+        await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+        const pages = [
+          { page: 0, ids: ['trace-d', 'trace-c'], hasMore: true },
+          { page: 1, ids: ['trace-a', 'trace-b'], hasMore: false },
+          { page: 2, ids: [], hasMore: false },
+        ];
+
+        const consecutiveIds: string[] = [];
+        for (const expected of pages) {
+          const plan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              pagination: { page: expected.page, perPage: 2 },
+            }),
+          );
+          const response = await storage.queryTraces(plan);
+          if (!('traces' in response) || !('pagination' in response)) throw new Error('Expected paginated traces');
+          expect(response.traces.map(trace => trace.traceId)).toEqual(expected.ids);
+          expect(response.pagination).toEqual({
+            total: 4,
+            page: expected.page,
+            perPage: 2,
+            hasMore: expected.hasMore,
+          });
+          if (expected.page < 2) consecutiveIds.push(...response.traces.map(trace => trace.traceId));
+        }
+        expect(consecutiveIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
+        expect(new Set(consecutiveIds).size).toBe(consecutiveIds.length);
+
+        const filteredPlan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            where: { op: 'exists', path: 'threadId' },
+            orderBy: [{ field: 'startedAt', direction: 'asc' }],
+            pagination: { page: 0, perPage: 3 },
+          }),
+        );
+        const filtered = await storage.queryTraces(filteredPlan);
+        if (!('traces' in filtered) || !('pagination' in filtered)) throw new Error('Expected paginated traces');
+        expect(filtered.traces.map(trace => trace.traceId)).toEqual(['trace-a', 'trace-b', 'trace-c']);
+        expect(filtered.pagination).toEqual({ total: 3, page: 0, perPage: 3, hasMore: false });
+
+        const emptyPlan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'missing' } },
+            pagination: { page: 0, perPage: 10 },
+          }),
+        );
+        const empty = await storage.queryTraces(emptyPlan);
+        if (!('traces' in empty) || !('pagination' in empty)) throw new Error('Expected paginated traces');
+        expect(empty).toEqual({
+          traces: [],
+          pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+        });
+      });
+
+      describe('feedback replacement conformance', () => {
+        for (const scenario of TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS) {
+          it(scenario.name, async () => {
+            for (const span of scenario.fixture.spans) {
+              await storage.createSpan({
+                span: {
+                  traceId: span.traceId!,
+                  spanId: span.spanId,
+                  parentSpanId: span.parentSpanId,
+                  name: span.name,
+                  spanType: span.spanType as SpanType,
+                  isEvent: false,
+                  startedAt: new Date(span.startedAt),
+                  endedAt: span.endedAt ? new Date(span.endedAt) : null,
+                  threadId: span.threadId,
+                  resourceId: span.resourceId,
+                  entityType: span.entityType as EntityType,
+                  entityId: span.entityId,
+                  entityName: span.entityName,
+                  entityVersionId: span.entityVersionId,
+                  parentEntityVersionId: span.parentEntityVersionId,
+                  rootEntityVersionId: span.rootEntityVersionId,
+                  environment: span.environment,
+                  attributes: span.attributes,
+                  metadata: span.metadata,
+                  error: span.error as CreateSpanRecord['error'],
+                },
+              });
+            }
+
+            for (const write of scenario.writes) {
+              const feedbacks: CreateFeedbackRecord[] = write.feedback.map(feedback => ({
+                feedbackId: feedback.feedbackId,
+                traceId: feedback.traceId,
+                spanId: null,
+                timestamp: new Date(feedback.timestamp),
+                feedbackType: feedback.feedbackType,
+                feedbackSource: feedback.feedbackSource,
+                feedbackUserId: feedback.feedbackUserId,
+                sourceId: feedback.sourceId,
+                value: feedback.value,
+                comment: feedback.comment,
+                entityVersionId: feedback.entityVersionId,
+                parentEntityVersionId: feedback.parentEntityVersionId,
+                rootEntityVersionId: feedback.rootEntityVersionId,
+                metadata: null,
+              }));
+              if (write.method === 'batch') {
+                await storage.batchCreateFeedback({ feedbacks });
+              } else {
+                await storage.createFeedback({ feedback: feedbacks[0]! });
+              }
+            }
+
+            if (flushPendingMerges) await flushPendingMerges(storage);
+
+            for (const assertion of scenario.assertions) {
+              const plan = planTraceQuery(parseTraceQueryRequest(assertion.request));
+              const response = await storage.queryTraces(plan);
+              expect.soft(normalizeTraceQueryResponse(response), assertion.name).toEqual(assertion.expected);
+            }
+          });
+        }
+      });
+
+      it('paginates mixed-case and non-ASCII trace and thread IDs in ordinal order', async () => {
+        for (const span of TRACE_QUERY_ORDINAL_FIXTURE_DATA.spans) {
+          await storage.createSpan({
+            span: {
+              traceId: span.traceId!,
+              spanId: span.spanId,
+              parentSpanId: span.parentSpanId,
+              name: span.spanId,
+              spanType: span.spanType as SpanType,
+              isEvent: false,
+              startedAt: new Date(span.startedAt),
+              endedAt: span.endedAt ? new Date(span.endedAt) : null,
+              threadId: span.threadId,
+              resourceId: span.resourceId,
+              entityName: span.entityName,
+              entityType: span.entityType as EntityType,
+              environment: span.environment,
+              error: span.error as CreateSpanRecord['error'],
+            },
+          });
+        }
+
+        const collectPages = async (request: TraceQueryRequest) => {
+          const values: string[] = [];
+          let after: string | undefined;
+          do {
+            const plan = planTraceQuery(
+              parseTraceQueryRequest({ ...request, page: { limit: 1, ...(after ? { after } : {}) } }),
+            );
+            const response = await storage.queryTraces(plan);
+            if ('traces' in response) {
+              values.push(...response.traces.map(trace => trace.traceId));
+            } else {
+              values.push(...response.groups.map(group => group.threadId));
+            }
+            if (!('page' in response)) throw new Error('Expected keyset results');
+            after = response.page.next ?? undefined;
+          } while (after);
+          return values;
+        };
+
+        const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+        const expected = ['A', 'a', 'é', 'Ω'];
+        await expect(collectPages({ timeRange, orderBy: [{ field: 'startedAt', direction: 'asc' }] })).resolves.toEqual(
+          expected,
+        );
+        await expect(collectPages({ timeRange, group: { by: ['threadId'] } })).resolves.toEqual(expected);
+      });
+    }
+
+    if (capabilities.threadQuery) {
+      it('matches the shared thread-query conformance cases without merge assistance', async () => {
+        await writeTraceQueryFixture(storage, THREAD_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+
+        for (const testCase of THREAD_QUERY_CONFORMANCE_CASES) {
+          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
+            continue;
+          }
+          const plan = planThreadQuery(parseQueryThreadsInput(testCase.request));
+          const response = await storage.queryThreads(plan);
+          expect(response.threads, testCase.name).toEqual(testCase.expected);
+        }
+
+        const threadIds: string[] = [];
+        let after: string | undefined;
+        do {
+          const pagePlan = planThreadQuery(
+            parseQueryThreadsInput({
+              traces: { timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } },
+              page: { limit: 1, ...(after ? { after } : {}) },
+            }),
+          );
+          const response = await storage.queryThreads(pagePlan);
+          threadIds.push(...response.threads.map(thread => thread.threadId));
+          after = response.page.next ?? undefined;
+        } while (after);
+        expect(threadIds).toEqual(['thread-1', 'thread-2']);
+        expect(new Set(threadIds).size).toBe(threadIds.length);
+      });
+
+      it('paginates mixed-case and non-ASCII thread IDs in ordinal order', async () => {
+        await writeTraceQueryFixture(storage, TRACE_QUERY_ORDINAL_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+
+        const threadIds: string[] = [];
+        let after: string | undefined;
+        do {
+          const plan = planThreadQuery(
+            parseQueryThreadsInput({
+              traces: { timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } },
+              page: { limit: 1, ...(after ? { after } : {}) },
+            }),
+          );
+          const response = await storage.queryThreads(plan);
+          threadIds.push(...response.threads.map(thread => thread.threadId));
+          after = response.page.next ?? undefined;
+        } while (after);
+
+        expect(threadIds).toEqual(['A', 'a', 'é', 'Ω']);
+        expect(new Set(threadIds).size).toBe(threadIds.length);
+      });
+    }
 
     it('gets a score by ID without paginating through list results', async () => {
       const now = new Date('2026-01-02T00:00:00.000Z');
@@ -1766,20 +2312,267 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         }
       });
 
-      it('batch deletes traces', async () => {
-        await storage.createSpan({
-          span: makeSpan({
+      it('batch deletes traces and cascades to signal events', async () => {
+        const ts = new Date('2026-02-03T00:00:00Z');
+        await storage.batchCreateSpans({
+          records: [
+            makeSpan({ traceId: 'trace-del', spanId: 'span-del', name: 'delete-me', startedAt: ts }),
+            makeSpan({ traceId: 'trace-keep', spanId: 'span-keep', name: 'keep-me', startedAt: ts }),
+          ],
+        });
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-del',
+              timestamp: ts,
+              name: 'cascade_metric',
+              value: 1,
+              labels: {},
+              traceId: 'trace-del',
+            },
+            {
+              metricId: 'metric-keep',
+              timestamp: ts,
+              name: 'cascade_metric',
+              value: 2,
+              labels: {},
+              traceId: 'trace-keep',
+            },
+          ],
+        });
+        await storage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'log-del',
+              timestamp: ts,
+              level: 'info',
+              message: 'del',
+              traceId: 'trace-del',
+              spanId: 'span-del',
+            },
+            {
+              logId: 'log-keep',
+              timestamp: ts,
+              level: 'info',
+              message: 'keep',
+              traceId: 'trace-keep',
+              spanId: 'span-keep',
+            },
+          ],
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-del',
+            timestamp: ts,
             traceId: 'trace-del',
-            spanId: 'span-del',
-            name: 'delete-me',
-            startedAt: new Date('2026-02-03T00:00:00Z'),
-            endedAt: null,
-          }),
+            spanId: null,
+            scorerId: 'q',
+            score: 0.5,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-keep',
+            timestamp: ts,
+            traceId: 'trace-keep',
+            spanId: null,
+            scorerId: 'q',
+            score: 0.8,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        // Trace-less score: must survive the cascade untouched.
+        await storage.createScore({
+          score: {
+            scoreId: 'score-no-trace',
+            timestamp: ts,
+            traceId: null,
+            spanId: null,
+            scorerId: 'q',
+            score: 0.9,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-del',
+            timestamp: ts,
+            traceId: 'trace-del',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 1,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
+        });
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-keep',
+            timestamp: ts,
+            traceId: 'trace-keep',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 2,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
         });
 
         await storage.batchDeleteTraces({ traceIds: ['trace-del'] });
-        const result = await storage.getSpan({ traceId: 'trace-del', spanId: 'span-del' });
-        expect(result).toBeNull();
+
+        expect(await storage.getSpan({ traceId: 'trace-del', spanId: 'span-del' })).toBeNull();
+        expect((await storage.getSpan({ traceId: 'trace-keep', spanId: 'span-keep' }))?.span.spanId).toBe('span-keep');
+
+        const traces = await waitFor(
+          () => storage.listTraces({}),
+          value => value.spans.every(span => span.traceId !== 'trace-del'),
+        );
+        expect(traces.spans.map(span => span.traceId)).toEqual(['trace-keep']);
+
+        const metrics = await storage.listMetrics({ filters: { name: ['cascade_metric'] } });
+        expect(metrics.metrics.map(metric => metric.metricId)).toEqual(['metric-keep']);
+
+        const logs = await storage.listLogs({});
+        expect(logs.logs.map(log => log.logId)).toEqual(['log-keep']);
+
+        const scores = await storage.listScores({});
+        expect(scores.scores.map(score => score.scoreId).sort()).toEqual(['score-keep', 'score-no-trace']);
+
+        const feedback = await storage.listFeedback({});
+        expect(feedback.feedback.map(item => item.feedbackId)).toEqual(['feedback-keep']);
+      });
+
+      it('batch delete with tenant scope only deletes matching rows and signals', async () => {
+        const ts = new Date('2026-02-03T00:00:00Z');
+        await storage.batchCreateSpans({
+          records: [
+            makeSpan({
+              traceId: 'trace-scope',
+              spanId: 'span-org-a',
+              name: 'org-a',
+              startedAt: ts,
+              organizationId: 'org-a',
+              resourceId: 'res-a',
+            }),
+            makeSpan({
+              traceId: 'trace-scope',
+              spanId: 'span-org-b',
+              name: 'org-b',
+              startedAt: ts,
+              organizationId: 'org-b',
+              resourceId: 'res-b',
+            }),
+          ],
+        });
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-org-a',
+              timestamp: ts,
+              name: 'scope_metric',
+              value: 1,
+              labels: {},
+              traceId: 'trace-scope',
+              organizationId: 'org-a',
+              resourceId: 'res-a',
+            },
+            {
+              metricId: 'metric-org-b',
+              timestamp: ts,
+              name: 'scope_metric',
+              value: 2,
+              labels: {},
+              traceId: 'trace-scope',
+              organizationId: 'org-b',
+              resourceId: 'res-b',
+            },
+          ],
+        });
+        await storage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'log-org-a',
+              timestamp: ts,
+              level: 'info',
+              message: 'a',
+              traceId: 'trace-scope',
+              spanId: 'span-org-a',
+              organizationId: 'org-a',
+              resourceId: 'res-a',
+            },
+            {
+              logId: 'log-org-b',
+              timestamp: ts,
+              level: 'info',
+              message: 'b',
+              traceId: 'trace-scope',
+              spanId: 'span-org-b',
+              organizationId: 'org-b',
+              resourceId: 'res-b',
+            },
+          ],
+        });
+        for (const organization of ['a', 'b']) {
+          await storage.createScore({
+            score: {
+              scoreId: `score-org-${organization}`,
+              timestamp: ts,
+              traceId: 'trace-scope',
+              spanId: null,
+              scorerId: 'q',
+              score: 0.5,
+              reason: null,
+              experimentId: null,
+              metadata: null,
+              organizationId: `org-${organization}`,
+              resourceId: `res-${organization}`,
+            },
+          });
+          await storage.createFeedback({
+            feedback: {
+              feedbackId: `feedback-org-${organization}`,
+              timestamp: ts,
+              traceId: 'trace-scope',
+              spanId: null,
+              feedbackSource: 'user',
+              feedbackType: 'thumbs',
+              value: 1,
+              comment: null,
+              experimentId: null,
+              feedbackUserId: null,
+              sourceId: null,
+              metadata: null,
+              organizationId: `org-${organization}`,
+              resourceId: `res-${organization}`,
+            },
+          });
+        }
+
+        await storage.batchDeleteTraces({ traceIds: ['trace-scope'], organizationId: 'org-a', resourceId: 'res-a' });
+
+        expect(await storage.getSpan({ traceId: 'trace-scope', spanId: 'span-org-a' })).toBeNull();
+        expect(await storage.getSpan({ traceId: 'trace-scope', spanId: 'span-org-b' })).not.toBeNull();
+        expect(
+          (await storage.listMetrics({ filters: { name: ['scope_metric'] } })).metrics.map(item => item.metricId),
+        ).toEqual(['metric-org-b']);
+        expect((await storage.listLogs({})).logs.map(item => item.logId)).toEqual(['log-org-b']);
+        expect((await storage.listScores({})).scores.map(item => item.scoreId)).toEqual(['score-org-b']);
+        expect((await storage.listFeedback({})).feedback.map(item => item.feedbackId)).toEqual(['feedback-org-b']);
       });
     });
 
@@ -2972,6 +3765,205 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(await storage.getScoreById('missing-score')).toBeNull();
       });
 
+      it('uses only the current score version for lookup, pages, filters, and OLAP reads', async () => {
+        const timestamp = new Date('2026-01-01T00:10:00.000Z');
+        const staleScore: CreateScoreRecord = {
+          scoreId: 'score-current-a',
+          timestamp,
+          traceId: 'trace-current',
+          spanId: 'span-current',
+          scorerId: 'rewrite-quality',
+          scorerVersion: 'stale',
+          scoreSource: 'manual',
+          score: 0.2,
+          entityName: 'stale-agent',
+          metadata: { revision: 'stale' },
+        };
+        const lowScore: CreateScoreRecord = {
+          scoreId: 'score-current-b',
+          timestamp: new Date('2026-01-01T00:20:00.000Z'),
+          traceId: 'trace-current',
+          spanId: 'span-current',
+          scorerId: 'rewrite-quality',
+          scorerVersion: 'current',
+          scoreSource: 'automated',
+          score: 0.1,
+          entityName: 'low-agent',
+          metadata: { revision: 'current' },
+        };
+        const currentScore: CreateScoreRecord = {
+          ...staleScore,
+          scorerVersion: 'current',
+          scoreSource: 'automated',
+          score: 0.8,
+          entityName: 'current-agent',
+          metadata: { revision: 'current' },
+        };
+
+        await storage.createScore({ score: staleScore });
+        await storage.createScore({ score: lowScore });
+        await storage.createScore({ score: currentScore });
+
+        await expect(storage.getScoreById('score-current-a')).resolves.toEqual(
+          expect.objectContaining({ score: 0.8, scorerVersion: 'current', entityName: 'current-agent' }),
+        );
+
+        const all = await storage.listScores({ orderBy: { field: 'score', direction: 'ASC' } });
+        expect(all.scores.map(score => [score.scoreId, score.score])).toEqual([
+          ['score-current-b', 0.1],
+          ['score-current-a', 0.8],
+        ]);
+        expect(all.pagination?.total).toBe(2);
+
+        const firstPage = await storage.listScores({
+          pagination: { page: 0, perPage: 1 },
+          orderBy: { field: 'score', direction: 'ASC' },
+        });
+        const secondPage = await storage.listScores({
+          pagination: { page: 1, perPage: 1 },
+          orderBy: { field: 'score', direction: 'ASC' },
+        });
+        expect(firstPage.scores.map(score => score.scoreId)).toEqual(['score-current-b']);
+        expect(secondPage.scores.map(score => score.scoreId)).toEqual(['score-current-a']);
+        expect(firstPage.pagination).toEqual({ total: 2, page: 0, perPage: 1, hasMore: true });
+        expect(secondPage.pagination).toEqual({ total: 2, page: 1, perPage: 1, hasMore: false });
+
+        await expect(storage.listScores({ filters: { scoreSource: 'manual' } })).resolves.toMatchObject({
+          scores: [],
+          pagination: { total: 0 },
+        });
+        await expect(storage.listScores({ filters: { metadata: { revision: 'stale' } } })).resolves.toMatchObject({
+          scores: [],
+          pagination: { total: 0 },
+        });
+
+        await expect(storage.getScoreAggregate({ scorerId: 'rewrite-quality', aggregation: 'count' })).resolves.toEqual(
+          { value: 2 },
+        );
+        await expect(storage.getScoreAggregate({ scorerId: 'rewrite-quality', aggregation: 'avg' })).resolves.toEqual({
+          value: 0.45,
+        });
+
+        const breakdown = await storage.getScoreBreakdown({
+          scorerId: 'rewrite-quality',
+          aggregation: 'avg',
+          groupBy: ['entityName'],
+        });
+        expect(breakdown.groups).toEqual([
+          { dimensions: { entityName: 'current-agent' }, value: 0.8 },
+          { dimensions: { entityName: 'low-agent' }, value: 0.1 },
+        ]);
+
+        await expect(
+          storage.getScoreTimeSeries({ scorerId: 'rewrite-quality', aggregation: 'avg', interval: '1h' }),
+        ).resolves.toEqual({
+          series: [
+            {
+              name: 'rewrite-quality',
+              points: [{ timestamp: new Date('2026-01-01T00:00:00.000Z'), value: 0.45 }],
+            },
+          ],
+        });
+        const percentiles = await storage.getScorePercentiles({
+          scorerId: 'rewrite-quality',
+          percentiles: [0.5],
+          interval: '1h',
+        });
+        expect(percentiles.series).toHaveLength(1);
+        expect(percentiles.series[0]!.percentile).toBe(0.5);
+        expect(percentiles.series[0]!.points).toHaveLength(1);
+        expect(percentiles.series[0]!.points[0]!.timestamp).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+        expect(percentiles.series[0]!.points[0]!.value).toBeCloseTo(0.45);
+      });
+
+      it('uses the last repeated scoreId entry within one batch', async () => {
+        const timestamp = new Date('2026-01-01T00:00:00.000Z');
+        await storage.batchCreateScores({
+          scores: [
+            {
+              scoreId: 'score-batch-rewrite',
+              timestamp,
+              traceId: 'trace-batch',
+              scorerId: 'batch-quality',
+              score: 0.2,
+            },
+            {
+              scoreId: 'score-batch-other',
+              timestamp,
+              traceId: 'trace-batch',
+              scorerId: 'batch-quality',
+              score: 0.1,
+            },
+            {
+              scoreId: 'score-batch-rewrite',
+              timestamp,
+              traceId: 'trace-batch',
+              scorerId: 'batch-quality',
+              score: 0.8,
+            },
+          ],
+        });
+
+        const result = await storage.listScores({ orderBy: { field: 'score', direction: 'ASC' } });
+        expect(result.scores.map(score => [score.scoreId, score.score])).toEqual([
+          ['score-batch-other', 0.1],
+          ['score-batch-rewrite', 0.8],
+        ]);
+        expect(result.pagination?.total).toBe(2);
+      });
+
+      it('selects the current score before target and timestamp filters', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-moved-target',
+            timestamp: new Date('2026-02-15T00:00:00.000Z'),
+            traceId: 'trace-old',
+            spanId: 'span-old',
+            scorerId: 'old-scorer',
+            score: 0.9,
+            environment: 'stale',
+            metadata: { revision: 'stale' },
+          },
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-moved-target',
+            timestamp: new Date('2026-01-15T00:00:00.000Z'),
+            traceId: 'trace-current',
+            spanId: 'span-current',
+            scorerId: 'current-scorer',
+            score: 0.4,
+            environment: 'production',
+            metadata: { revision: 'current' },
+          },
+        });
+
+        const current = await storage.listScores({ filters: { traceId: 'trace-current', spanId: 'span-current' } });
+        expect(current.scores).toEqual([
+          expect.objectContaining({ scoreId: 'score-moved-target', scorerId: 'current-scorer', score: 0.4 }),
+        ]);
+        expect(current.pagination?.total).toBe(1);
+
+        const staleFilters = [
+          { traceId: 'trace-old' },
+          { spanId: 'span-old' },
+          { scorerId: 'old-scorer' },
+          { environment: 'stale' },
+          { metadata: { revision: 'stale' } },
+          {
+            timestamp: {
+              start: new Date('2026-02-01T00:00:00.000Z'),
+              end: new Date('2026-03-01T00:00:00.000Z'),
+            },
+          },
+        ];
+        for (const filters of staleFilters) {
+          const result = await storage.listScores({ filters });
+          expect.soft(result.scores, JSON.stringify(filters)).toEqual([]);
+          expect.soft(result.pagination?.total, JSON.stringify(filters)).toBe(0);
+        }
+      });
+
       it('supports nullable traceId for scores at the storage boundary', async () => {
         await storage.createScore({
           score: {
@@ -3288,25 +4280,71 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(reviewed.feedback.map(fb => fb.feedbackId)).toEqual(['feedback-review-filter-2']);
       });
 
-      it('updates reviewStatus and returns the updated record', async () => {
-        await storage.createFeedback({
-          feedback: { ...baseFeedback, feedbackId: 'feedback-review-update', traceId: 'trace-review-update' },
-        });
+      it.each([0, 'Corrected answer'])(
+        'preserves all feedback fields when updating reviewStatus (value: %j)',
+        async value => {
+          const feedback = {
+            feedbackId: 'feedback-review-update',
+            timestamp: new Date('2026-01-01T12:34:56.789Z'),
+            traceId: 'trace-review-update',
+            spanId: 'span-review-update',
+            experimentId: 'experiment-review-update',
+            entityType: EntityType.TOOL,
+            entityId: 'tool-id',
+            entityName: 'Tool',
+            entityVersionId: 'tool-version',
+            parentEntityType: EntityType.AGENT,
+            parentEntityId: 'agent-id',
+            parentEntityName: 'Agent',
+            parentEntityVersionId: 'agent-version',
+            rootEntityType: EntityType.WORKFLOW_RUN,
+            rootEntityId: 'workflow-id',
+            rootEntityName: 'Workflow',
+            rootEntityVersionId: 'workflow-version',
+            userId: 'reviewer-id',
+            organizationId: 'organization-id',
+            resourceId: 'resource-id',
+            runId: 'run-id',
+            sessionId: 'session-id',
+            threadId: 'thread-id',
+            requestId: 'request-id',
+            environment: 'test',
+            executionSource: 'api',
+            serviceName: 'feedback-service',
+            feedbackUserId: 'reviewer-id',
+            sourceId: 'dataset-item-id',
+            feedbackSource: 'reviewer',
+            feedbackType: 'correction',
+            value,
+            comment: 'Preserve this comment when marking the feedback reviewed.',
+            tags: ['quality', 'review'],
+            metadata: { reviewer: { team: 'quality' }, confidence: 0, approved: false },
+            scope: { tenant: 'tenant-id', groups: ['reviewers', 'editors'] },
+            reviewStatus: 'needs-review',
+          } satisfies Omit<Required<CreateFeedbackRecord>, 'source'>;
 
-        const updated = await storage.updateFeedbackReviewStatus({
-          feedbackId: 'feedback-review-update',
-          reviewStatus: 'reviewed',
-        });
-        expect(updated.feedbackId).toBe('feedback-review-update');
-        expect(updated.reviewStatus).toBe('reviewed');
+          await storage.createFeedback({
+            feedback: structuredClone(feedback),
+          });
 
-        // Append-only stores (ClickHouse) implement the update as a replacement
-        // row; the read side must still expose a single, latest version.
-        const result = await storage.listFeedback({ filters: { traceId: 'trace-review-update' } });
-        expect(result.feedback).toHaveLength(1);
-        expect(result.pagination?.total).toBe(1);
-        expect(result.feedback[0]!.reviewStatus).toBe('reviewed');
-      });
+          // Compare against the input so a lossy read mapper cannot hide missing fields.
+          const before = await storage.listFeedback({ filters: { traceId: feedback.traceId } });
+          expect(before.feedback).toMatchObject([feedback]);
+
+          const updated = await storage.updateFeedbackReviewStatus({
+            feedbackId: feedback.feedbackId,
+            reviewStatus: 'reviewed',
+          });
+          const expected = { ...feedback, reviewStatus: 'reviewed' };
+          expect(updated).toMatchObject(expected);
+
+          // Append-only stores (ClickHouse) implement the update as a replacement
+          // row; the read side must still expose a single, latest version.
+          const result = await storage.listFeedback({ filters: { traceId: feedback.traceId } });
+          expect(result.feedback).toMatchObject([expected]);
+          expect(result.pagination?.total).toBe(1);
+        },
+      );
 
       it('throws when updating reviewStatus of a missing feedback record', async () => {
         await expect(
@@ -3396,6 +4434,220 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             comment: 'Escalated',
             metadata: { severity: 'high' },
           }),
+        ]);
+      });
+    });
+
+    describe('scores (delete)', () => {
+      const makeScore = (scoreId: string, extra: Record<string, unknown> = {}) => ({
+        scoreId,
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: `trace-${scoreId}`,
+        spanId: null,
+        scorerId: 'relevance',
+        score: 0.5,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+        ...extra,
+      });
+
+      it('deletes scores by id and leaves others intact', async () => {
+        await storage.batchCreateScores({
+          scores: [makeScore('score-del-1'), makeScore('score-del-2'), makeScore('score-del-3')],
+        });
+
+        await storage.deleteScores({ scoreIds: ['score-del-1', 'score-del-2'] });
+
+        const result = await waitFor(
+          () => storage.listScores({}),
+          value => value.scores.length === 1,
+        );
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]!.scoreId).toBe('score-del-3');
+        expect(await storage.getScoreById('score-del-1')).toBeNull();
+      });
+
+      it('is a no-op for an empty id list and for missing ids', async () => {
+        await storage.createScore({ score: makeScore('score-del-keep') });
+
+        await storage.deleteScores({ scoreIds: [] });
+        await storage.deleteScores({ scoreIds: ['score-del-missing'] });
+
+        const result = await storage.listScores({});
+        expect(result.scores).toHaveLength(1);
+      });
+
+      it('honors tenant scope when deleting scores', async () => {
+        await storage.batchCreateScores({
+          scores: [
+            makeScore('score-del-org-a', { organizationId: 'org-a', resourceId: 'res-a' }),
+            makeScore('score-del-resource-b', { organizationId: 'org-a', resourceId: 'res-b' }),
+            makeScore('score-del-org-b', { organizationId: 'org-b', resourceId: 'res-b' }),
+            makeScore('score-del-org-only', { organizationId: 'org-a', resourceId: 'res-c' }),
+            makeScore('score-del-resource-only', { organizationId: 'org-c', resourceId: 'res-a' }),
+          ],
+        });
+
+        // Mismatched tenant scope must not delete another tenant's rows.
+        await storage.deleteScores({ scoreIds: ['score-del-org-a'], organizationId: 'org-b' });
+        expect((await storage.listScores({})).scores).toHaveLength(5);
+
+        await storage.deleteScores({
+          scoreIds: ['score-del-org-a'],
+          organizationId: 'org-a',
+          resourceId: 'res-b',
+        });
+        expect((await storage.listScores({})).scores).toHaveLength(5);
+
+        await storage.deleteScores({ scoreIds: ['score-del-resource-only'], resourceId: 'res-b' });
+        expect((await storage.listScores({})).scores.map(score => score.scoreId).sort()).toEqual([
+          'score-del-org-a',
+          'score-del-org-b',
+          'score-del-org-only',
+          'score-del-resource-b',
+          'score-del-resource-only',
+        ]);
+
+        await storage.deleteScores({ scoreIds: ['score-del-org-only'], organizationId: 'org-a' });
+        const afterOrganizationDelete = await waitFor(
+          () => storage.listScores({}),
+          value => value.scores.length === 4,
+        );
+        expect(afterOrganizationDelete.scores.map(score => score.scoreId).sort()).toEqual([
+          'score-del-org-a',
+          'score-del-org-b',
+          'score-del-resource-b',
+          'score-del-resource-only',
+        ]);
+
+        await storage.deleteScores({ scoreIds: ['score-del-resource-only'], resourceId: 'res-a' });
+        const afterResourceDelete = await waitFor(
+          () => storage.listScores({}),
+          value => value.scores.length === 3,
+        );
+        expect(afterResourceDelete.scores.map(score => score.scoreId).sort()).toEqual([
+          'score-del-org-a',
+          'score-del-org-b',
+          'score-del-resource-b',
+        ]);
+
+        await storage.deleteScores({ scoreIds: ['score-del-org-a'], organizationId: 'org-a', resourceId: 'res-a' });
+        const result = await waitFor(
+          () => storage.listScores({}),
+          value => value.scores.length === 2,
+        );
+        expect(result.scores.map(score => score.scoreId).sort()).toEqual(['score-del-org-b', 'score-del-resource-b']);
+      });
+    });
+
+    describe('feedback (delete)', () => {
+      const makeFeedback = (feedbackId: string, extra: Record<string, unknown> = {}) => ({
+        feedbackId,
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: `trace-${feedbackId}`,
+        spanId: null,
+        feedbackSource: 'user' as const,
+        feedbackType: 'rating',
+        value: 4,
+        comment: 'PHI-bearing comment',
+        experimentId: null,
+        feedbackUserId: null,
+        sourceId: null,
+        metadata: null,
+        ...extra,
+      });
+
+      it('deletes feedback by id and aggregates no longer include it', async () => {
+        await storage.batchCreateFeedback({
+          feedbacks: [makeFeedback('fb-del-1'), makeFeedback('fb-del-2'), makeFeedback('fb-del-3')],
+        });
+
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-1', 'fb-del-2'] });
+
+        const result = await waitFor(
+          () => storage.listFeedback({}),
+          value => value.feedback.length === 1,
+        );
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.feedbackId).toBe('fb-del-3');
+
+        const aggregate = await storage.getFeedbackAggregate({ feedbackType: 'rating', aggregation: 'count' });
+        expect(aggregate.value).toBe(1);
+      });
+
+      it('is a no-op for an empty id list and for missing ids', async () => {
+        await storage.createFeedback({ feedback: makeFeedback('fb-del-keep') });
+
+        await storage.deleteFeedback({ feedbackIds: [] });
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-missing'] });
+
+        const result = await storage.listFeedback({});
+        expect(result.feedback).toHaveLength(1);
+      });
+
+      it('honors tenant scope when deleting feedback', async () => {
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            makeFeedback('fb-del-org-a', { organizationId: 'org-a', resourceId: 'res-a' }),
+            makeFeedback('fb-del-resource-b', { organizationId: 'org-a', resourceId: 'res-b' }),
+            makeFeedback('fb-del-org-b', { organizationId: 'org-b', resourceId: 'res-b' }),
+            makeFeedback('fb-del-org-only', { organizationId: 'org-a', resourceId: 'res-c' }),
+            makeFeedback('fb-del-resource-only', { organizationId: 'org-c', resourceId: 'res-a' }),
+          ],
+        });
+
+        // Mismatched tenant scope must not delete another tenant's rows.
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-org-a'], organizationId: 'org-b' });
+        expect((await storage.listFeedback({})).feedback).toHaveLength(5);
+
+        await storage.deleteFeedback({
+          feedbackIds: ['fb-del-org-a'],
+          organizationId: 'org-a',
+          resourceId: 'res-b',
+        });
+        expect((await storage.listFeedback({})).feedback).toHaveLength(5);
+
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-resource-only'], resourceId: 'res-b' });
+        expect((await storage.listFeedback({})).feedback.map(feedback => feedback.feedbackId).sort()).toEqual([
+          'fb-del-org-a',
+          'fb-del-org-b',
+          'fb-del-org-only',
+          'fb-del-resource-b',
+          'fb-del-resource-only',
+        ]);
+
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-org-only'], organizationId: 'org-a' });
+        const afterOrganizationDelete = await waitFor(
+          () => storage.listFeedback({}),
+          value => value.feedback.length === 4,
+        );
+        expect(afterOrganizationDelete.feedback.map(feedback => feedback.feedbackId).sort()).toEqual([
+          'fb-del-org-a',
+          'fb-del-org-b',
+          'fb-del-resource-b',
+          'fb-del-resource-only',
+        ]);
+
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-resource-only'], resourceId: 'res-a' });
+        const afterResourceDelete = await waitFor(
+          () => storage.listFeedback({}),
+          value => value.feedback.length === 3,
+        );
+        expect(afterResourceDelete.feedback.map(feedback => feedback.feedbackId).sort()).toEqual([
+          'fb-del-org-a',
+          'fb-del-org-b',
+          'fb-del-resource-b',
+        ]);
+
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-org-a'], organizationId: 'org-a', resourceId: 'res-a' });
+        const result = await waitFor(
+          () => storage.listFeedback({}),
+          value => value.feedback.length === 2,
+        );
+        expect(result.feedback.map(feedback => feedback.feedbackId).sort()).toEqual([
+          'fb-del-org-b',
+          'fb-del-resource-b',
         ]);
       });
     });

@@ -48,7 +48,7 @@ export function createStepFromAgent<TStepId extends string, TStepOutput>(
   // Determine output schema based on structuredOutput option
   const outputSchema = toStandardSchema(
     (options?.structuredOutput?.schema ?? z.object({ text: z.string() })) as PublicSchema<TStepOutput>,
-  ) as StandardSchemaWithJSON<TStepOutput>;
+  );
   const { retries, scorers, metadata } =
     options ??
     ({} as AgentStepOptions<TStepOutput> & {

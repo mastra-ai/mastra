@@ -1456,7 +1456,14 @@ describe('thinking defaults routes', () => {
       globalDefault: 'off',
       modeDefaults: {},
       modes: ['build', 'plan', 'fast'],
+      editable: true,
     });
+  });
+
+  it('reports the defaults as read-only when authentication is enabled', async () => {
+    const res = await buildApp(userA).request('/web/config/thinking');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ editable: false });
   });
 
   it('round-trips global and per-mode defaults through the settings file', async () => {

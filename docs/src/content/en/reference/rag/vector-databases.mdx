@@ -3,6 +3,7 @@ title: "Storing embeddings in a vector database | RAG"
 description: "After generating embeddings, you need to store them in a database that supports vector similarity search."
 packages:
   - "@mastra/astra"
+  - "@mastra/azure-ai-search"
   - "@mastra/chroma"
   - "@mastra/core"
   - "@mastra/couchbase"
@@ -273,6 +274,34 @@ After generating embeddings, you need to store them in a database that supports 
     ```
   </TabItem>
 
+  <TabItem value="weaviate" label="Weaviate">
+    ```ts title="vector-store.ts"
+    import { WeaviateVector } from '@mastra/weaviate'
+
+    const store = new WeaviateVector({
+      id: 'weaviate-vector',
+      httpHost: process.env.WEAVIATE_HOST,
+      httpPort: 443,
+      httpSecure: true,
+      grpcHost: process.env.WEAVIATE_GRPC_HOST,
+      grpcPort: 443,
+      grpcSecure: true,
+      apiKey: process.env.WEAVIATE_API_KEY,
+    })
+
+    await store.createIndex({
+      indexName: 'myCollection',
+      dimension: 1536,
+    })
+
+    await store.upsert({
+      indexName: 'myCollection',
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    })
+    ```
+  </TabItem>
+
   <TabItem value="cloudflare" label="Cloudflare">
     ```ts title="vector-store.ts"
     import { CloudflareVector } from '@mastra/vectorize'
@@ -340,6 +369,29 @@ After generating embeddings, you need to store them in a database that supports 
     <h3>Using Elasticsearch</h3>
 
     For detailed setup instructions and best practices, see the [official Elasticsearch documentation](https://www.elastic.co/docs/solutions/search/get-started).
+  </TabItem>
+
+  <TabItem value="azure-ai-search" label="Azure AI Search">
+    ```ts title="vector-store.ts"
+    import { AzureAISearchVector } from '@mastra/azure-ai-search'
+
+    const store = new AzureAISearchVector({
+      id: 'azure-search-vectors',
+      endpoint: process.env.AZURE_AI_SEARCH_ENDPOINT!,
+      credential: process.env.AZURE_AI_SEARCH_CREDENTIAL!,
+    })
+
+    await store.createIndex({
+      indexName: 'my-collection',
+      dimension: 1536,
+    })
+
+    await store.upsert({
+      indexName: 'my-collection',
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    })
+    ```
   </TabItem>
 
   <TabItem value="couchbase" label="Couchbase">
@@ -550,6 +602,17 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `_namespace` isn't valid (starts with underscore)
   </TabItem>
 
+  <TabItem value="weaviate" label="Weaviate">
+    Index names map to Weaviate collections, which:
+
+    - Are capitalized by Weaviate (the first letter is upper-cased)
+    - Should contain only letters, numbers, and the `_` character
+    - Must start with a letter, since only the first character is upper-cased (a leading digit or symbol stays invalid)
+    - Preserve the original Mastra index name in the collection description, so `listIndexes()` and `describeIndex()` return the name you supplied
+    - Example: `my_collection` is stored as `My_collection` and returned as `my_collection`
+    - Example: `123_collection` isn't valid (starts with a digit)
+  </TabItem>
+
   <TabItem value="cloudflare" label="Cloudflare">
     Index names must:
 
@@ -601,6 +664,17 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `-myindex` isn't valid (begins with hyphen)
     - Example: `myindex-` isn't valid (ends with hyphen)
     - Example: `MyIndex` isn't valid (contains uppercase letters)
+  </TabItem>
+
+  <TabItem value="azure-ai-search" label="Azure AI Search">
+    Index names must:
+
+    - Use only lowercase letters, numbers, dashes (`-`), and underscore (`_`) characters
+    - Not start or end with a dash
+    - Be between 2 and 128 characters long
+    - Example: `my-index-123` and `my_index` are valid
+    - Example: `MyIndex` isn't valid (contains uppercase letters)
+    - Example: `my-index-` isn't valid (ends with a dash)
   </TabItem>
 </Tabs>
 
@@ -669,7 +743,7 @@ Key metadata considerations:
 
 ## Deleting vectors
 
-When building RAG applications, you often need to clean up stale vectors when documents are deleted or updated. Mastra provides the `deleteVectors` method that supports deleting vectors by metadata filters, making it straightforward to remove all embeddings associated with a specific document.
+Use `deleteVectors` with a metadata filter to remove embeddings associated with a document. This is useful for cleaning up stale vectors after a document is deleted or updated.
 
 ### Delete by Metadata Filter
 

@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
@@ -8,6 +10,7 @@ import {
   EXPERIMENT_RESULTS_SCHEMA,
   ExperimentsStorage,
   calculatePagination,
+  hasErrorCode,
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
@@ -27,7 +30,7 @@ import type {
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
 } from '@mastra/core/storage';
-import type { Pool } from 'mysql2/promise';
+import type { Pool, PoolConnection } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier } from '../utils';
@@ -83,7 +86,7 @@ interface ExperimentResultRow {
   itemDatasetVersion: number | null;
   organizationId: string | null;
   projectId: string | null;
-  input: string;
+  input: string | null;
   output: string | null;
   groundTruth: string | null;
   metadata: string | null;
@@ -161,6 +164,86 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     this.#indexes = indexes?.filter(idx => (ExperimentsMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
+  async #withPurgeBarrier<T>(
+    experimentId: string,
+    itemId: string,
+    fn: (connection: PoolConnection, purgeMetadata: Record<string, unknown> | null) => Promise<T>,
+  ): Promise<T> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [experimentRows] = await connection.execute(
+        `SELECT ${quoteIdentifier('datasetId', 'column name')} FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+        [experimentId],
+      );
+      const datasetId = Array.isArray(experimentRows)
+        ? ((experimentRows[0] as { datasetId?: string | null } | undefined)?.datasetId ?? null)
+        : null;
+      let purgeMetadata: Record<string, unknown> | null = null;
+      if (datasetId) {
+        await connection.execute(
+          `SELECT ${quoteIdentifier('id', 'column name')} FROM ${formatTableName(TABLE_DATASETS)} WHERE ${quoteIdentifier('id', 'column name')} = ? FOR UPDATE`,
+          [datasetId],
+        );
+        const [itemRows] = await connection.execute(
+          `SELECT ${quoteIdentifier('metadata', 'column name')} FROM ${formatTableName(TABLE_DATASET_ITEMS)} WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ?`,
+          [itemId, datasetId],
+        );
+        if (Array.isArray(itemRows)) {
+          const purgedRow = (itemRows as Array<{ metadata?: unknown }>).find(
+            row => parseJSON<Record<string, unknown>>(row.metadata)?.__purged === true,
+          );
+          purgeMetadata = purgedRow ? (parseJSON<Record<string, unknown>>(purgedRow.metadata) ?? null) : null;
+        }
+      }
+      const result = await fn(connection, purgeMetadata);
+      await connection.commit();
+      return result;
+    } catch (error) {
+      let transactionError = error;
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        transactionError = new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+      }
+      throw transactionError;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async #ensureExperimentResultNaturalKey(): Promise<void> {
+    const tableName = formatTableName(TABLE_EXPERIMENT_RESULTS);
+    const indexName = 'idx_experiment_results_exp_item_attempt';
+
+    const [indexRows] = await this.pool.execute(
+      `SELECT 1 FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?
+       LIMIT 1`,
+      [TABLE_EXPERIMENT_RESULTS, indexName],
+    );
+    if (Array.isArray(indexRows) && indexRows.length > 0) return;
+
+    try {
+      await this.pool.execute(
+        `CREATE UNIQUE INDEX ${quoteIdentifier(indexName, 'index name')} ON ${tableName} (${quoteIdentifier('experimentId', 'column name')}(191), ${quoteIdentifier('itemId', 'column name')}(191), ((COALESCE(${quoteIdentifier('attempt', 'column name')}, 0))))`,
+      );
+    } catch (error) {
+      if (hasErrorCode(error, new Set([1061, 'ER_DUP_KEYNAME']))) return;
+      if (!hasErrorCode(error, new Set([1062, 'ER_DUP_ENTRY']))) throw error;
+
+      throw new MastraError(
+        {
+          id: 'MYSQL_EXPERIMENT_RESULT_NATURAL_KEY_MIGRATION_REQUIRED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Could not enforce experiment-result uniqueness. Resolve duplicate experiment, item, and attempt combinations before restarting the MySQL store.',
+        },
+        error,
+      );
+    }
+  }
+
   /**
    * Returns default index definitions for the experiments domain tables.
    */
@@ -214,6 +297,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       schema: EXPERIMENT_RESULTS_SCHEMA,
       ifNotExists: ['comment', 'metadata', 'organizationId', 'projectId', 'attempt'],
     });
+    await this.#ensureExperimentResultNaturalKey();
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -263,7 +347,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       itemDatasetVersion: row.itemDatasetVersion ?? null,
       organizationId: row.organizationId ?? null,
       projectId: row.projectId ?? null,
-      input: parseJSON<Record<string, unknown>>(row.input),
+      input: row.input === null ? null : parseJSON<Record<string, unknown>>(row.input),
       output: row.output ? parseJSON<Record<string, unknown>>(row.output) : null,
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : null,
       metadata: row.metadata ? (parseJSON<Record<string, unknown>>(row.metadata) ?? null) : null,
@@ -612,31 +696,61 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     try {
       const id = input.id ?? randomUUID();
       const now = new Date();
-
-      await this.operations.insert({
-        tableName: TABLE_EXPERIMENT_RESULTS,
-        record: {
-          id,
-          experimentId: input.experimentId,
-          itemId: input.itemId,
-          itemDatasetVersion: input.itemDatasetVersion ?? null,
-          organizationId: input.organizationId ?? null,
-          projectId: input.projectId ?? null,
-          input: JSON.stringify(input.input),
-          output: input.output != null ? JSON.stringify(input.output) : null,
-          groundTruth: input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
-          metadata: input.metadata != null ? JSON.stringify(input.metadata) : null,
-          error: input.error ? JSON.stringify(input.error) : null,
-          startedAt: input.startedAt,
-          completedAt: input.completedAt,
-          retryCount: input.retryCount,
-          attempt: input.attempt ?? 0,
-          traceId: input.traceId ?? null,
-          status: input.status ?? null,
-          tags: input.tags ? JSON.stringify(input.tags) : null,
-          createdAt: now,
+      const purgeMetadata = await this.#withPurgeBarrier(
+        input.experimentId,
+        input.itemId,
+        async (connection, marker) => {
+          await connection.execute(
+            `INSERT INTO ${formatTableName(TABLE_EXPERIMENT_RESULTS)} (
+            ${[
+              'id',
+              'experimentId',
+              'itemId',
+              'itemDatasetVersion',
+              'organizationId',
+              'projectId',
+              'input',
+              'output',
+              'groundTruth',
+              'metadata',
+              'error',
+              'startedAt',
+              'completedAt',
+              'retryCount',
+              'attempt',
+              'traceId',
+              'status',
+              'tags',
+              'createdAt',
+            ]
+              .map(column => quoteIdentifier(column, 'column name'))
+              .join(', ')}
+          ) VALUES (${Array.from({ length: 19 }, () => '?').join(', ')})`,
+            [
+              id,
+              input.experimentId,
+              input.itemId,
+              input.itemDatasetVersion ?? null,
+              input.organizationId ?? null,
+              input.projectId ?? null,
+              JSON.stringify(marker ? null : input.input),
+              marker || input.output == null ? null : JSON.stringify(input.output),
+              marker || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+              JSON.stringify(marker ?? input.metadata ?? null),
+              marker || input.error == null ? null : JSON.stringify(input.error),
+              input.startedAt,
+              input.completedAt,
+              input.retryCount,
+              input.attempt ?? 0,
+              input.traceId ?? null,
+              input.status ?? null,
+              marker || input.tags == null ? null : JSON.stringify(input.tags),
+              now,
+            ],
+          );
+          return marker;
         },
-      });
+      );
 
       return {
         id,
@@ -645,18 +759,18 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         itemDatasetVersion: input.itemDatasetVersion,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
-        input: input.input,
-        output: input.output,
-        groundTruth: input.groundTruth,
-        metadata: input.metadata ?? null,
-        error: input.error,
+        input: purgeMetadata ? null : input.input,
+        output: purgeMetadata ? null : input.output,
+        groundTruth: purgeMetadata ? null : input.groundTruth,
+        metadata: purgeMetadata ?? input.metadata ?? null,
+        error: purgeMetadata ? null : input.error,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,
         attempt: input.attempt ?? 0,
         traceId: input.traceId ?? null,
         status: input.status ?? null,
-        tags: input.tags ?? null,
+        tags: purgeMetadata ? null : (input.tags ?? null),
         createdAt: now,
       };
     } catch (error) {
@@ -711,50 +825,72 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
     try {
       const attempt = input.attempt ?? 0;
-      const rows = await this.operations.query<{ id: string }>(
-        `SELECT ${quoteIdentifier('id', 'column name')} FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ? AND ${quoteIdentifier('itemId', 'column name')} = ? AND COALESCE(${quoteIdentifier('attempt', 'column name')}, 0) = ?`,
-        [input.experimentId, input.itemId, attempt],
-      );
-      const existingId = rows[0]?.id;
-
-      if (!existingId) {
-        return await this.addExperimentResult({ ...input, attempt });
-      }
-
-      // Last write wins on the natural key; keep row id + createdAt stable.
-      await this.operations.update({
-        tableName: TABLE_EXPERIMENT_RESULTS,
-        keys: { id: existingId },
-        data: {
-          itemDatasetVersion: input.itemDatasetVersion ?? null,
-          organizationId: input.organizationId ?? null,
-          projectId: input.projectId ?? null,
-          input: JSON.stringify(input.input),
-          output: input.output != null ? JSON.stringify(input.output) : null,
-          groundTruth: input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
-          metadata: input.metadata != null ? JSON.stringify(input.metadata) : null,
-          error: input.error ? JSON.stringify(input.error) : null,
-          startedAt: input.startedAt,
-          completedAt: input.completedAt,
-          retryCount: input.retryCount,
+      return await this.#withPurgeBarrier(input.experimentId, input.itemId, async (connection, marker) => {
+        const tableName = formatTableName(TABLE_EXPERIMENT_RESULTS);
+        const updateColumns = [
+          'itemDatasetVersion',
+          'organizationId',
+          'projectId',
+          'input',
+          'output',
+          'groundTruth',
+          'metadata',
+          'error',
+          'startedAt',
+          'completedAt',
+          'retryCount',
+          'attempt',
+          'traceId',
+          'status',
+          'tags',
+        ];
+        const updateValues = [
+          input.itemDatasetVersion ?? null,
+          input.organizationId ?? null,
+          input.projectId ?? null,
+          JSON.stringify(marker ? null : input.input),
+          marker || input.output == null ? null : JSON.stringify(input.output),
+          marker || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+          JSON.stringify(marker ?? input.metadata ?? null),
+          marker || input.error == null ? null : JSON.stringify(input.error),
+          input.startedAt,
+          input.completedAt,
+          input.retryCount,
           attempt,
-          traceId: input.traceId ?? null,
-          status: input.status ?? null,
-          tags: input.tags ? JSON.stringify(input.tags) : null,
-        },
-      });
+          input.traceId ?? null,
+          input.status ?? null,
+          marker || input.tags == null ? null : JSON.stringify(input.tags),
+        ];
+        const columns = ['id', 'experimentId', 'itemId', ...updateColumns, 'createdAt'];
 
-      const updated = await this.getExperimentResultById({ id: existingId });
-      if (!updated) {
-        throw new MastraError({
-          id: 'MYSQL_UPSERT_EXPERIMENT_RESULT_NOT_FOUND',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Experiment result ${existingId} not found after upsert`,
-          details: { experimentId: input.experimentId, itemId: input.itemId, attempt },
-        });
-      }
-      return updated;
+        await connection.execute(
+          `INSERT INTO ${tableName} (${columns.map(column => quoteIdentifier(column, 'column name')).join(', ')})
+           VALUES (${Array.from({ length: columns.length }, () => '?').join(', ')})
+           ON DUPLICATE KEY UPDATE ${updateColumns
+             .map(
+               column =>
+                 `${quoteIdentifier(column, 'column name')} = VALUES(${quoteIdentifier(column, 'column name')})`,
+             )
+             .join(', ')}`,
+          [randomUUID(), input.experimentId, input.itemId, ...updateValues, new Date()],
+        );
+
+        const [rows] = await connection.execute(
+          `SELECT * FROM ${tableName} WHERE ${quoteIdentifier('experimentId', 'column name')} = ? AND ${quoteIdentifier('itemId', 'column name')} = ? AND ${quoteIdentifier('attempt', 'column name')} = ?`,
+          [input.experimentId, input.itemId, attempt],
+        );
+        const row = Array.isArray(rows) ? (rows[0] as ExperimentResultRow | undefined) : undefined;
+        if (!row) {
+          throw new MastraError({
+            id: 'MYSQL_UPSERT_EXPERIMENT_RESULT_NOT_FOUND',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Experiment result not found after upsert`,
+            details: { experimentId: input.experimentId, itemId: input.itemId, attempt },
+          });
+        }
+        return this.mapExperimentResult(row);
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -781,30 +917,33 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         throw new Error(`Experiment result ${input.id} does not belong to experiment ${input.experimentId}`);
       }
 
-      const updateData: Record<string, unknown> = {};
-      if (input.status !== undefined) {
-        updateData.status = input.status;
-      }
-      if (input.tags !== undefined) {
-        updateData.tags = input.tags ? JSON.stringify(input.tags) : null;
-      }
-      if (input.comment !== undefined) {
-        updateData.comment = input.comment;
-      }
-
-      if (Object.keys(updateData).length > 0) {
-        await this.operations.update({
-          tableName: TABLE_EXPERIMENT_RESULTS,
-          keys: { id: input.id },
-          data: updateData,
-        });
-      }
-
-      const updated = await this.getExperimentResultById({ id: input.id });
-      if (!updated) {
-        throw new Error(`Experiment result ${input.id} not found after update`);
-      }
-      return updated;
+      return await this.#withPurgeBarrier(existing.experimentId, existing.itemId, async (connection, marker) => {
+        await connection.execute(
+          `UPDATE ${formatTableName(TABLE_EXPERIMENT_RESULTS)}
+           SET ${quoteIdentifier('status', 'column name')} = CASE WHEN ? THEN ? ELSE ${quoteIdentifier('status', 'column name')} END,
+               ${quoteIdentifier('tags', 'column name')} = CASE WHEN ? THEN NULL WHEN ? THEN ? ELSE ${quoteIdentifier('tags', 'column name')} END,
+               ${quoteIdentifier('comment', 'column name')} = CASE WHEN ? THEN NULL WHEN ? THEN ? ELSE ${quoteIdentifier('comment', 'column name')} END
+           WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+          [
+            input.status !== undefined,
+            input.status ?? null,
+            Boolean(marker),
+            input.tags !== undefined,
+            input.tags === undefined ? null : JSON.stringify(input.tags),
+            Boolean(marker),
+            input.comment !== undefined,
+            input.comment ?? null,
+            input.id,
+          ],
+        );
+        const [rows] = await connection.execute(
+          `SELECT * FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+          [input.id],
+        );
+        const row = Array.isArray(rows) ? (rows[0] as ExperimentResultRow | undefined) : undefined;
+        if (!row) throw new Error(`Experiment result ${input.id} not found after update`);
+        return this.mapExperimentResult(row);
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -868,6 +1007,11 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       if (args.status) {
         conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
         params.push(args.status);
+      }
+      // All requested tags must be present (AND semantics)
+      for (const tag of args.tags ?? []) {
+        conditions.push(`JSON_CONTAINS(${quoteIdentifier('tags', 'column name')}, ?, '$')`);
+        params.push(JSON.stringify(tag));
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;

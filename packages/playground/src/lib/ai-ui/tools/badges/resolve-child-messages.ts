@@ -12,17 +12,15 @@ export interface ChildMessage {
 }
 
 /**
- * Extract child messages (tool calls and text) from the first assistant
- * message in a list. Used by the agent badge to render a nested sub-agent
+ * Extract child messages (tool calls and text) from all assistant
+ * messages in order. Used by the agent badge to render a nested sub-agent
  * conversation.
  */
 export const resolveToChildMessages = (messages: AISdkUIMessage[]): ChildMessage[] => {
-  const assistantMessage = messages.find(message => message.role === 'assistant');
-  if (!assistantMessage) return [];
-
+  const assistantParts = messages.flatMap(message => (message.role === 'assistant' ? (message.parts ?? []) : []));
   const childMessages: ChildMessage[] = [];
 
-  for (const part of assistantMessage.parts ?? []) {
+  for (const part of assistantParts) {
     const toolPart = part as any;
     if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
       const toolName = part.type.substring('tool-'.length);

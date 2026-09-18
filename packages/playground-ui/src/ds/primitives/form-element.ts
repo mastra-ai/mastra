@@ -23,24 +23,36 @@ export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-h
 export const inputHoverBorderVisible = '[&:hover:not(:focus-visible)]:border-border2';
 export const inputHoverBorderWithin = '[&:hover:not(:focus-within)]:border-border2';
 
-// Background-agnostic surface + focus recipe shared by Input and Textarea.
-// Uses theme-aware opacity overlays so it reads on any underlying surface, with
-// no accent (green) on focus — caller appends a radius (`rounded-full` for
-// single-line inputs, `rounded-xl` for textareas).
+// Background-agnostic surface + focus recipe shared by Input, Textarea and the
+// filled field triggers (Select/Combobox `default`). Uses theme-aware opacity
+// overlays so it reads on any underlying surface, with no accent (green) on
+// focus — caller appends a radius (`rounded-full` for single-line inputs,
+// `rounded-xl` for textareas).
 export const inputSurfaceAndFocusStyle =
-  'bg-surface-overlay-soft border border-border1 text-neutral5 ' +
-  'hover:text-neutral6 hover:bg-surface-overlay-strong ' +
+  'bg-surface-overlay-soft border border-border1 text-neutral6 ' +
+  'hover:bg-surface-overlay-strong ' +
   inputHoverBorderVisible +
   ' ' +
   'outline-hidden focus-visible:outline-hidden focus-visible:bg-surface-overlay-strong ' +
   inputFocusBorderVisible;
 
 export const inputOutlineAndFocusStyle =
-  'bg-transparent border border-border1 text-neutral5 ' +
-  'hover:text-neutral6 ' +
+  'bg-transparent border border-border1 text-neutral6 ' +
   inputHoverBorderVisible +
   ' ' +
   'outline-hidden focus-visible:outline-hidden ' +
+  inputFocusBorderVisible;
+
+// Filled field trigger (Select/Combobox `default`): the same surface as Input.
+// Applied *after* `buttonVariants` so tailwind-merge replaces the Button's
+// opaque `bg-button-default-bg` / `border-button-default-border` with the
+// field overlay — a field is not a button.
+export const fieldTriggerSurfaceStyle =
+  'bg-surface-overlay-soft border-border1 text-neutral6 ' +
+  'hover:bg-surface-overlay-strong hover:text-neutral6 active:bg-surface-overlay-strong ' +
+  inputHoverBorderVisible +
+  ' ' +
+  'focus-visible:bg-surface-overlay-strong ' +
   inputFocusBorderVisible;
 
 // Unstyled variant baseline — strips all chrome but still suppresses the

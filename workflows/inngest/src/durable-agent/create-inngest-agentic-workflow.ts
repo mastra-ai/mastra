@@ -23,7 +23,7 @@ import type {
 } from '@mastra/core/agent/durable';
 import type { PubSub } from '@mastra/core/events';
 import { SpanType, InternalSpans } from '@mastra/core/observability';
-import type { ExportedSpan } from '@mastra/core/observability';
+import type { AIModelGenerationSpan, ExportedSpan } from '@mastra/core/observability';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Inngest } from 'inngest';
 import { z } from 'zod';
@@ -328,23 +328,27 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           let finalText = lastStep?.text;
 
-          const finishResult = await params.engine.step.run(`agent.${state.runId}.finish-side-effects`, () =>
-            runDurableFinishSideEffects({
-              runId: state.runId,
-              initData,
-              messageListState: state.messageListState,
-              mastra,
-              requestContext,
-              tracingContext,
-              logger: mastra?.getLogger?.(),
-              outputResult: {
-                text: finalText ?? '',
-                usage: state.accumulatedUsage,
-                finishReason: state.lastStepResult?.reason ?? 'unknown',
-                steps: state.accumulatedSteps,
-              },
-            }),
-          );
+          // Run finish side effects directly. This mapping already executes inside the
+          // engine's durable boundary (`wrapDurableOperation` -> `inngestStep.run`), so
+          // wrapping this call in `params.engine.step.run(...)` would create a nested
+          // Inngest step, which the Inngest protocol does not support: the nested step's
+          // callback never executes and its promise never settles, hanging the run and
+          // silently skipping output processors, memory persistence, and title generation.
+          const finishResult = await runDurableFinishSideEffects({
+            runId: state.runId,
+            initData,
+            messageListState: state.messageListState,
+            mastra,
+            requestContext,
+            tracingContext,
+            logger: mastra?.getLogger?.(),
+            outputResult: {
+              text: finalText ?? '',
+              usage: state.accumulatedUsage,
+              finishReason: state.lastStepResult?.reason ?? 'unknown',
+              steps: state.accumulatedSteps,
+            },
+          });
           if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;
@@ -367,27 +371,25 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           };
 
           // End MODEL_GENERATION span with final output (children before parent)
-          // This span was created BEFORE the workflow started and stayed open for all iterations
+          // This span was created BEFORE the workflow started and stayed open for all iterations.
+          // Same shape as the core durable agent: `text` is the output, usage goes to the
+          // attributes through the tracker so consumers find it where every other model span puts it.
           const observability = mastra?.observability?.getSelectedInstance({});
           if (state.modelSpanData) {
-            const modelSpan = observability?.rebuildSpan(state.modelSpanData);
-            modelSpan?.end({
-              output: {
-                text: finalText,
-                usage: state.accumulatedUsage,
-              },
-              attributes: {
-                finishReason: state.lastStepResult?.reason || 'stop',
-              },
+            const modelSpan = observability?.rebuildSpan(
+              state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
+            ) as AIModelGenerationSpan | undefined;
+            modelSpan?.createTracker()?.endGeneration({
+              output: { text: finalText },
+              attributes: { finishReason: state.lastStepResult?.reason || 'stop' },
+              usage: state.accumulatedUsage,
             });
           }
 
           // End AGENT_RUN span with final output
           if (state.agentSpanData) {
-            const agentSpan = observability?.rebuildSpan(state.agentSpanData);
-            agentSpan?.end({
-              output: finalOutput.output,
-            });
+            const agentSpan = observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+            agentSpan?.end({ output: { text: finalText } });
           }
 
           // Emit finish event via pubsub

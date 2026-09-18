@@ -205,6 +205,20 @@ describe('ToolCallPresentedHeader', () => {
 
     expect(screen.getByRole('img', { name: 'Failed' })).toBeTruthy();
   });
+
+  it('seats a leading slot ahead of the label', () => {
+    render(
+      <ToolCall>
+        <ToolCallTrigger>
+          <ToolCallPresentedHeader icon={Search} label="Searched files" leading={<time>3:42:05 PM</time>} />
+        </ToolCallTrigger>
+      </ToolCall>,
+    );
+
+    const leading = screen.getByText('3:42:05 PM');
+    const label = screen.getByText('Searched files');
+    expect(leading.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });
 
 describe('ToolCallDetail arrival', () => {

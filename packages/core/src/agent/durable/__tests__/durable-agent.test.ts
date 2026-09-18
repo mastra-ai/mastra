@@ -713,7 +713,7 @@ describe('createDurableAgentStream', () => {
     const runId = 'test-run-456';
     const receivedChunks: any[] = [];
 
-    const { output, cleanup } = createDurableAgentStream({
+    const { output, cleanup, ready } = createDurableAgentStream({
       pubsub,
       runId,
       messageId: 'msg-123',
@@ -727,10 +727,33 @@ describe('createDurableAgentStream', () => {
       },
     });
 
+    await ready;
     expect(output).toBeDefined();
 
-    // Clean up
     cleanup();
+  });
+
+  it('should terminate when subscription setup fails', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    const subscribeError = new Error('subscription failed');
+    vi.spyOn(pubsub, 'subscribeWithReplay').mockRejectedValueOnce(subscribeError);
+
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-subscription-failure',
+      messageId: 'msg-subscription-failure',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+    });
+    const onError = vi.fn();
+    const consumption = output.consumeStream({ onError });
+
+    await expect(ready).rejects.toBe(subscribeError);
+    await consumption;
+    expect(onError).toHaveBeenCalledWith(subscribeError);
+    expect(() => {
+      cleanup();
+      cleanup();
+    }).not.toThrow();
   });
 
   it('should live-tail when resuming with a pubsub that does not support offsets', async () => {
@@ -1269,6 +1292,33 @@ describe('DurableAgent resume model metadata', () => {
       expect(Object.keys(await fork.listTools())).toEqual(expect.arrayContaining(['ping', 'extra']));
       // …while the original singleton is untouched.
       expect(Object.keys(await durableAgent.listTools())).not.toContain('extra');
+
+      await pubsub.close();
+    });
+
+    it('preserves a custom shouldPersistSnapshot policy on the fork', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const baseAgent = new Agent({
+        id: 'fork-persist-agent',
+        name: 'Fork Persist Agent',
+        instructions: 'Code instructions',
+        model: 'openai/gpt-4o',
+      });
+      const customPredicate = ({ workflowStatus }: { workflowStatus: string }) => workflowStatus === 'suspended';
+      const durableAgent = createDurableAgent({
+        agent: baseAgent,
+        pubsub,
+        shouldPersistSnapshot: customPredicate,
+      });
+
+      const fork = durableAgent.__fork();
+
+      // The fork keeps the caller's persistence policy instead of reverting to
+      // the recovery-aware default (which would persist `pending`).
+      const forkPolicy = (fork as any).resolveShouldPersistSnapshot();
+      expect(forkPolicy).toBe(customPredicate);
+      expect(forkPolicy({ workflowStatus: 'pending', stepResults: {} })).toBe(false);
+      expect(forkPolicy({ workflowStatus: 'suspended', stepResults: {} })).toBe(true);
 
       await pubsub.close();
     });

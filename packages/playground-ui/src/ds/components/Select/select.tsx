@@ -7,6 +7,9 @@ import { buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { fieldTriggerSurfaceStyle } from '@/ds/primitives/form-element';
+import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -101,11 +104,12 @@ const SelectValue = React.forwardRef<HTMLSpanElement, SelectValueProps>(({ class
 SelectValue.displayName = 'SelectValue';
 
 /**
- * A select is a form field, so it reuses the same button looks consumers see
- * everywhere: `default` (the Button's filled default surface — the default
- * here too), `outline` (bordered, transparent) and `ghost` (borderless, for
- * dense toolbars/inline pickers). The high-emphasis `primary` look is the only
- * one intentionally NOT offered (a field is not a call-to-action).
+ * A select is a form field, so it reuses the Button's size/shape recipe with
+ * these looks: `default` (the Input's overlay surface — the default here too,
+ * so a select sits next to an Input as the same kind of thing), `outline`
+ * (bordered, transparent) and `ghost` (borderless, for dense toolbars/inline
+ * pickers). The high-emphasis `primary` look is the only one intentionally NOT
+ * offered (a field is not a call-to-action).
  */
 export type SelectTriggerVariant = 'default' | 'outline' | 'ghost';
 type SelectTriggerLegacyVariant = 'primary';
@@ -135,12 +139,14 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         // focus, disabled) and layer only the select-specific extras.
         className={cn(
           buttonVariants({ variant: visualVariant, size }),
+          // The filled look is the Input surface, not the Button one.
+          visualVariant === 'default' && fieldTriggerSurfaceStyle,
           // Fill the field and push the value left / chevron right (Button's
           // base centers its content with `justify-center`).
           'w-full justify-between',
           // Read as "active" while the menu is open, per variant (see map above).
-          controlTriggerOpenState[visualVariant],
-          'data-[placeholder]:text-neutral3',
+          controlTriggerOpenState[visualVariant === 'default' ? 'field' : visualVariant],
+          'data-[placeholder]:text-neutral2',
           '[&>span]:truncate',
           className,
         )}
@@ -153,11 +159,11 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
             `[&>svg]` rules (negative `mx`, forced 50% opacity, 1.1em sizing)
             would distort and mis-position it. Wrapping it in a `<span>` keeps
             the svg one level deep so those rules can't reach it, leaving the
-            chevron pinned at the right edge at its intended size and opacity. */}
+            chevron pinned at the right edge at its intended size and color. */}
         <SelectPrimitive.Icon
           render={
             <span className="flex shrink-0 items-center">
-              <ChevronDown className={cn('size-4 opacity-60', transitions.colors)} />
+              <ChevronDown className={cn('size-4 text-neutral3', transitions.colors)} />
             </span>
           }
         />
@@ -209,6 +215,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
+    const menu = useFluidMenu<HTMLDivElement>();
     const positionerProps: SelectContentPositionerProps = {
       side,
       align,
@@ -227,18 +234,11 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
 
     return (
       <SelectPrimitive.Portal container={resolvedContainer}>
-        <SelectPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
-          <SelectPrimitive.Popup
-            ref={ref}
-            className={cn(
-              'relative z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))] min-w-[max(8rem,var(--anchor-width))] origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog',
-              'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
-              'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
-              className,
-            )}
-            {...props}
-          >
-            <SelectPrimitive.List>{children}</SelectPrimitive.List>
+        <SelectPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
+          <SelectPrimitive.Popup ref={ref} className={cn(menuPopupClass, className)} {...props}>
+            <SelectPrimitive.List className={menu.containerClassName} {...menu.getContainerProps({})}>
+              <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
+            </SelectPrimitive.List>
           </SelectPrimitive.Popup>
         </SelectPrimitive.Positioner>
       </SelectPrimitive.Portal>
@@ -252,27 +252,11 @@ export type SelectItemProps = Omit<SelectPrimitive.Item.Props, 'className'> & {
 };
 
 const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Item
-    ref={ref}
-    className={cn(
-      'relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg py-1.5 pr-8 pl-2 text-ui-smd leading-ui-sm text-neutral4 select-none',
-      'outline-none focus:outline-none focus-visible:outline-none',
-      transitions.colors,
-      'hover:bg-surface4 hover:text-neutral6',
-      'focus:bg-surface4 focus:text-neutral6',
-      'data-[highlighted]:bg-surface4 data-[highlighted]:text-neutral6',
-      'data-[selected]:text-neutral6',
-      'data-disabled:pointer-events-none data-disabled:opacity-50',
-      className,
-    )}
-    {...props}
-  >
-    <span className="absolute right-2 flex size-3.5 items-center justify-center">
-      <SelectPrimitive.ItemIndicator>
-        <Check className="text-neutral6 size-4" />
-      </SelectPrimitive.ItemIndicator>
-    </span>
+  <SelectPrimitive.Item ref={useFluidMenuItemRef(ref)} className={cn(menuItemClass, className)} {...props}>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    <SelectPrimitive.ItemIndicator className={menuItemCheckClass}>
+      <Check />
+    </SelectPrimitive.ItemIndicator>
   </SelectPrimitive.Item>
 ));
 SelectItem.displayName = 'SelectItem';

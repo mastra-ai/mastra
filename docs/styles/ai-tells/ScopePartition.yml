@@ -1,0 +1,60 @@
+---
+extends: existence
+message: "AI scope partition: '%s'. Make the scope the subject of its own sentence instead of a fronted label."
+level: error
+nonword: true
+# The scope partition: the setup that makes a reveal possible. The writer
+# splits the world in two and fronts each half with a label ("On the read
+# side, the lookup is one hop. On the write side, every blob is hashed";
+# "At index time, the tokenizer runs once. At query time, it runs again";
+# "Read-side, the join is one hop"). Each label spends a comma-fenced
+# runway before a short claim, and the second half only exists to be set
+# against the first. It is the same two-beat pivot CoordinatedReveal and
+# ContrastiveFormulas catch, delivered as stage directions rather than a
+# contrast word, so it survived when the contrast words were suppressed
+# (2026-09).
+#
+# The plain form makes the scope the subject: "A search reverses that
+# join." "A write hashes every blob." "The tokenizer runs once per
+# document and again per query."
+#
+# Case matters here, so the rule leaves ignorecase off: the fronting is
+# a sentence-initial capital or a lowercase label after a coordinator
+# ("and on the write side,"), and the mid-sentence lowercase spellings
+# are ordinary predicates ("filters them on the client side, so").
+#
+# Costs across the Go and Python standard libraries: the sentence-initial
+# "On the X side," measures six, all the crypto/tls docs pairing "On the
+# client side, it can't be empty. On the server side, it can be," which is
+# the construction itself in human hands and fires by design. The
+# coordinator-gated lowercase spelling measures zero. The hyphenated
+# "X-side," measures zero at sentence start and one mid-sentence ("the
+# socket is client-side, and not"), a predicate the coordinator gate
+# keeps out. The sentence-initial "At X time," measures two, both the
+# unsafe.Slice docs ("At run time, if len is negative"), and fires by
+# design. The comma is the gate on every token: "on the X side of" is
+# geometry twelve times over ("on the right-hand side of the
+# declaration"), the mid-sentence "at X time," is a trailing adverbial
+# forty-five times over ("applied at link time, before we"), and "at run
+# time" and "at compile time" without the fronting comma are technical
+# English at seventeen and eighteen, so all of those stay out. The
+# idioms "on the plus side," "on the safe side," and "on the bright
+# side" and the geometric "left" and "right" sides are excluded by
+# word. A single fronted "For X," is ordinary English at several hundred
+# lines and stays out; the paired "For X, ... For Y," across two
+# sentences is anaphora and lives in StackedAnaphora.
+tokens:
+  # --- The fronted side label ("On the read side, the lookup is one
+  # hop," "and on the write side, every blob is hashed"). The idiom and
+  # geometry words are excluded.
+  - "(?:\\bOn|\\b(?:and|but|while|whereas|then|so) on) the (?!(?:plus|safe|bright|flip|other|opposite|same|wrong|far|near|left|right|left-hand|right-hand|upper|lower|top|bottom|front|back|high|low|positive|negative|sunny|dark)\\b)[A-Za-z-]+ side,"
+
+  # --- The hyphenated side label ("Read-side, the join is one hop,"
+  # "Server-side, the token is checked on every request").
+  - "(?:\\b(?!(?:Left|Right)-)[A-Z][a-z]+-side,|\\b(?:and|but|while|whereas|then|so) (?!(?:left|right)-)[a-z]+-side,)"
+
+  # --- The fronted time label ("At index time, the tokenizer runs
+  # once," "and at run time, the loader checks it"). The determiners and
+  # demonstratives keep "at a time," "at the same time," and "at this
+  # time," out.
+  - "(?:\\bAt|\\b(?:and|but|while|whereas|then|so) at) (?!(?:a|an|any|that|this|the|all|one|some|no|such|which|what|same|present|first|last|every|each|another)\\b)[A-Za-z-]+ time,"

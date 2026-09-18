@@ -71,6 +71,22 @@ import type {
   MCPServerCacheHints,
 } from './types';
 
+type HonoSSEStreamingApi = {
+  readonly closed: boolean;
+  abort(): void;
+  onAbort(listener: () => void | Promise<void>): void;
+  sleep(ms: number): Promise<unknown>;
+  write(input: Uint8Array | string): Promise<unknown>;
+  writeSSE(message: Parameters<SSEStreamingApi['writeSSE']>[0]): Promise<void>;
+};
+type HonoSSEContext = {
+  req: Pick<Context['req'], 'header' | 'json'>;
+  text: Context['text'];
+};
+type HonoSSETransport = Omit<SSETransport, 'handlePostMessage'> & {
+  handlePostMessage(context: HonoSSEContext): Promise<Response>;
+};
+
 /**
  * Flattens the MCP `ServerContext` into the shape Mastra tools receive as `extra`.
  *
@@ -125,32 +141,30 @@ const ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS = new Set([
 ]);
 
 /**
- * MCPServer exposes Mastra tools, agents, and workflows as a Model Context Protocol (MCP) server.
- *
- * This class allows any MCP client (like Cursor, Windsurf, or Claude Desktop) to connect and use your
- * Mastra capabilities. It supports both stdio (subprocess) and SSE (HTTP) MCP transports.
+ * Exposes Mastra tools, agents, and workflows to Model Context Protocol (MCP) clients.
+ * Supports stdio, SSE, and Streamable HTTP transports; start or mount a transport
+ * to accept client connections.
  *
  * @example
+ * `yourTool` is a tool you have already configured.
  * ```typescript
  * import { MCPServer } from '@mastra/mcp';
- * import { createTool } from '@mastra/core/tools';
- * import { z } from 'zod';
- *
- * const weatherTool = createTool({
- *   id: 'getWeather',
- *   description: 'Gets the current weather for a location.',
- *   inputSchema: z.object({ location: z.string() }),
- *   execute: async (inputData) => `Weather in ${inputData.location} is sunny.`,
- * });
  *
  * const server = new MCPServer({
- *   name: 'My Weather Server',
+ *   id: 'my-server',
+ *   name: 'My Server',
  *   version: '1.0.0',
- *   tools: { weatherTool },
+ *   tools: { yourTool },
  * });
- *
- * await server.startStdio();
  * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/mcp/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [MCP server documentation](https://mastra.ai/reference/tools/mcp-server)
+ * if packaged docs are unavailable.
  */
 export class MCPServer extends MCPServerBase {
   private server: Server;
@@ -287,8 +301,8 @@ export class MCPServer extends MCPServerBase {
    * @param sessionId - The session identifier
    * @returns The Hono SSE transport instance, or undefined if session not found
    */
-  public getSseHonoTransport(sessionId: string): SSETransport | undefined {
-    return this.sseHonoTransports.get(sessionId);
+  public getSseHonoTransport(sessionId: string): HonoSSETransport | undefined {
+    return this.sseHonoTransports.get(sessionId) as HonoSSETransport | undefined;
   }
 
   /**
@@ -2439,9 +2453,9 @@ export class MCPServer extends MCPServerBase {
    * });
    * ```
    */
-  public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: SSEStreamingApi }) {
+  public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: HonoSSEStreamingApi }) {
     this.logger.debug('Received SSE connection');
-    const sseTransport = new SSETransport(messagePath, stream);
+    const sseTransport = new SSETransport(messagePath, stream as SSEStreamingApi);
     const sessionId = sseTransport.sessionId;
     this.logger.debug('SSE Transport created with sessionId:', { sessionId });
     this.sseHonoTransports.set(sessionId, sseTransport);

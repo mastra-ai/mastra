@@ -2,8 +2,10 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { Plus, XIcon } from 'lucide-react';
-import { DATASET_EXPERIMENT_OPTIONS, DATASET_TARGET_OPTIONS } from './datasets-list/helpers';
+import { XIcon } from 'lucide-react';
+import { DATASET_EXPERIMENT_OPTIONS } from './datasets-list/helpers';
+import type { DatasetTargetType } from './target-type-options';
+import { TargetFilter } from '@/domains/shared/components/target-filter';
 
 export interface DatasetsToolbarTagOption {
   value: string;
@@ -13,33 +15,33 @@ export interface DatasetsToolbarTagOption {
 export interface DatasetsToolbarProps {
   search: string;
   onSearchChange: (query: string) => void;
-  targetFilter: string;
-  onTargetFilterChange: (value: string) => void;
   experimentFilter: string;
   onExperimentFilterChange: (value: string) => void;
   tagFilter: string;
   onTagFilterChange: (value: string) => void;
   tagOptions: DatasetsToolbarTagOption[];
+  targetType: DatasetTargetType | '';
+  onTargetTypeChange: (type: DatasetTargetType | '') => void;
+  targetId: string;
+  onTargetIdChange: (id: string) => void;
   onReset?: () => void;
   hasActiveFilters?: boolean;
-  onCreateClick?: () => void;
-  createTooltip?: string;
 }
 
 export function DatasetsToolbar({
   search,
   onSearchChange,
-  targetFilter,
-  onTargetFilterChange,
   experimentFilter,
   onExperimentFilterChange,
   tagFilter,
   onTagFilterChange,
   tagOptions,
+  targetType,
+  onTargetTypeChange,
+  targetId,
+  onTargetIdChange,
   onReset,
   hasActiveFilters,
-  onCreateClick,
-  createTooltip = 'Create a dataset',
 }: DatasetsToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -52,14 +54,11 @@ export function DatasetsToolbar({
         />
       </div>
       <ButtonsGroup>
-        <SelectFieldBlock
-          label="Target"
-          labelIsHidden
-          name="filter-target"
-          options={[...DATASET_TARGET_OPTIONS]}
-          value={targetFilter}
-          onValueChange={onTargetFilterChange}
-          className="whitespace-nowrap"
+        <TargetFilter
+          targetType={targetType}
+          targetId={targetId}
+          onTargetTypeChange={onTargetTypeChange}
+          onTargetIdChange={onTargetIdChange}
         />
         <SelectFieldBlock
           label="Experiments"
@@ -82,16 +81,11 @@ export function DatasetsToolbar({
           />
         )}
         {onReset && hasActiveFilters && (
-          <Button onClick={onReset} size="sm" variant="default">
-            <XIcon className="size-3" /> Reset
+          <Button onClick={onReset} size="sm" variant="default" icon={<XIcon />}>
+            Reset
           </Button>
         )}
       </ButtonsGroup>
-      {onCreateClick && (
-        <Button onClick={onCreateClick} tooltip={createTooltip} variant="primary" className="ml-auto shrink-0">
-          <Plus />
-        </Button>
-      )}
     </div>
   );
 }

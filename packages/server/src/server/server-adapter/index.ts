@@ -22,6 +22,7 @@ import {
 } from '../constants';
 import type { MastraAuthMode } from '../constants';
 import { formatZodError } from '../handlers/error';
+import { HTTPException } from '../http-exception';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import type { SetMcpRequestAuth } from './mcp-auth';
@@ -47,6 +48,15 @@ export {
 export type { MastraAuthMode } from '../constants';
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
+export { HTTPException };
+
+export function getCustomHTTPExceptionResponse(error: unknown): Response | undefined {
+  if (!(error instanceof HTTPException) || !error.res) {
+    return undefined;
+  }
+
+  return error.getResponse();
+}
 
 /**
  * Hono/adapter context key set by the framework-public middleware.
@@ -1333,6 +1343,19 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const bodySchema = route.bodySchema;
     if (!bodySchema) {
       return body;
+    }
+
+    if (body === undefined) {
+      const omitted = await bodySchema.safeParseAsync(undefined);
+      if (omitted.success) return omitted.data;
+      // Preserve bodyless object requests with optional/defaulted fields, but keep
+      // the original missing-input error if the compatibility fallback also fails.
+      const schemaType = getSchemaTypeName(unwrapOptionalNullable(bodySchema));
+      if (schemaType === 'object' || schemaType === 'ZodObject') {
+        const emptyObject = await bodySchema.safeParseAsync({});
+        if (emptyObject.success) return emptyObject.data;
+      }
+      throw omitted.error;
     }
 
     return bodySchema.parseAsync(body);

@@ -74,12 +74,7 @@ export function ScoresOverTimeCard({
                 )}
               </TabContent>
               <TabContent value="summary">
-                <DataList
-                  columns="auto auto auto auto auto"
-                  className="max-h-80"
-                  mask={{ left: false }}
-                  stickyHeaderBackground="tinted"
-                >
+                <DataList columns="auto auto auto auto auto" className="max-h-80" mask={{ left: false }}>
                   <DataList.Top>
                     <DataList.TopCell sticky="start">Scorer</DataList.TopCell>
                     <DataList.TopCell className="justify-end text-right">Avg</DataList.TopCell>

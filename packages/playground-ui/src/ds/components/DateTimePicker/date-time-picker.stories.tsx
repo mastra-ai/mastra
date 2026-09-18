@@ -19,7 +19,7 @@ const DateTimePickerDemo = ({ initialValue }: { initialValue?: Date }) => {
   return (
     <div className="w-70">
       <DateTimePicker value={value} onValueChange={setValue} />
-      {value && <p className="text-neutral5 mt-2 text-sm">Selected: {value.toLocaleString()}</p>}
+      {value && <p className="text-ui-md text-neutral5 mt-2">Selected: {value.toLocaleString()}</p>}
     </div>
   );
 };

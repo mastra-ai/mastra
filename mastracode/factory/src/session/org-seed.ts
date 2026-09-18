@@ -56,7 +56,7 @@ export function readRequestContextOrgId(requestContext: OrgBearingRequestContext
 /**
  * Whether a session state value counts as a resolved organization.
  *
- * The curation side trims before deciding (`sdk/src/agents/memory.ts`), so the
+ * The curation side trims before deciding (`sdk/src/knowledge-scope.ts`), so the
  * recovery guards have to agree with it: a whitespace-only value that reads as
  * truthy here would look resolved to a heal path while curation still refuses,
  * and nothing would ever repair it. Not every seam routes its seed through

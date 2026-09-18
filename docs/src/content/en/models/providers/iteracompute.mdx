@@ -7,7 +7,7 @@ description: "Browse IteraCompute model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/iteracompute.svg" alt="IteraCompute logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />IteraCompute
 
-Access 2 IteraCompute models through Mastra's model router. Authentication is handled automatically using the `ITERACOMPUTE_API_KEY` environment variable.
+Access 9 IteraCompute models through Mastra's model router. Authentication is handled automatically using the `ITERACOMPUTE_API_KEY` environment variable.
 
 Learn more in the [IteraCompute documentation](https://iteracompute.com/docs.html).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "iteracompute/iteracompute/ornith-1.5-35b-a3b"
+  model: "iteracompute/deepseek/deepseek-v4-flash-0731"
 });
 
 // Generate a response
@@ -46,8 +46,56 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "iteracompute/iteracompute/ornith-1.5-35b-a3b",
+    "model": "iteracompute/deepseek/deepseek-v4-flash-0731",
     "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 970000,
+    "maxOutput": 393216,
+    "inputCost": 0.34,
+    "outputCost": 1.05
+  },
+  {
+    "model": "iteracompute/deepseek/deepseek-v4-pro-0813",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 393216,
+    "inputCost": 1.1,
+    "outputCost": 3.3
+  },
+  {
+    "model": "iteracompute/minimax/minimax-m3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 524288,
+    "inputCost": 0.29,
+    "outputCost": 1.2
+  },
+  {
+    "model": "iteracompute/moonshotai/kimi-k3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 999999,
+    "inputCost": 3,
+    "outputCost": 14.9
+  },
+  {
+    "model": "iteracompute/ornith-ai/ornith-1.5-35b-a3b",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -58,7 +106,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3
   },
   {
-    "model": "iteracompute/iteracompute/qwen3.8-27b",
+    "model": "iteracompute/qwen/qwen3.8-2.4t-a95b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 970000,
+    "maxOutput": 131072,
+    "inputCost": 1.95,
+    "outputCost": 5.95
+  },
+  {
+    "model": "iteracompute/qwen/qwen3.8-27b",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -68,6 +128,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.3,
     "outputCost": 2.5
+  },
+  {
+    "model": "iteracompute/z-ai/glm-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.2,
+    "outputCost": 3.5
+  },
+  {
+    "model": "iteracompute/z-ai/glm-5.3-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.14,
+    "outputCost": 0.49
   }
 ]}
 />
@@ -84,7 +168,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.iteracompute.com/v1",
-    id: "iteracompute/iteracompute/ornith-1.5-35b-a3b",
+    id: "iteracompute/deepseek/deepseek-v4-flash-0731",
     apiKey: process.env.ITERACOMPUTE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -102,10 +186,9 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "iteracompute/iteracompute/qwen3.8-27b"
-      : "iteracompute/iteracompute/ornith-1.5-35b-a3b";
+      ? "iteracompute/z-ai/glm-5.3-flash"
+      : "iteracompute/deepseek/deepseek-v4-flash-0731";
   }
 });
 ```
-
 

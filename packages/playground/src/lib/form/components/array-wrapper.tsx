@@ -1,42 +1,44 @@
 import type { ArrayWrapperProps } from '@autoform/react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Brackets, PlusIcon } from 'lucide-react';
-import React from 'react';
+import { Brackets, Plus } from 'lucide-react';
+import { Children, useContext, useRef } from 'react';
+import { ArrayAddButtonContext, FormReadOnlyContext } from '../field-context';
 
-export const ArrayWrapper: React.FC<ArrayWrapperProps> = ({ label, children, onAddItem }) => {
+export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) {
+  const readOnly = useContext(FormReadOnlyContext);
+  const count = Children.count(children);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
   return (
-    <div>
-      <div className="flex justify-between gap-2">
-        <Txt as="h3" variant="ui-sm" className="text-neutral3 flex items-center gap-1 pb-2">
-          <Icon size="sm">
-            <Brackets />
-          </Icon>
-
-          {label}
+    <div className="min-w-0">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <Txt as="h3" variant="ui-sm" className="text-neutral3 flex items-center gap-1.5">
+          <Brackets aria-hidden className="size-3.5" />
+          {label} <span className="tabular-nums">{count}</span>
         </Txt>
-
-        <TooltipProvider delayDuration={0}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                aria-label={`Add ${label} item`}
-                onClick={onAddItem}
-                type="button"
-                className="text-neutral3 bg-surface3 hover:bg-surface4 hover:text-neutral6 h-icon-sm w-icon-sm rounded-md p-1"
-              >
-                <Icon size="sm">
-                  <PlusIcon />
-                </Icon>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Add item</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        {!readOnly && (
+          <Button
+            ref={addButtonRef}
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Add ${label} item`}
+            onClick={onAddItem}
+          >
+            <Plus />
+            Add item
+          </Button>
+        )}
       </div>
-
-      <div className="flex flex-col gap-1">{children}</div>
+      {count === 0 ? (
+        <Txt as="p" variant="ui-sm" className="text-neutral3 py-2">
+          No items added
+        </Txt>
+      ) : (
+        <ArrayAddButtonContext value={addButtonRef}>
+          <div className="flex flex-col gap-2">{children}</div>
+        </ArrayAddButtonContext>
+      )}
     </div>
   );
-};
+}

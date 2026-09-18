@@ -5,7 +5,7 @@ import { MastraA2AError } from '@mastra/core/a2a';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import type { MastraStorage } from '@mastra/core/storage';
 import canonicalize from 'canonicalize';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -266,8 +266,10 @@ describe('A2A Handler', () => {
         }),
       } as any);
 
-      expect(response.url).toBe('http://localhost:4111/api/a2a/test-agent');
-      expect(response.capabilities.pushNotifications).toBe(true);
+      expect(response.headers.get('Vary')).toBe('A2A-Version');
+      const card = await response.json();
+      expect(card.url).toBe('http://localhost:4111/api/a2a/test-agent');
+      expect(card.capabilities.pushNotifications).toBe(true);
     });
 
     it('should sign the agent card when A2A signing is configured', async () => {
@@ -326,6 +328,85 @@ describe('A2A Handler', () => {
       expect(signature.header).toEqual({
         issuer: 'mastra-test',
       });
+    });
+  });
+
+  describe.each(['send', 'stream'] as const)('A2A %s memory identity', transport => {
+    it.each([false, true])('uses persisted v1 memory with trusted thread override=%s', async trustedThread => {
+      const taskStore = new InMemoryTaskStore();
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'authenticated-user');
+      if (trustedThread) requestContext.set(MASTRA_THREAD_ID_KEY, 'authenticated-thread');
+      const generate = vi.fn().mockResolvedValue({ text: 'Hello' });
+      const stream = vi.fn().mockImplementation(async () => createStreamResult({ chunks: ['Hello'] }));
+      const resumeGenerate = vi.fn().mockResolvedValue({ text: 'Continued' });
+      const resumeStream = vi.fn().mockImplementation(async () => createStreamResult({ chunks: ['Continued'] }));
+      const agent = { generate, stream, resumeGenerate, resumeStream } as unknown as Agent;
+      const invoke = async (params: MessageSendParams) => {
+        const input = { requestId: 'memory', params, taskStore, agent, agentId: 'test-agent', requestContext };
+        if (transport === 'send') return (await handleMessageSend(input)).result;
+        let initial: Task | undefined;
+        for await (const event of handleMessageStream(input)) {
+          if (event.result.kind === 'task') initial ??= event.result;
+        }
+        return initial!;
+      };
+      const task = await invoke({
+        message: {
+          kind: 'message',
+          messageId: 'initial',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Hello' }],
+          metadata: { resourceId: 'untrusted-message' },
+        },
+        metadata: { resourceId: 'untrusted-params' },
+      });
+      const memory = { thread: task.contextId, resource: 'authenticated-user' };
+      if (trustedThread) expect(task.contextId).toBe('authenticated-thread');
+      expect(task.contextId).toEqual(expect.any(String));
+      const call = transport === 'send' ? generate : stream;
+      expect(call).toHaveBeenLastCalledWith(expect.any(Array), expect.objectContaining({ memory }));
+      expect(call.mock.calls[0]?.[1]).not.toHaveProperty('threadId');
+      expect(call.mock.calls[0]?.[1]).not.toHaveProperty('resourceId');
+      const stored = (await taskStore.load({ agentId: 'test-agent', taskId: task.id }))!;
+      expect(stored.metadata?.resourceId).toBe(memory.resource);
+      await taskStore.save({ agentId: 'test-agent', data: { ...stored, status: { state: 'input-required' } } });
+      await invoke({
+        message: {
+          kind: 'message',
+          messageId: 'follow-up',
+          role: 'user',
+          taskId: task.id,
+          contextId: 'changed-context',
+          parts: [{ kind: 'text', text: 'Continue' }],
+        },
+        metadata: { resourceId: 'changed-resource' },
+      });
+      const resumeCall = transport === 'send' ? resumeGenerate : resumeStream;
+      expect(resumeCall).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ runId: task.id, requestContext }),
+      );
+      expect(resumeCall.mock.calls[0]?.[1]).not.toHaveProperty('memory');
+      expect((await taskStore.load({ agentId: 'test-agent', taskId: task.id }))?.metadata?.resourceId).toBe(
+        memory.resource,
+      );
+      const before = await taskStore.load({ agentId: 'test-agent', taskId: task.id });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'different-user');
+      await expect(
+        invoke({
+          message: {
+            kind: 'message',
+            messageId: 'conflict',
+            role: 'user',
+            taskId: task.id,
+            parts: [{ kind: 'text', text: 'No' }],
+          },
+        }),
+      ).rejects.toThrow('Task memory identity conflicts');
+      expect(await taskStore.load({ agentId: 'test-agent', taskId: task.id })).toEqual(before);
+      expect(call).toHaveBeenCalledTimes(1);
+      expect(resumeCall).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -398,6 +479,7 @@ describe('A2A Handler', () => {
           id: expect.any(String),
           contextId: expect.any(String),
           metadata: {
+            resourceId: 'test-agent',
             execution: {
               toolCalls: undefined,
               toolResults: undefined,
@@ -529,8 +611,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(expect.any(Array), {
         runId: taskId,
         requestContext,
-        threadId: contextId,
-        resourceId: 'test-agent',
+        memory: { thread: contextId, resource: 'test-agent' },
       });
       expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.status.state).toBe('working');
 
@@ -903,8 +984,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: agentId,
+          memory: { thread: contextId, resource: agentId },
         }),
       );
     });
@@ -990,8 +1070,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1036,8 +1115,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1086,8 +1164,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: paramsResourceId,
+          memory: { thread: contextId, resource: paramsResourceId },
         }),
       );
     });
@@ -1132,8 +1209,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1178,8 +1254,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1320,6 +1395,7 @@ describe('A2A Handler', () => {
             },
           ],
           metadata: {
+            resourceId: 'test-agent',
             execution: {
               toolCalls: undefined,
               toolResults: undefined,
@@ -1389,6 +1465,7 @@ describe('A2A Handler', () => {
 
       // Verify the execution metadata is stored
       expect(result.result?.metadata).toEqual({
+        resourceId: 'test-agent',
         execution: {
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
@@ -1404,6 +1481,7 @@ describe('A2A Handler', () => {
       }
       const savedTask = await mockTaskStore.load({ agentId, taskId });
       expect(savedTask?.metadata).toEqual({
+        resourceId: 'test-agent',
         execution: {
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
@@ -1460,6 +1538,7 @@ describe('A2A Handler', () => {
       // Verify both existing metadata and execution metadata are present
       expect(result.result?.metadata).toEqual({
         ...existingMetadata,
+        resourceId: 'test-agent',
         execution: {
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
@@ -1765,7 +1844,7 @@ describe('A2A Handler', () => {
           ],
           id: expect.any(String),
           kind: 'task',
-          metadata: undefined,
+          metadata: { resourceId: 'test-agent' },
           status: {
             message: {
               kind: 'message',
@@ -3247,6 +3326,114 @@ describe('A2A Handler', () => {
       });
     });
 
+    it('translates native v1 push notification configs and paginates list responses', async () => {
+      const pushNotificationStore = new InMemoryPushNotificationStore();
+
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          id: 'task-1',
+          contextId: 'context-1',
+          status: { state: 'working', timestamp: '2025-05-08T11:47:38.458Z' },
+          artifacts: [],
+          kind: 'task',
+        },
+      });
+
+      for (const id of ['push-1', 'push-2', 'push-3']) {
+        const result = await getAgentExecutionHandler({
+          requestId: `create-${id}`,
+          mastra: mockMastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          method: 'tasks/pushNotificationConfig/set',
+          params: { taskId: 'task-1', id, url: `https://example.com/${id}` },
+          taskStore: mockTaskStore,
+          pushNotificationStore,
+          protocolVersion: '1.0',
+        });
+
+        expect(result).toEqual({
+          id: `create-${id}`,
+          jsonrpc: '2.0',
+          result: { taskId: 'task-1', id, url: `https://example.com/${id}` },
+        });
+      }
+
+      const getResult = await getAgentExecutionHandler({
+        requestId: 'get-push-2',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/get',
+        params: { taskId: 'task-1', id: 'push-2' },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(getResult).toEqual({
+        id: 'get-push-2',
+        jsonrpc: '2.0',
+        result: { taskId: 'task-1', id: 'push-2', url: 'https://example.com/push-2' },
+      });
+
+      const firstPage = await getAgentExecutionHandler({
+        requestId: 'list-page-1',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/list',
+        params: { taskId: 'task-1', pageSize: 2 },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(firstPage).toEqual({
+        id: 'list-page-1',
+        jsonrpc: '2.0',
+        result: {
+          configs: [
+            { taskId: 'task-1', id: 'push-1', url: 'https://example.com/push-1' },
+            { taskId: 'task-1', id: 'push-2', url: 'https://example.com/push-2' },
+          ],
+          nextPageToken: '2',
+        },
+      });
+
+      const secondPage = await getAgentExecutionHandler({
+        requestId: 'list-page-2',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/list',
+        params: { taskId: 'task-1', pageSize: 2, pageToken: '2' },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(secondPage).toEqual({
+        id: 'list-page-2',
+        jsonrpc: '2.0',
+        result: {
+          configs: [{ taskId: 'task-1', id: 'push-3', url: 'https://example.com/push-3' }],
+          nextPageToken: '',
+        },
+      });
+
+      const deleteResult = await getAgentExecutionHandler({
+        requestId: 'delete-push-2',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/delete',
+        params: { taskId: 'task-1', id: 'push-2' },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(deleteResult).toEqual({ id: 'delete-push-2', jsonrpc: '2.0', result: null });
+    });
+
     it('returns task not found when configuring push notifications for an unknown task', async () => {
       const result = await getAgentExecutionHandler({
         requestId: 'test-request-id',
@@ -3799,6 +3986,49 @@ describe('A2A Handler', () => {
       });
 
       expect(() => resolveA2AProtocolVersion(request)).toThrow('Version not supported: 2.0');
+    });
+  });
+
+  describe('protocol discovery', () => {
+    let agent: MockAgent;
+    let mastra: Mastra;
+
+    beforeEach(() => {
+      agent = new MockAgent({
+        id: 'canonical-agent',
+        name: 'Discovery agent',
+        instructions: 'Test discovery',
+        model: openai('gpt-4o'),
+      });
+      mastra = createMockMastra({ registeredAgent: agent });
+    });
+
+    it('selects distinct legacy and v1 cards without changing metadata version', async () => {
+      const options = {
+        mastra,
+        agentId: agent.id,
+        requestContext: new RequestContext(),
+        executionUrl: 'https://example.com/api/a2a/canonical-agent',
+        version: 'release-2',
+      };
+      const legacy = await getAgentCardByIdHandler({ ...options, protocolVersion: '0.3' });
+      const v1 = await getAgentCardByIdHandler({ ...options, protocolVersion: '1.0' });
+      expect(legacy).toMatchObject({ protocolVersion: '0.3.0', url: options.executionUrl, version: 'release-2' });
+      expect(legacy).not.toHaveProperty('supportedInterfaces');
+      expect(v1.version).toBe('release-2');
+      expect(v1.supportedInterfaces).toEqual([
+        { url: options.executionUrl, protocolBinding: 'JSONRPC', protocolVersion: '0.3' },
+        { url: options.executionUrl, protocolBinding: 'JSONRPC', protocolVersion: '1.0' },
+      ]);
+      for (const field of [
+        'url',
+        'protocolVersion',
+        'additionalInterfaces',
+        'security',
+        'supportsAuthenticatedExtendedCard',
+      ]) {
+        expect(v1).not.toHaveProperty(field);
+      }
     });
   });
 

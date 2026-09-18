@@ -1,9 +1,9 @@
 ---
-title: "Feedback | Observability"
-description: "Create, list, aggregate, and export human feedback records in Mastra observability, with ratings and comments linked to specific traces and spans."
+title: 'Feedback | Observability'
+description: 'Create, list, aggregate, and export human feedback records in Mastra observability, with ratings and comments linked to specific traces and spans.'
 packages:
-  - "@mastra/core"
-  - "@mastra/observability"
+  - '@mastra/core'
+  - '@mastra/observability'
 ---
 
 # Feedback
@@ -112,7 +112,7 @@ const result = await observability!.listFeedback({
 console.log(result.feedback, result.pagination?.hasMore)
 ```
 
-Filters include target fields such as `traceId` and `spanId`, feedback fields such as `feedbackType`, `feedbackSource`, and `feedbackUserId`, and shared context fields such as `entityName`, `environment`, `experimentId`, and `tags`.
+Filters include target fields such as `traceId` and `spanId`, feedback fields such as `feedbackType`, `feedbackSource`, and `feedbackUserId`, and shared context fields such as `entityName`, `environment`, `experimentId`, and `tags`. See [`FeedbackFilter`](/reference/observability/feedback#feedbackfilter) for every filter field. Over HTTP, the same fields are passed as query parameters, for example `GET /api/observability/feedback?traceId=trace-123&environment=production`. See [list query parameters](/reference/observability/feedback#list-query-parameters).
 
 ```typescript
 await observability!.listFeedback({
@@ -123,6 +123,18 @@ await observability!.listFeedback({
   },
 })
 ```
+
+## Delete feedback
+
+Use `deleteFeedback()` to hide feedback records from reads by id. This is useful when a comment contains sensitive data. Each request accepts at most 1,000 `feedbackIds`, and deletion is idempotent. The optional `organizationId` field filters by organization, and the optional `resourceId` field filters by resource. You can supply either filter independently or use both together. In Studio, each comment on a trace or span Feedback tab has a delete action.
+
+```typescript
+await observability!.deleteFeedback({
+  feedbackIds: ['feedback-1', 'feedback-2'],
+})
+```
+
+Deleted records also disappear from feedback analytics. ClickHouse uses a lightweight delete to hide rows without guaranteeing immediate physical removal, so open-source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. Configure retention for every observability signal to expire deletion requests after the signal rows they protect. If any signal is unbounded, deletion requests also remain unbounded to prevent deleted data from being reintroduced. Delete APIs intentionally leave cursor-only delta rows untouched. These rows contain identifiers rather than feedback payloads and expire within two days.
 
 ## Query feedback analytics
 
@@ -153,7 +165,7 @@ const ratingsOverTime = await observability!.getFeedbackTimeSeries({
 
 See the [feedback reference](/reference/observability/feedback) for all fields, filters, return types, and percentile query parameters.
 
-The local runtime exposes the list route at `/api/observability/feedback` and analytics under its related paths. See the [HTTP routes table](/reference/observability/feedback#http-routes). Mastra Platform provides a separate, unversioned hosted query API. See the [observability feedback query API](/docs/mastra-platform/api#observability-feedback-query-api) for regional endpoints, authentication, and project scoping.
+The local runtime exposes the list route at `/api/observability/feedback` and analytics under its related paths. See the [HTTP routes table](/reference/observability/feedback#http-routes) and [list query parameters](/reference/observability/feedback#list-query-parameters). Mastra Platform provides a separate, unversioned hosted query API. See the [observability feedback query API](/docs/mastra-platform/api#observability-feedback-query-api) for regional endpoints, authentication, and project scoping.
 
 ## Export feedback to Mastra Platform
 

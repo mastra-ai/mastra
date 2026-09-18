@@ -7,7 +7,7 @@ description: "Browse xAI model IDs, capabilities, context windows, and pricing. 
 
 # <img src="https://models.dev/logos/xai.svg" alt="xAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />xAI
 
-Access 12 xAI models through Mastra's model router. Authentication is handled automatically using the `XAI_API_KEY` environment variable.
+Access 10 xAI models through Mastra's model router. Authentication is handled automatically using the `XAI_API_KEY` environment variable.
 
 Learn more in the [xAI documentation](https://docs.x.ai/docs/models).
 
@@ -130,31 +130,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 8000,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "xai/grok-imagine-image-2.0",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 8000,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "xai/grok-imagine-image-quality",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 8000,
+    "contextWindow": 16000,
     "maxOutput": null,
     "inputCost": null,
     "outputCost": null
@@ -272,14 +248,3 @@ const response = await agent.generate("Hello!", {
 ]}
 />
 
-
-
-## Direct provider installation
-
-This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/xai) for more details.
-
-```bash npm2yarn
-npm install @ai-sdk/xai
-```
-
-For detailed provider-specific documentation, see the [AI SDK xAI provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/xai).

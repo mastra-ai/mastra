@@ -7,8 +7,8 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 // Base UI's Select synthesizes PointerEvents on interaction, which jsdom does
 // not implement. Polyfill it with the available MouseEvent constructor.
 beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+  if (window.PointerEvent === undefined) {
+    Object.defineProperty(window, 'PointerEvent', { value: window.MouseEvent, configurable: true });
   }
 });
 
@@ -127,43 +127,59 @@ describe('Select', () => {
     renderSelect();
 
     const trigger = screen.getByRole('combobox');
-    // The trigger now inherits the button-native text size (`text-ui-md`) for
-    // its default size, not the legacy `text-ui-smd`.
-    expect(trigger.classList.contains('text-ui-md')).toBe(true);
-    expect(trigger.classList.contains('text-ui-smd')).toBe(false);
+    // The trigger inherits the button-native text size (`text-ui-smd`) for
+    // its default size.
+    expect(trigger.classList.contains('text-ui-smd')).toBe(true);
+    expect(trigger.classList.contains('text-ui-md')).toBe(false);
     // Focus is the unified neutral border (from `buttonVariants`), not the old
     // bespoke `focus-visible:border-border2`.
     expect(trigger.className).toContain('focus-visible:border-neutral5/50');
   });
 
-  it('wires the variant prop through to the button recipe (default = the filled Button default, field-only variants)', () => {
-    function renderWithVariant(variant?: 'default' | 'outline' | 'ghost' | 'primary') {
-      const utils = render(
+  it('uses the Input overlay surface (not the Button surface) for the default variant', () => {
+    renderSelect();
+
+    const trigger = screen.getByRole('combobox');
+    expect(trigger.classList.contains('bg-surface-overlay-soft')).toBe(true);
+    expect(trigger.classList.contains('border-border1')).toBe(true);
+    expect(trigger.classList.contains('text-neutral6')).toBe(true);
+    expect(trigger.classList.contains('data-[placeholder]:text-neutral2')).toBe(true);
+    expect(trigger.classList.contains('data-[popup-open]:bg-surface-overlay-strong')).toBe(true);
+    expect(trigger.className).not.toContain('button-default');
+
+    const chevron = trigger.querySelector('svg');
+    expect(chevron?.classList.contains('text-neutral3')).toBe(true);
+    expect(chevron?.className.baseVal).not.toContain('opacity');
+  });
+
+  it('keeps the outline and ghost variants on the Button recipe', () => {
+    render(
+      <>
         <Select>
-          <SelectTrigger {...(variant ? { variant } : {})}>
+          <SelectTrigger variant="outline" aria-label="outline">
             <SelectValue placeholder="Pick one" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="apple">Apple</SelectItem>
+            <SelectItem value="a">A</SelectItem>
           </SelectContent>
-        </Select>,
-      );
-      const className = screen.getByRole('combobox').className;
-      utils.unmount();
-      return className;
-    }
+        </Select>
+        <Select>
+          <SelectTrigger variant="ghost" aria-label="ghost">
+            <SelectValue placeholder="Pick one" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="a">A</SelectItem>
+          </SelectContent>
+        </Select>
+      </>,
+    );
 
-    // Default trigger == the `default` variant (the Button's filled surface).
-    expect(renderWithVariant()).toBe(renderWithVariant('default'));
-    expect(renderWithVariant('default')).toContain('bg-surface3');
-    expect(renderWithVariant('default')).not.toContain('bg-transparent');
-    // Legacy `primary` is still accepted for source compatibility, but renders
-    // as the field-safe default look.
-    expect(renderWithVariant('primary')).toBe(renderWithVariant('default'));
-    // `outline` is a transparent bordered field.
-    expect(renderWithVariant('outline')).toContain('bg-transparent');
-    expect(renderWithVariant('outline')).toContain('border-border1');
-    // `ghost` is borderless.
-    expect(renderWithVariant('ghost')).toContain('border-transparent');
+    const outline = screen.getByRole('combobox', { name: 'outline' });
+    expect(outline.classList.contains('bg-surface3')).toBe(true);
+    expect(outline.classList.contains('bg-surface-overlay-soft')).toBe(false);
+
+    const ghost = screen.getByRole('combobox', { name: 'ghost' });
+    expect(ghost.classList.contains('bg-transparent')).toBe(true);
+    expect(ghost.classList.contains('bg-surface-overlay-soft')).toBe(false);
   });
 });

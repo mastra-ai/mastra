@@ -1,5 +1,11 @@
+import { writeFile } from 'node:fs/promises';
 import { copy } from 'fs-extra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('node:fs/promises', async importOriginal => ({
+  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  writeFile: vi.fn().mockResolvedValue(undefined),
+}));
 
 // Mock fs-extra/esm - parent Bundler uses this import path
 vi.mock('fs-extra/esm', () => ({
@@ -14,6 +20,10 @@ vi.mock('fs-extra', () => ({
   copy: vi.fn(),
 }));
 
+const { extractMastraOption } = vi.hoisted(() => ({
+  extractMastraOption: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('@mastra/deployer/build', () => {
   class MockFileService {
     getFirstExistingFile = vi.fn().mockReturnValue('.env');
@@ -21,6 +31,7 @@ vi.mock('@mastra/deployer/build', () => {
   }
 
   return {
+    extractMastraOption,
     FileService: MockFileService,
   };
 });
@@ -82,6 +93,25 @@ describe('BuildBundler', () => {
     });
   });
 
+  describe('bundle', () => {
+    it('does not execute worker introspection outside environment deploys', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+      const bundleSpy = vi.spyOn(bundler as any, '_bundle').mockResolvedValue(undefined);
+      const loadEnvVarsSpy = vi
+        .spyOn(bundler as any, 'loadEnvVars')
+        .mockRejectedValue(new Error('must not load env vars'));
+
+      await expect(
+        bundler.bundle('/entry.ts', '/output', { toolsPaths: [], projectRoot: '/project' }),
+      ).resolves.toBeUndefined();
+      expect(extractMastraOption).not.toHaveBeenCalled();
+      expect(bundleSpy).toHaveBeenCalledOnce();
+      expect(writeFile).not.toHaveBeenCalledWith('/output/output/worker-manifest.mjs', expect.any(String));
+      expect(loadEnvVarsSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('bundler options', () => {
     it('defaults to externals true when no bundler config is provided', async () => {
       const { Bundler, IS_DEFAULT } = await import('@mastra/deployer/bundler');
@@ -116,11 +146,11 @@ describe('BuildBundler', () => {
       });
     });
 
-    it('keeps configured externals as runtime dependencies while preserving externals true', async () => {
+    it('preserves an explicit externals list and dynamic packages', async () => {
       const { Bundler } = await import('@mastra/deployer/bundler');
       vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
         externals: ['@duckdb/node-bindings', 'existing-package'],
-        dynamicPackages: ['existing-package', 'dynamic-package'],
+        dynamicPackages: ['dynamic-package'],
       });
       const { BuildBundler } = await import('./BuildBundler');
       const bundler = new BuildBundler();
@@ -128,8 +158,23 @@ describe('BuildBundler', () => {
       const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
 
       expect(options).toEqual({
-        externals: true,
-        dynamicPackages: ['existing-package', 'dynamic-package', '@duckdb/node-bindings'],
+        externals: ['@duckdb/node-bindings', 'existing-package'],
+        dynamicPackages: ['dynamic-package'],
+      });
+    });
+
+    it('preserves an explicit workspace external', async () => {
+      const { Bundler } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+        externals: ['@repro/database'],
+      });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+
+      const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(options).toEqual({
+        externals: ['@repro/database'],
       });
     });
 
@@ -167,6 +212,7 @@ describe('BuildBundler', () => {
       expect(entries.worker).toContain("import { mastra } from '#mastra'");
       expect(entries.worker).toContain("request.url !== '/health'");
       expect(entries.worker).toContain('await mastra.startWorkers()');
+      expect(entries).not.toHaveProperty('worker-manifest');
     });
 
     it('should include studio: true when studio is enabled', async () => {

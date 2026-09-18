@@ -13,7 +13,6 @@ export interface DatasetCompareVersionsListProps {
   allItems: Array<{ id: string; createdAt: Date }>;
   itemsAMap: Map<string, DatasetItem>;
   itemsBMap: Map<string, DatasetItem>;
-  onItemClick?: (itemId: string, itemA?: DatasetItem, itemB?: DatasetItem) => void;
 }
 
 const columns = [
@@ -189,7 +188,7 @@ export function DatasetCompareVersionsList({
                 {status === 'changed' ? (
                   <ItemList.LinkCell
                     LinkComponent={Link}
-                    href={`/datasets/${datasetId}/items/${id}/versions?ids=${itemA?.datasetVersion},${itemB?.datasetVersion}`}
+                    href={`/datasets/${datasetId}/items/${id}/versions?version=${itemA?.datasetVersion}&compare=${itemB?.datasetVersion}`}
                   >
                     Compare
                   </ItemList.LinkCell>

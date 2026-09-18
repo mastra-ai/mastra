@@ -1,52 +1,44 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ExperimentNameLabel } from '../experiment-name-label';
+import { ExperimentDescriptionLabel, ExperimentNameLabel } from '../experiment-name-label';
 import { experiments } from './fixtures/experiments';
+import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 
 const base = experiments[0];
 
 afterEach(cleanup);
 
+describe('getExperimentDisplayName', () => {
+  it('returns the name when set', () => {
+    expect(getExperimentDisplayName({ id: 'abcdef1234567890', name: 'Baseline run' })).toBe('Baseline run');
+  });
+
+  it('falls back to a readable short id when unnamed', () => {
+    expect(getExperimentDisplayName({ id: 'abcdef1234567890', name: null })).toBe('Experiment #abcdef12');
+  });
+});
+
 describe('ExperimentNameLabel', () => {
-  it('shows the name with the description underneath when both exist', () => {
+  it('renders the name on a single line', () => {
     render(<ExperimentNameLabel experiment={{ ...base, name: 'Baseline run', description: 'Nightly check' }} />);
     expect(screen.getByText('Baseline run')).toBeDefined();
-    expect(screen.getByText('Nightly check')).toBeDefined();
+    expect(screen.queryByText('Nightly check')).toBeNull();
   });
 
-  it('falls back to a readable id and the version/scorer summary when unnamed', () => {
-    render(
-      <ExperimentNameLabel
-        experiment={{
-          ...base,
-          id: 'abcdef1234567890',
-          name: null,
-          description: null,
-          datasetVersion: 3,
-          scorerIds: ['a', 'b'],
-        }}
-      />,
-    );
+  it('falls back to a readable id when unnamed', () => {
+    render(<ExperimentNameLabel experiment={{ ...base, id: 'abcdef1234567890', name: null }} />);
     expect(screen.getByText('Experiment #abcdef12')).toBeDefined();
-    expect(screen.getByText('v3 · 2 scorers')).toBeDefined();
+  });
+});
+
+describe('ExperimentDescriptionLabel', () => {
+  it('renders the description truncated to one line', () => {
+    render(<ExperimentDescriptionLabel experiment={{ ...base, description: 'Nightly check' }} />);
+    expect(screen.getByText('Nightly check').className).toContain('truncate');
   });
 
-  it('uses the singular scorer label and omits the version when unknown', () => {
-    render(
-      <ExperimentNameLabel
-        experiment={{ ...base, name: 'Single', description: null, datasetVersion: null, scorerIds: ['a'] }}
-      />,
-    );
-    expect(screen.getByText('1 scorer')).toBeDefined();
-  });
-
-  it('renders only the primary line when there is nothing to summarise', () => {
-    const { container } = render(
-      <ExperimentNameLabel
-        experiment={{ ...base, name: 'Bare', description: null, datasetVersion: null, scorerIds: null }}
-      />,
-    );
-    expect(screen.getByText('Bare')).toBeDefined();
-    expect(container.querySelectorAll('span').length).toBe(2);
+  it('shows a placeholder when there is no description', () => {
+    render(<ExperimentDescriptionLabel experiment={{ ...base, description: null }} />);
+    expect(screen.getByText('—')).toBeDefined();
   });
 });

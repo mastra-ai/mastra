@@ -7,7 +7,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DATASET_ID, dataset, items } from './fixtures/dataset-items';
 import DatasetPage from '@/pages/datasets/dataset';
-import DatasetItemPage from '@/pages/datasets/dataset/item';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
@@ -29,7 +28,7 @@ const renderDatasetRoute = (initialPath = `/datasets/${DATASET_ID}`) => {
       {
         path: '/datasets/:datasetId',
         element: <DatasetPage />,
-        children: [{ path: 'items/:itemId', element: <DatasetItemPage /> }],
+        children: [{ path: 'items/:itemId', element: null }],
       },
     ],
     { initialEntries: [initialPath] },
@@ -53,6 +52,10 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json({ datasets: [dataset] })),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () => HttpResponse.json(dataset)),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items`, () => HttpResponse.json(itemsResponse)),
+    http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items/:itemId`, ({ params }) => {
+      const item = items.find(item => item.id === params.itemId);
+      return item ? HttpResponse.json(item) : HttpResponse.json({ error: 'Item not found' }, { status: 404 });
+    }),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/versions`, () =>
       HttpResponse.json({ versions: [], pagination: { total: 0, page: 0, perPage: 10, hasMore: false } }),
     ),
@@ -95,7 +98,8 @@ describe('dataset items navigation', () => {
       await waitFor(() => {
         expect(router.state.location.pathname).toBe(`/datasets/${DATASET_ID}`);
       });
-      expect(screen.queryByRole('dialog')).toBeNull();
+      // The drawer stays mounted and animates out before its dialog leaves the DOM.
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     });
   });
 
@@ -111,9 +115,9 @@ describe('dataset items navigation', () => {
     it('shows a not-found state for an unknown item id', async () => {
       renderDatasetRoute(`/datasets/${DATASET_ID}/items/does-not-exist`);
 
-      const dialog = await screen.findByRole('dialog');
+      const dialog = await screen.findByRole('dialog', { name: 'Dataset item does-not-exist' });
       await waitFor(() => {
-        expect(dialog.textContent).toContain('Item not found');
+        expect(dialog.textContent).toContain('No loaded item "does-not-exist"');
       });
     });
   });

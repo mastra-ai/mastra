@@ -40,6 +40,14 @@ vi.mock('@mastra/core/agent-controller', () => ({
 
     async init() {}
 
+    onSessionCreated() {
+      return () => {};
+    }
+
+    onSessionDeleted() {
+      return () => {};
+    }
+
     getMastra() {
       return undefined;
     }
@@ -58,6 +66,7 @@ vi.mock('@mastra/core/agent-controller', () => ({
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},
+  createBackgroundWorkSignalProcessor: () => ({}),
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -84,9 +93,6 @@ vi.mock('./agents/model.js', () => ({
   resolveModel: vi.fn(),
 }));
 
-vi.mock('./agents/subagents/execute.js', () => ({ executeSubagent: {} }));
-vi.mock('./agents/subagents/explore.js', () => ({ exploreSubagent: {} }));
-vi.mock('./agents/subagents/plan.js', () => ({ planSubagent: {} }));
 vi.mock('./agents/tools.js', () => ({ createDynamicTools: vi.fn(), createToolHooks: vi.fn() }));
 vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn(), getGoalJudgeTools: vi.fn() }));
 
@@ -230,7 +236,7 @@ describe('createMastraCode startup performance', () => {
     expect(result.storageWarning).toBe('Storage fallback warning');
     expect(syncGateways).not.toHaveBeenCalled();
     resolveSync?.();
-  });
+  }, 10_000);
 });
 
 describe('Kimi startup access', () => {

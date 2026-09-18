@@ -19,11 +19,19 @@ describe('Textarea', () => {
     expect(textarea.className).not.toContain('bg-surface-overlay-soft');
   });
 
+  it('uses the shared neutral6 text color at rest', () => {
+    render(<Textarea placeholder="Description" />);
+
+    const cls = screen.getByPlaceholderText('Description').className;
+    expect(cls).toContain('text-neutral6');
+    expect(cls).not.toContain('text-neutral5');
+  });
+
   it.each([
+    ['xs', 'text-ui-xs'],
     ['sm', 'text-ui-sm'],
-    ['md', 'text-ui-md'],
-    ['default', 'text-ui-md'],
-    ['lg', 'text-ui-lg'],
+    ['md', 'text-ui-smd'],
+    ['lg', 'text-ui-md'],
   ] as const)('reads at the %s size', (size, expected) => {
     render(<Textarea size={size} placeholder="Description" />);
 
@@ -33,7 +41,7 @@ describe('Textarea', () => {
   it('reads at the medium size by default', () => {
     render(<Textarea placeholder="Description" />);
 
-    expect(screen.getByPlaceholderText('Description').className).toContain('text-ui-md');
+    expect(screen.getByPlaceholderText('Description').className).toContain('text-ui-smd');
   });
 
   it('drops its own chrome in the unstyled variant', () => {

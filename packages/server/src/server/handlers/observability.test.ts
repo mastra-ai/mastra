@@ -9,6 +9,7 @@ import type {
   LightSpanRecord,
 } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
 import {
@@ -19,6 +20,7 @@ import {
   GET_TRACE_ROUTE,
   GET_TRACE_LIGHT_ROUTE,
   GET_SPAN_ROUTE,
+  DELETE_TRACES_ROUTE,
   SCORE_TRACES_ROUTE,
   LIST_SCORES_BY_SPAN_ROUTE,
 } from './observability';
@@ -47,10 +49,12 @@ const createMockObservabilityStore = () => ({
   listTraces: vi.fn(),
   listTracesLight: vi.fn(),
   listBranches: vi.fn(),
+  batchDeleteTraces: vi.fn(),
   listMetrics: vi.fn(),
   listLogs: vi.fn(),
   listScores: vi.fn(),
   createScore: vi.fn(),
+  deleteScores: vi.fn(),
   getScoreById: vi.fn(),
   getScoreAggregate: vi.fn(),
   getScoreBreakdown: vi.fn(),
@@ -58,6 +62,7 @@ const createMockObservabilityStore = () => ({
   getScorePercentiles: vi.fn(),
   listFeedback: vi.fn(),
   createFeedback: vi.fn(),
+  deleteFeedback: vi.fn(),
   updateFeedbackReviewStatus: vi.fn(),
   getFeedbackAggregate: vi.fn(),
   getFeedbackBreakdown: vi.fn(),
@@ -1068,6 +1073,60 @@ describe('Observability Handlers', () => {
     });
   });
 
+  describe('DELETE_TRACES_ROUTE', () => {
+    it('should validate a trace ID array and exclude tenant scope from the public route', () => {
+      const schema = DELETE_TRACES_ROUTE.bodySchema!;
+
+      expect(schema.safeParse({ traceIds: ['trace-1', 'trace-2'] }).success).toBe(true);
+      expect(schema.safeParse({}).success).toBe(false);
+      expect(schema.safeParse({ traceIds: 'trace-1' }).success).toBe(false);
+      expect(schema.safeParse({ traceIds: Array.from({ length: 1001 }, (_, index) => `trace-${index}`) }).success).toBe(
+        false,
+      );
+      expect(schema.parse({ traceIds: ['trace-1'], organizationId: 'org-1' })).toEqual({ traceIds: ['trace-1'] });
+      expect(DELETE_TRACES_ROUTE.maxBodySize).toBe(256 * 1024);
+    });
+
+    it('should delete traces and return success', async () => {
+      mockObservabilityStore.batchDeleteTraces.mockResolvedValue(undefined);
+
+      const result = await DELETE_TRACES_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        traceIds: ['trace-1', 'trace-2'],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.batchDeleteTraces).toHaveBeenCalledWith({ traceIds: ['trace-1', 'trace-2'] });
+    });
+
+    it('should throw 501 when observability store is not available', async () => {
+      const mastraWithoutObservability = createMockMastra({
+        getStore: vi.fn(() => Promise.resolve(undefined)) as MastraCompositeStore['getStore'],
+      });
+
+      await expect(
+        DELETE_TRACES_ROUTE.handler({
+          ...createTestServerContext({ mastra: mastraWithoutObservability }),
+          traceIds: ['trace-1'],
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should call handleError when the store throws', async () => {
+      const storeError = new Error('boom');
+      mockObservabilityStore.batchDeleteTraces.mockRejectedValue(storeError);
+
+      await expect(
+        DELETE_TRACES_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          traceIds: ['trace-1'],
+        }),
+      ).rejects.toThrow('boom');
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storeError, 'Error deleting traces');
+    });
+  });
+
   describe('SCORE_TRACES_ROUTE', () => {
     let scoreTracesMock: ReturnType<typeof vi.fn>;
 
@@ -1638,6 +1697,140 @@ describe('Observability Handlers', () => {
   });
 
   describe('LIST_FEEDBACK_ROUTE', () => {
+    it.each(['absent', 'unsupported', 'batch-error', 'individual-error', 'empty', 'no-ids'])(
+      'given %s resolution, when listing feedback, then preserves unresolved records without unnecessary lookups',
+      async scenario => {
+        const getUser = vi.fn().mockRejectedValue(new Error('User lookup failed'));
+        const getUsers = vi.fn().mockRejectedValue(new Error('Batch lookup failed'));
+        const provider = {
+          authenticateToken: vi.fn(),
+          getCurrentUser: vi.fn(),
+          getUser,
+          ...(scenario === 'individual-error' ? {} : { getUsers }),
+        };
+        const mastra = Object.assign(mockMastra, {
+          getServer: () => ({
+            auth:
+              scenario === 'absent'
+                ? undefined
+                : scenario === 'unsupported'
+                  ? { authenticateToken: vi.fn() }
+                  : provider,
+          }),
+        });
+        const feedback =
+          scenario === 'empty'
+            ? []
+            : [
+                {
+                  timestamp: new Date(),
+                  feedbackType: 'comment',
+                  value: 'hi',
+                  reviewStatus: 'needs-review',
+                  ...(scenario === 'no-ids' ? {} : { feedbackUserId: 'missing' }),
+                },
+              ];
+        mockObservabilityStore.listFeedback.mockResolvedValue({ feedback });
+        const response = await NEW_ROUTES.LIST_FEEDBACK.handler(createTestServerContext({ mastra }));
+        expect(NEW_ROUTES.LIST_FEEDBACK.responseSchema!.parse(response)).toEqual({ feedback });
+        expect(getUsers).toHaveBeenCalledTimes(scenario === 'batch-error' ? 1 : 0);
+        expect(getUser).toHaveBeenCalledTimes(scenario === 'individual-error' ? 1 : 0);
+      },
+    );
+
+    it('given separate Studio auth, when Studio lists feedback, then uses only the Studio directory', async () => {
+      const getUser = vi.fn().mockResolvedValue({ id: 'user-1', name: 'Server' });
+      const studioGetUser = vi.fn().mockResolvedValue({ id: 'user-1', name: 'Studio' });
+      const mastra = Object.assign(mockMastra, {
+        getServer: () => ({ auth: { authenticateToken: vi.fn(), getCurrentUser: vi.fn(), getUser } }),
+        getStudio: () => ({ auth: { authenticateToken: vi.fn(), getCurrentUser: vi.fn(), getUser: studioGetUser } }),
+      });
+      mockObservabilityStore.listFeedback.mockResolvedValue({
+        feedback: [
+          {
+            timestamp: new Date(),
+            feedbackType: 'comment',
+            value: 'hi',
+            reviewStatus: 'needs-review',
+            feedbackUserId: 'user-1',
+          },
+        ],
+      });
+      const result = await NEW_ROUTES.LIST_FEEDBACK.handler({
+        ...createTestServerContext({ mastra }),
+        request: new Request('http://localhost/observability/feedback', {
+          headers: { 'x-mastra-client-type': 'studio' },
+        }),
+      });
+      expect(result.feedback[0]).toHaveProperty('author', { id: 'user-1', name: 'Studio' });
+      expect(getUser).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, 'page', 'delta'] as const)(
+      'given mixed feedback authors, when listing in %s mode, then preserves records and metadata',
+      async mode => {
+        const getUsers = vi
+          .fn()
+          .mockResolvedValue([
+            { id: 'normalized-id', name: 'Alice', email: 'alice@example.com', token: 'secret' },
+            null,
+          ]);
+        const mastra = Object.assign(mockMastra, {
+          getServer: () => ({
+            auth: { authenticateToken: vi.fn(), getCurrentUser: vi.fn(), getUser: vi.fn(), getUsers },
+          }),
+        });
+        const feedback = ['user-1', undefined, 'deleted', 'user-1'].map((feedbackUserId, index) => ({
+          feedbackId: String(index),
+          timestamp: new Date(),
+          feedbackType: 'comment',
+          value: 'hi',
+          reviewStatus: 'needs-review',
+          ...(feedbackUserId ? { feedbackUserId } : {}),
+        }));
+        const pagination = { total: 4, page: 0, perPage: 10, hasMore: false };
+        const metadata =
+          mode === 'delta' ? { delta: { limit: 10, hasMore: true }, deltaCursor: 'next' } : { pagination };
+        mockObservabilityStore.getFeatures.mockReturnValue(['delta-polling']);
+        mockObservabilityStore.listFeedback.mockResolvedValue({ feedback, ...metadata });
+
+        const response = await NEW_ROUTES.LIST_FEEDBACK.handler({ ...createTestServerContext({ mastra }), mode });
+        const result = NEW_ROUTES.LIST_FEEDBACK.responseSchema!.parse(response);
+        const author = { id: 'user-1', name: 'Alice', email: 'alice@example.com' };
+        expect(result).toEqual({
+          ...metadata,
+          feedback: [{ ...feedback[0], author }, feedback[1], feedback[2], { ...feedback[3], author }],
+        });
+        expect(getUsers).toHaveBeenCalledExactlyOnceWith(['user-1', 'deleted']);
+      },
+    );
+
+    it('given an author profile, when validating the list response, then retains only public author fields', () => {
+      const result = NEW_ROUTES.LIST_FEEDBACK.responseSchema!.parse({
+        feedback: [
+          {
+            timestamp: new Date(),
+            feedbackType: 'comment',
+            value: 'hi',
+            reviewStatus: 'needs-review',
+            author: {
+              id: 'user-1',
+              name: 'Alice',
+              email: 'alice@example.com',
+              avatarUrl: 'avatar.png',
+              token: 'private',
+            },
+          },
+        ],
+      });
+      expect(result.feedback[0]).toHaveProperty('author', {
+        id: 'user-1',
+        name: 'Alice',
+        email: 'alice@example.com',
+        avatarUrl: 'avatar.png',
+      });
+    });
+
     it('should return paginated results with default parameters', async () => {
       const mockResult = {
         pagination: {
@@ -1765,6 +1958,52 @@ describe('Observability Handlers', () => {
   });
 
   describe('CREATE_FEEDBACK_ROUTE', () => {
+    it('given an authenticated user, when creating feedback, then persists their ID instead of the submitted ID', async () => {
+      const context = createTestServerContext({ mastra: mockMastra });
+      context.requestContext.set(MASTRA_USER_KEY, { id: 'authenticated-user' });
+
+      const result = await NEW_ROUTES.CREATE_FEEDBACK.handler({
+        ...context,
+        feedback: {
+          traceId: 'trace-123',
+          source: 'user',
+          feedbackType: 'comment',
+          value: 'hi',
+          feedbackUserId: 'submitted-user',
+        },
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        feedback: expect.objectContaining({ feedbackUserId: 'authenticated-user' }),
+      });
+    });
+
+    it.each([undefined, null, {}, { id: '' }, { id: '  ' }, { id: 123 }])(
+      'given unusable identity %j, when creating feedback, then preserves optional explicit attribution',
+      async user => {
+        const context = createTestServerContext({ mastra: mockMastra });
+        context.requestContext.set(MASTRA_USER_KEY, user);
+        context.requestContext.set('mastra__resourceId', 'trace-subject');
+        for (const feedbackUserId of [undefined, 'explicit-user']) {
+          const result = await NEW_ROUTES.CREATE_FEEDBACK.handler({
+            ...context,
+            feedback: {
+              traceId: 'trace-123',
+              source: 'user',
+              feedbackType: 'comment',
+              value: 'hi',
+              ...(feedbackUserId ? { feedbackUserId } : {}),
+            },
+          });
+          expect(result).toEqual({ success: true });
+          const stored = mockObservabilityStore.createFeedback.mock.lastCall?.[0].feedback;
+          if (feedbackUserId) expect(stored.feedbackUserId).toBe(feedbackUserId);
+          else expect(stored).not.toHaveProperty('feedbackUserId');
+        }
+      },
+    );
+
     it('should create feedback successfully', async () => {
       (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
@@ -1897,6 +2136,130 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'create feedback'");
+    });
+  });
+
+  describe('DELETE_SCORES_ROUTE', () => {
+    it('should delete scores successfully', async () => {
+      (mockObservabilityStore.deleteScores as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const result = await NEW_ROUTES.DELETE_SCORES.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scoreIds: ['score-1', 'score-2'],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.deleteScores).toHaveBeenCalledWith({ scoreIds: ['score-1', 'score-2'] });
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should pass tenant scope to the storage layer', async () => {
+      (mockObservabilityStore.deleteScores as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.DELETE_SCORES.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scoreIds: ['score-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+
+      expect(mockObservabilityStore.deleteScores).toHaveBeenCalledWith({
+        scoreIds: ['score-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+    });
+
+    it('should throw 500 when storage is not available', async () => {
+      const mastraWithoutStorage = createMockMastra(undefined);
+
+      try {
+        await NEW_ROUTES.DELETE_SCORES.handler({
+          ...createTestServerContext({ mastra: mastraWithoutStorage }),
+          scoreIds: ['score-1'],
+        });
+        expect.fail('expected handler to throw');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(500);
+        expect((error as HTTPException).message).toBe('Storage is not available');
+      }
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Database delete failed');
+      (mockObservabilityStore.deleteScores as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        NEW_ROUTES.DELETE_SCORES.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          scoreIds: ['score-1'],
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'delete scores'");
+    });
+  });
+
+  describe('DELETE_FEEDBACK_ROUTE', () => {
+    it('should delete feedback successfully', async () => {
+      (mockObservabilityStore.deleteFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const result = await NEW_ROUTES.DELETE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackIds: ['fb-1', 'fb-2'],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.deleteFeedback).toHaveBeenCalledWith({ feedbackIds: ['fb-1', 'fb-2'] });
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should pass tenant scope to the storage layer', async () => {
+      (mockObservabilityStore.deleteFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.DELETE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackIds: ['fb-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+
+      expect(mockObservabilityStore.deleteFeedback).toHaveBeenCalledWith({
+        feedbackIds: ['fb-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+    });
+
+    it('should throw 500 when storage is not available', async () => {
+      const mastraWithoutStorage = createMockMastra(undefined);
+
+      try {
+        await NEW_ROUTES.DELETE_FEEDBACK.handler({
+          ...createTestServerContext({ mastra: mastraWithoutStorage }),
+          feedbackIds: ['fb-1'],
+        });
+        expect.fail('expected handler to throw');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(500);
+        expect((error as HTTPException).message).toBe('Storage is not available');
+      }
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Database delete failed');
+      (mockObservabilityStore.deleteFeedback as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        NEW_ROUTES.DELETE_FEEDBACK.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          feedbackIds: ['fb-1'],
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'delete feedback'");
     });
   });
 

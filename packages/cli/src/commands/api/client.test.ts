@@ -162,6 +162,25 @@ describe('requestApi', () => {
     });
   });
 
+  it('uses the server origin for origin-placed routes when the base URL includes a prefix', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ projects: [] }));
+
+    await requestApi({
+      baseUrl: 'https://example.com/custom-api',
+      headers: {},
+      timeoutMs: 1000,
+      descriptor: descriptor({ method: 'GET', path: '/web/factory/projects', routePlacement: 'origin' }),
+      pathParams: {},
+      apiPrefix: '/custom-api',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/web/factory/projects', {
+      method: 'GET',
+      headers: {},
+      signal: expect.any(AbortSignal),
+    });
+  });
+
   it('sends non-GET query/body split input with JSON content type', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
 

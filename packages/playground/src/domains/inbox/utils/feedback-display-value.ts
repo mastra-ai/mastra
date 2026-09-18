@@ -1,7 +1,7 @@
-import type { FeedbackRecord } from '@mastra/core/storage';
+import type { FeedbackItem } from '@mastra/client-js';
 
 /** Human-readable body of a feedback record: comment → string value → thumbs → raw JSON. */
-export function feedbackDisplayValue(feedback: Pick<FeedbackRecord, 'comment' | 'value' | 'feedbackType'>) {
+export function feedbackDisplayValue(feedback: Pick<FeedbackItem, 'comment' | 'value' | 'feedbackType'>) {
   if (feedback.comment) return feedback.comment;
   if (typeof feedback.value === 'string') return feedback.value;
   if (feedback.feedbackType === 'thumbs') return feedback.value === 1 ? 'Thumbs up' : 'Thumbs down';

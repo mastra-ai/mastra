@@ -408,7 +408,7 @@ Date: 2026-01-15
   - 🔴 12:15 User stated the app name is "Acme Dashboard"
 ```
 
-The compression is typically between 5x and 40x. The Observer also tracks a **current task** and **suggested response** so the agent picks up where it left off.
+The compression is typically between 5x and 40x. During synchronous observation, the Observer can also track a **current task** and **suggested response** so the agent picks up where it left off.
 
 If you enable `observation.threadTitle`, the Observer can also suggest a short thread title when the conversation topic meaningfully changes. Thread title generation is opt-in and updates the thread metadata, so apps like Mastra Code can show the latest title in thread lists and status UI.
 
@@ -737,11 +737,11 @@ As the agent converses, message tokens accumulate. At regular intervals (`buffer
 
 When message tokens reach the `messageTokens` threshold, buffered chunks activate: their observations move into the active observation log, and the corresponding raw messages are removed from the context window. The agent never pauses.
 
-Buffered observations also include continuation hints, a suggested next response and the current task, so the main agent maintains conversational continuity after activation shrinks the context window.
+Async buffered Observer calls don't generate continuation hints because delayed hints can be stale by activation time. When buffered chunks activate, any previously stored suggested response and current task are cleared. The main agent receives the compressed observations without those hints.
 
 When message production outpaces the Observer, the `blockAfter` safety threshold allows activation to overshoot the retention target instead of using fewer chunks. Activation still uses no more chunks than needed to reach the target, and the default settings remain unaffected. A synchronous observation runs when the `messageTokens` threshold is reached and buffered activation didn't happen. Buffered activation usually preserves a minimum remaining context (the smaller of \~1k tokens or the configured retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less.
 
-Reflection works similarly, the Reflector runs in the background when observations reach a fraction of the reflection threshold.
+Reflection works similarly: the Reflector runs in the background when observations reach a fraction of the reflection threshold.
 
 ### Settings
 
@@ -835,6 +835,79 @@ const memory = new Memory({
 - `previousObserverTokens: 2000` → default. Keeps \~2k tokens of recent observations.
 - `previousObserverTokens: 0` → omit previous observations completely.
 - `previousObserverTokens: false` → disable truncation and keep full previous observations.
+
+## Hooks
+
+OM exposes two kinds of config-level hooks on `observationalMemory.hooks`:
+
+- **Lifecycle hooks** (`onObservationStart`, `onObservationEnd`, `onReflectionStart`, `onReflectionEnd`) are telemetry callbacks. They receive `threadId`, `resourceId`, and `trigger`, and the end hooks also receive the model call's `usage`, `providerMetadata`, and any `error`. They never change what OM stores.
+- **Transform hooks** (`beforeObservation`, `afterObservation`, `beforeReflection`, `afterReflection`) intercept the data flowing through a cycle. Return `void` to pass the input through unchanged, or return a replacement to change what the Observer/Reflector sees or what gets persisted.
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
+      hooks: {
+        // Drop or redact messages before the Observer sees them.
+        beforeObservation: ({ messages }) => ({
+          messages: messages.filter(m => !isSensitive(m)),
+        }),
+        // Rewrite observations before they are persisted.
+        afterObservation: ({ observations, threadId }) => ({
+          observations: redact(observations),
+        }),
+        // Rewrite the text the Reflector condenses, or its output.
+        beforeReflection: ({ observations }) => ({
+          observations: stripInternalNotes(observations),
+        }),
+        afterReflection: async ({ observations, resourceId }) => {
+          await syncToExternalStore(resourceId, observations)
+        },
+      },
+    },
+  },
+})
+```
+
+Transform hooks are always awaited, on every path (manual `observe()`/`reflect()`, turn-synchronous observation, and async buffering). If `beforeObservation` returns an empty `messages` array, the Observer model call is skipped and the filtered messages are still marked as observed. If a transform hook throws, the cycle fails before committing the transformed observation or reflection text. This doesn't roll back extractor callbacks or other side effects that have already run.
+
+`afterObservation` and `afterReflection` replace only the observation or reflection text. They don't recompute or redact the separate structured extractor results stored in thread metadata. Reflection extraction and its callbacks run before `afterReflection`, so rewriting the reflection doesn't rerun those callbacks. Use extractor configuration and callbacks to control structured values. Don't treat an after hook as a redaction boundary for all cycle data.
+
+Because hooks receive `threadId` and `resourceId`, you can also use them to update [working memory](/docs/memory/working-memory) via `memory.updateWorkingMemory()` during a cycle. These external updates aren't atomic with the OM text commit.
+
+### Redact skill results
+
+Agent skills are injected into the agent as tools (`skill`, `skill_search`, `skill_read`). Their results contain the skill's full instructions or file contents, so without redaction the Observer re-observes that text every time a skill is used. `skillResultRedactor()` is a ready-made `beforeObservation` hook that replaces those results with a placeholder and leaves everything else in place. The tool call survives, so the Observer still records which skill was used and what it was called with.
+
+```typescript
+import { Memory } from '@mastra/memory'
+import { skillResultRedactor } from '@mastra/memory/hooks'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
+      hooks: {
+        beforeObservation: skillResultRedactor(),
+      },
+    },
+  },
+})
+```
+
+Pass `toolNames` to redact results from a different set of tools. Because a hook is a function over the messages, it composes with your own transforms by chaining the outputs. Await each chained hook so an async one isn't discarded:
+
+```typescript oxfmt:false
+const dropSkillResults = skillResultRedactor()
+
+hooks: {
+  beforeObservation: async input => {
+    const messages = (await dropSkillResults(input))?.messages ?? input.messages
+    return { messages: messages.filter(m => m.role !== 'signal') }
+  },
+}
+```
 
 ## Migrating existing threads
 

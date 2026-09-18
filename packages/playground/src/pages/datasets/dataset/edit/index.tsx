@@ -60,7 +60,7 @@ function EditDatasetPage() {
     <PageLayout height="full">
       <div />
       <PageLayout.MainArea isCentered>
-        <div className="w-full max-w-2xl overflow-y-auto px-6 py-8">
+        <div className="w-full max-w-2xl overflow-y-auto px-4 py-5">
           <MainHeader className="mb-6 p-0">
             <MainHeader.Column>
               <MainHeader.Title>
@@ -69,16 +69,16 @@ function EditDatasetPage() {
               <MainHeader.Description>{dataset.name}</MainHeader.Description>
             </MainHeader.Column>
           </MainHeader>
-          <Card className="p-6">
+          <Card className="p-4">
             <EditDatasetForm
               dataset={{
                 id: dataset.id,
                 name: dataset.name,
                 description: dataset.description || '',
-                targetType: dataset.targetType,
                 inputSchema: dataset.inputSchema,
                 groundTruthSchema: dataset.groundTruthSchema,
                 requestContextSchema: dataset.requestContextSchema,
+                scorerIds: dataset.scorerIds,
               }}
               onSuccess={goToDataset}
               onCancel={goToDataset}

@@ -222,6 +222,7 @@ describe('Board card pending states', () => {
       priorityLabel: 'High',
       assignee: 'ada',
       team: 'ENG',
+      sourceId: 'linear-project-1',
       labels: ['bug'],
       createdAt: '2026-08-01T00:00:00Z',
       updatedAt: '2026-08-01T00:00:00Z',
@@ -261,6 +262,13 @@ describe('Board card pending states', () => {
             github: { enabled: true, sourceIds: ['acme/app'] },
             linear: { enabled: true, sourceIds: ['linear-project-1'] },
           },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        HttpResponse.json({
+          bindings: [
+            { integrationId: 'linear', sourceId: 'linear-project-1', factoryProjectId: FACTORY_ID, board: 'work' },
+          ],
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
@@ -611,6 +619,13 @@ describe('Board card pending states', () => {
           },
         }),
       ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        HttpResponse.json({
+          bindings: [
+            { integrationId: 'linear', sourceId: 'linear-project-1', factoryProjectId: FACTORY_ID, board: 'work' },
+          ],
+        }),
+      ),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
       ),
@@ -851,7 +866,7 @@ describe('Board card pending states', () => {
     await user.type(titleInput, 'Plan onboarding');
     await user.click(within(submittedComposer).getByRole('button', { name: 'Add work item to Planning' }));
 
-    await waitFor(() => expect(createRequest).toEqual({ title: 'Plan onboarding', stages: ['intake'] }));
+    await waitFor(() => expect(createRequest).toEqual({ title: 'Plan onboarding', board: 'work' }));
     await waitFor(() =>
       expect(transitionRequest).toEqual(
         expect.objectContaining({

@@ -52,7 +52,7 @@ export function FlowCard({
     >
       <span
         aria-hidden="true"
-        className="bg-surface2 text-neutral3 absolute top-0 left-5 -translate-y-1/2 px-2 font-mono text-[10px] tracking-[0.18em]"
+        className="bg-surface2 text-neutral3 text-ui-xs absolute top-0 left-5 -translate-y-1/2 px-2 font-mono tracking-[0.18em]"
       >
         SIGNALS
       </span>
@@ -64,7 +64,7 @@ export function FlowCard({
         />
         <div
           aria-label="Themes"
-          className="text-neutral3 flex items-center gap-2 py-1 font-mono text-[10px] tracking-[0.18em]"
+          className="text-neutral3 text-ui-xs flex items-center gap-2 py-1 font-mono tracking-[0.18em]"
           role="separator"
         >
           <span aria-hidden="true" className="bg-border1 h-px w-5" />

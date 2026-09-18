@@ -9,13 +9,31 @@
 
 import { LangfuseClient } from '@langfuse/client';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
-import type { TracingEvent, AnyExportedSpan, InitExporterOptions, ScoreEvent } from '@mastra/core/observability';
+import type {
+  TracingEvent,
+  AnyExportedSpan,
+  InitExporterOptions,
+  ModelGenerationAttributes,
+  ScoreEvent,
+} from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter } from '@mastra/otel-exporter';
 
 const LOG_PREFIX = '[LangfuseExporter]';
+const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
+/** Metadata keys mapped to dedicated Langfuse fields; never forwarded as trace metadata. */
+const OM_CALLER_THREAD_ID = '__mastraObservationalMemoryCallerThreadId';
+const DEDICATED_METADATA_KEYS = new Set([
+  'userId',
+  'sessionId',
+  'threadId',
+  'traceName',
+  'version',
+  'langfuse',
+  OM_CALLER_THREAD_ID,
+]);
 
 export const LANGFUSE_DEFAULT_BASE_URL = 'https://cloud.langfuse.com';
 
@@ -331,14 +349,39 @@ function mapMastraToLangfuseAttributes(
     delete attributes['mastra.completion_start_time'];
   }
 
+  // Exact provider-reported cost takes precedence over Langfuse's model-price inference.
+  // Estimated costs remain unexported so Langfuse can apply its own pricing model.
+  const costContext =
+    span.type === SpanType.MODEL_GENERATION
+      ? (span.attributes as ModelGenerationAttributes | undefined)?.costContext
+      : undefined;
+  if (
+    costContext?.costMetadata?.source === 'provider_reported' &&
+    costContext.costUnit === 'USD' &&
+    typeof costContext.estimatedCost === 'number' &&
+    Number.isFinite(costContext.estimatedCost) &&
+    costContext.estimatedCost >= 0
+  ) {
+    attributes['langfuse.observation.cost_details'] = JSON.stringify({
+      total: costContext.estimatedCost,
+    });
+  }
+
   // User ID: mastra.metadata.userId → user.id
   if (attributes['mastra.metadata.userId']) {
     attributes['user.id'] = attributes['mastra.metadata.userId'];
     delete attributes['mastra.metadata.userId'];
   }
 
-  // Session ID: mastra.metadata.sessionId or threadId → session.id
-  const sessionId = attributes['mastra.metadata.sessionId'] ?? attributes['mastra.metadata.threadId'];
+  // OM keeps caller identity separate from its isolated execution thread. Read
+  // the raw hint: conversion serializes malformed objects/arrays into strings.
+  const omCallerThreadId = span.metadata?.[OM_CALLER_THREAD_ID];
+  const sessionId =
+    attributes['mastra.metadata.sessionId'] ??
+    (typeof omCallerThreadId === 'string' && omCallerThreadId
+      ? omCallerThreadId
+      : attributes['mastra.metadata.threadId']);
+  delete attributes[`${MASTRA_METADATA_PREFIX}${OM_CALLER_THREAD_ID}`];
   if (sessionId) {
     attributes['session.id'] = sessionId;
     delete attributes['mastra.metadata.sessionId'];
@@ -405,6 +448,30 @@ function mapMastraToLangfuseAttributes(
         attributes['langfuse.trace.metadata.workflowName'] = span.entityName;
       }
     }
+
+    // Root-span metadata: forward the remaining mastra.metadata.* keys (runId,
+    // resourceId, user-supplied keys) to langfuse.trace.metadata.* so they are
+    // filterable trace metadata; Langfuse nests unmapped attributes under
+    // metadata.attributes. Dedicated keys, explicit metadata.langfuse.* values,
+    // and the identity keys above take precedence. Root only: Langfuse applies
+    // langfuse.trace.* from any span, so a child span could overwrite the trace.
+    for (const [key, value] of Object.entries(attributes)) {
+      if (!key.startsWith(MASTRA_METADATA_PREFIX)) {
+        continue;
+      }
+      const metadataKey = key.slice(MASTRA_METADATA_PREFIX.length);
+      if (DEDICATED_METADATA_KEYS.has(metadataKey) || value === null || value === undefined) {
+        continue;
+      }
+      const traceKey = `langfuse.trace.metadata.${metadataKey}`;
+      if (attributes[traceKey] !== undefined) {
+        continue;
+      }
+      const serialized = serializeTraceIo(value);
+      if (serialized !== undefined) {
+        attributes[traceKey] = serialized;
+      }
+    }
   }
 
   // Observation metadata: map semantic attributes to langfuse.observation.metadata.*
@@ -430,6 +497,7 @@ function mapMastraToLangfuseAttributes(
     for (const key of Object.keys(attributes)) {
       if (key.startsWith('mastra.') && key.endsWith('.input')) {
         attributes['langfuse.observation.input'] = attributes[key];
+        delete attributes[key];
         break;
       }
     }
@@ -438,6 +506,7 @@ function mapMastraToLangfuseAttributes(
     for (const key of Object.keys(attributes)) {
       if (key.startsWith('mastra.') && key.endsWith('.output')) {
         attributes['langfuse.observation.output'] = attributes[key];
+        delete attributes[key];
         break;
       }
     }
