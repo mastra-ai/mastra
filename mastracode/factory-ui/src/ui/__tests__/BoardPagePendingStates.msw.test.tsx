@@ -170,7 +170,7 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
       HttpResponse.json({
         sessions: [
           {
@@ -503,7 +503,7 @@ describe('Board card pending states', () => {
         if (workItemRequests > 1) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
       }),
-      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
         HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
       ),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
@@ -539,7 +539,7 @@ describe('Board card pending states', () => {
         if (workItemRequests > 1) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
       }),
-      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
         HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
       ),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
