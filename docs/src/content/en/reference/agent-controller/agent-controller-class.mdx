@@ -498,6 +498,62 @@ interface ActiveThreadRun {
 }
 ```
 
+### Storage queries
+
+These methods read stored threads and messages without creating a Session or provisioning its workspace.
+
+#### `queryThreadById({ threadId })`
+
+Return one stored thread, or `null` when the thread or storage doesn't exist.
+
+```typescript
+const thread = await controller.queryThreadById({ threadId: 'thread-7' })
+```
+
+Returns: `Promise<AgentControllerThread | null>`
+
+#### `queryThreads(options)`
+
+List stored threads. `resourceId` and `metadata` filter the results. Forked subagent threads are excluded unless `includeForkedSubagents` is `true`.
+
+```typescript
+const threads = await controller.queryThreads({
+  resourceId: 'project-42',
+  includeForkedSubagents: false,
+  metadata: { repository: 'mastra' },
+})
+```
+
+All options are optional. Returns: `Promise<AgentControllerThread[]>`
+
+#### `queryThreadMessages(options)`
+
+List stored messages for one thread with pagination, ordering, inclusion, and filtering options from `StorageListMessagesInput`. `threadId` is required. The default order is newest first by `createdAt`. When `perPage` is omitted, storage uses 40 messages per page.
+
+```typescript
+const result = await controller.queryThreadMessages({
+  threadId: 'thread-7',
+  page: 0,
+  perPage: 20,
+  orderBy: { field: 'createdAt', direction: 'DESC' },
+})
+```
+
+Returns: `Promise<StorageListMessagesOutput>` with controller-format messages.
+
+#### `generateThreadTitle(options)`
+
+Generate and store a title from a thread's conversation without creating a Session. `threadId` is required. `resourceId`, `scope`, `model`, and `requestContext` are optional. The method throws when the thread doesn't exist and returns `undefined` when the model produces no title.
+
+```typescript
+const title = await controller.generateThreadTitle({
+  threadId: 'thread-7',
+  resourceId: 'project-42',
+})
+```
+
+Returns: `Promise<string | undefined>`
+
 ### Lifecycle
 
 #### `init()`
@@ -507,6 +563,16 @@ Initialize shared storage, propagate runtime services to agents, and start confi
 ```typescript
 await controller.init()
 ```
+
+#### `initStorage()`
+
+Initialize only the controller's storage layer without provisioning a workspace or starting the full controller runtime. The method is idempotent and is used by direct storage queries.
+
+```typescript
+await controller.initStorage()
+```
+
+Returns: `Promise<void>`
 
 #### `destroy()`
 

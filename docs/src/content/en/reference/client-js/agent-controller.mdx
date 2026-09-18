@@ -268,7 +268,9 @@ Returns: `Promise<SendNotificationResult>`
 | Subagents | `subagent_start`, `subagent_text_delta`, `subagent_tool_start`, `subagent_tool_end`, `subagent_end`, `subagent_model_changed` |
 | Memory | `om_observation_start`, `om_observation_end`, `om_observation_failed`, `om_reflection_start`, `om_reflection_end`, `om_reflection_failed`, `om_buffering_start`, `om_buffering_end`, `om_buffering_failed`, `om_model_changed`, `om_activation`, `om_status`, `om_thread_title_updated` |
 | Workspace | `workspace_ready`, `workspace_error`, `workspace_status_changed` |
-| Notification | `notification`, `notification_summary`, `info`, `error` |
+| Diagnostics | `info`, `error` |
+
+Notifications are delivered as agent signals carried on messages rather than as `notification` or `notification_summary` controller events.
 
 A message lifecycle uses three event shapes:
 
@@ -308,7 +310,7 @@ function applyUpdate(message: MastraDBMessage, update: MessageUpdate): MastraDBM
     const part = parts[update.index]
     const reasoning = part?.type === 'reasoning' ? part.reasoning + update.delta : update.delta
     parts[update.index] = {
-      type: 'reasoning',
+      ...(part?.type === 'reasoning' ? part : { type: 'reasoning' as const }),
       reasoning,
       details: [{ type: 'text', text: reasoning }],
     }
