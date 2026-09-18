@@ -71,6 +71,7 @@ export function Crumb({
         >
           {icon && (
             <Icon
+              aria-hidden="true"
               size="sm"
               className={cn(
                 '-ml-[.3em] shrink-0 opacity-50 group-hover:opacity-100',
