@@ -34,7 +34,6 @@ describe('ACP Event Mapper', () => {
   function createPromptState(sessionId: string): PromptState {
     return {
       sessionId,
-      lastTextLength: 0,
       usage: {
         promptTokens: 0,
         completionTokens: 0,
@@ -110,7 +109,6 @@ describe('ACP Event Mapper', () => {
         'Before signal',
         ' after',
       ]);
-      expect(state.lastTextLength).toBe(0);
     });
   });
 
@@ -141,7 +139,6 @@ describe('ACP Event Mapper', () => {
         update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } },
       });
       expect(sessionUpdateSpy).toHaveBeenCalledTimes(1);
-      expect(state.lastTextLength).toBe(5);
     });
 
     it('does not emit ACP text chunks for reasoning or part updates', () => {
@@ -171,7 +168,6 @@ describe('ACP Event Mapper', () => {
       );
 
       expect(sessionUpdateSpy).not.toHaveBeenCalled();
-      expect(state.lastTextLength).toBe(0);
     });
   });
 
@@ -661,7 +657,6 @@ describe('cancellation while a turn starts', () => {
     const completeDeferredAbort = vi.fn();
     const state: PromptState = {
       sessionId: 'cancelled-start',
-      lastTextLength: 0,
       usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       resolve: vi.fn(),
     };
@@ -680,7 +675,6 @@ describe('cancellation while a turn starts', () => {
     const requestPermission = vi.fn();
     const state: PromptState = {
       sessionId: 'cancelled-approval',
-      lastTextLength: 0,
       usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       resolve: vi.fn(),
     };

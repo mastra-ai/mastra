@@ -42,7 +42,6 @@ function mapToolKind(
 export interface PromptState {
   sessionId: string;
   activeAssistantMessageId?: string;
-  lastTextLength: number;
   usage: TokenUsage;
   error?: Error;
   stopReason?: 'max_tokens' | 'refusal';
@@ -69,7 +68,6 @@ export function handleAgentControllerEvent(
   switch (event.type) {
     case 'agent_start':
       state.suspended = false;
-      state.lastTextLength = 0;
       // Startup can arm its controller after cancel first called abort().
       if (state.cancelled && !state.cancelSuspensions?.size) session.completeDeferredAbort();
       break;
@@ -77,7 +75,6 @@ export function handleAgentControllerEvent(
     case 'message_start': {
       if (event.message.role === 'assistant') {
         state.activeAssistantMessageId = event.message.id;
-        state.lastTextLength = 0;
         break;
       }
       break;
@@ -85,7 +82,6 @@ export function handleAgentControllerEvent(
 
     case 'message_update':
       if (event.event.type === 'text-delta' && event.id === state.activeAssistantMessageId && event.event.delta) {
-        state.lastTextLength += event.event.delta.length;
         sendUpdate(connection, state.sessionId, {
           sessionUpdate: 'agent_message_chunk',
           content: { type: 'text', text: event.event.delta },
@@ -96,7 +92,6 @@ export function handleAgentControllerEvent(
     case 'message_end':
       if (event.id === state.activeAssistantMessageId) {
         state.activeAssistantMessageId = undefined;
-        state.lastTextLength = 0;
       }
       break;
 
