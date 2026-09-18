@@ -32,6 +32,7 @@ import {
   AGENT_BACKGROUND_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
+  EAGER_TOOL_EXECUTION_KEY,
   GENERATE_ID_KEY,
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
@@ -51,6 +52,15 @@ import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
+import {
+  EAGER_TOOL_ABORT_SIGNAL,
+  EAGER_TOOL_BAILOUT,
+  EAGER_TOOL_EXECUTION_MARKER,
+  eagerToolCallAlreadyAnnouncedInput,
+  EagerToolExecutionNotRun,
+  eagerToolCallDidNotExecute,
+} from './eager-tool-execution';
+import type { EagerToolBailout } from './eager-tool-execution';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -94,10 +104,51 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend, resumeData: workflowResumeData, suspendData, requestContext }) => {
+    execute: async executionContext => {
+      const { inputData, suspend, resumeData: workflowResumeData, suspendData, requestContext } = executionContext;
+      // Eager dispatch invokes this step with its own signal, chained to the run's, so a
+      // call started for a model attempt that is later discarded can be cancelled on its
+      // own. Every other caller falls back to the run signal, unchanged.
+      const callerAbortSignal = (executionContext as unknown as Record<symbol, AbortSignal | undefined>)[
+        EAGER_TOOL_ABORT_SIGNAL
+      ];
+      const abortSignal =
+        callerAbortSignal && options?.abortSignal
+          ? AbortSignal.any([callerAbortSignal, options.abortSignal])
+          : (callerAbortSignal ?? options?.abortSignal);
       // Resolve run-scoped state from either the Mastra-managed RunScope (production
       // path via loop.ts hydration) or the legacy `_internal` bag (tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
+      const isEagerExecution = Boolean((executionContext as any)[EAGER_TOOL_EXECUTION_MARKER]);
+      // Present only on an eager dispatch. Marked before bailing out, so the dispatcher
+      // can reject a settlement whose bailout the tool swallowed.
+      const eagerBailout = (executionContext as unknown as Record<symbol, EagerToolBailout | undefined>)[
+        EAGER_TOOL_BAILOUT
+      ];
+      // Adopt an execution the LLM step started eagerly for this call, if any. The
+      // eager invocation itself carries the marker so it never adopts itself.
+      // Set when the eager attempt this invocation replaces already ran the tool's
+      // `onInputAvailable`, so the hook stays at one call per adoption.
+      let inputAlreadyAnnouncedEagerly = false;
+      if (!isEagerExecution) {
+        // Take rather than read: adoption is exactly-once, so a later iteration that
+        // reuses this toolCallId executes again instead of replaying a stale result.
+        const eagerExecution = readScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator')?.take(
+          inputData.toolCallId,
+        );
+        if (eagerExecution) {
+          try {
+            return (await eagerExecution) as any;
+          } catch (error) {
+            // The eager attempt produced nothing adoptable: it was cancelled while
+            // still queued, or it turned out to need suspension. Run it normally
+            // instead. In the suspension case the body did start, so the hook it
+            // already announced must not be announced a second time.
+            if (!eagerToolCallDidNotExecute(error)) throw error;
+            inputAlreadyAnnouncedEagerly = eagerToolCallAlreadyAnnouncedInput(error);
+          }
+        }
+      }
       // Use tools from the scope (set by llmExecutionStep via prepareStep/processInputStep)
       // when available. This avoids serialization — execute functions live off-the-wire.
       // Fall back to the original tools from the closure if not set.
@@ -379,17 +430,21 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
       }
 
-      if (tool && 'onInputAvailable' in tool) {
+      if (tool && 'onInputAvailable' in tool && !inputAlreadyAnnouncedEagerly) {
         try {
           await tool?.onInputAvailable?.({
             toolCallId: inputData.toolCallId,
             input: inputData.args,
             messages: messageList.get.input.aiV5.model(),
-            abortSignal: options?.abortSignal,
+            abortSignal,
           });
         } catch (error) {
           logger?.error('Error calling onInputAvailable', error);
         }
+        // Announced before `execute`, so a bailout raised from inside the tool body has
+        // already fired the hook. Record it so the foreach's re-run does not fire it
+        // again for the same call.
+        if (eagerBailout) eagerBailout.inputAvailableCalled = true;
       }
 
       if (!tool.execute) {
@@ -619,7 +674,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             : resumeData;
 
         const toolOptions: MastraToolInvocationOptions = {
-          abortSignal: options?.abortSignal,
+          abortSignal,
           toolCallId: inputData.toolCallId,
           // Agent tools receive the exact processor-adjusted prompt visible to the parent model.
           // Regular tools retain the input-only context expected by the AI SDK tool contract.
@@ -645,6 +700,22 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             return sqm && tid ? () => sqm.flushMessages(messageList, tid, mcfg) : undefined;
           })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
+            // A tool can suspend at runtime without declaring a suspend schema, so the
+            // eager eligibility whitelist cannot see it coming. Bail here, before any
+            // suspension side effect (chunk, metadata, flush) has happened, so the call
+            // is genuinely handed back to the ordinary foreach rather than half-suspended
+            // on this path. Bailing after the chunk was emitted would leave a suspension
+            // announced that never suspends.
+            if (isEagerExecution) {
+              // Recorded before the throw, because the throw is not enough on its own: it
+              // unwinds through the tool's body, and a tool that catches it would otherwise
+              // return normally and have that return adopted as the call's result.
+              const reason = `"${inputData.toolName}" requested suspension`;
+              if (eagerBailout) eagerBailout.reason = reason;
+              throw new EagerToolExecutionNotRun(reason, {
+                inputAvailableCalled: eagerBailout?.inputAvailableCalled,
+              });
+            }
             if (options?.requireToolApproval) {
               const innerApproval =
                 typeof options.requireToolApproval === 'object' && options.requireToolApproval
@@ -1309,7 +1380,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             });
 
             const awaitAuthoritativeBackgroundResult = async () => {
-              const completedTask = await bgTask.waitForCompletion({ abortSignal: options?.abortSignal });
+              const completedTask = await bgTask.waitForCompletion({ abortSignal });
               if (completedTask.status !== 'completed') {
                 throw new Error(
                   completedTask.error?.message ??
@@ -1406,6 +1477,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         const rawResult = await tool.execute(args, toolOptions);
+
+        // The tool asked to suspend or bail and then swallowed the throw. Its return value
+        // is the return value of a call that was never supposed to complete here, so bail
+        // before it is published: `onOutput` is a side effect the foreach will produce
+        // again when it runs the call for real.
+        if (eagerBailout?.reason) {
+          throw new EagerToolExecutionNotRun(eagerBailout.reason, {
+            inputAvailableCalled: eagerBailout.inputAvailableCalled,
+          });
+        }
+
         const result = ensureSerializable(rawResult);
 
         // Call onOutput hook after successful execution
@@ -1415,7 +1497,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolCallId: inputData.toolCallId,
               toolName: inputData.toolName,
               output: result,
-              abortSignal: options?.abortSignal,
+              abortSignal,
             });
           } catch (error) {
             logger?.error('Error calling onOutput', error);
@@ -1428,13 +1510,20 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         if (error instanceof Error && error.name === 'FGADeniedError') {
           throw error;
         }
+        // "The eager attempt must not run this" is control flow, not a tool failure.
+        // Turning it into a resolved `{ error }` would defeat the fail-safe: adoption
+        // awaits the eager promise and would record that error as the tool's result
+        // instead of running the call normally.
+        if (eagerToolCallDidNotExecute(error)) {
+          throw error;
+        }
         // A throw while the request is aborted is a mid-flight cancellation, not a genuine
         // failure. Recording it as an error result would fake-complete the call (its
         // `result` becomes the abort message) and read as success on resume, so flag it
         // aborted instead and let the mapping step leave the call incomplete. Key off the
         // abort signal, not the error type: CoreToolBuilder wraps the AbortError in a
         // TOOL_EXECUTION_FAILED MastraError, so isAbortError(error) wouldn't match here.
-        if (options?.abortSignal?.aborted) {
+        if (abortSignal?.aborted) {
           // Log the discarded error for observability (control flow unchanged).
           logger?.debug?.('Tool execution interrupted by request abort; leaving the tool call incomplete', {
             toolName: inputData.toolName,

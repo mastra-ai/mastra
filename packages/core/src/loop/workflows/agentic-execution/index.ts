@@ -6,6 +6,7 @@ import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { createBackgroundTaskCheckStep } from './background-task-check-step';
+import { EagerToolExecutionCoordinator } from './eager-tool-execution';
 import { createGoalStep } from './goal-step';
 import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
@@ -39,16 +40,38 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     }),
   };
 
-  const llmExecutionStep = createLLMExecutionStep({
-    models,
-    _internal,
-    toolCallForeachOptions,
-    ...rest,
-  });
+  // Eager dispatch is a regular-streaming-only contract. The 'called' strategy is
+  // excluded because its limit depends on the full set of tools the model ends up
+  // calling, which is unknowable while the model is still streaming.
+  //
+  // `Agent.stream()` is where the default lives: it resolves the option to a boolean
+  // before the options reach here, so an eligible call — a plain server-side call with
+  // complete arguments — runs early unless the caller passed `eagerToolExecution: false`.
+  //
+  // The check is `=== true` rather than "not false" on purpose. Durable agents run their
+  // own mirrored steps and never build this workflow, and durable preparation rejects an
+  // explicit `true` outright; requiring the flag to be present makes that exclusion a
+  // stated condition rather than a consequence of the option not being threaded through.
+  // The same goes for any other caller reaching the loop directly.
+  const eagerCoordinator =
+    rest.eagerToolExecution === true && rest.methodType === 'stream' && toolCallConcurrencyStrategy === 'available'
+      ? // Read the limit late: map-tool-calls recomputes it per step, and the eager
+        // path must honour the same recomputed value rather than a construction-time copy.
+        new EagerToolExecutionCoordinator(() => toolCallForeachOptions.concurrency)
+      : undefined;
 
   const toolCallStep = createToolCallStep({
     models,
     _internal,
+    ...rest,
+  });
+
+  const llmExecutionStep = createLLMExecutionStep({
+    models,
+    _internal,
+    toolCallForeachOptions,
+    eagerCoordinator,
+    eagerToolCallStep: toolCallStep,
     ...rest,
   });
 
