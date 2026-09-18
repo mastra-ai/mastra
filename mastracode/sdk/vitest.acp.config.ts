@@ -1,8 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
-// The ACP unit tests need the signal factory, not the core package's full build.
-// Use its source implementation so this suite also runs in a fresh checkout.
+// Keep signal fixtures aligned with core source. Other runtime imports (including
+// @mastra/core/workspace) require core and its workspace dependencies to be built.
 export default defineConfig({
   resolve: {
     alias: {

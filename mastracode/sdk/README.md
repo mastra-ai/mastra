@@ -58,7 +58,7 @@ The handle stays in memory and isn't restart-safe. The plugin still owns its con
 
 `defaultDisposition: 'foreground'` preserves normal calls unless the caller explicitly requests `_background.disposition: 'deferred'` or `'awaited'`. Plugins without a declaration remain usable in the foreground, including older versions of `mastra_expert`.
 
-## ACP server
+### ACP server
 
 Start the installed CLI with `mastracode --acp`, or start the SDK server directly:
 
@@ -103,7 +103,7 @@ Unauthenticated gateway catalogs are omitted; stale model choices must be refres
 Session loading is not supported yet. Configure authentication outside ACP;
 the server does not advertise an interactive authentication method.
 
-### Skills
+#### Skills
 
 The server advertises workspace skills through `available_commands_update` when
 a session starts and refreshes the list before each prompt. Clients that support
@@ -126,19 +126,22 @@ turn. Missing or hidden skills return an invalid-parameters error without
 starting inference. Each session uses its own workspace. Terminal commands such
 as `/goal` are not advertised or implemented by this command handler.
 
-### Focused adapter tests
+#### Focused adapter tests
 
-From the repository root, after installing dependencies:
+From the repository root, install dependencies and build core with its dependencies
+before the first run:
 
 ```sh
+pnpm turbo build --filter @mastra/core...
 pnpm --filter @mastra/code-sdk test:acp
 ```
 
-This suite runs the adapter and stdio protocol tests without building the TUI
-or the workspace packages. Runtime factory tests mock SDK startup; use a running
+This suite runs the adapter and stdio protocol tests without building the TUI.
+It requires built workspace imports, including `@mastra/core/workspace`; the signal
+factory alone is aliased to source. Runtime factory tests mock SDK startup. Use a running
 ACP client to verify provider authentication and actual tool execution.
 
-### Build ACP without rebuilding the workspace
+#### Build ACP without rebuilding the workspace
 
 For local adapter development, bundle the SDK source against an existing
 installation of Mastra Code's published dependencies:
@@ -155,7 +158,7 @@ paths and is not a release artifact. It checks the local SDK against the install
 dependency versions; changes to other workspace packages still need their own
 builds and tests.
 
-### Validate the ACP wire protocol
+#### Validate the ACP wire protocol
 
 Mastra Code implements [Agent Client Protocol v1](https://agentclientprotocol.com/protocol/v1/overview).
 The similarly named `@acprotocol/conformance` package tests **Agent Control
