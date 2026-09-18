@@ -576,6 +576,10 @@ describe('eager tool dispatch — excluded tool classes', () => {
     const run = async (eager: boolean) => {
       const { record } = createRecorder();
       const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+      // `onOutput` is the tool's own "this produced a result" hook. A denied eager attempt
+      // must not reach it: the value handed to it belongs to a call that never legitimately
+      // completed, and the foreach is about to run the call again.
+      let onOutputCalls = 0;
       const agent = new Agent({
         id: 'eager-swallowed-suspend-agent',
         name: 'Eager swallowed suspend agent',
@@ -587,6 +591,9 @@ describe('eager tool dispatch — excluded tool classes', () => {
             description: 'Suspends at runtime and swallows anything the suspend call throws',
             inputSchema: z.object({ value: z.string() }),
             outputSchema: z.object({ value: z.string() }),
+            onOutput: async () => {
+              onOutputCalls += 1;
+            },
             execute: async ({ value }, options?: any) => {
               try {
                 await options?.agent?.suspend?.({ reason: 'needs input' });
@@ -600,14 +607,19 @@ describe('eager tool dispatch — excluded tool classes', () => {
       });
 
       const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
-      return chunks.map(chunk => chunk.type);
+      return { types: chunks.map(chunk => chunk.type), onOutputCalls };
     };
 
     const base = await run(false);
     const eager = await run(true);
 
-    expect(eager).toEqual(base);
-    expect(eager).toContain('tool-call-suspended');
+    expect(eager.types).toEqual(base.types);
+    expect(eager.types).toContain('tool-call-suspended');
+    // The tool swallows the suspend on both paths, so its `onOutput` hook fires once for the
+    // value it returns afterwards. The denied eager attempt must not add a second firing:
+    // the value it produced belongs to a call the foreach is about to run again.
+    expect(base.onOutputCalls).toBe(1);
+    expect(eager.onOutputCalls).toBe(base.onOutputCalls);
   });
 
   it('does not eagerly execute an agent-derived tool, which can suspend without a suspend schema', async () => {
