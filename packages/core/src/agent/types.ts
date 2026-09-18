@@ -55,7 +55,12 @@ import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
-import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
+import type {
+  AgentChunkType,
+  CustomChunkWriter,
+  MastraOnFinishCallbackArgs,
+  ModelManagerModelConfig,
+} from '../stream/types';
 import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { WebSearchToolPlaceholder } from '../tools/builtin/web-search';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
@@ -1279,6 +1284,10 @@ export type AgentExecuteOnFinishOptions = {
     | MastraScorers
     | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   onTitleGenerated?: (title: string) => void | Promise<void>;
+  /** Writer for emitting a transient `data-thread-title` chunk on stream runs before `finish`. */
+  writer?: CustomChunkWriter;
+  /** Abort signal of the current run; an abort during the title wait releases `finish` immediately. */
+  abortSignal?: AbortSignal;
   /**
    * Optional platform `waitUntil` so detached title generation survives
    * serverless freeze-after-response without blocking `generate()`/`stream()`.

@@ -137,7 +137,10 @@ const semanticEntries: [string, string][] = [
   ['selected', Colors.selected],
 ];
 
-const semanticBorderEntries: [string, string][] = [['border', BorderColors.border]];
+const semanticBorderEntries: [string, string][] = [
+  ['border', BorderColors.border],
+  ['sidebar-divider', BorderColors['sidebar-divider']],
+];
 
 const SurfacePreview = ({ semantic }: { semantic: boolean }) => {
   return (

@@ -1,5 +1,32 @@
 # @mastra/code-sdk
 
+## 1.8.0-alpha.5
+
+### Minor Changes
+
+- Added native background tool and delegated subagent support to Mastra Code sessions. ([#19960](https://github.com/mastra-ai/mastra/pull/19960))
+
+  Set `backgroundTools.enabled` to `true` in Mastra Code settings to make read-only workspace tools and the Alexandria expert background-eligible. Eligible tools remain foreground by default, and agents can opt individual calls into `deferred` or `awaited` execution through the Core `_background.disposition` override.
+
+  Mastra Code factory results now expose `backgroundCompletionEvents`, which publishes reconciled `completed`, `failed`, and `cancelled` events for the originating resource and thread:
+
+  ```ts
+  const mastraCode = await createMastraCode(options);
+
+  const unsubscribe = mastraCode.backgroundCompletionEvents.subscribe(event => {
+    console.log(event.taskId, event.status);
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4266b67`](https://github.com/mastra-ai/mastra/commit/4266b677d33bb20651ca296f64aa91fa3b3d4e82), [`bec18d0`](https://github.com/mastra-ai/mastra/commit/bec18d05e7f997ead6ada04a4dc0179c3cad8aa2), [`abecb67`](https://github.com/mastra-ai/mastra/commit/abecb6709643785fd87a3ff9251032a61479ccab), [`bec18d0`](https://github.com/mastra-ai/mastra/commit/bec18d05e7f997ead6ada04a4dc0179c3cad8aa2), [`f27f915`](https://github.com/mastra-ai/mastra/commit/f27f91577fd2c9b0984b861b6fc6c919319994de), [`ee7187e`](https://github.com/mastra-ai/mastra/commit/ee7187e7bf66db46630f33c64e86b1ff7bb0c0b7), [`aa6225f`](https://github.com/mastra-ai/mastra/commit/aa6225f9aac0c09843d573dcc58eea601bfcc8d7), [`bec18d0`](https://github.com/mastra-ai/mastra/commit/bec18d05e7f997ead6ada04a4dc0179c3cad8aa2), [`babda00`](https://github.com/mastra-ai/mastra/commit/babda005397d2780aa21be0a7670688b704bdb2f), [`2476423`](https://github.com/mastra-ai/mastra/commit/24764233246dc85d7bcba8f8bb610110449a54d6), [`f27f915`](https://github.com/mastra-ai/mastra/commit/f27f91577fd2c9b0984b861b6fc6c919319994de), [`bdab4a8`](https://github.com/mastra-ai/mastra/commit/bdab4a889808d502f398a8086af3b50cc3bfbcd5), [`53cdd63`](https://github.com/mastra-ai/mastra/commit/53cdd6368b12aea743f95118a49fc6b93985fd20), [`c6fff55`](https://github.com/mastra-ai/mastra/commit/c6fff55224ea28752201b9ed4e8dc4449dde9cb9), [`a2c9876`](https://github.com/mastra-ai/mastra/commit/a2c9876f0d76a3b50ea28e6bab71de0ff4bd78a8)]:
+  - @mastra/core@1.68.0-alpha.5
+  - @mastra/duckdb@1.10.0-alpha.2
+  - @mastra/pg@1.26.0-alpha.3
+  - @mastra/parallel@0.1.2-alpha.0
+  - @mastra/mcp@1.18.1-alpha.3
+
 ## 1.8.0-alpha.4
 
 ### Patch Changes

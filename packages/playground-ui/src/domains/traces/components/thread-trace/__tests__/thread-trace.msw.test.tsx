@@ -116,23 +116,27 @@ const renderView = ({
       <ThreadTrace.List data-testid="thread-trace-list">
         <ThreadTrace.Rail turns={railTurns} />
         <ThreadTrace.LoadMoreSentinel data-testid="sentinel" />
-        {traceIds.map((traceId, index) => (
-          <ThreadTrace.Row key={traceId} traceId={traceId} isFirst={index === 0}>
+        {traceIds.map(traceId => (
+          <ThreadTrace.Row key={traceId} traceId={traceId}>
             <ThreadTrace.Messages>
-              <MessagesSlot />
+              <ThreadTrace.MessagesHeader>
+                <ThreadTrace.TabList>
+                  <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
+                  <ThreadTrace.Tab value="extra">Extra</ThreadTrace.Tab>
+                </ThreadTrace.TabList>
+              </ThreadTrace.MessagesHeader>
+              <ThreadTrace.TabContent value="messages">
+                <MessagesSlot />
+              </ThreadTrace.TabContent>
+              <ThreadTrace.TabContent value="extra">Extra content {traceId}</ThreadTrace.TabContent>
             </ThreadTrace.Messages>
             <ThreadTrace.Details data-testid={`details-${traceId}`}>
               <ThreadTrace.DetailsHeader>
-                <ThreadTrace.TabList>
-                  <ThreadTrace.Tab value="spans">Spans</ThreadTrace.Tab>
-                  <ThreadTrace.Tab value="extra">Extra</ThreadTrace.Tab>
-                </ThreadTrace.TabList>
                 <ThreadTrace.DetailsActions>
                   <button type="button">Action {traceId}</button>
                 </ThreadTrace.DetailsActions>
               </ThreadTrace.DetailsHeader>
-              <ThreadTrace.SpansTab />
-              <ThreadTrace.TabContent value="extra">Extra content {traceId}</ThreadTrace.TabContent>
+              <ThreadTrace.Spans />
             </ThreadTrace.Details>
           </ThreadTrace.Row>
         ))}
@@ -205,19 +209,23 @@ describe('ThreadTrace', () => {
     it('opens the side panel for that row, marks the row active, and closes back', async () => {
       const { container } = renderView();
       await screen.findByText('Chef agent run');
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)]');
-      expect(screen.queryByTestId('span-panel')).toBeNull();
+      // The span cell stays mounted but collapsed so opening it animates the grid columns.
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_0%]');
+      expect(container.firstElementChild?.className).toContain('transition-[grid-template-columns]');
+      expect(screen.getByTestId('span-panel').childElementCount).toBe(0);
 
       fireEvent.click(screen.getByText('Chef agent run'));
 
-      await screen.findByTestId('span-panel');
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_minmax(0,40%)]');
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_40%]');
       expect(getRow('trace-a').dataset.active).toBe('true');
       expect(getRow('trace-b').dataset.active).toBeUndefined();
       expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none');
 
-      fireEvent.click(screen.getByRole('button', { name: /close/i }));
-      await waitFor(() => expect(screen.queryByTestId('span-panel')).toBeNull());
+      // No close button on the span panel: re-clicking the selected span toggles it off.
+      fireEvent.click(screen.getByText('Chef agent run'));
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBe(0));
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_0%]');
       expect(getRow('trace-a').dataset.active).toBeUndefined();
     });
 
@@ -225,45 +233,81 @@ describe('ThreadTrace', () => {
       renderView();
       await screen.findByText('Recipe lookup');
       fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByTestId('span-panel');
+      await screen.findByRole('button', { name: 'Go to next span' });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Next span' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Go to next span' }));
       await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a-tool;none'));
-      fireEvent.click(screen.getByRole('button', { name: 'Previous span' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Go to previous span' }));
       await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none'));
     });
   });
 
+  describe('messages column tabs', () => {
+    it('swaps the messages column body per row and leaves the span tree in place', async () => {
+      renderView();
+      await screen.findByText('Chef agent run');
+      const rowA = getRow('trace-a');
+      const rowB = getRow('trace-b');
+
+      fireEvent.click(within(rowA).getByRole('tab', { name: 'Extra' }));
+
+      expect(within(rowA).getByText('Extra content trace-a')).toBeTruthy();
+      expect(within(rowA).queryByRole('button', { name: 'Highlight trace-a' })).toBeNull();
+      expect(within(rowA).getByText('Chef agent run')).toBeTruthy();
+      expect(within(rowB).queryByText('Extra content trace-b')).toBeNull();
+      expect(within(rowB).getByRole('button', { name: 'Highlight trace-b' })).toBeTruthy();
+    });
+  });
+
   describe('highlighting spans from the messages slot', () => {
-    it('scopes the highlight to that row and brings the spans tab back', async () => {
+    it('scopes the highlight to that row', async () => {
       renderView();
       await screen.findByText('Chef agent run');
       const rowA = getRow('trace-a');
 
-      fireEvent.click(within(rowA).getByRole('tab', { name: 'Extra' }));
-      expect(within(rowA).getByText('Extra content trace-a')).toBeTruthy();
-
       fireEvent.click(within(rowA).getByRole('button', { name: 'Highlight trace-a' }));
 
       expect(screen.getByTestId('root-state').textContent).toBe('none;trace-a');
-      expect(within(rowA).queryByText('Extra content trace-a')).toBeNull();
       await within(rowA).findByText('Recipe lookup');
       // Closing the panel clears the highlight, so opening and closing a span resets it.
       fireEvent.click(within(rowA).getByText('Chef agent run'));
-      await screen.findByTestId('span-panel');
-      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
+      fireEvent.click(within(rowA).getByText('Chef agent run'));
       await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('none;none'));
     });
   });
 
   describe('details column', () => {
-    it('gives only the first row the top border and renders custom actions', async () => {
+    it('draws the borders on the row — a line under each turn, the messages column framed left and right — and renders custom actions', async () => {
       renderView();
       await screen.findByText('Chef agent run');
 
-      expect(screen.getByTestId('details-trace-a').className).toContain('rounded-t-xl');
-      expect(screen.getByTestId('details-trace-b').className).not.toContain('rounded-t-xl');
+      for (const id of ['trace-a', 'trace-b']) {
+        const details = screen.getByTestId(`details-${id}`);
+        const row = getRow(id);
+        expect(row.className).toContain('border-b');
+        expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-x');
+        expect(details.className).not.toMatch(/border|rounded/);
+      }
       expect(screen.getByRole('button', { name: 'Action trace-a' })).toBeTruthy();
+    });
+
+    it('keeps clamping to the Messages view height while another view is showing', async () => {
+      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
+      renderView({ traceIds: ['trace-a'] });
+      await screen.findByText('Chef agent run');
+
+      const timeline = await screen.findByTestId('trace-row-timeline');
+      expect(timeline.style.maxHeight).toBe('300px');
+
+      mockHeights({ 'trace-row-messages': 80, 'trace-row-timeline': 900 });
+      fireEvent.click(screen.getByRole('tab', { name: 'Extra' }));
+
+      expect(screen.getByRole('tab', { name: 'Extra' }).getAttribute('aria-selected')).toBe('true');
+      expect(timeline.style.maxHeight).toBe('300px');
+      expect(getRow('trace-a').querySelector<HTMLElement>('[data-slot=thread-trace-messages]')?.style.minHeight).toBe(
+        '300px',
+      );
     });
 
     it('clamps a long timeline to the messages height and expands on Show more', async () => {
@@ -280,9 +324,9 @@ describe('ThreadTrace', () => {
 
       // Collapsing would hide the selected span, so Show less waits until the panel closes.
       fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByTestId('span-panel');
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
       expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+      fireEvent.click(screen.getByText('Chef agent run'));
       await screen.findByRole('button', { name: 'Show less' });
 
       fireEvent.click(screen.getByRole('button', { name: 'Show less' }));

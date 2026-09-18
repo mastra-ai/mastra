@@ -189,12 +189,9 @@ function DefaultErrorFallback({
           </Button>
           <Button
             icon={<Bug />}
-            as="a"
+            render={<a href="https://github.com/mastra-ai/mastra/issues" target="_blank" rel="noopener noreferrer" />}
             variant="default"
             size={isInline ? 'sm' : 'lg'}
-            href="https://github.com/mastra-ai/mastra/issues"
-            target="_blank"
-            rel="noopener noreferrer"
           >
             Report issue
           </Button>

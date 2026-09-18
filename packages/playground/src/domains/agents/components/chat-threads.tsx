@@ -52,7 +52,7 @@ export const ChatThreads = ({
       <ThreadList embedded={embedded}>
         {/* pt-[3px] lines the hide button up with the collapsed panel's expand button (top-2 vs border+p-1) */}
         <div className="flex items-center gap-1 pt-[3px]">
-          <ThreadListNewItem as={Link} to={newThreadLink}>
+          <ThreadListNewItem render={<Link href={newThreadLink} />}>
             <Icon>
               <Plus />
             </Icon>

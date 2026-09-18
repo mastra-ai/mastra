@@ -80,7 +80,11 @@ export default function AgentBuilderAgentsPage() {
             descriptionSlot="Start building your first agent with the Agent Builder."
             actionSlot={
               canWrite ? (
-                <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary" icon={<PlusIcon />}>
+                <Button
+                  render={<FrameworkLink href="/agent-builder/agents/create" />}
+                  variant="primary"
+                  icon={<PlusIcon />}
+                >
                   Create an agent
                 </Button>
               ) : undefined
@@ -106,8 +110,8 @@ export default function AgentBuilderAgentsPage() {
           {agents.length > 0 && canWrite && (
             <div className="w-full shrink-0 md:w-auto">
               <Button
-                as={FrameworkLink}
-                to="/agent-builder/agents/create"
+                render={<FrameworkLink href="/agent-builder/agents/create" />}
+
                 variant="primary"
                 className="w-full justify-center md:w-auto"
                 icon={<PlusIcon />}

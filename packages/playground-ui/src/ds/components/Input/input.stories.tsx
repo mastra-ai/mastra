@@ -12,7 +12,7 @@ const meta: Meta<typeof Input> = {
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['default', 'filled', 'outline', 'unstyled'],
+      options: ['default', 'outline', 'unstyled'],
     },
     size: {
       control: { type: 'select' },
@@ -42,7 +42,6 @@ export const Variants: Story = {
   render: () => (
     <div className="flex w-64 flex-col gap-3">
       <Input variant="default" placeholder="Default" />
-      <Input variant="filled" placeholder="Filled" />
       <Input variant="outline" placeholder="Outline" />
       <Input variant="unstyled" placeholder="Unstyled" />
     </div>
@@ -58,13 +57,6 @@ export const Sizes: Story = {
       <Input size="lg" placeholder="Large" />
     </div>
   ),
-};
-
-export const Filled: Story = {
-  args: {
-    placeholder: 'Filled variant',
-    variant: 'filled',
-  },
 };
 
 export const Outline: Story = {
@@ -155,18 +147,18 @@ export const Error: Story = {
 
 export const OnDifferentSurfaces: Story = {
   render: () => (
-    <div className="flex w-96 flex-col gap-4">
-      <div className="border-border1 bg-surface1 rounded-lg border p-4">
-        <Input placeholder="On bg-surface1 (darkest in dark mode)" />
+    <div className="new-theme flex w-96 flex-col gap-4">
+      <div className="border-border bg-sidebar rounded-lg border p-4">
+        <Input placeholder="On bg-sidebar (recessed)" />
       </div>
-      <div className="border-border1 bg-surface2 rounded-lg border p-4">
-        <Input placeholder="On bg-surface2" />
+      <div className="border-border bg-background rounded-lg border p-4">
+        <Input placeholder="On bg-background" />
       </div>
-      <div className="border-border1 bg-surface3 rounded-lg border p-4">
-        <Input placeholder="On bg-surface3" />
+      <div className="border-border bg-card rounded-lg border p-4">
+        <Input placeholder="On bg-card" />
       </div>
-      <div className="border-border1 bg-surface4 rounded-lg border p-4">
-        <Input placeholder="On bg-surface4 (lightest)" />
+      <div className="border-border bg-muted rounded-lg border p-4">
+        <Input placeholder="On bg-muted (raised)" />
       </div>
     </div>
   ),

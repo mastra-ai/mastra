@@ -1,5 +1,55 @@
 # @mastra/client-js
 
+## 1.47.0-alpha.5
+
+### Minor Changes
+
+- Added page-based pagination for advanced trace queries. Paginated responses include `pagination` metadata with `total`, `page`, `perPage`, and `hasMore`. ([#24061](https://github.com/mastra-ai/mastra/pull/24061))
+
+  ```ts
+  const result = await client.queryTraces({
+    timeRange,
+    pagination: { page: 0, perPage: 25 },
+  });
+  ```
+
+- Added Client JS methods for bounded trace-query field and value discovery. Requests can now override client-level retry and abort settings with the per-request `retries` and `signal` options. Retry counts must be non-negative safe integers, and aborted requests stop without retrying. ([#24109](https://github.com/mastra-ai/mastra/pull/24109))
+
+  ```ts
+  const fields = await mastraClient.getTraceQueryFields({
+    timeRange,
+    predicateScope: 'trace',
+  });
+
+  const values = await mastraClient.getTraceQueryValues({
+    timeRange,
+    predicateScope: 'spans',
+    path: 'model',
+  });
+  ```
+
+### Patch Changes
+
+- Fixed an uncaught `ERR_INVALID_STATE` error when a consumer cancels an agent stream after its `finish` chunk. ([#24303](https://github.com/mastra-ai/mastra/pull/24303))
+
+  Stream cancellation no longer produces an unhandled rejection.
+
+- Fixed `agent.stream()` cancellation in `@mastra/client-js`. Cancelling a returned stream now aborts the underlying HTTP request and stops pending client-tool executions and follow-up requests. Fixes #24271. ([#24310](https://github.com/mastra-ai/mastra/pull/24310))
+
+  Added a per-call `abortSignal` option to `stream()`, `streamUntilIdle()`, `resumeStream()`, `resumeStreamUntilIdle()`, `approveToolCall()`, `declineToolCall()`, `streamLegacy()`, `generate()` and `generateLegacy()`. It is merged with the client-wide `abortSignal`, and aborted requests are not retried.
+
+  ```ts
+  const controller = new AbortController();
+  const response = await agent.stream('Hello', { abortSignal: controller.signal });
+  // later
+  controller.abort();
+  ```
+
+- `GetWorkflowRunByIdResponse.serializedStepGraph` is typed as the core `SerializedStepFlowEntry[]`, like `GetWorkflowResponse.stepGraph`, instead of the generated route shape. ([#24030](https://github.com/mastra-ai/mastra/pull/24030))
+
+- Updated dependencies [[`4266b67`](https://github.com/mastra-ai/mastra/commit/4266b677d33bb20651ca296f64aa91fa3b3d4e82), [`bec18d0`](https://github.com/mastra-ai/mastra/commit/bec18d05e7f997ead6ada04a4dc0179c3cad8aa2), [`abecb67`](https://github.com/mastra-ai/mastra/commit/abecb6709643785fd87a3ff9251032a61479ccab), [`ee7187e`](https://github.com/mastra-ai/mastra/commit/ee7187e7bf66db46630f33c64e86b1ff7bb0c0b7), [`babda00`](https://github.com/mastra-ai/mastra/commit/babda005397d2780aa21be0a7670688b704bdb2f), [`2476423`](https://github.com/mastra-ai/mastra/commit/24764233246dc85d7bcba8f8bb610110449a54d6), [`bdab4a8`](https://github.com/mastra-ai/mastra/commit/bdab4a889808d502f398a8086af3b50cc3bfbcd5), [`53cdd63`](https://github.com/mastra-ai/mastra/commit/53cdd6368b12aea743f95118a49fc6b93985fd20)]:
+  - @mastra/core@1.68.0-alpha.5
+
 ## 1.47.0-alpha.4
 
 ### Patch Changes

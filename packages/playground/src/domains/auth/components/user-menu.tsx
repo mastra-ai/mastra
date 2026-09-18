@@ -106,8 +106,8 @@ export function UserMenu({ user }: UserMenuProps) {
 
         <div className="flex flex-col gap-1 p-2">
           <Button
-            as={Link}
-            to="/settings"
+            render={<Link to="/settings" />}
+
             variant="ghost"
             className="w-full justify-start"
             onClick={() => setOpen(false)}
