@@ -32,8 +32,21 @@ export const semanticRecallSchema = z.object({
 export const titleGenerationSchema = z.union([
   z.boolean(),
   z.object({
-    model: z.string().describe('Model ID in format provider/model-name (ModelRouterModelId)'),
+    model: z
+      .string()
+      .optional()
+      .describe("Model ID in format provider/model-name (ModelRouterModelId); defaults to the agent's own model"),
     instructions: z.string().optional().describe('Custom instructions for title generation'),
+    minMessages: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe('Minimum number of thread messages required before a title is generated'),
+    emitEvent: z
+      .boolean()
+      .optional()
+      .describe('Emit the generated title as a data-thread-title chunk on the run stream'),
   }),
 ]);
 

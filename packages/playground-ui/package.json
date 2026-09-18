@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "56.0.0-alpha.5",
+  "version": "56.0.0-alpha.6",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -83,6 +83,16 @@
       "require": {
         "types": "./dist/resize/*.d.ts",
         "default": "./dist/resize/*.cjs.js"
+      }
+    },
+    "./lib/*": {
+      "import": {
+        "types": "./dist/lib/*.d.ts",
+        "default": "./dist/lib/*.es.js"
+      },
+      "require": {
+        "types": "./dist/lib/*.d.ts",
+        "default": "./dist/lib/*.cjs.js"
       }
     },
     "./store/*": {
@@ -180,6 +190,7 @@
     "@xyflow/react": "^12.10.1",
     "cmdk": "^1.1.1",
     "date-fns": "catalog:",
+    "framer-motion": "^13.4.0",
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-to-markdown": "^2.1.2",
     "prettier": "^3.9.5",

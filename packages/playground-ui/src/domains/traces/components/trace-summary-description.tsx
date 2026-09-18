@@ -63,7 +63,7 @@ export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkCompo
             as={LinkComponent ?? 'a'}
             href={entityHref}
             icon={<EntityIcon />}
-            tooltip={formattedEntityType}
+            tooltip={`See ${formattedEntityType.toLowerCase()}`}
           >
             {entityName}
           </DataPanel.Meta>

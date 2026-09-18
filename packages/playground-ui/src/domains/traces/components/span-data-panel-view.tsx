@@ -15,7 +15,8 @@ import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import { cn } from '@/lib/utils';
 
-const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-3 pt-1 pb-3';
+// Mirrors `DataPanel.Content` padding without requiring the Drawer root (this view also renders standalone).
+const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-2 py-3';
 
 export interface SpanDataPanelViewProps {
   traceId: string;
@@ -23,7 +24,6 @@ export interface SpanDataPanelViewProps {
   /** Full span record. Caller fetches via useSpanDetail. */
   span: SpanRecord | undefined;
   isLoading?: boolean;
-  onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
   activeTab?: string;
@@ -50,7 +50,6 @@ export function SpanDataPanelView({
   spanId,
   span,
   isLoading,
-  onClose,
   onPrevious,
   onNext,
   activeTab,
@@ -76,10 +75,9 @@ export function SpanDataPanelView({
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}
             onNext={onNext}
-            previousLabel="Previous span"
-            nextLabel="Next span"
+            previousLabel="Go to previous span"
+            nextLabel="Go to next span"
           />
-          <DataPanel.CloseButton onClick={onClose} />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 
@@ -246,19 +244,27 @@ function SpanDataPanelContent({
     return <div className={BODY_CLASS}>{detailsBody}</div>;
   }
 
+  // Same chrome as the trace column: tab list in a header row, content scrolling beneath it.
   return (
-    <div className={BODY_CLASS}>
-      <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
-        <TabList variant="pill-ghost">
+    <Tabs
+      defaultTab="details"
+      value={activeTab}
+      onValueChange={onTabChange}
+      className="grid min-h-0 flex-1 grid-rows-[auto_1fr]"
+    >
+      <DataPanel.Header>
+        <TabList variant="pill-ghost" size="sm">
           <Tab value="details">Details</Tab>
-          <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
+          <Tab value="feedback">Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}</Tab>
         </TabList>
+      </DataPanel.Header>
 
-        <TabContent value="details" className="pt-1">
-          {detailsBody}
-        </TabContent>
-        <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>
-      </Tabs>
-    </div>
+      <TabContent value="details" flush>
+        <div className={BODY_CLASS}>{detailsBody}</div>
+      </TabContent>
+      <TabContent value="feedback" flush>
+        <div className={BODY_CLASS}>{feedbackTabSlot({ span, traceId, spanId })}</div>
+      </TabContent>
+    </Tabs>
   );
 }

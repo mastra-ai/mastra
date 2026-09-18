@@ -89,7 +89,6 @@ export const ManageConnectionForm = ({
             <div className="relative w-full">
               <Input
                 id={`${testIdPrefix}-input`}
-                variant="filled"
                 size="sm"
                 value={draft}
                 onChange={event => {

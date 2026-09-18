@@ -154,6 +154,13 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description: 'Whether to enable logging for this server.',
   },
   {
+    name: 'traceContext',
+    type: '() => MCPTraceContext | undefined',
+    isOptional: true,
+    description:
+      'Returns the W3C `traceparent`, optional `tracestate` and `baggage` to send as request `_meta` on every call to this server. Called when each request is sent so it can read a request-local carrier. Explicit `_meta` keys on a tool call take precedence. Servers built with `MCPServer` expose the received values to tools as `requestContext.get("traceContext")`; they are observability data and are never used for authorization.',
+  },
+  {
     name: 'forwardInstructions',
     type: 'boolean',
     isOptional: true,
@@ -176,11 +183,11 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, request context, and any tool annotations advertised by the server to dynamically decide whether approval is needed.',
   },
   {
-    name: 'protocolVersion',
-    type: "'auto' | '2026-07-28'",
+    name: 'jsonSchemaValidator',
+    type: 'JsonSchemaValidator',
     isOptional: true,
     description:
-      "Opt-in MCP protocol version negotiation. Omitted keeps the legacy (2025-era) connect sequence unchanged. 'auto' probes the server at connect time and uses the stateless '2026-07-28' revision when the server supports it, with a safe fallback to the legacy handshake. '2026-07-28' pins that revision exactly and fails with a typed error when the server does not offer it. Elicitation handlers work on both eras: on a '2026-07-28' connection, embedded elicitation requests from input_required results are dispatched through the same registered handler and the originating call retries automatically.",
+      'Validator used for MCP tool schemas and structured results. The default supports JSON Schema 2020-12. Provide a compatible validator such as CfWorkerJsonSchemaValidator in runtimes that disallow dynamic code generation.',
   },
 ]}
 />
@@ -425,7 +432,11 @@ When called without options, the method omits only `durations`; `definitions`, `
 
 Rebuilds a single executable tool from a cached definition. No connection is opened here. The client connects lazily, the first time the tool is executed.
 
-The returned tool behaves exactly like one from `listTools()`, with the same strict-mode metadata, approval policy, structured content handling, tool error handling, and reconnect behavior.
+The returned tool behaves exactly like one from `listTools()`, with the same strict-mode metadata, approval policy, structured content handling, tool error handling, and reconnect behavior. Successful structured results are validated against the advertised `outputSchema` on both paths. Invalid results reject the tool call. MCP error results skip output validation.
+
+MCP schemas without a `$schema` declaration use JSON Schema 2020-12. Local `$ref` and `$defs` references, composition keywords, and boolean subschemas are supported. To bound validation work from untrusted tool catalogs, input and output schemas are limited to 128 nested subschema levels and 10,000 subschema nodes.
+
+`structuredContent` can be any JSON value, including strings, numbers, booleans, and `null`. Object and array results also expose the MCP content and `_meta` envelopes through non-enumerable Mastra metadata properties. Scalar and `null` results can't carry those properties and remain unchanged rather than being wrapped.
 
 ```typescript
 const definitions = JSON.parse(await cache.get('mcp-tools'))
@@ -621,10 +632,12 @@ console.log('Current weather:', content.contents[0].text)
 
 #### `resources.subscribe(serverName: string, uri: string)`
 
-Subscribes to updates for a specific resource on a server.
+Subscribes to updates for a specific resource on a server. Mastra adds the URI to a single managed `subscriptions/listen` stream per server. Subscribing to the same URI more than once has no effect while the stream is active. Mastra restores the stream after a reconnect and closes it when the client disconnects.
+
+The method rejects if the server doesn't honor the requested URI. If stream restoration fails after a reconnect, the connection remains available and calling `subscribe()` again retries the stream.
 
 ```typescript oxfmt:false
-async subscribe(serverName: string, uri: string): Promise<object>
+async subscribe(serverName: string, uri: string): Promise<void>
 ```
 
 Example:
@@ -635,10 +648,10 @@ await mcpClient.resources.subscribe('myWeatherServer', 'weather://current')
 
 #### `resources.unsubscribe(serverName: string, uri: string)`
 
-Unsubscribes from updates for a specific resource on a server.
+Unsubscribes from updates for a specific resource on a server. Mastra removes the URI from the managed `subscriptions/listen` filter and replaces the stream. When nothing remains to listen for, Mastra closes the stream.
 
 ```typescript oxfmt:false
-async unsubscribe(serverName: string, uri: string): Promise<object>
+async unsubscribe(serverName: string, uri: string): Promise<void>
 ```
 
 Example:
@@ -1099,15 +1112,19 @@ await mcpClient.elicitation.onRequest('interactiveServer', async request => {
 
 ## OAuth authentication
 
-For connecting to MCP servers that require OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `MCPOAuthClientProvider`:
+For connecting to MCP servers that require OAuth authentication per the [MCP 2026-07-28 authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization), use the `MCPOAuthClientProvider`. The provider never registers a client at runtime: give it either `clientInformation` for a client pre-registered with the authorization server, or a [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/client-registration#client-id-metadata-documents) URL as `clientMetadataUrl`:
 
 ```typescript
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp'
 
 // Create an OAuth provider
+const clientMetadataUrl = 'https://app.example.com/oauth/client-metadata.json'
+
 const oauthProvider = new MCPOAuthClientProvider({
   redirectUrl: 'http://localhost:3000/oauth/callback',
+  clientMetadataUrl,
   clientMetadata: {
+    client_id: clientMetadataUrl,
     redirect_uris: ['http://localhost:3000/oauth/callback'],
     client_name: 'My MCP Client',
     grant_types: ['authorization_code', 'refresh_token'],
@@ -1130,18 +1147,26 @@ const client = new MCPClient({
 })
 ```
 
-Give each server its own `MCPOAuthClientProvider` instance. A provider holds per-server session and credential state during authorization, so sharing one instance across multiple servers lets their flows overwrite each other. When configuring several protected servers, construct a separate provider for each.
+The document served at `clientMetadataUrl` must contain the same `client_id`, `client_name`, and `redirect_uris`. For loopback callbacks, include every fallback URL returned by `getCallbackUrlCandidates()` in the hosted document. The URL is sent as the `client_id`; the provider never calls a registration endpoint, so an authorization server that accepts neither the metadata document nor a pre-registered `clientInformation` fails the flow explicitly. Configure exactly one identity: the constructor throws when both `clientInformation` and `clientMetadataUrl` are set.
+
+Tokens saved by `MCPOAuthClientProvider` are bound to the authorization server's validated `issuer`, and discovery state is persisted so the code exchange is only sent to the server that issued the redirect. The loopback callback also forwards the RFC 9207 `iss` parameter to the SDK, which rejects a mismatch before exchanging the authorization code.
+
+Give each server its own `MCPOAuthClientProvider` instance. A provider holds per-server session and credential state during authorization, so sharing one instance across multiple servers lets their flows overwrite each other. When configuring several protected servers, construct a separate provider for each. If those providers use the same persistent backend, give each provider a separate `OAuthStorage` namespace because storage mutation ordering is coordinated only within one provider instance.
 
 ### Interactive browser authentication
 
-When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` completes the flow. It starts a one-shot callback server on the provider's loopback redirect URL, falling back to the next sequential ports when it's in use. The SDK then performs discovery and client registration at runtime. `onRedirectToAuthorization` receives the authorization URL so your application can open it in the user's browser. The token exchange finishes after the browser returns the authorization code:
+When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` completes the flow. It starts a one-shot callback server on the provider's loopback redirect URL, falling back to the next sequential ports when it's in use. The SDK then performs discovery and uses the configured client identity. `onRedirectToAuthorization` receives the authorization URL so your application can open it in the user's browser. The token exchange finishes after the browser returns the authorization code:
 
 ```typescript
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp'
 
+const clientMetadataUrl = 'https://app.example.com/oauth/client-metadata.json'
+
 const oauthProvider = new MCPOAuthClientProvider({
   redirectUrl: 'http://127.0.0.1:5533/oauth/callback',
+  clientMetadataUrl,
   clientMetadata: {
+    client_id: clientMetadataUrl,
     redirect_uris: ['http://127.0.0.1:5533/oauth/callback'],
     client_name: 'My MCP Client',
     grant_types: ['authorization_code', 'refresh_token'],
@@ -1178,8 +1203,8 @@ Hosts that drive the flow can capture the authorization code with the exported `
 ```typescript
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from '@mastra/mcp'
 
-// getCallbackUrlCandidates() lists every URL the helper may bind, so register
-// all of them as redirect_uris during client registration to cover port fallback.
+// getCallbackUrlCandidates() lists every URL the helper may bind, so list all
+// of them as redirect_uris in your pre-registration or metadata document.
 const redirectUris = getCallbackUrlCandidates('http://127.0.0.1:5533/oauth/callback').map(url =>
   url.toString(),
 )
@@ -1191,8 +1216,8 @@ const server = await createOAuthCallbackServer({
 
 // server.url reflects the port actually bound — use it as the redirect_uri.
 try {
-  const { code } = await server.waitForCode()
-  // Exchange the code here.
+  const { code, iss } = await server.waitForCode()
+  // Exchange the code here, passing `iss` so the SDK validates the issuer.
 } finally {
   await server.close()
 }
@@ -1211,6 +1236,7 @@ const provider = createSimpleTokenProvider('your-access-token', {
     redirect_uris: ['http://localhost:3000/callback'],
     client_name: 'Test Client',
   },
+  clientInformation: { client_id: 'test-client' },
 })
 
 const client = new MCPClient({
@@ -1225,7 +1251,7 @@ const client = new MCPClient({
 
 ### Custom Token Storage
 
-For persistent token storage across sessions, implement the `OAuthStorage` interface:
+For persistent token storage across sessions, implement the `OAuthStorage` interface. The provider stores tokens (both the latest set and one entry per authorization-server issuer), discovery state, and the PKCE verifier under string keys, so the backend only needs a key-value contract:
 
 ```typescript
 import { MCPOAuthClientProvider, OAuthStorage } from '@mastra/mcp'
@@ -1262,6 +1288,7 @@ class DatabaseOAuthStorage implements OAuthStorage {
 const provider = new MCPOAuthClientProvider({
   redirectUrl: 'http://localhost:3000/callback',
   clientMetadata: {/* ... */},
+  clientInformation: { client_id: 'my-registered-client' },
   storage: new DatabaseOAuthStorage(db, 'user-123'),
 })
 ```

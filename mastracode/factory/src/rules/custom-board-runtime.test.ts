@@ -114,6 +114,9 @@ describe('custom board public runtime', () => {
   it.each([true, false])(
     'executes a lifecycle-linked release through both roles and terminal tool-result dispatch (includeDefaultBoards: %s)',
     async includeDefaultBoards => {
+      // The mocked fetch below makes any key work, but gateway auth resolution
+      // still requires the env var to be present — CI has no OPENAI_API_KEY.
+      vi.stubEnv('OPENAI_API_KEY', 'sk-release-test');
       const phaseRequests: string[] = [];
       let handoffRequested = false;
       let publishRequested = false;
@@ -423,6 +426,7 @@ describe('custom board public runtime', () => {
           await storage.close();
         } finally {
           model.mockRestore();
+          vi.unstubAllEnvs();
         }
       }
     },
