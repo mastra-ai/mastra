@@ -31,7 +31,9 @@ let workerHandle: WorkerHandle | undefined;
 let devServer: ChildProcess | null = null;
 
 async function terminateWorker(proc: ChildProcess | undefined): Promise<void> {
-  if (!proc || proc.exitCode !== null) return;
+  // A signal-terminated child has exitCode null but signalCode set; either one
+  // means the process is already dead and `exit` will never fire again.
+  if (!proc || proc.exitCode !== null || proc.signalCode !== null) return;
   const exited = new Promise<void>(resolve => proc.once('exit', () => resolve()));
   proc.kill('SIGTERM');
   const stopped = await Promise.race([
@@ -44,12 +46,14 @@ async function terminateWorker(proc: ChildProcess | undefined): Promise<void> {
   }
 }
 
-function startWorker(): Promise<WorkerHandle> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('npx', ['tsx', workerPath, dbUrl, agentId, String(INNGEST_PORT)], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, INNGEST_DEV: '1', INNGEST_BASE_URL: `http://localhost:${INNGEST_PORT}` },
-    });
+// Exposes `proc` before readiness so tests can exercise pre-readiness failure
+// paths; regular callers go through startWorker() and only see the handle.
+function spawnWorker(): { proc: ChildProcess; whenReady: Promise<WorkerHandle> } {
+  const proc = spawn('npx', ['tsx', workerPath, dbUrl, agentId, String(INNGEST_PORT)], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, INNGEST_DEV: '1', INNGEST_BASE_URL: `http://localhost:${INNGEST_PORT}` },
+  });
+  const whenReady = new Promise<WorkerHandle>((resolve, reject) => {
     let ready = false;
     let disarmed = false;
     let rejectExited!: (error: Error) => void;
@@ -100,6 +104,11 @@ function startWorker(): Promise<WorkerHandle> {
       fail(new Error(`abort worker exited unexpectedly (code ${code}, signal ${signal})`)),
     );
   });
+  return { proc, whenReady };
+}
+
+function startWorker(): Promise<WorkerHandle> {
+  return spawnWorker().whenReady;
 }
 
 async function stopWorker(): Promise<void> {
@@ -174,5 +183,15 @@ describe('durable agent abort on a connect worker', () => {
     // process tree actually dies instead of leaving an orphan behind.
     handle.proc.kill('SIGTERM');
     await expect(handle.exited).rejects.toThrow(/exited unexpectedly/);
+  });
+
+  // Per-test timeout encodes "promptly": before the signalCode guard in
+  // terminateWorker, a pre-readiness signal exit made cleanup await an `exit`
+  // event that had already fired, so the readiness promise never settled and
+  // only the suite timeout caught it.
+  it('rejects readiness promptly when the worker is signal-killed before readiness', { timeout: 15_000 }, async () => {
+    const { proc, whenReady } = spawnWorker();
+    proc.kill('SIGTERM');
+    await expect(whenReady).rejects.toThrow(/exited unexpectedly/);
   });
 });
