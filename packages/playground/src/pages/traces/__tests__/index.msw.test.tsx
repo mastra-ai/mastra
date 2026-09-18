@@ -35,6 +35,7 @@ import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { pickTraceSideView, traceSideViewLabel } from '@/test/trace-side-view';
 
 const TRACE_COLUMN_STORAGE_KEY = `mastra:traces:columns:${TEST_BASE_URL}:/api`;
 const onBreakdownRequest = vi.fn<() => void>();
@@ -362,7 +363,7 @@ describe('Traces side panel header actions', () => {
         }),
       );
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Score trace' })).toBeNull());
-      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
+      expect(traceSideViewLabel()).toMatch(/scores/i);
     });
   });
   it('shows the trace actions in the panel header when a trace is selected', async () => {
@@ -385,7 +386,7 @@ describe('Traces side panel header actions', () => {
   });
 });
 
-describe('Traces side panel Scores tab', () => {
+describe('Traces side panel Scores view', () => {
   const openScoresTab = async (scoresResponse = emptyTraceSpanScores) => {
     setTracePageHandlers(metricsCapableSystemPackages);
     server.use(
@@ -399,7 +400,7 @@ describe('Traces side panel Scores tab', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
+    await pickTraceSideView(/^scores/i);
     return queryClient;
   };
 
@@ -414,7 +415,7 @@ describe('Traces side panel Scores tab', () => {
 
       fireEvent.click(within(scoreDialog).getByRole('button', { name: /close/i }));
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Score score-1' })).toBeNull());
-      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
+      expect(traceSideViewLabel()).toMatch(/scores/i);
     });
 
     it('renders the score chart legend above the scores table', async () => {
@@ -434,7 +435,7 @@ describe('Traces side panel Scores tab', () => {
   });
 
   describe('when a span is open', () => {
-    it('closes the span side panel so the scores get the room', async () => {
+    it('keeps the span panel open while the side column shows the scores', async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
@@ -448,10 +449,11 @@ describe('Traces side panel Scores tab', () => {
       expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
+      await pickTraceSideView(/^scores/i);
 
-      await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
-      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
+      expect(await screen.findByText(/no scores/i)).not.toBeNull();
+      expect(screen.getByRole('heading', { name: /^Span/ })).not.toBeNull();
+      expect(traceSideViewLabel()).toMatch(/scores/i);
     });
   });
 

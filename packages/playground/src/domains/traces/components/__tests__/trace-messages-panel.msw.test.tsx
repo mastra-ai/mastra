@@ -1,9 +1,12 @@
-import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
-import { TraceMessagesPanel, type TraceMessagesPanelProps } from '../trace-messages-panel';
+import {
+  TraceMessagesPanel,
+  TraceMessagesPanelActions,
+  type TraceMessagesPanelActionsProps,
+} from '../trace-messages-panel';
 import { TRACE_ID, panelTraceSpans } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -25,13 +28,11 @@ const installHandlers = ({ threadTraceCount = 2 }: { threadTraceCount?: number }
   );
 };
 
-const renderPanel = (props: Partial<TraceMessagesPanelProps> = {}) =>
+const renderPanel = (actions: Partial<TraceMessagesPanelActionsProps> = {}) =>
   renderWithProviders(
     <TestLinkProvider>
-      {/* DataPanel.Content requires a Drawer root; the panel normally renders inside TraceSpanPanel's DataPanel. */}
-      <DataPanel open title="Trace">
-        <TraceMessagesPanel traceId={TRACE_ID} threadId={THREAD_ID} {...props} />
-      </DataPanel>
+      <TraceMessagesPanelActions threadId={THREAD_ID} {...actions} />
+      <TraceMessagesPanel traceId={TRACE_ID} />
     </TestLinkProvider>,
     { router: true },
   );
@@ -51,15 +52,14 @@ describe('TraceMessagesPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when rendered, then a "Messages" heading sits at the top of the column', async () => {
+    it('when rendered, then the reconstructed turn shows inside the messages panel', async () => {
       installHandlers({ threadTraceCount: 2 });
       const { queryClient } = renderPanel({ onViewFullThread: vi.fn() });
 
-      await screen.findByText('No rain is expected.');
+      const message = await screen.findByText('No rain is expected.');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      const heading = screen.getByRole('heading', { name: 'Messages' });
-      expect(screen.getByTestId('messages-panel').contains(heading)).toBe(true);
+      expect(screen.getByTestId('messages-panel').contains(message)).toBe(true);
     });
 
     it('when onViewFullThread is absent, then no "Open full thread" action is shown', async () => {

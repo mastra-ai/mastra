@@ -25,6 +25,7 @@ import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
@@ -33,7 +34,10 @@ import { cn } from '@/lib/utils';
 
 export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 
-export type TraceDataPanelTab = 'details' | 'timeline' | 'scores' | 'feedback';
+export type TraceDataPanelTab = 'details' | 'timeline';
+
+/** What the side column next to the span tree shows. */
+export type TraceSideView = 'messages' | 'feedback' | 'scores';
 
 export interface TraceDataPanelViewProps {
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
@@ -102,11 +106,15 @@ export interface TraceDataPanelViewProps {
   /** Span ids to feature in the timeline; every other span is faded. */
   featuredSpanIds?: string[];
   /**
-   * Rendered as a column to the left of the span tree inside the same card
-   * (typically the trace as one reconstructed agent turn). Collapsed while the
-   * Timeline tab is active, since the timeline needs the width.
+   * The "Messages" view of the side column next to the span tree (typically the
+   * trace as one reconstructed agent turn). Rendered without content padding.
    */
   messagesPanelSlot?: ReactNode;
+  /** Header actions shown while the side column is on its "Messages" view. */
+  messagesPanelActions?: ReactNode;
+  /** Controlled side column view; falls back to the first available view. */
+  sideView?: TraceSideView;
+  onSideViewChange?: (view: TraceSideView) => void;
   /**
    * Rendered as a column to the right of the timeline inside the same card;
    * typically the span detail.
@@ -145,9 +153,42 @@ export function TraceDataPanelView({
   onTabChange,
   featuredSpanIds,
   messagesPanelSlot,
+  messagesPanelActions,
+  sideView: controlledSideView,
+  onSideViewChange,
   spanPanelSlot,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
+
+  // The side column next to the span tree hosts Messages / Feedback / Scores;
+  // which one is shown is purely a local viewing choice.
+  const sideViews = useMemo(() => {
+    const views: Array<{ value: TraceSideView; label: ReactNode }> = [];
+    if (messagesPanelSlot) views.push({ value: 'messages', label: 'Messages' });
+    if (feedbackTabSlot) {
+      views.push({
+        value: 'feedback',
+        label: (
+          <>
+            Feedback
+            {feedbackTabBadge}
+          </>
+        ),
+      });
+    }
+    if (scoresTabSlot) {
+      views.push({ value: 'scores', label: <>Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</> });
+    }
+    return views;
+  }, [messagesPanelSlot, feedbackTabSlot, feedbackTabBadge, scoresTabSlot, scoresTabBadge]);
+  const [uncontrolledSideView, setUncontrolledSideView] = useState<TraceSideView>();
+  const chosenSideView = controlledSideView ?? uncontrolledSideView;
+  const activeSideView = sideViews.find(view => view.value === chosenSideView) ?? sideViews[0];
+  const sideView = activeSideView?.value;
+  const handleSideViewChange = (view: TraceSideView) => {
+    setUncontrolledSideView(view);
+    onSideViewChange?.(view);
+  };
 
   const handleTabChange = (tab: TraceDataPanelTab) => {
     onTabChange?.(tab);
@@ -305,7 +346,7 @@ export function TraceDataPanelView({
           </DataPanel.Header>
 
           <TracePanelColumns
-            hasMessagesColumn={!!messagesPanelSlot}
+            hasMessagesColumn={!!sideView}
             spanPanelSlot={spanPanelSlot}
             highlightQuery={query}
             spanPanelKey={selectedSpanId}
@@ -345,31 +386,62 @@ export function TraceDataPanelView({
                       <TabList variant="pill-ghost" size="sm">
                         <Tab value="details">Spans</Tab>
                         <Tab value="timeline">Timeline</Tab>
-                        {feedbackTabSlot && <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>}
-                        {scoresTabSlot && (
-                          <Tab value="scores">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</Tab>
-                        )}
                       </TabList>
                     </DataPanel.Header>
 
                     {/* Tab contents share the tab list's horizontal padding so their edges line up. */}
                     <TabContent value="details" flush>
-                      {/* The messages column only makes sense beside the span tree, so it lives in this tab
+                      {/* The side column only makes sense beside the span tree, so it lives in this tab
                           rather than as a sibling column: switching tabs takes it away with the tree. */}
                       <div
                         className={cn(
                           'grid h-full min-h-0',
-                          messagesPanelSlot
+                          sideView
                             ? 'grid-cols-[18rem_minmax(0,1fr)] lg:grid-cols-[24rem_minmax(0,1fr)]'
                             : 'grid-cols-[minmax(0,1fr)]',
                         )}
                       >
-                        {messagesPanelSlot && (
+                        {sideView && (
                           <div
-                            data-trace-messages-column
+                            data-trace-side-column
                             className="border-border1 flex min-h-0 min-w-0 flex-col overflow-hidden border-r"
                           >
-                            {messagesPanelSlot}
+                            {/* Same chrome as the Span column header, so the two side columns line up. */}
+                            <DataPanel.Header>
+                              <DataPanel.HeaderContent>
+                                {sideViews.length > 1 ? (
+                                  <Select<TraceSideView> value={sideView} onValueChange={handleSideViewChange}>
+                                    <SelectTrigger variant="ghost" size="sm" aria-label="Side column view">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {sideViews.map(view => (
+                                        <SelectItem key={view.value} value={view.value}>
+                                          {view.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <DataPanel.Heading>{activeSideView.label}</DataPanel.Heading>
+                                )}
+                              </DataPanel.HeaderContent>
+                              {sideView === 'messages' && messagesPanelActions && (
+                                <DataPanel.HeaderActions>{messagesPanelActions}</DataPanel.HeaderActions>
+                              )}
+                            </DataPanel.Header>
+                            {/* The turn view brings its own padding; feedback and scores use the panel's. */}
+                            {sideView === 'messages' && (
+                              <DataPanel.Content className="p-0">{messagesPanelSlot}</DataPanel.Content>
+                            )}
+                            {sideView === 'feedback' && (
+                              <DataPanel.Content>{feedbackTabSlot?.({ traceId })}</DataPanel.Content>
+                            )}
+                            {sideView === 'scores' && (
+                              <DataPanel.Content>
+                                {scoresTabSlot?.({ traceId, rootSpanId: rootSpan?.spanId })}
+                              </DataPanel.Content>
+                            )}
                           </div>
                         )}
                         <DataPanel.Content>
@@ -419,18 +491,6 @@ export function TraceDataPanelView({
                         {noSearchResults}
                       </DataPanel.Content>
                     </TabContent>
-                    {feedbackTabSlot && (
-                      <TabContent value="feedback" flush>
-                        <DataPanel.Content>{feedbackTabSlot({ traceId })}</DataPanel.Content>
-                      </TabContent>
-                    )}
-                    {scoresTabSlot && (
-                      <TabContent value="scores" flush>
-                        <DataPanel.Content>
-                          {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
-                        </DataPanel.Content>
-                      </TabContent>
-                    )}
                   </Tabs>
                 );
               })()
@@ -457,7 +517,7 @@ function TracePanelColumns({
   spanPanelKey,
   children,
 }: {
-  /** The Spans tab hosts a messages column; the trace track then gets more room than the span detail. */
+  /** The Spans tab hosts a side column; the trace track then gets more room than the span detail. */
   hasMessagesColumn: boolean;
   spanPanelSlot?: ReactNode;
   highlightQuery: string;

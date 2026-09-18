@@ -414,7 +414,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         isFullThreadOpen={isFullThreadOpen}
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (url.traceIdParam ?? null) : null)}
         onSpanSelect={id => url.handleSpanChange(id ?? null)}
-        onSpanClose={url.handleSpanClose}
         onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}
         onAddTraceMocksToItem={isAgentTrace ? args => setAddMocksTarget(args) : undefined}
         initialSpanId={url.spanIdParam}

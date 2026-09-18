@@ -5,7 +5,7 @@ import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hoo
 import type { ComponentProps, ReactNode } from 'react';
 
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
-import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
+import { TraceMessagesPanel, TraceMessagesPanelActions } from '@/domains/traces/components/trace-messages-panel';
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { Link } from '@/lib/link';
@@ -31,8 +31,6 @@ export interface TraceSpanPanelProps {
   selectedSpanId: string | null;
   onSpanSelect: (spanId: string | undefined) => void;
   onClose: () => void;
-  /** Closes the span panel. Defaults to `onSpanSelect(undefined)`. */
-  onSpanClose?: () => void;
 
   // Trace-panel pass-through.
   anchorSpanId?: string;
@@ -86,7 +84,6 @@ export function TraceSpanPanel({
   selectedSpanId,
   onSpanSelect,
   onClose,
-  onSpanClose,
   anchorSpanId,
   initialSpanId,
   onPrevious,
@@ -163,20 +160,19 @@ export function TraceSpanPanel({
       featuredSpanIds={featuredSpanIds}
       messagesPanelSlot={
         traceId && showPartialThread && threadId ? (
-          <TraceMessagesPanel
-            traceId={traceId}
+          <TraceMessagesPanel traceId={traceId} onHighlightSpans={onHighlightSpans} />
+        ) : undefined
+      }
+      messagesPanelActions={
+        traceId && showPartialThread && threadId ? (
+          <TraceMessagesPanelActions
             threadId={threadId}
             onViewFullThread={onFullThreadOpenChange ? () => onFullThreadOpenChange(true) : undefined}
-            onHighlightSpans={onHighlightSpans}
           />
         ) : undefined
       }
       scoresTabBadge={scoresTabBadge}
       scoresTabSlot={scoresTabSlot}
-      // The scores tab needs the width; the span drilldown gives it up.
-      onTabChange={tab => {
-        if (tab === 'scores' && selectedSpanId) (onSpanClose ?? (() => onSpanSelect(undefined)))();
-      }}
       spanPanelSlot={
         traceId && selectedSpanId ? (
           <SpanDataPanelView

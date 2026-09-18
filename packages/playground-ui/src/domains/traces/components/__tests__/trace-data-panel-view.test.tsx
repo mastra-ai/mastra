@@ -800,7 +800,7 @@ describe('TraceDataPanelView — messages column', () => {
       const messagesPanel = screen.getByTestId('messages-panel');
       expect(precedes(messagesPanel, screen.getByText('agent run'))).toBe(true);
       expect(screen.getByRole('tabpanel').contains(messagesPanel)).toBe(true);
-      expect(messagesPanel.closest('[data-trace-messages-column]')?.parentElement?.className).toContain(
+      expect(messagesPanel.closest('[data-trace-side-column]')?.parentElement?.className).toContain(
         'grid-cols-[18rem_minmax(0,1fr)] lg:grid-cols-[24rem_minmax(0,1fr)]',
       );
       expect(columns().className).toContain('grid-cols-[1fr_0fr]');
@@ -857,7 +857,7 @@ describe('TraceDataPanelView — messages column', () => {
       render(<TraceDataPanelView {...baseProps} />);
 
       expect(screen.queryByTestId('messages-panel')).toBeNull();
-      expect(document.body.querySelector('[data-trace-messages-column]')).toBeNull();
+      expect(document.body.querySelector('[data-trace-side-column]')).toBeNull();
       expect(columns().className).toContain('grid-cols-[1fr_0fr]');
     });
   });
@@ -896,114 +896,152 @@ describe('TraceDataPanelView — timeline tab', () => {
   });
 });
 
-describe('TraceDataPanelView — trace-level tabs', () => {
-  it('renders no Scores tab when no scores slot is provided', () => {
-    render(<TraceDataPanelView {...baseProps} />);
+describe('TraceDataPanelView — side column views', () => {
+  const sideColumn = () => document.body.querySelector('[data-trace-side-column]');
+  const viewSwitcher = () => screen.getByRole('combobox', { name: 'Side column view' });
+  const pickView = async (name: RegExp) => {
+    fireEvent.click(viewSwitcher());
+    const option = await screen.findByRole('option', { name });
+    fireEvent.pointerDown(option, { pointerType: 'mouse' });
+    fireEvent.click(option, { detail: 1 });
+  };
 
-    expect(screen.getByRole('tab', { name: /spans/i })).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: /scores/i })).toBeNull();
-  });
-
-  it('renders Spans and Scores tabs when a scores slot is provided', () => {
-    render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => <div>trace scores here</div>} />);
-
-    expect(screen.getByRole('tab', { name: /spans/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /scores/i })).toBeTruthy();
-    // Spans is the default tab.
-    expect(screen.getByText('agent run')).toBeTruthy();
-    expect(screen.queryByText('trace scores here')).toBeNull();
-  });
-
-  it('shows the scores slot with the trace and root span when the Scores tab is active', () => {
-    const scoresTabSlot = vi.fn(({ traceId, rootSpanId }: { traceId: string; rootSpanId: string | undefined }) => (
-      <div>
-        scores for {traceId}/{rootSpanId}
-      </div>
-    ));
-    render(
-      <TraceDataPanelView {...baseProps} activeTab="scores" onTabChange={vi.fn()} scoresTabSlot={scoresTabSlot} />,
-    );
-
-    expect(scoresTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
-    expect(screen.getByText('scores for trace-1/root')).toBeTruthy();
-  });
-
-  it('notifies the consumer when the user switches tabs', () => {
-    const onTabChange = vi.fn();
+  it('keeps the tab strip to Spans and Timeline whatever slots are provided', () => {
     render(
       <TraceDataPanelView
         {...baseProps}
-        activeTab="details"
-        onTabChange={onTabChange}
-        scoresTabSlot={() => <div>trace scores here</div>}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
-
-    expect(onTabChange).toHaveBeenCalledWith('scores');
-  });
-
-  it('shows the badge count in the Scores tab label', () => {
-    render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => null} scoresTabBadge={3} />);
-
-    expect(screen.getByRole('tab', { name: /scores \(3\)/i })).toBeTruthy();
-  });
-});
-
-describe('TraceDataPanelView — trace feedback tab', () => {
-  it('renders Feedback before Scores', () => {
-    render(
-      <TraceDataPanelView
-        {...baseProps}
+        messagesPanelSlot={<div data-testid="messages-panel">messages</div>}
         scoresTabSlot={() => <div>trace scores here</div>}
         feedbackTabSlot={() => <div>trace feedback here</div>}
       />,
     );
 
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Timeline', 'Feedback', 'Scores']);
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Timeline']);
   });
 
-  it('renders the Feedback tab even when no scores slot is provided', () => {
-    render(<TraceDataPanelView {...baseProps} feedbackTabSlot={() => <div>trace feedback here</div>} />);
-
-    expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: /scores/i })).toBeNull();
-  });
-
-  it('shows the feedback slot with the trace id — and no span id — when the tab is active', () => {
-    const feedbackTabSlot = vi.fn(({ traceId }: { traceId: string }) => <div>feedback for {traceId}</div>);
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        activeTab="feedback"
-        onTabChange={vi.fn()}
-        feedbackTabSlot={feedbackTabSlot}
-      />,
-    );
-
-    expect(feedbackTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1' });
-    expect(screen.getByText('feedback for trace-1')).toBeTruthy();
-  });
-
-  it('renders the feedback tab badge inside the Feedback tab label', () => {
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        feedbackTabSlot={() => null}
-        feedbackTabBadge={<span data-testid="feedback-badge" />}
-      />,
-    );
-
-    const tab = screen.getByRole('tab', { name: /^feedback/i });
-    expect(within(tab).getByTestId('feedback-badge')).toBeTruthy();
-  });
-
-  it('renders no Feedback tab when no feedback slot is provided', () => {
+  it('renders no side column when no slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
-    expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
-    expect(screen.getByRole('tab', { name: /spans/i })).toBeTruthy();
+    expect(sideColumn()).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Side column view' })).toBeNull();
+  });
+
+  describe('given only a scores slot', () => {
+    it('shows the scores in the side column under a plain "Scores" heading', () => {
+      const scoresTabSlot = vi.fn(({ traceId, rootSpanId }: { traceId: string; rootSpanId: string | undefined }) => (
+        <div>
+          scores for {traceId}/{rootSpanId}
+        </div>
+      ));
+      render(<TraceDataPanelView {...baseProps} scoresTabSlot={scoresTabSlot} scoresTabBadge={3} />);
+
+      expect(scoresTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+      expect(within(sideColumn() as HTMLElement).getByText('scores for trace-1/root')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Scores (3)' })).toBeTruthy();
+      expect(screen.queryByRole('combobox', { name: 'Side column view' })).toBeNull();
+    });
+  });
+
+  describe('given only a feedback slot', () => {
+    it('shows the feedback — with the trace id and no span id — under a "Feedback" heading carrying the badge', () => {
+      const feedbackTabSlot = vi.fn(({ traceId }: { traceId: string }) => <div>feedback for {traceId}</div>);
+      render(
+        <TraceDataPanelView
+          {...baseProps}
+          feedbackTabSlot={feedbackTabSlot}
+          feedbackTabBadge={<span data-testid="feedback-badge" />}
+        />,
+      );
+
+      expect(feedbackTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1' });
+      expect(screen.getByText('feedback for trace-1')).toBeTruthy();
+      const heading = screen.getByRole('heading', { name: /^feedback/i });
+      expect(within(heading).getByTestId('feedback-badge')).toBeTruthy();
+    });
+  });
+
+  describe('given messages, feedback and scores slots', () => {
+    const renderAll = () =>
+      render(
+        <TraceDataPanelView
+          {...baseProps}
+          messagesPanelSlot={<div data-testid="messages-panel">messages</div>}
+          feedbackTabSlot={() => <div>trace feedback here</div>}
+          scoresTabSlot={() => <div>trace scores here</div>}
+          scoresTabBadge={3}
+        />,
+      );
+
+    it('starts on Messages and offers the views in a dropdown in the column header', async () => {
+      renderAll();
+
+      expect(screen.getByTestId('messages-panel')).toBeTruthy();
+      expect(screen.queryByText('trace feedback here')).toBeNull();
+      expect(viewSwitcher().textContent).toContain('Messages');
+
+      fireEvent.click(viewSwitcher());
+      await waitFor(() =>
+        expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Messages', 'Feedback', 'Scores (3)']),
+      );
+    });
+
+    it('swaps the column body when another view is picked', async () => {
+      renderAll();
+
+      await pickView(/^feedback/i);
+      expect(within(sideColumn() as HTMLElement).getByText('trace feedback here')).toBeTruthy();
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
+
+      await pickView(/^scores/i);
+      expect(within(sideColumn() as HTMLElement).getByText('trace scores here')).toBeTruthy();
+      expect(screen.queryByText('trace feedback here')).toBeNull();
+    });
+
+    it('keeps the span tree in place while a view is picked', async () => {
+      renderAll();
+
+      await pickView(/^scores/i);
+      expect(screen.getByText('agent run')).toBeTruthy();
+    });
+  });
+
+  describe('given a controlled side view', () => {
+    it('shows the requested view and reports a pick to the consumer', async () => {
+      const onSideViewChange = vi.fn();
+      render(
+        <TraceDataPanelView
+          {...baseProps}
+          messagesPanelSlot={<div data-testid="messages-panel">messages</div>}
+          scoresTabSlot={() => <div>trace scores here</div>}
+          sideView="scores"
+          onSideViewChange={onSideViewChange}
+        />,
+      );
+
+      expect(screen.getByText('trace scores here')).toBeTruthy();
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
+
+      await pickView(/^messages/i);
+      expect(onSideViewChange).toHaveBeenCalledWith('messages');
+    });
+  });
+
+  describe('given messages header actions', () => {
+    it('shows them on the Messages view only', async () => {
+      render(
+        <TraceDataPanelView
+          {...baseProps}
+          messagesPanelSlot={<div data-testid="messages-panel">messages</div>}
+          messagesPanelActions={<button>Open full thread</button>}
+          feedbackTabSlot={() => <div>trace feedback here</div>}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Open full thread' })).toBeTruthy();
+
+      await pickView(/^feedback/i);
+      expect(screen.queryByRole('button', { name: 'Open full thread' })).toBeNull();
+    });
   });
 });
 

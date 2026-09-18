@@ -29,6 +29,7 @@ import ExperimentPage from '@/pages/experiments/experiment';
 import ReviewQueuePage from '@/pages/experiments/review-queue';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
+import { pickTraceSideView, traceSideViewLabel } from '@/test/trace-side-view';
 
 /**
  * Renders the real experiment route tree (parent list page + nested
@@ -387,14 +388,17 @@ describe('experiment item sub-route', () => {
       await findResultDialog('res-1');
       fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
 
-      const scoresTab = await screen.findByRole('tab', { name: /scores \(1\)/i });
-      const feedbackTab = screen.getAllByRole('tab', { name: /^feedback/i }).at(-1)!;
-      expect(within(feedbackTab).getByTestId('needs-review-dot')).toBeDefined();
+      const traceDialog = await screen.findByRole('dialog', { name: 'Trace experiment-trace-1' });
+      fireEvent.click(within(traceDialog).getByRole('combobox', { name: 'Side column view' }));
+      const feedbackOption = await screen.findByRole('option', { name: /^feedback/i });
+      expect(within(feedbackOption).getByTestId('needs-review-dot')).toBeDefined();
+      expect(await screen.findByRole('option', { name: /scores \(1\)/i })).toBeDefined();
+      fireEvent.keyDown(feedbackOption, { key: 'Escape' });
 
-      fireEvent.click(scoresTab);
+      await pickTraceSideView(/^scores/i, traceDialog);
       expect((await screen.findAllByText('Experiment relevance')).length).toBeGreaterThan(0);
 
-      fireEvent.click(feedbackTab);
+      await pickTraceSideView(/^feedback/i, traceDialog);
       expect(await screen.findByText('Trace feedback for the experiment run')).toBeDefined();
     });
 
@@ -408,7 +412,8 @@ describe('experiment item sub-route', () => {
 
       await findResultDialog('res-1');
       fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
-      fireEvent.click(await screen.findByRole('tab', { name: /scores \(1\)/i }));
+      const traceDialog = await screen.findByRole('dialog', { name: 'Trace experiment-trace-1' });
+      await pickTraceSideView(/^scores/i, traceDialog);
       fireEvent.click(await screen.findByRole('button', { name: /0\.9Experiment relevance/i }));
 
       expect(await screen.findByText('Matches the experiment result score')).toBeDefined();
@@ -419,13 +424,12 @@ describe('experiment item sub-route', () => {
 
       await findResultDialog('res-1');
       fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
-      const scoresTab = await screen.findByRole('tab', { name: /scores \(1\)/i });
-      fireEvent.click(scoresTab);
+      const traceDialog = await screen.findByRole('dialog', { name: 'Trace experiment-trace-1' });
+      await pickTraceSideView(/^scores/i, traceDialog);
       fireEvent.click(await screen.findByRole('button', { name: /0\.9Experiment relevance/i }));
 
-      expect(scoresTab.getAttribute('aria-selected')).toBe('true');
+      expect(traceSideViewLabel(traceDialog)).toMatch(/scores \(1\)/i);
       expect(screen.queryByText('Matches the experiment result score')).toBeNull();
-      expect(screen.getByRole('tab', { name: /scores \(1\)/i })).toBeDefined();
     });
 
     it('shows selected-span feedback inside the trace drawer stacked over the result', async () => {
@@ -450,7 +454,8 @@ describe('experiment item sub-route', () => {
       fireEvent.click(spanFeedbackTab);
       expect(await screen.findByText('Child span feedback for the tool call')).toBeDefined();
 
-      fireEvent.click(within(spanSection).getByLabelText('Close Panel'));
+      // Re-clicking the selected span toggles the span column away.
+      fireEvent.click(screen.getByText('Experiment tool call'));
       await waitFor(() => expect(screen.queryByRole('heading', { name: /span-child/ })).toBeNull());
       expect(screen.getByText('Experiment agent run')).toBeDefined();
     });
@@ -494,9 +499,8 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByText('Experiment tool call'));
       expect(await screen.findByRole('heading', { name: /span-child/ })).toBeDefined();
 
-      const spanSection = screen.getByRole('heading', { name: /span-child/ }).closest('section');
-      if (!spanSection) throw new Error('Expected span detail section');
-      fireEvent.click(within(spanSection).getByLabelText('Close Panel'));
+      // Re-clicking the selected span toggles the span column away.
+      fireEvent.click(screen.getByText('Experiment tool call'));
 
       await waitFor(() => expect(screen.queryByRole('heading', { name: /span-child/ })).toBeNull());
       expect(screen.getByText('Experiment agent run')).toBeDefined();
