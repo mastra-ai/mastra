@@ -630,6 +630,18 @@ export class MessageList {
       return true;
     }
 
+    // `content.content` mirrors the latest text part (see MessageMerger), and readers such as
+    // AIV4Adapter prefer it over `parts` when it is non-empty. Re-derive it from what survived,
+    // otherwise the rejected attempt's text outlives the rollback whenever the retry emits no
+    // text of its own to overwrite it.
+    if (typeof message.content.content === 'string') {
+      let lastText = '';
+      for (const part of parts) {
+        if (part.type === 'text') lastText = part.text;
+      }
+      message.content.content = lastText;
+    }
+
     // Ensure the mutated message is persisted.
     if (!this.stateManager.isResponseMessage(message)) {
       this.stateManager.removeMessage(message);
