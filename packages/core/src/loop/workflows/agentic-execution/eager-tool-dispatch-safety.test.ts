@@ -523,6 +523,60 @@ describe('eager tool dispatch — excluded tool classes', () => {
     }
   });
 
+  it('announces onInputAvailable once when an eager attempt hands the call back', async () => {
+    // The hook is announced immediately before `execute`, so a bailout raised from
+    // inside the tool body has already fired it. The foreach then re-runs the same
+    // `execute` from the top: without a marker travelling with the rejection it
+    // announces the same toolCallId twice, which is one more call than the tool gets
+    // with eager dispatch off.
+    const run = async (eager: boolean) => {
+      const { record } = createRecorder();
+      let inputAvailable = 0;
+      let bodyRuns = 0;
+      const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+      const agent = new Agent({
+        id: 'eager-input-available-agent',
+        name: 'Eager input available agent',
+        instructions: 'Call tool-a once.',
+        model,
+        tools: {
+          'tool-a': createTool({
+            id: 'tool-a',
+            description: 'Suspends at runtime without declaring a suspend schema',
+            inputSchema: z.object({ value: z.string() }),
+            outputSchema: z.object({ value: z.string() }),
+            onInputAvailable: async () => {
+              inputAvailable += 1;
+            },
+            execute: async ({ value }, options?: any) => {
+              bodyRuns += 1;
+              await options?.agent?.suspend?.({ reason: 'needs input' });
+              return { value };
+            },
+          }),
+        },
+      });
+
+      const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
+      return { inputAvailable, bodyRuns, types: chunks.map(chunk => chunk.type) };
+    };
+
+    // Explicitly off: eager is the default, so an omitted option compares eager to itself.
+    const base = await run(false);
+    const eager = await run(true);
+
+    expect(base.inputAvailable).toBe(1);
+    expect(eager.inputAvailable).toBe(base.inputAvailable);
+    // The hook count is only evidence if the call really was dispatched eagerly and
+    // then handed back: the body runs twice on that path and once without the option,
+    // so this also fails if eager dispatch silently did not happen.
+    expect(base.bodyRuns).toBe(1);
+    expect(eager.bodyRuns).toBe(2);
+    // The handback has to end in a real suspension, not a skipped call.
+    expect(eager.types).toEqual(base.types);
+    expect(eager.types).toContain('tool-call-suspended');
+  });
+
   it('suspends normally when a tool suspends at runtime without declaring a suspend schema', async () => {
     // The whitelist cannot see this coming: `hasSuspendSchema` is false, so the call is
     // dispatched eagerly and only discovers it suspends once the body runs. The fail-safe

@@ -100,7 +100,7 @@ import {
   EagerToolExecutionNotRun,
   isEagerlyExecutableToolCall,
 } from './eager-tool-execution';
-import type { EagerToolExecutionCoordinator } from './eager-tool-execution';
+import type { EagerToolBailout, EagerToolExecutionCoordinator } from './eager-tool-execution';
 import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
@@ -2137,7 +2137,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         //
                         // It is created per dispatch rather than kept on the coordinator, so
                         // a later attempt reusing this toolCallId cannot observe it.
-                        const bailout: { reason?: string } = {};
+                        const bailout: EagerToolBailout = {};
                         const settled = await eagerToolCallStep.execute({
                           inputData: toolCall,
                           runId,
@@ -2160,18 +2160,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                           // tool that catches it.
                           suspend: async () => {
                             bailout.reason = `"${toolCall.toolName}" requested suspension`;
-                            throw new EagerToolExecutionNotRun(bailout.reason);
+                            throw new EagerToolExecutionNotRun(bailout.reason, {
+                              inputAvailableCalled: bailout.inputAvailableCalled,
+                            });
                           },
                           bail: async () => {
                             bailout.reason = `"${toolCall.toolName}" bailed`;
-                            throw new EagerToolExecutionNotRun(bailout.reason);
+                            throw new EagerToolExecutionNotRun(bailout.reason, {
+                              inputAvailableCalled: bailout.inputAvailableCalled,
+                            });
                           },
                           resumeData: undefined,
                           tracingContext,
                           [EAGER_TOOL_EXECUTION_MARKER]: true,
                         });
                         if (bailout.reason) {
-                          throw new EagerToolExecutionNotRun(bailout.reason);
+                          throw new EagerToolExecutionNotRun(bailout.reason, {
+                            inputAvailableCalled: bailout.inputAvailableCalled,
+                          });
                         }
                         return settled;
                       },
