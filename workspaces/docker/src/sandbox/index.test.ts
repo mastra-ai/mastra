@@ -16,12 +16,18 @@
  * Based on the Workspace Filesystem & Sandbox Test Plan.
  */
 
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
 import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
 import { SandboxAbortError, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
 import { extract as tarExtract } from 'tar-stream';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { DockerSandbox } from './index';
+
+const packageRoot = fileURLToPath(new URL('../..', import.meta.url));
+const naturalExitChild = fileURLToPath(new URL('./fixtures/kill-helper-natural-exit-child.mts', import.meta.url));
 
 // =============================================================================
 // Mock Setup
@@ -1276,6 +1282,23 @@ describe('DockerSandbox', () => {
       expect(killStart).toHaveBeenCalled();
     });
 
+    it('should release the kill helper response stream after success', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const helperResponse = { destroy: vi.fn() };
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(helperResponse),
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+      });
+
+      await expect(handle.kill()).resolves.toBe(true);
+
+      expect(helperResponse.destroy).toHaveBeenCalledOnce();
+    });
+
     it('should report kill failure (not a false "killed") when the helper exits non-zero', async () => {
       // Models the fail-closed guards in KILL_SCRIPT: when the PGID file is
       // unreadable/empty the helper exits 1 rather than 0. kill() must surface
@@ -1288,9 +1311,10 @@ describe('DockerSandbox', () => {
       const handle = await sandbox.processes!.spawn('sleep 100');
 
       // The kill helper exec runs but exits non-zero (unrecorded/empty PGID).
+      const helperResponse = { destroy: vi.fn() };
       mockContainer.exec.mockResolvedValueOnce({
         id: 'kill-exec',
-        start: vi.fn().mockResolvedValue(undefined),
+        start: vi.fn().mockResolvedValue(helperResponse),
         inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
       });
 
@@ -1299,7 +1323,117 @@ describe('DockerSandbox', () => {
 
       // Stream was not destroyed, so wait() has not been resolved by kill().
       expect(mockStream.destroy).not.toHaveBeenCalled();
+      expect(helperResponse.destroy).toHaveBeenCalledOnce();
     });
+
+    it('should release the kill helper response stream when inspection fails', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const helperResponse = { destroy: vi.fn() };
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(helperResponse),
+        inspect: vi.fn().mockRejectedValue(new Error('inspect failed')),
+      });
+
+      await expect(handle.kill()).resolves.toBe(false);
+
+      expect(helperResponse.destroy).toHaveBeenCalledOnce();
+    });
+
+    it('should release the kill helper response stream when polling fails', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const helperResponse = { destroy: vi.fn() };
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(helperResponse),
+        inspect: vi.fn().mockResolvedValueOnce({ Running: true }).mockRejectedValueOnce(new Error('poll failed')),
+      });
+
+      await expect(handle.kill()).resolves.toBe(false);
+
+      expect(helperResponse.destroy).toHaveBeenCalledOnce();
+    });
+
+    it('should preserve a successful kill result when response cleanup throws', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const helperResponse = {
+        destroy: vi.fn(() => {
+          throw new Error('cleanup failed');
+        }),
+      };
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(helperResponse),
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+      });
+
+      await expect(handle.kill()).resolves.toBe(true);
+
+      expect(helperResponse.destroy).toHaveBeenCalledOnce();
+    });
+
+    it('should preserve a failed kill result when response cleanup throws', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const helperResponse = {
+        destroy: vi.fn(() => {
+          throw new Error('cleanup failed');
+        }),
+      };
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(helperResponse),
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
+      });
+
+      await expect(handle.kill()).resolves.toBe(false);
+
+      expect(helperResponse.destroy).toHaveBeenCalledOnce();
+    });
+
+    it.each(['without-stdin', 'with-stdin'] as const)(
+      'should let a child process exit naturally after cleanup (%s)',
+      async mode => {
+        const child = spawn(process.execPath, ['--import', 'tsx', naturalExitChild, mode], {
+          cwd: packageRoot,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stderr = '';
+        child.stderr.setEncoding('utf8');
+        child.stderr.on('data', chunk => {
+          stderr += chunk;
+        });
+
+        const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            child.kill('SIGKILL');
+            reject(new Error(`Natural-exit child timed out in ${mode} mode. stderr: ${stderr}`));
+          }, 10000);
+          child.once('error', error => {
+            clearTimeout(timeout);
+            reject(error);
+          });
+          child.once('close', (code, signal) => {
+            clearTimeout(timeout);
+            resolve({ code, signal });
+          });
+        });
+
+        expect(exit).toEqual({ code: 0, signal: null });
+        expect(stderr).toBe('');
+      },
+    );
 
     it('should mark explicit kill results as killed without timeout', async () => {
       const sandbox = new DockerSandbox();

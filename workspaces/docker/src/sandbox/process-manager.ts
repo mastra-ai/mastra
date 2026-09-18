@@ -205,26 +205,33 @@ class DockerProcessHandle extends ProcessHandle {
         AttachStdout: false,
         AttachStderr: false,
       });
-      await killExec.start({});
+      const killResponse = await killExec.start({});
+      try {
+        // Exec.start() resolves when the exec stream is opened, not when the
+        // helper script exits. Poll inspect() until it finishes so we only report
+        // success once the process tree has actually been killed — otherwise
+        // wait() could resolve with exit 137 while targets are still running.
+        let killInfo = await killExec.inspect();
+        while (killInfo.Running) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          killInfo = await killExec.inspect();
+        }
+        if (killInfo.ExitCode !== 0) {
+          throw new Error(`kill helper exited with code ${killInfo.ExitCode}`);
+        }
 
-      // Exec.start() resolves when the exec stream is opened, not when the
-      // helper script exits. Poll inspect() until it finishes so we only report
-      // success once the process tree has actually been killed — otherwise
-      // wait() could resolve with exit 137 while targets are still running.
-      let killInfo = await killExec.inspect();
-      while (killInfo.Running) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-        killInfo = await killExec.inspect();
+        // Mark as killed and destroy stream so wait() resolves.
+        // Docker exec streams don't close automatically when the process is killed externally.
+        this._killed = true;
+        this._destroyStream();
+        return true;
+      } finally {
+        try {
+          killResponse?.destroy?.();
+        } catch {
+          // Cleanup is best effort and must not change the kill result.
+        }
       }
-      if (killInfo.ExitCode !== 0) {
-        throw new Error(`kill helper exited with code ${killInfo.ExitCode}`);
-      }
-
-      // Mark as killed and destroy stream so wait() resolves.
-      // Docker exec streams don't close automatically when the process is killed externally.
-      this._killed = true;
-      this._destroyStream();
-      return true;
     } catch (error: unknown) {
       // ESRCH / "no such process" is expected if the process exited between inspect and kill
       const msg = error instanceof Error ? error.message.toLowerCase() : '';
