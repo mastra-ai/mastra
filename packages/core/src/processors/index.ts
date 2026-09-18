@@ -971,6 +971,16 @@ export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> = ErrorProcess
 
 export { isProcessorWorkflow } from './is-processor-workflow';
 
+export {
+  defaultStabilityErrorProcessors,
+  STABILITY_ERROR_PROCESSOR_IDS,
+  ECONNRESET_MAX_RETRIES,
+  ECONNRESET_RETRY_INITIAL_DELAY_MS,
+  ECONNRESET_RETRY_MAX_DELAY_MS,
+  ECONNRESET_MESSAGE_PATTERN,
+  isECONNRESETError,
+} from './stability-defaults';
+
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
 export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningContent } from './provider-history-compat';
