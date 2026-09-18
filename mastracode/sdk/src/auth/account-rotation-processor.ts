@@ -675,10 +675,10 @@ async function applyPreferredAccountRoute(
     ...accounts.filter(account => tried.has(account.id)).map(account => account.id),
   ]);
   const selected = // A12: a targeted route may use only the account it names. `Automatic`
-  // keeps insertion order with full pool rotation (A10).
-  (preferredId ? accounts.filter(account => account.id === preferredId) : accounts).find(
-    account => !unavailable.has(account.id),
-  );
+    // keeps insertion order with full pool rotation (A10).
+    (preferredId ? accounts.filter(account => account.id === preferredId) : accounts).find(
+      account => !unavailable.has(account.id),
+    );
 
   for (const accountId of unavailable) tried.add(accountId);
   if (!selected) {
