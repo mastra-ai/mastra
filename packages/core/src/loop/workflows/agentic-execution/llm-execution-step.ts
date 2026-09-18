@@ -1252,9 +1252,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // consecutive tool-only turns are not collapsed into a single block
       // by convertToModelMessages. This ensures the LLM sees them as
       // sequential steps rather than parallel tool calls.
-      if (currentIteration > 1) {
-        messageList.stepStart();
-      }
+      // Held for the rollback below: it identifies *this* iteration's boundary, which
+      // "the last step-start part" does not — markers are also synthesized within a single
+      // response when a tool call is followed by text, and nothing stored tells them apart.
+      // Undefined on the first iteration, which opens no boundary and so rolls back whole.
+      const iterationBoundary = currentIteration > 1 ? messageList.openStepBoundary().boundary : undefined;
 
       let currentMessageId = inputData.isTaskCompleteCheckFailed
         ? `${messageIdPassed}-${currentIteration}`
@@ -2588,7 +2590,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // assistant message carrying an OpenAI text itemId with no reasoning item to pair with,
       // which OpenAI rejects with a non-retryable 400 on the next turn (issue #22291).
       if (shouldRetry) {
-        messageList.rollbackToLastStepBoundary(outputStream.messageId);
+        messageList.rollbackToStepBoundary(outputStream.messageId, iterationBoundary);
       }
 
       const retryFeedbackText =

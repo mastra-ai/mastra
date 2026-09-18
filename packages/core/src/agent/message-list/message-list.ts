@@ -24,7 +24,6 @@ import {
   aiV4CoreMessagesToAIV5ModelMessages as convertAIV4CoreToAIV5ModelMessages,
   systemMessageToAIV4Core,
   StepContentExtractor,
-  findStepBoundaries,
 } from './conversion';
 import type { ToolCallConversionMode } from './conversion';
 import { TypeDetector } from './detection/TypeDetector';
@@ -36,6 +35,7 @@ import { MessageStateManager } from './state';
 import type {
   MastraDBMessage,
   MastraMessagePart,
+  MastraStepStartPart,
   MastraMessageV1,
   MessageSource,
   MemoryInfo,
@@ -584,8 +584,8 @@ export class MessageList {
   }
 
   /**
-   * Roll a response message back to its last step boundary, discarding the parts produced
-   * by the step currently in flight while keeping every earlier, completed step intact.
+   * Roll a response message back to the boundary the caller's loop iteration opened, discarding
+   * the parts produced by that step while keeping every earlier, completed step intact.
    *
    * Used by the processor-retry path: the rejected attempt must not survive into the next
    * prompt (PR #12799), but the accepted steps before it must. Removing the whole message
@@ -594,10 +594,17 @@ export class MessageList {
    * with an OpenAI text `itemId` and no reasoning item to pair with it, which OpenAI rejects
    * with a non-retryable 400 on replay (issue #22291).
    *
-   * Step boundaries are the `step-start` markers, read with the same helper
-   * `StepContentExtractor` uses. If the message has no boundary, the in-flight step *is* the
-   * whole message and the message is removed outright — which is the correct degradation:
-   * there is no accepted content to keep.
+   * The boundary must be the marker handed back by `openStepBoundary()`, not "the last
+   * `step-start` in the message". Markers are also synthesized *within* a single response
+   * whenever a tool call is followed by text, and nothing stored on the part says which writer
+   * produced it, so the last marker is routinely an intra-response one. Anchoring on it splices
+   * below the rejected step and leaves part of the rejected attempt behind — on a first
+   * iteration, which opens no boundary at all, that is the whole bug: a rejected tool call
+   * survives, unexecuted and still carrying its `fc_…` item id.
+   *
+   * With no boundary — a first iteration, a sealed message, or a marker that is no longer in
+   * `parts` — the in-flight step *is* the whole message and it is removed outright. That is the
+   * pre-#12799 behaviour, so the degradation is never worse than the path this replaced.
    *
    * Mirrors: `content.content` and `content.toolInvocations` are re-derived below, because
    * `MessageMerger` keeps both in step with the parts as a turn streams. `content.reasoning`
@@ -609,9 +616,10 @@ export class MessageList {
    * update them per step, as it does `content.content`, they will need the same treatment here.
    *
    * @param messageId - ID of the message to roll back
+   * @param boundary - the marker returned by `openStepBoundary()` for the step being discarded
    * @returns true if a message was found and rolled back or removed
    */
-  public rollbackToLastStepBoundary(messageId: string): boolean {
+  public rollbackToStepBoundary(messageId: string, boundary?: MastraStepStartPart): boolean {
     const message = this.messages.find(m => m.id === messageId);
     if (!message) return false;
 
@@ -621,18 +629,20 @@ export class MessageList {
       return true;
     }
 
-    const boundaries = findStepBoundaries(parts);
-    const lastBoundary = boundaries[boundaries.length - 1];
+    // Identity, not position: the marker is matched by reference because no stored field
+    // distinguishes it from a synthetic one. -1 covers the marker having been spliced away by
+    // an earlier rollback in the same turn, and a boundary opened on a different message.
+    const boundaryIndex = boundary ? parts.indexOf(boundary) : -1;
 
-    // No step boundary: the rejected attempt is the entire message.
-    if (lastBoundary === undefined) {
+    // No boundary of our own: the rejected attempt is the entire message.
+    if (boundaryIndex === -1) {
       this.removeByIds([messageId]);
       return true;
     }
 
     // Drop the marker itself along with the step it opened, so the next iteration's
-    // stepStart() writes a fresh marker for the retry rather than reusing the rejected one.
-    parts.splice(lastBoundary);
+    // openStepBoundary() writes a fresh marker for the retry rather than reusing the rejected one.
+    parts.splice(boundaryIndex);
 
     if (parts.length === 0) {
       this.removeByIds([messageId]);
@@ -1601,22 +1611,47 @@ export class MessageList {
    * source so the updated content is re-saved.
    */
   public stepStart(): boolean {
+    return this.openStepBoundary().appended;
+  }
+
+  /**
+   * Open the boundary for a new loop iteration and hand back the marker that delimits it.
+   *
+   * This is `stepStart()` with the marker returned instead of discarded, for callers that
+   * need to name *their own* boundary later — `rollbackToStepBoundary` is the only one today.
+   * The distinction matters because `step-start` has several writers and they are
+   * indistinguishable once stored: besides this loop boundary, a marker is synthesized inside a
+   * single model response whenever a tool call is followed by text
+   * (`build-messages-from-chunks.ts`, `MessageMerger.pushNewPart`, `addStartStepPartsForAIV5`).
+   * Nothing on the part records which writer produced it — `model` in particular does not, since
+   * `MessageMerger` deliberately copies it from the preceding marker onto the synthetic one.
+   * So "the last `step-start`" is not "the boundary this iteration opened", and only the caller
+   * that opened one can tell them apart. Holding the reference is enough; it never has to be
+   * persisted or compared by value.
+   *
+   * When the last part is already a `step-start` the iteration begins at *that* marker — nothing
+   * has been appended after it — so it is returned rather than duplicated.
+   *
+   * @returns the marker beginning this iteration, and whether it had to be appended
+   */
+  public openStepBoundary(): { boundary?: MastraStepStartPart; appended: boolean } {
     const lastMsg = this.messages[this.messages.length - 1];
     if (!lastMsg || lastMsg.role !== 'assistant' || !lastMsg.content?.parts) {
-      return false;
+      return { appended: false };
     }
 
     if (MessageMerger.isSealed(lastMsg)) {
-      return false;
+      return { appended: false };
     }
 
     // Don't add a duplicate step-start
     const lastPart = lastMsg.content.parts[lastMsg.content.parts.length - 1];
     if (lastPart?.type === 'step-start') {
-      return false;
+      return { boundary: lastPart, appended: false };
     }
 
-    lastMsg.content.parts.push(stampPart({ type: 'step-start' as const }));
+    const boundary = stampPart({ type: 'step-start' as const });
+    lastMsg.content.parts.push(boundary);
 
     // Ensure the mutated message is persisted
     if (!this.stateManager.isResponseMessage(lastMsg)) {
@@ -1624,7 +1659,7 @@ export class MessageList {
       this.stateManager.addToSource(lastMsg, 'response');
     }
 
-    return true;
+    return { boundary, appended: true };
   }
 
   /** Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row. */
