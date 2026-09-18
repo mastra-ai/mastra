@@ -5,6 +5,7 @@ import type { FieldBlockErrorMsgProps } from '../block/field-block-error-msg';
 import type { FieldBlockHelpTextProps } from '../block/field-block-help-text';
 import type { FieldBlockLabelProps } from '../block/field-block-label';
 import type { FieldBlockLayoutProps } from '../block/field-block-layout';
+import { fieldErrorId } from '../block/field-error-id';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 
 export type TextFieldBlockProps = Pick<FieldBlockLayoutProps, 'layout' | 'labelColumnWidth'> &
@@ -60,10 +61,15 @@ export function TextFieldBlock({
           placeholder={placeholder}
           data-testid={testId}
           size={size}
+          // An error is three signals, not one: the field draws its error border and
+          // reports `aria-invalid`, the message carries the icon, and the two are tied
+          // together so a screen reader reads the reason with the field.
+          error={Boolean(errorMsg)}
+          aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
           {...props}
         />
         {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
-        {errorMsg && <FieldBlock.ErrorMsg>{errorMsg}</FieldBlock.ErrorMsg>}
+        {errorMsg && <FieldBlock.ErrorMsg name={name}>{errorMsg}</FieldBlock.ErrorMsg>}
       </FieldBlock.Column>
     </FieldBlock.Layout>
   );
