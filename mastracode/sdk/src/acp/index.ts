@@ -19,7 +19,7 @@ export async function acpMain(options?: {
     await runAcpServer(request => createAcpSession(request, { coAuthor: options?.coAuthor }));
   } catch (error) {
     process.stderr.write(`[acp] Fatal error: ${error}\n`);
-    process.exitCode = 1;
+    process.exit(1);
   } finally {
     // eslint-disable-next-line no-console
     console.log = originalConsoleLog;
