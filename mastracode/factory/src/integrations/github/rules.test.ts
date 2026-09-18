@@ -9,6 +9,7 @@ import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubAppIdentity } from './app-identity.js';
 import { resolveGithubRules } from './default-rules.js';
 import type { GithubRuleOverrides } from './default-rules.js';
+import { readGithubReviewGroup } from './pull-request-stack.js';
 import { createGithubPullRequestReconciler, GithubRules, reconciledClosedEvent } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
@@ -54,6 +55,7 @@ async function setup(permission: string | undefined, rules?: GithubRuleOverrides
     rules: resolveGithubRules(rules),
     slug: 'factory-app',
     getRepositoryCollaboratorPermission: vi.fn().mockResolvedValue(permission),
+    fetchPullRequestState: vi.fn().mockResolvedValue(undefined),
   } as unknown as GithubIntegration;
   return {
     sourceControl,
@@ -2617,6 +2619,104 @@ describe('createGithubPullRequestReconciler', () => {
       author: 'maintainer',
     };
   }
+
+  it('keeps delayed lifecycle decisions from overwriting synchronized group membership', async () => {
+    const context = await setup('read');
+    const service = new GithubRules({
+      github: context.github,
+      sourceControl: context.sourceControl,
+      integrationStorage: context.integrationStorage,
+      projects: context.projects,
+      storage: context.workItems,
+      configVersion: 'factory-config-v1',
+      boards: createBoardRegistry(),
+    });
+    const event = pullRequest('opened', 'native-stack-opened');
+    const stack = { id: 100, number: 7, position: 2, base: { ref: 'main' } };
+    await service.ingest({
+      ...event,
+      payload: {
+        ...event.payload,
+        pull_request: { ...event.payload.pull_request, stack },
+      },
+    });
+    const [decision] = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'review' });
+    expect(decision?.decision).not.toHaveProperty('metadata.reviewGroup');
+  });
+
+  it('updates and clears stack membership from webhooks without moving cards or starting reviews', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17, metadata: { labels: ['keep'] } });
+    const service = new GithubRules({
+      github: context.github,
+      sourceControl: context.sourceControl,
+      integrationStorage: context.integrationStorage,
+      projects: context.projects,
+      storage: context.workItems,
+      configVersion: 'factory-config-v1',
+      boards: createBoardRegistry(),
+    });
+    const event = pullRequest('opened', 'native-stack-change');
+    const stack = { id: 100, number: 7, position: 2, base: { ref: 'main' } };
+    const stackedEvent = {
+      ...event,
+      payload: {
+        ...event.payload,
+        action: 'stacked',
+        pull_request: { ...event.payload.pull_request, stack },
+      },
+    };
+    vi.mocked(context.github.fetchPullRequestState).mockResolvedValue({
+      ...mergedState(17),
+      reviewGroup: readGithubReviewGroup(stack, 'https://github.com/acme/repo/pull/17'),
+    });
+    await service.ingest(stackedEvent);
+    const grouped = await context.workItems.get({ orgId: 'org-1', id: card.item.id });
+    expect(grouped).toMatchObject({
+      stages: ['review'],
+      metadata: { reviewGroup: readGithubReviewGroup(stack, 'https://github.com/acme/repo/pull/17'), labels: ['keep'] },
+    });
+    await service.ingest(stackedEvent);
+    expect((await context.workItems.get({ orgId: 'org-1', id: card.item.id }))?.revision).toBe(grouped?.revision);
+    vi.mocked(context.github.fetchPullRequestState).mockResolvedValue({ ...mergedState(17), reviewGroup: null });
+    await service.ingest({ ...event, payload: { ...event.payload, action: 'edited' } });
+    expect(await context.workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({
+      stages: ['review'],
+      metadata: { reviewGroup: null, labels: ['keep'] },
+    });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
+  it('reconciles changed positions and removed membership when no webhook arrives', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17 });
+    const reviewGroup = {
+      key: 'github:https://github.com/acme/repo:stack:100',
+      label: 'Stack #7',
+      position: 2,
+      targetBranch: 'main',
+    };
+    const state: ReconcilePullRequestState = { ...mergedState(17), state: 'open', merged: false, reviewGroup };
+    const fetchPullRequest = vi.fn(async () => state);
+    const reconcile = createReconciler(context, fetchPullRequest);
+    await reconcile([repositoryTarget]);
+    expect(await context.workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({
+      metadata: { reviewGroup },
+    });
+    state.reviewGroup = { ...reviewGroup, position: 1 };
+    await reconcile([repositoryTarget]);
+    const reordered = await context.workItems.get({ orgId: 'org-1', id: card.item.id });
+    expect(reordered).toMatchObject({ stages: ['review'], metadata: { reviewGroup: { ...reviewGroup, position: 1 } } });
+    await reconcile([repositoryTarget]);
+    expect((await context.workItems.get({ orgId: 'org-1', id: card.item.id }))?.revision).toBe(reordered?.revision);
+    state.reviewGroup = null;
+    await reconcile([repositoryTarget]);
+    expect(await context.workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({
+      metadata: { reviewGroup: null },
+    });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
 
   it('replays a missed merge through the ingress exactly once', async () => {
     const context = await setup('read');

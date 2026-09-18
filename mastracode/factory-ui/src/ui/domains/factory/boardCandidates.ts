@@ -4,7 +4,7 @@ import { hasLabel } from './boardItems';
 import { itemAppearsInStage } from './boardStages';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
-import type { WorkItem, WorkItemSource } from './services/workItems';
+import type { WorkItem, WorkItemMetadata, WorkItemSource } from './services/workItems';
 import type { BoardStageId } from './stages';
 
 /**
@@ -41,7 +41,7 @@ export interface BoardCandidate {
   meta: string;
   /** Column the candidate is offered in: everything starts in Intake (auto-triaged issues in Triage). */
   column: BoardStageId;
-  metadata: Record<string, unknown>;
+  metadata: WorkItemMetadata;
 }
 
 export function issueCandidate(issue: GithubIssue): BoardCandidate {
@@ -72,6 +72,7 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
       requestedReviewers: pr.requestedReviewers ?? [],
       headBranch: pr.headBranch,
       baseBranch: pr.baseBranch,
+      reviewGroup: pr.reviewGroup,
     },
   };
 }

@@ -1,3 +1,4 @@
+import type { ReviewGroup } from '@mastra/factory/capabilities/review-group';
 /**
  * Browser-side helpers for the Factory pages (Intake / Review).
  *
@@ -20,6 +21,7 @@ export interface GithubIssue {
 }
 
 export interface GithubPullRequest {
+  reviewGroup?: ReviewGroup | null;
   number: number;
   title: string;
   url: string;

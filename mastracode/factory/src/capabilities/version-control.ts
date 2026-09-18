@@ -4,6 +4,7 @@ import type {
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import type { IntegrationConnection } from './connection.js';
+import type { ReviewGroup } from './review-group.js';
 
 export interface InstallationInput {
   externalId: string;
@@ -27,6 +28,7 @@ export interface RepositoryAccess {
 export type PullRequestState = 'open' | 'closed';
 
 export interface PullRequest {
+  reviewGroup?: ReviewGroup | null;
   id: string;
   title: string;
   url: string;

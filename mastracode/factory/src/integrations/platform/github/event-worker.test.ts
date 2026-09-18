@@ -91,12 +91,16 @@ function createWorker(input: {
           repositoryExternalId: String(row.repositoryId),
         })),
       ),
-      listByExternalRepository: vi.fn(async (args: { installationExternalId: string; repositoryExternalId: string }) => {
-        const match = configured.find(
-          row => String(row.installationId) === args.installationExternalId && String(row.repositoryId) === args.repositoryExternalId,
-        );
-        return match ? [{ orgId: match.orgId ?? 'org-1', factoryProjectId: 'proj-1' }] : [];
-      }),
+      listByExternalRepository: vi.fn(
+        async (args: { installationExternalId: string; repositoryExternalId: string }) => {
+          const match = configured.find(
+            row =>
+              String(row.installationId) === args.installationExternalId &&
+              String(row.repositoryId) === args.repositoryExternalId,
+          );
+          return match ? [{ orgId: match.orgId ?? 'org-1', factoryProjectId: 'proj-1' }] : [];
+        },
+      ),
     },
     repositories: {
       findByExternalId: vi.fn(async (args: { orgId: string; externalId: string }) => {
@@ -474,6 +478,39 @@ describe('PlatformGithubEventWorker', () => {
       orgId: 'org-1',
     });
     await worker.stop();
+  });
+
+  it.each(['stacked', 'edited'])('forwards PR %s events to synchronize native stack membership', async action => {
+    const settings = createSettingsStorage();
+    const ingestFactoryEvent = vi.fn(async () => ({ status: 'committed' }));
+    const payload = {
+      action,
+      pull_request: {
+        number: 7,
+        stack: action === 'stacked' ? { id: 100, number: 7, position: 2, base: { ref: 'main' } } : null,
+      },
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/repositories/101/events')) {
+        if (url.searchParams.has('afterEventId')) return json({ events: [], nextCursor: null });
+        return json({
+          events: [{ id: '1001-0', deliveryId: 'delivery-stack', event: 'pull_request', payload }],
+          nextCursor: '1001-0',
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const worker = createWorker({ fetchImpl, storage: settings.storage, ingestFactoryEvent });
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await worker.stop();
+    expect(ingestFactoryEvent).toHaveBeenCalledExactlyOnceWith({
+      event: 'pull_request',
+      deliveryId: 'delivery-stack',
+      payload,
+    });
   });
 
   it('replays an event when Factory ingestion fails before advancing the cursor', async () => {
@@ -1082,9 +1119,7 @@ describe('PlatformGithubEventWorker', () => {
         if (url.pathname.endsWith('/repositories/101/events')) {
           if (url.searchParams.has('afterTimestamp')) {
             return json({
-              events: [
-                { id: '1000-0', deliveryId: 'delivery-1', event: 'issues', payload: { action: 'opened' } },
-              ],
+              events: [{ id: '1000-0', deliveryId: 'delivery-1', event: 'issues', payload: { action: 'opened' } }],
               nextCursor: '1000-0',
             });
           }

@@ -1,6 +1,7 @@
 import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
+import type { ReviewGroup } from '../../capabilities/review-group.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -25,8 +26,11 @@ import type { IntegrationContext } from '../base.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
+import { readGithubReviewGroup } from './pull-request-stack.js';
+import { findGithubPullRequestCard, syncGithubReviewGroup } from './review-group-sync.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
+import { cardBelongsToRepository, canonicalSourceKey, legacySourceKey } from './work-item-source.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
 const RULE_TIMEOUT_MS = 5_000;
@@ -132,32 +136,6 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   return undefined;
 }
 
-/**
- * Canonical source keys (`github-issue:N`, `github-pr:N`) do not identify a
- * repository, so a project linked to several repositories could bind repo A's
- * event to repo B's same-numbered card. The card's intake-stamped URL is
- * authoritative; the intake-stamped `githubRepositoryId` covers URL-less
- * cards. A card with neither signal cannot be attributed by number alone.
- */
-function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
-  const url = item.externalSource?.url;
-  if (url) {
-    const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(url);
-    if (match && match[1] === repositoryFullName) return true;
-  }
-  // A renamed repository leaves the old owner/name in the card URL, so a URL
-  // mismatch still defers to the stable intake-stamped repository id.
-  return item.metadata?.githubRepositoryId === repositoryId;
-}
-
-function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number): string {
-  return kind === 'issue' ? `github-issue:${itemNumber}` : `github-pr:${itemNumber}`;
-}
-
-function legacySourceKey(repositoryId: number, kind: 'issue' | 'pull-request', itemNumber: number): string {
-  return `github:${repositoryId}:${kind}:${itemNumber}`;
-}
-
 function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
   return `factory-pr-provenance:${repositoryId}:${pullRequestNumber}`;
 }
@@ -248,6 +226,7 @@ function pullRequestProvenance(
 }
 
 export interface GithubRulesIntegration {
+  fetchPullRequestState: GithubPullRequestFetcher;
   readonly rules: GithubEventRules;
   readonly slug?: string;
   /**
@@ -384,15 +363,61 @@ export class GithubRules {
     return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
   }
 
+  async #syncPullRequestGroup(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    installationId: number,
+    project: ExternalRepositoryProjectTarget,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const pullRequest = object(parsed.payload.pull_request);
+    const pullRequestNumber = number(pullRequest?.number);
+    if (pullRequestNumber === undefined) return { status: 'ignored' };
+    const card = await findGithubPullRequestCard(
+      this.options.storage,
+      project,
+      repositoryId,
+      repositoryName,
+      pullRequestNumber,
+    );
+    if (!card) return { status: 'ignored' };
+    const hint =
+      parsed.reviewGroup !== undefined
+        ? parsed.reviewGroup
+        : readGithubReviewGroup(
+            pullRequest?.stack,
+            string(pullRequest?.html_url) ?? `https://github.com/${repositoryName}/pull/${pullRequestNumber}`,
+          );
+    return syncGithubReviewGroup({
+      storage: this.options.storage,
+      card,
+      hint,
+      fetchState: () =>
+        this.options.github.fetchPullRequestState({
+          installationId,
+          repository: repositoryName,
+          number: pullRequestNumber,
+        }),
+    });
+  }
+
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
     const labelChange = issueLabelChange(parsed);
+    const pullRequestChange =
+      parsed.event === 'pull_request' && number(object(parsed.payload.pull_request)?.number) !== undefined;
     const repository = object(parsed.payload.repository);
     const installationId = number(object(parsed.payload.installation)?.id);
     const repositoryId = number(repository?.id);
     const repositoryName = string(repository?.full_name);
     const login = string(object(parsed.payload.sender)?.login);
-    if ((!event && !labelChange) || !installationId || !repositoryId || !repositoryName || !login) {
+    if (
+      (!event && !labelChange && !pullRequestChange) ||
+      !installationId ||
+      !repositoryId ||
+      !repositoryName ||
+      !login
+    ) {
       return { status: 'ignored' };
     }
 
@@ -403,11 +428,16 @@ export class GithubRules {
     if (projects.length === 0) return { status: 'ignored' };
     const results = [];
     for (const project of projects) {
-      results.push(
-        event
-          ? await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
-          : await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project),
-      );
+      if (event) {
+        results.push(
+          await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project),
+        );
+      } else if (labelChange) {
+        results.push(await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project));
+      }
+      if (pullRequestChange) {
+        results.push(await this.#syncPullRequestGroup(parsed, repositoryId, repositoryName, installationId, project));
+      }
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
@@ -812,6 +842,7 @@ export class GithubRules {
 }
 
 export interface ReconcilePullRequestState {
+  reviewGroup?: ReviewGroup | null;
   title: string;
   url: string;
   state: 'open' | 'closed';
@@ -976,6 +1007,7 @@ export function reconciledClosedEvent(
     // Stable per (repository, PR, outcome): the ingress dedupe makes repeat
     // reconcile cycles replay instead of re-committing decisions.
     deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:${state.merged ? 'merged' : 'closed'}`,
+    reviewGroup: state.reviewGroup,
     payload: {
       action: 'closed',
       installation: { id: repository.installationId },
@@ -1164,6 +1196,17 @@ export function createGithubPullRequestReconciler(
             }
           }
           for (const card of cards) {
+            await syncGithubReviewGroup({
+              storage: options.storage,
+              card,
+              initialState: state,
+              fetchState: () =>
+                fetchPullRequest({
+                  installationId: repository.installationId,
+                  repository: repository.fullName,
+                  number: pullRequestNumber,
+                }),
+            });
             if (state.state === 'closed') continue;
             const metadata = card.metadata ?? {};
             const statusChanged =

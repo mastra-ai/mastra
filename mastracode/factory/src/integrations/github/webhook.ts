@@ -3,6 +3,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Context } from 'hono';
+import type { ReviewGroup } from '../../capabilities/review-group.js';
 import { hasResolvedOrg, seedSessionOrg } from '../../session/org-seed.js';
 import { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
@@ -44,6 +45,7 @@ export interface GithubWebhookMetadata {
 }
 
 export interface ParsedGithubWebhook {
+  reviewGroup?: ReviewGroup | null;
   event: string;
   deliveryId: string;
   payload: Record<string, unknown>;

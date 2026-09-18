@@ -28,11 +28,11 @@ import type { ActivityBlock, ActivityEntry } from '../activity';
 import { activityBlocks, clockTime, dayHeading, groupByDay } from '../activity';
 import { auditActionLabel, auditCategory } from '../auditPresentation';
 import { boardItemPath } from '../overview';
-import { PANEL, PANEL_ROW, PANEL_ROW_LINK, TIMESTAMP } from './panel';
-import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE } from './Timeline';
 import type { FactoryMentionMember } from '../services/members';
 import { stageTone } from '../stages';
+import { PANEL, PANEL_ROW, PANEL_ROW_LINK, TIMESTAMP } from './panel';
 import { StageBadge } from './StageBadge';
+import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE } from './Timeline';
 
 /** Steps beyond this fold into a count, so a long chain cannot push the title out. */
 const CHAIN_SHOWN = 2;
@@ -67,6 +67,8 @@ const DEED_GLYPHS: Record<AuditNamespace, LucideIcon> = {
 /** The verb that makes the rail read as prose; a row off the registry falls back to its own label. */
 const DEED_PHRASES: Record<AuditAction, string> = {
   'factory.run.started': 'started a run on',
+  'factory.run.queued': 'queued a run on',
+  'factory.run.rejected': 'was blocked starting a run on',
   'factory.run.ended': 'ended a run on',
   'factory.run.approved': 'approved the run on',
   'factory.run.dismissed': 'dismissed the run on',

@@ -357,7 +357,10 @@ export class PlatformGithubEventWorker extends MastraWorker {
         const { errors, ...counts } = await this.#reconcileIssuesFactoryState(targets);
         const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
         if (counts.failed > 0) {
-          this.deps?.logger.warn('Platform GitHub issue reconcile sweep completed with failures', { ...context, errors });
+          this.deps?.logger.warn('Platform GitHub issue reconcile sweep completed with failures', {
+            ...context,
+            errors,
+          });
         } else if (counts.closed > 0) {
           this.deps?.logger.info('Platform GitHub issue reconcile replayed closed work items', context);
         } else if (counts.updated > 0) {
@@ -373,7 +376,6 @@ export class PlatformGithubEventWorker extends MastraWorker {
         });
       }
     }
-
   }
 
   /**
@@ -565,25 +567,9 @@ function normalizeSettings(value: PlatformGithubEventWorkerSettings | null): Pla
   return { version: 1, repositories: { ...value.repositories } };
 }
 
-// Events the polling worker forwards to the factory rules engine. Closures
-// let the reconciler finalize cards; `synchronize` and `review_requested` on a
-// pull request are the triggers the review board's re-review path listens for;
-// submitted reviews and pull request comments are how review feedback reaches
-// the agent that authored the branch. Direct-webhook consumers ingest every
-// parsed event; the platform path gates because the remaining events (issue
-// edits, comment edits and deletions) only interest the subscription
-// dispatcher, not the factory rules.
 function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
-  if ((event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed') {
-    return true;
-  }
-  if (event.event === 'pull_request') {
-    const action = event.payload.action;
-    // `opened` is what mints the Review card for a pull request. Without it a
-    // factory-authored PR never gets reviewed on the polling path, which is the
-    // only path a local deployment has.
-    if (action === 'opened' || action === 'synchronize' || action === 'review_requested') return true;
-  }
+  if (event.event === 'pull_request') return true;
+  if (event.event === 'issues' && event.payload.action === 'closed') return true;
   if (event.event === 'pull_request_review' && event.payload.action === 'submitted') return true;
   if (event.event === 'issue_comment' && event.payload.action === 'created') return true;
   // Default-branch pushes drive base-checkpoint rebuilds
