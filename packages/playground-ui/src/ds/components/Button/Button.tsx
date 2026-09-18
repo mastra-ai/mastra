@@ -33,7 +33,7 @@ const TEXT_MODE_ADORNMENTS = cn(
 // left icon-only buttons with no hover response at all: only their background moved.
 // Filled variants opt out because there the glyph colour carries the meaning.
 const NEUTRAL_ICON_STATE = cn(
-  '[&_svg]:text-muted-foreground not-disabled:hover:[&_svg]:text-foreground',
+  '[&_svg]:text-muted-foreground not-disabled:hover:[&_svg]:text-foreground aria-disabled:[&_svg]:text-muted-foreground',
   '[&_svg]:transition-colors [&_svg]:duration-normal [&_svg]:ease-out-custom',
   'motion-reduce:[&_svg]:transition-none',
 );
@@ -44,6 +44,7 @@ export const buttonVariants = cva(
     'new-theme inline-flex cursor-pointer items-center justify-center',
     'transition-[background-color,border-color,color] duration-normal ease-out-custom motion-reduce:transition-none',
     sharedFormElementDisabledStyle,
+    'aria-disabled:pointer-events-none aria-disabled:text-muted-foreground',
     controlFocusBorderVisible,
   ),
   {
@@ -53,27 +54,29 @@ export const buttonVariants = cva(
           'border border-border bg-foreground/10 font-medium text-foreground not-disabled:hover:bg-foreground/14 not-disabled:active:bg-foreground/18',
           NEUTRAL_ICON_STATE,
           disabledFilledSurfaceStyle,
+          'aria-disabled:border-border aria-disabled:bg-muted',
         ),
         primary: cn(
           'border border-transparent bg-foreground font-medium text-background not-disabled:hover:bg-foreground/75 not-disabled:active:bg-foreground/60',
-          'disabled:bg-foreground/45 disabled:text-background/75',
+          'disabled:bg-foreground/45 disabled:text-background/75 aria-disabled:bg-foreground/45 aria-disabled:text-background/75',
         ),
         destructive: cn(
           'border border-transparent bg-destructive font-medium text-destructive-foreground not-disabled:hover:bg-destructive/80 not-disabled:active:bg-destructive/70',
-          'disabled:bg-destructive/45 disabled:text-destructive-foreground/75',
+          'disabled:bg-destructive/45 disabled:text-destructive-foreground/75 aria-disabled:bg-destructive/45 aria-disabled:text-destructive-foreground/75',
         ),
         'destructive-ghost': cn(
           'border border-transparent bg-transparent text-destructive not-disabled:hover:bg-destructive/20 not-disabled:hover:text-destructive not-disabled:active:bg-destructive/30',
-          'disabled:bg-transparent disabled:text-destructive/50',
+          'disabled:bg-transparent disabled:text-destructive/50 aria-disabled:bg-transparent aria-disabled:text-destructive/50',
         ),
         ghost: cn(
           'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-foreground/4 not-disabled:hover:text-foreground not-disabled:active:bg-foreground/10',
-          'disabled:bg-transparent',
+          'disabled:bg-transparent aria-disabled:bg-transparent',
         ),
         outline: cn(
           'border border-foreground/30 bg-transparent text-foreground not-disabled:hover:border-foreground/45 not-disabled:hover:bg-foreground/4 not-disabled:active:bg-foreground/10',
           NEUTRAL_ICON_STATE,
           disabledOutlineSurfaceStyle,
+          'aria-disabled:border-border aria-disabled:bg-transparent',
         ),
       },
       size: {

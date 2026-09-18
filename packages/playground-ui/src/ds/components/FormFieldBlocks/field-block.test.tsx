@@ -27,6 +27,26 @@ describe('FieldBlock error wiring', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('preserves caller descriptions alongside the error message', () => {
+    render(
+      <TextFieldBlock
+        name="email"
+        label="Email"
+        aria-describedby="email-help"
+        errorMsg="Your email must include an @ symbol."
+      />,
+    );
+
+    expect(screen.getByLabelText('Email').getAttribute('aria-describedby')).toBe('email-help error-email');
+  });
+
+  it('preserves an explicit error state without a message', () => {
+    render(<TextFieldBlock name="email" label="Email" error />);
+
+    expect(screen.getByLabelText('Email').getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByLabelText('Email').getAttribute('aria-describedby')).toBeNull();
+  });
+
   it('announces without the caller wrapping it', () => {
     render(<FieldBlock.ErrorMsg name="token">Token is required.</FieldBlock.ErrorMsg>);
 
@@ -34,6 +54,12 @@ describe('FieldBlock error wiring', () => {
     expect(message.id).toBe('error-token');
     // Error state carries an icon as well as colour, so it survives colour blindness.
     expect(message.querySelector('svg')).not.toBeNull();
+  });
+
+  it('matches the generated error ID for an empty field name', () => {
+    render(<FieldBlock.ErrorMsg name="">Required.</FieldBlock.ErrorMsg>);
+
+    expect(screen.getByRole('alert').id).toBe('error-');
   });
 
   it('labels a field at the secondary text role, with required as metadata', () => {

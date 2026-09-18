@@ -15,7 +15,11 @@ describe('Button', () => {
   it('uses semantic neutral roles with distinct interaction states', () => {
     const baseClasses = buttonVariants().split(' ');
     expect(baseClasses).toEqual(
-      expect.arrayContaining(['transition-[background-color,border-color,color]', 'motion-reduce:transition-none']),
+      expect.arrayContaining([
+        'transition-[background-color,border-color,color]',
+        'motion-reduce:transition-none',
+        'aria-disabled:pointer-events-none',
+      ]),
     );
     expect(baseClasses).not.toContain('transition-all');
 
@@ -28,16 +32,31 @@ describe('Button', () => {
         'text-foreground',
         'not-disabled:hover:bg-foreground/14',
         'not-disabled:active:bg-foreground/18',
+        'aria-disabled:bg-muted',
       ],
       primary: [
         'bg-foreground',
         'text-background',
         'not-disabled:hover:bg-foreground/75',
         'not-disabled:active:bg-foreground/60',
+        'aria-disabled:bg-foreground/45',
       ],
-      destructive: ['not-disabled:hover:bg-destructive/80', 'not-disabled:active:bg-destructive/70'],
-      'destructive-ghost': ['not-disabled:hover:bg-destructive/20', 'not-disabled:active:bg-destructive/30'],
-      ghost: ['text-muted-foreground', 'not-disabled:hover:bg-foreground/4', 'not-disabled:active:bg-foreground/10'],
+      destructive: [
+        'not-disabled:hover:bg-destructive/80',
+        'not-disabled:active:bg-destructive/70',
+        'aria-disabled:bg-destructive/45',
+      ],
+      'destructive-ghost': [
+        'not-disabled:hover:bg-destructive/20',
+        'not-disabled:active:bg-destructive/30',
+        'aria-disabled:text-destructive/50',
+      ],
+      ghost: [
+        'text-muted-foreground',
+        'not-disabled:hover:bg-foreground/4',
+        'not-disabled:active:bg-foreground/10',
+        'aria-disabled:bg-transparent',
+      ],
       outline: [
         'border-foreground/30',
         'bg-transparent',
@@ -45,6 +64,7 @@ describe('Button', () => {
         'not-disabled:hover:border-foreground/45',
         'not-disabled:hover:bg-foreground/4',
         'not-disabled:active:bg-foreground/10',
+        'aria-disabled:border-border',
       ],
     } satisfies Record<ButtonVariant, string[]>;
 
@@ -278,6 +298,8 @@ describe('Button', () => {
 
       expect(link.getAttribute('href')).toBeNull();
       expect(link.getAttribute('aria-disabled')).toBe('true');
+      expect(link.className).toContain('aria-disabled:pointer-events-none');
+      expect(link.className).toContain('aria-disabled:bg-muted');
       fireEvent.click(link);
       expect(onClick).not.toHaveBeenCalled();
       expect(fireEvent.keyDown(link, { key: 'Enter' })).toBe(false);

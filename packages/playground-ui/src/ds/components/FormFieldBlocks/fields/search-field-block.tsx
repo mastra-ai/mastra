@@ -35,6 +35,7 @@ export type SearchFieldBlockProps = {
 export function SearchFieldBlock({
   name,
   helpText,
+  error,
   errorMsg,
   required = false,
   disabled = false,
@@ -108,7 +109,7 @@ export function SearchFieldBlock({
             onChange={onChange}
             size={size}
             variant={variant}
-            error={Boolean(errorMsg)}
+            error={error || Boolean(errorMsg)}
             aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
             className={cn(
               size === 'xs' && 'px-7',

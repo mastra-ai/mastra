@@ -20,7 +20,7 @@ export function FieldBlockErrorMsg({ children, name, className }: FieldBlockErro
       // error announces itself wherever it is used instead of depending on each caller
       // remembering to wrap it.
       role="alert"
-      id={name ? `error-${name}` : undefined}
+      id={name !== undefined ? `error-${name}` : undefined}
       className={cn(
         'new-theme flex items-center gap-2 text-ui-sm text-foreground',
         // Colour is never the only signal: the icon carries the error meaning, the text

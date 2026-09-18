@@ -26,6 +26,7 @@ export function TextFieldBlock({
   labelIsHidden = false,
   labelColumnWidth,
   helpText,
+  error,
   errorMsg,
   required = false,
   disabled = false,
@@ -35,8 +36,12 @@ export function TextFieldBlock({
   size = 'md',
   testId,
   className,
+  'aria-describedby': ariaDescribedBy,
   ...props
 }: TextFieldBlockProps) {
+  const describedBy =
+    [ariaDescribedBy, errorMsg ? fieldErrorId(name) : undefined].filter(Boolean).join(' ') || undefined;
+
   return (
     <FieldBlock.Layout layout={layout} labelColumnWidth={labelColumnWidth} className={className}>
       {layout === 'horizontal' ? (
@@ -64,8 +69,8 @@ export function TextFieldBlock({
           // An error is three signals, not one: the field draws its error border and
           // reports `aria-invalid`, the message carries the icon, and the two are tied
           // together so a screen reader reads the reason with the field.
-          error={Boolean(errorMsg)}
-          aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
+          error={error || Boolean(errorMsg)}
+          aria-describedby={describedBy}
           {...props}
         />
         {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
