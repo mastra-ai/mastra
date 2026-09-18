@@ -34,12 +34,11 @@ function deterministicUUID(): `${string}-${string}-${string}-${string}-${string}
   return `00000000-0000-4000-8000-${hex}`;
 }
 
-vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(deterministicUUID);
-
 // enterWith transitions the current async context into the store.
 // vitest runs beforeEach in the same async context as the test,
 // so each test (including concurrent ones) gets its own counter.
 beforeEach(() => {
+  vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(deterministicUUID);
   uuidStore.enterWith({ counter: 0 });
 });
 
