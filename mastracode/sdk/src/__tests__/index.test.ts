@@ -1261,7 +1261,7 @@ describe('createMastraCode', () => {
     const agentConfig = agentConstructorMock.mock.calls
       .map(call => call[0] as { errorProcessors?: Array<{ id?: string }>; maxProcessorRetries?: number } | undefined)
       .find(config => config?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'));
-    expect(agentConfig?.maxProcessorRetries).toBe(1024);
+    expect(agentConfig?.maxProcessorRetries).toBe(64);
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'stream-error-retry-processor',
@@ -1375,12 +1375,15 @@ describe('createMastraCode', () => {
       .map(call => call[0] as { maxProcessorRetries?: number } | undefined)
       .find(config => typeof config?.maxProcessorRetries === 'number');
     const budget = agentConfig?.maxProcessorRetries;
-    expect(budget).toBe(1024);
+    // Bounded on purpose: core counts every processor-requested retry against
+    // this one number, so an open-ended budget lets a custom or plugin
+    // processor amplify a single request indefinitely.
+    expect(budget).toBe(64);
     expect(Number.isSafeInteger(budget)).toBe(true);
 
-    // Ten transient attempts per account still leave room for far more local
-    // subscriptions than a person can realistically configure.
-    expect(10 * 64).toBeLessThan(budget!);
+    // Sized for the largest legitimate cascade: one rotation step per remaining
+    // account per pack hop (8 representative accounts x 8 packs).
+    expect(budget!).toBeGreaterThanOrEqual(8 * 8);
   });
 
   it('prepends embedding input processors without replacing mandatory built-ins', async () => {
