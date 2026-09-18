@@ -40,15 +40,15 @@ catalog:
   '@microsoft/api-extractor': ^7.57.7
   '@stryker-mutator/core': 10.0.0
   '@stryker-mutator/vitest-runner': 10.0.0
-  '@vitest/coverage-v8': 4.1.10
-  '@vitest/ui': 4.1.10
+  '@vitest/coverage-v8': 4.1.11
+  '@vitest/ui': 4.1.11
   date-fns: 4.4.0
   lucide-react: ^1.37.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^7.0.2
-  vitest: 4.1.10
-  zod: ^4.4.3
+  vitest: 4.1.11
+  zod: ^4.6.4
   tsx: ^4.23.1
   oxfmt: 0.59.0
 
@@ -123,12 +123,12 @@ packageExtensions:
       # client; if this resolves to a different vitest than the workspace,
       # a second SnapshotClient is created and every toMatchSnapshot() in
       # tests that import from that entrypoint fails. Keep these in sync.
-      vitest: 4.1.8
+      vitest: 4.1.11
   '@ai-sdk/provider-utils@3.0.28':
     dependencies:
       msw: ^2.12.11
       # See the note on the 3.0.25 entry — must track the catalog `vitest`.
-      vitest: 4.1.10
+      vitest: 4.1.11
   '@uiw/codemirror-theme-dracula@*':
     dependencies:
       '@babel/runtime': ^7.29.2
@@ -142,6 +142,12 @@ packageExtensions:
   '@huggingface/transformers@*':
     dependencies:
       onnxruntime-common: '*'
+  # weaviate-client references protobufjs on its gRPC path without declaring it;
+  # with the global virtual store there is no fallback hoist, so make the
+  # dependency explicit so @mastra/weaviate can import it at runtime.
+  'weaviate-client@*':
+    dependencies:
+      protobufjs: '*'
   # @daytonaio/sdk requires tslib at runtime without declaring it; with the
   # global virtual store there is no fallback hoist, so importing the SDK
   # fails with "Cannot find module 'tslib'".
@@ -183,30 +189,62 @@ minimumReleaseAgeExclude:
   - shell-quote@1.10.0
   # Renovate security update: tmp@0.2.7
   - tmp@0.2.7
-  # Renovate security update: axios@1.18.0
+  # Renovate security update: axios@1.20.0
   - axios@1.18.0
+  - axios@1.20.0
   # Renovate security update: body-parser@2.3.0
   - body-parser@2.3.0
   # Renovate security update: protobufjs@8.6.6 || 7.6.5
-  - protobufjs@8.6.6 || 7.6.5
+  - protobufjs@8.6.6 || 7.6.5 || 7.6.6 || 8.8.0
   # Renovate security update: tar@7.5.21
   - tar@7.5.21
   # Renovate security update: webpack-dev-server@5.2.6
   - webpack-dev-server@5.2.6
   # Renovate security update: dompurify@3.4.13
   - dompurify@3.4.13
+  - dompurify@3.4.15
   # Renovate security update: fast-xml-parser@5.10.1
   - fast-xml-parser@5.10.1
-  # Renovate security update: svgo@3.3.4
+  # Renovate security update: svgo@3.3.5
   - svgo@3.3.4
+  - svgo@3.3.5
   # Renovate security update: @hono/node-server@2.0.10 || 2.0.5
   - "@hono/node-server@2.0.10 || 2.0.5"
+  - "@hono/node-server@1.19.17"
+  # Security bump: hono 4.13.7 (query-parser / toSSG / parseBody / XSS advisories)
+  - hono@4.13.5
+  - hono@4.13.7
+  # Security bump: tinypool 2.2.0, image-size 2.0.4, mysql2 3.24.4
+  - tinypool@2.2.0
+  - image-size@2.0.4
+  - mysql2@3.24.4
+  - '@fastify/busboy@3.2.2'
+  - ws@8.21.3 || 7.5.13
+  - undici@8.10.2 || 7.29.1 || 6.28.1
+  - qs@6.16.0
+  - joi@17.13.8
+  - nanoid@3.3.19
+  - browserslist@4.28.9
+  - ip-address@10.6.0
+  - '@opentelemetry/propagator-jaeger@2.11.0'
+  - '@clerk/shared@4.31.1'
+  - '@clerk/backend@3.17.2'
+  - better-auth@1.7.4
+  - js-yaml@5.4.1
+  - js-yaml@5.4.2
+  - vitest@4.1.11
+  - '@vitest/coverage-v8@4.1.11'
+  - '@vitest/ui@4.1.11'
+  - deepmerge-ts@8.0.2
+  - zod@4.6.5
   # Renovate security update: brace-expansion@2.1.4 || 5.0.9
   - brace-expansion@2.1.4 || 5.0.9
   # Renovate security update: react-router@7.18.0
   - react-router@7.18.0
   # Renovate security update: js-yaml@5.2.2
   - js-yaml@5.2.2
+  - js-yaml@5.4.1
+  - js-yaml@5.4.2
   # Renovate security update: better-auth@1.6.23
   - better-auth@1.6.23
   # Renovate security update: valibot@1.4.2
@@ -432,6 +470,10 @@ allowBuilds:
   edgedriver: false
   esbuild: false
   geckodriver: false
+  # Blocked so every `pnpm install` doesn't download the ~100MB Inngest Go binary.
+  # Inngest tests resolve the CLI via workflows/inngest/src/__tests__/inngest-cli.ts
+  # and fail with install instructions if it's absent; install it explicitly with
+  # `pnpm --filter @mastra/inngest setup:inngest-cli` (or brew install inngest/tap/inngest).
   inngest-cli: false
   koffi: false
   msgpackr-extract: false

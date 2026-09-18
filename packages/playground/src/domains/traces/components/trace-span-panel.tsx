@@ -52,6 +52,7 @@ export interface TraceSpanPanelProps {
   isFullThreadOpen?: boolean;
   /** Enables the in-place "View full thread" swap; without it the action falls back to a link. */
   onFullThreadOpenChange?: (open: boolean) => void;
+  scorePanelSlot?: ReactNode;
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
   usage?: TraceDataPanelViewProps['usage'];
@@ -95,6 +96,7 @@ export function TraceSpanPanel({
   onHighlightSpans,
   isFullThreadOpen,
   onFullThreadOpenChange,
+  scorePanelSlot,
   scoresTabBadge,
   scoresTabSlot,
   usage,
@@ -174,8 +176,13 @@ export function TraceSpanPanel({
       }
       scoresTabBadge={scoresTabBadge}
       scoresTabSlot={scoresTabSlot}
+      // The scores tab needs the width; the span drilldown gives it up.
+      onTabChange={tab => {
+        if (tab === 'scores' && selectedSpanId) (onSpanClose ?? (() => onSpanSelect(undefined)))();
+      }}
       spanPanelSlot={
-        selectedSpanId ? (
+        scorePanelSlot ??
+        (selectedSpanId ? (
           <SpanDataPanelView
             className={spanPanelClassName}
             traceId={traceId}
@@ -191,7 +198,7 @@ export function TraceSpanPanel({
             feedbackTabBadge={spanFeedbackTabBadge}
             feedbackTabSlot={spanFeedbackTabSlot}
           />
-        ) : null
+        ) : null)
       }
     />
   );

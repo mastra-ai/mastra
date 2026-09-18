@@ -56,6 +56,21 @@ describe('collectToolGroups', () => {
     });
   });
 
+  describe('when a network approval belongs to one of several same-named calls', () => {
+    it('keeps only the pending call out of the fold', () => {
+      const context = {
+        metadata: {
+          mode: 'network',
+          requireApprovalMetadata: { view: { toolCallId: 'd', toolName: 'view', args: {} } },
+        },
+      };
+      expect(groupKeys([call('a'), call('b'), call('c'), call('d')], context)).toEqual({
+        firsts: ['a'],
+        members: ['b', 'c'],
+      });
+    });
+  });
+
   describe('when a streamed part has no call id', () => {
     it('never folds it', () => {
       const anonymous: MessageFactoryPart = { type: 'dynamic-tool', toolName: 'view' };

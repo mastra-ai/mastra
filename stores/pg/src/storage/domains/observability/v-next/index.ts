@@ -100,6 +100,7 @@ import type {
   ListScoresResponse,
   ListTracesArgs,
   ListTracesResponse,
+  GetTraceQueryValuesResponse,
   ObservabilityStorageStrategy,
   PruneOptions,
   PruneResult,
@@ -107,9 +108,12 @@ import type {
   QueryThreadsResult,
   ScoreRecord,
   TableRetentionPolicy,
+  TraceQueryObservedFieldsResult,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
@@ -159,7 +163,12 @@ export type VNextPostgresObservabilityConfig = PgDomainConfig & {
 };
 
 function wrapError(op: string, error: unknown, details?: Record<string, unknown>): never {
-  if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+  if (
+    error instanceof MastraError ||
+    error instanceof coreStorage.TraceQueryExecutionError ||
+    error instanceof coreStorage.TraceQueryResourceLimitError
+  )
+    throw error;
   throw new MastraError(
     {
       id: createStorageErrorId('PG', op, 'FAILED'),
@@ -350,8 +359,10 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   }
 
   override getFeatures() {
-    if (!deltaPollingFeatureEnabled()) return ['metrics', 'logs', 'trace-query', 'thread-query'] as const;
-    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'thread-query'] as const;
+    if (!deltaPollingFeatureEnabled()) {
+      return ['metrics', 'logs', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
+    }
+    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
   }
 
   async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {
@@ -422,6 +433,20 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     return this.#run('QUERY_TRACES', () =>
       traceQueryOps.queryTraces(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async getTraceQueryObservedFields(
+    plan: TrustedTraceQueryObservedFieldsPlan,
+  ): Promise<TraceQueryObservedFieldsResult> {
+    return this.#run('GET_TRACE_QUERY_OBSERVED_FIELDS', () =>
+      traceQueryOps.getTraceQueryObservedFields(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async getTraceQueryValues(plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
+    return this.#run('GET_TRACE_QUERY_VALUES', () =>
+      traceQueryOps.getTraceQueryValues(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
     );
   }
 

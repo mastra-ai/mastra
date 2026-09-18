@@ -33,7 +33,12 @@ export const useAgentMessages = ({ threadId, agentId, memory }: UseAgentMessages
       if (!firstPage?.hasMore) return undefined;
       return (firstPageParam as number) + 1;
     },
-    getNextPageParam: () => undefined,
+    getNextPageParam: (_lastPage, _allPages, lastPageParam) => {
+      if (typeof lastPageParam === 'number' && lastPageParam > 0) {
+        return lastPageParam - 1;
+      }
+      return undefined;
+    },
     enabled: memory && Boolean(threadId),
     staleTime: 0,
     gcTime: 0,

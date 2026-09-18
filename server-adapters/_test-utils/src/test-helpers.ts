@@ -93,6 +93,9 @@ export interface AdapterTestSuiteConfig {
     withJsonContentType: 'undefined' | 'empty-object' | 'empty-string';
   };
 
+  /** Whether the adapter decodes requestContext from POST query parameters. */
+  supportsPostQueryRequestContext?: boolean;
+
   /**
    * Setup adapter and app for testing
    * Called once before all tests
@@ -301,6 +304,8 @@ export function mockAgentMethods(agent: Agent) {
   vi.spyOn(agent, 'getModelList').mockResolvedValue([
     {
       id: 'id1',
+      enabled: true,
+      maxRetries: 3,
       modelId: 'gpt-4o',
       provider: 'openai',
       model: {
@@ -311,6 +316,8 @@ export function mockAgentMethods(agent: Agent) {
     },
     {
       id: 'id2',
+      enabled: true,
+      maxRetries: 3,
       modelId: 'gpt-4o-mini',
       provider: 'openai',
       model: {
@@ -634,8 +641,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   if (storage) {
     const observability = await storage.getStore('observability');
     if (observability) {
-      vi.spyOn(observability, 'getFeatures').mockReturnValue([...observability.getFeatures(), 'trace-query']);
+      vi.spyOn(observability, 'getFeatures').mockReturnValue([
+        ...observability.getFeatures(),
+        'trace-query',
+        'thread-query',
+      ]);
       vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
+      vi.spyOn(observability, 'queryThreads').mockResolvedValue({ threads: [], page: { next: null } });
       await observability.createSpan({
         span: {
           spanId: 'test-span',

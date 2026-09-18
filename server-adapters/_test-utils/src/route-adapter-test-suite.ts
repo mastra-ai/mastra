@@ -54,6 +54,30 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       app = setup.app;
     });
 
+    if (config.supportsPostQueryRequestContext) {
+      it('merges query requestContext into POST route handlers', async () => {
+        await setup.adapter.registerRoute(app, {
+          method: 'POST',
+          path: '/test/query-request-context',
+          responseType: 'json',
+          bodySchema: z.object({ data: z.string() }),
+          handler: async ({ requestContext }: { requestContext?: { get: (key: string) => unknown } }) => ({
+            userId: requestContext?.get('userId'),
+          }),
+        });
+
+        const response = await executeHttpRequest(app, {
+          method: 'POST',
+          path: '/api/test/query-request-context',
+          query: { requestContext: JSON.stringify({ userId: 'query-user-123' }) },
+          body: { data: 'test' },
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual({ userId: 'query-user-123' });
+      });
+    }
+
     describe.each([
       {
         version: 'v3',

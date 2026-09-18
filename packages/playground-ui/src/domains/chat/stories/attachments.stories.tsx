@@ -10,7 +10,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Studio file parts use the same mimeType/data shape live and after reload. Open image and text previews with the keyboard; Escape closes the dialog. Factory still has its own renderer.',
+          'Studio and Factory share message attachment previews. Image sources can be raw base64, data URLs, or remote URLs. Text files keep their names and readable content after reload; provider-only URIs remain file chips. Open previews with the keyboard; Escape closes the dialog.',
       },
     },
   },
@@ -31,12 +31,15 @@ const longFilenamePart = {
   filename: 'conversation-review-notes-with-a-long-filename-and-unicode-é日本語.txt',
 } satisfies FilePart & { filename: string };
 
+const imageSvg =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160" viewBox="0 0 320 160"><rect width="320" height="160" fill="#182c25"/><circle cx="160" cy="80" r="48" fill="#a3e8c0"/><path d="m136 80 16 16 32-32" fill="none" stroke="#182c25" stroke-width="8"/></svg>';
+
 export const Image: Story = {
   args: {
     part: {
       type: 'file',
       mimeType: 'image/svg+xml',
-      data: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160" viewBox="0 0 320 160"><rect width="320" height="160" fill="#182c25"/><circle cx="160" cy="80" r="48" fill="#a3e8c0"/><path d="m136 80 16 16 32-32" fill="none" stroke="#182c25" stroke-width="8"/></svg>')}`,
+      data: `data:image/svg+xml,${encodeURIComponent(imageSvg)}`,
     },
   },
 };
@@ -76,5 +79,15 @@ export const CloudStorageFile: Story = {
 export const InlineBinaryFile: Story = {
   args: {
     part: { type: 'file', mimeType: 'application/octet-stream', data: 'data:application/octet-stream;base64,AAEC' },
+  },
+};
+
+export const Base64Image: Story = {
+  args: {
+    part: {
+      type: 'file',
+      mimeType: 'image/svg+xml',
+      data: btoa(imageSvg),
+    },
   },
 };

@@ -137,7 +137,9 @@ export function useTraceUrlState(
   const { onRemoveAll } = options ?? {};
   const datePreset = useMemo<TraceDatePreset>(() => {
     const value = searchParams.get(TRACE_DATE_PRESET_PARAM);
-    return value && TRACE_DATE_PRESET_VALUES.has(value as TraceDatePreset) ? (value as TraceDatePreset) : 'last-24h';
+    return value && value !== 'all' && TRACE_DATE_PRESET_VALUES.has(value as TraceDatePreset)
+      ? (value as TraceDatePreset)
+      : 'last-7d';
   }, [searchParams]);
 
   const dateFromParamRaw = searchParams.get(TRACE_DATE_FROM_PARAM);
@@ -401,7 +403,7 @@ export function useTraceUrlState(
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
-          if (preset === 'last-24h') {
+          if (preset === 'last-7d') {
             // Default — clear all date params.
             next.delete(TRACE_DATE_PRESET_PARAM);
             next.delete(TRACE_DATE_FROM_PARAM);

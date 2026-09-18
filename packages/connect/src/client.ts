@@ -140,6 +140,39 @@ async function throwPlatformError(response: Response, context: string): Promise<
   );
 }
 
+/** Builds a locked MCP transport that can only call one Platform connection endpoint. */
+export function platformMcpTransport(client: ResolvedClient, connectionId: string) {
+  const url = new URL(`${client.baseUrl}/v2/connections/${encodeURIComponent(connectionId)}/mcp`);
+  return {
+    url,
+    allowedHosts: [url.host],
+    fetch: async (input: string | URL, init?: RequestInit): Promise<Response> => {
+      const requested = new URL(String(input));
+      if (requested.href !== url.href) {
+        throw new MastraConnectError(
+          'invalid_options',
+          `MCP transport refused an unexpected Platform URL for connection ${connectionId}.`,
+        );
+      }
+      const headers = new Headers(client.headers);
+      new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
+      // The platform token always wins over transport-provided headers. Platform
+      // strips it before Nango injects the provider credential upstream.
+      headers.set('authorization', `Bearer ${client.accessToken}`);
+      try {
+        return await client.fetch(url, { ...init, headers, redirect: 'manual' });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes(client.accessToken)) {
+          const redacted = new Error(redact(error.message, client.accessToken));
+          redacted.name = error.name;
+          throw redacted;
+        }
+        throw error;
+      }
+    },
+  };
+}
+
 // —— response schemas (mirroring the platform's http-schemas) ——
 
 export const connectionSchema = z.object({
@@ -161,12 +194,32 @@ const connectionListSchema = z.object({
   connections: z.array(connectionSchema),
 });
 
+export const integrationCatalogEntrySchema = z.object({
+  id: z.string(),
+  capabilities: z.object({
+    mcp: z.boolean().optional(),
+  }),
+});
+
+export type IntegrationCatalogEntry = z.infer<typeof integrationCatalogEntrySchema>;
+
+const integrationCatalogResponseSchema = z.object({
+  integrations: z.array(integrationCatalogEntrySchema),
+});
+
 export const credentialSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('oauth2'), accessToken: z.string(), expiresAt: z.string().nullable() }),
   z.object({ type: z.literal('api_key'), apiKey: z.string() }),
 ]);
 
 export type ConnectionCredential = z.infer<typeof credentialSchema>;
+
+export const connectionContextSchema = z.object({
+  connection_config: z.record(z.string(), z.unknown()).nullable(),
+  metadata: z.record(z.string(), z.unknown()).nullable(),
+});
+
+export type ConnectionContext = z.infer<typeof connectionContextSchema>;
 
 // —— endpoint functions ——
 
@@ -187,6 +240,33 @@ export async function listProjectConnections(client: ResolvedClient, projectId: 
   return parsed.data.connections;
 }
 
+export async function listIntegrations(client: ResolvedClient): Promise<IntegrationCatalogEntry[]> {
+  const response = await platformFetch(client, '/v2/integrations');
+  if (!response.ok) {
+    await throwPlatformError(response, 'listing integrations');
+  }
+  const parsed = integrationCatalogResponseSchema.safeParse(await parsePlatformJson(response, 'listing integrations'));
+  if (!parsed.success) {
+    throw new MastraConnectError('platform_error', 'Platform returned an unexpected integration catalog shape.');
+  }
+  return parsed.data.integrations;
+}
+
+export async function getConnectionContext(client: ResolvedClient, connectionId: string): Promise<ConnectionContext> {
+  const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}/context`);
+  if (!response.ok) {
+    await throwPlatformError(response, `retrieving context for connection ${connectionId}`);
+  }
+  const parsed = connectionContextSchema.safeParse(await response.json());
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected context shape for connection ${connectionId}.`,
+    );
+  }
+  return parsed.data;
+}
+
 export async function getCredential(client: ResolvedClient, connectionId: string): Promise<ConnectionCredential> {
   const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}/credentials`);
   if (!response.ok) {
@@ -204,12 +284,15 @@ export async function getCredential(client: ResolvedClient, connectionId: string
   return parsed.data;
 }
 
+type ProxyQueryPrimitive = string | number | boolean;
+
 export interface ProxyRequestOptions {
   method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   /** Provider-relative path (no leading slash required; dot segments are rejected client-side, absolute URLs by the platform). */
   path: string;
-  query?: Record<string, string | number | boolean | undefined>;
+  query?: Record<string, ProxyQueryPrimitive | ProxyQueryPrimitive[] | undefined>;
   headers?: Record<string, string>;
+  baseUrlOverride?: string;
   body?: unknown;
 }
 
@@ -242,11 +325,57 @@ function hasDotSegment(path: string): boolean {
   });
 }
 
+/**
+ * Client-side shape check on `baseUrlOverride` before it is forwarded to the
+ * platform proxy. The platform is the source of truth on which origins a
+ * connection may target; this rejects trivially unsafe values (non-HTTPS
+ * schemes, embedded credentials, unparseable URLs) so an authenticated
+ * platform request is never issued with a malformed override header.
+ */
+function assertValidBaseUrlOverride(baseUrlOverride: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrlOverride);
+  } catch {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid baseUrlOverride '${baseUrlOverride}': must be an absolute URL.`,
+    );
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid baseUrlOverride '${baseUrlOverride}': only https:// URLs are allowed.`,
+    );
+  }
+  if (parsed.username || parsed.password) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid baseUrlOverride '${baseUrlOverride}': embedded credentials are not allowed.`,
+    );
+  }
+}
+
+export interface ProxyResponse {
+  data: unknown;
+  status: number;
+  headers: Record<string, string>;
+}
+
 export async function proxyRequest(
   client: ResolvedClient,
   connectionId: string,
   options: ProxyRequestOptions,
 ): Promise<unknown> {
+  return (await proxyRequestWithResponse(client, connectionId, options)).data;
+}
+
+/** Preserves HTTP metadata for tools with status-dependent provider contracts. */
+export async function proxyRequestWithResponse(
+  client: ResolvedClient,
+  connectionId: string,
+  options: ProxyRequestOptions,
+): Promise<ProxyResponse> {
   const cleanPath = options.path.replace(/^\/+/, '');
   if (hasDotSegment(cleanPath)) {
     throw new MastraConnectError(
@@ -256,14 +385,30 @@ export async function proxyRequest(
   }
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(options.query ?? {})) {
-    if (value !== undefined) search.set(key, String(value));
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) search.append(key, String(item));
+    } else {
+      search.set(key, String(value));
+    }
   }
   const queryString = search.size > 0 ? `?${search.toString()}` : '';
   const url = `/v2/connections/${encodeURIComponent(connectionId)}/proxy/${cleanPath}${queryString}`;
 
   const headers: Record<string, string> = { ...options.headers };
+  if (options.baseUrlOverride !== undefined) {
+    assertValidBaseUrlOverride(options.baseUrlOverride);
+    headers['base-url-override'] = options.baseUrlOverride;
+  }
   const init: RequestInit = { method: options.method, headers };
-  if (options.body !== undefined) {
+  if (typeof options.body === 'string') {
+    // Pre-encoded payloads (multipart, form-encoded) go out unchanged with
+    // the caller's content type; only JSON encoding is applied automatically.
+    if (!Object.keys(headers).some(name => name.toLowerCase() === 'content-type')) {
+      headers['content-type'] = 'text/plain';
+    }
+    init.body = options.body;
+  } else if (options.body !== undefined) {
     headers['content-type'] = 'application/json';
     init.body = JSON.stringify(options.body);
   }
@@ -305,12 +450,13 @@ export async function proxyRequest(
     );
   }
 
-  if (response.status === 204) return null;
+  const metadata = { status: response.status, headers: Object.fromEntries(response.headers.entries()) };
+  if (response.status === 204) return { ...metadata, data: null };
   const text = await response.text();
-  if (!text) return null;
+  if (!text) return { ...metadata, data: null };
   try {
-    return JSON.parse(text);
+    return { ...metadata, data: JSON.parse(text) };
   } catch {
-    return text;
+    return { ...metadata, data: text };
   }
 }

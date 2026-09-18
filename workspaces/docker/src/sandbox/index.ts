@@ -30,9 +30,13 @@ import {
 import Docker from 'dockerode';
 import type { Container, ContainerInfo } from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
+import type { DockerTemplate } from '../template/template';
 import { DockerProcessManager } from './process-manager';
 
 const LOG_PREFIX = '[DockerSandbox]';
+
+/** A prepared template, or a resolver producing one (see `DockerSandboxOptions.template`). */
+export type DockerTemplateSpec = DockerTemplate | (() => DockerTemplate | Promise<DockerTemplate>);
 
 /**
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
@@ -133,6 +137,17 @@ export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'proces
    * @default 'node:22-slim'
    */
   image?: string;
+  /**
+   * Prepared baseline to boot from, as an alternative to `image`. The
+   * template is built (or its cached image reused) lazily on `start()`, and
+   * the container boots from the resulting image. A function form is resolved
+   * once per `start()` that creates a container, so head-pinned repo
+   * templates can re-resolve on each new sandbox.
+   *
+   * When `workingDirectory` is not set, the template's last `setWorkdir`
+   * becomes the sandbox working directory. Mutually exclusive with `image`.
+   */
+  template?: DockerTemplateSpec;
   /** Container entrypoint command. Must keep the container alive.
    * @default ['sleep', 'infinity']
    */
@@ -159,6 +174,13 @@ export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'proces
   cpuPeriod?: number;
   /** Maximum number of PIDs in the container (HostConfig.PidsLimit). */
   pidsLimit?: number;
+  /**
+   * Run an init process (tini) as PID 1 to reap zombie children (HostConfig.Init).
+   * Without this, processes orphaned by a command (e.g. after a timeout/kill) remain
+   * as zombies and keep counting against `pidsLimit`.
+   * @default true
+   */
+  init?: boolean;
   /** Mount the container root filesystem as read-only (HostConfig.ReadonlyRootfs). */
   readonlyRootfs?: boolean;
   /** Linux capabilities to drop (HostConfig.CapDrop), e.g. ['ALL']. */
@@ -257,7 +279,10 @@ export class DockerSandbox extends MastraSandbox {
 
   /** Configuration */
   private readonly _containerName: string;
-  private readonly _image: string;
+  /** Image the container boots from; rewritten by a template resolution on `start()`. */
+  private _image: string;
+  private readonly _templateSpec?: DockerTemplateSpec;
+  private readonly _workingDirectoryWasSet: boolean;
   private readonly _command: string[];
   private readonly _env: Record<string, string>;
   private readonly _volumes: Record<string, string>;
@@ -270,6 +295,7 @@ export class DockerSandbox extends MastraSandbox {
   private readonly _cpuQuota?: number;
   private readonly _cpuPeriod?: number;
   private readonly _pidsLimit?: number;
+  private readonly _init: boolean;
   private readonly _readonlyRootfs?: boolean;
   private readonly _capDrop?: string[];
   private readonly _capAdd?: string[];
@@ -303,7 +329,12 @@ export class DockerSandbox extends MastraSandbox {
 
     this.id = options.id ?? this._generateId();
     this._containerName = sanitizeContainerName(options.name ?? this.id);
+    if (options.image !== undefined && options.template !== undefined) {
+      throw new TypeError('DockerSandbox: `image` and `template` are mutually exclusive');
+    }
+    this._templateSpec = options.template;
     this._image = options.image ?? 'node:22-slim';
+    this._workingDirectoryWasSet = options.workingDirectory !== undefined || options.workingDir !== undefined;
     this._command = options.command ?? ['sleep', 'infinity'];
     this._env = options.env ?? {};
     this._volumes = options.volumes ?? {};
@@ -316,6 +347,7 @@ export class DockerSandbox extends MastraSandbox {
     this._cpuQuota = options.cpuQuota;
     this._cpuPeriod = options.cpuPeriod;
     this._pidsLimit = options.pidsLimit;
+    this._init = options.init ?? true;
     this._readonlyRootfs = options.readonlyRootfs;
     this._capDrop = options.capDrop;
     this._capAdd = options.capAdd;
@@ -395,6 +427,14 @@ export class DockerSandbox extends MastraSandbox {
         await this._container.start();
       }
 
+      // The container was created with a working directory (possibly derived
+      // from a template); keep resolving relative paths against it rather than
+      // this instance's default.
+      const reconnectedWorkingDir = info.Config?.WorkingDir;
+      if (!this._workingDirectoryWasSet && reconnectedWorkingDir) {
+        this.setWorkingDirectory(reconnectedWorkingDir);
+      }
+
       // Provide container reference to process manager
       this.processes.setContainer(this._container);
 
@@ -403,6 +443,8 @@ export class DockerSandbox extends MastraSandbox {
     }
 
     this._warnOnPrivilegedHardeningConflict(this._privileged);
+
+    await this._resolveTemplate();
 
     // Pull image if not available locally
     await this._ensureImage();
@@ -432,6 +474,7 @@ export class DockerSandbox extends MastraSandbox {
         CpuQuota: this._cpuQuota,
         CpuPeriod: this._cpuPeriod,
         PidsLimit: this._pidsLimit,
+        Init: this._init,
         ReadonlyRootfs: this._readonlyRootfs,
         CapDrop: this._capDrop,
         CapAdd: this._capAdd,
@@ -750,6 +793,29 @@ export class DockerSandbox extends MastraSandbox {
         `${LOG_PREFIX} Failed to list containers: ${error instanceof Error ? error.message : String(error)}`,
       );
       throw error;
+    }
+  }
+
+  /**
+   * Resolve the `template` option (if any) into the image to boot from,
+   * building it when no cached image exists. Runs on every `start()` that
+   * creates a container, so a resolver-form template re-resolves each time.
+   * Adopts the template's workdir unless the sandbox was given one explicitly.
+   */
+  private async _resolveTemplate(): Promise<void> {
+    if (!this._templateSpec) return;
+    const template = typeof this._templateSpec === 'function' ? await this._templateSpec() : this._templateSpec;
+    // Build on this sandbox's daemon, which may differ from the template's default.
+    const result = await template.build({ docker: this._docker });
+    if (result.status !== 'ready') {
+      throw new SandboxError(`Docker template build failed: ${result.error ?? 'unknown error'}`, 'START_FAILED', {
+        templateId: result.templateId,
+        reason: 'template_build_failed',
+      });
+    }
+    this._image = result.templateId;
+    if (!this._workingDirectoryWasSet && template.workdir !== undefined) {
+      this.setWorkingDirectory(template.workdir);
     }
   }
 

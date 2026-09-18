@@ -1,6 +1,6 @@
-import type { SpanRecord } from '@mastra/core/storage';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import type { SpanRecord } from '../types';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
 import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
@@ -85,12 +85,13 @@ export function SpanDataPanelView({
         </div>
         <ButtonsGroup className="ml-auto shrink-0 self-start">
           <DataPanel.NextPrevNav
+            variant="ghost"
             onPrevious={onPrevious}
             onNext={onNext}
             previousLabel="Previous span"
             nextLabel="Next span"
           />
-          <DataPanel.CloseButton onClick={onClose} />
+          <DataPanel.CloseButton variant="ghost" onClick={onClose} />
         </ButtonsGroup>
       </DataPanel.Header>
 

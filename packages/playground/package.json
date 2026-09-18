@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.30.0-alpha.6",
+  "version": "1.31.0-alpha.2",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -74,7 +74,7 @@
     "date-fns": "catalog:",
     "livekit-client": "^2.19.2",
     "lucide-react": "catalog:",
-    "nanoid": "^5.1.11",
+    "nanoid": "^5.1.16",
     "papaparse": "^5.5.3",
     "posthog-js": "^1.404.0",
     "prism-react-renderer": "^2.4.1",
@@ -92,7 +92,7 @@
     "superjson": "^2.2.6",
     "use-debounce": "^10.1.0",
     "zod": "^3.25.0",
-    "zod-v4": "npm:zod@^4.4.3",
+    "zod-v4": "npm:zod@^4.6.4",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

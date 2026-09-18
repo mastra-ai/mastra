@@ -1,4 +1,5 @@
 import type { ServerDetailInfo } from '@mastra/core/mcp';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
 import type { McpServerListResponse } from '../types';
@@ -211,6 +212,18 @@ describe('MCP Server Registry Client Methods', () => {
       );
     });
 
+    it('serializes request context in the query string instead of the body', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'u-42');
+      mockFetchResponse({ ok: true });
+
+      await client.getMcpServerTool(serverId, toolId).execute({ data: { foo: 'bar' }, requestContext });
+
+      const [url, init] = (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
+      expect(url).toContain(`/api/mcp/${serverId}/tools/${toolId}/execute?requestContext=`);
+      expect(JSON.parse(init.body as string)).toEqual({ data: { foo: 'bar' } });
+    });
+
     it('should POST an empty JSON object when no data is provided', async () => {
       mockFetchResponse({ ok: true });
       const tool = client.getMcpServerTool(serverId, toolId);
@@ -221,6 +234,24 @@ describe('MCP Server Registry Client Methods', () => {
       expect(init.body).toBe('{}');
       const headers = new Headers(init.headers);
       expect(headers.get('content-type')).toContain('application/json');
+    });
+
+    it('continues a suspended tool by echoing suspendPayload with resumeData', async () => {
+      mockFetchResponse({ result: { charged: 990 } });
+      const tool = client.getMcpServerTool(serverId, toolId);
+      const response = await tool.execute({
+        data: { amount: 990 },
+        resumeData: { confirmed: true },
+        suspendPayload: { phase: 'confirm', amount: 990 },
+      });
+
+      expect(response).toEqual({ result: { charged: 990 } });
+      const [, init] = (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
+      expect(JSON.parse(init.body as string)).toEqual({
+        data: { amount: 990 },
+        resumeData: { confirmed: true },
+        suspendPayload: { phase: 'confirm', amount: 990 },
+      });
     });
   });
 });

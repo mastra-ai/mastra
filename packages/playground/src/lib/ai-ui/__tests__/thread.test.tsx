@@ -716,10 +716,8 @@ describe('Thread', () => {
       if (!input) throw new Error('File picker input is missing');
       fireEvent.change(input, { target: { files } });
       await screen.findByRole('button', { name: 'Preview settings.ini' });
-      const discarded = await screen.findByRole('button', { name: 'Preview discard.txt' });
-      const chip = discarded.closest<HTMLElement>('[role="group"]');
-      if (!chip) throw new Error('Attachment actions are not grouped');
-      fireEvent.click(within(chip).getByRole('button', { name: 'Remove file' }));
+      await screen.findByRole('button', { name: 'Preview discard.txt' });
+      fireEvent.click(screen.getByRole('button', { name: 'Remove discard.txt' }));
       expect(screen.queryByRole('button', { name: 'Preview discard.txt' })).toBeNull();
       await waitFor(() => expect(screen.queryByLabelText('Public URL')).toBeNull());
       fireEvent.change(screen.getByPlaceholderText('Enter your message...'), { target: { value: 'Read both files' } });
