@@ -142,13 +142,13 @@ type AgentStreamAncestryMetadata = {
   parentAgentId?: string;
 };
 
-export type AgentDataPart = AgentStreamAncestryMetadata & {
+export type AgentDataPart = {
   type: 'data-tool-agent';
   id: string;
   data: AgentRunSnapshot;
 };
 
-export type AgentStepDataPart = AgentStreamAncestryMetadata & {
+export type AgentStepDataPart = {
   type: 'data-tool-agent-step';
   id: string;
   data: {
@@ -158,7 +158,12 @@ export type AgentStepDataPart = AgentStreamAncestryMetadata & {
   };
 };
 
-type TransformAgentResult = AgentDataPart | readonly [AgentDataPart, AgentStepDataPart];
+export type AgentDataPartWithAncestry = AgentDataPart & AgentStreamAncestryMetadata;
+export type AgentStepDataPartWithAncestry = AgentStepDataPart & AgentStreamAncestryMetadata;
+
+type TransformAgentResult =
+  | AgentDataPartWithAncestry
+  | readonly [AgentDataPartWithAncestry, AgentStepDataPartWithAncestry];
 
 // used so it's not serialized to JSON
 const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
@@ -393,6 +398,7 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
     sendSources,
     messageMetadata,
     onError,
+    includeSubAgentMetadata = false,
   }: {
     lastMessageId?: string;
     sendStart?: boolean;
@@ -401,6 +407,7 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
     sendSources?: boolean;
     messageMetadata?: (args: { part: any }) => unknown;
     onError?: (error: unknown) => string;
+    includeSubAgentMetadata?: boolean;
   },
 ) {
   let bufferedSteps = new Map<string, any>();
@@ -450,6 +457,9 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
 
       if (transformedChunk) {
         if (transformedChunk.type === 'tool-agent') {
+          if (!includeSubAgentMetadata) {
+            return;
+          }
           const { payload, ancestry } = transformedChunk;
           const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps, ancestry);
           if (agentTransformed) {
@@ -568,6 +578,7 @@ export function AgentStreamToAISDKTransformer<OUTPUT>({
   sendSources,
   messageMetadata,
   onError,
+  includeSubAgentMetadata = false,
 }: {
   lastMessageId?: string;
   sendStart?: boolean;
@@ -576,6 +587,7 @@ export function AgentStreamToAISDKTransformer<OUTPUT>({
   sendSources?: boolean;
   messageMetadata?: UIMessageStreamOptions<UIMessage>['messageMetadata'];
   onError?: UIMessageStreamOptions<UIMessage>['onError'];
+  includeSubAgentMetadata?: boolean;
 }) {
   return createAgentStreamToAISDKTransformer<OUTPUT>(convertMastraChunkToAISDKv5, {
     lastMessageId,
@@ -585,6 +597,7 @@ export function AgentStreamToAISDKTransformer<OUTPUT>({
     sendSources,
     messageMetadata,
     onError,
+    includeSubAgentMetadata,
   });
 }
 
@@ -596,6 +609,7 @@ export function AgentStreamToAISDKV6Transformer<OUTPUT>({
   sendSources,
   messageMetadata,
   onError,
+  includeSubAgentMetadata = false,
 }: {
   lastMessageId?: string;
   sendStart?: boolean;
@@ -604,6 +618,7 @@ export function AgentStreamToAISDKV6Transformer<OUTPUT>({
   sendSources?: boolean;
   messageMetadata?: UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata'];
   onError?: UIMessageStreamOptionsV6<UIMessageV6>['onError'];
+  includeSubAgentMetadata?: boolean;
 }) {
   return createAgentStreamToAISDKTransformer<OUTPUT>(convertMastraChunkToAISDKv6, {
     lastMessageId,
@@ -613,6 +628,7 @@ export function AgentStreamToAISDKV6Transformer<OUTPUT>({
     sendSources,
     messageMetadata,
     onError,
+    includeSubAgentMetadata,
   });
 }
 
@@ -809,7 +825,7 @@ function createAgentDataPart(args: {
   ancestry: AgentStreamAncestryEntry[];
   includeCompletedStepDetails: boolean;
   includeResponseMessages: boolean;
-}): AgentDataPart {
+}): AgentDataPartWithAncestry {
   const { current, runId, ancestry, includeCompletedStepDetails, includeResponseMessages } = args;
 
   return {
@@ -828,7 +844,7 @@ function createAgentStepDataPart(args: {
   stepIndex: number;
   step: Record<string, any>;
   ancestry: AgentStreamAncestryEntry[];
-}): AgentStepDataPart {
+}): AgentStepDataPartWithAncestry {
   const { runId, stepIndex, step, ancestry } = args;
 
   return {

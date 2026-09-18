@@ -174,7 +174,7 @@ describe('nested sub-agent streaming', () => {
 
     const chunks = [];
     for await (const chunk of stream.pipeThrough(
-      AgentStreamToAISDKTransformer({ sendStart: false, sendFinish: false }),
+      AgentStreamToAISDKTransformer({ sendStart: false, sendFinish: false, includeSubAgentMetadata: true }),
     )) {
       chunks.push(chunk);
     }
@@ -208,7 +208,7 @@ describe('nested sub-agent streaming', () => {
 
     const chunks = [];
     for await (const chunk of stream.pipeThrough(
-      AgentStreamToAISDKTransformer({ sendStart: false, sendFinish: false }),
+      AgentStreamToAISDKTransformer({ sendStart: false, sendFinish: false, includeSubAgentMetadata: true }),
     )) {
       chunks.push(chunk);
     }
@@ -278,7 +278,7 @@ describe('nested sub-agent streaming', () => {
 
     const chunks: any[] = [];
     for await (const chunk of stream.pipeThrough(
-      AgentStreamToAISDKTransformer({ sendStart: false, sendFinish: false }),
+      AgentStreamToAISDKTransformer({ sendStart: false, sendFinish: false, includeSubAgentMetadata: true }),
     )) {
       chunks.push(chunk);
     }
