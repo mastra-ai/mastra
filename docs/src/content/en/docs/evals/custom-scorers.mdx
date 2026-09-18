@@ -340,9 +340,9 @@ The `prepareRun` function can also be async.
 
 :::
 
-## Skipping runs that cannot be scored
+## Skipping runs that can't be scored
 
-Some scorers only apply to a subset of runs. A scorer that judges how well a refund was handled has nothing to say about a run where no refund was requested. Judging it anyway costs a model call and stores a score that does not measure what the scorer is for, which skews averages and pass rates.
+Some scorers only apply to a subset of runs. A scorer that judges how well a refund was handled has nothing to say about a run where no refund was requested. Judging it anyway costs a model call and stores a score that doesn't measure what the scorer is for, which skews averages and pass rates.
 
 Return [`notScorable()`](/reference/evals/not-scorable) from a function step to declare that the run has nothing to evaluate. The remaining steps are skipped, no score is stored, and the run is left out of the scorer's aggregates:
 
