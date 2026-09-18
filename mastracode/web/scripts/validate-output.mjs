@@ -9,11 +9,14 @@
  *   2. `.mastra/output/package.json` — the deploy manifest exists and
  *      has no `link:` / `workspace:` / `@internal/` specs (would break
  *      `npm install` at deploy time)
- *   3. Factory `SKILL.md` files — packaged alongside the Web server bundle
+ *   3. SPA `index.html` — present in `factory/` under the output dir
+ *   4. Factory `SKILL.md` files — packaged alongside the Web server bundle
  *
- * The Factory SPA is no longer copied into the deploy artifact; the runtime
- * resolves it from `node_modules/mastra/dist/factory/` via `@mastra/factory`
- * spa-static.
+ * Note: `@mastra/deployer-cloud` strips `factory/` from the artifact
+ * before it ships (edge-router serves the Factory SPA from R2 upstream
+ * of the container). This local validate step runs against the raw
+ * `mastra build` output, before that strip, so the SPA must still be
+ * present here.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,7 +63,15 @@ if (!fs.existsSync(outputPkgPath)) {
   }
 }
 
-// 3. Web Factory skills
+// 3. SPA
+const spaPath = path.join(outputDir, 'factory', 'index.html');
+if (!fs.existsSync(spaPath)) {
+  fail('SPA index.html not found in .mastra/output/factory/ — run `npm run build` first');
+} else {
+  ok(`SPA (${path.relative(outputDir, spaPath)})`);
+}
+
+// 4. Web Factory skills
 for (const skillName of ['configure-factory-rules', 'factory-plan', 'factory-review', 'factory-triage']) {
   const relativeSkillPath = path.join('factory-skills', skillName, 'SKILL.md');
   const skillPath = path.join(outputDir, relativeSkillPath);

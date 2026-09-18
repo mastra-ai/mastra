@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { getDeployer } from '@mastra/deployer';
 import {
   analyzeEntryProjectType,
@@ -12,6 +12,7 @@ import { createLogger } from '../../utils/logger';
 import { getMastraPackages } from '../../utils/mastra-packages';
 import { computeSourceHash, writeBuildManifest } from '../../utils/source-hash';
 import { BuildBundler } from './BuildBundler';
+import { buildFactoryUI } from './factory-ui-build';
 import { guardAgainstLiveDevServer, prepareWithLiveDevGuard } from './guard-live-dev-server';
 
 export async function build({
@@ -29,7 +30,7 @@ export async function build({
   force?: boolean;
   debug: boolean;
 }) {
-  const rootDir = root || process.cwd();
+  const rootDir = resolve(root || process.cwd());
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
   const logger = createLogger(debug);
@@ -47,13 +48,15 @@ export async function build({
     // instance from discovered primitives.
     const mastraEntryFile = findMastraEntryFile(mastraDir);
 
-    // Software Factory projects: the Factory SPA is resolved at runtime from
-    // `node_modules/mastra/dist/factory/` (see `@mastra/factory` spa-static),
-    // so the CLI no longer copies it into the deploy artifact. Skip project
-    // type analysis for synthetic file-routed entries (no real index.ts).
+    // For Software Factory projects, copy the prebuilt SPA bundled with the CLI
+    // into the public directory so copyPublic() can include it in the output.
+    // Skip for synthetic file-routed entries (no real index.ts).
     let projectType: string | undefined;
     if (mastraEntryFile) {
       projectType = await analyzeEntryProjectType(mastraEntryFile);
+      if (projectType === 'factory') {
+        await buildFactoryUI(mastraDir, logger);
+      }
     }
 
     // Discover fs-routed agents under agents/* and, if any exist, wrap the entry

@@ -1,6 +1,5 @@
 ---
 '@mastra/factory': patch
-'mastra': patch
 ---
 
-Software Factory projects no longer bundle the Factory SPA into the deploy artifact. `mastra build` used to copy `packages/cli/dist/factory/` into `.mastra/output/public/factory/`, adding ~4 MB to every deploy. The Factory SPA is now resolved at runtime from `node_modules/mastra/dist/factory/` (where the npm `mastra` package already ships it), so the artifact stays small and both CLI-source and GitHub-source deploys produce identical origin bundles. `mastra dev` behavior is unchanged.
+`resolveUiDistDir()` now falls back to `node_modules/mastra/dist/factory/` (resolved via `createRequire`) when the SPA isn't found in the usual locations. This lets the Factory SPA middleware mount from the published `mastra` CLI package when it's on the module path, which supports deploy targets that strip the bundled `factory/` assets from the artifact (e.g. Mastra Cloud, where edge-router serves the SPA from R2 upstream of the container).
