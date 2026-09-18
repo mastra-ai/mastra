@@ -5,6 +5,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
+import { stripInternalPromptMetadata } from '../../../agent/message-list/strip-internal-prompt-metadata';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
@@ -1656,6 +1657,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             inputMessages = requestStepResult.prompt;
             cachedResponse = requestStepResult.response;
+            // The assembled prompt carries Mastra's internal `modelOutput`
+            // provenance marker, which the processors above read. It must not
+            // reach the provider.
+            stripInternalPromptMetadata(inputMessages);
           } catch (error) {
             if (error instanceof TripWire) {
               logger?.warn('Streaming request processor tripwire triggered', {

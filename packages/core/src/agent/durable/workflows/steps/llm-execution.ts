@@ -40,6 +40,7 @@ import type { CoreTool } from '../../../../tools/types';
 import { createMastraProxy, makeCoreTool } from '../../../../utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
+import { stripInternalPromptMetadata } from '../../../message-list/strip-internal-prompt-metadata';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener } from '../../abort-transport';
@@ -757,6 +758,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 throw error;
               }
             }
+            // Mirrors the loop step: the internal `modelOutput` provenance marker
+            // that the processors above read must not reach the provider. Runs
+            // outside the runner branch so prompts with no processors are covered.
+            stripInternalPromptMetadata(inputMessages);
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution

@@ -179,4 +179,58 @@ describe('ToolCallFilter does not persist its rewrites', () => {
     expect(toolInvocationParts([stored])).toHaveLength(1);
     expect(JSON.stringify(stored)).toContain('FULL_RAW_TOOL_RESULT');
   });
+
+  it('keeps the internal modelOutput marker out of the prompt sent to the model', async () => {
+    const promptsSeen: any[] = [];
+
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+    messageList.add(rememberedMessages(), 'memory');
+    messageList.add({ id: 'msg-followup', role: 'user', content: [{ type: 'text', text: 'Summarize that' }] }, 'input');
+
+    const result = await loop({
+      methodType: 'stream',
+      runId: 'to-model-output-boundary',
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: new MastraLanguageModelV2Mock({
+            doStream: async ({ prompt }: { prompt: unknown }) => {
+              promptsSeen.push(prompt);
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'response-metadata', id: 'resp-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Here is the summary.' },
+                  { type: 'text-end', id: 'text-1' },
+                  { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+                ]),
+              };
+            },
+          }),
+        },
+      ],
+      messageList,
+      stopWhen: stepCountIs(2),
+      _internal: {
+        now: mockValues(0, 100, 500),
+        generateId: mockId({ prefix: 'id' }),
+      },
+      agentId: 'test-agent',
+      mastra,
+    });
+
+    await result.consumeStream();
+
+    const prompt = promptsSeen[0] as any[];
+    const toolResultPart = prompt
+      .flatMap((message: any) => (Array.isArray(message.content) ? message.content : []))
+      .find((part: any) => part.type === 'tool-result');
+
+    // The toModelOutput-mapped value still reaches the provider as the tool result...
+    expect(toolResultPart?.output).toEqual({ type: 'text', value: 'compact result' });
+    // ...but the internal provenance marker that processors read does not.
+    expect(toolResultPart?.providerOptions?.mastra ?? {}).not.toHaveProperty('modelOutput');
+    expect(JSON.stringify(prompt)).not.toContain('modelOutput');
+  });
 });
