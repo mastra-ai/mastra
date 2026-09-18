@@ -33,10 +33,22 @@ export const EAGER_TOOL_ABORT_SIGNAL = Symbol('eager-tool-abort-signal');
 export const EAGER_TOOL_BAILOUT = Symbol('eager-tool-bailout');
 
 /** Set by `toolCallStep` when an eagerly dispatched call bails out. */
-export type EagerToolBailout = { reason?: string };
+export type EagerToolBailout = {
+  reason?: string;
+  /**
+   * Set once the eager attempt has run the tool's `onInputAvailable`. The hook is
+   * announced before `execute`, so a bailout that happens inside the tool body has
+   * already fired it; the foreach re-runs the same `execute` function and would
+   * otherwise announce the same `toolCallId` a second time.
+   */
+  inputAvailableCalled?: boolean;
+};
 
-/** Brands errors raised before the tool's own `execute` ever ran. */
+/** Brands errors whose eager attempt produced no adoptable result. */
 const EAGER_NOT_EXECUTED = Symbol('eager-tool-not-executed');
+
+/** Brands a bailout whose eager attempt already announced `onInputAvailable`. */
+const EAGER_INPUT_ANNOUNCED = Symbol('eager-tool-input-announced');
 
 type RunningExecution = {
   controller: AbortController;
@@ -360,23 +372,46 @@ export class EagerToolExecutionCoordinator {
 }
 
 /**
- * Raised when an eager attempt ends without the tool's `execute` ever running, so the
+ * Raised when an eager attempt ends without producing an adoptable result, so the
  * normal foreach path must handle the call instead of surfacing the failure. That
- * happens when the attempt is cancelled while still queued, and defensively if an
- * eager call ever reaches a suspend/bail it should have been excluded from.
+ * happens when the attempt is cancelled while still queued, and when an eager call
+ * reaches a suspend/bail it should have been excluded from. In the second case the
+ * tool's body has already started; only its *result* is discarded.
  */
 export class EagerToolExecutionNotRun extends Error {
   readonly [EAGER_NOT_EXECUTED] = true;
+  readonly [EAGER_INPUT_ANNOUNCED]: boolean;
 
-  constructor(reason: string) {
+  constructor(reason: string, options?: { inputAvailableCalled?: boolean }) {
     super(`Eager tool execution did not run: ${reason}`);
     this.name = 'EagerToolExecutionNotRun';
+    this[EAGER_INPUT_ANNOUNCED] = options?.inputAvailableCalled === true;
   }
 }
 
 /**
- * True when an eager execution failed without the tool ever running, meaning the
- * normal foreach path must handle the call instead of surfacing the failure.
+ * True when the eager attempt behind this rejection already ran the tool's
+ * `onInputAvailable`. The foreach re-runs `execute` from the top, so it has to skip
+ * the announcement it already produced: one call per adoption, the same count the
+ * call gets without eager dispatch. (An attempt abandoned in flight is a separate
+ * matter: it is never adopted, so the replacement attempt announces again.)
+ */
+export function eagerToolCallAlreadyAnnouncedInput(error: unknown): boolean {
+  // Walk `cause` for the same reason `eagerToolCallDidNotExecute` does, with the same
+  // depth bound: a runtime suspension raises this from inside the tool body, where
+  // CoreToolBuilder wraps it in a TOOL_EXECUTION_FAILED MastraError.
+  let current: unknown = error;
+  for (let depth = 0; depth < 10 && typeof current === 'object' && current !== null; depth++) {
+    if (EAGER_INPUT_ANNOUNCED in current) return Boolean((current as Record<symbol, unknown>)[EAGER_INPUT_ANNOUNCED]);
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/**
+ * True when an eager execution ended without an adoptable result, meaning the normal
+ * foreach path must handle the call instead of surfacing the failure. The tool body
+ * may have started (a runtime suspension gets here); only its result is discarded.
  */
 export function eagerToolCallDidNotExecute(error: unknown): boolean {
   // Walk `cause`: a tool that suspends at runtime raises this from inside its own

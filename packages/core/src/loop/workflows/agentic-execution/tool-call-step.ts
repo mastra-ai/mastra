@@ -56,6 +56,7 @@ import {
   EAGER_TOOL_ABORT_SIGNAL,
   EAGER_TOOL_BAILOUT,
   EAGER_TOOL_EXECUTION_MARKER,
+  eagerToolCallAlreadyAnnouncedInput,
   EagerToolExecutionNotRun,
   eagerToolCallDidNotExecute,
 } from './eager-tool-execution';
@@ -126,6 +127,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       ];
       // Adopt an execution the LLM step started eagerly for this call, if any. The
       // eager invocation itself carries the marker so it never adopts itself.
+      // Set when the eager attempt this invocation replaces already ran the tool's
+      // `onInputAvailable`, so the hook stays at one call per adoption.
+      let inputAlreadyAnnouncedEagerly = false;
       if (!isEagerExecution) {
         // Take rather than read: adoption is exactly-once, so a later iteration that
         // reuses this toolCallId executes again instead of replaying a stale result.
@@ -136,9 +140,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           try {
             return (await eagerExecution) as any;
           } catch (error) {
-            // The eager attempt failed before the tool itself ran (cancelled while
-            // queued, or it turned out to need suspension). Run it normally instead.
+            // The eager attempt produced nothing adoptable: it was cancelled while
+            // still queued, or it turned out to need suspension. Run it normally
+            // instead. In the suspension case the body did start, so the hook it
+            // already announced must not be announced a second time.
             if (!eagerToolCallDidNotExecute(error)) throw error;
+            inputAlreadyAnnouncedEagerly = eagerToolCallAlreadyAnnouncedInput(error);
           }
         }
       }
@@ -423,7 +430,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
       }
 
-      if (tool && 'onInputAvailable' in tool) {
+      if (tool && 'onInputAvailable' in tool && !inputAlreadyAnnouncedEagerly) {
         try {
           await tool?.onInputAvailable?.({
             toolCallId: inputData.toolCallId,
@@ -434,6 +441,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         } catch (error) {
           logger?.error('Error calling onInputAvailable', error);
         }
+        // Announced before `execute`, so a bailout raised from inside the tool body has
+        // already fired the hook. Record it so the foreach's re-run does not fire it
+        // again for the same call.
+        if (eagerBailout) eagerBailout.inputAvailableCalled = true;
       }
 
       if (!tool.execute) {
@@ -701,7 +712,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // return normally and have that return adopted as the call's result.
               const reason = `"${inputData.toolName}" requested suspension`;
               if (eagerBailout) eagerBailout.reason = reason;
-              throw new EagerToolExecutionNotRun(reason);
+              throw new EagerToolExecutionNotRun(reason, {
+                inputAvailableCalled: eagerBailout?.inputAvailableCalled,
+              });
             }
             if (options?.requireToolApproval) {
               const innerApproval =
@@ -1470,7 +1483,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // before it is published: `onOutput` is a side effect the foreach will produce
         // again when it runs the call for real.
         if (eagerBailout?.reason) {
-          throw new EagerToolExecutionNotRun(eagerBailout.reason);
+          throw new EagerToolExecutionNotRun(eagerBailout.reason, {
+            inputAvailableCalled: eagerBailout.inputAvailableCalled,
+          });
         }
 
         const result = ensureSerializable(rawResult);
