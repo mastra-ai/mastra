@@ -710,6 +710,9 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/system-environment-variables',
       label: 'System environment variables',
+      customProps: {
+        tags: ['new'],
+      },
     },
     {
       type: 'doc',
