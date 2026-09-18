@@ -37,11 +37,13 @@ export function Crumb({
   isLoading,
   children,
   separator,
+  to,
   ...props
 }: CrumbProps) {
   const contextSeparator = useBreadcrumbSeparator();
   const Root = as || 'span';
   const separatorIcon = separator ?? contextSeparator;
+  const destinationProps = as === 'a' ? { href: to } : { to };
 
   return (
     <>
@@ -67,6 +69,7 @@ export function Crumb({
               : 'max-w-48 cursor-pointer text-muted-foreground group-hover:text-foreground',
             className,
           )}
+          {...destinationProps}
           {...props}
         >
           {icon && (

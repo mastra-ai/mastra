@@ -41,6 +41,19 @@ describe('BreadcrumbBar', () => {
       expect(markup).toContain('Research agent');
     });
 
+    it('maps a native anchor destination to href', () => {
+      const markup = renderToStaticMarkup(
+        <Breadcrumb label="Navigation">
+          <Crumb as="a" to="/agents">
+            Agents
+          </Crumb>
+        </Breadcrumb>,
+      );
+
+      expect(markup).toContain('href="/agents"');
+      expect(markup).not.toContain('to="/agents"');
+    });
+
     it('provides each crumb with its pathname and leaf state', () => {
       const markup = renderToStaticMarkup(
         <Breadcrumb.Bar>
