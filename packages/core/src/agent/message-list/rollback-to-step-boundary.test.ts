@@ -254,6 +254,20 @@ describe('MessageList#rollbackToStepBoundary', () => {
     expect(list.get.all.db().find(m => m.id === id)).toBeUndefined();
   });
 
+  it('removes the message whole when the survivor is preceded by same-length rejected text', () => {
+    // 'approved' and 'rejected' are both eight characters, so a checkpoint that recorded lengths
+    // would accept the twin and keep the rejected text. The checkpoint records the strings.
+    const { list, id } = listWith(assistant([text('approved', 'msg_1')]));
+    const boundary = openBoundary(list);
+    partsOf(list, id)!.push(text('rejected', 'msg_2'), { type: 'step-start', createdAt: boundary!.createdAt });
+    const message = list.get.all.db().find(m => m.id === id)!;
+    const cloned = message.content.parts!.map(part => structuredClone(part));
+    message.content.parts = cloned.slice(2);
+
+    expect(list.rollbackToStepBoundary(id, boundary)).toBe(true);
+    expect(list.get.all.db().find(m => m.id === id)).toBeUndefined();
+  });
+
   it('will not carry a boundary across to a different message that matches by timestamp', () => {
     const { list, id } = listWith(assistant([text('accepted', 'msg_1')]));
     const boundary = openBoundary(list);
