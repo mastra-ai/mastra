@@ -21,7 +21,12 @@ function message(
 
 function setup(storedMessages: MastraDBMessage[]) {
   const listMessages = vi.fn(async () => ({ messages: storedMessages }));
-  const processor = new MemoryInputFilter({ storage: { listMessages } as unknown as MemoryStorage });
+  const listMessagesById = vi.fn(async ({ messageIds }: { messageIds: string[] }) => ({
+    messages: storedMessages.filter(message => messageIds.includes(message.id)),
+  }));
+  const processor = new MemoryInputFilter({
+    storage: { listMessages, listMessagesById } as unknown as MemoryStorage,
+  });
   const messageList = new MessageList({ threadId: 'thread', resourceId: 'resource' });
   return { listMessages, messageList, processor };
 }
@@ -77,12 +82,27 @@ describe('MemoryInputFilter', () => {
   });
 
   it('clears assistant echoes without new tool results for an existing thread', async () => {
-    const { messageList, processor } = setup([message('stored', 'assistant', [{ type: 'text', text: 'stored' }])]);
-    messageList.add(message('assistant', 'assistant', [{ type: 'text', text: 'echo' }]), 'input');
+    const { messageList, processor } = setup([
+      message('stored', 'assistant', [{ type: 'text', text: 'stored' }]),
+      message('a1', 'assistant', [{ type: 'text', text: 'echo' }]),
+    ]);
+    messageList.add(message('a1', 'assistant', [{ type: 'text', text: 'echo' }]), 'input');
 
     await process(processor, messageList);
 
     expect(messageList.get.input.db()).toEqual([]);
+  });
+
+  it('preserves a result-less assistant message that is not in storage', async () => {
+    const { messageList, processor } = setup([message('stored', 'assistant', [{ type: 'text', text: 'stored' }])]);
+    messageList.add(
+      message('routing', 'assistant', [{ type: 'text', text: 'You will be calling just *one* primitive at a time' }]),
+      'input',
+    );
+
+    await process(processor, messageList);
+
+    expect(messageList.get.input.db().map(item => item.id)).toEqual(['routing']);
   });
 
   it('preserves full input for an empty thread while stripping assistant provider metadata', async () => {
