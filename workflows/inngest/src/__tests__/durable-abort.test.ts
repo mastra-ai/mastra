@@ -19,7 +19,15 @@ const agentId = 'durable-abort-agent';
 const dbUrl = pathToFileURL(path.join(tmpdir(), `mastra-durable-abort-${Date.now()}.db`)).href;
 const workerPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'abort-worker.ts');
 
-let worker: ChildProcess | undefined;
+interface WorkerHandle {
+  proc: ChildProcess;
+  /** Rejects if the worker exits or errors after readiness. Never resolves. */
+  exited: Promise<never>;
+  /** Call before intentional shutdown so SIGTERM in afterAll isn't a failure. */
+  disarm(): void;
+}
+
+let workerHandle: WorkerHandle | undefined;
 let devServer: ChildProcess | null = null;
 
 async function terminateWorker(proc: ChildProcess | undefined): Promise<void> {
@@ -36,44 +44,64 @@ async function terminateWorker(proc: ChildProcess | undefined): Promise<void> {
   }
 }
 
-function startWorker(): Promise<ChildProcess> {
+function startWorker(): Promise<WorkerHandle> {
   return new Promise((resolve, reject) => {
     const proc = spawn('npx', ['tsx', workerPath, dbUrl, agentId, String(INNGEST_PORT)], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, INNGEST_DEV: '1', INNGEST_BASE_URL: `http://localhost:${INNGEST_PORT}` },
     });
-    let settled = false;
+    let ready = false;
+    let disarmed = false;
+    let rejectExited!: (error: Error) => void;
+    const exited = new Promise<never>((_, rejectExit) => {
+      rejectExited = rejectExit;
+    });
+    // A pre-readiness crash is already reported via the readiness rejection;
+    // avoid an unhandled-rejection warning when nothing races `exited` yet.
+    exited.catch(() => {});
     const fail = (error: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      void terminateWorker(proc).then(() => reject(error), reject);
+      if (disarmed) return;
+      if (!ready) {
+        clearTimeout(timer);
+        void terminateWorker(proc).then(() => reject(error), reject);
+      }
+      // Idempotent: a settled promise ignores later rejections.
+      rejectExited(error);
     };
     const onData = (buffer: Buffer) => {
-      if (!settled && buffer.toString().includes('ABORT_WORKER_READY')) {
-        settled = true;
+      if (!ready && buffer.toString().includes('ABORT_WORKER_READY')) {
+        ready = true;
         clearTimeout(timer);
-        resolve(proc);
+        resolve({
+          proc,
+          exited,
+          disarm: () => {
+            disarmed = true;
+          },
+        });
       }
     };
     const timer = setTimeout(() => fail(new Error('abort worker did not become ready')), 90_000);
     proc.stdout?.on('data', onData);
     proc.stderr?.on('data', onData);
     proc.once('error', error => fail(error));
-    proc.once('exit', code => fail(new Error(`abort worker exited early with code ${code}`)));
+    proc.once('exit', (code, signal) =>
+      fail(new Error(`abort worker exited unexpectedly (code ${code}, signal ${signal})`)),
+    );
   });
 }
 
 async function stopWorker(): Promise<void> {
-  const proc = worker;
-  worker = undefined;
-  await terminateWorker(proc);
+  const handle = workerHandle;
+  workerHandle = undefined;
+  handle?.disarm();
+  await terminateWorker(handle?.proc);
 }
 
 describe('durable agent abort on a connect worker', () => {
   beforeAll(async () => {
     devServer = await startConnectInngestDevServer();
-    worker = await startWorker();
+    workerHandle = await startWorker();
   });
 
   afterAll(async () => {
@@ -97,21 +125,26 @@ describe('durable agent abort on a connect worker', () => {
     });
 
     let aborted = false;
-    try {
-      for await (const chunk of result.output.fullStream as AsyncIterable<{ type: string }>) {
-        if (!aborted && chunk.type === 'text-delta') {
-          aborted = true;
-          // Await dispatch: the run executes on the worker process, so only the
-          // pubsub control message can actually stop it — the local
-          // AbortController flipped by abort() reaches nothing here.
-          await result.abort();
+    const consume = async () => {
+      try {
+        for await (const chunk of result.output.fullStream as AsyncIterable<{ type: string }>) {
+          if (!aborted && chunk.type === 'text-delta') {
+            aborted = true;
+            // Await dispatch: the run executes on the worker process, so only the
+            // pubsub control message can actually stop it — the local
+            // AbortController flipped by abort() reaches nothing here.
+            await result.abort();
+          }
         }
+      } catch {
+        // The ABORT bridge path may error the stream after firing onAbort.
+      } finally {
+        result.cleanup();
       }
-    } catch {
-      // The ABORT bridge path may error the stream after firing onAbort.
-    } finally {
-      result.cleanup();
-    }
+    };
+    // Fail fast if the worker dies mid-test instead of waiting for the vitest
+    // timeout: `exited` rejects on any post-readiness exit/error.
+    await Promise.race([consume(), workerHandle!.exited]);
 
     expect(aborted).toBe(true);
     // When the control topic is dropped (#22543), the worker never receives the
@@ -121,5 +154,14 @@ describe('durable agent abort on a connect worker', () => {
     expect(abortPayload).toBeDefined();
     expect(finishReason).toBe('abort');
     await expect(result.output.finishReason).resolves.toBe('abort');
+  });
+
+  it('fails fast when the worker dies after readiness', async () => {
+    const handle = await startWorker();
+    // No disarm — any post-readiness exit must reject `exited`. SIGTERM (unlike
+    // SIGKILL) is forwarded by the npx wrapper to the tsx child, so the worker
+    // process tree actually dies instead of leaving an orphan behind.
+    handle.proc.kill('SIGTERM');
+    await expect(handle.exited).rejects.toThrow(/exited unexpectedly/);
   });
 });
