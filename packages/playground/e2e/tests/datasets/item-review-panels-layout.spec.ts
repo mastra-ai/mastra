@@ -72,7 +72,7 @@ test.describe('Item and review panel layout', () => {
     test('allows cancelling deletion above the item drawer', async ({ page }) => {
       await page.goto('/datasets/ds-1/items/item-a');
       const panel = page.getByRole('dialog', { name: 'Dataset item item-a' });
-      await panel.getByRole('button', { name: 'Actions menu' }).click();
+      await panel.getByRole('button', { name: 'Open actions menu' }).click();
       await page.getByRole('menuitem', { name: 'Delete Item' }).click();
       const confirmation = page.getByRole('alertdialog', { name: 'Delete Item' });
       await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -110,7 +110,7 @@ test.describe('Item and review panel layout', () => {
       const contentScrollTop = await scrollCardContent(page, panel);
       await expect.poll(contentScrollTop).toBeGreaterThan(0);
       expect(await panel.evaluate(element => element.scrollTop)).toBe(0);
-      await panel.getByRole('button', { name: 'Next item', exact: true }).click();
+      await panel.getByRole('button', { name: 'Go to next item', exact: true }).click();
       await expect(page.getByRole('dialog', { name: 'Dataset item item-b' })).toBeVisible();
     });
   });
@@ -150,7 +150,7 @@ test.describe('Item and review panel layout', () => {
       await page.goto('/experiments/exp-1/items/item-1');
       const panel = page.getByRole('dialog', { name: 'Experiment item item-1' });
       await expect(panel.getByText('first question', { exact: false })).toBeVisible();
-      await panel.getByRole('button', { name: 'Trace', exact: true }).click();
+      await panel.getByRole('button', { name: 'See trace', exact: true }).click();
       const trace = page.getByRole('dialog', { name: /^Trace / });
       await expect(trace).toBeVisible();
       await trace.getByText('Experiment tool call', { exact: true }).click();

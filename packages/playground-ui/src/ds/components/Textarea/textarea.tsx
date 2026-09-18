@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 const textareaVariants = cva(
   cn(
     // Base styles with enhanced transitions
-    'flex w-full border bg-transparent text-neutral6',
+    'flex w-full border bg-transparent',
     'transition-all duration-normal ease-out-custom',
     // Better placeholder styling
     'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
@@ -27,7 +27,7 @@ const textareaVariants = cva(
         default: cn(inputSurfaceAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
         filled: cn(inputSurfaceAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
         outline: cn(inputOutlineAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
-        unstyled: unstyledFormElementStyle,
+        unstyled: cn(unstyledFormElementStyle, 'text-neutral6'),
       },
       // Text tokens mirror the Input size scale (xs→ui-xs, sm→ui-sm, md→ui-smd, lg→ui-md)
       // so a Textarea reads at the same size as a sibling Input.

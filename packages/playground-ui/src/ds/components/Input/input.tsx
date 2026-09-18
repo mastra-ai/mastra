@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
   cn(
-    'flex w-full border bg-transparent text-neutral6',
+    'flex w-full border bg-transparent',
     'transition-all duration-normal ease-out-custom',
     'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70',
@@ -34,7 +34,7 @@ const inputVariants = cva(
         default: cn(inputSurfaceAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
         filled: cn(inputSurfaceAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
         outline: cn(inputOutlineAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
-        unstyled: unstyledFormElementStyle,
+        unstyled: cn(unstyledFormElementStyle, 'text-neutral6'),
       },
       size: {
         xs: cn(controlSizeClasses.xs, 'px-[.75em]'),

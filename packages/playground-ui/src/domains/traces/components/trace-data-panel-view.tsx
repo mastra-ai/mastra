@@ -222,7 +222,7 @@ export function TraceDataPanelView({
     <DropdownMenu>
       <DropdownMenu.Trigger
         render={
-          <Button size="sm" variant="ghost" tooltip="Trace actions" aria-label="Trace actions">
+          <Button size="sm" variant="ghost" tooltip="Open trace actions" aria-label="Open trace actions">
             <MoreHorizontalIcon />
           </Button>
         }
@@ -273,6 +273,7 @@ export function TraceDataPanelView({
               </>
             ) : (
               <>
+                <DataPanel.CloseButton onClick={onClose} />
                 <DataPanel.HeaderContent>
                   <DataPanel.Heading>
                     Trace
@@ -299,11 +300,10 @@ export function TraceDataPanelView({
                     <DataPanel.NextPrevNav
                       onPrevious={onPrevious}
                       onNext={onNext}
-                      previousLabel="Previous trace"
-                      nextLabel="Next trace"
+                      previousLabel="Go to previous trace"
+                      nextLabel="Go to next trace"
                     />
                   )}
-                  <DataPanel.CloseButton onClick={onClose} />
                 </DataPanel.HeaderActions>
               </>
             )}

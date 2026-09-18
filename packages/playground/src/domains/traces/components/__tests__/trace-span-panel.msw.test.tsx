@@ -255,14 +255,14 @@ describe('TraceSpanPanel', () => {
     expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByLabelText('Next span'));
+    fireEvent.click(screen.getByLabelText('Go to next span'));
     expect(await screen.findByRole('heading', { name: /span-child-2/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByLabelText('Previous span'));
+    fireEvent.click(screen.getByLabelText('Go to previous span'));
     expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
 
-    fireEvent.click(screen.getByLabelText('Previous span'));
+    fireEvent.click(screen.getByLabelText('Go to previous span'));
     expect(await screen.findByRole('heading', { name: /span-root/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
