@@ -3647,9 +3647,10 @@ export class AgentThreadStreamRuntime {
       throw new Error('cancelQueuedMessages requires exactly one of signalIds or queueOwnerId');
     }
     if (hasSignalIds) {
-      const result = this.#cancelPendingSignals(state, key, new Set(target.signalIds));
+      const signalIds = new Set(target.signalIds);
+      const result = this.#cancelPendingSignals(state, key, signalIds);
+      this.#publish(pubsub, key, { type: 'signals-cancelled', signalIds: [...signalIds] });
       if (result.cancelledSignalIds.length) {
-        this.#publish(pubsub, key, { type: 'signals-cancelled', signalIds: [...result.cancelledSignalIds] });
         this.#notifyThreadEvents(state);
       }
       return result;

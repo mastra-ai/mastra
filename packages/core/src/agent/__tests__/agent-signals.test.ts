@@ -3193,7 +3193,9 @@ describe('Agent signals', () => {
         expect(follower.cancelQueuedMessages(agent, { ...scope, signalIds: [signal.signal.id] }, pubsub)).toEqual({
           cancelledSignalIds: [],
         });
-        expect(pubsub.publishedData.filter(data => data.type === 'signals-cancelled')).toEqual([]);
+        expect(pubsub.publishedData.filter(data => data.type === 'signals-cancelled')).toEqual([
+          { type: 'signals-cancelled', signalIds: [signal.signal.id] },
+        ]);
       } finally {
         observer?.unsubscribe();
         releaseFirst();
@@ -3629,9 +3631,13 @@ describe('Agent signals', () => {
       }
     });
 
-    it.each(['connected', 'absent', 'disconnected'] as const)(
-      'propagates locally cancelled IDs with owner observer %s without cancelling survivors',
-      async observer => {
+    it.each(
+      (['connected', 'absent', 'disconnected'] as const).flatMap(observer =>
+        [false, true].map(localCopy => ({ observer, localCopy })),
+      ),
+    )(
+      'propagates requested IDs with owner observer $observer and local copy $localCopy without cancelling survivors',
+      async ({ observer, localCopy }) => {
         const scope = { resourceId: 'propagate-user', threadId: 'propagate-thread' };
         const pubsub = new ControlledLeasePubSub();
         const followerRuntime = new AgentThreadStreamRuntime();
@@ -3653,42 +3659,49 @@ describe('Agent signals', () => {
           await vi.waitFor(() => expect(getStreamCount()).toBe(1));
           await pubsub.flush();
           await vi.waitFor(() => expect(follower.activeRunId()).toBe(first.runId));
-          const removed = followerRuntime.queueMessage(agent, 'cancelled remote input', scope, pubsub);
+          const removed = localCopy
+            ? followerRuntime.queueMessage(agent, 'cancelled remote input', scope, pubsub)
+            : agent.sendSignal({ type: 'user-message', contents: 'cancelled remote input' }, scope);
           await removed.accepted;
           // Model a pending copy routed to the execution owner, not an observer-only history entry.
-          await pubsub.publish(
-            `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`,
-            {
-              type: 'signal-enqueued',
-              data: {
+          if (localCopy)
+            await pubsub.publish(
+              `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`,
+              {
                 type: 'signal-enqueued',
-                runId: first.runId,
-                signal: removed.signal.toDataPart().data,
-                sourceId: 'follower',
+                data: {
+                  type: 'signal-enqueued',
+                  runId: first.runId,
+                  signal: removed.signal.toDataPart().data,
+                  sourceId: 'follower',
+                },
               },
-            },
-          );
+            );
+          const ownerOnly = agent.queueMessage('cancelled owner-only input', scope);
+          await ownerOnly.accepted;
           const survivor = agent.queueMessage('surviving input', scope);
           await survivor.accepted;
           await pubsub.flush();
           await nextTick();
           if (observer === 'disconnected') owner?.unsubscribe();
-          // The idle survivor exists only on the owner, so it must not appear in the local result or publication.
+          // Requested remote-only IDs are published but never included in the local result.
           expect(
             followerRuntime.cancelQueuedMessages(
               agent,
-              { ...scope, signalIds: [removed.signal.id, removed.signal.id, survivor.signal.id, 'missing'] },
+              { ...scope, signalIds: [removed.signal.id, removed.signal.id, ownerOnly.signal.id, 'missing'] },
               pubsub,
             ),
-          ).toEqual({ cancelledSignalIds: [removed.signal.id] });
+          ).toEqual({ cancelledSignalIds: localCopy ? [removed.signal.id] : [] });
           await pubsub.flush();
           await nextTick();
           expect(pubsub.publishedData.filter(data => data.type === 'signals-cancelled')).toEqual([
-            { type: 'signals-cancelled', signalIds: [removed.signal.id] },
+            { type: 'signals-cancelled', signalIds: [removed.signal.id, ownerOnly.signal.id, 'missing'] },
           ]);
-          expect(agent.cancelQueuedMessages({ ...scope, signalIds: [removed.signal.id] })).toEqual({
-            cancelledSignalIds: [],
-          });
+          expect(agent.cancelQueuedMessages({ ...scope, signalIds: [removed.signal.id, ownerOnly.signal.id] })).toEqual(
+            {
+              cancelledSignalIds: [],
+            },
+          );
           releaseFirst();
           await first.text;
           await vi.waitFor(() => expect(getStreamCount()).toBe(2));
@@ -3696,6 +3709,7 @@ describe('Agent signals', () => {
           const prompt = JSON.stringify(model.doStreamCalls[1]?.prompt);
           expect(prompt).toContain('surviving input');
           expect(prompt).not.toContain('cancelled remote input');
+          expect(prompt).not.toContain('cancelled owner-only input');
           expect(getStreamCount()).toBe(2);
         } finally {
           releaseFirst();
@@ -3770,7 +3784,7 @@ describe('Agent signals', () => {
               pubsub,
             ),
           ).toEqual({ cancelledSignalIds: [] });
-          expect(pubsub.publishedData.filter(data => data.type === 'signals-cancelled')).toHaveLength(2);
+          expect(pubsub.publishedData.filter(data => data.type === 'signals-cancelled')).toHaveLength(3);
           expect(runtime.cancelQueuedMessages(agent, { ...scope, signalIds: [marker.id] }, pubsub)).toEqual({
             cancelledSignalIds: [marker.id],
           });
@@ -4019,11 +4033,11 @@ describe('Agent signals', () => {
             sourceId: 'marker-source',
           },
         });
-        await vi.waitFor(() =>
-          expect(owner.cancelQueuedMessages(agent, { ...scope, signalIds: [marker.id] }, pubsub)).toEqual({
-            cancelledSignalIds: [marker.id],
-          }),
-        );
+        await pubsub.flush();
+        await nextTick();
+        expect(owner.cancelQueuedMessages(agent, { ...scope, signalIds: [marker.id] }, pubsub)).toEqual({
+          cancelledSignalIds: [marker.id],
+        });
         expect(owner.isRunAborted('new-clear-run', pubsub)).toBe(false);
         expect(owner.isRunAborted('old-clear-run', pubsub)).toBe(false);
         expect(owner.cancelQueuedMessages(agent, { ...scope, signalIds: [survivor.signal.id] }, pubsub)).toEqual({
@@ -4123,9 +4137,15 @@ describe('Agent signals', () => {
         }
       },
     );
-    it.each((['pending', 'idle'] as const).flatMap(queue => [false, true].map(clear => [queue, clear] as const)))(
-      'handles failed %s preparation after abort with clearPendingSignals=%s',
-      async (queue, clearPendingSignals) => {
+    it.each(
+      (['pending', 'idle'] as const).flatMap(queue =>
+        [false, true].flatMap(clearPendingSignals =>
+          [false, true].map(cancelById => ({ queue, clearPendingSignals, cancelById })),
+        ),
+      ),
+    )(
+      'handles failed $queue preparation after abort with clearPendingSignals=$clearPendingSignals and cancelById=$cancelById',
+      async ({ queue, clearPendingSignals, cancelById }) => {
         const scope = { resourceId: 'failed-clear-user', threadId: 'failed-clear-thread' };
         const pubsub = new ControlledLeasePubSub();
         const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'next');
@@ -4168,10 +4188,14 @@ describe('Agent signals', () => {
           releaseFirst();
           await first.text;
           await prepared;
-          // Execution handoff already happened: selective cancellation must not claim success.
-          expect(agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
-            cancelledSignalIds: [],
-          });
+          if (cancelById) {
+            // Handoff prevents local success; deliver the request before testing preparation cleanup.
+            expect(agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
+              cancelledSignalIds: [],
+            });
+            await pubsub.flush();
+            await nextTick();
+          }
           expect(subscription.abort({ clearPendingSignals })).toBe(true);
           release();
           await vi.waitFor(() => expect(pubsub.publishedData.some(data => data.type === 'run-failed')).toBe(true));

@@ -120,7 +120,7 @@ const { cancelledSignalIds } = agent.cancelQueuedMessages({
 console.log(cancelledSignalIds)
 ```
 
-Only IDs removed locally by this call appear in `cancelledSignalIds`. Mastra publishes those IDs through PubSub so other processes subscribed to the thread can cancel matching pending copies, but this asynchronous propagation doesn't confirm remote cancellation. IDs missing locally aren't published, and input already handed to execution can't be cancelled this way. Cancellation doesn't delete saved messages, notification records, or state updates. It doesn't revoke an earlier acceptance acknowledgement.
+Only IDs removed locally by this call appear in `cancelledSignalIds`. Mastra publishes all requested IDs through PubSub, even when none are pending locally, so other processes subscribed to the thread can cancel matching pending input. This asynchronous propagation doesn't confirm remote cancellation, and input already handed to execution can't be cancelled this way. Cancellation doesn't delete saved messages, notification records, or state updates. It doesn't revoke an earlier acceptance acknowledgement.
 
 ### Stop the run and clear pending input
 
