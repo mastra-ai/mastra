@@ -33,6 +33,32 @@ on:
 permissions: {}
 
 jobs:
+  sdk-type-tests:
+    name: SDK type tests
+    if: inputs.has_code == 'true'
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
+      NODE_OPTIONS: --max-old-space-size=8192
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build SDK dependencies
+        run: pnpm turbo build --filter "@mastra/client-js^..."
+      - name: Check SDK type assertions
+        run: pnpm --filter @mastra/client-js test:types
+
   unit-test:
     name: UNIT Test (Shard ${{ matrix.shard }})
     if: inputs.has_code == 'true' && inputs.run_full != 'false'

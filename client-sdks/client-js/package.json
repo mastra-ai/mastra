@@ -40,7 +40,8 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "dev": "pnpm generate:route-types && pnpm build:lib --watch",
     "test": "vitest",
-    "test:unit": "vitest run"
+    "test:unit": "vitest run",
+    "test:types": "tsc --project type-tests/tsconfig.json"
   },
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.2.11",

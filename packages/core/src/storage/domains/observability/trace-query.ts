@@ -1106,7 +1106,7 @@ const deltaCursorEnvelopeSchema = z
 
 /** Wraps a storage-native watermark in a query-bound, delta-only cursor. */
 export function encodeTraceQueryDeltaCursor(
-  plan: { binding: string } | { deltaBinding: string },
+  plan: TrustedTraceQueryPaginatedTracesPlan | TrustedTraceQueryDeltaTracesPlan,
   adapter: string,
   watermark: string,
 ): string {
