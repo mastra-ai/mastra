@@ -1730,4 +1730,23 @@ describe('openaiOrphanItemId', () => {
 
     expect(textPartMetadata(args, 'msg-orphan-msg_split_text')).toHaveProperty('itemId', 'msg_split_text');
   });
+
+  it('A13: the fix is idempotent — a second call over already-stripped history asks for no retry', async () => {
+    // The rule reports a mutation only when it actually stripped something. A `fix` that reported
+    // one unconditionally would ask for a retry that cannot change the request, so pin it: once the
+    // itemIds are gone, a further call over the same history is silent.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const first = await handler.processAPIError(args);
+    const second = await handler.processAPIError(args);
+
+    expect(first).toEqual({ retry: true });
+    expect(second).toBeUndefined();
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).not.toHaveProperty('itemId');
+  });
 });
