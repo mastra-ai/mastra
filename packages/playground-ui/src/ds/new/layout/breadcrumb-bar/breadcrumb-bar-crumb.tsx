@@ -69,7 +69,11 @@ export function BreadcrumbBarCrumb({
               {icon}
             </Icon>
           )}
-          {isLoading ? <BreadcrumbBarCrumbSkeleton /> : <span className="min-w-0 flex-1 truncate">{children}</span>}
+          {isLoading ? (
+            <BreadcrumbBarCrumbSkeleton />
+          ) : (
+            <span className="flex min-w-0 flex-1 items-center truncate">{children}</span>
+          )}
         </Root>
         {action && <span className="h-form-sm -ml-1 flex shrink-0 items-center">{action}</span>}
       </li>

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 import { BreadcrumbBar } from './breadcrumb-bar';
@@ -25,17 +25,26 @@ function ExampleCrumb({ children }: { children: ReactNode }) {
 function ExampleProjectSwitcher() {
   return (
     <BreadcrumbBar.SwitcherCrumb>
-      <DropdownMenu>
-        <DropdownMenu.Trigger variant="ghost" size="sm">
-          Production project
-          <ChevronDown />
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start">
-          <DropdownMenu.Item>Production project</DropdownMenu.Item>
-          <DropdownMenu.Item>Staging project</DropdownMenu.Item>
-          <DropdownMenu.Item>Development project</DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu>
+      <BreadcrumbBar.SwitcherTrigger>
+        <DropdownMenu>
+          <DropdownMenu.Trigger variant="ghost" size="sm">
+            Production project
+            <BreadcrumbBar.SwitcherIndicator>
+              <ChevronDown className="ml-1 size-3.5" aria-hidden />
+            </BreadcrumbBar.SwitcherIndicator>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="start">
+            <DropdownMenu.Item>Production project</DropdownMenu.Item>
+            <DropdownMenu.Item>Staging project</DropdownMenu.Item>
+            <DropdownMenu.Item>Development project</DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      </BreadcrumbBar.SwitcherTrigger>
+      <BreadcrumbBar.SwitcherAction>
+        <Button variant="ghost" size="icon-xs" aria-label="Exit Production project">
+          <X />
+        </Button>
+      </BreadcrumbBar.SwitcherAction>
     </BreadcrumbBar.SwitcherCrumb>
   );
 }

@@ -57,13 +57,24 @@ describe('BreadcrumbBar', () => {
             <BreadcrumbBar.Crumb as="span">Projects</BreadcrumbBar.Crumb>
           </BreadcrumbBar.Item>
           <BreadcrumbBar.Item pathname="/projects/production">
-            <BreadcrumbBar.SwitcherCrumb>Production project</BreadcrumbBar.SwitcherCrumb>
+            <BreadcrumbBar.SwitcherCrumb>
+              <BreadcrumbBar.SwitcherTrigger>
+                <button type="button">
+                  Production project
+                  <BreadcrumbBar.SwitcherIndicator>Open</BreadcrumbBar.SwitcherIndicator>
+                </button>
+              </BreadcrumbBar.SwitcherTrigger>
+              <BreadcrumbBar.SwitcherAction>
+                <button type="button" aria-label="Exit Production project" />
+              </BreadcrumbBar.SwitcherAction>
+            </BreadcrumbBar.SwitcherCrumb>
           </BreadcrumbBar.Item>
         </BreadcrumbBar>,
       );
 
       expect(markup).toContain('aria-current="page"');
       expect(markup).toContain('Production project');
+      expect(markup).toContain('aria-label="Exit Production project"');
     });
 
     it('renders separators as hidden list items', () => {
