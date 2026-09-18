@@ -17,20 +17,23 @@ function CrumbProbe({ label }: { label: string }) {
 
 describe('BreadcrumbBar', () => {
   describe('when crumbs and actions are provided', () => {
-    it('composes the icon, breadcrumb, and actions slots', () => {
+    it('composes crumb icons and bar actions', () => {
       const markup = renderToStaticMarkup(
-        <Breadcrumb.Bar icon={<svg data-testid="route-icon" />} actions={<button type="button">Create agent</button>}>
+        <Breadcrumb.Bar actions={<button type="button">Create agent</button>}>
           <Breadcrumb.Item pathname="/agents">
-            <CrumbProbe label="Agents" />
+            <Crumb as="span" icon={<svg data-testid="route-icon" />}>
+              Agents
+            </Crumb>
           </Breadcrumb.Item>
           <Breadcrumb.Item pathname="/agents/research">
-            <CrumbProbe label="Research agent" />
+            <Crumb as="span" isCurrent>
+              Research agent
+            </Crumb>
           </Breadcrumb.Item>
         </Breadcrumb.Bar>,
       );
 
       expect(markup).toContain('data-testid="route-icon"');
-      expect(markup.indexOf('data-testid="route-icon"')).toBeLessThan(markup.indexOf('aria-label="Breadcrumb"'));
       expect(markup).toContain('aria-label="Breadcrumb"');
       expect(markup).toContain('Create agent');
       expect(markup).toContain('Agents');
@@ -71,7 +74,7 @@ describe('BreadcrumbBar', () => {
       expect(markup).toContain('Production project');
       expect(markup).toContain('aria-label="Exit Production project"');
       expect(markup).toContain('group-hover:text-foreground');
-      expect(markup).toContain('hover:bg-foreground/10');
+      expect(markup.match(/hover:bg-foreground\/10/g)).toHaveLength(2);
     });
 
     it('renders separators as hidden list items', () => {

@@ -5,7 +5,6 @@ import { BreadcrumbItemContext } from './breadcrumb-context';
 import type { BreadcrumbSeparator } from './breadcrumb-context';
 import { BreadcrumbRoot } from './breadcrumb-root';
 import { Header } from '@/ds/components/Header';
-import { Icon } from '@/ds/icons/Icon';
 
 export interface BreadcrumbItemProps {
   children: ReactNode;
@@ -15,7 +14,6 @@ export interface BreadcrumbItemProps {
 export interface BreadcrumbBarProps {
   actions?: ReactNode;
   children?: ReactNode;
-  icon?: ReactNode;
   separator?: BreadcrumbSeparator;
 }
 
@@ -27,13 +25,12 @@ function isBreadcrumbItem(child: ReactNode): child is ReactElement<BreadcrumbIte
   return isValidElement<BreadcrumbItemProps>(child) && child.type === BreadcrumbItem;
 }
 
-export function BreadcrumbBar({ actions, children, icon, separator = 'slash' }: BreadcrumbBarProps) {
+export function BreadcrumbBar({ actions, children, separator = 'slash' }: BreadcrumbBarProps) {
   const crumbs = Children.toArray(children).filter(isBreadcrumbItem);
   const leafIndex = crumbs.length - 1;
 
   return (
     <Header className="new-theme h-10 min-h-10 gap-2 overflow-hidden px-2">
-      {icon && <Icon className="text-muted-foreground shrink-0">{icon}</Icon>}
       {crumbs.length > 0 && (
         <BreadcrumbRoot
           label="Breadcrumb"

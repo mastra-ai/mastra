@@ -58,6 +58,15 @@ describe('Combobox', () => {
     expect(screen.getByRole('option', { name: 'Google' })).toBeTruthy();
   });
 
+  it('omits search when there are at most two options', async () => {
+    render(<Combobox options={options.slice(0, 2)} searchPlaceholder="Search providers" />);
+
+    fireEvent.click(screen.getByRole('combobox'));
+    await screen.findByRole('option', { name: 'OpenAI' });
+
+    expect(screen.queryByPlaceholderText('Search providers')).toBeNull();
+  });
+
   it('portals the popup into document.body when there is no portal container provider', async () => {
     const { container } = renderCombobox();
 

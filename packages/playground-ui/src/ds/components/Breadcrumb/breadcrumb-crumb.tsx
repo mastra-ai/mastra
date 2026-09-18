@@ -48,7 +48,8 @@ export function Crumb({
       <li
         className={cn(
           'group flex h-form-sm min-w-0 items-center rounded-full',
-          action && [transitions.colors, 'hover:bg-foreground/10 active:bg-foreground/14'],
+          transitions.colors,
+          'hover:bg-foreground/10 active:bg-foreground/14',
           isCurrent ? 'shrink' : 'shrink-0',
         )}
       >
@@ -63,16 +64,14 @@ export function Crumb({
                   'max-w-xs cursor-default',
                   action ? 'text-muted-foreground group-hover:text-foreground' : 'text-foreground',
                 )
-              : cn(
-                  'max-w-48 cursor-pointer text-muted-foreground hover:text-foreground',
-                  !action && 'hover:bg-foreground/4 active:bg-foreground/10',
-                ),
+              : 'max-w-48 cursor-pointer text-muted-foreground group-hover:text-foreground',
             className,
           )}
           {...props}
         >
           {icon && (
             <Icon
+              size="sm"
               className={cn(
                 '-ml-[.3em] shrink-0 opacity-50 group-hover:opacity-100',
                 'transition-opacity duration-normal ease-out-custom',
@@ -91,7 +90,7 @@ export function Crumb({
       </li>
       {!isCurrent && (
         <li aria-hidden="true" className="flex h-full items-center">
-          <Icon className={cn('text-muted-foreground/50', transitions.colors)}>
+          <Icon size="sm" className={cn('text-muted-foreground/50', transitions.colors)}>
             {separatorIcon === 'chevron' ? <ChevronIcon className="-rotate-90" /> : <SlashIcon />}
           </Icon>
         </li>

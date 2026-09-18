@@ -108,6 +108,7 @@ export function Combobox(props: ComboboxProps) {
       ? { label: `Use “${customValue}”`, value: customValue }
       : undefined;
   const displayedOptions = customOption ? [customOption, ...options] : options;
+  const showSearch = displayedOptions.length > 2;
   const selectedValues = multiple ? (props.value ?? EMPTY_VALUES) : EMPTY_VALUES;
   const selectedValueSet = React.useMemo(() => new Set(selectedValues), [selectedValues]);
   const selectedOption = multiple ? null : (options.find(option => option.value === props.value) ?? null);
@@ -158,10 +159,12 @@ export function Combobox(props: ComboboxProps) {
           className={comboboxStyles.positioner}
         >
           <BaseCombobox.Popup className={comboboxStyles.popup}>
-            <div className={comboboxStyles.searchContainer}>
-              <Search className={comboboxStyles.searchIcon} />
-              <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
-            </div>
+            {showSearch ? (
+              <div className={comboboxStyles.searchContainer}>
+                <Search className={comboboxStyles.searchIcon} />
+                <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
+              </div>
+            ) : null}
             <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
             <div className={cn(comboboxStyles.listScroller, menu.containerClassName)} {...menu.getContainerProps({})}>
               <FluidMenuItems menu={menu}>

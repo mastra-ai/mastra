@@ -123,7 +123,7 @@ const ProjectExitAction = ({ onExit }: { onExit: () => void }) => (
       aria-label="Exit project"
       onClick={onExit}
     >
-      <XIcon className="!size-4" />
+      <XIcon />
     </Button>
   </span>
 );
@@ -133,9 +133,14 @@ function WithActionExample() {
   const [showProject, setShowProject] = useState(true);
 
   return (
-    <Breadcrumb.Bar icon={<WorkspacesIcon />} actions={<Button size="sm">Deploy</Button>}>
+    <Breadcrumb.Bar actions={<Button size="sm">Deploy</Button>}>
       <Breadcrumb.Item pathname="/projects">
-        <Crumb as={showProject ? 'a' : 'span'} to={showProject ? '/projects' : undefined} isCurrent={!showProject}>
+        <Crumb
+          as={showProject ? 'a' : 'span'}
+          to={showProject ? '/projects' : undefined}
+          isCurrent={!showProject}
+          icon={<WorkspacesIcon />}
+        >
           Projects
         </Crumb>
       </Breadcrumb.Item>
@@ -153,7 +158,7 @@ function WithActionExample() {
               onValueChange={setProject}
               variant="ghost"
               size="sm"
-              className="hover:!bg-transparent active:!bg-transparent data-[popup-open]:!bg-transparent"
+              className="hover:!bg-transparent active:!bg-transparent data-[popup-open]:!bg-transparent [&_svg]:!size-3"
               aria-label="Switch project"
               footer={
                 <Button
