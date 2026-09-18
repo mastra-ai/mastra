@@ -33,6 +33,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agent-controller/message-lifecycle',
+          label: 'Message Lifecycle',
+        },
+        {
+          type: 'doc',
           id: 'agent-controller/session',
           label: 'Session Class',
         },

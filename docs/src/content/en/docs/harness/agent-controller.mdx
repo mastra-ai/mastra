@@ -91,7 +91,7 @@ await session.sendMessage({ content: 'Plan a small TypeScript CLI.' })
 unsubscribe()
 ```
 
-Each message emits a `message_start` event with the initial message, zero or more `message_update` events with compact deltas, and a `message_end` event containing the message ID. Apply updates by ID when you need to reconstruct the complete message.
+Each message emits a `message_start` event with the initial message, zero or more `message_update` events with compact deltas, and a `message_end` event containing the message ID. Apply updates by ID when you need to reconstruct the complete message. The compact message events are documented in [Message lifecycle](/reference/agent-controller/message-lifecycle).
 
 Use the same controller for many Sessions. Don't store a current Session on the controller or route work through controller-level message methods.
 
