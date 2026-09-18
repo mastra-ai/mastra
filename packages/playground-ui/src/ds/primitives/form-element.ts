@@ -32,7 +32,10 @@ export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-h
 // can emit focus variants before hover variants, so an unguarded `hover:border-*`
 // of equal specificity may win on a field that is focused AND hovered.
 export const inputHoverBorderVisible = '[&:hover:not(:focus-visible):not(:disabled)]:border-foreground/45';
-export const inputHoverBorderWithin = '[&:hover:not(:focus-within)]:border-foreground/45';
+// The wrapper itself is never `:disabled` — the control it wraps is — so the guard
+// has to ask about descendants. Without it, hovering a group that contains a
+// disabled input repaints the enabled border over the muted disabled one.
+export const inputHoverBorderWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:border-foreground/45';
 
 // Background-agnostic surface + focus recipe shared by Input, Textarea and the
 // filled field triggers (Select/Combobox `default`). Reads on any underlying

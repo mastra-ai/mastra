@@ -26,7 +26,7 @@ const expectOnlyGuardedHoverBorder = (className: string) => {
     .split(/\s+/)
     .filter(token => token.includes('hover') && token.includes('border-foreground/45'));
 
-  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within)]:border-foreground/45']);
+  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within):not(:has(:disabled))]:border-foreground/45']);
   expect(className).toContain('focus-within:border-foreground/60');
   expect(className).not.toContain('hover:border-foreground/45');
 };
@@ -211,8 +211,23 @@ describe('InputGroup', () => {
     );
     const cls = getWrapper().className;
 
-    expect(cls).toContain('hover:bg-foreground/14');
+    expect(cls).toContain('not-has-[:disabled]:hover:bg-foreground/14');
     expect(cls).toContain('focus-within:border-foreground/60');
     expect(cls.split(/\s+/).filter(token => token.includes('hover') && token.includes('border-'))).toEqual([]);
+  });
+
+  it('leaves a group muted on hover while it wraps a disabled control', () => {
+    render(
+      <InputGroup>
+        <InputGroupInput placeholder="disabled" disabled />
+      </InputGroup>,
+    );
+    const cls = getWrapper().className;
+
+    // The wrapper is a div, so `:disabled` never matches it. Both hover surfaces
+    // have to ask about descendants or they repaint over the disabled treatment.
+    expect(cls).toContain('has-[:disabled]:bg-muted');
+    expect(cls).toContain('not-has-[:disabled]:hover:bg-foreground/14');
+    expect(cls).not.toContain(' hover:bg-foreground/14');
   });
 });

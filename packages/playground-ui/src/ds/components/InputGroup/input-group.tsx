@@ -51,7 +51,9 @@ const inputGroupRoundedTextareaClassName = cn(
 // Focus brightens the border (inputFocusBorderWithin) for WCAG-visible focus.
 const inputGroupFilledVariant = cn(
   'rounded-full bg-foreground/10',
-  'hover:bg-foreground/14',
+  // Guarded on descendants, not the wrapper: a div is never `:disabled`, so an
+  // unguarded hover fill paints over the muted surface of a disabled group.
+  'not-has-[:disabled]:hover:bg-foreground/14',
   'outline-hidden focus-within:bg-foreground/14 focus-within:outline-hidden',
   inputFocusBorderWithin,
   inputGroupRoundedTextareaClassName,
