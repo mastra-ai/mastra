@@ -16,9 +16,9 @@ function CrumbProbe({ label }: { label: string }) {
 
 describe('BreadcrumbBar', () => {
   describe('when crumbs and actions are provided', () => {
-    it('composes the breadcrumb and actions slots', () => {
+    it('composes the icon, breadcrumb, and actions slots', () => {
       const markup = renderToStaticMarkup(
-        <BreadcrumbBar actions={<button type="button">Create agent</button>}>
+        <BreadcrumbBar icon={<svg data-testid="route-icon" />} actions={<button type="button">Create agent</button>}>
           <BreadcrumbBar.Item pathname="/agents">
             <CrumbProbe label="Agents" />
           </BreadcrumbBar.Item>
@@ -28,6 +28,8 @@ describe('BreadcrumbBar', () => {
         </BreadcrumbBar>,
       );
 
+      expect(markup).toContain('data-testid="route-icon"');
+      expect(markup.indexOf('data-testid="route-icon"')).toBeLessThan(markup.indexOf('aria-label="Breadcrumb"'));
       expect(markup).toContain('aria-label="Breadcrumb"');
       expect(markup).toContain('Create agent');
       expect(markup).toContain('Agents');

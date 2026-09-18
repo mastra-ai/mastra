@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ChevronDown, X } from 'lucide-react';
+import { Bot, ChevronDown, X } from 'lucide-react';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 import { BreadcrumbBar } from './breadcrumb-bar';
@@ -61,7 +61,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   render: () => (
-    <BreadcrumbBar actions={<Button size="sm">Create agent</Button>}>
+    <BreadcrumbBar icon={<Bot aria-hidden />} actions={<Button size="sm">Create agent</Button>}>
       <BreadcrumbBar.Item pathname="/agents">
         <ExampleCrumb>Agents</ExampleCrumb>
       </BreadcrumbBar.Item>
