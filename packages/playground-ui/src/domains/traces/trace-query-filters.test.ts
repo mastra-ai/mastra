@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildTraceQueryRequest, TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from './trace-query-filters';
+import {
+  buildTraceQueryRequest,
+  clampTraceDiscoveryTimeRange,
+  TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
+} from './trace-query-filters';
 
 const now = new Date('2026-09-15T12:00:00Z');
 
@@ -73,5 +77,42 @@ describe('buildTraceQueryRequest', () => {
         ],
       },
     });
+  });
+
+  it('turns discovered metadata tokens into predicates on the metadata path', () => {
+    expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'metadata.region', value: 'eu-west' }], now })?.where).toEqual({
+      op: 'and',
+      args: [{ op: 'eq', left: { path: 'metadata.region' }, right: { literal: 'eu-west' } }],
+    });
+    expect(
+      buildTraceQueryRequest({ tokens: [{ fieldId: 'metadata.region', value: ['eu-west', 'us-east'] }], now })?.where,
+    ).toEqual({
+      op: 'and',
+      args: [{ op: 'in', value: { path: 'metadata.region' }, set: ['eu-west', 'us-east'] }],
+    });
+  });
+
+  it('drops a bare metadata prefix with no key', () => {
+    expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'metadata.', value: 'x' }], now }).where).toBeUndefined();
+  });
+});
+
+describe('clampTraceDiscoveryTimeRange', () => {
+  const to = '2026-09-15T12:00:00.000Z';
+
+  it('keeps ranges of 31 days or less untouched', () => {
+    const range = { from: '2026-09-01T00:00:00.000Z', to };
+    expect(clampTraceDiscoveryTimeRange(range)).toBe(range);
+  });
+
+  it('clamps wider ranges to the 31 days ending at to', () => {
+    expect(clampTraceDiscoveryTimeRange({ from: '2026-01-01T00:00:00.000Z', to })).toEqual({
+      from: '2026-08-15T12:00:00.000Z',
+      to,
+    });
+  });
+
+  it('falls back to the 31-day window when from is not before to', () => {
+    expect(clampTraceDiscoveryTimeRange({ from: to, to })).toEqual({ from: '2026-08-15T12:00:00.000Z', to });
   });
 });
