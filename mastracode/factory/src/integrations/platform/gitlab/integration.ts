@@ -16,7 +16,6 @@ interface PlatformIntegrationConnection {
 interface PlatformGitLabContext {
   id: string;
   label: string | null;
-  repositoryAccessToken: () => Promise<string>;
   api: GitLabApiClient;
   connection: IntegrationConnection;
   host: string;
@@ -44,8 +43,7 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
     this.#client = new PlatformApiClient(clientConfig);
     this.#connectionId = connectionId;
     this.#endpointHost = new URL(clientConfig.baseUrl).host;
-    this.#webhookSecret =
-      config.webhookSecret?.trim() || process.env.MASTRA_GITLAB_WEBHOOK_SECRET?.trim() || undefined;
+    this.#webhookSecret = config.webhookSecret?.trim() || process.env.MASTRA_GITLAB_WEBHOOK_SECRET?.trim() || undefined;
   }
 
   async listConnections(): Promise<PlatformIntegrationConnection[]> {
@@ -108,19 +106,6 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       connection: gitlabConnection(connection.id),
       // Platform does not currently expose the connected GitLab instance host.
       host: 'gitlab.com',
-      repositoryAccessToken: () => this.#repositoryAccessToken(connection.id),
     };
-  }
-
-  async #repositoryAccessToken(connectionId: string): Promise<string> {
-    const credential = await this.#client.request<
-      | { type: 'oauth2'; accessToken: string; expiresAt: string | null }
-      | { type: 'api_key'; apiKey: string }
-    >('GET', `/v2/connections/${encodeURIComponent(connectionId)}/credentials`);
-    const token = credential.type === 'oauth2' ? credential.accessToken : credential.apiKey;
-    if (!token?.trim()) {
-      throw new GitLabApiError('GitLab connection did not provide a repository access credential.', 502);
-    }
-    return token;
   }
 }
