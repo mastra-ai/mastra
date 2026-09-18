@@ -1000,6 +1000,28 @@ describe('MastraFactory.prepare integrations', () => {
     expect(paths).toContain('/web/linear/status');
   });
 
+  it('prefers an explicit GitLab integration over the platform fallback', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_platform_test');
+    const routes = vi.fn(() => [
+      { path: '/web/gitlab/direct-test', method: 'GET' as const, handler: () => new Response() },
+    ]);
+
+    try {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        stateSecret: 'deployment-stable-secret',
+        integrations: [fakeIntegration({ id: 'gitlab', routes })],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(route => route.path);
+
+      expect(routes).toHaveBeenCalledOnce();
+      expect(paths).toContain('/web/gitlab/direct-test');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('merges agentTools and sessionTools from ready integrations into extraTools', async () => {
     const agentTool = { description: 'agent' };
     const sessionTool = { description: 'session' };

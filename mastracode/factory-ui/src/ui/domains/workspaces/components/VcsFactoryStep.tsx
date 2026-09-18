@@ -9,9 +9,9 @@ import { useState, type ReactNode } from 'react';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { gitLabProjectRepository, manageGitLabConnection } from '../../factory/services/gitlab';
-import type { GithubStatus, SourceControlRepository } from '../services/github';
-import { SearchIcon } from '../../../ui/icons';
+import { gitLabProjectRepository, openMastraPlatformIntegrations } from '../../factory/services/gitlab';
+import type { SourceControlRepository } from '../services/github';
+import { GitLabIcon, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 export interface VcsFactoryStepProps {
@@ -23,14 +23,6 @@ export interface VcsFactoryStepProps {
   onManageConnection: () => void;
   onSelectRepository: (repository: SourceControlRepository) => void;
 }
-
-const GITHUB_ENV_VAR_DISPLAY_ORDER = [
-  'GITHUB_APP_ID',
-  'GITHUB_APP_PRIVATE_KEY',
-  'GITHUB_APP_CLIENT_ID',
-  'GITHUB_APP_SLUG',
-  'GITHUB_APP_CLIENT_SECRET',
-];
 
 export function VcsFactoryStep({
   connectingRepositoryId,
@@ -64,18 +56,15 @@ export function VcsFactoryStep({
         <SkeletonRows label="Loading source control status" rows={2} rowClassName="h-32 w-full rounded-xl" />
       ) : selectedProvider === null ? (
         <ProviderChoice
-          githubStatus={githubStatus.data}
-          gitlabConfigured={gitlabConfigured}
-          gitlabReason={gitlabStatus.data?.reason}
-          gitlabMode={gitlabStatus.data?.mode}
           githubRedirecting={githubRedirecting}
           onChooseGithub={() => {
             if (connected) setSelectedProvider('github');
-            else onConnect();
+            else if (githubStatus.data?.enabled) onConnect();
+            else openMastraPlatformIntegrations();
           }}
           onChooseGitlab={() => {
             if (gitlabConfigured) setSelectedProvider('gitlab');
-            else if (gitlabStatus.data?.mode === 'platform') manageGitLabConnection();
+            else openMastraPlatformIntegrations();
           }}
         />
       ) : (
@@ -143,75 +132,30 @@ export function VcsFactoryStep({
 }
 
 function ProviderChoice({
-  githubStatus,
-  gitlabConfigured,
-  gitlabReason,
-  gitlabMode,
   githubRedirecting,
   onChooseGithub,
   onChooseGitlab,
 }: {
-  githubStatus: GithubStatus | undefined;
-  gitlabConfigured: boolean;
-  gitlabReason: 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready' | undefined;
-  gitlabMode: 'direct' | 'platform' | undefined;
   githubRedirecting: boolean;
   onChooseGithub: () => void;
   onChooseGitlab: () => void;
 }) {
-  const githubUnavailable =
-    githubStatus?.reason === 'missing_config' || githubStatus?.reason === 'organization_required';
-  const githubMessage =
-    githubStatus?.reason === 'missing_config'
-      ? 'GitHub is not configured for this deployment.'
-      : githubStatus?.reason === 'organization_required'
-        ? 'Join an organization to connect GitHub repositories.'
-        : githubStatus?.reason === 'auth_required'
-          ? 'Sign in again to connect GitHub.'
-          : 'Connect GitHub to choose a repository.';
-  const githubMissingEnvVars =
-    githubStatus?.reason === 'missing_config'
-      ? [...(githubStatus.diagnostics?.missingGithubAppEnvVars ?? [])].sort(
-          (left, right) => GITHUB_ENV_VAR_DISPLAY_ORDER.indexOf(left) - GITHUB_ENV_VAR_DISPLAY_ORDER.indexOf(right),
-        )
-      : [];
-  const gitlabPlatformManaged = gitlabMode === 'platform';
-  const gitlabUnavailable = !gitlabConfigured && !gitlabPlatformManaged;
-  const gitlabMessage =
-    gitlabReason === 'organization_required'
-      ? 'Join an organization to connect GitLab repositories.'
-      : gitlabReason === 'auth_required'
-        ? 'Sign in again to connect GitLab.'
-        : !gitlabConfigured && gitlabPlatformManaged
-          ? 'Connect GitLab through Mastra Platform to choose a repository.'
-          : gitlabUnavailable
-            ? 'GitLab is not configured for this deployment.'
-            : 'Connect GitLab to choose a repository.';
-  const gitlabMissingEnvVars =
-    gitlabUnavailable && gitlabReason === 'missing_config' ? ['GITLAB_ACCESS_TOKEN', 'GITLAB_ACCESS_TOKEN_TYPE'] : [];
-
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] items-stretch gap-5">
       <ProviderConnection
         provider="GitHub"
-        message={githubMessage}
+        message="Connect GitHub to choose a repository."
         icon={<GithubIcon className="size-10" />}
         buttonIcon={<GithubIcon className="size-4" />}
-        unavailable={githubUnavailable}
         isConnecting={githubRedirecting}
-        missingEnvVars={githubMissingEnvVars}
-        setupMessage="To enable it, set the GitHub App environment variables on the server and restart:"
         onConnect={onChooseGithub}
       />
       <div role="separator" aria-orientation="vertical" className="bg-border1 h-full min-h-36 w-px" />
       <ProviderConnection
         provider="GitLab"
-        message={gitlabMessage}
+        message="Connect GitLab to choose a repository."
         icon={<GitLabIcon className="size-10" />}
         buttonIcon={<GitLabIcon className="size-4" />}
-        unavailable={gitlabUnavailable}
-        missingEnvVars={gitlabMissingEnvVars}
-        setupMessage="To enable it, set the GitLab environment variables on the server and restart:"
         onConnect={onChooseGitlab}
       />
     </div>
@@ -223,20 +167,14 @@ function ProviderConnection({
   message,
   icon,
   buttonIcon,
-  unavailable,
   isConnecting = false,
-  missingEnvVars,
-  setupMessage,
   onConnect,
 }: {
   provider: 'GitHub' | 'GitLab';
   message: string;
   icon: ReactNode;
   buttonIcon: ReactNode;
-  unavailable: boolean;
   isConnecting?: boolean;
-  missingEnvVars: string[];
-  setupMessage: string;
   onConnect: () => void;
 }) {
   return (
@@ -246,35 +184,12 @@ function ProviderConnection({
       titleSlot={`Connect ${provider}`}
       descriptionSlot={message}
       actionSlot={
-        !unavailable ? (
-          <Button variant="primary" disabled={isConnecting} onClick={onConnect}>
-            {isConnecting ? <Spinner size="sm" aria-label={`Connecting to ${provider}`} /> : buttonIcon}
-            Connect {provider}
-          </Button>
-        ) : missingEnvVars.length > 0 ? (
-          <div className="flex max-w-md min-w-0 flex-col items-center gap-2">
-            <Txt as="p" variant="ui-sm" className="text-icon3 m-0 text-center">
-              {setupMessage}
-            </Txt>
-            <ul className="m-0 flex list-none flex-wrap justify-center gap-1.5 p-0">
-              {missingEnvVars.map(name => (
-                <li key={name}>
-                  <code className="bg-surface4 text-ui-xs text-icon5 rounded px-1.5 py-0.5 font-mono">{name}</code>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : undefined
+        <Button variant="primary" disabled={isConnecting} onClick={onConnect}>
+          {isConnecting ? <Spinner size="sm" aria-label={`Connecting to ${provider}`} /> : buttonIcon}
+          Connect {provider}
+        </Button>
       }
     />
-  );
-}
-
-function GitLabIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
-      <path d="M23.955 13.587 20.613 3.307a.54.54 0 0 0-1.025 0l-2.257 6.946H6.67L4.413 3.307a.54.54 0 0 0-1.025 0L.045 13.587a1.08 1.08 0 0 0 .393 1.207L12 23.196l11.562-8.402a1.08 1.08 0 0 0 .393-1.207Z" />
-    </svg>
   );
 }
 

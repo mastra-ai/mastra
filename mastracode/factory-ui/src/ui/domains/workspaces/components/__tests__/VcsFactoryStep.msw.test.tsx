@@ -120,6 +120,41 @@ describe('VCS Factory step', () => {
     expect(await screen.findByText('group/project')).toBeInTheDocument();
   });
 
+  it('prefers the deployment GitHub connect flow when it is configured', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: false,
+          installations: [],
+          reason: 'not_connected',
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' }),
+      ),
+    );
+    const onConnect = vi.fn();
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    renderWithProviders(
+      <VcsFactoryStep
+        connectingRepositoryId={null}
+        githubRedirecting={false}
+        mutationPending={false}
+        mutationError={null}
+        onConnect={onConnect}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /Connect GitHub/ }));
+
+    expect(onConnect).toHaveBeenCalledOnce();
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it('offers Mastra Platform connection setup when GitLab has no active account yet', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
@@ -149,15 +184,13 @@ describe('VCS Factory step', () => {
       />,
     );
 
-    expect(
-      await screen.findByText('Connect GitLab through Mastra Platform to choose a repository.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Connect GitLab to choose a repository.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Connect GitLab/ }));
     expect(open).toHaveBeenCalledWith('https://projects.mastra.ai', '_blank', 'noopener,noreferrer');
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
   });
 
-  it('shows provider-specific configuration guidance when connections are unavailable', async () => {
+  it('falls back to Mastra Platform without exposing missing provider credentials', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
         HttpResponse.json({
@@ -166,13 +199,7 @@ describe('VCS Factory step', () => {
           installations: [],
           reason: 'missing_config',
           diagnostics: {
-            missingGithubAppEnvVars: [
-              'GITHUB_APP_ID',
-              'GITHUB_APP_PRIVATE_KEY',
-              'GITHUB_APP_CLIENT_ID',
-              'GITHUB_APP_CLIENT_SECRET',
-              'GITHUB_APP_SLUG',
-            ],
+            missingGithubAppEnvVars: ['GITHUB_APP_ID', 'GITHUB_APP_PRIVATE_KEY'],
           },
         }),
       ),
@@ -185,6 +212,8 @@ describe('VCS Factory step', () => {
         }),
       ),
     );
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    open.mockClear();
 
     renderWithProviders(
       <VcsFactoryStep
@@ -198,24 +227,16 @@ describe('VCS Factory step', () => {
       />,
     );
 
-    expect(await screen.findByText('GitHub is not configured for this deployment.')).toBeInTheDocument();
-    expect(screen.getByText('GITHUB_APP_ID')).toBeInTheDocument();
-    expect(screen.getByText('GITHUB_APP_PRIVATE_KEY')).toBeInTheDocument();
-    expect(screen.getAllByText(/^GITHUB_APP_/).map(element => element.textContent)).toEqual([
-      'GITHUB_APP_ID',
-      'GITHUB_APP_PRIVATE_KEY',
-      'GITHUB_APP_CLIENT_ID',
-      'GITHUB_APP_SLUG',
-      'GITHUB_APP_CLIENT_SECRET',
-    ]);
-    expect(screen.getByText('GitLab is not configured for this deployment.')).toBeInTheDocument();
-    expect(
-      screen.getByText('To enable it, set the GitLab environment variables on the server and restart:'),
-    ).toBeInTheDocument();
-    expect(screen.getByText('GITLAB_ACCESS_TOKEN')).toBeInTheDocument();
-    expect(screen.getByText('GITLAB_ACCESS_TOKEN_TYPE')).toBeInTheDocument();
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-orientation', 'vertical');
-    expect(screen.queryByLabelText('Search repositories')).not.toBeInTheDocument();
+    const github = await screen.findByRole('button', { name: /Connect GitHub/ });
+    const gitlab = screen.getByRole('button', { name: /Connect GitLab/ });
+    expect(screen.queryByText('GITHUB_APP_ID')).not.toBeInTheDocument();
+    expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
+
+    await userEvent.click(github);
+    await userEvent.click(gitlab);
+
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledWith('https://projects.mastra.ai', '_blank', 'noopener,noreferrer');
   });
 
   it('does not show server environment variables when GitLab authorization must be renewed', async () => {
@@ -246,7 +267,7 @@ describe('VCS Factory step', () => {
       />,
     );
 
-    expect(await screen.findByText('Sign in again to connect GitLab.')).toBeInTheDocument();
+    expect(await screen.findByText('Connect GitLab to choose a repository.')).toBeInTheDocument();
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN_TYPE')).not.toBeInTheDocument();
   });
