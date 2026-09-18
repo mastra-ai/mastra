@@ -1,10 +1,17 @@
+import '../../../../new-theme.css';
+import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
 import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
-import { controlFocusBorderVisible, sharedFormElementDisabledStyle } from '@/ds/primitives/form-element';
+import {
+  controlFocusBorderVisible,
+  disabledFilledSurfaceStyle,
+  disabledOutlineSurfaceStyle,
+  sharedFormElementDisabledStyle,
+} from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 // Adornments for text-mode buttons: gap between icon+label and larger radius.
@@ -19,35 +26,47 @@ const TEXT_MODE_ADORNMENTS = cn(
   '[&>[data-slot=button-icon]]:-ml-[.3em] [&>[data-slot=button-icon]]:opacity-50',
   '[&:hover>[data-slot=button-icon]]:opacity-100',
   '[&>[data-slot=button-icon]]:transition-opacity [&>[data-slot=button-icon]]:duration-normal',
-  '[&>[data-slot=button-icon]]:ease-out-custom',
+  '[&>[data-slot=button-icon]]:ease-out-custom motion-reduce:[&>[data-slot=button-icon]]:transition-none',
   '[&>svg]:mx-[-.3em] [&>svg]:size-[1.1em]',
   '[&:hover>svg]:opacity-100 [&>svg]:opacity-50',
-  '[&>svg]:transition-opacity [&>svg]:duration-normal [&>svg]:ease-out-custom',
+  '[&>svg]:transition-opacity [&>svg]:duration-normal [&>svg]:ease-out-custom motion-reduce:[&>svg]:transition-none',
 );
 
 // eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API
 export const buttonVariants = cva(
   cn(
-    'inline-flex cursor-pointer items-center justify-center leading-0',
-    'transition-all duration-normal ease-out-custom',
+    'new-theme inline-flex cursor-pointer items-center justify-center leading-0',
+    'transition-[background-color,border-color,color] duration-normal ease-out-custom motion-reduce:transition-none',
     sharedFormElementDisabledStyle,
     controlFocusBorderVisible,
   ),
   {
     variants: {
       variant: {
-        default:
-          'border border-button-default-border bg-button-default-bg font-medium text-neutral6 hover:bg-button-default-bg-hover hover:text-neutral6 active:bg-button-default-bg-active',
-        primary:
-          'border border-transparent bg-neutral6 font-medium text-surface1 hover:bg-neutral6/90 active:bg-neutral6/80',
-        destructive:
-          'border border-transparent bg-accent2 font-medium text-white hover:bg-accent2/90 active:bg-accent2/80',
-        'destructive-ghost':
-          'border border-transparent bg-transparent text-accent2 hover:bg-accent2/10 hover:text-accent2 active:bg-accent2/15',
-        ghost:
-          'border border-transparent bg-transparent text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
-        outline:
-          'border border-border2 bg-surface3 text-neutral6 hover:bg-surface5 hover:text-neutral6 active:bg-surface6',
+        default: cn(
+          'border border-border bg-foreground/10 font-medium text-foreground not-disabled:hover:bg-foreground/14 not-disabled:active:bg-foreground/18',
+          disabledFilledSurfaceStyle,
+        ),
+        primary: cn(
+          'border border-transparent bg-foreground font-medium text-background not-disabled:hover:bg-foreground/75 not-disabled:active:bg-foreground/60',
+          'disabled:bg-foreground/45 disabled:text-background/75',
+        ),
+        destructive: cn(
+          'border border-transparent bg-accent2 font-medium text-white not-disabled:hover:bg-accent2/80 not-disabled:active:bg-accent2/70',
+          'disabled:bg-accent2/40 disabled:text-white/80',
+        ),
+        'destructive-ghost': cn(
+          'border border-transparent bg-transparent text-accent2 not-disabled:hover:bg-accent2/20 not-disabled:hover:text-accent2 not-disabled:active:bg-accent2/30',
+          'disabled:bg-transparent disabled:text-accent2/50',
+        ),
+        ghost: cn(
+          'border border-transparent bg-transparent text-foreground/90 not-disabled:hover:bg-foreground/4 not-disabled:hover:text-foreground not-disabled:active:bg-foreground/10',
+          'disabled:bg-transparent',
+        ),
+        outline: cn(
+          'border border-foreground/30 bg-transparent text-foreground not-disabled:hover:border-foreground/45 not-disabled:hover:bg-foreground/4 not-disabled:active:bg-foreground/10',
+          disabledOutlineSurfaceStyle,
+        ),
       },
       size: {
         xs: cn(controlSizeClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),
@@ -55,7 +74,7 @@ export const buttonVariants = cva(
         md: cn(controlSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
         lg: cn(controlSizeClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
-        // (e.g. `active:bg-surface5`) — same press feedback as text-mode for consistency.
+        // so icon-mode and text-mode use the same press feedback.
         // `icon-lg` is intentionally 32px (larger than text-mode `lg`, which shares the 28px `md` height).
         'icon-xs': cn(controlHeight.xs, 'w-form-xs rounded-full'),
         'icon-sm': cn(controlHeight.sm, 'w-form-sm rounded-full'),
@@ -80,18 +99,33 @@ export type TextButtonSize = Exclude<ButtonSize, IconButtonSize>;
 
 export interface ButtonProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'>, ButtonVariantsProps {
-  as?: React.ElementType;
+  render?: BaseButton.Props['render'];
   className?: string;
-  href?: string;
-  to?: string;
-  prefetch?: boolean | null;
   children: React.ReactNode;
   /** Leading icon, always rendered on the left of the label inside `<Icon>`. Ignored in icon-mode sizes. */
   icon?: React.ReactNode;
   tooltip?: React.ReactNode;
+  /** @deprecated Pass the element through `render` instead: `render={<Link href="/x" />}`. */
+  as?: React.ElementType;
+  /** @deprecated Set it on the element passed to `render`. */
+  href?: string;
+  /** @deprecated Set it on the element passed to `render`. */
+  to?: string;
+  /** @deprecated Set it on the element passed to `render`. */
   target?: string;
-  type?: 'button' | 'submit' | 'reset';
-  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  /** @deprecated Set it on the element passed to `render`. */
+  prefetch?: boolean | null;
+}
+
+// A link is not a button. `render` always entered `BaseButton`, which warns in
+// development when the resolved element is not a native button. `nativeButton={false}`
+// is the worse fix: Base UI then adds `role="button"` and Enter/Space handling, so a
+// screen reader announces a link as a button. Render links directly instead and keep
+// `BaseButton` for real buttons.
+function isLinkElement(element: React.ReactElement): boolean {
+  if (element.type === 'a') return true;
+  const { href, to } = element.props as { href?: unknown; to?: unknown };
+  return href !== undefined || to !== undefined;
 }
 
 // Button's icon-* sizes don't match `<Icon>`'s own size scale (`sm | default | lg`).
@@ -138,11 +172,16 @@ export function isIconButtonSize(size: ButtonSize | null | undefined): size is I
   return size?.startsWith('icon-') ?? false;
 }
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+export const Button = React.forwardRef<HTMLElement, ButtonProps>(
   (
     {
       className,
-      as,
+      render,
+      as: asProp,
+      href,
+      to,
+      target,
+      prefetch,
       size,
       variant = 'default',
       disabled,
@@ -150,11 +189,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       icon,
       tooltip,
       'aria-label': ariaLabelProp,
+      type,
       ...props
     },
     ref,
   ) => {
-    const Component = as || 'button';
     const iconMode = isIconButtonSize(size);
     const resolvedSize: ButtonSize = size ?? 'md';
     const isLabelless = !iconMode && isIconOnly(children);
@@ -175,20 +214,54 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       </>
     );
 
-    const button = (
-      <Component
-        ref={ref}
-        disabled={disabled}
-        aria-label={ariaLabel}
-        // Expose the variant so a parent ButtonsGroup can detect FILLED segments in CSS
-        // (filled buttons have an opaque background that hides a border seam, so the group
-        // paints their divider as an inset box-shadow instead — see buttons-group.tsx).
-        data-variant={variant}
-        className={cn(buttonVariants({ variant, size: resolvedSize }), isLabelless && '[&>svg]:opacity-75', className)}
-        {...props}
-      >
+    const sharedProps = {
+      disabled,
+      // Base UI renders `type="button"` when the prop is absent, which would quietly stop
+      // a form button that relied on the native `submit` default from submitting. Passing
+      // it through, `undefined` included, keeps native semantics: absent stays absent.
+      type,
+      'aria-label': ariaLabel,
+      // Expose the variant so a parent ButtonsGroup can detect FILLED segments in CSS
+      // (filled buttons have an opaque background that hides a border seam, so the group
+      // paints their divider as an inset box-shadow instead — see buttons-group.tsx).
+      'data-variant': variant,
+      className: cn(buttonVariants({ variant, size: resolvedSize }), isLabelless && '[&>svg]:opacity-75', className),
+      ...props,
+    };
+
+    // The deprecated `as` API keeps its original element path rather than going through
+    // Base UI. Routing it through `render` drops props Base UI does not know about — a
+    // router link loses its `to` and stops navigating — and Base UI warns that a
+    // non-<button> contradicts `nativeButton`.
+    const LegacyComponent = render ? undefined : asProp;
+
+    // Only forward what the caller actually set. Passing `href={undefined}` through to a
+    // router link overwrites the href that link derives from `to`, leaving an anchor that
+    // renders correctly and navigates nowhere.
+    const legacyLinkProps = {
+      ...(href === undefined ? null : { href }),
+      ...(to === undefined ? null : { to }),
+      ...(target === undefined ? null : { target }),
+      ...(prefetch === undefined ? null : { prefetch }),
+    };
+
+    const renderedLink = React.isValidElement(render) && isLinkElement(render) ? render : undefined;
+
+    const button = LegacyComponent ? (
+      <LegacyComponent ref={ref} {...legacyLinkProps} {...sharedProps}>
         {content}
-      </Component>
+      </LegacyComponent>
+    ) : renderedLink ? (
+      React.cloneElement(renderedLink as React.ReactElement<Record<string, unknown>>, {
+        ref,
+        ...sharedProps,
+        className: cn(sharedProps.className, (renderedLink.props as { className?: string }).className),
+        children: content,
+      })
+    ) : (
+      <BaseButton ref={ref} render={render} {...sharedProps}>
+        {content}
+      </BaseButton>
     );
 
     if (tooltip) {

@@ -147,8 +147,8 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
 
       {hasExperimentsAction ? (
         <Button
-          as={Link}
-          to={`/experiments?dataset=${ds.id}`}
+          render={<Link href={`/experiments?dataset=${ds.id}`} />}
+
           variant="ghost"
           size="sm"
           className="h-full w-full rounded-lg p-0!"

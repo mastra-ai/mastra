@@ -1214,10 +1214,14 @@ type InputShared_Type_53 = {
 };
 
 type InputShared_Type_54 = {
-  /** Model ID in format provider/model-name (ModelRouterModelId) */
-  model: string;
+  /** Model ID in format provider/model-name (ModelRouterModelId); defaults to the agent's own model */
+  model?: string | undefined;
   /** Custom instructions for title generation */
   instructions?: string | undefined;
+  /** Minimum number of thread messages required before a title is generated */
+  minMessages?: number | undefined;
+  /** Emit the generated title as a data-thread-title chunk on the run stream */
+  emitEvent?: boolean | undefined;
 };
 
 type InputShared_Type_55 = {
@@ -2514,10 +2518,14 @@ type Shared_Type_22 = {
 };
 
 type Shared_Type_23 = {
-  /** Model ID in format provider/model-name (ModelRouterModelId) */
-  model: string;
+  /** Model ID in format provider/model-name (ModelRouterModelId); defaults to the agent's own model */
+  model?: string | undefined;
   /** Custom instructions for title generation */
   instructions?: string | undefined;
+  /** Minimum number of thread messages required before a title is generated */
+  minMessages?: number | undefined;
+  /** Emit the generated title as a data-thread-title chunk on the run stream */
+  emitEvent?: boolean | undefined;
 };
 
 type Shared_Type_24 = {

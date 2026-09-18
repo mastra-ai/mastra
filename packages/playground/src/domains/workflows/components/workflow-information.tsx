@@ -62,8 +62,8 @@ function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onC
 
   return (
     <Button
-      as={Link}
-      href={`${paths.workflowLink(workflowId)}/graph`}
+      render={<Link href={`${paths.workflowLink(workflowId)}/graph`} />}
+
       variant="ghost"
       size="icon-md"
       tooltip="New workflow run"

@@ -546,4 +546,55 @@ describe('Tab', () => {
       expect(tab.className).toContain('text-neutral3');
     });
   });
+
+  describe('size', () => {
+    it('when size="sm" on pill-ghost, then tabs use the sm button recipe', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill-ghost" size="sm">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tabClasses = screen.getByRole('tab', { name: 'First' }).className.split(/\s+/);
+      for (const token of cn(buttonVariants({ variant: 'ghost', size: 'sm' })).split(/\s+/)) {
+        expect(tabClasses).toContain(token);
+      }
+    });
+
+    it('when size="sm" on pill, then tabs take the sm control height and the list is tagged with the size', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill" size="sm">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tab = screen.getByRole('tab', { name: 'First' });
+      expect(tab.className).toContain('h-form-sm');
+      expect(tab.className).toContain('text-ui-sm');
+      expect(tab.className).not.toContain('text-ui-smd');
+      expect(screen.getByRole('tablist').getAttribute('data-size')).toBe('sm');
+    });
+
+    it('when size is omitted, then tabs keep the md box', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tab = screen.getByRole('tab', { name: 'First' });
+      expect(tab.className).toContain('text-ui-smd');
+      expect(tab.className).not.toContain('h-form-sm');
+      expect(screen.getByRole('tablist').getAttribute('data-size')).toBe('md');
+    });
+  });
 });

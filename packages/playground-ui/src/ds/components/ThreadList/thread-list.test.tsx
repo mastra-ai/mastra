@@ -151,11 +151,7 @@ describe('ThreadList building blocks', () => {
   });
 
   it('renders a new-thread entry point', () => {
-    render(
-      <ThreadListNewItem as="a" href="/threads/new">
-        New thread
-      </ThreadListNewItem>,
-    );
+    render(<ThreadListNewItem render={<a href="/threads/new" />}>New thread</ThreadListNewItem>);
 
     expect(screen.getByRole('link', { name: 'New thread' }).getAttribute('href')).toBe('/threads/new');
   });

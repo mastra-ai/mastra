@@ -5,6 +5,8 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  adm-zip@<=0.6.0: 0.6.1
+  image-size@<=2.0.2: 2.0.4
   brace-expansion@>=2.0.0 <2.1.4: 2.1.4
   js-yaml@>=3.0.0 <3.15.2: 3.15.2
   js-yaml@>=4.0.0 <4.3.2: 4.3.2

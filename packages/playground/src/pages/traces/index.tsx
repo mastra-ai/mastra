@@ -44,13 +44,11 @@ import { useObservabilityStorageCapabilities } from '@/domains/configuration/hoo
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
-import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 
@@ -262,14 +260,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Tool mocks only make sense for agent runs — gate the "Add tool mocks to item" action
   // on the displayed root/anchor span being an agent.
   const isAgentTrace = anchorSpan?.entityType === 'agent';
-  // The trace drawer widens per column shown: Messages (agent turn) and/or span detail.
-  const hasMessagesColumn = !!getTraceThreadId(anchorSpan, anchorSpanId ?? undefined);
-  const hasDetailColumn = !!url.spanIdParam;
   const isFullThreadOpen = !!url.traceIdParam && fullThreadTraceId === url.traceIdParam;
   const selectedTraceId =
     url.traceIdParam && (url.listMode !== 'branches' || !!url.anchorSpanIdParam) ? url.traceIdParam : undefined;
-  const tracePanelSize =
-    hasMessagesColumn && hasDetailColumn ? 'full' : hasMessagesColumn || hasDetailColumn ? 'wide' : 'half';
 
   const filtersApplied =
     !!url.selectedEntityOption ||
@@ -405,7 +398,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
       <TraceSpanPanel
         title="Trace details"
-        size={tracePanelSize}
+        size={url.spanIdParam ? 'full' : 'wide'}
         traceId={selectedTraceId}
         spans={traceSpans}
         anchorSpanId={anchorSpanId}
@@ -419,7 +412,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         isFullThreadOpen={isFullThreadOpen}
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (url.traceIdParam ?? null) : null)}
         onSpanSelect={id => url.handleSpanChange(id ?? null)}
-        onSpanClose={url.handleSpanClose}
         onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}
         onAddTraceMocksToItem={isAgentTrace ? args => setAddMocksTarget(args) : undefined}
         initialSpanId={url.spanIdParam}
@@ -428,15 +420,17 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         showPartialThread
         featuredSpanIds={url.highlightSpanIdsParam}
         onHighlightSpans={url.handleHighlightSpans}
-        feedbackTabBadge={<NeedsReviewDot feedback={traceFeedbackData?.feedback} />}
+        feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
         feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
         scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId: tid, rootSpanId }) =>
           rootSpanId ? <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={url.handleScoreChange} /> : null
         }
+        spanView={url.spanViewParam}
+        onSpanViewChange={url.handleSpanViewChange}
         spanActiveTab={url.spanTabParam ?? 'details'}
         onSpanTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
-        spanFeedbackTabBadge={<NeedsReviewDot feedback={spanFeedbackData?.feedback} />}
+        spanFeedbackTabBadge={spanFeedbackData?.pagination?.total ?? undefined}
         spanFeedbackTabSlot={({ traceId: tid, spanId: sid }) =>
           tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
         }

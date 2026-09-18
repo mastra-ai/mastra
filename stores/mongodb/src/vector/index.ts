@@ -19,7 +19,7 @@ import type { MongoClientOptions, Document, Db, Collection } from 'mongodb';
 import packageJson from '../../package.json';
 
 import { MongoDBFilterTranslator } from './filter';
-import type { MongoDBVectorFilter } from './filter';
+import type { MongoDBFieldCondition, MongoDBVectorFilter } from './filter';
 
 // Define necessary types and interfaces
 export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
@@ -27,7 +27,11 @@ export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
 }
 
 export interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVectorFilter> {
-  documentFilter?: MongoDBVectorFilter;
+  /**
+   * Condition applied to the `document` text field, independent of `filter`.
+   * For example `{ $regex: /astronaut/ }`.
+   */
+  documentFilter?: MongoDBFieldCondition;
   /**
    * Number of candidates the HNSW graph considers before selecting the
    * top-K results. Higher values improve recall at the cost of latency.

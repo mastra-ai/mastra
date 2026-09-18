@@ -117,7 +117,7 @@ export function SearchFieldBlock({
           <SearchIcon
             aria-hidden="true"
             className={cn(
-              'absolute top-1/2 left-3 -translate-y-1/2 text-neutral3',
+              'absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground',
               size === 'xs' && 'size-3',
               size === 'sm' && 'size-3.5',
               (!size || size === 'md') && 'size-4',

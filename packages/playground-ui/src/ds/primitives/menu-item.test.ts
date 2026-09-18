@@ -11,7 +11,7 @@ describe('menuItemClass', () => {
 
   it('leaves the hover/highlight background to the travelling FluidMenu surface', () => {
     expect(menuItemClass).toContain('hover:bg-transparent');
-    expect(menuItemClass).not.toContain('data-highlighted:bg-neutral6/5');
+    expect(menuItemClass).not.toContain('data-highlighted:bg-foreground/4');
   });
 
   it('overrides the pill radius with rounded-lg', () => {
@@ -20,7 +20,7 @@ describe('menuItemClass', () => {
   });
 
   it('maps Base UI highlight/disabled states', () => {
-    expect(menuItemClass).toContain('data-highlighted:text-neutral6');
+    expect(menuItemClass).toContain('data-highlighted:text-foreground');
     expect(menuItemClass).toContain('data-disabled:opacity-50');
     expect(menuItemClass).toContain('focus-visible:border-transparent');
     expect(menuItemClass).not.toContain('focus-visible:border-neutral5/50');
@@ -35,7 +35,7 @@ describe('menuItemClass', () => {
 
 describe('menuPopupClass', () => {
   it('uses the shared surface and dropdown max-height token', () => {
-    expect(menuPopupClass).toContain('bg-surface3');
+    expect(menuPopupClass).toContain('bg-popover');
     expect(menuPopupClass).toContain('z-50');
     expect(menuPopupClass).toContain('var(--max-height-dropdown-max-height)');
   });

@@ -1,13 +1,10 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
 import { omWork } from '../om';
 import { initialChatRuntime, runtimeReducer } from '../runtime';
 
-function dbMessage(id: string, role: MastraDBMessage['role'], parts: MastraMessagePart[]): MastraDBMessage {
-  return { id, role, createdAt: new Date(), content: { format: 2, parts } };
-}
+type MessageUpdateEvent = Extract<AgentControllerEvent, { type: 'message_update' }>;
 
 describe('chat runtime status', () => {
   it('discards snapshot telemetry when resetting without a destination thread', () => {
@@ -109,52 +106,86 @@ describe('chat runtime status', () => {
         state = runtimeReducer(state, { type: 'event', event });
       };
       const usage = { promptTokens: 10, completionTokens: 40, reasoningTokens: 2, totalTokens: 52 };
-      const textDelta = (delta: string): AgentControllerEvent => ({
+      emit({ type: 'agent_start' });
+      emit({
+        type: 'message_start',
+        message: {
+          id: 'user-1',
+          role: 'user',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'Inspect this' }] },
+        },
+      });
+      vi.advanceTimersByTime(1000);
+      emit({
+        type: 'message_start',
+        message: {
+          id: 'signal-1',
+          role: 'signal',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'A reminder' }] },
+        },
+      });
+      vi.advanceTimersByTime(1000);
+      emit({
+        type: 'message_start',
+        message: {
+          id: 'assistant-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [] },
+        },
+      });
+      vi.advanceTimersByTime(1000);
+      emit({
         type: 'message_update',
         id: 'assistant-1',
-        event: { type: 'text-delta', delta },
-      });
-      emit({ type: 'agent_start' });
-      // Full messages (user turns, signals) and non-text streaming don't start
-      // the decode clock — only a non-empty text delta does.
-      for (const event of [
-        { type: 'message_start', message: dbMessage('user-1', 'user', [{ type: 'text', text: 'Inspect this' }]) },
-        { type: 'message_start', message: dbMessage('signal-1', 'signal', [{ type: 'text', text: 'A reminder' }]) },
-        { type: 'message_start', message: dbMessage('assistant-1', 'assistant', []) },
-        textDelta(''),
-        {
-          type: 'message_update',
-          id: 'assistant-1',
-          event: {
-            type: 'part',
-            index: 0,
-            part: {
-              type: 'tool-invocation',
-              toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
-            },
+        event: { type: 'reasoning-delta', index: 0, delta: 'Thinking' },
+      } satisfies MessageUpdateEvent);
+      vi.advanceTimersByTime(1000);
+      emit({
+        type: 'message_update',
+        id: 'assistant-1',
+        event: {
+          type: 'part',
+          index: 0,
+          part: {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
           },
         },
-      ] satisfies AgentControllerEvent[]) {
-        emit(event);
-        vi.advanceTimersByTime(1000);
-      }
-      emit(textDelta('Working'));
+      } satisfies MessageUpdateEvent);
+      vi.advanceTimersByTime(1000);
+      const assistantTextDelta: MessageUpdateEvent = {
+        type: 'message_update',
+        id: 'assistant-1',
+        event: { type: 'text-delta', delta: 'Working' },
+      };
+      emit(assistantTextDelta);
       vi.advanceTimersByTime(1000);
       emit({ type: 'usage_update', usage });
       expect(state.tokensPerSec).toBe(42);
 
-      emit({ type: 'message_start', message: dbMessage('signal-2', 'signal', [{ type: 'text', text: 'A reminder' }]) });
+      emit({
+        type: 'message_start',
+        message: {
+          id: 'signal-2',
+          role: 'signal',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'A reminder' }] },
+        },
+      });
       vi.advanceTimersByTime(5000);
-      emit(textDelta('Working'));
+      emit(assistantTextDelta);
       vi.advanceTimersByTime(1000);
-      emit(textDelta(' more'));
+      emit(assistantTextDelta);
       vi.advanceTimersByTime(1000);
       emit({ type: 'usage_update', usage });
       expect(state.tokensPerSec).toBe(36);
 
       emit({ type: 'agent_end' });
       expect(state.tokensPerSec).toBe(36);
-      emit(textDelta('Working'));
+      emit(assistantTextDelta);
       state = runtimeReducer(state, { type: 'reset' });
       expect(state.tokensPerSec).toBe(0);
       emit({ type: 'usage_update', usage });
