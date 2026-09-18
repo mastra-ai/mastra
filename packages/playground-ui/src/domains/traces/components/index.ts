@@ -27,3 +27,4 @@ export { TracesListModeToggle, type TracesListModeToggleProps } from './traces-l
 export { TracesErrorContent, type TracesErrorContentProps } from './traces-error-content';
 export { NoTracesInfo, type NoTracesInfoProps } from './no-traces-info';
 export * from './thread-trace';
+export * from './span-payload';

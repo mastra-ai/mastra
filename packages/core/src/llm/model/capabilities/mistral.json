@@ -43,7 +43,8 @@
     "pixtral-12b",
     "pixtral-large-latest",
     "voxtral-small-latest",
-    "zai-glm-5-2"
+    "zai-glm-5-2",
+    "zai-glm-5-3"
   ],
-  "structuredOutput": ["mistral-medium-2604", "mistral-medium-latest", "zai-glm-5-2"]
+  "structuredOutput": ["mistral-medium-2604", "mistral-medium-latest", "zai-glm-5-2", "zai-glm-5-3"]
 }

@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "56.0.0-alpha.4",
+  "version": "56.0.0-alpha.5",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -150,7 +150,7 @@
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
-    "build-storybook": "storybook build"
+    "build-storybook": "pnpm -w build:core && storybook build"
   },
   "keywords": [
     "mastra",
