@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMastraCode } from '../index.js';
 import { createAcpSession } from './runtime.js';
+import { loadSettings, resolveDefaultThinkingLevel } from '../onboarding/settings.js';
 
 vi.mock('../onboarding/settings.js', () => ({
-  loadSettings: () => ({}),
-  resolveDefaultThinkingLevel: () => ({ level: 'medium' }),
+  loadSettings: vi.fn(() => ({})),
+  resolveDefaultThinkingLevel: vi.fn(() => ({ level: 'medium' })),
 }));
 
 vi.mock('../index.js', () => ({ createMastraCode: vi.fn() }));
@@ -12,6 +13,8 @@ vi.mock('../index.js', () => ({ createMastraCode: vi.fn() }));
 function bootResult() {
   const session = {
     abort: vi.fn(),
+    mode: { get: vi.fn(() => 'build') },
+    state: { get: vi.fn(() => ({})) },
     thread: { detachFromCurrent: vi.fn(), clearAndReleaseLock: vi.fn().mockResolvedValue(undefined) },
   };
   const stopWorkers = vi.fn().mockResolvedValue(undefined);
@@ -37,6 +40,23 @@ function bootResult() {
 }
 
 describe('ACP runtime factory', () => {
+  it('reads defaults once while observing live mode and session reasoning changes', async () => {
+    vi.mocked(loadSettings).mockClear();
+    vi.mocked(resolveDefaultThinkingLevel).mockClear();
+    const boot = bootResult();
+    vi.mocked(createMastraCode).mockResolvedValueOnce(boot as never);
+    const runtime = await createAcpSession({ cwd: '/project', mcpServers: [] });
+    expect(runtime.getThinkingLevel?.()).toBe('medium');
+    boot.session.mode.get.mockReturnValue('plan');
+    expect(runtime.getThinkingLevel?.()).toBe('medium');
+    expect(loadSettings).toHaveBeenCalledOnce();
+    expect(resolveDefaultThinkingLevel).toHaveBeenLastCalledWith({}, 'plan');
+    boot.session.state.get.mockReturnValue({ thinkingLevel: 'high' });
+    expect(runtime.getThinkingLevel?.()).toBe('high');
+    expect(resolveDefaultThinkingLevel).toHaveBeenCalledTimes(2);
+    await runtime.cleanup?.();
+  });
+
   it('preserves co-author configuration when booting a session', async () => {
     const boot = bootResult();
     vi.mocked(createMastraCode).mockResolvedValueOnce(boot as never);

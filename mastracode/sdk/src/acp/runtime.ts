@@ -43,6 +43,7 @@ export async function createAcpSession(
     // Project environment files must not mutate other ACP sessions.
     disableEnvFile: true,
   });
+  const settings = loadSettings();
   let cleanupPromise: Promise<void> | undefined;
   const runtime: AcpSessionRuntime = {
     controller: result.controller,
@@ -51,7 +52,7 @@ export async function createAcpSession(
     getSkills: async () => (await result.controller.resolveWorkspace({ session: result.session }))?.skills,
     getThinkingLevel: () =>
       result.session.state.get().thinkingLevel ??
-      resolveDefaultThinkingLevel(loadSettings(), result.session.mode.get()).level,
+      resolveDefaultThinkingLevel(settings, result.session.mode.get()).level,
     cleanup: () =>
       (cleanupPromise ??= (async () => {
         result.session.abort();
