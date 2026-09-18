@@ -16,11 +16,11 @@ const baseProps: SpanDataPanelViewProps = {
 afterEach(cleanup);
 
 describe('SpanDataPanelView — header summary', () => {
-  it('shows started, ended and duration in the header, not in the details list', () => {
+  it('shows started and duration in the header (end is implied), not in the details list', () => {
     render(<SpanDataPanelView {...baseProps} />);
 
     expect(screen.getByLabelText(/^Started at/)).toBeTruthy();
-    expect(screen.getByLabelText(/^Ended at/)).toBeTruthy();
+    expect(screen.queryByLabelText(/^Ended at/)).toBeNull();
     // Same `X.XXX s` format as the timeline timing column.
     expect(screen.getByLabelText(/^Duration/).textContent).toBe('1.000 s');
     expect(screen.queryByText('Started')).toBeNull();
