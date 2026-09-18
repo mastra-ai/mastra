@@ -599,6 +599,15 @@ export class MessageList {
    * whole message and the message is removed outright — which is the correct degradation:
    * there is no accepted content to keep.
    *
+   * Mirrors: `content.content` and `content.toolInvocations` are re-derived below, because
+   * `MessageMerger` keeps both in step with the parts as a turn streams. `content.reasoning`
+   * and `content.experimental_attachments` are deliberately *not* touched: the merger never
+   * writes them (they are set once when a DB message is built from model messages), so they
+   * describe the first chunk of the message — which a rollback that keeps any parts has by
+   * definition kept. `AIV5Adapter` only re-synthesizes a part from either field when no such
+   * part survives, so there is nothing to resurrect today. If the merger is ever changed to
+   * update them per step, as it does `content.content`, they will need the same treatment here.
+   *
    * @param messageId - ID of the message to roll back
    * @returns true if a message was found and rolled back or removed
    */
