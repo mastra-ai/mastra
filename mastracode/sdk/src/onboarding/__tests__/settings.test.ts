@@ -358,11 +358,12 @@ describe('default config and state storage', () => {
     });
   });
 
-  it('leaves an unreadable config file untouched after a save', () => {
+  it('leaves an unreadable config file untouched while saving state', () => {
     withTempDefaultSettings(() => {
       writeFileSync(getSettingsPath(), '{invalid', 'utf-8');
       const legacy = JSON.stringify({ preferences: { theme: 'dark' }, onboarding: { completedAt: 'legacy' } });
       writeFileSync(getLegacySettingsPath(), legacy, 'utf-8');
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const settings = loadSettings();
       settings.modelUseCounts['openai/gpt-5.5'] = 1;
@@ -370,7 +371,9 @@ describe('default config and state storage', () => {
 
       expect(readFileSync(getSettingsPath(), 'utf-8')).toBe('{invalid');
       expect(readFileSync(getLegacySettingsPath(), 'utf-8')).toBe(legacy);
-      expect(existsSync(getStatePath())).toBe(false);
+      expect(JSON.parse(readFileSync(getStatePath(), 'utf-8')).modelUseCounts).toEqual({ 'openai/gpt-5.5': 1 });
+      expect(warn).toHaveBeenCalledWith(`Skipped saving unreadable settings file: ${getSettingsPath()}`);
+      warn.mockRestore();
     });
   });
 

@@ -1408,7 +1408,10 @@ export function saveSettings(
 
   if (filePath !== undefined) {
     const currentRead = readSettingsRecord(filePath);
-    if (currentRead.status === 'invalid') return;
+    if (currentRead.status === 'invalid') {
+      console.warn(`Skipped saving unreadable settings file: ${filePath}`);
+      return;
+    }
     const storedCurrent = getSettingsRecord(currentRead);
     const current = storedCurrent
       ? toSettingsRecord(parseSettingsRecord(stripMirrorMetadata(storedCurrent)).settings)
@@ -1425,7 +1428,10 @@ export function saveSettings(
   const statePath = getStatePath();
   const configRead = readSettingsRecord(configPath);
   const stateRead = readSettingsRecord(statePath);
-  if (configRead.status === 'invalid' || stateRead.status === 'invalid') return;
+  const configInvalid = configRead.status === 'invalid';
+  const stateInvalid = stateRead.status === 'invalid';
+  if (configInvalid) console.warn(`Skipped saving unreadable settings file: ${configPath}`);
+  if (stateInvalid) console.warn(`Skipped saving unreadable settings file: ${statePath}`);
   const currentConfig = getSettingsRecord(configRead);
   const currentState = getSettingsRecord(stateRead);
   const current =
@@ -1439,17 +1445,20 @@ export function saveSettings(
   const legacyRead = readSettingsRecord(legacyPath);
   const legacyRecord = getSettingsRecord(legacyRead);
   const mirrorBaseline = legacyRecord ? getMirrorBaseline(legacyRecord) : undefined;
-  if (legacyRecord && mirrorBaseline) {
+  if (legacyRead.status === 'invalid') console.warn(`Skipped saving unreadable settings file: ${legacyPath}`);
+  if (!configInvalid && !stateInvalid && legacyRecord && mirrorBaseline) {
     const legacySettings = toSettingsRecord(parseSettingsRecord(stripMirrorMetadata(legacyRecord)).settings);
     merged = mergeChangedSettings(mirrorBaseline, merged, legacySettings);
     if (!isSettingsRecord(merged)) throw new Error('Unable to merge legacy settings');
   }
 
   const split = splitSettingsRecord(merged);
-  writeSettingsRecordIfChanged(configPath, split.config, currentConfig);
-  writeSettingsRecordIfChanged(statePath, split.state, currentState);
-  if (legacyRead.status !== 'invalid') writeLegacyMirror(legacyPath, merged, legacyRecord);
-  loadedSettingsRecords.set(settings, desired);
+  if (!configInvalid) writeSettingsRecordIfChanged(configPath, split.config, currentConfig);
+  if (!stateInvalid) writeSettingsRecordIfChanged(statePath, split.state, currentState);
+  if (!configInvalid && !stateInvalid && legacyRead.status !== 'invalid') {
+    writeLegacyMirror(legacyPath, merged, legacyRecord);
+  }
+  if (!configInvalid && !stateInvalid) loadedSettingsRecords.set(settings, desired);
   loadedSettingsConfigDirs.set(settings, configDirName);
 }
 
