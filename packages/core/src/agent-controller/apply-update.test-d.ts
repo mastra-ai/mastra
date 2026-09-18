@@ -21,11 +21,11 @@ describe('applyUpdate types', () => {
     expectTypeOf(applyUpdate(undefined, { type: 'text-delta', delta: 'x' })).toEqualTypeOf<
       MastraDBMessage | undefined
     >();
-    expectTypeOf(
-      applyUpdate(undefined, { type: 'reasoning-delta', index: 0, delta: 'x' }),
-    ).toEqualTypeOf<MastraDBMessage | undefined>();
-    expectTypeOf(
-      applyUpdate(undefined, { type: 'part', index: 0, part: { type: 'text', text: '' } }),
-    ).toEqualTypeOf<MastraDBMessage | undefined>();
+    expectTypeOf(applyUpdate(undefined, { type: 'reasoning-delta', index: 0, delta: 'x' })).toEqualTypeOf<
+      MastraDBMessage | undefined
+    >();
+    expectTypeOf(applyUpdate(undefined, { type: 'part', index: 0, part: { type: 'text', text: '' } })).toEqualTypeOf<
+      MastraDBMessage | undefined
+    >();
   });
 });

@@ -74,8 +74,9 @@ describe('applyUpdate', () => {
     expect(updated?.content.parts[0]).not.toBe(replacement);
 
     // Mutating the folded copy must not reach the object the caller passed in.
-    (updated!.content.parts[0] as { type: 'tool-invocation'; toolInvocation: { toolName: string } }).toolInvocation.toolName =
-      'mutated';
+    (
+      updated!.content.parts[0] as { type: 'tool-invocation'; toolInvocation: { toolName: string } }
+    ).toolInvocation.toolName = 'mutated';
     expect(replacement.toolInvocation.toolName).toBe('read_file');
   });
 

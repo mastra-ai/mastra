@@ -35,7 +35,11 @@ function capturedSequence(): AgentControllerEvent[] {
     { type: 'message_start', message: assistantMessage([{ type: 'text', text: '' }]) },
     { type: 'message_update', id: MESSAGE_ID, event: { type: 'text-delta', delta: 'Hello' } },
     { type: 'message_update', id: MESSAGE_ID, event: { type: 'text-delta', delta: ' world' } },
-    { type: 'message_update', id: MESSAGE_ID, event: { type: 'reasoning-delta', index: 0, delta: 'not a reasoning part' } },
+    {
+      type: 'message_update',
+      id: MESSAGE_ID,
+      event: { type: 'reasoning-delta', index: 0, delta: 'not a reasoning part' },
+    },
     { type: 'message_end', id: MESSAGE_ID },
   ];
 }
