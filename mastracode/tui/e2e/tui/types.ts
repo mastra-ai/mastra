@@ -158,6 +158,7 @@ export type ScenarioName =
   | 'shell-passthrough-env-override'
   | 'shell-passthrough-long-output'
   | 'shell-passthrough-nonpersistent'
+  | 'skill-tab-autocomplete'
   | 'skills-command-activation'
   | 'skills-symlink-dedupe'
   | 'storage-fallback-history-reload'

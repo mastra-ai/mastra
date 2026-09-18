@@ -1701,7 +1701,7 @@ mastra api metric label-values '{"metricName":"latency_ms","labelKey":"model","p
 
 #### Observability with `curl`
 
-You can call the hosted observability API directly with your platform access token and project ID. The examples below use the United States host. Substitute `https://observability.eu.mastra.ai` for a European Union environment. The [hosted feedback query API](/docs/mastra-platform/api#observability-feedback-query-api) documents feedback endpoints that don't have CLI commands:
+You can call the hosted observability API directly with your platform access token and project ID. The examples below use the United States host. Substitute `https://observability.eu.mastra.ai` for a European Union environment. The [Feedback API](/docs/mastra-platform/api#feedback-api) documents feedback endpoints that don't have CLI commands:
 
 ```bash
 curl -sS "https://observability.mastra.ai/api/observability/traces?page=0&perPage=20" \

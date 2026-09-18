@@ -66,12 +66,11 @@ export function DatasetItemPanel({ item, itemId, fallback, onClose, ...bodyProps
       ) : itemId ? (
         <>
           <DataPanel.Header>
+            <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" />
             <DataPanel.Heading>
-              Item <b>#{itemId}</b>
+              Item
+              <DataPanel.CopyId id={itemId} />
             </DataPanel.Heading>
-            <DataPanel.HeaderActions>
-              <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" />
-            </DataPanel.HeaderActions>
           </DataPanel.Header>
           {fallback}
         </>
@@ -280,16 +279,12 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
   return (
     <>
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" />
         <DataPanel.Heading>
-          Item <b># {item.id.length > 12 ? `${item.id.slice(0, 12)}…` : item.id}</b>
+          Item
+          <DataPanel.CopyId id={item.id} />
         </DataPanel.Heading>
         <DataPanel.HeaderActions>
-          <DataPanel.NextPrevNav
-            onPrevious={onPrevious}
-            onNext={onNext}
-            previousLabel="Previous item"
-            nextLabel="Next item"
-          />
           {!isEditing && (
             <>
               <Button
@@ -307,7 +302,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
 
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button size="sm" variant="ghost" aria-label="Actions menu">
+                  <Button size="sm" variant="ghost" tooltip="Open actions menu" aria-label="Open actions menu">
                     <EllipsisVerticalIcon />
                   </Button>
                 </DropdownMenu.Trigger>
@@ -327,7 +322,12 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
               </DropdownMenu>
             </>
           )}
-          <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" />
+          <DataPanel.NextPrevNav
+            onPrevious={onPrevious}
+            onNext={onNext}
+            previousLabel="Go to previous item"
+            nextLabel="Go to next item"
+          />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 

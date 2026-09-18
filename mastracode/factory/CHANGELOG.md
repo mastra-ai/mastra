@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.16.0-alpha.5
+
+### Patch Changes
+
+- Fixed synchronous `onAccepted` hook failures rejecting an already-committed Factory transition and skipping its `stage_moved` audit record. Synchronous throws are now isolated and logged the same way as asynchronous rejections. ([#24304](https://github.com/mastra-ai/mastra/pull/24304))
+
+- Updated dependencies [[`8d578e4`](https://github.com/mastra-ai/mastra/commit/8d578e42f3ecfa9d625f23d6a78e666023cda7ff), [`4266b67`](https://github.com/mastra-ai/mastra/commit/4266b677d33bb20651ca296f64aa91fa3b3d4e82), [`bec18d0`](https://github.com/mastra-ai/mastra/commit/bec18d05e7f997ead6ada04a4dc0179c3cad8aa2), [`abecb67`](https://github.com/mastra-ai/mastra/commit/abecb6709643785fd87a3ff9251032a61479ccab), [`ee7187e`](https://github.com/mastra-ai/mastra/commit/ee7187e7bf66db46630f33c64e86b1ff7bb0c0b7), [`babda00`](https://github.com/mastra-ai/mastra/commit/babda005397d2780aa21be0a7670688b704bdb2f), [`2476423`](https://github.com/mastra-ai/mastra/commit/24764233246dc85d7bcba8f8bb610110449a54d6), [`bdab4a8`](https://github.com/mastra-ai/mastra/commit/bdab4a889808d502f398a8086af3b50cc3bfbcd5), [`53cdd63`](https://github.com/mastra-ai/mastra/commit/53cdd6368b12aea743f95118a49fc6b93985fd20)]:
+  - @mastra/code-sdk@1.8.0-alpha.5
+  - @mastra/core@1.68.0-alpha.5
+
 ## 0.16.0-alpha.4
 
 ### Patch Changes

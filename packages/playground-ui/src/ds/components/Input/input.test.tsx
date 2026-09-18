@@ -36,6 +36,17 @@ describe('Input', () => {
     expect(cls).toContain('border-border');
   });
 
+  it.each(['default', 'outline'] as const)(
+    'uses the shared foreground text color at rest for the %s variant',
+    variant => {
+      render(<Input variant={variant} placeholder={variant} />);
+
+      const cls = screen.getByPlaceholderText(variant).className;
+      expect(cls).toContain('text-foreground');
+      expect(cls).toContain('placeholder:text-muted-foreground');
+    },
+  );
+
   it('supports an outline variant without an initial filled background', () => {
     render(<Input variant="outline" placeholder="Name" />);
 

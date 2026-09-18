@@ -83,12 +83,11 @@ export function ExperimentResultPanel({
       ) : itemId ? (
         <>
           <DataPanel.Header>
+            <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
             <DataPanel.Heading>
-              Experiment item <b>#{itemId}</b>
+              Experiment item
+              <DataPanel.CopyId id={itemId} />
             </DataPanel.Heading>
-            <DataPanel.HeaderActions>
-              <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
-            </DataPanel.HeaderActions>
           </DataPanel.Header>
           {fallback}
         </>
@@ -262,26 +261,12 @@ function ExperimentResultPanelBody({
   return (
     <>
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
         <DataPanel.Heading>
-          Result <b># {result.id.length > 12 ? `${result.id.slice(0, 12)}…` : result.id}</b>
+          Result
+          <DataPanel.CopyId id={result.id} />
         </DataPanel.Heading>
         <DataPanel.HeaderActions>
-          <DataPanel.NextPrevNav
-            onPrevious={onPrevious}
-            onNext={onNext}
-            previousLabel="Previous result"
-            nextLabel="Next result"
-          />
-          {experimentLink && (
-            <Button size="sm" variant="ghost" render={<Link href={experimentLink} />} icon={<FlaskConical />}>
-              See experiment
-            </Button>
-          )}
-          {result.traceId && onShowTrace && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} icon={<TraceIcon />}>
-              Trace
-            </Button>
-          )}
           {canFlag && (
             <Button size="sm" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardCheck />}>
               Flag for Review
@@ -292,7 +277,28 @@ function ExperimentResultPanelBody({
               Mark as reviewed
             </Button>
           )}
-          <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
+          {experimentLink && (
+            <Button
+              size="sm"
+              variant="ghost"
+              render={<Link href={experimentLink} />}
+              tooltip="See experiment"
+              aria-label="See experiment"
+            >
+              <FlaskConical />
+            </Button>
+          )}
+          {result.traceId && onShowTrace && (
+            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+              <TraceIcon />
+            </Button>
+          )}
+          <DataPanel.NextPrevNav
+            onPrevious={onPrevious}
+            onNext={onNext}
+            previousLabel="Go to previous result"
+            nextLabel="Go to next result"
+          />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 

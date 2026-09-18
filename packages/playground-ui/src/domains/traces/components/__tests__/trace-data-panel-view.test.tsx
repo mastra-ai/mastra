@@ -29,7 +29,7 @@ const baseProps: TraceDataPanelViewProps = {
   placement: 'traces-list',
 };
 
-const openTraceActions = () => fireEvent.click(screen.getByRole('button', { name: 'Trace actions' }));
+const openTraceActions = () => fireEvent.click(screen.getByRole('button', { name: 'Open trace actions' }));
 
 // jsdom has no layout, so it ships no scrollIntoView.
 const scrollIntoView = vi.fn();

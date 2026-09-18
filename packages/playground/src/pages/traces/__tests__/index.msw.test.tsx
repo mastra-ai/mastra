@@ -6,7 +6,12 @@ import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
-import { traceQueryPage } from './fixtures/trace-query';
+import {
+  emptyTraceQueryFields,
+  traceQueryFieldsWithRegion,
+  traceQueryPage,
+  traceQueryRegionValues,
+} from './fixtures/trace-query';
 import {
   branchList,
   emptyEntityNames,
@@ -54,6 +59,7 @@ const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
     http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => HttpResponse.json(traceQueryPage)),
+    http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () => HttpResponse.json(emptyTraceQueryFields)),
     http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(traceList)),
     // The list fetches the lightweight projection first; serve the same rows there.
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(traceList)),
@@ -380,7 +386,7 @@ describe('Traces side panel header actions', () => {
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     expect(await screen.findByRole('button', { name: 'Score trace' })).not.toBeNull();
-    fireEvent.click(await screen.findByRole('button', { name: 'Trace actions' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open trace actions' }));
 
     expect(screen.queryByRole('menuitem', { name: 'Evaluate trace' })).toBeNull();
     expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).not.toBeNull();
@@ -643,6 +649,141 @@ describe('Traces page filter bar', () => {
       expect(screen.queryByRole('option', { name: 'Primitive Name' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive Type' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive ID' })).toBeNull();
+    });
+  });
+});
+
+describe('Traces page metadata filter discovery', () => {
+  describe('when field discovery is still pending', () => {
+    it('shows the page skeleton instead of the filter bar and list', async () => {
+      let releaseFields: () => void = () => {};
+      const fieldsGate = new Promise<void>(resolve => {
+        releaseFields = resolve;
+      });
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, async () => {
+          await fieldsGate;
+          return HttpResponse.json(emptyTraceQueryFields);
+        }),
+      );
+
+      const { queryClient } = renderPage();
+
+      expect(screen.getByTestId('traces-page-skeleton')).not.toBeNull();
+      expect(screen.queryByRole('combobox', { name: 'Add filter' })).toBeNull();
+
+      releaseFields();
+      await waitFor(() => expect(screen.queryByTestId('traces-page-skeleton')).toBeNull());
+      expect(getFilterInput()).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  describe('when discovery is unsupported by the server', () => {
+    it('renders the filter bar without metadata fields and no skeleton', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(
+            {
+              error: 'Trace query discovery requires a newer @mastra/core.',
+              code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
+            },
+            { status: 501 },
+          ),
+        ),
+      );
+
+      const { queryClient } = renderPage();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      focusFilterInput();
+      await screen.findByRole('option', { name: 'Trace ID' });
+      expect(screen.queryByRole('option', { name: 'region' })).toBeNull();
+    });
+  });
+
+  describe('when discovery reports a metadata.region field', () => {
+    const commitRegionFilter = async () => {
+      const onFields = vi.fn<(body: unknown) => void>();
+      const onValues = vi.fn<(body: unknown) => void>();
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, async ({ request }) => {
+          onFields(await request.json());
+          return HttpResponse.json(traceQueryFieldsWithRegion);
+        }),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/values`, async ({ request }) => {
+          onValues(await request.json());
+          return HttpResponse.json(traceQueryRegionValues);
+        }),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      const { queryClient } = renderPage();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      focusFilterInput();
+      typeInFilter('region');
+      await screen.findByRole('option', { name: 'region' });
+      pressInFilter('Enter');
+      await screen.findByRole('option', { name: 'eu-west' });
+      pressInFilter('Enter');
+
+      return { onFields, onValues, onQuery, queryClient };
+    };
+
+    it('requests fields on mount with the trace predicate scope', async () => {
+      const { onFields } = await commitRegionFilter();
+
+      expect(onFields).toHaveBeenCalledTimes(1);
+      expect(onFields.mock.calls[0]?.[0]).toMatchObject({ predicateScope: 'trace' });
+    });
+
+    it('fetches values only when the value step opens, for the chosen path', async () => {
+      const { onValues } = await commitRegionFilter();
+
+      expect(onValues).toHaveBeenCalledTimes(1);
+      expect(onValues.mock.calls[0]?.[0]).toMatchObject({ path: 'metadata.region', predicateScope: 'trace' });
+    });
+
+    it('writes filterMetadata.region=eu-west to the URL', async () => {
+      await commitRegionFilter();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('location').textContent).toContain('filterMetadata.region=eu-west'),
+      );
+    });
+
+    it('sends an eq predicate on metadata.region in the trace query request', async () => {
+      const { onQuery, queryClient } = await commitRegionFilter();
+
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
+        JSON.stringify({ op: 'eq', left: { path: 'metadata.region' }, right: { literal: 'eu-west' } }),
+      );
+    });
+  });
+
+  describe('when the URL carries filterMetadata.region', () => {
+    it('renders a removable region chip', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(traceQueryFieldsWithRegion),
+        ),
+      );
+
+      const { queryClient } = renderPage('/traces?filterMetadata.region=eu-west');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual(['regioneu-west']);
     });
   });
 });

@@ -34,9 +34,9 @@ export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-h
 export const inputHoverBorderVisible = '[&:hover:not(:focus-visible):not(:disabled)]:border-foreground/45';
 export const inputHoverBorderWithin = '[&:hover:not(:focus-within)]:border-foreground/45';
 
-// Background-agnostic surface + focus recipe shared by Input and Textarea.
-// Uses theme-aware opacity overlays so it reads on any underlying surface, with
-// no accent (green) on focus — caller appends a radius (`rounded-full` for
+// Background-agnostic surface + focus recipe shared by Input, Textarea and the
+// filled field triggers (Select/Combobox `default`). Reads on any underlying
+// surface, with no accent on focus — caller appends a radius (`rounded-full` for
 // single-line inputs, `rounded-xl` for textareas).
 // Filled fields carry their affordance in the fill, exactly like a default Button:
 // the resting `border` stays put on hover and only the surface steps up.
@@ -53,6 +53,16 @@ export const inputOutlineAndFocusStyle =
   inputHoverBorderVisible +
   ' ' +
   'outline-hidden focus-visible:outline-hidden ' +
+  inputFocusBorderVisible;
+
+// Filled field trigger (Select/Combobox `default`): the same surface as Input.
+// Applied *after* `buttonVariants` so tailwind-merge replaces the Button's fill
+// and border with the field overlay — a field is not a button. Like every filled
+// control it carries hover in the fill and leaves the resting border alone.
+export const fieldTriggerSurfaceStyle =
+  'bg-foreground/10 border-border text-foreground ' +
+  'not-disabled:hover:bg-foreground/14 not-disabled:active:bg-foreground/14 ' +
+  'focus-visible:bg-foreground/14 ' +
   inputFocusBorderVisible;
 
 // `filled` was an alias for `default` (both render the filled surface) and has been

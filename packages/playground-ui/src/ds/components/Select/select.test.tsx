@@ -135,4 +135,51 @@ describe('Select', () => {
     // bespoke focus border.
     expect(trigger.className).toContain('focus-visible:border-foreground/60');
   });
+
+  it('uses the Input overlay surface (not the Button surface) for the default variant', () => {
+    renderSelect();
+
+    const trigger = screen.getByRole('combobox');
+    expect(trigger.classList.contains('bg-foreground/10')).toBe(true);
+    expect(trigger.classList.contains('border-border')).toBe(true);
+    expect(trigger.classList.contains('text-foreground')).toBe(true);
+    expect(trigger.classList.contains('data-[placeholder]:text-muted-foreground')).toBe(true);
+    expect(trigger.classList.contains('data-[popup-open]:bg-foreground/14')).toBe(true);
+    expect(trigger.className).not.toContain('button-default');
+
+    const chevron = trigger.querySelector('svg');
+    expect(chevron?.classList.contains('text-muted-foreground')).toBe(true);
+    expect(chevron?.className.baseVal).not.toContain('opacity');
+  });
+
+  it('keeps the outline and ghost variants on the Button recipe', () => {
+    render(
+      <>
+        <Select>
+          <SelectTrigger variant="outline" aria-label="outline">
+            <SelectValue placeholder="Pick one" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="a">A</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select>
+          <SelectTrigger variant="ghost" aria-label="ghost">
+            <SelectValue placeholder="Pick one" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="a">A</SelectItem>
+          </SelectContent>
+        </Select>
+      </>,
+    );
+
+    const outline = screen.getByRole('combobox', { name: 'outline' });
+    expect(outline.classList.contains('bg-transparent')).toBe(true);
+    expect(outline.classList.contains('bg-foreground/10')).toBe(false);
+
+    const ghost = screen.getByRole('combobox', { name: 'ghost' });
+    expect(ghost.classList.contains('bg-transparent')).toBe(true);
+    expect(ghost.classList.contains('bg-foreground/10')).toBe(false);
+  });
 });

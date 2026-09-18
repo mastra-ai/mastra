@@ -13,7 +13,9 @@ const MENU_ITEM_OVERRIDES = cn(
   'flex w-full justify-start rounded-lg text-left select-none',
   // Button brightens its border on focus-visible; inside a menu the highlight is the focus cue.
   'focus-visible:border-transparent',
-  'data-highlighted:bg-foreground/4 data-highlighted:text-foreground',
+  // No row background: the popup's FluidMenuItems highlight travels between rows;
+  // the row only lifts its text color.
+  'hover:bg-transparent data-highlighted:text-foreground',
   'data-selected:text-foreground',
   'data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50',
   '[&>span]:truncate',
