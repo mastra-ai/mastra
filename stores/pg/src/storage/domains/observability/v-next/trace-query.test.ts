@@ -672,7 +672,7 @@ describe('Postgres advanced trace delta polling', () => {
     expect(compiled.text).toContain('newer."cursorId" > r."cursorId"');
     expect(compiled.text).toContain('NOT r."isPending"');
     expect(compiled.text).toContain('r."endedAt" IS NOT NULL');
-    expect(compiled.text).toContain('("xactId", "cursorId") > ($3::xid8, $4::bigint)');
+    expect(compiled.text).toContain('(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)');
     expect(compiled.text).toContain('"xactId" < $5::xid8');
     expect(compiled.text).toContain('ORDER BY "xactId" ASC, "cursorId" ASC');
     expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, '100', '4', '200', 2]);

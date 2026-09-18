@@ -110,3 +110,58 @@ jobs:
           ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
+
+  postgres-vnext:
+    needs: setup
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+      PG_VNEXT_INTEGRATION_TESTS: '1'
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build PostgreSQL storage
+        run: pnpm turbo --filter @mastra/pg build
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Start PostgreSQL services and wait for readiness
+        working-directory: stores/pg
+        run: |
+          docker compose up -d
+          docker compose -f docker-compose.vnext.yaml up -d
+          for service in db timescale partman; do
+            compose_file=docker-compose.vnext.yaml
+            if [ "$service" = db ]; then compose_file=docker-compose.yaml; fi
+            ready=false
+            for attempt in $(seq 1 60); do
+              if docker compose -f "$compose_file" exec -T "$service" pg_isready -h 127.0.0.1 -U postgres; then
+                ready=true
+                break
+              fi
+              sleep 1
+            done
+            if [ "$ready" != true ]; then exit 1; fi
+          done
+      - name: Run shared observability and PostgreSQL v-next integration suites
+        run: pnpm --filter @mastra/pg exec vitest run src/storage/index.vnext.test.ts src/storage/domains/observability/v-next/integration.test.ts
+      - name: Collect PostgreSQL service logs
+        if: failure()
+        working-directory: stores/pg
+        run: |
+          docker compose logs --no-color
+          docker compose -f docker-compose.vnext.yaml logs --no-color
+      - name: Stop PostgreSQL services
+        if: always()
+        working-directory: stores/pg
+        run: |
+          docker compose down -v
+          docker compose -f docker-compose.vnext.yaml down -v

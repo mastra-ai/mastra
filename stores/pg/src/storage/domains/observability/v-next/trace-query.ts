@@ -369,6 +369,7 @@ function compilePostgresTraceScope(
   schema: string,
   selection: TraceSelection,
   relationCollections: Set<RelatedCollection>,
+  deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
 ): { ctes: string[]; values: unknown[] } {
   const spanTable = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const scoreTable = qualifiedTable(schema, TABLE_SCORE_EVENTS);
@@ -382,6 +383,12 @@ function compilePostgresTraceScope(
     `r."startedAt" >= $1`,
     `r."startedAt" < $2`,
   ];
+  if (deltaWindow) {
+    values.push(deltaWindow.xactId, deltaWindow.cursorId, deltaWindow.safeHorizon);
+    // Restrict candidates before materializing roots and their related records.
+    // latestRootPredicate must still see replacements outside this interval.
+    rootConditions.push(`(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)`, `r."xactId" < $5::xid8`);
+  }
   const ctes = [
     `root_scope AS MATERIALIZED (
     SELECT *
@@ -469,7 +476,14 @@ export function compilePostgresTraceQuery(
   safeHorizon?: string,
 ): CompiledPostgresTraceQuery {
   const relationCollections = collectRelationCollections(plan.where);
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections);
+  let deltaWindow: { xactId: string; cursorId: string; safeHorizon: string } | undefined;
+  if (plan.paginationMode === 'delta') {
+    const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'pg');
+    if (watermark === undefined || safeHorizon === undefined)
+      throw new Error('Delta query requires a cursor and safe horizon');
+    deltaWindow = { ...decodeTraceDeltaWatermark(watermark), safeHorizon };
+  }
+  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections, deltaWindow);
 
   let predicateSql = 'TRUE';
   if (plan.where) {
@@ -494,16 +508,10 @@ FROM candidates`,
   }
 
   if (plan.paginationMode === 'delta') {
-    const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'pg');
-    if (watermark === undefined || safeHorizon === undefined)
-      throw new Error('Delta query requires a cursor and safe horizon');
-    const after = decodeTraceDeltaWatermark(watermark);
-    values.push(after.xactId, after.cursorId, safeHorizon, plan.limit + 1);
+    values.push(plan.limit + 1);
     return {
       text: `${candidates}
 SELECT * FROM candidates
-WHERE ("xactId", "cursorId") > ($${values.length - 3}::xid8, $${values.length - 2}::bigint)
-  AND "xactId" < $${values.length - 1}::xid8
 ORDER BY "xactId" ASC, "cursorId" ASC
 LIMIT $${values.length}`,
       values,
