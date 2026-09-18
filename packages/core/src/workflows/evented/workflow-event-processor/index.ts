@@ -412,9 +412,19 @@ export class WorkflowEventProcessor extends EventProcessor {
   /**
    * Resolves the live, in-process workflow instance described by
    * `{ workflowId, runId, parentWorkflow }`. Run-scoped internal registrations
-   * win (closure-bound instances like `agentic-loop`), then nested workflows
-   * are located by descending from their parent descriptor, and finally the
-   * public registry is consulted.
+   * win (closure-bound instances like `agentic-loop`). When a parent
+   * descriptor exists the target is a *nested* workflow — possibly
+   * closure-bound and never publicly registered — so descent from the parent
+   * descriptor is authoritative: a miss propagates instead of degrading to an
+   * id lookup, because dispatch relies on failing loudly when a descriptor no
+   * longer matches this worker's topology (cf. the stale-build fence below).
+   * Only descriptors without a parent are resolved via the public registry.
+   *
+   * Misses come in two modes: `getNestedWorkflow` *throws* when the ancestor
+   * chain root isn't in any registry, and returns `null` when the chain
+   * resolves but the `executionPath` doesn't land on a workflow-bearing
+   * entry. Call sites that can degrade gracefully (see `processWorkflowEnd`)
+   * must handle both.
    *
    * Note: `parentWorkflow` must be the descriptor of the *parent* of the
    * workflow being resolved — `getNestedWorkflow` descends one level from the
@@ -807,7 +817,19 @@ export class WorkflowEventProcessor extends EventProcessor {
       // Streams etc.) strips the loop `condition` function from its stepGraph
       // copy, so resolve the live loop-owning workflow from the registry and
       // only fall back to the payload copy if it can't be found (#23111).
-      const liveParentWorkflow = this.#resolveLiveWorkflow(parentWorkflow);
+      // When grandparent descent misses (either mode — see #resolveLiveWorkflow),
+      // degrade to a public-registry lookup by the loop owner's id: the same
+      // resolution the 2-level case (no grandparent) already uses, and strictly
+      // better than the function-stripped payload copy of last resort.
+      let liveParentWorkflow: Workflow | null | undefined;
+      try {
+        liveParentWorkflow = this.#resolveLiveWorkflow(parentWorkflow);
+      } catch {
+        // Registry lookups throw when the ancestor chain root isn't registered
+        // on this worker; fall through to resolving the loop owner by id.
+        liveParentWorkflow = undefined;
+      }
+      liveParentWorkflow ??= this.#tryResolveWorkflow(parentWorkflow.workflowId);
       const step =
         liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!] ??
         parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
