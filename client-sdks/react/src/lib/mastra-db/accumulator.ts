@@ -1176,7 +1176,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
               toolName,
               args,
               errorText,
-              ...(toolName?.startsWith('agent-') ? { result: toolPart.toolInvocation.result } : {}),
+              ...(chunk.from === 'AGENT' ? { result: toolPart.toolInvocation.result } : {}),
             } as MastraToolInvocation,
           };
         } else {
@@ -1198,7 +1198,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           );
           const isWorkflow =
             Boolean(resultObj?.result?.steps) || toolName?.startsWith('workflow-') || existingLooksLikeWorkflow;
-          const isAgent = toolName?.startsWith('agent-');
+          const isAgent = chunk.from === 'AGENT';
           let output: unknown;
           if (isWorkflow) {
             // Prefer merging the terminal payload into the accumulated
@@ -1339,7 +1339,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
             result: updated,
           } as MastraToolInvocation,
         };
-      } else if (toolName.startsWith('agent-')) {
+      } else if (toolName.startsWith('agent-') || payloadOutput?.from === 'AGENT') {
         const normalized = normalizeNestedAgentOutput(payloadOutput);
         if (!normalized) return result;
 
@@ -1701,15 +1701,19 @@ const accumulateAgentChildMessages = (
   }
 
   if (chunk.type === 'tool-call') {
-    return [
-      ...childMessages,
-      {
-        type: 'tool',
-        toolCallId: chunk.payload.toolCallId,
-        toolName: chunk.payload.toolName,
-        args: chunk.payload.args,
-      },
-    ];
+    const existingIndex = findAgentChildToolIndex(childMessages, chunk.payload.toolCallId);
+    const toolMessage: AgentChildMessage = {
+      ...(existingIndex === -1 ? {} : childMessages[existingIndex]),
+      type: 'tool',
+      toolCallId: chunk.payload.toolCallId,
+      toolName: chunk.payload.toolName,
+      args: chunk.payload.args,
+    };
+    if (existingIndex === -1) return [...childMessages, toolMessage];
+
+    const nextMessages = [...childMessages];
+    nextMessages[existingIndex] = toolMessage;
+    return nextMessages;
   }
 
   if (chunk.type === 'tool-output' && chunk.payload.output?.type?.startsWith('workflow-')) {

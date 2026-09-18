@@ -155,6 +155,40 @@ describe('nested sub-agent streaming', () => {
     expect(convert(outer(cyclic, 'call-applicationAgent', 'agent-applicationAgent'))).toBeUndefined();
   });
 
+  it('counts a custom streaming tool as a delegation boundary', async () => {
+    const stream = new ReadableStream<any>({
+      start(controller) {
+        controller.enqueue({
+          type: 'tool-output',
+          runId: 'supervisor-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-nested-agent',
+            toolName: 'nested-agent-stream',
+            output: { type: 'start', runId: 'nested-run', from: ChunkFrom.AGENT, payload: { id: 'nested-agent' } },
+          },
+        });
+        controller.close();
+      },
+    });
+
+    const chunks = [];
+    for await (const chunk of stream.pipeThrough(
+      AgentStreamToAISDKTransformer({ sendStart: false, sendFinish: false }),
+    )) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toMatchObject({
+      type: 'data-tool-agent',
+      id: 'nested-run',
+      ancestry: [{ toolCallId: 'call-nested-agent', toolName: 'nested-agent-stream' }],
+      depth: 1,
+    });
+    expect(chunks[0]).not.toHaveProperty('parentAgentId');
+  });
+
   it('emits direct agent snapshots at depth one without guessing a parent', async () => {
     const stream = new ReadableStream<any>({
       start(controller) {

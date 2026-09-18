@@ -794,12 +794,12 @@ function serializeAgentRun(
 }
 
 function createAgentStreamAncestryMetadata(ancestry: AgentStreamAncestryEntry[]): AgentStreamAncestryMetadata {
-  const agentIds = ancestry.flatMap(entry => (entry.agentId ? [entry.agentId] : []));
+  const parentAgentId = ancestry.at(-2)?.agentId;
 
   return {
     ancestry,
-    depth: agentIds.length,
-    ...(agentIds.length > 1 ? { parentAgentId: agentIds.at(-2) } : {}),
+    depth: ancestry.length,
+    ...(parentAgentId ? { parentAgentId } : {}),
   };
 }
 

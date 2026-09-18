@@ -1719,6 +1719,49 @@ describe('accumulateChunk - deeply nested agent streaming', () => {
     expect(rootAgentResult(out)?.childMessages).toEqual([{ type: 'text', content: 'Working' }]);
   });
 
+  it('preserves agent progress streamed through a custom tool', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('nested-call', 'nested-agent-stream', {}),
+      toolOutputChunk('nested-call', agentLeaf('text-delta', { text: 'Working' })),
+      toolResultChunk('nested-call', { text: 'Complete' }),
+    ]);
+
+    expect(rootAgentResult(out)).toMatchObject({
+      text: 'Complete',
+      childMessages: [{ type: 'text', content: 'Working' }],
+    });
+  });
+
+  it('upserts a delayed nested tool call without losing earlier progress', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('application-call', 'agent-applicationAgent', {}),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput('resume-call', 'agent-resumeAgent', agentLeaf('text-delta', { text: 'Early progress' })),
+      ),
+      toolOutputChunk(
+        'application-call',
+        agentLeaf('tool-call', {
+          toolCallId: 'resume-call',
+          toolName: 'agent-resumeAgent',
+          args: { candidate: 'Ada' },
+        }),
+      ),
+    ]);
+
+    expect(rootAgentResult(out)?.childMessages).toEqual([
+      {
+        type: 'tool',
+        toolCallId: 'resume-call',
+        toolName: 'agent-resumeAgent',
+        args: { candidate: 'Ada' },
+        toolOutput: { childMessages: [{ type: 'text', content: 'Early progress' }] },
+      },
+    ]);
+  });
+
   it('routes three-level progress into the matching nested agent tool', () => {
     const out = reduce([
       startChunk(),
