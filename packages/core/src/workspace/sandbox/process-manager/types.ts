@@ -28,6 +28,9 @@ export interface SpawnProcessOptions extends CommandOptions {
    * Commands run to completion with output collected — `executeCommand` and
    * background spawns — use `ignore`. `sendStdin`/`closeStdin` throw on an
    * `ignore` process because there is no stdin to write to.
+   *
+   * Honored by the local, Docker, and E2B providers. Other providers may not
+   * expose stdin control; on those, `stdinMode` is accepted but has no effect.
    */
   stdinMode?: 'pipe' | 'ignore';
 }

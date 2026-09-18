@@ -1165,6 +1165,23 @@ describe('DockerSandbox', () => {
       await expect(handle.sendStdin('data')).rejects.toThrow(/stdin/i);
     });
 
+    it('executeCommand with stdinMode ignore completes a stdin-reading command', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      // Build a proper stream that immediately emits end
+      const { PassThrough } = await import('node:stream');
+      const endStream = new PassThrough();
+      setTimeout(() => endStream.end(), 10);
+      mockExec.start.mockResolvedValueOnce(endStream as any);
+
+      const result = await sandbox.executeCommand('cat', [], { timeout: 5000 });
+
+      expect(mockContainer.exec).toHaveBeenCalledWith(expect.objectContaining({ AttachStdin: false }));
+      expect(result.timedOut).not.toBe(true);
+      expect(result.exitCode).toBe(0);
+    });
+
     it('should close the writable side of the exec stream to signal EOF', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();

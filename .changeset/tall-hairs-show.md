@@ -13,7 +13,7 @@ Commands that read standard input without being given anything to read — a bar
 await sandbox.executeCommand('/bin/sh', ['-c', 'rg -n "pattern" --files-with-matches | head']);
 ```
 
-`execute_command` with `background: true` closes standard input too: a background command that reads stdin now exits at end-of-input instead of staying alive until it is killed.
+`execute_command` with `background: true` also closes standard input: a background command that reads stdin now sees end-of-input instead of staying alive until it is killed. Retrieving that background process's handle no longer provides a writable stdin — use `processes.spawn()` with the default `'pipe'` mode for interactive processes.
 
 `processes.spawn()` keeps a writable stdin by default so long-running processes can be driven with `sendStdin()`. It now also accepts a public `stdinMode` option — pass `'ignore'` to close stdin when nothing will feed it:
 
@@ -22,4 +22,4 @@ await sandbox.executeCommand('/bin/sh', ['-c', 'rg -n "pattern" --files-with-mat
 const handle = await sandbox.processes.spawn('node server.js', { stdinMode: 'ignore' });
 ```
 
-Run-to-completion spawns (`executeCommand()` and `execute_command` with `background: true`) pass this option automatically.
+Output-only execution paths (`executeCommand()` and `execute_command` with `background: true`) pass this option automatically. Honored by the local, Docker, and E2B providers; other providers may not expose stdin control.

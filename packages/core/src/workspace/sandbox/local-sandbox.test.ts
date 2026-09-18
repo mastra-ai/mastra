@@ -480,6 +480,20 @@ describe('LocalSandbox', () => {
       expect(result.executionTimeMs).toBeLessThan(5_000);
     }, 15_000);
 
+    it('should not hang when a Node process reads stdin', async () => {
+      // Cross-platform variant: `node -e` reading stdin until EOF. Runs on
+      // Windows too since it doesn't depend on POSIX commands.
+      const result = await sandbox.executeCommand(
+        'node',
+        ['-e', 'process.stdin.resume(); process.stdin.on("end", () => process.exit(0));'],
+        { timeout: 10_000 },
+      );
+
+      expect(result.timedOut).not.toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.executionTimeMs).toBeLessThan(5_000);
+    }, 15_000);
+
     it('should handle command failure', async () => {
       if (os.platform() === 'win32') return; // Uses POSIX commands
       const result = await sandbox.executeCommand('ls', ['nonexistent-directory-12345']);

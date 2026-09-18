@@ -1,8 +1,8 @@
 ---
-title: "Reference: SandboxProcessManager | Workspace"
-description: "Abstract base class for managing background processes in sandboxes. Provides methods to spawn processes, list them, get handles by PID, and kill them."
+title: 'Reference: SandboxProcessManager | Workspace'
+description: 'Abstract base class for managing background processes in sandboxes. Provides methods to spawn processes, list them, get handles by PID, and kill them.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # SandboxProcessManager
@@ -18,25 +18,25 @@ Abstract base class for managing background processes in sandboxes. Provides met
 Access the process manager through the sandbox's `processes` property:
 
 ```typescript title="src/mastra/index.ts"
-import { LocalSandbox } from '@mastra/core/workspace'
+import { LocalSandbox } from '@mastra/core/workspace';
 
-const sandbox = new LocalSandbox({ workingDirectory: './workspace' })
-await sandbox.start()
+const sandbox = new LocalSandbox({ workingDirectory: './workspace' });
+await sandbox.start();
 
 // Spawn a background process
 const handle = await sandbox.processes.spawn('node server.js', {
   env: { PORT: '3000' },
   onStdout: data => console.log(data),
-})
+});
 
 // List all tracked processes
-const procs = await sandbox.processes.list()
+const procs = await sandbox.processes.list();
 
 // Get a handle by PID
-const proc = await sandbox.processes.get(handle.pid)
+const proc = await sandbox.processes.get(handle.pid);
 
 // Kill a process
-await sandbox.processes.kill(handle.pid)
+await sandbox.processes.kill(handle.pid);
 ```
 
 ## Methods
@@ -50,69 +50,76 @@ const handle = await sandbox.processes.spawn('npm run dev', {
   cwd: '/app',
   env: { NODE_ENV: 'development' },
   onStdout: data => console.log(data),
-})
+});
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-  {
-    name: 'command',
-    type: 'string',
-    description: 'The command to run. Interpreted by the shell.',
-  },
-  {
-    name: 'options',
-    type: 'SpawnProcessOptions',
-    description: 'Optional settings for the spawned process.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'SpawnProcessOptions',
-        parameters: [
-          {
-            name: 'timeout',
-            type: 'number',
-            description: 'Timeout in milliseconds. Kills the process if exceeded.',
-            isOptional: true,
-          },
-          {
-            name: 'env',
-            type: 'NodeJS.ProcessEnv',
-            description: 'Environment variables for the process.',
-            isOptional: true,
-          },
-          {
-            name: 'cwd',
-            type: 'string',
-            description:
-              "Working directory for the process. Defaults to the sandbox's configured `workingDirectory`, then the provider default.",
-            isOptional: true,
-          },
-          {
-            name: 'onStdout',
-            type: '(data: string) => void',
-            description: 'Callback for stdout chunks. Called as data arrives.',
-            isOptional: true,
-          },
-          {
-            name: 'onStderr',
-            type: '(data: string) => void',
-            description: 'Callback for stderr chunks. Called as data arrives.',
-            isOptional: true,
-          },
-          {
-            name: 'abortSignal',
-            type: 'AbortSignal',
-            description: 'Signal to abort the process. When aborted, the process is killed.',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
-]}
+    {
+      name: 'command',
+      type: 'string',
+      description: 'The command to run. Interpreted by the shell.',
+    },
+    {
+      name: 'options',
+      type: 'SpawnProcessOptions',
+      description: 'Optional settings for the spawned process.',
+      isOptional: true,
+      properties: [
+        {
+          type: 'SpawnProcessOptions',
+          parameters: [
+            {
+              name: 'timeout',
+              type: 'number',
+              description: 'Timeout in milliseconds. Kills the process if exceeded.',
+              isOptional: true,
+            },
+            {
+              name: 'env',
+              type: 'NodeJS.ProcessEnv',
+              description: 'Environment variables for the process.',
+              isOptional: true,
+            },
+            {
+              name: 'cwd',
+              type: 'string',
+              description:
+                "Working directory for the process. Defaults to the sandbox's configured `workingDirectory`, then the provider default.",
+              isOptional: true,
+            },
+            {
+              name: 'onStdout',
+              type: '(data: string) => void',
+              description: 'Callback for stdout chunks. Called as data arrives.',
+              isOptional: true,
+            },
+            {
+              name: 'onStderr',
+              type: '(data: string) => void',
+              description: 'Callback for stderr chunks. Called as data arrives.',
+              isOptional: true,
+            },
+            {
+              name: 'abortSignal',
+              type: 'AbortSignal',
+              description: 'Signal to abort the process. When aborted, the process is killed.',
+              isOptional: true,
+            },
+            {
+              name: 'stdinMode',
+              type: "'pipe' | 'ignore'",
+              description:
+                "How stdin is wired. `'pipe'` (default) opens a writable stdin for `sendStdin()` and `writer`. `'ignore'` closes stdin so commands that read it see immediate EOF. Honored by the local, Docker, and E2B providers.",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
 />
 
 **Returns:** `Promise<ProcessHandle>`
@@ -122,9 +129,9 @@ const handle = await sandbox.processes.spawn('npm run dev', {
 List all tracked processes. Returns info about each process including PID, running state, and exit code.
 
 ```typescript
-const procs = await sandbox.processes.list()
+const procs = await sandbox.processes.list();
 for (const proc of procs) {
-  console.log(proc.pid, proc.running, proc.exitCode)
+  console.log(proc.pid, proc.running, proc.exitCode);
 }
 ```
 
@@ -135,10 +142,10 @@ for (const proc of procs) {
 Get a handle to a process by PID. Returns `undefined` if the process isn't found or has already been dismissed.
 
 ```typescript
-const handle = await sandbox.processes.get(1234)
+const handle = await sandbox.processes.get(1234);
 if (handle) {
-  console.log(handle.stdout)
-  await handle.kill()
+  console.log(handle.stdout);
+  await handle.kill();
 }
 ```
 
@@ -149,7 +156,7 @@ if (handle) {
 Kill a process by PID. Waits for the process to terminate before returning. Returns `true` if the process was killed, `false` if it wasn't found.
 
 ```typescript
-const killed = await sandbox.processes.kill(handle.pid)
+const killed = await sandbox.processes.kill(handle.pid);
 ```
 
 **Returns:** `Promise<boolean>`
@@ -160,29 +167,29 @@ Information about a tracked process, returned by `list()`.
 
 <PropertiesTable
   content={[
-  {
-    name: 'pid',
-    type: 'number',
-    description: 'Process ID.',
-  },
-  {
-    name: 'command',
-    type: 'string',
-    description: 'The command that was executed.',
-    isOptional: true,
-  },
-  {
-    name: 'running',
-    type: 'boolean',
-    description: 'Whether the process is still running.',
-  },
-  {
-    name: 'exitCode',
-    type: 'number',
-    description: 'Exit code if the process has finished.',
-    isOptional: true,
-  },
-]}
+    {
+      name: 'pid',
+      type: 'number',
+      description: 'Process ID.',
+    },
+    {
+      name: 'command',
+      type: 'string',
+      description: 'The command that was executed.',
+      isOptional: true,
+    },
+    {
+      name: 'running',
+      type: 'boolean',
+      description: 'Whether the process is still running.',
+    },
+    {
+      name: 'exitCode',
+      type: 'number',
+      description: 'Exit code if the process has finished.',
+      isOptional: true,
+    },
+  ]}
 />
 
 ---
@@ -198,66 +205,66 @@ You don't create `ProcessHandle` instances directly. They're returned by `spawn(
 ```typescript
 const handle = await sandbox.processes.spawn('npm run dev', {
   onStdout: data => console.log(data),
-})
+});
 
 // Read accumulated output
-console.log(handle.pid)
-console.log(handle.stdout)
-console.log(handle.stderr)
-console.log(handle.exitCode) // undefined while running
+console.log(handle.pid);
+console.log(handle.stdout);
+console.log(handle.stderr);
+console.log(handle.exitCode); // undefined while running
 
 // Wait for completion
-const result = await handle.wait()
+const result = await handle.wait();
 
 // Send stdin and signal EOF
-await handle.sendStdin('input data\n')
-await handle.closeStdin()
+await handle.sendStdin('input data\n');
+await handle.closeStdin();
 
 // Kill the process
-await handle.kill()
+await handle.kill();
 ```
 
 ### Properties
 
 <PropertiesTable
   content={[
-  {
-    name: 'pid',
-    type: 'number',
-    description: 'Process ID.',
-  },
-  {
-    name: 'stdout',
-    type: 'string',
-    description: 'Accumulated stdout output so far.',
-  },
-  {
-    name: 'stderr',
-    type: 'string',
-    description: 'Accumulated stderr output so far.',
-  },
-  {
-    name: 'exitCode',
-    type: 'number | undefined',
-    description: 'Exit code. undefined while the process is still running.',
-  },
-  {
-    name: 'command',
-    type: 'string | undefined',
-    description: 'The command that was spawned. Set automatically by the process manager.',
-  },
-  {
-    name: 'reader',
-    type: 'Readable',
-    description: 'Readable stream of stdout. Useful for protocols like LSP or JSON-RPC that communicate over stdio.',
-  },
-  {
-    name: 'writer',
-    type: 'Writable',
-    description:
-      'Writable stream to stdin. Ending the stream calls closeStdin(). Useful for protocols like LSP or JSON-RPC that communicate over stdio.',
-  },
-]}
+    {
+      name: 'pid',
+      type: 'number',
+      description: 'Process ID.',
+    },
+    {
+      name: 'stdout',
+      type: 'string',
+      description: 'Accumulated stdout output so far.',
+    },
+    {
+      name: 'stderr',
+      type: 'string',
+      description: 'Accumulated stderr output so far.',
+    },
+    {
+      name: 'exitCode',
+      type: 'number | undefined',
+      description: 'Exit code. undefined while the process is still running.',
+    },
+    {
+      name: 'command',
+      type: 'string | undefined',
+      description: 'The command that was spawned. Set automatically by the process manager.',
+    },
+    {
+      name: 'reader',
+      type: 'Readable',
+      description: 'Readable stream of stdout. Useful for protocols like LSP or JSON-RPC that communicate over stdio.',
+    },
+    {
+      name: 'writer',
+      type: 'Writable',
+      description:
+        'Writable stream to stdin. Ending the stream calls closeStdin(). Useful for protocols like LSP or JSON-RPC that communicate over stdio.',
+    },
+  ]}
 />
 
 ### Methods
@@ -268,46 +275,46 @@ Wait for the process to exit and return the result. Optionally pass `onStdout`/`
 
 ```typescript
 // Simple wait
-const result = await handle.wait()
-console.log(result.success, result.exitCode, result.stdout)
+const result = await handle.wait();
+console.log(result.success, result.exitCode, result.stdout);
 
 // Wait with streaming
 const result = await handle.wait({
   onStdout: data => process.stdout.write(data),
   onStderr: data => process.stderr.write(data),
-})
+});
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: 'WaitOptions',
-    description: 'Optional settings for waiting.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'WaitOptions',
-        parameters: [
-          {
-            name: 'onStdout',
-            type: '(data: string) => void',
-            description: 'Callback for stdout chunks while waiting.',
-            isOptional: true,
-          },
-          {
-            name: 'onStderr',
-            type: '(data: string) => void',
-            description: 'Callback for stderr chunks while waiting.',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
-]}
+    {
+      name: 'options',
+      type: 'WaitOptions',
+      description: 'Optional settings for waiting.',
+      isOptional: true,
+      properties: [
+        {
+          type: 'WaitOptions',
+          parameters: [
+            {
+              name: 'onStdout',
+              type: '(data: string) => void',
+              description: 'Callback for stdout chunks while waiting.',
+              isOptional: true,
+            },
+            {
+              name: 'onStderr',
+              type: '(data: string) => void',
+              description: 'Callback for stderr chunks while waiting.',
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
 />
 
 **Returns:** `Promise<CommandResult>`
@@ -316,44 +323,44 @@ The `CommandResult` object contains:
 
 <PropertiesTable
   content={[
-  {
-    name: 'success',
-    type: 'boolean',
-    description: 'true if exit code is 0.',
-  },
-  {
-    name: 'exitCode',
-    type: 'number',
-    description: 'Numeric exit code.',
-  },
-  {
-    name: 'stdout',
-    type: 'string',
-    description: 'Full stdout output.',
-  },
-  {
-    name: 'stderr',
-    type: 'string',
-    description: 'Full stderr output.',
-  },
-  {
-    name: 'executionTimeMs',
-    type: 'number',
-    description: 'Execution time in milliseconds.',
-  },
-  {
-    name: 'timedOut',
-    type: 'boolean',
-    description: 'true if the process was killed due to timeout.',
-    isOptional: true,
-  },
-  {
-    name: 'killed',
-    type: 'boolean',
-    description: 'true if the process was killed by a signal.',
-    isOptional: true,
-  },
-]}
+    {
+      name: 'success',
+      type: 'boolean',
+      description: 'true if exit code is 0.',
+    },
+    {
+      name: 'exitCode',
+      type: 'number',
+      description: 'Numeric exit code.',
+    },
+    {
+      name: 'stdout',
+      type: 'string',
+      description: 'Full stdout output.',
+    },
+    {
+      name: 'stderr',
+      type: 'string',
+      description: 'Full stderr output.',
+    },
+    {
+      name: 'executionTimeMs',
+      type: 'number',
+      description: 'Execution time in milliseconds.',
+    },
+    {
+      name: 'timedOut',
+      type: 'boolean',
+      description: 'true if the process was killed due to timeout.',
+      isOptional: true,
+    },
+    {
+      name: 'killed',
+      type: 'boolean',
+      description: 'true if the process was killed by a signal.',
+      isOptional: true,
+    },
+  ]}
 />
 
 #### `kill()`
@@ -361,7 +368,7 @@ The `CommandResult` object contains:
 Kill the process. Returns `true` if the process was killed, `false` if it had already exited.
 
 ```typescript
-const killed = await handle.kill()
+const killed = await handle.kill();
 ```
 
 **Returns:** `Promise<boolean>`
@@ -371,7 +378,7 @@ const killed = await handle.kill()
 Send data to the process's stdin. Throws if the process has already exited or stdin isn't available.
 
 ```typescript
-await handle.sendStdin('console.log("hello")\n')
+await handle.sendStdin('console.log("hello")\n');
 ```
 
 **Returns:** `Promise<void>`
@@ -381,10 +388,10 @@ await handle.sendStdin('console.log("hello")\n')
 Close the process's stdin to signal end-of-file (EOF). Use this after sending all input to commands that read until stdin closes. An exited process or an unavailable stdin causes a throw. Providers without a stdin close primitive throw `UnsupportedStdinCloseError`.
 
 ```typescript
-const handle = await sandbox.processes.spawn('cat')
-await handle.sendStdin('input data\n')
-await handle.closeStdin()
-const result = await handle.wait()
+const handle = await sandbox.processes.spawn('cat');
+await handle.sendStdin('input data\n');
+await handle.closeStdin();
+const result = await handle.wait();
 ```
 
 Calling `handle.writer.end()` also closes stdin. On providers without stdin close support, `writer.end()` finishes the stream without an error.
@@ -396,19 +403,15 @@ Calling `handle.writer.end()` also closes stdin. On providers without stdin clos
 `ProcessHandle` exposes `reader` and `writer` properties for integration with Node.js stream-based protocols like LSP or JSON-RPC:
 
 ```typescript
-import {
-  createMessageConnection,
-  StreamMessageReader,
-  StreamMessageWriter,
-} from 'vscode-jsonrpc/node'
+import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from 'vscode-jsonrpc/node';
 
-const handle = await sandbox.processes.spawn('typescript-language-server --stdio')
+const handle = await sandbox.processes.spawn('typescript-language-server --stdio');
 
 const connection = createMessageConnection(
   new StreamMessageReader(handle.reader),
   new StreamMessageWriter(handle.writer),
-)
-connection.listen()
+);
+connection.listen();
 ```
 
 ## Building a custom process manager
@@ -416,15 +419,15 @@ connection.listen()
 To build a process manager for a custom sandbox provider, extend `SandboxProcessManager` and implement `spawn()` and `list()`. The base class automatically wraps your methods with `ensureRunning()` so the sandbox starts before any process operation.
 
 ```typescript
-import { SandboxProcessManager, ProcessHandle } from '@mastra/core/workspace'
-import type { ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace'
+import { SandboxProcessManager, ProcessHandle } from '@mastra/core/workspace';
+import type { ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 
 class MyProcessManager extends SandboxProcessManager<MySandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     // Your spawn implementation
-    const handle = new MyProcessHandle(/* ... */)
-    this._tracked.set(handle.pid, handle)
-    return handle
+    const handle = new MyProcessHandle(/* ... */);
+    this._tracked.set(handle.pid, handle);
+    return handle;
   }
 
   async list(): Promise<ProcessInfo[]> {
@@ -432,7 +435,7 @@ class MyProcessManager extends SandboxProcessManager<MySandbox> {
       pid: handle.pid,
       running: handle.exitCode === undefined,
       exitCode: handle.exitCode,
-    }))
+    }));
   }
 }
 ```
@@ -445,7 +448,7 @@ class MySandbox extends MastraSandbox {
     super({
       name: 'MySandbox',
       processes: new MyProcessManager(),
-    })
+    });
   }
 }
 ```
