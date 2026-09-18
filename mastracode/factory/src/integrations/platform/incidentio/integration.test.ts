@@ -245,6 +245,10 @@ describe('PlatformIncidentioIntegration', () => {
   it('reads issues through the connection encoded in the Intake connection token', async () => {
     const fetchImpl = fetchRouter([
       {
+        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        respond: () => json({ connections: [connection('connection-a', 'acme'), connection('connection-b', 'beta')] }),
+      },
+      {
         match: url => url.includes('/connection-b/proxy/v2/incidents/incident-2'),
         respond: () => json({ incident: { ...incident, id: 'incident-2' } }),
       },
@@ -259,6 +263,28 @@ describe('PlatformIncidentioIntegration', () => {
       issueId: 'incidentio:incident:incident-2',
     });
     expect(issue).toEqual(expect.objectContaining({ identifier: 'INC-42' }));
+  });
+
+  it('rejects a connection token whose id is not among the discovered active connections', async () => {
+    const fetchImpl = fetchRouter([
+      {
+        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        respond: () => json({ connections: [connection('connection-a', 'acme')] }),
+      },
+    ]);
+    const integration = new PlatformIncidentioIntegration({
+      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+    });
+
+    // A correctly prefixed but foreign token must not mint a proxy request
+    // that would ride the Platform bearer credential to another connection.
+    await expect(
+      integration.intake.getIssue({
+        connection: { type: 'oauth', accessToken: 'incidentio-connection:connection-foreign' },
+        issueId: 'incidentio:incident:incident-2',
+      }),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(fetchImpl).not.toHaveBeenCalledWith(expect.stringContaining('connection-foreign'), expect.any(Object));
   });
 
   it('rejects ambiguous requests when multiple accounts are connected and no connection is identified', async () => {

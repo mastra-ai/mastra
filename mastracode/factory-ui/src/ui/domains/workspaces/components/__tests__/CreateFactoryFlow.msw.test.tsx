@@ -508,11 +508,13 @@ describe('Create Factory wizard', () => {
         github: { enabled: true, sourceIds: ['octo/hello'] },
         linear: { enabled: false, sourceIds: null },
         jira: { enabled: false, sourceIds: null },
+        incidentio: { enabled: false, sourceIds: null },
       },
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
         linear: { enabled: false, sourceIds: null },
         jira: { enabled: true, sourceIds: ['jira-source-1'] },
+        incidentio: { enabled: false, sourceIds: null },
       },
     ]);
   });

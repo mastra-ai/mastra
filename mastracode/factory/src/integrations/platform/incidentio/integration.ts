@@ -194,11 +194,20 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
   /**
    * Resolve the intake for an explicit connection token, or fall back to the
    * sole active connection so legacy single-connection callers keep working.
+   *
+   * A caller-supplied connection token is only a claim: the id it carries
+   * must match a connection the deployment actually discovered as active
+   * before any proxy request is minted with the Platform credential.
    */
   async #intakeForConnection(connection: IntegrationConnection): Promise<Intake> {
     const connectionId = connectionIdFromConnection(connection);
-    if (connectionId) return this.#connectionIntake(connectionId);
     const active = await this.#activeConnections();
+    if (connectionId) {
+      if (!active.some(candidate => candidate.id === connectionId)) {
+        throw new IncidentioApiError('incident.io connection is unavailable or requires reauthentication.', 401);
+      }
+      return this.#connectionIntake(connectionId);
+    }
     if (active.length === 1) return this.#connectionIntake(active[0]!.id);
     throw new IncidentioApiError(
       active.length === 0
