@@ -59,9 +59,9 @@ describe('JiraApiClient construction', () => {
   });
 
   it('allows plain http for loopback hosts (local mocks)', () => {
-    expect(new JiraApiClient({ baseUrl: 'http://localhost:8080', email: 'ops@acme.test', apiToken: 'tok' }).baseUrl).toBe(
-      'http://localhost:8080',
-    );
+    expect(
+      new JiraApiClient({ baseUrl: 'http://localhost:8080', email: 'ops@acme.test', apiToken: 'tok' }).baseUrl,
+    ).toBe('http://localhost:8080');
   });
 });
 

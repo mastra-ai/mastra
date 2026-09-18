@@ -17,6 +17,7 @@
 
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { MastraWorker } from '@mastra/core/worker';
 
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
@@ -37,13 +38,19 @@ import type {
 import type { RouteAuth } from '../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { adfToText } from './adf.js';
 import { buildJiraAgentTools } from './agent-tools.js';
 import type { JiraComment, JiraIssue, JiraTransition } from './api.js';
 import { JiraApiClient, JiraApiError } from './api.js';
+import type { JiraEventRules, JiraRuleOverrides } from './default-rules.js';
+import { resolveJiraRules } from './default-rules.js';
+import { attachJiraIssueReconciler } from './issue-reconciler.js';
+import { jiraReconciliationEnabled, jiraReconciliationInterval } from './reconciliation-config.js';
 import { buildJiraRoutes } from './routes.js';
+import { attachJiraRules } from './rules.js';
 
-/** Deployment-global Jira Cloud credentials. All fields are required. */
+/** Deployment-global Jira Cloud credentials. All credential fields are required. */
 export interface JiraIntegrationConfig {
   /** Site base URL, e.g. `https://acme.atlassian.net`. */
   baseUrl: string;
@@ -51,6 +58,8 @@ export interface JiraIntegrationConfig {
   email: string;
   /** API token from id.atlassian.com → Security → API tokens. */
   apiToken: string;
+  /** Per-event replacements; omitted events retain defaults, null disables. */
+  rules?: JiraRuleOverrides;
 }
 
 /** Hard stop for comment pagination so a misbehaving `total` can't loop forever. */
@@ -110,7 +119,14 @@ export class JiraIntegration implements FactoryIntegration {
   #auth: RouteAuth | undefined;
   readonly #orgIdByResourceId = new Map<string, string | null>();
 
+  readonly #rules: JiraEventRules;
+
+  get rules(): JiraEventRules {
+    return this.#rules;
+  }
+
   constructor(config: JiraIntegrationConfig) {
+    this.#rules = resolveJiraRules(config.rules);
     // JiraApiClient validates the credential group and normalizes the URL.
     this.api = new JiraApiClient(config);
     this.#config = config;
@@ -398,7 +414,27 @@ export class JiraIntegration implements FactoryIntegration {
       jira: this,
       auth: ctx.auth,
       intake: ctx.storage.intake,
+      ingestFactoryIssues: attachJiraRules(this, ctx),
     });
+  }
+
+  /**
+   * Background reconciliation, matching the Platform integration: keeps filed
+   * Jira cards' metadata fresh and replays close events through the rules
+   * ingress. Registered only when reconciliation is enabled.
+   */
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    if (!jiraReconciliationEnabled()) return [];
+    const reconcile = attachJiraIssueReconciler(this, ctx);
+    if (!reconcile) return [];
+    const intervalMs = jiraReconciliationInterval();
+    return [
+      new IssueReconcileWorker({
+        integrationId: this.id,
+        reconcile,
+        ...(intervalMs ? { intervalMs } : {}),
+      }),
+    ];
   }
 
   /**

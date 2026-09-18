@@ -139,6 +139,9 @@ export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 export const FACTORY_LINEAR_EVENTS = ['issueObserved', 'issueClosed'] as const;
 export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
 
+export const FACTORY_JIRA_EVENTS = ['issueObserved', 'issueClosed'] as const;
+export type FactoryJiraEventName = (typeof FACTORY_JIRA_EVENTS)[number];
+
 export type FactoryRuleJsonValue =
   | null
   | boolean
@@ -167,7 +170,7 @@ export type FactoryRuleActor =
   | { type: 'system'; id: string };
 
 export interface FactoryRuleIngressIdentity {
-  type: 'human' | 'agent' | 'toolResult' | 'github' | 'linear' | 'rule';
+  type: 'human' | 'agent' | 'toolResult' | 'github' | 'linear' | 'jira' | 'rule';
   id: string;
 }
 
@@ -295,6 +298,32 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
     assignee: string | null;
     creator: string | null;
     team: string | null;
+    labels: readonly string[];
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
+export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  /** Bound board for the source this issue came from, when one is configured and installed. */
+  intake?: FactoryRuleIntakeTarget;
+  event: FactoryJiraEventName;
+  issue: {
+    /** Stable issue reference — the direct integration's Jira id or the Platform-encoded issue reference. */
+    id: string;
+    identifier: string;
+    title: string;
+    url: string;
+    state: string;
+    stateType: string;
+    priorityLabel: string;
+    assignee: string | null;
+    author: string | null;
+    project: string | null;
+    site: string | null;
     labels: readonly string[];
     createdAt: string;
     updatedAt: string;

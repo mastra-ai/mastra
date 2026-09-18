@@ -25,8 +25,11 @@ import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { adfToText } from '../../jira/adf.js';
 import type { JiraComment, JiraIssue, JiraTransition } from '../../jira/api.js';
 import { JiraApiClient, JiraApiError } from '../../jira/api.js';
+import type { JiraEventRules, JiraRuleOverrides } from '../../jira/default-rules.js';
+import { resolveJiraRules } from '../../jira/default-rules.js';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from '../../jira/reconciliation-config.js';
+import { attachJiraRules } from '../../jira/rules.js';
 import {
   logPlatformInfo,
   PlatformApiClient,
@@ -97,6 +100,8 @@ function stateTypeFromCategory(key: string | undefined): string | null {
 
 export interface PlatformJiraIntegrationConfig {
   clientConfig?: PlatformApiClientConfig;
+  /** Per-event replacements; omitted events retain defaults, null disables. */
+  rules?: JiraRuleOverrides;
 }
 
 export class PlatformJiraIntegration implements FactoryIntegration {
@@ -110,7 +115,14 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   #auth: RouteAuth | undefined;
   readonly #orgIdByResourceId = new Map<string, string | null>();
 
+  readonly #rules: JiraEventRules;
+
+  get rules(): JiraEventRules {
+    return this.#rules;
+  }
+
   constructor(config: PlatformJiraIntegrationConfig = {}) {
+    this.#rules = resolveJiraRules(config.rules);
     this.#clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
     this.#platformClient = new PlatformApiClient(this.#clientConfig);
     this.#endpointHost = new URL(this.#clientConfig.baseUrl).host;
@@ -504,6 +516,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       auth: ctx.auth,
       intake: ctx.storage.intake,
       appDbConfigured: Boolean(ctx.factoryStorage),
+      ingestFactoryIssues: attachJiraRules(this, ctx),
     });
   }
 
