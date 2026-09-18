@@ -284,33 +284,11 @@ type StepContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> =
   results: TAccumulated;
 };
 
-type IsAny<T> = 0 extends 1 & T ? true : false;
-
-/** True when a step return type includes `notScorable()`. `any` is treated as not skippable. */
-type IncludesNotScorable<T> =
-  IsAny<T> extends true ? false : [Extract<Awaited<T>, NotScorable>] extends [never] ? false : true;
-
-declare const scorerCanSkip: unique symbol;
-type MarkScorerCanSkip<T extends Record<string, any>> = T & { readonly [scorerCanSkip]: true };
-
-/**
- * Accumulated step results. A step that returns `notScorable()` ends the run, so
- * later steps never see that value in `results`; it's excluded from the stored
- * result type. If the step *can* return `notScorable()`, the accumulated type is
- * branded so `scorer.run()` is a scored/not-scorable union. Scorers that never
- * skip keep a required `score`, matching the pre-notScorable contract.
- */
-type AccumulatedResults<T extends Record<string, any>, K extends string, V> = (IncludesNotScorable<V> extends true
-  ? MarkScorerCanSkip<T>
-  : T) &
+// Simplified AccumulatedResults - don't try to resolve Promise types here.
+// A step that returns `notScorable()` ends the run, so later steps never see
+// that value in `results`; it's excluded from the accumulated type.
+type AccumulatedResults<T extends Record<string, any>, K extends string, V> = T &
   Record<StepResultKey<K>, Exclude<V, NotScorable>>;
-
-type ScorerCanSkip<TAccumulatedResults> =
-  IsAny<TAccumulatedResults> extends true
-    ? true
-    : TAccumulatedResults extends { readonly [scorerCanSkip]: true }
-      ? true
-      : false;
 
 // Special context type for generateReason that includes the score
 type GenerateReasonContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> = StepContext<
@@ -412,45 +390,43 @@ type ScorerRunResultFields<
   judge?: ScorerJudgeResults;
 } & { runId: string };
 
-type ScorerRunScore<TAccumulatedResults extends Record<string, any>> =
-  TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
-
-type ScorerRunOutcome<TAccumulatedResults extends Record<string, any>> =
-  ScorerCanSkip<TAccumulatedResults> extends true
-    ?
-        | {
-            score: ScorerRunScore<TAccumulatedResults>;
-            notScorable?: undefined;
-          }
-        | {
-            score?: undefined;
-            /** Set when a step returned `notScorable()`. The remaining steps did not run. */
-            notScorable: NotScorableOutcome;
-          }
-    : {
-        score: ScorerRunScore<TAccumulatedResults>;
-        notScorable?: undefined;
-      };
-
 /**
  * Result of `scorer.run()`.
  *
- * When no builder step can return `notScorable()`, `score` is required — same
- * as before this feature. When a step can return `notScorable()`, the result
- * is a union: either `score` is set or `notScorable` is set. Narrow on
- * `notScorable` before reading `score` in that case.
+ * Either the run was scored (`score` is set) or a step returned `notScorable()`
+ * (`notScorable` is set and `score` is absent). Check `notScorable` before
+ * reading `score`:
+ *
+ * ```ts
+ * const result = await scorer.run(input)
+ * if (result.notScorable) {
+ *   // skipped — no score
+ * } else {
+ *   result.score // number
+ * }
+ * ```
  */
 export type ScorerRunResult<
-  TAccumulatedResults extends Record<string, any> = any,
+  TAccumulatedResults extends Record<string, any> = Record<string, any>,
   TInput = any,
   TRunOutput = any,
-> = ScorerRunResultFields<TAccumulatedResults, TInput, TRunOutput> & ScorerRunOutcome<TAccumulatedResults>;
+> = ScorerRunResultFields<TAccumulatedResults, TInput, TRunOutput> &
+  (
+    | {
+        score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
+        notScorable?: undefined;
+      }
+    | {
+        score?: undefined;
+        /** Set when a step returned `notScorable()`. The remaining steps did not run. */
+        notScorable: NotScorableOutcome;
+      }
+  );
 
-export type ScorerRunResultSnapshot<TResult extends { score?: unknown } = ScorerRunResult> = Omit<TResult, 'score'> & {
-  score?: TResult['score'];
-};
+export type ScorerRunResultSnapshot<TResult extends ScorerRunResult = ScorerRunResult> = Omit<TResult, 'score'> &
+  Partial<Pick<TResult, 'score'>>;
 
-export interface ScorerRunErrorOptions<TResult extends { score?: unknown } = ScorerRunResult> {
+export interface ScorerRunErrorOptions<TResult extends ScorerRunResult = ScorerRunResult> {
   scorerId: string;
   steps: ScorerStepName[];
   failedStep: ScorerStepName;
@@ -459,7 +435,7 @@ export interface ScorerRunErrorOptions<TResult extends { score?: unknown } = Sco
   cause: unknown;
 }
 
-export class ScorerRunError<TResult extends { score?: unknown } = ScorerRunResult> extends MastraError {
+export class ScorerRunError<TResult extends ScorerRunResult = ScorerRunResult> extends MastraError {
   public readonly failedStep: ScorerStepName;
   public readonly completedSteps: ScorerStepName[];
   public readonly result?: ScorerRunResultSnapshot<TResult>;
@@ -726,14 +702,9 @@ type GenerateReasonFunctionStep<TAccumulated extends Record<string, any>, TInput
   | ((context: GenerateReasonContext<TAccumulated, TInput, TRunOutput>) => any)
   | ((context: GenerateReasonContext<TAccumulated, TInput, TRunOutput>) => Promise<any>);
 
-type GenerateScoreFunctionStep<
-  TAccumulated extends Record<string, any>,
-  TInput,
-  TRunOutput,
-  TScoreOutput extends number | NotScorable = number | NotScorable,
-> =
-  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => TScoreOutput)
-  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => Promise<TScoreOutput>);
+type GenerateScoreFunctionStep<TAccumulated extends Record<string, any>, TInput, TRunOutput> =
+  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => number | NotScorable)
+  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => Promise<number | NotScorable>);
 
 // Special prompt object type for generateScore that always returns a number
 interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
@@ -765,13 +736,8 @@ type AnalyzeStepDef<TAccumulated extends Record<string, any>, TStepOutput, TInpu
     });
 
 // Conditional type for generateScore step definition
-type GenerateScoreStepDef<
-  TAccumulated extends Record<string, any>,
-  TInput,
-  TRunOutput,
-  TScoreOutput extends number | NotScorable = number | NotScorable,
-> =
-  | GenerateScoreFunctionStep<TAccumulated, TInput, TRunOutput, TScoreOutput>
+type GenerateScoreStepDef<TAccumulated extends Record<string, any>, TInput, TRunOutput> =
+  | GenerateScoreFunctionStep<TAccumulated, TInput, TRunOutput>
   | GenerateScorePromptObject<TAccumulated, TInput, TRunOutput>;
 
 // Conditional type for generateReason step definition
@@ -927,8 +893,8 @@ class MastraScorer<
     );
   }
 
-  generateScore<TScoreOutput extends number | NotScorable = number>(
-    stepDef: GenerateScoreStepDef<TAccumulatedResults, TInput, TRunOutput, TScoreOutput>,
+  generateScore<TScoreOutput extends number = number>(
+    stepDef: GenerateScoreStepDef<TAccumulatedResults, TInput, TRunOutput>,
   ): MastraScorer<
     TID,
     TInput,

@@ -245,8 +245,6 @@ describe('scorer pipeline with notScorable()', () => {
     expect(result).not.toHaveProperty('notScorable');
     expect(result.score).toBe(0.5);
     expect(result.reason).toBe('score 0.5');
-    expectTypeOf(result.score).toEqualTypeOf<number>();
-    expectTypeOf(result.notScorable).toEqualTypeOf<undefined>();
   });
 
   it('narrows the result type on notScorable and excludes the sentinel from later step results', async () => {
