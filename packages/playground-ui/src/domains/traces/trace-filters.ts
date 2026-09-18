@@ -21,14 +21,10 @@ import {
   WaypointsIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { TraceMetadataFilterField } from './hooks/use-trace-metadata-filter-fields';
 import { TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from './trace-query-filters';
 import type { TraceDatePreset } from './types';
-import type {
-  FilterBarField,
-  FilterBarItem,
-  FilterBarOperator,
-  FilterBarSuggestionsResolver,
-} from '@/ds/components/FilterBar/types';
+import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 import { stringToThemedColor, themedHueColor } from '@/lib/colors';
 
@@ -291,7 +287,7 @@ export function createTraceFilterBarFields({
   availableEnvironments: string[];
   hiddenFieldIds?: readonly string[];
   /** Discovered `metadata.<key>` paths with a lazy value-suggestions resolver each. */
-  metadataFields?: readonly { path: string; suggestions: FilterBarSuggestionsResolver }[];
+  metadataFields?: readonly TraceMetadataFilterField[];
 }): FilterBarField[] {
   const pick = (id: string, suggestions: { value: string; label?: string }[]): FilterBarField => ({
     ...traceFieldBase(id),

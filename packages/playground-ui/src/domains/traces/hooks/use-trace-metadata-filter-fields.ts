@@ -2,12 +2,20 @@ import { MastraClientError } from '@mastra/client-js';
 import type { GetTraceQueryFieldsArgs, GetTraceQueryFieldsResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { DISCOVERY_STALE_TIME } from './discovery-cache';
+import type { FilterBarSuggestionsResolver } from '@/ds/components/FilterBar/types';
 
 export type TraceQueryDiscoveryTimeRange = GetTraceQueryFieldsArgs['timeRange'];
 
+export type TraceMetadataFilterField = {
+  /** `metadata.<key>` — doubles as the filter bar field id. */
+  path: string;
+  suggestions: FilterBarSuggestionsResolver;
+};
+
 // Server caps discovery limits at 100 (TRACE_QUERY_DISCOVERY_MAX_LIMIT).
-const FIELDS_LIMIT = 100;
+const DISCOVERY_LIMIT = 100;
 
 const EMPTY_FIELDS: GetTraceQueryFieldsResponse = {
   canonicalFields: [],
@@ -27,11 +35,14 @@ export const traceQueryFieldsQueryKey = (timeRange: TraceQueryDiscoveryTimeRange
   ['trace-query-fields', timeRange.from, timeRange.to] as const;
 
 /**
- * Discovers the `metadata.*` fields observed on traces in the given time range so the
- * filter bar can offer them. Resolves to an empty field list when the server or store does
- * not support discovery (`TRACE_QUERY_DISCOVERY_UNSUPPORTED`) so callers never stay blocked.
+ * Discovers the `metadata.*` fields observed on traces in the given time range and returns
+ * them as filter bar fields, each with a lazy `suggestions` resolver that fetches the field's
+ * values when the user opens the value step (FilterBar owns debounce/abort).
+ *
+ * Resolves to an empty field list when the server or store does not support discovery
+ * (`TRACE_QUERY_DISCOVERY_UNSUPPORTED`) so callers never stay blocked.
  */
-export const useTraceQueryFields = ({
+export const useTraceMetadataFilterFields = ({
   timeRange,
   enabled = true,
 }: {
@@ -45,7 +56,7 @@ export const useTraceQueryFields = ({
     queryFn: async ({ signal }) => {
       try {
         return await client.getTraceQueryFields(
-          { timeRange, predicateScope: 'trace', limit: FIELDS_LIMIT },
+          { timeRange, predicateScope: 'trace', limit: DISCOVERY_LIMIT },
           { signal },
         );
       } catch (error) {
@@ -61,8 +72,28 @@ export const useTraceQueryFields = ({
     placeholderData: keepPreviousData,
   });
 
-  return {
-    ...query,
-    metadataFields: query.data?.observedFields ?? EMPTY_FIELDS.observedFields,
-  };
+  const observedFields = query.data?.observedFields;
+
+  const fields = useMemo<TraceMetadataFilterField[]>(
+    () =>
+      (observedFields ?? []).map(field => ({
+        path: field.path,
+        suggestions: async ({ query: search, signal }) => {
+          const { values } = await client.getTraceQueryValues(
+            {
+              timeRange,
+              predicateScope: 'trace',
+              path: field.path,
+              search: search.trim() || undefined,
+              limit: DISCOVERY_LIMIT,
+            },
+            { signal },
+          );
+          return values.map(({ value }) => ({ value }));
+        },
+      })),
+    [observedFields, client, timeRange],
+  );
+
+  return { fields, isLoading: query.isLoading, error: query.error };
 };
