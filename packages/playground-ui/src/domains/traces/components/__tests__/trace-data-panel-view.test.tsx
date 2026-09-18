@@ -793,12 +793,17 @@ describe('TraceDataPanelView — messages column', () => {
   const precedes = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
   describe('given a messages slot', () => {
-    it('renders the messages column next to the span tree, with no Messages tab', () => {
+    it('renders the messages column inside the Spans tab, next to the span tree, with no Messages tab', () => {
       render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
 
       expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Timeline']);
-      expect(precedes(screen.getByTestId('messages-panel'), screen.getByText('agent run'))).toBe(true);
-      expect(columns().className).toContain('grid-cols-[18rem_1fr_0fr] lg:grid-cols-[24rem_1fr_0fr]');
+      const messagesPanel = screen.getByTestId('messages-panel');
+      expect(precedes(messagesPanel, screen.getByText('agent run'))).toBe(true);
+      expect(screen.getByRole('tabpanel').contains(messagesPanel)).toBe(true);
+      expect(messagesPanel.closest('[data-trace-messages-column]')?.parentElement?.className).toContain(
+        'grid-cols-[18rem_minmax(0,1fr)] lg:grid-cols-[24rem_minmax(0,1fr)]',
+      );
+      expect(columns().className).toContain('grid-cols-[1fr_0fr]');
       expect(columns().className).toContain('transition-[grid-template-columns]');
     });
 
@@ -808,17 +813,18 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       expect(precedes(screen.getByTestId('messages-panel'), trace)).toBe(true);
       expect(precedes(trace, screen.getByTestId('span-detail'))).toBe(true);
-      expect(columns().className).toContain('grid-cols-[18rem_1fr_1fr] lg:grid-cols-[24rem_1fr_1fr]');
+      // The trace track hosts messages + tree, so it takes twice the span detail's share.
+      expect(columns().className).toContain('grid-cols-[2fr_1fr]');
     });
 
-    it('folds the messages column away while the Timeline tab is active', () => {
+    it('takes the messages column away with the span tree while the Timeline tab is active', () => {
       render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
 
       fireEvent.click(screen.getByRole('tab', { name: 'Timeline' }));
-      expect(columns().className).toContain('grid-cols-[0px_1fr_0fr]');
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Spans' }));
-      expect(columns().className).toContain('grid-cols-[18rem_1fr_0fr] lg:grid-cols-[24rem_1fr_0fr]');
+      expect(screen.getByTestId('messages-panel')).not.toBeNull();
     });
   });
 
@@ -842,16 +848,17 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       const span = screen.getByTestId('span-detail');
       expect(precedes(trace, span)).toBe(true);
-      expect(columns().className).toContain('grid-cols-[0px_1fr_1fr]');
+      expect(columns().className).toContain('grid-cols-[1fr_1fr]');
     });
   });
 
   describe('given no messages slot', () => {
-    it('keeps the messages column collapsed', () => {
+    it('renders the span tree alone in the Spans tab', () => {
       render(<TraceDataPanelView {...baseProps} />);
 
       expect(screen.queryByTestId('messages-panel')).toBeNull();
-      expect(columns().className).toContain('grid-cols-[0px_1fr_0fr]');
+      expect(document.body.querySelector('[data-trace-messages-column]')).toBeNull();
+      expect(columns().className).toContain('grid-cols-[1fr_0fr]');
     });
   });
 });

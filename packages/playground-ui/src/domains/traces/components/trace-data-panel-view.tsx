@@ -149,12 +149,7 @@ export function TraceDataPanelView({
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
 
-  // Tracked locally too (tabs may be uncontrolled) so the messages column knows
-  // when to fold away for the Timeline tab.
-  const [uncontrolledTab, setUncontrolledTab] = useState<TraceDataPanelTab>('details');
-  const currentTab = activeTab ?? uncontrolledTab;
   const handleTabChange = (tab: TraceDataPanelTab) => {
-    setUncontrolledTab(tab);
     onTabChange?.(tab);
   };
 
@@ -310,8 +305,7 @@ export function TraceDataPanelView({
           </DataPanel.Header>
 
           <TracePanelColumns
-            messagesPanelSlot={messagesPanelSlot}
-            messagesCollapsed={currentTab === 'timeline'}
+            hasMessagesColumn={!!messagesPanelSlot}
             spanPanelSlot={spanPanelSlot}
             highlightQuery={query}
             spanPanelKey={selectedSpanId}
@@ -360,35 +354,54 @@ export function TraceDataPanelView({
 
                     {/* Tab contents share the tab list's horizontal padding so their edges line up. */}
                     <TabContent value="details" flush>
-                      <DataPanel.Content>
-                        {!isOnTracePage &&
-                          !onEvaluateTrace &&
-                          !onSaveAsDatasetItem &&
-                          !onAddTraceMocksToItem &&
-                          showUnavailableFeaturesMsg && (
-                            <Notice variant="info" className="mb-6">
-                              <Notice.Message>
-                                Evaluating traces and saving them as dataset items is available in Mastra Studio (local
-                                or deployed).
-                              </Notice.Message>
-                            </Notice>
-                          )}
+                      {/* The messages column only makes sense beside the span tree, so it lives in this tab
+                          rather than as a sibling column: switching tabs takes it away with the tree. */}
+                      <div
+                        className={cn(
+                          'grid h-full min-h-0',
+                          messagesPanelSlot
+                            ? 'grid-cols-[18rem_minmax(0,1fr)] lg:grid-cols-[24rem_minmax(0,1fr)]'
+                            : 'grid-cols-[minmax(0,1fr)]',
+                        )}
+                      >
+                        {messagesPanelSlot && (
+                          <div
+                            data-trace-messages-column
+                            className="border-border1 flex min-h-0 min-w-0 flex-col overflow-hidden border-r"
+                          >
+                            {messagesPanelSlot}
+                          </div>
+                        )}
+                        <DataPanel.Content>
+                          {!isOnTracePage &&
+                            !onEvaluateTrace &&
+                            !onSaveAsDatasetItem &&
+                            !onAddTraceMocksToItem &&
+                            showUnavailableFeaturesMsg && (
+                              <Notice variant="info" className="mb-6">
+                                <Notice.Message>
+                                  Evaluating traces and saving them as dataset items is available in Mastra Studio
+                                  (local or deployed).
+                                </Notice.Message>
+                              </Notice>
+                            )}
 
-                        {/* The tree stays mounted even with no results, because it
+                          {/* The tree stays mounted even with no results, because it
                           hosts the search field: unmounting it would strand the user
                           with a query they can no longer clear. */}
-                        <TraceSpanTree
-                          hierarchicalSpans={hierarchicalSpans}
-                          onSpanClick={handleSpanClick}
-                          selectedSpanId={selectedSpanId}
-                          expandedSpanIds={expandedSpanIds}
-                          setExpandedSpanIds={setExpandedSpanIds}
-                          featuredSpanIds={featuredSpanIds}
-                          leadingSlot={searchField}
-                          isLoading={isLoading}
-                        />
-                        {noSearchResults}
-                      </DataPanel.Content>
+                          <TraceSpanTree
+                            hierarchicalSpans={hierarchicalSpans}
+                            onSpanClick={handleSpanClick}
+                            selectedSpanId={selectedSpanId}
+                            expandedSpanIds={expandedSpanIds}
+                            setExpandedSpanIds={setExpandedSpanIds}
+                            featuredSpanIds={featuredSpanIds}
+                            leadingSlot={searchField}
+                            isLoading={isLoading}
+                          />
+                          {noSearchResults}
+                        </DataPanel.Content>
+                      </div>
                     </TabContent>
                     <TabContent value="timeline" flush>
                       <DataPanel.Content>
@@ -430,24 +443,22 @@ export function TraceDataPanelView({
 }
 
 /**
- * Lays out the card body as three columns — `[messages] [trace] [span]` — inside
- * the same card. The messages and span cells always exist and collapse to zero
- * when hidden, so opening/closing them animates via `grid-template-columns`
- * rather than mounting/unmounting a DOM column (which cannot be transitioned).
+ * Lays out the card body as two columns — `[trace] [span]` — inside the same
+ * card. The span cell always exists and collapses to zero when hidden, so
+ * opening/closing it animates via `grid-template-columns` rather than
+ * mounting/unmounting a DOM column (which cannot be transitioned).
  * Search matches — span names in the timeline tree as well as values in the span
  * detail — are highlighted while a query is active.
  */
 function TracePanelColumns({
-  messagesPanelSlot,
-  messagesCollapsed,
+  hasMessagesColumn,
   spanPanelSlot,
   highlightQuery,
   spanPanelKey,
   children,
 }: {
-  messagesPanelSlot?: ReactNode;
-  /** Folds the messages column away (e.g. while the Timeline tab needs the width). */
-  messagesCollapsed: boolean;
+  /** The Spans tab hosts a messages column; the trace track then gets more room than the span detail. */
+  hasMessagesColumn: boolean;
   spanPanelSlot?: ReactNode;
   highlightQuery: string;
   /** Identity of the span shown in the panel; changing it re-triggers the match scroll. */
@@ -463,33 +474,15 @@ function TracePanelColumns({
   // The timeline column must never be scrolled by this.
   const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(highlightQuery, spanPanelKey);
 
-  const showMessages = !!messagesPanelSlot && !messagesCollapsed;
-  // The messages column has a fixed width so the span tree and span detail share the rest;
-  // it narrows below `lg` so both side columns keep breathing room in the drawer.
-  // It collapses to `0px` (a length, not `0fr`) so `grid-template-columns` still interpolates.
-  const columns =
-    showMessages && spanPanelSlot
-      ? 'grid-cols-[18rem_1fr_1fr] lg:grid-cols-[24rem_1fr_1fr]'
-      : showMessages
-        ? 'grid-cols-[18rem_1fr_0fr] lg:grid-cols-[24rem_1fr_0fr]'
-        : spanPanelSlot
-          ? 'grid-cols-[0px_1fr_1fr]'
-          : 'grid-cols-[0px_1fr_0fr]';
-
   return (
     <div
       ref={highlightRef}
       data-trace-columns
-      className={cn('grid min-h-0 flex-1 transition-[grid-template-columns] duration-300 ease-in-out', columns)}
+      className={cn(
+        'grid min-h-0 flex-1 transition-[grid-template-columns] duration-300 ease-in-out',
+        spanPanelSlot ? (hasMessagesColumn ? 'grid-cols-[2fr_1fr]' : 'grid-cols-[1fr_1fr]') : 'grid-cols-[1fr_0fr]',
+      )}
     >
-      <div
-        className={cn(
-          'flex min-h-0 min-w-0 flex-col overflow-hidden',
-          showMessages && 'animate-in border-r border-border1 duration-300 fade-in-0',
-        )}
-      >
-        {messagesPanelSlot}
-      </div>
       <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{children}</div>
       {/* Searchable: the span detail is where a match hides inside a large payload. */}
       <div
