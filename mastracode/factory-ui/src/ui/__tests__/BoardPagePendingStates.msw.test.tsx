@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { GithubIssue } from '../domains/factory/services/factory';
+import type { JiraIssue } from '../domains/factory/services/jira';
 import type { LinearIssue } from '../domains/factory/services/linear';
 import { createAppRoutes } from '../router';
 
@@ -79,6 +80,24 @@ const manualWorkItem = {
   revision: 1,
   createdAt: '2026-07-28T00:00:00.000Z',
   updatedAt: '2026-07-28T00:00:00.000Z',
+};
+
+const jiraIssue: JiraIssue = {
+  id: 'jira-issue-acme-eng-42',
+  identifier: 'ENG-42',
+  title: 'Fix Jira intake sync',
+  url: 'https://acme.atlassian.net/browse/ENG-42',
+  author: 'grace',
+  state: 'To Do',
+  stateType: 'unstarted',
+  priorityLabel: 'High',
+  assignee: 'ada',
+  project: 'ENG',
+  site: 'acme.atlassian.net',
+  labels: ['bug'],
+  createdAt: '2026-09-18T00:00:00Z',
+  updatedAt: '2026-09-18T01:00:00Z',
+  sourceId: '10001',
 };
 
 function deferred() {
@@ -198,6 +217,36 @@ function stubBoardEndpoints() {
 function renderWorkBoard() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
   return { ...renderWithProviders(<RouterProvider router={router} />), router };
+}
+
+function stubJiraCandidate() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+      HttpResponse.json({
+        config: {
+          github: { enabled: false, sourceIds: null },
+          linear: { enabled: false, sourceIds: null },
+          jira: { enabled: true, sourceIds: ['10001'] },
+        },
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+      HttpResponse.json({
+        bindings: [{ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_ID, board: 'work' }],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/jira/status`, () =>
+      HttpResponse.json({
+        enabled: true,
+        configured: true,
+        mode: 'platform',
+        site: 'acme.atlassian.net',
+        sites: ['acme.atlassian.net'],
+        reason: 'ready',
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/jira/issues`, () => HttpResponse.json({ issues: [jiraIssue], nextCursor: null })),
+  );
 }
 
 describe('Board card pending states', () => {
@@ -679,6 +728,87 @@ describe('Board card pending states', () => {
     const linearLink = await screen.findByRole('menuitem', { name: 'Open in Linear' });
     expect(linearLink).toHaveAttribute('href', 'https://linear.app/acme/issue/ENG-42/linear-intake-issue');
     expect(linearLink).toHaveAttribute('target', '_blank');
+  });
+
+  it('offers Linear-equivalent actions on Jira intake candidates', async () => {
+    stubBoardEndpoints();
+    stubJiraCandidate();
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix Jira intake sync' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Add to board' })).toBeVisible();
+    const jiraLink = screen.getByRole('menuitem', { name: 'Open in Jira' });
+    expect(jiraLink).toHaveAttribute('href', jiraIssue.url);
+    expect(jiraLink).toHaveAttribute('target', '_blank');
+  });
+
+  it('files a Jira intake candidate on the Work board', async () => {
+    const createRequests: unknown[] = [];
+    stubBoardEndpoints();
+    stubJiraCandidate();
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+        createRequests.push(await request.json());
+        return HttpResponse.json({
+          workItem: {
+            ...manualWorkItem,
+            id: 'jira-item',
+            factoryProjectId: FACTORY_ID,
+            title: jiraIssue.title,
+            externalSource: {
+              integrationId: 'jira',
+              type: 'issue',
+              externalId: jiraIssue.id,
+              url: jiraIssue.url,
+            },
+            metadata: {
+              identifier: jiraIssue.identifier,
+              issueRef: jiraIssue.id,
+              state: jiraIssue.state,
+              stateType: jiraIssue.stateType,
+              priority: jiraIssue.priorityLabel,
+              project: jiraIssue.project,
+              site: jiraIssue.site,
+              assignee: jiraIssue.assignee,
+              assignees: [jiraIssue.assignee],
+              creator: jiraIssue.author,
+              author: jiraIssue.author,
+              labels: jiraIssue.labels,
+              createdAt: jiraIssue.createdAt,
+              updatedAt: jiraIssue.updatedAt,
+            },
+          },
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWorkBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix Jira intake sync' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Add to board' }));
+
+    await waitFor(() => expect(createRequests).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(createRequests[0]).toMatchObject({
+      board: 'work',
+      externalSource: {
+        integrationId: 'jira',
+        type: 'issue',
+        externalId: jiraIssue.id,
+        url: jiraIssue.url,
+      },
+      title: jiraIssue.title,
+      stages: ['intake'],
+      metadata: {
+        identifier: jiraIssue.identifier,
+        assignee: jiraIssue.assignee,
+        labels: jiraIssue.labels,
+      },
+    });
   });
 
   it('offers "Open in GitHub" on unfiled Intake candidates', async () => {
