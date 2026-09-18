@@ -399,11 +399,16 @@ export function createSourceControlTools({
       id: 'source_control_review_change_request',
       description:
         'Submit an approve, request-changes, or comment review to a change request. Provider limitations are returned explicitly.',
-      inputSchema: changeRequestSchema.extend({
-        event: z.enum(['approve', 'request-changes', 'comment']),
-        body: z.string().optional(),
-        commitId: z.string().trim().min(1).optional(),
-      }),
+      inputSchema: changeRequestSchema
+        .extend({
+          event: z.enum(['approve', 'request-changes', 'comment']),
+          body: z.string().optional(),
+          commitId: z.string().trim().min(1).optional(),
+        })
+        .refine(input => input.event === 'approve' || Boolean(input.body?.trim()), {
+          path: ['body'],
+          message: 'request-changes and comment reviews require a body.',
+        }),
       execute: async input => {
         const target = await withTarget();
         const base = {
@@ -418,8 +423,7 @@ export function createSourceControlTools({
             ...(input.body !== undefined ? { body: input.body } : {}),
           });
         }
-        if (!input.body?.trim()) throw new Error(`${input.event} reviews require a body.`);
-        return target.provider.versionControl.createReview({ ...base, event: input.event, body: input.body });
+        return target.provider.versionControl.createReview({ ...base, event: input.event, body: input.body! });
       },
     }),
     source_control_request_reviewers: createTool({

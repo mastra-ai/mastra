@@ -183,6 +183,11 @@ export class GitLabApiClient {
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       throw new Error('GitLabApiClient baseUrl must be an absolute HTTP(S) URL.');
     }
+    const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    const isLoopback = hostname === 'localhost' || hostname === '::1' || /^127(?:\.\d{1,3}){3}$/.test(hostname);
+    if (url.protocol === 'http:' && !isLoopback) {
+      throw new Error('GitLabApiClient baseUrl must use HTTPS unless it targets a loopback host.');
+    }
     this.#direct = {
       baseUrl: config.baseUrl.replace(/\/+$/, ''),
       accessToken,

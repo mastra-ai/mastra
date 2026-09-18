@@ -126,7 +126,13 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isValidGitRef(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(value);
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 255 &&
+    !value.startsWith('-') &&
+    /^[A-Za-z0-9_./-]+$/.test(value)
+  );
 }
 
 function createSessionNaming() {

@@ -341,8 +341,10 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           const issueReference = issueId ? decodeIssueReference(issueId) : null;
           if (!issueReference) return c.json({ error: 'invalid_gitlab_issue_id' }, 400);
 
-          const { connectionId, projectId, projectPath } = issueReference;
-          const sourceId = encodeSourceId({ connectionId, projectId, projectPath });
+          const { host, connectionId, projectId, projectPath } = issueReference;
+          const sourceId = host
+            ? encodeSourceId({ host, projectId })
+            : encodeSourceId({ connectionId, projectId, projectPath });
           await intake.ensureReady();
           const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['gitlab'] });
           const selection = config.gitlab!;

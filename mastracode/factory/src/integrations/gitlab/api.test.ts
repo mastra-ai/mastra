@@ -18,6 +18,12 @@ describe('GitLabApiClient', () => {
   it('validates direct configuration', () => {
     expect(() => new GitLabApiClient({ baseUrl: 'gitlab.com', accessToken: 'token' })).toThrow(/absolute HTTP/);
     expect(() => new GitLabApiClient({ baseUrl: 'https://gitlab.com', accessToken: ' ' })).toThrow(/accessToken/);
+    expect(() => new GitLabApiClient({ baseUrl: 'http://gitlab.example.com', accessToken: 'token' })).toThrow(
+      /must use HTTPS/,
+    );
+    expect(() => new GitLabApiClient({ baseUrl: 'http://localhost:8080', accessToken: 'token' })).not.toThrow();
+    expect(() => new GitLabApiClient({ baseUrl: 'http://127.0.0.1:8080', accessToken: 'token' })).not.toThrow();
+    expect(() => new GitLabApiClient({ baseUrl: 'http://[::1]:8080', accessToken: 'token' })).not.toThrow();
   });
 
   it('checks the current identity without listing projects', async () => {

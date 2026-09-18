@@ -290,7 +290,7 @@ describe('GitLab UI routes', () => {
   it('loads details only for a selected GitLab source routed to the caller-owned Factory', async () => {
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
     const factoryProjectId = '11111111-1111-4111-8111-111111111111';
-    const source = { connectionId: 'direct', projectId: '10', projectPath: 'acme/app' };
+    const source = { host: 'gitlab.com', projectId: '10' };
     const sourceId = encodeSourceId(source);
     const issueId = encodeIssueReference({ ...source, issueIid: 42 });
     vi.spyOn(gitlab, 'resolveOrgId').mockResolvedValue('org1');
