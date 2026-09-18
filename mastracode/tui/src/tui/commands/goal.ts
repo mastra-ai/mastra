@@ -82,18 +82,9 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     await goalManager.saveToThread(state);
     ctx.updateStatusLine();
 
-    // Kick off the next turn using the same goal-reminder signal format used by
-    // startGoal, so the model receives a structured system-reminder rather than
-    // a plain user message.
+    // The goal-reminder signal below is echoed back into the live stream as the
+    // goal box; rendering it here too would show the goal twice.
     const resumedGoal = goalManager.getGoal();
-    ctx.addUserMessage(
-      createGoalReminderMessage(
-        resumedGoal!.id,
-        resumedGoal!.objective,
-        resumedGoal!.maxTurns,
-        resumedGoal!.judgeModelId,
-      ),
-    );
     try {
       await state.session.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
     } catch (err) {
@@ -378,11 +369,11 @@ async function startGoal(
   await goalManager.saveToThread(state);
   ctx.updateStatusLine();
 
-  // Model-only reminders are not echoed to the live stream. Render the goal
-  // locally, including plan handoffs that start their run separately.
-  ctx.addUserMessage(createGoalReminderMessage(goal.id, goal.objective, goal.maxTurns, goal.judgeModelId));
-
   if (options.trigger === 'none') {
+    // No reminder signal is sent in this mode, so nothing echoes the goal into
+    // the transcript — render it locally. On the sending paths the echoed
+    // signal renders the goal box, and rendering here too shows it twice.
+    ctx.addUserMessage(createGoalReminderMessage(goal.id, goal.objective, goal.maxTurns, goal.judgeModelId));
     return;
   }
 
@@ -395,6 +386,8 @@ async function startGoal(
   }
 }
 
+// Rendered only when no reminder signal is sent (`trigger: 'none'`). On the
+// sending paths the echoed signal is the single source of the goal box.
 export function createGoalReminderMessage(
   goalId: string,
   objective: string,
@@ -407,6 +400,8 @@ export function createGoalReminderMessage(
     tagName: 'system-reminder',
     contents: objective,
     attributes: { type: 'goal' },
+    // Key must match what `getReminderView` reads, and what
+    // `createGoalReminderSignal` now emits.
     metadata: { goalMaxTurns: maxTurns, judgeModelId },
   } as Parameters<typeof createSignal>[0]).toDBMessage();
 }

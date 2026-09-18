@@ -10,6 +10,9 @@ const OBJECTIVE = 'Complete the single-render goal judge e2e objective.';
 const HISTORY_THREAD_ID = 'thread-goal-judge-single-render-history';
 const HISTORY_THREAD_TITLE = 'E2E goal judge history fixture';
 export const GOAL_JUDGE_BOX_SIGNATURE = /Goal\s+●\s+done\s+\(1\/3\)/g;
+// The goal reminder box. It must appear exactly once: the goal is rendered from
+// the echoed reminder signal, so a local render as well would show it twice.
+export const GOAL_REMINDER_BOX_SIGNATURE = /Goal \(3 max attempts, judge: [^)]+\)/g;
 
 function quoteSql(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
@@ -17,6 +20,10 @@ function quoteSql(value: string): string {
 
 function countJudgeBoxes(view: string): number {
   return stripAnsi(view).match(GOAL_JUDGE_BOX_SIGNATURE)?.length ?? 0;
+}
+
+function countGoalReminderBoxes(view: string): number {
+  return stripAnsi(view).match(GOAL_REMINDER_BOX_SIGNATURE)?.length ?? 0;
 }
 
 function writeProofCounts(live: number, reload: number | null): void {
@@ -89,6 +96,16 @@ export const goalJudgeSingleRenderScenario: McE2eScenario = {
     console.info(`[goal-judge-single-render] live=${liveCount} signature=${GOAL_JUDGE_BOX_SIGNATURE.source}`);
     if (liveCount !== 1) {
       throw new Error(`Expected exactly one live judge box, found ${liveCount}:\n${liveView}`);
+    }
+
+    const reminderCount = countGoalReminderBoxes(liveView);
+    console.info(
+      `[goal-judge-single-render] goalReminderBoxes=${reminderCount} signature=${GOAL_REMINDER_BOX_SIGNATURE.source}`,
+    );
+    if (reminderCount !== 1) {
+      throw new Error(
+        `Expected exactly one live goal reminder box, found ${reminderCount}:\n${liveView}`,
+      );
     }
     terminal.submit('/new');
     await runtime.waitForScreenText(/Ready for new conversation/i, terminal, 8_000);
