@@ -21,12 +21,19 @@ const createJiraIssueComment = vi.fn();
 let PROJECT_ID = '';
 const ORG_ID = 'org-1';
 
-function requestContextFor(resourceId: string | undefined): RequestContext {
+function requestContextFor(resourceId: string | undefined, factoryProjectId?: string): RequestContext {
   const ctx = new RequestContext();
   if (resourceId !== undefined) {
-    ctx.set('controller', { resourceId });
+    ctx.set('controller', {
+      resourceId,
+      getState: () => ({ factoryProjectId }),
+    });
   }
   return ctx;
+}
+
+function boardRunRequestContext(factoryProjectId: string): RequestContext {
+  return requestContextFor('work-item-session-id', factoryProjectId);
 }
 
 async function seedProject(): Promise<void> {
@@ -85,6 +92,12 @@ describe('buildPlatformJiraAgentTools — exposure gating', () => {
     jira.initialize({ projects: seed.projects, auth: fakeRouteAuth({ enabled: false }) });
     const tools = await buildPlatformJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toEqual({});
+  });
+
+  it('exposes the tools on board runs, where the resourceId is a session id', async () => {
+    await seedProject();
+    const tools = await buildPlatformJiraAgentTools({ jira, requestContext: boardRunRequestContext(PROJECT_ID) });
+    expect(Object.keys(tools)).toEqual(['jira_get_issue', 'jira_create_comment']);
   });
 
   it('exposes nothing for resources that are not factory projects', async () => {

@@ -108,11 +108,16 @@ export async function buildJiraAgentTools({
 }): Promise<Record<string, ReturnType<typeof createJiraGetIssueTool> | ReturnType<typeof createJiraCommentTool>>> {
   if (!jira.authEnabled) return {};
 
-  const ctx = requestContext.get('controller') as AgentControllerRequestContext | undefined;
-  const resourceId = ctx?.resourceId;
-  if (!resourceId) return {};
+  const ctx = requestContext.get('controller') as
+    AgentControllerRequestContext<{ factoryProjectId?: string }> | undefined;
+  if (!ctx) return {};
 
-  const orgId = await jira.resolveOrgId(resourceId);
+  // Board-run resourceId is the work-item session id, not the project id stored
+  // in factory_projects. Project-scoped sessions may not carry factoryProjectId.
+  const projectId = ctx.getState().factoryProjectId ?? ctx.resourceId;
+  if (!projectId) return {};
+
+  const orgId = await jira.resolveOrgId(projectId);
   if (!orgId) return {};
 
   return {
