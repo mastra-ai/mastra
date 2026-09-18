@@ -1339,6 +1339,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
         }
 
+        // Per-model modelSettings shallow-merge on top of call-time modelSettings,
+        // resolved once here so that input processors see (and can override) the
+        // settings this step will actually run with. Mirrors how per-model
+        // providerOptions are merged below.
+        // An explicit model or agent maxRetries wins; otherwise preserve modelSettings before using the default.
+        const resolvedModelSettings: MastraModelSettings = {
+          ...modelSettings,
+          ...modelConfig.modelSettings,
+          timeout:
+            modelSettings?.timeout || modelConfig.modelSettings?.timeout
+              ? { ...modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
+              : undefined,
+          maxRetries: modelConfig.maxRetriesConfigured
+            ? modelConfig.maxRetries
+            : (modelSettings?.maxRetries ?? modelConfig.maxRetries),
+        };
+
         const currentStep: {
           messageId: string;
           model: MastraLanguageModel;
@@ -1356,7 +1373,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           toolChoice,
           activeTools,
           providerOptions: mergeProviderOptions(providerOptions, modelConfig.providerOptions),
-          modelSettings,
+          modelSettings: resolvedModelSettings,
           structuredOutput,
           workspace,
         };
@@ -1462,6 +1479,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // `currentStep`. This is the contract the regular path relied on
             // before composeStepInput was extracted.
             Object.assign(currentStep, mergedStepInput);
+            // `composeStepInput` replaces `modelSettings` wholesale, so a processor
+            // returning the idiomatic partial shape (`{ temperature }`) drops every
+            // key it did not restate. `maxRetries` and `timeout` are infrastructure
+            // budgets rather than model knobs, and were re-applied after the
+            // processor ran before this resolution moved into `currentStep` — keep
+            // them rather than silently falling back to provider defaults.
+            const processorSettings = currentStep.modelSettings;
+            currentStep.modelSettings = {
+              ...processorSettings,
+              maxRetries: processorSettings?.maxRetries ?? resolvedModelSettings.maxRetries,
+              timeout: processorSettings?.timeout ?? resolvedModelSettings.timeout,
+            };
             executedStepModel =
               currentStep.model.provider && currentStep.model.modelId
                 ? `${currentStep.model.provider}/${currentStep.model.modelId}`
@@ -1470,7 +1499,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // Update MODEL_GENERATION span if processor actually changed model or modelSettings
             const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
             const modelSettingsChanged =
-              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
+              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== resolvedModelSettings;
             if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
               modelSpanTracker.updateGeneration({
                 ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
@@ -1745,14 +1774,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // input processor / prepareStep / processLLMRequest work, and that
           // availableTools / toolChoice reflect any per-step mutations.
           modelSpanTracker?.setInferenceContext?.({
-            parameters: {
-              ...currentStep.modelSettings,
-              ...modelConfig.modelSettings,
-              timeout:
-                currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
-                  ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
-                  : undefined,
-            } as Record<string, unknown> | undefined,
+            parameters: currentStep.modelSettings as Record<string, unknown> | undefined,
             providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
             availableTools: getStepAvailableToolNames(
               currentStep.tools as Record<string, unknown> | undefined,
@@ -1776,19 +1798,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 toolChoice: currentStep.toolChoice,
                 activeTools: currentStep.activeTools as string[] | undefined,
                 options,
-                // Per-model modelSettings shallow-merge on top of call-time modelSettings.
-                // An explicit model or agent maxRetries wins; otherwise preserve modelSettings before using the default.
-                modelSettings: {
-                  ...currentStep.modelSettings,
-                  ...modelConfig.modelSettings,
-                  timeout:
-                    currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
-                      ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
-                      : undefined,
-                  maxRetries: modelConfig.maxRetriesConfigured
-                    ? modelConfig.maxRetries
-                    : (currentStep.modelSettings?.maxRetries ?? modelConfig.maxRetries),
-                },
+                // Resolved once in `currentStep` above (call-time < per-model < processor).
+                modelSettings: currentStep.modelSettings,
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,
                 headers: mergeLlmCallHeaders({
