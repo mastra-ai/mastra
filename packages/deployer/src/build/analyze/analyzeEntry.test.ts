@@ -93,6 +93,49 @@ describe('analyzeEntry', () => {
     expect(result.output.code).toBeTruthy();
   });
 
+  it.each([
+    {
+      name: 'production by default',
+      env: undefined,
+      includedDependency: '@mastra/core/logger',
+      excludedDependency: '@mastra/core/agent',
+    },
+    {
+      name: 'the provided environment',
+      env: { 'process.env.NODE_ENV': JSON.stringify('development') },
+      includedDependency: '@mastra/core/agent',
+      excludedDependency: '@mastra/core/logger',
+    },
+  ])('should analyze only the $name branch', async ({ env, includedDependency, excludedDependency }) => {
+    const tempDir = await mkdtemp(join(import.meta.dirname, '__fixtures__', 'node-env-'));
+    const entryFilePath = join(tempDir, 'entry.ts');
+    await writeFile(
+      entryFilePath,
+      `
+        if (process.env.NODE_ENV === 'development') {
+          await import('@mastra/core/agent');
+        } else {
+          await import('@mastra/core/logger');
+        }
+      `,
+    );
+
+    try {
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: process.cwd(),
+        env,
+      });
+
+      expect(result.dependencies.has(includedDependency)).toBe(true);
+      expect(result.dependencies.has(excludedDependency)).toBe(false);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('should detect workspace packages correctly', async () => {
     const entryAsString = await readFile(join(import.meta.dirname, '__fixtures__', 'default', 'entry.ts'), 'utf-8');
 

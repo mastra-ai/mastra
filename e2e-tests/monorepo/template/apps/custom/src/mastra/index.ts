@@ -13,6 +13,10 @@ import { protobufSubpathRoute } from '@/api/route/protobuf-subpath';
 import { myAgent } from '@inner/hello-world/agent';
 import 'nodemailer';
 
+if (process.env.NODE_ENV === 'development') {
+  void import('date-fns');
+}
+
 export const mastra = new Mastra({
   agents: { innerAgent, myAgent, 'browser-agent': browserAgent },
   workflows: { shutdownDrainWorkflow },
@@ -30,7 +34,7 @@ export const mastra = new Mastra({
     ],
   },
   bundler: {
-    externals: ['bcrypt', '@inner/subpath-only'],
+    externals: ['bcrypt', '@inner/subpath-only', 'unicorn-magic'],
   },
   logger: new ConsoleLogger({ level: 'info' }),
 });
