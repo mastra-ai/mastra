@@ -4,9 +4,16 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
+import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { GitLabApiError } from './api.js';
-import { decodeSourceId, encodeIssueReference, gitlabConnection } from './integration.js';
+import {
+  decodeIssueReference,
+  decodeSourceId,
+  encodeIssueReference,
+  encodeSourceId,
+  gitlabConnection,
+} from './integration.js';
 import type { GitLabIntegrationBase } from './integration.js';
 import { handleGitLabWebhook } from './webhook.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
@@ -22,6 +29,7 @@ export interface BuildGitLabRoutesOptions {
   auth?: RouteAuth;
   intake?: IntakeStorage;
   sandbox?: MastraFactorySandboxConfig;
+  emitAudit?: AuditEmitter['emit'];
   webhookSecret?: string;
   ingestFactoryEvent?: (event: ParsedGitLabWebhook) => Promise<unknown>;
 }
@@ -54,9 +62,68 @@ function gitlabFetchError(c: RouteContext, error: unknown) {
   return c.json({ error: 'gitlab_fetch_failed', message: error instanceof Error ? error.message : String(error) }, 502);
 }
 
+type GitLabSourceIdentityMigration = { from: string; to: string };
+
+function gitlabProjectPayload(source: { id: string; name: string; metadata?: Record<string, unknown> }) {
+  const connectionId = typeof source.metadata?.connectionId === 'string' ? source.metadata.connectionId : null;
+  const projectId = typeof source.metadata?.projectId === 'string' ? source.metadata.projectId : null;
+  const projectPath = typeof source.metadata?.projectPath === 'string' ? source.metadata.projectPath : source.name;
+  if (!connectionId || !projectId) return null;
+  const repositoryName = projectPath.split('/').filter(Boolean).at(-1) ?? 'repo';
+  return {
+    id: source.id,
+    name: source.name,
+    projectId,
+    projectPath,
+    connectionId,
+    accountLabel: typeof source.metadata?.accountLabel === 'string' ? source.metadata.accountLabel : null,
+    defaultBranch: typeof source.metadata?.defaultBranch === 'string' ? source.metadata.defaultBranch : 'main',
+    sandboxProvider: 'none',
+    sandboxWorkdir: `~/${sanitizeSegment(repositoryName)}`,
+  };
+}
+
+async function reconcileGitLabSourceIdentity({
+  intake,
+  orgId,
+  sources,
+}: {
+  intake: IntakeStorage;
+  orgId: string;
+  sources: Array<{ id: string; metadata?: Record<string, unknown> }>;
+}): Promise<{ migrations: GitLabSourceIdentityMigration[]; conflicts: GitLabSourceIdentityMigration[] }> {
+  await intake.ensureReady();
+  const [config, bindings] = await Promise.all([
+    intake.getConfig({ orgId }),
+    intake.listBindings({ orgId, integrationId: 'gitlab' }),
+  ]);
+  const selected = config.gitlab?.sourceIds ?? [];
+  const canonicalByProject = new Map<string, string[]>();
+  for (const source of sources) {
+    const reference = decodeSourceId(source.id);
+    if (!reference?.host) continue;
+    const ids = canonicalByProject.get(reference.projectId) ?? [];
+    ids.push(source.id);
+    canonicalByProject.set(reference.projectId, ids);
+  }
+
+  const migrations = new Map<string, string>();
+  for (const sourceId of new Set([...selected, ...bindings.map(binding => binding.sourceId)])) {
+    const reference = decodeSourceId(sourceId);
+    if (!reference || reference.host) continue;
+    const candidates = canonicalByProject.get(reference.projectId) ?? [];
+    if (candidates.length === 1) migrations.set(sourceId, candidates[0]!);
+  }
+  return intake.migrateSourceIds({
+    orgId,
+    integrationId: 'gitlab',
+    migrations: [...migrations].map(([from, to]) => ({ from, to })),
+  });
+}
+
 export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { gitlab, auth, intake } = options;
+  const { gitlab, auth, intake, emitAudit } = options;
   const enabled = Boolean(gitlab && auth?.enabled());
 
   if (gitlab && auth) {
@@ -85,6 +152,7 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           }
 
           try {
+            await gitlab.verifyStatus();
             const connections = await gitlab.statusConnections();
             const active = connections?.filter(connection => connection.status === 'active');
             const direct = connections === undefined;
@@ -98,6 +166,7 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
             return c.json({
               enabled: true,
               configured,
+              mode: direct ? 'direct' : 'platform',
               ...(connections ? { connections } : {}),
               accounts,
               reauthRequired: connections?.some(connection => connection.status === 'needs_reauth') ?? false,
@@ -116,53 +185,73 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           if ('response' in resolved) return resolved.response;
           try {
             const sources = await gitlab.intake.listSources(resolved.tenant);
-            const installations = new Map<string, Awaited<ReturnType<typeof gitlab.versionControl.registerInstallation>>>();
-            for (const source of sources) {
-              const connectionId =
-                typeof source.metadata?.connectionId === 'string' ? source.metadata.connectionId : null;
-              if (!connectionId || installations.has(connectionId)) continue;
-              installations.set(
-                connectionId,
-                await gitlab.versionControl.registerInstallation({
-                  orgId: resolved.tenant.orgId,
-                  userId: resolved.tenant.userId,
-                  installation: {
-                    externalId: connectionId,
-                    accountName:
-                      typeof source.metadata?.accountLabel === 'string' ? source.metadata.accountLabel : 'GitLab',
-                    accountType: 'GitLab',
-                    metadata: { connection: gitlabConnection(connectionId) },
+            if (intake) {
+              const identity = await reconcileGitLabSourceIdentity({
+                intake,
+                orgId: resolved.tenant.orgId,
+                sources,
+              });
+              if (identity.conflicts.length > 0) {
+                return c.json(
+                  {
+                    error: 'gitlab_source_identity_conflict',
+                    message: 'Conflicting routes exist for the same GitLab project. Resolve the duplicate bindings.',
+                    conflicts: identity.conflicts,
                   },
-                }),
-              );
+                  409,
+                );
+              }
+              if (identity.migrations.length > 0) {
+                await emitAudit?.({
+                  context: loose(c),
+                  input: {
+                    action: 'factory.intake.config_updated',
+                    targets: identity.migrations.map(migration => ({ type: 'intake_source', id: migration.to })),
+                    metadata: { provider: 'gitlab', migrated: identity.migrations.length },
+                  },
+                });
+              }
             }
             return c.json({
               projects: sources.flatMap(source => {
-                const connectionId =
-                  typeof source.metadata?.connectionId === 'string' ? source.metadata.connectionId : null;
-                const projectId = typeof source.metadata?.projectId === 'string' ? source.metadata.projectId : null;
-                const projectPath =
-                  typeof source.metadata?.projectPath === 'string' ? source.metadata.projectPath : source.name;
-                const installation = connectionId ? installations.get(connectionId) : undefined;
-                if (!connectionId || !projectId || !installation) return [];
-                const repositoryName = projectPath.split('/').filter(Boolean).at(-1) ?? 'repo';
-                return [
-                  {
-                    id: source.id,
-                    name: source.name,
-                    projectId,
-                    projectPath,
-                    installationStorageId: installation.id,
-                    connectionId,
-                    accountLabel:
-                      typeof source.metadata?.accountLabel === 'string' ? source.metadata.accountLabel : null,
-                    defaultBranch:
-                      typeof source.metadata?.defaultBranch === 'string' ? source.metadata.defaultBranch : 'main',
-                    sandboxProvider: options.sandbox ? 'custom' : 'none',
-                    sandboxWorkdir: `~/${sanitizeSegment(repositoryName)}`,
-                  },
-                ];
+                const project = gitlabProjectPayload(source);
+                return project ? [{ ...project, sandboxProvider: options.sandbox ? 'custom' : 'none' }] : [];
               }),
+            });
+          } catch (error) {
+            return gitlabFetchError(loose(c), error);
+          }
+        },
+      }),
+      registerApiRoute('/web/gitlab/projects/registration', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await resolveOrgTenant(loose(c), auth);
+          if ('response' in resolved) return resolved.response;
+          const input = (await c.req.json().catch(() => null)) as { sourceId?: unknown } | null;
+          const sourceId = typeof input?.sourceId === 'string' ? input.sourceId.trim() : '';
+          if (!sourceId) return c.json({ error: 'invalid_gitlab_source' }, 400);
+          try {
+            const source = (await gitlab.intake.listSources(resolved.tenant)).find(candidate => candidate.id === sourceId);
+            const project = source ? gitlabProjectPayload(source) : null;
+            if (!project) return c.json({ error: 'gitlab_project_not_found' }, 404);
+            const installation = await gitlab.versionControl.registerInstallation({
+              orgId: resolved.tenant.orgId,
+              userId: resolved.tenant.userId,
+              installation: {
+                externalId: project.connectionId,
+                accountName: project.accountLabel ?? 'GitLab',
+                accountType: 'GitLab',
+                metadata: { connection: gitlabConnection(project.connectionId) },
+              },
+            });
+            return c.json({
+              project: {
+                ...project,
+                installationStorageId: installation.id,
+                sandboxProvider: options.sandbox ? 'custom' : 'none',
+              },
             });
           } catch (error) {
             return gitlabFetchError(loose(c), error);
@@ -192,7 +281,10 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['gitlab'] });
           const selection = config.gitlab!;
           if (!selection.enabled) {
-            return c.json({ error: 'gitlab_intake_disabled', message: 'GitLab intake is turned off in Settings.' }, 404);
+            return c.json(
+              { error: 'gitlab_intake_disabled', message: 'GitLab intake is turned off in Settings.' },
+              404,
+            );
           }
           const selected = new Set(selection.sourceIds ?? []);
           const sourceIds = [
@@ -226,6 +318,50 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
                 return { ...issue, externalId: encodeIssueReference({ ...source, issueIid }) };
               }),
             });
+          } catch (error) {
+            return gitlabFetchError(loose(c), error);
+          }
+        },
+      }),
+    );
+
+    routes.push(
+      registerApiRoute('/web/gitlab/issues/:issueId', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await resolveOrgTenant(loose(c), auth);
+          if ('response' in resolved) return resolved.response;
+          const factoryProjectId = c.req.query('factoryProjectId')?.trim();
+          if (!factoryProjectId) return c.json({ error: 'invalid_factory_project_id' }, 400);
+          if ((await gitlab.resolveOrgId(factoryProjectId)) !== resolved.tenant.orgId) {
+            return c.json({ error: 'factory_project_not_found' }, 404);
+          }
+          const issueId = c.req.param('issueId')?.trim();
+          const issueReference = issueId ? decodeIssueReference(issueId) : null;
+          if (!issueReference) return c.json({ error: 'invalid_gitlab_issue_id' }, 400);
+
+          const { connectionId, projectId, projectPath } = issueReference;
+          const sourceId = encodeSourceId({ connectionId, projectId, projectPath });
+          await intake.ensureReady();
+          const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['gitlab'] });
+          const selection = config.gitlab!;
+          const selected = new Set(selection.sourceIds ?? []);
+          const routed =
+            selection.enabled &&
+            selected.has(sourceId) &&
+            (await intake.listBindings({ orgId: resolved.tenant.orgId, integrationId: 'gitlab' })).some(
+              binding => binding.factoryProjectId === factoryProjectId && binding.sourceId === sourceId,
+            );
+          if (!routed) return c.json({ error: 'gitlab_issue_not_routed' }, 404);
+
+          try {
+            const issue = await gitlab.intake.getIssue({
+              connection: { type: 'oauth', accessToken: 'gitlab-route' },
+              issueId,
+            });
+            if (!issue) return c.json({ error: 'gitlab_issue_not_found' }, 404);
+            return c.json(issue);
           } catch (error) {
             return gitlabFetchError(loose(c), error);
           }
