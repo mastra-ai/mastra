@@ -721,6 +721,21 @@ function hasReasoningPart(message: MastraDBMessage): boolean {
 }
 
 /**
+ * True when `message` looks like the leading half of a turn that storage split across two
+ * assistant rows: it carries a reasoning item and has not yet produced text of its own. A
+ * following text row is then covered by that reasoning item.
+ *
+ * Deliberately not "has any reasoning part" — a previous row that already paired its own
+ * reasoning with its own text says nothing about the row after it, and treating it as cover
+ * would leave a genuine orphan unrepaired. The retry would then hit the same 400, and
+ * `processAPIError` bails at `retryCount > 0`, turning a recoverable turn into a hard failure.
+ */
+function isUnpairedReasoningRow(message: MastraDBMessage): boolean {
+  const parts = message.content?.parts ?? [];
+  return parts.some(p => p.type === 'reasoning') && !parts.some(p => p.type === 'text');
+}
+
+/**
  * Strips `itemId` from a part's OpenAI metadata, leaving every other field
  * (cache counts, reasoning-token counts, logprobs) intact. Mirrors the narrow
  * destructure in `client-sdks/ai-sdk/src/helpers.ts` (PR #23323).
@@ -757,11 +772,24 @@ function stripItemId(part: MastraMessagePart): void {
  *   (`fc_…`) variant is a different failure, addressed by PR #19408.
  * - Strips only `itemId`; all other `providerMetadata.openai` fields survive.
  * - Skips a message whose reasoning lives on the immediately preceding
- *   assistant message. Stored history can split one turn across adjacent
- *   assistant rows (adjacent rows are merged when streamed, but not when
- *   loaded from storage), and in that case the reasoning item *is* present in
- *   the prompt — stripping the id there would fix nothing and would discard a
- *   valid reference.
+ *   assistant row, when that row has reasoning and no text of its own. Stored
+ *   history can split one turn across adjacent assistant rows (adjacent rows
+ *   are merged when streamed, but not when loaded from storage), and in that
+ *   case the reasoning item *is* present in the prompt — stripping the id
+ *   there would fix nothing and would discard a valid reference. A preceding
+ *   row that already paired its own reasoning with its own text is not cover
+ *   and does not suppress the repair.
+ *
+ * Not covered by that guard, deliberately: the `assistant[reasoning, tool-call]
+ * → tool[result] → assistant[text]` shape, where the preceding entry is a tool
+ * message. If OpenAI rejected the text item there, its reference is genuinely
+ * unsatisfiable and stripping is the right repair.
+ *
+ * The rule repairs every orphan-shaped message in the history rather than only
+ * the id named in the error. That is intentional: the error names one item, but
+ * OpenAI rejects on the first one it hits, so healing only that id would trade a
+ * permanent failure for N sequential ones — and `processAPIError` gets a single
+ * retry, not N. Any message it touches is one that would itself be rejected.
  *
  * This is a seatbelt, not the cure: the path that produces these orphans is
  * fixed separately in the processor-retry rollback (#22291).
@@ -782,7 +810,7 @@ export const openaiOrphanItemId: CompatRule = {
       // Split-history guard: the reasoning item for this turn may sit on the
       // preceding assistant row, in which case the reference is satisfiable.
       const previous = messages[index - 1];
-      if (previous?.role === 'assistant' && hasReasoningPart(previous)) return;
+      if (previous?.role === 'assistant' && isUnpairedReasoningRow(previous)) return;
 
       for (const part of parts) {
         if (part.type !== 'text') continue;

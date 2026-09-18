@@ -1514,7 +1514,7 @@ describe('openaiOrphanItemId', () => {
     expect(textPartMetadata(args, 'msg-healthy')).toEqual({ itemId: 'msg_healthy_text' });
   });
 
-  it('A5: does not fire on an unrelated 400', async () => {
+  it('A5: does not fire on a rate-limit error', async () => {
     const handler = new ProviderHistoryCompat();
     const args = orphanArgs(
       list => {
@@ -1540,6 +1540,100 @@ describe('openaiOrphanItemId', () => {
         list.add([createUserMessage('and Paris?')], 'input');
       },
       { error: createOrphanFunctionCallError() },
+    );
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toBeUndefined();
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).toHaveProperty('itemId', ORPHAN_ID);
+  });
+
+  it('A7b: repairs the orphan anyway when the preceding assistant row already paired its own reasoning with its own text', async () => {
+    // A preceding row that is self-consistent is not cover for the row after it. Treating it as
+    // cover would leave a genuine orphan unrepaired, and the retry would hit the same 400 with
+    // retryCount === 1 -- a hard failure instead of a recovery.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([healthyAssistant()], 'memory');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).not.toHaveProperty('itemId');
+    // ...and the healthy row is still untouched.
+    expect(textPartMetadata(args, 'msg-healthy')).toEqual({ itemId: 'msg_healthy_text' });
+  });
+
+  it('A8: repairs every orphan-shaped message in a mixed history, and only those', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([healthyAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Rome?')], 'input');
+      list.add([orphanAssistant('msg_second_orphan')], 'memory');
+      list.add([createUserMessage('and Oslo?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).not.toHaveProperty('itemId');
+    expect(textPartMetadata(args, 'msg-orphan-msg_second_orphan')).not.toHaveProperty('itemId');
+    expect(textPartMetadata(args, 'msg-healthy')).toEqual({ itemId: 'msg_healthy_text' });
+  });
+
+  it('A9: strips every orphaned text part on a multi-part message', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-multi',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                { type: 'text' as const, text: 'first', providerMetadata: { openai: { itemId: 'msg_a', usage: 1 } } },
+                { type: 'text' as const, text: 'second', providerMetadata: { openai: { itemId: 'msg_b', usage: 2 } } },
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    const parts = args.messageList.get.all.db().find(m => m.id === 'msg-multi')!.content.parts;
+    expect(parts.map((p: any) => p.providerMetadata.openai)).toEqual([{ usage: 1 }, { usage: 2 }]);
+  });
+
+  it('A10: does not fire on an unrelated 400', async () => {
+    const handler = new ProviderHistoryCompat();
+    const unrelated400 = new APICallError({
+      message: "Invalid value for 'temperature': expected a number between 0 and 2",
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message: 'Invalid value for temperature' } }),
+      isRetryable: false,
+    });
+    const args = orphanArgs(
+      list => {
+        list.add([createUserMessage('population of Lyon?')], 'input');
+        list.add([orphanAssistant()], 'memory');
+        list.add([createUserMessage('and Paris?')], 'input');
+      },
+      { error: unrelated400 },
     );
 
     const result = await handler.processAPIError(args);
