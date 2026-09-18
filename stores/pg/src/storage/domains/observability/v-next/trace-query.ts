@@ -92,7 +92,7 @@ const TRACE_SELECT = `
   r."name" AS "name",
   r."entityId" AS "entityId",
   r."parentSpanId" AS "parentSpanId",
-  r."metadata" AS "metadata",
+  r."metadataRaw" AS "metadata",
   r."input" AS "input",
   r."threadId" AS "threadId",
   r."resourceId" AS "resourceId",
@@ -113,7 +113,7 @@ function fieldSql<TField extends string>(
 }
 
 function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
-  return field.startsWith('metadata.');
+  return typeof field === 'string' && field.startsWith('metadata.');
 }
 
 function placeholders(values: readonly unknown[], offset: number): string {
@@ -143,7 +143,28 @@ function compileScalarPredicate<TField extends string>(
 
   let field: string;
   let fieldValues: unknown[] = [];
-  if (isMetadataField(predicate.field)) {
+  if (Array.isArray(predicate.field)) {
+    if (!allowMetadata || predicate.field[0] !== 'metadata')
+      throw new Error('Unsupported structured trace-query field');
+    let json = 'r."metadataRaw"';
+    for (const segment of predicate.field.slice(1)) {
+      json = `(${json} -> $${parameterOffset++}::text)`;
+      fieldValues.push(segment);
+    }
+    const sample =
+      predicate.type === 'comparison'
+        ? predicate.value
+        : predicate.type === 'membership'
+          ? predicate.values[0]
+          : undefined;
+    if (sample === undefined) {
+      field = `CASE WHEN jsonb_typeof(${json}) IN ('string', 'number', 'boolean') THEN ${json} END`;
+    } else {
+      const kind = typeof sample;
+      const text = `(${json} #>> '{}')`;
+      field = `CASE WHEN jsonb_typeof(${json}) = '${kind}' THEN ${kind === 'number' ? `(${text})::numeric` : kind === 'boolean' ? `(${text})::boolean` : text} END`;
+    }
+  } else if (isMetadataField(predicate.field)) {
     if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
     const keyParameter = `$${parameterOffset++}`;
     field = `COALESCE(
@@ -585,23 +606,33 @@ export function compilePostgresTraceQueryObservedFields(
 ): CompiledPostgresTraceQuery {
   const { ctes, values } = compilePostgresTraceScope(schema, plan, new Set());
   const searchParameter = values.length + 1;
-  const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower($${searchParameter})) > 0` : '';
+  const search = plan.search ? `AND strpos(lower(array_to_string(segments, '.')), lower($${searchParameter})) > 0` : '';
   if (plan.search) values.push(plan.search);
   values.push(plan.limit + 1);
   return {
-    text: `WITH ${ctes.join(',\n')}
-SELECT 'metadata.' || entry.key AS path, count(*)::bigint AS occurrences
-FROM root_scope r
-CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(r."metadataRaw") = 'object' THEN r."metadataRaw" ELSE '{}'::jsonb END) entry
-WHERE jsonb_typeof(entry.value) = 'string'
-  AND btrim(entry.value #>> '{}') <> ''
-  AND entry.key <> ''
-  AND strpos(entry.key, '.') = 0
-  AND octet_length('metadata.' || entry.key) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
-  AND octet_length(entry.value #>> '{}') <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
-  ${search}
-GROUP BY entry.key
-ORDER BY occurrences DESC, ('metadata.' || entry.key) COLLATE "C" ASC
+    text: `WITH RECURSIVE ${ctes.join(',\n')}, metadata_tree AS (
+  SELECT ARRAY['metadata']::text[] AS segments, r."metadataRaw" AS leaf FROM root_scope r
+  UNION ALL
+  SELECT segments || entry.key, entry.value
+  FROM metadata_tree
+  CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(leaf) = 'object' THEN leaf ELSE '{}'::jsonb END) entry
+  WHERE cardinality(segments) < ${coreStorage.TRACE_QUERY_MAX_PATH_SEGMENTS}
+    AND entry.key <> ''
+    AND octet_length(entry.key) <= ${coreStorage.TRACE_QUERY_MAX_PATH_SEGMENT_BYTES}
+    AND octet_length(array_to_string(segments || entry.key, '.')) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
+), fields AS (
+  SELECT segments, CASE WHEN cardinality(segments) = 2 AND strpos(segments[2], '.') = 0
+    AND jsonb_typeof(leaf) = 'string' AND btrim(leaf #>> '{}') <> ''
+    THEN 'metadata.' || segments[2] ELSE array_to_json(segments)::text END AS path
+  FROM metadata_tree
+  WHERE jsonb_typeof(leaf) IN ('string', 'number', 'boolean')
+    AND (jsonb_typeof(leaf) <> 'string' OR octet_length(leaf #>> '{}') <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES})
+)
+SELECT path, count(*)::bigint AS occurrences
+FROM fields
+WHERE true ${search}
+GROUP BY path
+ORDER BY occurrences DESC, path COLLATE "C" ASC
 LIMIT $${values.length}`,
     values,
   };
@@ -613,7 +644,16 @@ export function compilePostgresTraceQueryValues(
 ): CompiledPostgresTraceQuery {
   const { ctes, values } = compilePostgresTraceScope(schema, plan, discoveryCollections(plan.predicateScope));
   let field: string;
-  if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
+  if (Array.isArray(plan.path)) {
+    if (plan.predicateScope !== 'trace' || plan.path[0] !== 'metadata')
+      throw new Error('Unsupported structured discovery path');
+    let json = 'r."metadataRaw"';
+    for (const segment of plan.path.slice(1)) {
+      values.push(segment);
+      json = `(${json} -> $${values.length}::text)`;
+    }
+    field = `CASE WHEN jsonb_typeof(${json}) IN ('string', 'number', 'boolean') THEN ${json} END`;
+  } else if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const keyParameter = `$${values.length + 1}`;
     field = `COALESCE(
       CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
@@ -624,7 +664,8 @@ export function compilePostgresTraceQueryValues(
     field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
   }
   const searchParameter = values.length + 1;
-  const search = plan.search ? `AND strpos(lower(value), lower($${searchParameter})) > 0` : '';
+  const searchableValue = Array.isArray(plan.path) ? `(value::jsonb #>> '{}')` : 'value';
+  const search = plan.search ? `AND strpos(lower(${searchableValue}), lower($${searchParameter})) > 0` : '';
   if (plan.search) values.push(plan.search);
   values.push(plan.limit + 1);
   return {
@@ -634,7 +675,7 @@ export function compilePostgresTraceQueryValues(
 SELECT value, count(*)::bigint AS count
 FROM extracted
 WHERE value IS NOT NULL
-  AND octet_length(value) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
+  AND octet_length(${searchableValue}) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
   ${search}
 GROUP BY value
 ORDER BY count DESC, value COLLATE "C" ASC
@@ -692,7 +733,12 @@ export async function getTraceQueryObservedFields(
   return {
     observedFields: rows
       .slice(0, plan.limit)
-      .map(row => coreStorage.createTraceQueryObservedFieldDescriptor(String(row.path), Number(row.occurrences))),
+      .map(row =>
+        coreStorage.createTraceQueryObservedFieldDescriptor(
+          String(row.path).startsWith('[') ? JSON.parse(String(row.path)) : String(row.path),
+          Number(row.occurrences),
+        ),
+      ),
     observedFieldsTruncated: rows.length > plan.limit,
   };
 }
@@ -708,7 +754,10 @@ export async function getTraceQueryValues(
     transaction.any<Record<string, unknown>>(query.text, query.values),
   );
   return coreStorage.getTraceQueryValuesResponseSchema.parse({
-    values: rows.slice(0, plan.limit).map(row => ({ value: String(row.value), count: Number(row.count) })),
+    values: rows.slice(0, plan.limit).map(row => ({
+      value: Array.isArray(plan.path) ? JSON.parse(String(row.value)) : String(row.value),
+      count: Number(row.count),
+    })),
     valuesTruncated: rows.length > plan.limit,
   });
 }

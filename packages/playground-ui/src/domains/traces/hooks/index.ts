@@ -20,6 +20,7 @@ export {
 export { useTags } from './use-tags';
 export { useEntityNames } from './use-entity-names';
 export { useEnvironments } from './use-environments';
+export { useMetadataFilterFields } from './use-metadata-filter-fields';
 export { useServiceNames } from './use-service-names';
 export { useTraceSpanNavigation } from './use-trace-span-navigation';
 export { useTraceListNavigation } from './use-trace-list-navigation';

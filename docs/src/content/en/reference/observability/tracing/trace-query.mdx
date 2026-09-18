@@ -174,7 +174,7 @@ The response separates canonical fields from observed metadata fields:
 }
 ```
 
-Canonical fields come from the same registry used to validate trace queries. They don't consume `limit`. The canonical order follows that registry. `observedFields` contains top-level string `metadata.<key>` paths found on qualifying current root spans. These fields are ordered by `occurrences` descending, then by path. Nested metadata, keys containing `.`, empty keys, non-string values, and oversized paths are omitted.
+Canonical fields come from the same registry used to validate trace queries. They don't consume `limit`. The canonical order follows that registry. `observedFields` contains executable scalar metadata paths found on qualifying current root spans. Top-level non-empty string fields retain their legacy `metadata.<key>` representation and `valueKind: 'string'`. Nested fields, dotted keys, numbers, booleans, and empty strings use segment-array paths with `valueKind: 'scalar'`. Scalar fields support equality, membership, presence, and numeric ordering operators. Fields are ordered by `occurrences` descending, then by their serialized path. Nulls, object and array leaves, empty keys, and oversized paths are omitted. Discovery doesn't traverse arrays.
 
 `predicateScope` selects the local predicate grammar. It isn't an authorization scope:
 
@@ -213,7 +213,7 @@ const suggestions = await mastraClient.getTraceQueryValues(
 }
 ```
 
-Discovery returns string values only. Missing values, empty strings, and strings larger than 4,096 UTF-8 bytes are omitted. Values are ordered by `count` descending, then by value. Suggestions are advisory: `queryTraces()` continues to accept valid manual literals that discovery doesn't return.
+Canonical and legacy metadata paths return string suggestions. Structured metadata paths return typed string, number, and boolean suggestions, preserving empty strings and whitespace. Missing paths, nulls, objects, arrays, and oversized strings are omitted. Values are ordered by `count` descending, then by value (serialized JSON for structured paths). Suggestions are advisory: `queryTraces()` continues to accept valid manual literals that discovery doesn't return.
 
 Value suggestions are available for these canonical fields:
 
@@ -224,7 +224,7 @@ Value suggestions are available for these canonical fields:
 | Scores | `scorerId`, `scorerVersion`, `scoreSource` |
 | Feedback | `feedbackType`, `feedbackSource` |
 
-Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, numeric score or feedback values, comments, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
+Each executable metadata path, including segment-array paths such as `['metadata', 'customer', 'id']`, also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, numeric score or feedback values, comments, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
 
 Both discovery requests require a half-open time range of at most 31 days. They use the same current-record semantics as `queryTraces()`: qualifying completed roots satisfy `from <= startedAt < to`, and related values come only from current records joined to those roots by `traceId`. Discovery doesn't accept or apply a draft `where` predicate.
 
@@ -270,7 +270,9 @@ The planner rejects a query before storage execution when it exceeds any of thes
 | Values in one `in` or `notIn` set | 100 |
 | Comparison literals and membership values | 1,000 total |
 | String literal | 4,096 UTF-8 bytes |
-| Raw predicate path | 128 UTF-8 bytes |
+| Raw predicate path, or structured segments joined with `.` | 128 UTF-8 bytes |
+| Structured path segments, including `metadata` | 12 |
+| Individual path segment | 128 UTF-8 bytes |
 | `page.limit` | 1,000 |
 | HTTP request body | 256 KiB |
 
@@ -283,7 +285,8 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Predicate context | Fields | Operators |
 | - | - | - |
 | Trace | `traceId`, `threadId`, `resourceId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
-| Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace metadata (legacy string paths) | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace metadata (structured paths) | `['metadata', 'customer', 'id']` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists`; `lt`, `lte`, `gt`, `gte` for numbers |
 | Trace | `startedAt`, `endedAt` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Span | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
@@ -297,7 +300,7 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`.
 
-String comparisons are case-sensitive, and literals are never coerced. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Numeric predicates, including `score` and `durationMs`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
+String comparisons are case-sensitive, and literals are never coerced. Canonical string fields compare exact stored values. Legacy `metadata.<key>` string values are trimmed before comparison; structured metadata paths preserve whitespace. Numeric predicates, including `score` and `durationMs`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
 
 ### Filter by span properties
 
@@ -428,6 +431,27 @@ The deprecated `source` field and `scorerName` aren't available as score predica
 
 ### Filter by metadata
 
+Use segment-array paths to compare string, number, or boolean leaves in the current root span's metadata:
+
+```typescript
+const reviewedRetries = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: ['metadata', 'customer', 'id'] }, right: { literal: '123a' } },
+    { op: 'gte', left: { path: ['metadata', 'retry', 'count'] }, right: { literal: 3 } },
+    { op: 'eq', left: { path: ['metadata', 'flags', 'reviewed'] }, right: { literal: false } },
+  ],
+}
+```
+
+Segments are exact object keys, not JSONPath expressions. `['metadata', 'a.b']` addresses a literal dotted key and is distinct from `['metadata', 'a', 'b']`. Numeric string keys address object properties, not array indexes. Empty segments and NUL characters are rejected. Structured metadata paths are only valid in trace predicates, including those inside `traces.some` or `traces.none`, not in span, score, or feedback predicates.
+
+Structured paths preserve string whitespace, empty strings, `0`, and `false`. Comparisons don't coerce types: numeric `3` doesn't equal string `'3'`. Ordered operators require finite numbers. Membership sets must contain only strings, only numbers, or only booleans. Missing paths, JSON nulls, objects, and arrays count as absent scalar values. They satisfy `ne`, `notIn`, and `notExists`, but not `eq`, `in`, ordered comparisons, or `exists`. Use `exists` alongside a negative predicate to require a present scalar leaf.
+
+Array traversal, object or array equality, wildcards, text matching, and structured input/output or span-attribute paths aren't supported.
+
+#### Legacy string paths
+
 Use `metadata.<key>` paths for custom dimensions stored on the current root span. Metadata predicates compare trimmed, non-empty string values exactly and case-sensitively. Leading and trailing whitespace in a stored string value is ignored. Values empty after trimming count as missing. Null, numeric, boolean, object, and array values also count as missing.
 
 ```typescript
@@ -449,9 +473,9 @@ const messageTrace = {
 }
 ```
 
-The key must name one top-level property. Empty keys and nested paths are rejected. Metadata keys aren't trimmed, so leading and trailing whitespace remains part of the exact key identity. When metadata duplicates a canonical trace field, such as `resourceId`, `threadId`, or `environment`, prefer the canonical field because it uses the dedicated storage column. The `metadata.<key>` form remains available when you specifically need the value from the metadata object. Metadata and canonical values may differ.
+In the legacy string form, the key must name one top-level property. Empty keys and keys containing dots are rejected. Use segment-array paths for nested properties or literal dotted keys. Metadata keys aren't trimmed, so leading and trailing whitespace remains part of the exact key identity. When metadata duplicates a canonical trace field, such as `resourceId`, `threadId`, or `environment`, prefer the canonical field because it uses the dedicated storage column. The `metadata.<key>` form remains available when you specifically need the value from the metadata object. Metadata and canonical values may differ.
 
-Metadata fields aren't available for grouping. Trace-query discovery returns executable top-level string metadata fields observed in the selected time range.
+Metadata fields aren't available for grouping or additional result projections. Trace-query discovery returns executable scalar metadata fields observed in the selected time range. Studio's trace field picker includes discovered metadata fields and typed equality-value suggestions.
 
 ### Filter by feedback
 

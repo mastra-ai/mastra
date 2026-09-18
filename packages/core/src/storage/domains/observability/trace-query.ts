@@ -28,10 +28,27 @@ const literalStringSchema = z
   .string()
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_STRING_BYTES), 'String literal is too large');
 const timestampLiteralSchema = z.string().datetime({ offset: true });
-const predicatePathSchema = z
+export const TRACE_QUERY_MAX_PATH_SEGMENTS = 12;
+export const TRACE_QUERY_MAX_PATH_SEGMENT_BYTES = 128;
+const legacyPredicatePathSchema = z
   .string()
   .min(1)
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_PATH_BYTES), 'Predicate path is too large');
+const structuredMetadataPathSchema = z
+  .array(
+    z
+      .string()
+      .min(1)
+      .refine(
+        segment => !segment.includes('\0') && hasMaxUtf8Bytes(segment, TRACE_QUERY_MAX_PATH_SEGMENT_BYTES),
+        'Invalid path segment',
+      ),
+  )
+  .min(2)
+  .max(TRACE_QUERY_MAX_PATH_SEGMENTS)
+  .refine(segments => segments[0] === 'metadata', 'Structured paths must start with metadata')
+  .refine(segments => hasMaxUtf8Bytes(segments.join('.'), TRACE_QUERY_MAX_PATH_BYTES), 'Predicate path is too large');
+const predicatePathSchema = z.union([legacyPredicatePathSchema, structuredMetadataPathSchema]);
 const literalSchema = z.union([literalStringSchema, z.number(), z.boolean(), z.null()]);
 const pathRefSchema = z.object({ path: predicatePathSchema }).strict();
 const literalRefSchema = z.object({ literal: literalSchema }).strict();
@@ -135,7 +152,15 @@ export const traceQueryOperatorSchema = z.enum([
   'exists',
   'notExists',
 ]);
-export const traceQueryValueKindSchema = z.enum(['string', 'number', 'stringOrNumber', 'timestamp', 'presence']);
+export const traceQueryValueKindSchema = z.enum([
+  'string',
+  'number',
+  'boolean',
+  'scalar',
+  'stringOrNumber',
+  'timestamp',
+  'presence',
+]);
 
 const traceQueryDiscoveryTimeRangeSchema = traceQueryTimeRangeSchema.superRefine((timeRange, context) => {
   const from = new Date(timeRange.from);
@@ -192,12 +217,12 @@ export const traceQueryCanonicalFieldDescriptorSchema = z
   .strict();
 export const traceQueryObservedFieldDescriptorSchema = z
   .object({
-    path: z
-      .string()
-      .startsWith('metadata.')
-      .refine(path => isTraceQueryMetadataPath(path), 'Invalid metadata path'),
-    valueKind: z.literal('string'),
-    operators: z.array(z.enum(['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'])),
+    path: z.union([
+      legacyPredicatePathSchema.refine(path => isTraceQueryMetadataPath(path), 'Invalid metadata path'),
+      structuredMetadataPathSchema,
+    ]),
+    valueKind: z.enum(['string', 'scalar']),
+    operators: z.array(traceQueryOperatorSchema),
     valueSuggestions: z.literal(true),
     occurrences: z.number().int().nonnegative(),
   })
@@ -212,7 +237,14 @@ export const getTraceQueryFieldsResponseSchema = z
 export const getTraceQueryValuesResponseSchema = z
   .object({
     values: z
-      .array(z.object({ value: literalStringSchema, count: z.number().int().nonnegative() }).strict())
+      .array(
+        z
+          .object({
+            value: z.union([literalStringSchema, z.number(), z.boolean()]),
+            count: z.number().int().nonnegative(),
+          })
+          .strict(),
+      )
       .max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
     valuesTruncated: z.boolean(),
   })
@@ -345,7 +377,8 @@ export const queryThreadsResultSchema = z
   .strict();
 
 export type TraceQueryLiteral = string | number | boolean | null;
-export type TraceQueryPathOrLiteral = { path: string } | { literal: TraceQueryLiteral };
+export type TraceQueryPath = string | string[];
+export type TraceQueryPathOrLiteral = { path: TraceQueryPath } | { literal: TraceQueryLiteral };
 export type TraceQueryScalarPredicate =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
@@ -353,7 +386,7 @@ export type TraceQueryScalarPredicate =
       right: TraceQueryPathOrLiteral;
     }
   | { op: 'in' | 'notIn'; value: TraceQueryPathOrLiteral; set: TraceQueryLiteral[] }
-  | { op: 'exists' | 'notExists'; path: string }
+  | { op: 'exists' | 'notExists'; path: TraceQueryPath }
   | { op: 'and' | 'or'; args: TraceQueryScalarPredicate[] }
   | { op: 'not'; arg: TraceQueryScalarPredicate };
 
@@ -488,7 +521,7 @@ export type TraceQueryCanonicalField =
   | TraceQueryFeedbackField;
 type TraceQueryMetadataKey = Extract<keyof NonNullable<SpanRecord['metadata']>, string>;
 export type TraceQueryMetadataField = `metadata.${TraceQueryMetadataKey}`;
-export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryMetadataField;
+export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryMetadataField | string[];
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
 export type TraceQueryPresenceOperator = 'exists' | 'notExists';
@@ -507,13 +540,13 @@ export type TrustedTraceQueryScalarPredicate =
       type: 'comparison';
       field: TraceQueryPredicateField;
       operator: TraceQueryComparisonOperator;
-      value: string | number;
+      value: string | number | boolean;
     }
   | {
       type: 'membership';
       field: TraceQueryPredicateField;
       operator: TraceQueryMembershipOperator;
-      values: Array<string | number>;
+      values: Array<string | number | boolean>;
     }
   | { type: 'presence'; field: TraceQueryPredicateField; operator: TraceQueryPresenceOperator }
   | { type: 'boolean'; operator: 'and' | 'or'; args: TrustedTraceQueryScalarPredicate[] }
@@ -585,7 +618,7 @@ export interface TrustedTraceQueryObservedFieldsPlan {
 }
 
 export interface TrustedTraceQueryValuesPlan extends TrustedTraceQueryObservedFieldsPlan {
-  path: string;
+  path: TraceQueryPath;
 }
 
 export interface TraceQueryObservedFieldsResult {
@@ -738,19 +771,25 @@ function findPredicateComplexityIssue(
   return undefined;
 }
 
-function getTraceQueryFieldRule(scope: TraceQueryPredicateScope, path: string): FieldRule | undefined {
+function getTraceQueryFieldRule(scope: TraceQueryPredicateScope, path: TraceQueryPath): FieldRule | undefined {
   if (scope === 'trace' && isTraceQueryMetadataPath(path)) return METADATA_FIELD_RULE;
+  if (Array.isArray(path)) {
+    return scope === 'trace' && structuredMetadataPathSchema.safeParse(path).success
+      ? { valueKind: 'scalar', operators: TRACE_QUERY_ORDERED_OPERATORS, valueSuggestions: true }
+      : undefined;
+  }
   const registry: Record<string, FieldRule> = TRACE_QUERY_FIELD_REGISTRY[scope];
   return Object.hasOwn(registry, path) ? registry[path] : undefined;
 }
 
-export function isTraceQueryMetadataPath(path: string): path is TraceQueryMetadataField {
+export function isTraceQueryMetadataPath(path: TraceQueryPath): path is TraceQueryMetadataField {
+  if (Array.isArray(path)) return false;
   if (!path.startsWith('metadata.') || !hasMaxUtf8Bytes(path, TRACE_QUERY_MAX_PATH_BYTES)) return false;
   const key = path.slice('metadata.'.length);
   return key.length > 0 && !key.includes('.');
 }
 
-export function isTraceQueryValueSuggestionsPath(scope: TraceQueryPredicateScope, path: string): boolean {
+export function isTraceQueryValueSuggestionsPath(scope: TraceQueryPredicateScope, path: TraceQueryPath): boolean {
   return getTraceQueryFieldRule(scope, normalizePath(path))?.valueSuggestions === true;
 }
 
@@ -770,13 +809,13 @@ export function getTraceQueryCanonicalFieldDescriptors(
 }
 
 export function createTraceQueryObservedFieldDescriptor(
-  path: string,
+  path: TraceQueryPath,
   occurrences: number,
 ): TraceQueryObservedFieldDescriptor {
   return traceQueryObservedFieldDescriptorSchema.parse({
     path,
-    valueKind: 'string',
-    operators: [...TRACE_QUERY_STRING_OPERATORS],
+    valueKind: Array.isArray(path) ? 'scalar' : 'string',
+    operators: [...(Array.isArray(path) ? TRACE_QUERY_ORDERED_OPERATORS : TRACE_QUERY_STRING_OPERATORS)],
     valueSuggestions: true,
     occurrences,
   });
@@ -1182,12 +1221,19 @@ function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
 }
 
 function getRule(
-  field: string,
+  field: TraceQueryPath,
   context: PredicateContext,
   rules: Record<string, FieldRule>,
   path: Array<string | number>,
   state: PlannerState,
 ): FieldRule | undefined {
+  if (Array.isArray(field)) {
+    if (context === 'trace' && structuredMetadataPathSchema.safeParse(field).success) {
+      return { valueKind: 'scalar', operators: TRACE_QUERY_ORDERED_OPERATORS, valueSuggestions: true };
+    }
+    state.issues.push({ code: 'field_not_allowed', path, message: 'The predicate field is not allowed here' });
+    return undefined;
+  }
   if (context === 'trace' && field.startsWith('metadata.')) {
     const key = field.slice('metadata.'.length);
     if (key.length === 0 || key.includes('.')) {
@@ -1207,7 +1253,12 @@ function getRule(
   return rules[field];
 }
 
-function addOperatorIssue(operator: string, field: string, path: Array<string | number>, state: PlannerState): void {
+function addOperatorIssue(
+  operator: string,
+  field: TraceQueryPath,
+  path: Array<string | number>,
+  state: PlannerState,
+): void {
   state.issues.push({
     code: 'operator_not_allowed',
     path,
@@ -1215,7 +1266,8 @@ function addOperatorIssue(operator: string, field: string, path: Array<string | 
   });
 }
 
-function normalizePath(path: string): string {
+function normalizePath(path: TraceQueryPath): TraceQueryPath {
+  if (Array.isArray(path)) return [...path];
   const match = /^\$\{([^}]+)\}$/.exec(path.trim());
   const unwrapped = match?.[1] ?? path;
   const normalized = unwrapped.trim();
@@ -1230,7 +1282,17 @@ function normalizeLiteral(
   value: TraceQueryLiteral,
   rule: FieldRule,
   operator?: TraceQueryComparisonOperator,
-): string | number | undefined {
+): string | number | boolean | undefined {
+  if (rule.valueKind === 'scalar') {
+    if (operator && !TRACE_QUERY_STRING_OPERATORS.some(candidate => candidate === operator)) {
+      return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+    }
+    return typeof value === 'string' ||
+      typeof value === 'boolean' ||
+      (typeof value === 'number' && Number.isFinite(value))
+      ? value
+      : undefined;
+  }
   if (rule.valueKind === 'number') return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   if (rule.valueKind === 'stringOrNumber') {
     if (operator && !TRACE_QUERY_STRING_OPERATORS.some(candidate => candidate === operator)) {
@@ -1248,12 +1310,15 @@ function normalizeLiteral(
   return undefined;
 }
 
-function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<string | number> | undefined {
+function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<string | number | boolean> | undefined {
   const normalized = values.map(value => normalizeLiteral(value, rule));
   if (normalized.some(value => value === undefined)) return undefined;
-  if (rule.valueKind === 'stringOrNumber' && normalized.some(value => typeof value !== typeof normalized[0]))
+  if (
+    (rule.valueKind === 'stringOrNumber' || rule.valueKind === 'scalar') &&
+    normalized.some(value => typeof value !== typeof normalized[0])
+  )
     return undefined;
-  return normalized as Array<string | number>;
+  return normalized as Array<string | number | boolean>;
 }
 
 function digestBinding(value: unknown): string {

@@ -16,6 +16,7 @@ import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/compone
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
+import { useMetadataFilterFields } from '@mastra/playground-ui/domains/traces/hooks/use-metadata-filter-fields';
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
@@ -147,17 +148,24 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   });
   const { data: discoveredEnvironments = [] } = useEnvironments();
 
-  const filterBarFields = useMemo(
-    () => [
-      TRACE_TIME_RANGE_FIELD,
-      ...createTraceFilterBarFields({
-        availableRootEntityNames: rootEntityNameSuggestions,
-        availableEnvironments: discoveredEnvironments,
-        hiddenFieldIds,
-      }),
-    ],
-    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds],
+  const [discoveryNow] = useState(() => new Date());
+  const { fields: metadataFields } = useMetadataFilterFields(
+    buildTraceQueryRequest({
+      tokens: [],
+      dateFrom: url.selectedDateFrom,
+      dateTo: url.selectedDateTo,
+      now: discoveryNow,
+    }).timeRange,
   );
+  const filterBarFields = [
+    TRACE_TIME_RANGE_FIELD,
+    ...createTraceFilterBarFields({
+      availableRootEntityNames: rootEntityNameSuggestions,
+      availableEnvironments: discoveredEnvironments,
+      hiddenFieldIds,
+    }),
+    ...metadataFields,
+  ];
   const allFilterBarItems = useMemo(() => traceTokensToFilterBarItems(url.filterTokens), [url.filterTokens]);
   const filterBarItems = useMemo(
     () => allFilterBarItems.filter(item => !scopedFieldIds.has(item.fieldId)),

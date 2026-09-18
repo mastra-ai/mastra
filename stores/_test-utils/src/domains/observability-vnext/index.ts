@@ -264,7 +264,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       };
       const values = async (args: {
         predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-        path: string;
+        path: string | string[];
         search?: string;
         limit?: number;
       }) => {
@@ -278,7 +278,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       const writeDiscoveryFixture = () =>
         writeTraceQueryFixture(storage, TRACE_QUERY_DISCOVERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
-      it('discovers only executable top-level string metadata fields from current qualified roots', async () => {
+      it('discovers executable scalar metadata fields from current qualified roots', async () => {
         await writeDiscoveryFixture();
         await expect(observedFields({ predicateScope: 'trace' })).resolves.toEqual({
           observedFields: [
@@ -287,6 +287,14 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             expect.objectContaining({ path: 'metadata.escapedValue', occurrences: 2 }),
             expect.objectContaining({ path: 'metadata.literalPattern', occurrences: 2 }),
             expect.objectContaining({ path: 'metadata.unicodeValue', occurrences: 2 }),
+            ...[
+              ['metadata', 'active'],
+              ['metadata', 'dotted.key'],
+              ['metadata', 'emptyValue'],
+              ['metadata', 'nested', 'plan'],
+              ['metadata', 'retries'],
+              ['metadata', 'whitespaceOnly'],
+            ].map(path => expect.objectContaining({ path, valueKind: 'scalar', occurrences: 1 })),
             expect.objectContaining({ path: 'metadata.percent%key', occurrences: 1 }),
             expect.objectContaining({ path: 'metadata.under_score', occurrences: 1 }),
           ],
@@ -314,6 +322,37 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await expect(observedFields({ predicateScope: 'spans' })).resolves.toEqual({
           observedFields: [],
           observedFieldsTruncated: false,
+        });
+      });
+
+      it('discovers typed structured metadata values without trimming or coercion', async () => {
+        await writeDiscoveryFixture();
+        for (const [path, value] of [
+          [['metadata', 'nested', 'plan'], 'pro'],
+          [['metadata', 'active'], true],
+          [['metadata', 'retries'], 2],
+          [['metadata', 'emptyValue'], ''],
+          [['metadata', 'whitespaceOnly'], '   '],
+          [['metadata', 'dotted.key'], 'unsupported'],
+        ] as const) {
+          await expect(values({ predicateScope: 'trace', path: [...path] })).resolves.toEqual({
+            values: [{ value, count: 1 }],
+            valuesTruncated: false,
+          });
+        }
+        await expect(values({ predicateScope: 'trace', path: ['metadata', 'arrayValue'] })).resolves.toEqual({
+          values: [],
+          valuesTruncated: false,
+        });
+      });
+
+      it('discovers structured values using decoded strings for search', async () => {
+        await writeDiscoveryFixture();
+        await expect(
+          values({ predicateScope: 'trace', path: ['metadata', 'escapedValue'], search: 'quote" and slash\\' }),
+        ).resolves.toEqual({
+          values: [{ value: 'quote" and slash\\ with 雪', count: 2 }],
+          valuesTruncated: false,
         });
       });
 

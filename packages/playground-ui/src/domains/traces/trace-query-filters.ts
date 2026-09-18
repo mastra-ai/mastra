@@ -1,5 +1,6 @@
 import type { QueryTracesInput } from '@mastra/client-js';
 import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/core/storage';
+import { getMetadataFilterPath, getMetadataFilterValue } from './metadata-filter-values';
 import type { buildTraceListFilters } from './trace-filters';
 
 export const TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS = new Set([
@@ -31,6 +32,12 @@ export function buildTraceQueryRequest({
   if (status && status !== 'running') args.push(predicate('status', [status]));
 
   for (const token of tokens) {
+    const metadataPath = getMetadataFilterPath(token.fieldId);
+    if (metadataPath) {
+      const value = typeof token.value === 'string' ? getMetadataFilterValue(token.value) : undefined;
+      if (value !== undefined) args.push({ op: 'eq', left: { path: metadataPath }, right: { literal: value } });
+      continue;
+    }
     const values = (Array.isArray(token.value) ? token.value : [token.value]).filter(
       (value): value is string => typeof value === 'string' && Boolean(value.trim()) && value !== 'Any',
     );

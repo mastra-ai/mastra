@@ -664,7 +664,17 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
         paddedValue: '  padded value  ',
         emptyValue: '',
         numericValue: 42,
-        nestedValue: { child: 'value' },
+        nestedValue: {
+          child: 'value',
+          count: 3,
+          reviewed: false,
+          empty: '',
+          null: null,
+          array: [{ id: 'hidden' }],
+          object: { '0': 'key' },
+        },
+        'nestedValue.child': 'literal-dot',
+        'quoted"key': { 'slash\\key': 'escaped-key' },
       },
     }),
     span(11, 'trace-a', 'span-a-tool', {
@@ -1242,6 +1252,49 @@ export const TRACE_QUERY_TIED_TIMESTAMP_CASES: TraceQueryConformanceCase[] = [
 ];
 
 export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
+  ...(
+    [
+      ['nested string', ['metadata', 'nestedValue', 'child'], 'value'],
+      ['literal dotted key', ['metadata', 'nestedValue.child'], 'literal-dot'],
+      ['escaped keys', ['metadata', 'quoted"key', 'slash\\key'], 'escaped-key'],
+      ['nested number', ['metadata', 'nestedValue', 'count'], 3],
+      ['nested false', ['metadata', 'nestedValue', 'reviewed'], false],
+      ['nested empty string', ['metadata', 'nestedValue', 'empty'], ''],
+      ['numeric object key', ['metadata', 'nestedValue', 'object', '0'], 'key'],
+    ] as const
+  ).map(
+    ([name, path, literal]): TraceQueryConformanceCase => ({
+      name: `compares structured metadata ${name}`,
+      request: { timeRange: fullRange, where: { op: 'eq', left: { path: [...path] }, right: { literal } } },
+      expected: [{ traceId: 'trace-a' }],
+    }),
+  ),
+  ...(['null', 'array', 'missing', 'object'] as const).map(key => ({
+    name: `excludes non-scalar structured metadata ${key}`,
+    request: { timeRange: fullRange, where: { op: 'exists' as const, path: ['metadata', 'nestedValue', key] } },
+    expected: [],
+  })),
+  {
+    name: 'does not traverse arrays through numeric string segments',
+    request: { timeRange: fullRange, where: { op: 'exists', path: ['metadata', 'nestedValue', 'array', '0', 'id'] } },
+    expected: [],
+  },
+  {
+    name: 'orders numeric metadata and compares boolean membership without coercion',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'gte', left: { path: ['metadata', 'nestedValue', 'count'] }, right: { literal: 3 } },
+          { op: 'in', value: { path: ['metadata', 'nestedValue', 'reviewed'] }, set: [false] },
+          { op: 'ne', left: { path: ['metadata', 'nestedValue', 'count'] }, right: { literal: '3' } },
+          { op: 'notIn', value: { path: ['metadata', 'nestedValue', 'missing'] }, set: [0] },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
   {
     name: 'returns one current completed root per trace in default order',
     request: { timeRange: fullRange },
@@ -2168,7 +2221,18 @@ function evaluateScalarPredicate(
       : predicate.args.some(arg => evaluateScalarPredicate(arg, record));
   }
   if (predicate.type === 'not') return !evaluateScalarPredicate(predicate.arg, record);
-  const value = record[predicate.field as keyof typeof record] as unknown;
+  let value: unknown = record;
+  if (Array.isArray(predicate.field)) {
+    for (const segment of predicate.field) {
+      value =
+        value !== null && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, segment)
+          ? Reflect.get(value, segment)
+          : undefined;
+    }
+    if (!['string', 'number', 'boolean'].includes(typeof value)) value = undefined;
+  } else {
+    value = record[predicate.field as keyof typeof record];
+  }
   const missing = value === null || value === undefined;
   if (predicate.type === 'presence') return predicate.operator === 'exists' ? !missing : missing;
   if (predicate.type === 'membership') {
@@ -2178,6 +2242,7 @@ function evaluateScalarPredicate(
   }
   if (missing) return predicate.operator === 'ne';
   if (typeof value !== typeof predicate.value) return predicate.operator === 'ne';
+  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') return false;
   switch (predicate.operator) {
     case 'eq':
       return value === predicate.value;
@@ -2233,6 +2298,7 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     entityType: root.entityType,
     environment: root.environment,
     status: root.error === null ? 'success' : 'error',
+    metadata: root.metadata,
     ...metadata,
   };
 }

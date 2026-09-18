@@ -160,10 +160,10 @@ describe('ClickHouse advanced trace query', () => {
       ),
     );
 
-    expect(compiled.query).toContain('JSONExtractString(entry.2) AS value');
-    expect(compiled.query).toContain("JSONType(rawValue) = 'String'");
-    expect(compiled.query).toContain("trim(value) != ''");
-    expect(compiled.query).toContain('length(value) <= 4096');
+    expect(compiled.query).toContain('WITH RECURSIVE');
+    expect(compiled.query).toContain("JSONType(leaf) IN ('String', 'Int64', 'UInt64', 'Double', 'Bool')");
+    expect(compiled.query).toContain("trim(JSONExtractString(leaf)) != ''");
+    expect(compiled.query).toContain('length(JSONExtractString(leaf)) <= 4096');
     expect(compiled.query).not.toContain('JSONExtractString(r.metadataRaw, entry.1)');
   });
 

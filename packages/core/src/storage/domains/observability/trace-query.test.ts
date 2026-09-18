@@ -519,6 +519,52 @@ describe('planTraceQuery', () => {
     });
   });
 
+  it.each(['', '   ', 0, false, true, 3.5])('preserves structured scalar literal %j', literal => {
+    const field = ['metadata', 'customer', 'a.b'];
+    const plan = planTraceQuery(
+      parsed({ ...baseRequest, where: { op: 'eq', left: { path: field }, right: { literal } } }),
+    );
+    expect(plan.where).toEqual({ type: 'comparison', field, operator: 'eq', value: literal });
+  });
+
+  it('keeps dotted keys distinct in cursor bindings', () => {
+    const plan = (path: string[]) => planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path } }));
+    expect(plan(['metadata', 'a.b']).binding).not.toBe(plan(['metadata', 'a', 'b']).binding);
+  });
+
+  it.each([
+    ['metadata'],
+    ['metadata', ''],
+    ['attributes', 'model'],
+    ['metadata', 'x'.repeat(129)],
+    ['metadata', ...Array(12).fill('a')],
+    ['metadata', 'a\u0000b'],
+    ['metadata', 0],
+  ])('rejects invalid structured path %j', (...path) => {
+    expect(() => parsed({ ...baseRequest, where: { op: 'exists', path } })).toThrow();
+  });
+
+  it('validates structured literal types, numeric ordering, and homogeneous sets', () => {
+    const path = ['metadata', 'nested', 'value'];
+    for (const literal of [null, {}, [], '3', true]) {
+      expect(() =>
+        planTraceQuery(parsed({ ...baseRequest, where: { op: 'gte', left: { path }, right: { literal } } })),
+      ).toThrow();
+    }
+    expect(
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'gte', left: { path }, right: { literal: 3 } } })).where,
+    ).toEqual({ type: 'comparison', field: path, operator: 'gte', value: 3 });
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'in', value: { path }, set: [1, '1'] } })),
+    ).toThrow();
+    expect(
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'in', value: { path }, set: [true, false] } })).where,
+    ).toEqual({ type: 'membership', field: path, operator: 'in', values: [true, false] });
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, where: { spans: { some: { op: 'exists', path } } } })),
+    ).toThrow();
+  });
+
   it('accepts promoted and sensitive names as metadata keys', () => {
     for (const field of ['metadata.requestId', 'metadata.api_key']) {
       expect(planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: field } })).where).toEqual({

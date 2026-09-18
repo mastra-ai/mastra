@@ -22,14 +22,14 @@ type InputShared_Auxiliary_201 =
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
         | {
-            path: string;
+            path: string | string[];
           }
         | {
             literal: string | number | boolean | null;
           };
       right:
         | {
-            path: string;
+            path: string | string[];
           }
         | {
             literal: string | number | boolean | null;
@@ -39,7 +39,7 @@ type InputShared_Auxiliary_201 =
       op: 'in' | 'notIn';
       value:
         | {
-            path: string;
+            path: string | string[];
           }
         | {
             literal: string | number | boolean | null;
@@ -48,7 +48,7 @@ type InputShared_Auxiliary_201 =
     }
   | {
       op: 'exists' | 'notExists';
-      path: string;
+      path: string | string[];
     }
   | {
       op: 'and' | 'or';
@@ -91,14 +91,14 @@ type InputShared_Auxiliary_219 =
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
         | {
-            path: string;
+            path: string | string[];
           }
         | {
             literal: string | number | boolean | null;
           };
       right:
         | {
-            path: string;
+            path: string | string[];
           }
         | {
             literal: string | number | boolean | null;
@@ -108,7 +108,7 @@ type InputShared_Auxiliary_219 =
       op: 'in' | 'notIn';
       value:
         | {
-            path: string;
+            path: string | string[];
           }
         | {
             literal: string | number | boolean | null;
@@ -117,7 +117,7 @@ type InputShared_Auxiliary_219 =
     }
   | {
       op: 'exists' | 'notExists';
-      path: string;
+      path: string | string[];
     }
   | {
       op: 'and' | 'or';
@@ -10156,14 +10156,14 @@ export type PostObservabilityTracesQueryFields_Body = {
 export type PostObservabilityTracesQueryFields_Response = {
   canonicalFields: {
     path: string;
-    valueKind: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence';
+    valueKind: 'string' | 'number' | 'boolean' | 'scalar' | 'stringOrNumber' | 'timestamp' | 'presence';
     operators: ('eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'in' | 'notIn' | 'exists' | 'notExists')[];
     valueSuggestions: boolean;
   }[];
   observedFields: {
-    path: string;
-    valueKind: 'string';
-    operators: ('eq' | 'ne' | 'in' | 'notIn' | 'exists' | 'notExists')[];
+    path: string | string[];
+    valueKind: 'string' | 'scalar';
+    operators: ('eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'in' | 'notIn' | 'exists' | 'notExists')[];
     valueSuggestions: true;
     occurrences: number;
   }[];
@@ -10198,14 +10198,14 @@ export type PostObservabilityTracesQueryValues_Body = {
     to: string;
   };
   predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-  path: string;
+  path: string | string[];
   search?: string | undefined;
   limit?: number;
 };
 
 export type PostObservabilityTracesQueryValues_Response = {
   values: {
-    value: string;
+    value: string | number | boolean;
     count: number;
   }[];
   valuesTruncated: boolean;

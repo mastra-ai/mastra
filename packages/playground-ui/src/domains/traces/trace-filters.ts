@@ -20,6 +20,7 @@ import {
   WaypointsIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { getMetadataFilterPath } from './metadata-filter-values';
 import { TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from './trace-query-filters';
 import type { TraceDatePreset } from './types';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
@@ -162,6 +163,7 @@ export function loadTraceFiltersFromStorage(
  *  to hydrate from localStorage on page mount (we only hydrate when the URL is
  *  filter-clean, i.e. the user landed here via a plain sidebar nav). */
 export function hasAnyTraceFilterParams(params: URLSearchParams): boolean {
+  if ([...params.keys()].some(name => getMetadataFilterPath(name))) return true;
   if (params.has(TRACE_DATE_PRESET_PARAM)) return true;
   if (params.has(TRACE_DATE_FROM_PARAM)) return true;
   if (params.has(TRACE_DATE_TO_PARAM)) return true;
@@ -340,7 +342,7 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Pro
 
   const seen = new Set<string>();
   for (const [paramName] of searchParams.entries()) {
-    const fieldId = paramToFieldId.get(paramName);
+    const fieldId = getMetadataFilterPath(paramName) ? paramName : paramToFieldId.get(paramName);
     if (!fieldId || seen.has(fieldId)) continue;
     seen.add(fieldId);
 
@@ -365,6 +367,9 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Pro
 
 export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
   const next = new URLSearchParams();
+  for (const [name, value] of searchParams) {
+    if (getMetadataFilterPath(name)) next.append(name, value);
+  }
 
   const rootEntityType = searchParams.get(TRACE_ROOT_ENTITY_TYPE_PARAM);
   if (rootEntityType) next.set(TRACE_ROOT_ENTITY_TYPE_PARAM, rootEntityType);
@@ -400,6 +405,9 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
  * dedicated synthetic params (rootEntityType, status).
  */
 export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: PropertyFilterToken[]) {
+  for (const name of [...params.keys()]) {
+    if (getMetadataFilterPath(name)) params.delete(name);
+  }
   params.delete(TRACE_ROOT_ENTITY_TYPE_PARAM);
   params.delete(TRACE_STATUS_PARAM);
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
@@ -407,6 +415,10 @@ export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: 
   }
 
   for (const token of tokens) {
+    if (getMetadataFilterPath(token.fieldId) && typeof token.value === 'string') {
+      params.set(token.fieldId, token.value);
+      continue;
+    }
     if (token.fieldId === 'rootEntityType' && typeof token.value === 'string') {
       params.set(TRACE_ROOT_ENTITY_TYPE_PARAM, token.value);
       continue;
