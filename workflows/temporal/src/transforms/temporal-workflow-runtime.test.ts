@@ -45,6 +45,45 @@ describe('temporal workflow runtime helper module', () => {
     });
   });
 
+  it('executes mapping entries through proxy activities', async () => {
+    const mappingId = 'mapping_mapped-workflow_0';
+    const mapping = vi.fn(async ({ inputData, initData }) => ({
+      doubled: inputData.value * 2,
+      initialValue: initData.value,
+    }));
+    proxyActivities.mockReturnValue({ [mappingId]: mapping });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('mapped-workflow').map(mappingId).commit();
+    const result = await workflow({ inputData: { value: 21 } });
+
+    expect(mapping).toHaveBeenCalledWith({ inputData: { value: 21 }, initData: { value: 21 } });
+    expect(result).toEqual({
+      status: 'success',
+      input: { value: 21 },
+      result: { doubled: 42, initialValue: 21 },
+      state: undefined,
+      steps: {
+        [mappingId]: { doubled: 42, initialValue: 21 },
+      },
+    });
+  });
+
+  it('propagates mapping activity failures', async () => {
+    const mappingId = 'mapping_mapped-workflow_0';
+    const error = new Error('mapping failed');
+    proxyActivities.mockReturnValue({
+      [mappingId]: vi.fn(async () => {
+        throw error;
+      }),
+    });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('mapped-workflow').map(mappingId).commit();
+
+    await expect(workflow({ inputData: { value: 21 } })).rejects.toBe(error);
+  });
+
   it('uses the configured activity timeout', async () => {
     proxyActivities.mockReturnValue({});
 

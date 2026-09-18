@@ -44,6 +44,13 @@ export class TemporalExecutionEngine {
         return out;
       }
 
+      case 'mapping': {
+        log.info('mapping', { mappingId: entry.id });
+        const out = await this.activityHandle[entry.id]({ inputData, initData: this.initData });
+        stepResults[entry.id] = out;
+        return out;
+      }
+
       case 'sleep': {
         const duration = entry.duration ?? (entry.fn ? await this.activityHandle[entry.fn]({ inputData }) : 0);
         log.info('sleep', { id: entry.id, duration });
@@ -185,6 +192,13 @@ export function createWorkflow(workflowId, options) {
       stepFlow.push({
         type: 'childWorkflow',
         workflowType,
+      });
+      return workflow;
+    },
+    map(mappingId) {
+      stepFlow.push({
+        type: 'mapping',
+        id: mappingId,
       });
       return workflow;
     },

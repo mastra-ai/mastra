@@ -147,7 +147,12 @@ describe('Temporal prebuild integration', () => {
         .then(step4)
         .commit();
 
-      export const mastra = new Mastra({ workflows: { complexWorkflow } });
+      const double = value => value * 2;
+      export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+        .map(({ inputData }) => ({ doubled: double(inputData.value) }))
+        .commit();
+
+      export const mastra = new Mastra({ workflows: { complexWorkflow, mappedWorkflow } });
     `;
     const bundleSpy = mockCompiledBundle(compiledEntrySource);
     const customActivity = vi.fn(async () => undefined);
@@ -193,6 +198,8 @@ describe('Temporal prebuild integration', () => {
     );
     expect(workflowSource).toContain('.sleep(1000)');
     expect(workflowSource).toContain('.then("step4")');
+    expect(workflowSource).toContain('.map("mapping_mapped-workflow_0")');
+    expect(workflowSource).not.toContain('inputData.value * 2');
     expect(workflowSource).not.toContain('export const mastra');
     expect(workflowSource).not.toContain('createStep({');
     expect(workflowSource).toContain("startToCloseTimeout: '5 minutes'");
@@ -203,14 +210,18 @@ describe('Temporal prebuild integration', () => {
     expect(activitiesSource).toContain('const step2 = createStep({');
     expect(activitiesSource).toContain('const step3 = createStep({');
     expect(activitiesSource).toContain('const step4 = createStep({');
+    expect(activitiesSource).toMatch(/const mappingMappedWorkflow0[\s\S]*export \{[^}]*mappingMappedWorkflow0/);
+    expect(activitiesSource).toContain('const double =');
     expect(activitiesSource).not.toContain('const innerWorkflow =');
     expect(activitiesSource).not.toContain('const complexWorkflow =');
+    expect(activitiesSource).not.toContain('const mappedWorkflow =');
     expect(activityBindings).toEqual([
       { exportName: 'step1', stepId: 'step1' },
       { exportName: 'innerStep', stepId: 'inner-step' },
       { exportName: 'step2', stepId: 'step2' },
       { exportName: 'step3', stepId: 'step3' },
       { exportName: 'step4', stepId: 'step4' },
+      { exportName: 'mappingMappedWorkflow0', stepId: 'mapping_mapped-workflow_0' },
     ]);
 
     const activitiesModule = (await import(moduleUrl(activitiesPath))) as Record<string, unknown>;
@@ -258,6 +269,22 @@ describe('Temporal prebuild integration', () => {
         step4: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
       },
     });
+    const mappedWorkflow = workflowModule.mappedWorkflow;
+    expect(mappedWorkflow).toBeTypeOf('function');
+    await expect(
+      (mappedWorkflow as (args: { inputData: { value: number } }) => Promise<unknown>)({
+        inputData: { value: 21 },
+      }),
+    ).resolves.toEqual({
+      status: 'success',
+      input: { value: 21 },
+      result: { doubled: 42 },
+      state: undefined,
+      steps: {
+        'mapping_mapped-workflow_0': { doubled: 42 },
+      },
+    });
+
     expect(proxyActivities).toHaveBeenCalledWith({ startToCloseTimeout: '5 minutes' });
     expect(executeChild).toHaveBeenCalledWith('innerWorkflow', { args: [{ inputData: { value: 'test-step1' } }] });
     expect(sleep).toHaveBeenCalledWith(1000);
