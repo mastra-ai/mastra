@@ -18,6 +18,8 @@ Each conversation now has its own runtime and uses the client's requested workin
 
 Tool approvals and sandbox access requests now ask the client for permission. Cancelling a session stops its active turn and queued prompts without interrupting other conversations. Shutdown waits for cleanup even when multiple signals arrive.
 
+Headless runs report cancellation during startup as aborted instead of returning a startup error.
+
 Model lists now omit unconfigured providers and retain full routing IDs in labels, preventing gateway entries from appearing to be direct provider models.
 
 Added workspace skill discovery and invocation for Agent Client Protocol clients. Clients can list user-invokable skills and activate them with an ordinary prompt:

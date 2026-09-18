@@ -11,6 +11,9 @@ import z from 'zod';
 import { runMC } from './run-mc.js';
 import type { ResolutionPolicy } from './types.js';
 
+// These tests exercise prompt runs, which do not construct a goal manager.
+vi.mock('../goal-manager.js', () => ({ GoalManager: vi.fn() }));
+
 vi.setConfig({ testTimeout: 30_000 });
 
 function textStream(text: string, finishReason: 'stop' | 'tool-calls' = 'stop') {
@@ -167,6 +170,17 @@ describe('runMC', () => {
     expect(result.status).toBe('completed');
     expect(approvals).toContain('readFile');
     expect(result.toolCalls.map(c => c.name)).toContain('readFile');
+  });
+
+  it('reports a cancelled startup as aborted without a startup error', async () => {
+    const { controller, session } = await makeHarness({ doStream: async () => ({ stream: textStream('unused') }) });
+    vi.spyOn(session, 'sendMessage').mockRejectedValueOnce(new DOMException('Session startup cancelled', 'AbortError'));
+
+    const result = await runMC({ controller, session, prompt: 'Cancelled startup' }).result;
+
+    expect(result.status).toBe('aborted');
+    expect(result.exitCode).toBe(1);
+    expect(result.error).toBeUndefined();
   });
 
   it('returns status "aborted" with exit code 1 when aborted', async () => {
