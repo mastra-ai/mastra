@@ -17,7 +17,8 @@ const memory = new Memory({
   },
 });
 
-// Any stream consumer (including over HTTP) now receives the title:
+// In-process consumers read it from the run's stream. HTTP clients receive the
+// same chunk with @mastra/client-js's `processDataStream`.
 for await (const chunk of stream.fullStream) {
   if (chunk.type === 'data-thread-title') {
     console.log(chunk.data.threadId, chunk.data.title);

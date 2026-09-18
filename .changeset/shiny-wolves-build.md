@@ -7,17 +7,21 @@ Clients can now send the full `generateTitle` configuration with a memory config
 ```ts
 const agent = client.getAgent('assistant');
 
-const stream = await agent.stream('Plan my trip to Kyoto', {
+const response = await agent.stream('Plan my trip to Kyoto', {
   memory: {
+    thread: 'thread-1',
+    resource: 'user-1',
     options: {
       generateTitle: { emitEvent: true, minMessages: 2 },
     },
   },
 });
 
-for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'data-thread-title') {
-    console.log(chunk.data.threadId, chunk.data.title);
-  }
-}
+await response.processDataStream({
+  onChunk: async chunk => {
+    if (chunk.type === 'data-thread-title') {
+      console.log(chunk.data.threadId, chunk.data.title);
+    }
+  },
+});
 ```
