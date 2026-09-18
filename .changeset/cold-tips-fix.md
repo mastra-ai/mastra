@@ -4,6 +4,8 @@
 
 Added PostgreSQL support for handing numbered trace-query pages to delta polling. Polls use a safe transaction watermark and detect completed root writes.
 
+Numbered pages remain available without a polling cursor when the installed core version lacks trace-query delta support.
+
 ```ts
 // Start with a numbered page.
 const page = await client.queryTraces({ timeRange, pagination: { page: 0, perPage: 100 } });

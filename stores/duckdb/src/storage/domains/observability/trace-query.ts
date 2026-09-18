@@ -712,7 +712,8 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
       }));
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
-      ...(deltaPollingFeatureEnabled()
+      // The list-polling feature predates the trace-query cursor encoder.
+      ...(deltaPollingFeatureEnabled() && typeof coreStorage.encodeTraceQueryDeltaCursor === 'function'
         ? { deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'duckdb', String(rows[0]?.streamHead ?? 0)) }
         : {}),
       pagination: {

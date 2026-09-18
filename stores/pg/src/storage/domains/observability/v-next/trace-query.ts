@@ -864,13 +864,15 @@ export async function queryTraces(
       client,
       resolvedTimeoutMs,
       async transaction => {
-        const deltaCursor = deltaPollingFeatureEnabled()
-          ? coreStorage.encodeTraceQueryDeltaCursor(
-              plan,
-              'pg',
-              encodeDeltaCursor(await readSafeXactHorizon(transaction), 0),
-            )
-          : undefined;
+        // The list-polling feature predates the trace-query cursor encoder.
+        const deltaCursor =
+          deltaPollingFeatureEnabled() && typeof coreStorage.encodeTraceQueryDeltaCursor === 'function'
+            ? coreStorage.encodeTraceQueryDeltaCursor(
+                plan,
+                'pg',
+                encodeDeltaCursor(await readSafeXactHorizon(transaction), 0),
+              )
+            : undefined;
         if (deltaCursor !== undefined) await setRemainingTimeout(transaction, deadline);
         const countRows = await transaction.any<{ count: string }>(countQuery.text, countQuery.values);
         const remainingTimeoutMs = Math.floor(deadline - performance.now());

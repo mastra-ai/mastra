@@ -601,7 +601,7 @@ Ordering is deterministic. Trace ordering appends `traceId` ascending as a tie-b
 
 Keyset cursors are bound to the operation, accepted normalized query, and ordering. Reusing a keyset cursor after changing the trace selection, predicates, or ordering returns `409`. Trace and thread cursors aren't interchangeable.
 
-Numbered-page handoff cursors and delta cursors also bind the authorization state. Reload a numbered page when the authorization scope changes. A malformed cursor returns `400`.
+Numbered-page handoff cursors and delta cursors also bind the authorization state. Changes to the caller's roles or permissions invalidate these cursors and return `409`. If a delta poll returns `409`, reload the numbered pages and resume polling with the new `deltaCursor`. A malformed cursor returns `400`.
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 

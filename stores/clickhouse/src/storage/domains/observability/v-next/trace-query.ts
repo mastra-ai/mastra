@@ -758,7 +758,13 @@ export async function queryTraces(
     const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'clickhouse');
     if (watermark) parseDeltaWatermark(watermark);
   }
-  if (plan.paginationMode === 'delta' || (plan.paginationMode === 'page' && deltaPollingSupported(strategy))) {
+  // The list-polling feature predates the trace-query cursor encoder.
+  if (
+    plan.paginationMode === 'delta' ||
+    (plan.paginationMode === 'page' &&
+      deltaPollingSupported(strategy) &&
+      typeof coreStorage.encodeTraceQueryDeltaCursor === 'function')
+  ) {
     const head = await runWithClickHouseTraceQueryTimeout(
       client,
       { timeoutMs: remaining() },
