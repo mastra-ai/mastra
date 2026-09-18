@@ -1,5 +1,4 @@
-import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
-import { Header } from '@mastra/playground-ui/components/Header';
+import { BreadcrumbBar, useBreadcrumbBarCrumb } from '@mastra/playground-ui/new/layout/breadcrumb-bar';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { RouteHeaderActionsSlot } from './route-header-actions';
@@ -17,40 +16,38 @@ function routeHeaderCrumbContent(def: CrumbDef): ReactNode {
   return def.label;
 }
 
+function RouteHeaderCrumb({ def }: { def: CrumbDef }) {
+  const slot = useBreadcrumbBarCrumb();
+  const isCurrent = slot?.isLeaf ?? false;
+  const to = isCurrent ? undefined : slot?.pathname;
+  const IconComponent = def.icon;
+  const Action = def.Action;
+
+  return (
+    <BreadcrumbBar.Crumb
+      as={to ? Link : 'span'}
+      to={to}
+      isCurrent={isCurrent}
+      icon={IconComponent ? <IconComponent /> : undefined}
+      action={Action ? <Action /> : undefined}
+    >
+      {routeHeaderCrumbContent(def)}
+    </BreadcrumbBar.Crumb>
+  );
+}
+
 export function RouteHeader() {
   const { crumbs: handleCrumbs } = useRouteHeader();
   const override = useRouteHeaderCrumbsOverride();
   const crumbs = override ?? handleCrumbs;
-  const lastIdx = crumbs.length - 1;
 
   return (
-    <Header className="h-10 min-h-10 gap-2 overflow-hidden px-2">
-      {crumbs.length > 0 && (
-        <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
-          {crumbs.map((def, i) => {
-            const isCurrent = i === lastIdx;
-            const linkable = !isCurrent && def.to;
-            const IconComponent = def.icon;
-            const Action = def.Action;
-            return (
-              <Crumb
-                key={def.id}
-                as={linkable ? Link : 'span'}
-                to={linkable ? def.to : undefined}
-                isCurrent={isCurrent}
-                icon={IconComponent ? <IconComponent /> : undefined}
-                action={Action ? <Action /> : undefined}
-              >
-                {routeHeaderCrumbContent(def)}
-              </Crumb>
-            );
-          })}
-        </Breadcrumb>
-      )}
-
-      <div className="ml-auto flex shrink-0 items-center gap-2 overflow-hidden">
-        <RouteHeaderActionsSlot className="contents" />
-      </div>
-    </Header>
+    <BreadcrumbBar actions={<RouteHeaderActionsSlot className="contents" />}>
+      {crumbs.map(def => (
+        <BreadcrumbBar.Item key={def.id} pathname={def.to}>
+          <RouteHeaderCrumb def={def} />
+        </BreadcrumbBar.Item>
+      ))}
+    </BreadcrumbBar>
   );
 }
