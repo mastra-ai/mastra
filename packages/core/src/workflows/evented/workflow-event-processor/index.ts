@@ -410,6 +410,39 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
+   * Resolves the live, in-process workflow instance described by
+   * `{ workflowId, runId, parentWorkflow }`. Run-scoped internal registrations
+   * win (closure-bound instances like `agentic-loop`), then nested workflows
+   * are located by descending from their parent descriptor, and finally the
+   * public registry is consulted.
+   *
+   * Note: `parentWorkflow` must be the descriptor of the *parent* of the
+   * workflow being resolved — `getNestedWorkflow` descends one level from the
+   * descriptor it's given (and into the loop *body* for `loop`/`foreach`
+   * entries), so calling it on the target's own descriptor would resolve one
+   * level too deep. To resolve the workflow a `ParentWorkflow` descriptor
+   * itself refers to, pass the descriptor's fields (its `parentWorkflow` is
+   * the grandparent, whose descent lands back on the descriptor's workflow).
+   */
+  #resolveLiveWorkflow({
+    workflowId,
+    runId,
+    parentWorkflow,
+  }: {
+    workflowId: string;
+    runId: string;
+    parentWorkflow?: ParentWorkflow;
+  }): Workflow | null | undefined {
+    if (this.mastra.__hasInternalWorkflow(workflowId, runId)) {
+      return this.mastra.__getInternalWorkflow(workflowId, runId);
+    }
+    if (parentWorkflow) {
+      return getNestedWorkflow(this.mastra, parentWorkflow);
+    }
+    return this.#tryResolveWorkflow(workflowId);
+  }
+
+  /**
    * Stale-build fence for scheduled fires (#19169).
    *
    * A `workflow.start` published by the scheduler carries no step graph —
@@ -769,8 +802,15 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // handle nested workflow
     if (parentWorkflow) {
-      // get the step from the parent workflow and process it if it's a loop
-      const step = parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
+      // get the step from the parent workflow and process it if it's a loop.
+      // `parentWorkflow` came over the pubsub wire: a serializing pubsub (Redis
+      // Streams etc.) strips the loop `condition` function from its stepGraph
+      // copy, so resolve the live loop-owning workflow from the registry and
+      // only fall back to the payload copy if it can't be found (#23111).
+      const liveParentWorkflow = this.#resolveLiveWorkflow(parentWorkflow);
+      const step =
+        liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!] ??
+        parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
       if (step?.type === 'loop') {
         // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
         await processWorkflowLoop(
@@ -3102,14 +3142,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    let workflow;
-    if (this.mastra.__hasInternalWorkflow(workflowData.workflowId, workflowData.runId)) {
-      workflow = this.mastra.__getInternalWorkflow(workflowData.workflowId, workflowData.runId);
-    } else if (workflowData.parentWorkflow) {
-      workflow = getNestedWorkflow(this.mastra, workflowData.parentWorkflow);
-    } else {
-      workflow = this.#tryResolveWorkflow(workflowData.workflowId);
-    }
+    const workflow = this.#resolveLiveWorkflow(workflowData);
 
     if (!workflow) {
       // For terminal/cleanup events (`workflow.fail`, `workflow.end`,
