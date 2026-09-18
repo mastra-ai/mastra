@@ -22,7 +22,7 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(presets.tagName).toBe('BUTTON');
     expect(presets.getAttribute('data-variant')).toBe('ghost');
     expect(presets.className).toContain('bg-transparent');
-    expect(presets.className).toContain('text-neutral4');
+    expect(presets.className).toContain('text-foreground/90');
     expect(presets.className).not.toContain('pointer-events-none');
   });
 

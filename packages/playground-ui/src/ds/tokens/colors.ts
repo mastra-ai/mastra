@@ -46,4 +46,5 @@ export const BorderColors = {
   border1: 'var(--border1)',
   border2: 'var(--border2)',
   border: 'var(--border)',
+  'sidebar-divider': 'var(--sidebar-divider)',
 };

@@ -35,6 +35,7 @@ import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { pickTraceSideView, traceSideViewLabel } from '@/test/trace-side-view';
 
 const TRACE_COLUMN_STORAGE_KEY = `mastra:traces:columns:${TEST_BASE_URL}:/api`;
 const onBreakdownRequest = vi.fn<() => void>();
@@ -200,25 +201,32 @@ describe('Traces page usage columns', () => {
       );
     };
 
-    it('given an agent trace with a thread id, when opened, then Messages renders as a column and the panel is wide', async () => {
+    it('given an agent trace with a thread id, when opened, then Messages renders as a column and the panel opens wide', async () => {
       setThreadedTraceHandlers();
 
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
       expect(await screen.findByTestId('messages-panel')).not.toBeNull();
-      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('given a span is also selected, then the panel covers the full frame', async () => {
-      setThreadedTraceHandlers();
+    describe('given the spanView query param is timeline', () => {
+      it('opens the trace column on the timeline and writes the pick back to the URL', async () => {
+        setThreadedTraceHandlers();
 
-      const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
+        const { queryClient } = renderPage('/traces?traceId=trace-a&spanView=timeline');
 
-      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
-      await waitFor(() => expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-full'));
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+        expect(await screen.findByLabelText('Trace time axis')).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Timeline' }).getAttribute('aria-pressed')).toBe('true');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Span tree' }));
+
+        await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('spanView='));
+        expect(screen.queryByLabelText('Trace time axis')).toBeNull();
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
     });
 
     describe('given the thread has another trace', () => {
@@ -257,17 +265,17 @@ describe('Traces page usage columns', () => {
         );
       };
 
-      it('when "View full thread" is clicked, then the side panel shows every turn at full width, and "Back to trace" restores the trace', async () => {
+      it('when "Open full thread" is clicked, then the side panel shows every turn at the same wide size, and "Back to trace" restores the trace', async () => {
         setMultiTurnThreadHandlers();
 
         const { queryClient } = renderPage('/traces?traceId=trace-a');
         const dialog = () => screen.getByRole('dialog', { name: 'Trace details' });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'View full thread' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
 
         expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
         await waitFor(() => expect(dialog().querySelectorAll('[data-trace-id]')).toHaveLength(2));
-        expect(dialog().className).toContain('w-full');
+        expect(dialog().className).toContain('w-4/5');
         expect(screen.queryByTestId('messages-panel')).toBeNull();
         // The page did not navigate away from the traces list.
         expect(screen.getByRole('button', { name: 'Back to trace' })).not.toBeNull();
@@ -281,7 +289,7 @@ describe('Traces page usage columns', () => {
       });
     });
 
-    it('given a trace without a thread id, then no Messages column renders and the panel is half width', async () => {
+    it('given a trace without a thread id, then no Messages column renders and the panel still opens wide', async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
       server.use(http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)));
 
@@ -289,7 +297,7 @@ describe('Traces page usage columns', () => {
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(screen.queryByTestId('messages-panel')).toBeNull();
-      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-1/2');
+      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
     });
   });
 
@@ -372,7 +380,7 @@ describe('Traces side panel header actions', () => {
         }),
       );
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Score trace' })).toBeNull());
-      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
+      expect(traceSideViewLabel()).toMatch(/scores/i);
     });
   });
   it('shows the trace actions in the panel header when a trace is selected', async () => {
@@ -395,7 +403,7 @@ describe('Traces side panel header actions', () => {
   });
 });
 
-describe('Traces side panel Scores tab', () => {
+describe('Traces side panel Scores view', () => {
   const openScoresTab = async (scoresResponse = emptyTraceSpanScores) => {
     setTracePageHandlers(metricsCapableSystemPackages);
     server.use(
@@ -409,14 +417,14 @@ describe('Traces side panel Scores tab', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
+    await pickTraceSideView(/^scores/i);
     return queryClient;
   };
 
   describe('when the trace has scores', () => {
     it('opens score details in a sibling drawer above the trace and closes it independently', async () => {
       await openScoresTab(traceSpanScores);
-      fireEvent.click(await screen.findByText('score-1'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Score score-1' }));
 
       const scoreDialog = await screen.findByRole('dialog', { name: 'Score score-1' });
       expect(scoreDialog.getAttribute('data-depth')).toBe('2');
@@ -424,27 +432,43 @@ describe('Traces side panel Scores tab', () => {
 
       fireEvent.click(within(scoreDialog).getByRole('button', { name: /close/i }));
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Score score-1' })).toBeNull());
-      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
+      expect(traceSideViewLabel()).toMatch(/scores/i);
     });
 
-    it('renders the score chart legend above the scores table', async () => {
+    it('renders one card per score with the scorer name, value and a link to the scorer run', async () => {
       await openScoresTab(traceSpanScores);
 
-      // Chart legend: one entry per scorer with its average (scorer names also
-      // appear in the table rows, hence the *AllByText queries).
-      expect((await screen.findAllByText('Relevance')).length).toBeGreaterThan(0);
-      expect(screen.getAllByText('Toxicity').length).toBeGreaterThan(0);
-      expect(screen.getByText('0.60')).not.toBeNull();
-      expect(screen.getByText('1.00')).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Score score-1' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Score score-3' })).not.toBeNull();
+      expect(screen.getAllByText('Relevance')).toHaveLength(2);
+      expect(screen.getByText('Toxicity')).not.toBeNull();
+      expect(screen.getByText('0.4')).not.toBeNull();
+      expect(screen.getByText('0.8')).not.toBeNull();
+      expect(screen.getByText('1')).not.toBeNull();
 
-      // Table rows still render from the same data.
-      expect(screen.getByText('score-1')).not.toBeNull();
-      expect(screen.getByText('score-3')).not.toBeNull();
+      const links = screen.getAllByRole('link', { name: /open scorer run/i });
+      expect(links).toHaveLength(3);
+      expect(links[0]?.getAttribute('href')).toBe('/scorers/relevance-scorer?scoreId=score-1');
+    });
+
+    it('truncates a long reason and reveals the rest on Read more', async () => {
+      const longReason = 'a'.repeat(200);
+      await openScoresTab({
+        ...traceSpanScores,
+        scores: [{ ...traceSpanScores.scores[0]!, reason: longReason }],
+      });
+
+      const preview = await screen.findByText(new RegExp(`^${'a'.repeat(100)}…`));
+      expect(preview.textContent).not.toContain(longReason);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Read more' }));
+      expect(screen.getByText(new RegExp(longReason))).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Read less' })).not.toBeNull();
     });
   });
 
   describe('when a span is open', () => {
-    it('closes the span side panel so the scores get the room', async () => {
+    it('keeps the span panel open while the side column shows the scores', async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
@@ -458,10 +482,11 @@ describe('Traces side panel Scores tab', () => {
       expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
+      await pickTraceSideView(/^scores/i);
 
-      await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
-      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
+      expect(await screen.findByText(/no scores/i)).not.toBeNull();
+      expect(screen.getByRole('heading', { name: /^Span/ })).not.toBeNull();
+      expect(traceSideViewLabel()).toMatch(/scores/i);
     });
   });
 

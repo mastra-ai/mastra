@@ -1,5 +1,36 @@
 # @mastra/client-js
 
+## 1.47.0-alpha.6
+
+### Patch Changes
+
+- Clients can now send the full `generateTitle` configuration with a memory config: `minMessages` (minimum thread messages before a title is generated), `emitEvent` (stream the generated title as a transient `data-thread-title` chunk before `finish`), and an optional `model` (defaults to the agent's model). ([#24247](https://github.com/mastra-ai/mastra/pull/24247))
+
+  ```ts
+  const agent = client.getAgent('assistant');
+
+  const response = await agent.stream('Plan my trip to Kyoto', {
+    memory: {
+      thread: 'thread-1',
+      resource: 'user-1',
+      options: {
+        generateTitle: { emitEvent: true, minMessages: 2 },
+      },
+    },
+  });
+
+  await response.processDataStream({
+    onChunk: async chunk => {
+      if (chunk.type === 'data-thread-title') {
+        console.log(chunk.data.threadId, chunk.data.title);
+      }
+    },
+  });
+  ```
+
+- Updated dependencies [[`6ef8186`](https://github.com/mastra-ai/mastra/commit/6ef8186ade9c8ca69269deed07fd47a942ecf70d), [`34e4d21`](https://github.com/mastra-ai/mastra/commit/34e4d21e62c61e11e52aa7d6c39748b1120fbb93), [`8702f39`](https://github.com/mastra-ai/mastra/commit/8702f39331322ef0296fd3d68c0bd0997079faaa), [`e6072cb`](https://github.com/mastra-ai/mastra/commit/e6072cbbd3482e37027e53e4d62da7aad6a36c41), [`8d808d8`](https://github.com/mastra-ai/mastra/commit/8d808d8452b8acd5eda4f8cfe014331a8c0f1e92)]:
+  - @mastra/core@1.68.0-alpha.6
+
 ## 1.47.0-alpha.5
 
 ### Minor Changes

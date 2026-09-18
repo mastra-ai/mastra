@@ -20,7 +20,7 @@ const meta: Meta<typeof InputGroup> = {
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['default', 'filled', 'outline'],
+      options: ['default', 'outline'],
     },
   },
 };
@@ -47,7 +47,7 @@ export const Variants: Story = {
         </InputGroupAddon>
         <InputGroupInput placeholder="Default" />
       </InputGroup>
-      <InputGroup variant="filled">
+      <InputGroup>
         <InputGroupAddon>
           <SearchIcon />
         </InputGroupAddon>
@@ -268,37 +268,37 @@ export const NumberWithStepper: Story = {
 
 export const OnDifferentSurfaces: Story = {
   render: () => (
-    <div className="flex w-96 flex-col gap-4">
-      <div className="border-border1 bg-surface1 rounded-lg border p-4">
+    <div className="new-theme flex w-96 flex-col gap-4">
+      <div className="border-border bg-sidebar rounded-lg border p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface1" />
+          <InputGroupInput placeholder="On bg-sidebar (recessed)" />
         </InputGroup>
       </div>
-      <div className="border-border1 bg-surface2 rounded-lg border p-4">
+      <div className="border-border bg-background rounded-lg border p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface2" />
+          <InputGroupInput placeholder="On bg-background" />
         </InputGroup>
       </div>
-      <div className="border-border1 bg-surface3 rounded-lg border p-4">
+      <div className="border-border bg-card rounded-lg border p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface3" />
+          <InputGroupInput placeholder="On bg-card" />
         </InputGroup>
       </div>
-      <div className="border-border1 bg-surface4 rounded-lg border p-4">
+      <div className="border-border bg-muted rounded-lg border p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface4" />
+          <InputGroupInput placeholder="On bg-muted (raised)" />
         </InputGroup>
       </div>
     </div>

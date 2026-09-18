@@ -1341,8 +1341,8 @@ export class MastraTUI {
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
-      startGoal: (objective, cancelMessage, options) =>
-        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage, options),
+      startGoal: (objective, cancelMessage) =>
+        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
       renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>

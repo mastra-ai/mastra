@@ -10,9 +10,7 @@ export function AgentUnavailable() {
       action={
         <div className="flex flex-wrap justify-center gap-2">
           <Button onClick={() => window.location.reload()}>Reload</Button>
-          <Button as={Link} to="/agents">
-            Choose agent
-          </Button>
+          <Button render={<Link to="/agents" />}>Choose agent</Button>
         </div>
       }
     />

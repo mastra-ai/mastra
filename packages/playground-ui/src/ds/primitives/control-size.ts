@@ -33,10 +33,10 @@ export type ControlTriggerVisualVariant = 'default' | 'outline' | 'ghost';
 // (for Button-shaped triggers: DropdownMenu, Popover, DateTimePicker); `field`
 // is the Input-family overlay used by the filled Select/Combobox triggers.
 export const controlTriggerOpenState: Record<ControlTriggerVisualVariant | 'field', string> = {
-  default: 'data-[popup-open]:bg-button-default-bg-hover data-[popup-open]:text-neutral6',
-  field: 'data-[popup-open]:bg-surface-overlay-strong data-[popup-open]:text-neutral6',
-  outline: 'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
-  ghost: 'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
+  default: 'data-[popup-open]:bg-foreground/14 data-[popup-open]:text-foreground',
+  field: 'data-[popup-open]:bg-foreground/14 data-[popup-open]:text-foreground',
+  outline: 'data-[popup-open]:bg-foreground/4 data-[popup-open]:text-foreground data-[popup-open]:border-foreground/45',
+  ghost: 'data-[popup-open]:bg-foreground/4 data-[popup-open]:text-foreground',
 };
 
 // Open-state classes for a trigger rendered with any Button variant; only the

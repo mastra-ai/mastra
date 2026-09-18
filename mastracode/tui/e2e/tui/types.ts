@@ -69,6 +69,7 @@ export type ScenarioName =
   | 'goal-fresh-thread-persistence'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
+  | 'goal-resume-single-render'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
   | 'openai-strict-schema'
