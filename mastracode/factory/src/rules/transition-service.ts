@@ -129,6 +129,8 @@ function actorId(actor: FactoryRuleActor): string {
       return `agent:${actor.bindingId}`;
     case 'github':
       return `github:${actor.login}`;
+    case 'gitlab':
+      return `gitlab:${actor.username}`;
   }
 }
 
@@ -137,6 +139,7 @@ export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorT
   const id = actorId(actor);
   switch (actor.type) {
     case 'github':
+    case 'gitlab':
       return { actorId: id, actorType: 'human' };
     case 'human':
       return { actorId: id, actorType: isAgentActor(id) ? 'agent' : 'human' };
