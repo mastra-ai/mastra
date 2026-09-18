@@ -114,10 +114,12 @@ describe('durable agent abort on a connect worker', () => {
     }
 
     expect(aborted).toBe(true);
-    // Discriminating assertion: when the control topic is dropped (#22543), the
-    // worker never receives the abort-request, streams to natural completion,
-    // and this resolves to 'stop'.
-    const outcome = abortPayload !== undefined ? 'abort' : finishReason;
-    expect(outcome).toBe('abort');
+    // When the control topic is dropped (#22543), the worker never receives the
+    // abort-request, streams to natural completion, and finishReason resolves to
+    // 'stop' with onAbort never firing. All three signals derive from the FINISH
+    // event the worker publishes after gracefully catching the AbortError.
+    expect(abortPayload).toBeDefined();
+    expect(finishReason).toBe('abort');
+    await expect(result.output.finishReason).resolves.toBe('abort');
   });
 });
