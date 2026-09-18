@@ -28,7 +28,7 @@ Injected on every deploy.
 | `MASTRA_PLATFORM_REGION` | Region the environment runs in, `US` or `EU` |
 | `MASTRA_PLATFORM_ACCESS_TOKEN` | Token the deploy uses to call platform APIs, including observability |
 | `MASTRA_PLATFORM_BUCKET_NAME` | Bucket backing the environment's [workspace](/docs/mastra-platform/workspaces). Set when workspaces are enabled |
-| `MASTRA_WORKERS` | Set when the project ships a workers manifest |
+| `MASTRA_WORKERS` | Set to `false` on the main service when the project declares workers, so they run only in their own service |
 
 ## Managed database variables
 
