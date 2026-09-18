@@ -172,7 +172,7 @@ export const FullSpanPanel: StoryObj<FixtureArgs> = {
     const span = ALL_SPAN_FIXTURES[fixture];
     return (
       <div className="h-[80vh] max-w-3xl">
-        <SpanDataPanelView traceId={span.traceId} spanId={span.spanId} span={span} onClose={() => {}} />
+        <SpanDataPanelView traceId={span.traceId} spanId={span.spanId} span={span} />
       </div>
     );
   },

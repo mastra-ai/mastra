@@ -171,13 +171,13 @@ describe('ThreadViewByTrace', () => {
       await refocus();
       expect(requested).not.toHaveBeenCalled();
       fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByRole('button', { name: /close/i });
+      await screen.findByRole('heading', { name: /^Span/ });
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(requested.mock.calls).toEqual([['trace-a']]);
       requested.mockClear();
       await refocus();
       expect(requested.mock.calls).toEqual([['trace-a']]);
-      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+      fireEvent.click(screen.getByText('Chef agent run'));
       requested.mockClear();
       await refocus();
       expect(requested).not.toHaveBeenCalled();
@@ -231,15 +231,15 @@ describe('ThreadViewByTrace', () => {
 
     fireEvent.click(await screen.findByText('Chef agent run'));
 
-    // The span panel is the only place with a close button; its detail body shows the span input.
-    const closeButton = await screen.findByRole('button', { name: /close/i });
+    await screen.findByRole('heading', { name: /^Span/ });
     // The conversation column stays mounted while the span panel is open.
     expect(screen.getByTestId('thread-view-by-trace')).not.toBeNull();
     expect(screen.getByText('Chef agent follow-up')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(closeButton);
-    await waitFor(() => expect(screen.queryByRole('button', { name: /close/i })).toBeNull());
+    // Re-clicking the selected span toggles the span panel off.
+    fireEvent.click(screen.getByText('Chef agent run'));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
   });
 
   it('shows a rail with one stop per turn that jumps to the matching row', async () => {
@@ -338,13 +338,13 @@ describe('ThreadViewByTrace', () => {
       screen.getByTestId('thread-view-by-trace').querySelector(`[data-trace-id="${traceId}"]`);
 
     fireEvent.click(await screen.findByText('Chef agent run'));
-    await screen.findByRole('button', { name: /close/i });
+    await screen.findByRole('heading', { name: /^Span/ });
 
     expect(rowOf('trace-a')?.getAttribute('data-active')).toBe('true');
     expect(rowOf('trace-b')?.getAttribute('data-active')).toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    fireEvent.click(screen.getByText('Chef agent run'));
     await waitFor(() => expect(rowOf('trace-a')?.getAttribute('data-active')).toBeNull());
   });
 
@@ -362,7 +362,7 @@ describe('ThreadViewByTrace', () => {
       fireEvent.click(within(toolBadge).getAllByRole('button')[0]!);
 
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
-      expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
+      expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
@@ -385,7 +385,7 @@ describe('ThreadViewByTrace', () => {
       expect(spanLabel('Chef agent follow-up').className).not.toContain('opacity-30');
       // Highlighting is a timeline-only affordance: no span is selected and the panel stays closed,
       // so opening a span remains the user's own click.
-      expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
+      expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
       expect(spanLabel('Chef agent run').getAttribute('aria-selected')).toBe('false');
       // The most specific span behind the message (last id, deepest in the tree) is brought into
@@ -442,7 +442,8 @@ describe('ThreadViewByTrace', () => {
 
       // Highlighting does not open the panel, so open a span by hand and then close it.
       fireEvent.click(spanLabel('Recipe lookup'));
-      fireEvent.click(await screen.findByRole('button', { name: /close/i }));
+      await screen.findByRole('heading', { name: /^Span/ });
+      fireEvent.click(spanLabel('Recipe lookup'));
       await waitFor(() => expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
@@ -512,15 +513,15 @@ describe('ThreadViewByTrace', () => {
 
       await screen.findAllByRole('button', { name: 'Show more' });
       fireEvent.click(await screen.findByText('Chef agent run'));
-      await screen.findByRole('button', { name: /close/i });
+      await screen.findByRole('heading', { name: /^Span/ });
 
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
       // Collapsing would hide the selection, so the control is withheld while a span is open.
       expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      fireEvent.click(screen.getByRole('button', { name: /close/i }));
-      await waitFor(() => expect(screen.queryByRole('button', { name: /close/i })).toBeNull());
+      fireEvent.click(screen.getByText('Chef agent run'));
+      await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
       expect(screen.getByRole('button', { name: 'Show less' })).not.toBeNull();
     });

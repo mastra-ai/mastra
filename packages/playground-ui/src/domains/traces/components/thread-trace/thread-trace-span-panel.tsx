@@ -61,7 +61,6 @@ function SelectedSpanPanel({ traceId, spanId, panelClassName }: SelectedSpanPane
       spanId={spanId}
       span={spanDetailData?.span}
       isLoading={isLoading}
-      onClose={() => onSpanSelect(undefined)}
       onPrevious={handlePreviousSpan}
       onNext={handleNextSpan}
     />

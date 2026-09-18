@@ -218,7 +218,8 @@ describe('ThreadTrace', () => {
       expect(getRow('trace-b').dataset.active).toBeUndefined();
       expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none');
 
-      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+      // No close button on the span panel: re-clicking the selected span toggles it off.
+      fireEvent.click(screen.getByText('Chef agent run'));
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBe(0));
       expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_0%]');
       expect(getRow('trace-a').dataset.active).toBeUndefined();
@@ -253,8 +254,8 @@ describe('ThreadTrace', () => {
       await within(rowA).findByText('Recipe lookup');
       // Closing the panel clears the highlight, so opening and closing a span resets it.
       fireEvent.click(within(rowA).getByText('Chef agent run'));
-      await screen.findByTestId('span-panel');
-      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
+      fireEvent.click(within(rowA).getByText('Chef agent run'));
       await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('none;none'));
     });
   });
@@ -283,9 +284,9 @@ describe('ThreadTrace', () => {
 
       // Collapsing would hide the selected span, so Show less waits until the panel closes.
       fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByTestId('span-panel');
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
       expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+      fireEvent.click(screen.getByText('Chef agent run'));
       await screen.findByRole('button', { name: 'Show less' });
 
       fireEvent.click(screen.getByRole('button', { name: 'Show less' }));

@@ -185,7 +185,6 @@ export function TraceSpanPanel({
             span={spanDetailData?.span}
             isAnchor={anchorSpanId ? selectedSpanId === anchorSpanId : undefined}
             isLoading={isLoadingSpanDetail}
-            onClose={onSpanClose ?? (() => onSpanSelect(undefined))}
             onPrevious={handlePreviousSpan}
             onNext={handleNextSpan}
             activeTab={spanActiveTab}

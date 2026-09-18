@@ -268,7 +268,7 @@ describe('TraceSpanPanel', () => {
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
-  it('when the span panel is closed, then onSpanSelect(undefined) clears the selection', async () => {
+  it('when the selected span is clicked again, then onSpanSelect(undefined) clears the selection', async () => {
     installHandlers();
     const onSpanSelect = vi.fn<(spanId: string | undefined) => void>();
     const { queryClient } = renderPanel({ initialSpanId: 'span-child-1', onSpanSelect });
@@ -276,9 +276,8 @@ describe('TraceSpanPanel', () => {
     expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    // Two close buttons are visible (trace panel + span panel); the span panel's is the last.
-    const closeButtons = screen.getAllByLabelText('Close Panel');
-    fireEvent.click(closeButtons[closeButtons.length - 1]);
+    // The span column has no close button: clicking the selected span row again toggles it off.
+    fireEvent.click(screen.getByText('First tool call'));
 
     expect(onSpanSelect).toHaveBeenCalledWith(undefined);
     await waitFor(() => expect(screen.queryByRole('heading', { name: /span-child-1/ })).toBeNull());

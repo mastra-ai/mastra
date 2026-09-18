@@ -24,7 +24,6 @@ export interface SpanDataPanelViewProps {
   /** Full span record. Caller fetches via useSpanDetail. */
   span: SpanRecord | undefined;
   isLoading?: boolean;
-  onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
   activeTab?: string;
@@ -51,7 +50,6 @@ export function SpanDataPanelView({
   spanId,
   span,
   isLoading,
-  onClose,
   onPrevious,
   onNext,
   activeTab,
@@ -80,8 +78,6 @@ export function SpanDataPanelView({
             previousLabel="Go to previous span"
             nextLabel="Go to next span"
           />
-          {/* Nested column: dismissed in place with an X; the back arrow stays on the drawer's top header. */}
-          <DataPanel.CloseButton icon="x" onClick={onClose} />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 

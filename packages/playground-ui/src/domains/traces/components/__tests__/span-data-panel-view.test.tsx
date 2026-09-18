@@ -10,7 +10,6 @@ const baseProps: SpanDataPanelViewProps = {
   traceId: 'trace-1',
   spanId: 'span-1',
   span: spanFixture,
-  onClose: vi.fn(),
 };
 
 afterEach(cleanup);

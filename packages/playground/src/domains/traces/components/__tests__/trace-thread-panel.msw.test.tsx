@@ -104,9 +104,8 @@ describe('TraceThreadPanel', () => {
       fireEvent.click(screen.getByText('Chef agent run'));
       await waitFor(() => expect(dialog().className).toContain('w-full'));
 
-      const spanPanel = dialog().querySelector<HTMLElement>('[data-slot="thread-trace-span-panel"]');
-      expect(spanPanel).not.toBeNull();
-      fireEvent.click(within(spanPanel!).getByRole('button', { name: 'Close Panel' }));
+      // Re-clicking the selected span toggles the span panel off.
+      fireEvent.click(screen.getByText('Chef agent run'));
       await waitFor(() => expect(dialog().className).toContain('w-4/5'));
     });
 
