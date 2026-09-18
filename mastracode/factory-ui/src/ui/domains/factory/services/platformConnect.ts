@@ -46,11 +46,19 @@ export interface PlatformConnectSession {
 }
 
 async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${baseUrl}${path}`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-    ...init,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+      ...init,
+    });
+  } catch (cause) {
+    const err = new Error('Network request failed');
+    (err as { transient?: boolean }).transient = true;
+    (err as { cause?: unknown }).cause = cause;
+    throw err;
+  }
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     let code: string | undefined;
@@ -70,11 +78,16 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
   return (await res.json()) as T;
 }
 
-/** Network failures and 5xx responses are worth retrying; 4xx (auth, gating) are not. */
+/**
+ * Only confirmed transient failures are worth retrying: fetch rejections
+ * (tagged by `requestJson`) and 5xx responses. Everything else — 4xx (auth,
+ * gating) and contract failures like malformed JSON — fails immediately.
+ */
 function isRetryableListFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
+  if ((error as { transient?: boolean }).transient === true) return true;
   const status = (error as { status?: number }).status;
-  return status === undefined || status >= 500;
+  return status !== undefined && status >= 500;
 }
 
 /**

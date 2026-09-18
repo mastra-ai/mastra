@@ -20,9 +20,10 @@ export function useIncidentioSourcesQuery(enabled: boolean = true) {
 }
 
 /**
- * incident.io feature status through the shared React Query cache. The service
- * degrades to a disabled status instead of throwing, so consumers read
- * `data`, never `error`. Pass `enabled: false` to gate the request.
+ * incident.io feature status through the shared React Query cache. Explicit
+ * server answers (including 401 → `auth_required`) resolve as data; transient
+ * failures throw, so a failed background refetch keeps the last known status
+ * instead of collapsing the feed. Pass `enabled: false` to gate the request.
  */
 export function useIncidentioStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();

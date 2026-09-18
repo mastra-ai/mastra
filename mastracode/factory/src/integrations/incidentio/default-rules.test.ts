@@ -53,15 +53,18 @@ describe('incident.io rule resolution', () => {
     expect(() => resolveIncidentioRules(overrides)).toThrow(/plain object/);
   });
 
+  // Each case is wrapped in a one-element tuple: with a bare mixed list Vitest
+  // only passes array cases through intact because other rows are non-arrays,
+  // which would silently change if the list ever became all-arrays.
   it.each([
-    null,
-    [],
-    'rules',
-    { unknown: null },
-    { toString: null },
-    { followUpObserved: false },
-    { followUpClosed: {} },
-    { [Symbol('event')]: null },
+    [null],
+    [[]],
+    ['rules'],
+    [{ unknown: null }],
+    [{ toString: null }],
+    [{ followUpObserved: false }],
+    [{ followUpClosed: {} }],
+    [{ [Symbol('event')]: null }],
   ])('rejects invalid configuration %j', overrides => {
     // @ts-expect-error Exercise invalid configuration from JavaScript callers.
     expect(() => resolveIncidentioRules(overrides)).toThrow();

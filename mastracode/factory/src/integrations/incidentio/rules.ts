@@ -189,7 +189,7 @@ export class IncidentioRules {
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
       workItemId: relatedItem?.id ?? null,
-      ingress: { identity: ingressId, triggerType: 'incidentio.followUpObserved' },
+      ingress: { identity: ingressId, triggerType: `incidentio.${event}` },
       configVersion: this.options.configVersion,
       expectedRevision: relatedItem?.revision ?? null,
       actor,

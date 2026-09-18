@@ -56,7 +56,10 @@ function LinearPane({ onConnect }: { onConnect: () => void }) {
 }
 
 function JiraPane({ connections, onRetry }: { connections: PlatformProviderConnection[]; onRetry?: () => void }) {
-  if (onRetry) {
+  const hasActiveConnection = connections.some(connection => connection.status === 'active');
+  // A failed refetch retains the last successful data; keep showing the
+  // connected summary rather than replacing it with a retry state.
+  if (onRetry && !hasActiveConnection) {
     return (
       <EmptyState
         className="py-8"
@@ -71,8 +74,7 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
       />
     );
   }
-  const hasActive = connections.some(connection => connection.status === 'active');
-  if (hasActive) {
+  if (hasActiveConnection) {
     return (
       <EmptyState
         className="py-8"
@@ -102,7 +104,10 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
 }
 
 function IncidentIoPane({ connections, onRetry }: { connections: PlatformProviderConnection[]; onRetry?: () => void }) {
-  if (onRetry) {
+  const hasActiveConnection = connections.some(connection => connection.status === 'active');
+  // A failed refetch retains the last successful data; keep showing the
+  // connected summary rather than replacing it with a retry state.
+  if (onRetry && !hasActiveConnection) {
     return (
       <EmptyState
         className="py-8"
@@ -117,8 +122,7 @@ function IncidentIoPane({ connections, onRetry }: { connections: PlatformProvide
       />
     );
   }
-  const hasActive = connections.some(connection => connection.status === 'active');
-  if (hasActive) {
+  if (hasActiveConnection) {
     return (
       <EmptyState
         className="py-8"

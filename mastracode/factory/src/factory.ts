@@ -209,8 +209,9 @@ export interface MastraFactoryConfig {
    * agent/session tools, intake, source control, and diagnostics — into the
    * system. When Platform credentials are configured, missing `github` and
    * `linear` integrations default to their Platform-backed implementations.
-   * A missing `jira` integration also defaults to Platform Jira, which
-   * discovers visible `jira` connections at runtime.
+   * Missing `jira` and `incidentio` integrations also default to their
+   * Platform-backed implementations, which discover visible `jira` and
+   * `incident-io` connections at runtime.
    */
   integrations?: FactoryIntegration[];
   /**

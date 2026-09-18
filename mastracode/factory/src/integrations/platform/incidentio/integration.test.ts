@@ -324,6 +324,32 @@ describe('PlatformIncidentioIntegration', () => {
     expect(issue).toEqual(expect.objectContaining({ identifier: 'INC-42' }));
   });
 
+  it('drops foreign-scoped source ids when the sole-connection fallback resolves the connection', async () => {
+    const fetchImpl = fetchRouter([
+      {
+        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        respond: () => json({ connections: [connection('connection-a', 'acme')] }),
+      },
+      {
+        match: url => url.includes('/connection-a/proxy/v2/incidents'),
+        respond: () => json({ incidents: [incident], pagination_meta: {} }),
+      },
+    ]);
+    const integration = new PlatformIncidentioIntegration({
+      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+    });
+
+    // No connection id in the token: the fallback resolves the sole active
+    // connection. A source id scoped to a different connection must be
+    // dropped, not unwrapped and read against connection-a.
+    const page = await integration.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'some-legacy-token' },
+      sourceIds: [encodeScopedSourceId('connection-gone', INCIDENTIO_INCIDENTS_SOURCE_ID)],
+    });
+    expect(page.issues).toEqual([]);
+    expect(fetchImpl).not.toHaveBeenCalledWith(expect.stringContaining('/proxy/v2/incidents'), expect.any(Object));
+  });
+
   it('rejects a connection token whose id is not among the discovered active connections', async () => {
     const fetchImpl = fetchRouter([
       {

@@ -214,7 +214,9 @@ describe('IncidentioRules', () => {
           configVersion: 'factory-config-v1',
           ingress: {
             identity: `incidentio:${issue.id}:${issue.updatedAt}`,
-            triggerType: 'incidentio.followUpObserved',
+            // Closures must be stored under the close trigger, not the
+            // observation trigger, so trigger-based audit queries stay correct.
+            triggerType: 'incidentio.followUpClosed',
           },
         }),
       );

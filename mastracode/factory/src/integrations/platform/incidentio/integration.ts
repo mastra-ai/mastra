@@ -426,7 +426,10 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
 
   async #listIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
     const resolved = await this.#intakeForConnection(input.connection);
-    const connectionId = connectionIdFromConnection(input.connection);
+    // Scope to the connection that was actually resolved (which may be the
+    // sole-connection fallback), so a source id scoped to a different
+    // connection is dropped instead of being read against this one.
+    const connectionId = connectionIdFromConnection(resolved.connection);
     const baseSourceIds = connectionId
       ? baseSourceIdsFor(connectionId, input.sourceIds)
       : input.sourceIds.map(sourceId => decodeScopedSourceId(sourceId)?.sourceId ?? sourceId);

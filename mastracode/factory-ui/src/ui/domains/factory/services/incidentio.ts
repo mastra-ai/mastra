@@ -73,21 +73,20 @@ async function requestJson<T>(url: string): Promise<T> {
 }
 
 /**
- * Read incident.io feature status. Degrades to a disabled status on failure —
- * same contract as `fetchJiraStatus`, so consumers read `data`, never `error`.
+ * Read incident.io feature status. The endpoint's explicit answers — success
+ * payloads and 401 (mapped to `auth_required`) — resolve as data. Transient
+ * failures (network, other HTTP errors, malformed JSON) throw so React Query
+ * retains the last successful status instead of replacing it with a
+ * "successful" disabled result that would silently collapse the intake feed.
  */
 export async function fetchIncidentioStatus(baseUrl: string): Promise<IncidentioStatus> {
-  try {
-    const res = await fetch(`${baseUrl}/web/incidentio/status`, {
-      headers: { Accept: 'application/json' },
-      credentials: 'include',
-    });
-    if (res.status === 401) return { enabled: false, configured: false, reason: 'auth_required' };
-    if (!res.ok) return { enabled: false, configured: false };
-    return (await res.json()) as IncidentioStatus;
-  } catch {
-    return { enabled: false, configured: false };
-  }
+  const res = await fetch(`${baseUrl}/web/incidentio/status`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (res.status === 401) return { enabled: false, configured: false, reason: 'auth_required' };
+  if (!res.ok) throw new Error(`incident.io status request failed (${res.status})`);
+  return (await res.json()) as IncidentioStatus;
 }
 
 /**

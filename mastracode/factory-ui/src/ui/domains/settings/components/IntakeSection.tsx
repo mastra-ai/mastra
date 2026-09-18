@@ -353,7 +353,14 @@ function IncidentioIntakeSection({
                 Coming soon
               </Badge>
             </SettingsRow>
-            {config.incidentio.enabled && active.length > 0 && (
+            {config.incidentio.enabled && active.length > 0 && sourcesQuery.isError && (
+              <SettingsRow label="Follow-up sources" description="Couldn't load follow-up sources.">
+                <Button size="xs" variant="ghost" onClick={() => void sourcesQuery.refetch()}>
+                  Retry
+                </Button>
+              </SettingsRow>
+            )}
+            {config.incidentio.enabled && active.length > 0 && !sourcesQuery.isError && (
               <SourcePicker
                 label="Follow-up sources"
                 groups={[
