@@ -26,7 +26,7 @@ function ExampleProjectSwitcher() {
   return (
     <BreadcrumbBar.SwitcherCrumb>
       <DropdownMenu>
-        <DropdownMenu.Trigger variant="ghost" size="xs">
+        <DropdownMenu.Trigger variant="ghost" size="sm">
           Production project
           <ChevronDown />
         </DropdownMenu.Trigger>
