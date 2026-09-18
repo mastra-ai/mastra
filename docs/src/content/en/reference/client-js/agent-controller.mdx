@@ -306,9 +306,11 @@ function applyUpdate(message: MastraDBMessage, update: MessageUpdate): MastraDBM
     }
   } else if (update.type === 'reasoning-delta') {
     const part = parts[update.index]
-    if (part?.type === 'reasoning') {
-      const reasoning = part.reasoning + update.delta
-      parts[update.index] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] }
+    const reasoning = part?.type === 'reasoning' ? part.reasoning + update.delta : update.delta
+    parts[update.index] = {
+      type: 'reasoning',
+      reasoning,
+      details: [{ type: 'text', text: reasoning }],
     }
   } else {
     parts[update.index] = update.part
