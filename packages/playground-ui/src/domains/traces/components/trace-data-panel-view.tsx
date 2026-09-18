@@ -464,13 +464,14 @@ function TracePanelColumns({
   const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(highlightQuery, spanPanelKey);
 
   const showMessages = !!messagesPanelSlot && !messagesCollapsed;
-  // The messages column has a fixed width so the span tree and span detail share the rest.
+  // The messages column has a fixed width so the span tree and span detail share the rest;
+  // it narrows below `lg` so both side columns keep breathing room in the drawer.
   // It collapses to `0px` (a length, not `0fr`) so `grid-template-columns` still interpolates.
   const columns =
     showMessages && spanPanelSlot
-      ? 'grid-cols-[24rem_1fr_1fr]'
+      ? 'grid-cols-[18rem_1fr_1fr] lg:grid-cols-[24rem_1fr_1fr]'
       : showMessages
-        ? 'grid-cols-[24rem_1fr_0fr]'
+        ? 'grid-cols-[18rem_1fr_0fr] lg:grid-cols-[24rem_1fr_0fr]'
         : spanPanelSlot
           ? 'grid-cols-[0px_1fr_1fr]'
           : 'grid-cols-[0px_1fr_0fr]';
