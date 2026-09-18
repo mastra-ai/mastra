@@ -5,6 +5,7 @@ import { MessageList } from '../../agent/message-list';
 import { signalToXmlMarkup } from '../../agent/signals';
 import { ConsoleLogger } from '../../logger';
 import { ProcessorRunner } from '../../processors/runner';
+import { STABILITY_ERROR_PROCESSOR_IDS } from '../../processors/stability-defaults';
 import { LocalFilesystem, LocalSandbox, Workspace } from '../../workspace';
 import type { PromptContext } from '../index';
 import { buildBasePrompt, createCodingAgent } from '../index';
@@ -209,6 +210,19 @@ describe('createCodingAgent', () => {
       }),
     );
     expect(agent).toBeInstanceOf(Agent);
+  });
+
+  it('defaults error processors to the shared stability stack, ProviderHistoryCompat first', async () => {
+    const agent = createCodingAgent(baseConfig());
+    const ids = (await agent.listErrorProcessors()).map(p => p.id);
+
+    expect(ids).toEqual([...STABILITY_ERROR_PROCESSOR_IDS]);
+  });
+
+  it('honors a caller-provided error processor list verbatim', async () => {
+    const agent = createCodingAgent(baseConfig({ errorProcessors: [] }));
+
+    expect(await agent.listErrorProcessors()).toEqual([]);
   });
 
   it('does not include TaskSignalProvider when no memory is configured', async () => {
