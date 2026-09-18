@@ -1334,6 +1334,7 @@ export class SessionRunEngine {
     let currentRun: StreamState | undefined;
     let requestContext!: RequestContext;
     let bailed = false;
+    let abortedRunId: string | undefined;
 
     const consume = async (): Promise<void> => {
       for await (const chunk of subscription.stream) {
@@ -1343,8 +1344,11 @@ export class SessionRunEngine {
           break;
         }
 
+        const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
+        if (runId && runId === abortedRunId) continue;
+        if (runId && abortedRunId) abortedRunId = undefined;
+
         if (!currentRun) {
-          const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
           currentRun = this.createStreamState();
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
@@ -1393,14 +1397,10 @@ export class SessionRunEngine {
             });
             currentRun = undefined;
             if (aborted) {
-              // The abort chunk terminates this consumer loop, so the live
-              // subscription is no longer being drained. Detach it so the next
-              // signal (e.g. a follow-up message sent right after Ctrl+C)
-              // re-subscribes and starts a fresh consumer — otherwise the new
-              // run's chunks would never be processed and the follow-up would
-              // get no response.
-              this.#session.stream.detach();
-              break;
+              // The thread subscription remains live across runs. Ignore any
+              // trailing chunks from the aborted run while continuing to drain
+              // later signals on this same subscription.
+              abortedRunId = runId ?? undefined;
             }
           }
         } catch (error) {
@@ -1429,10 +1429,10 @@ export class SessionRunEngine {
         currentRun = undefined;
       }
 
-      // An abort-deadline bail leaves the hung subscription undrained; detach
-      // it so the next message re-subscribes a fresh consumer (same reason as
-      // the abort-chunk path above).
-      if (bailed && this.#session.stream.isCurrent({ subscription })) {
+      // A closed or hung subscription cannot observe later runs. Detach it so
+      // the next message creates a fresh consumer. A persistent subscription
+      // stays attached after an abort and continues draining later signals.
+      if ((bailed || abortedRunId) && this.#session.stream.isCurrent({ subscription })) {
         this.#session.stream.detach();
       }
     } catch (error) {

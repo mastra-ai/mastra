@@ -2,10 +2,9 @@ import {
   presentTool,
   stringifyToolValue,
   stripSerializedAnsi,
-  ToolCallEdit,
-  ToolCallMono,
+  ToolCallArguments,
+  ToolCallOutput,
   ToolCallPresentedHeader,
-  toolEdit,
 } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
@@ -54,7 +53,6 @@ export const ToolBadge = ({
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
   const { icon, label, detail } = presentTool(toolName, argsObject);
-  const edit = toolEdit(toolName, argsObject);
   const resultPretty =
     result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
 
@@ -87,35 +85,26 @@ export const ToolBadge = ({
       }
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >
-      {edit && <ToolCallEdit edit={edit} />}
-      {!withoutArgs && !edit && (
-        <ToolCallMono copyText={argsPretty} data-testid="tool-args" className="text-icon5">
-          {argsPretty}
-        </ToolCallMono>
-      )}
+      <ToolCallArguments
+        toolName={toolName}
+        args={argsObject}
+        argsText={argsPretty}
+        hideArguments={withoutArgs}
+        data-testid="tool-args"
+      />
 
       {suspendPayload !== undefined && suspendPayload && (
         <div>
           <SectionLabel>Suspend payload</SectionLabel>
           {typeof suspendPayload === 'string' ? (
-            <ToolCallMono copyText={suspendPayload} className="text-icon3">
-              {suspendPayload}
-            </ToolCallMono>
+            <ToolCallOutput text={suspendPayload} />
           ) : (
             <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
           )}
         </div>
       )}
 
-      {resultPretty && (
-        <ToolCallMono
-          copyText={resultPretty}
-          data-testid="tool-result"
-          className={status === 'error' ? 'text-error/90' : 'text-icon3'}
-        >
-          {resultPretty}
-        </ToolCallMono>
-      )}
+      {resultPretty && <ToolCallOutput text={resultPretty} error={status === 'error'} data-testid="tool-result" />}
 
       {toolOutput.length > 0 && (
         <div>

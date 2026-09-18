@@ -2,35 +2,22 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { longPanelItems, longPanelResults, mockPanelRequests } from './__tests__/fixtures/item-review-panels';
 
-function routeHeader(page: Page) {
-  return page.locator('header').filter({ has: page.getByRole('navigation', { name: 'breadcrumb' }) });
-}
-
-async function expectFrameHeight(page: Page, panel: Locator) {
-  await expect(async () => {
-    const frame = await routeHeader(page)
-      .locator('..')
-      .evaluate(element => {
-        const box = element.getBoundingClientRect();
-        return { top: box.y + element.clientTop, bottom: box.y + element.clientTop + element.clientHeight };
-      });
-    const box = await panel.boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.y).toBeCloseTo(frame.top, 0);
-    expect(box!.y + box!.height).toBeCloseTo(frame.bottom, 0);
-  }).toPass({ timeout: 3000 });
+/** The dialog is the drawer popup; the card is its inner `section`. */
+function card(panel: Locator) {
+  return panel.locator('section').first();
 }
 
 /**
  * Wheel-scrolls inside the card's content area and returns how far the card's
  * own scroll region moved, regardless of tabs or other wrappers around it.
  */
-async function scrollCardContent(page: Page, card: Locator) {
-  const box = await card.boundingBox();
-  await card.hover({ position: { x: 8, y: box!.height - 8 } });
+async function scrollCardContent(page: Page, panel: Locator) {
+  const target = card(panel);
+  const box = await target.boundingBox();
+  await target.hover({ position: { x: 8, y: box!.height - 8 } });
   await page.mouse.wheel(0, 1000);
   return () =>
-    card.evaluate(element =>
+    target.evaluate(element =>
       Math.max(
         0,
         ...Array.from(element.querySelectorAll<HTMLElement>('*'))
@@ -40,20 +27,8 @@ async function scrollCardContent(page: Page, card: Locator) {
     );
 }
 
-async function expectCardInset(panel: Locator) {
-  await expect(async () => {
-    const panelBox = await panel.boundingBox();
-    const cardBox = await panel.locator('section').first().boundingBox();
-    expect(cardBox!.y).toBeCloseTo(panelBox!.y + 12, 0);
-    expect(cardBox!.y + cardBox!.height).toBeCloseTo(panelBox!.y + panelBox!.height - 12, 0);
-    expect(cardBox!.x).toBeCloseTo(panelBox!.x + 12, 0);
-    expect(cardBox!.x + cardBox!.width).toBeCloseTo(panelBox!.x + panelBox!.width - 12, 0);
-  }).toPass({ timeout: 3000 });
-}
-
 /**
- * Item details should cover the route header, not Studio navigation, so their
- * controls stay usable while inspecting data. Fixtures cross only the network
+ * Item details open as a modal drawer. Fixtures cross only the network
  * boundary; deep links persist the selection without any data mutation.
  */
 test.describe('Item and review panel layout', () => {
@@ -78,52 +53,45 @@ test.describe('Item and review panel layout', () => {
       test.describe(`when a ${surface} is opened directly on ${device}`, () => {
         test.use({ viewport });
 
-        test('covers the route header with a full-height inset card that can be closed', async ({ page }, testInfo) => {
+        test('opens a drawer that can be closed', async ({ page }, testInfo) => {
           await page.goto(url);
           const panel = page.getByRole('dialog', { name: label });
           const close = panel.getByRole('button', { name: 'Close Panel', exact: true });
           await expect(close).toBeVisible();
-          await expectFrameHeight(page, panel);
-          await expectCardInset(panel);
-          const headerBox = await routeHeader(page).boundingBox();
-          const cardBox = await panel.locator('section').first().boundingBox();
-          const headerPoint = { x: cardBox!.x + cardBox!.width / 2, y: headerBox!.y + headerBox!.height - 2 };
-          expect(
-            await panel.evaluate(
-              (element, point) => element.contains(document.elementFromPoint(point.x, point.y)),
-              headerPoint,
-            ),
-          ).toBe(true);
           const screenshot = testInfo.outputPath(`${surface.replaceAll(' ', '-')}-${device}.png`);
           await page.screenshot({ path: screenshot });
           await testInfo.attach(`${surface}-${device}`, { path: screenshot, contentType: 'image/png' });
           await close.click();
-          await expect(panel).not.toBeVisible();
+          await expect(panel).toBeHidden();
         });
       });
     }
   }
 
   test.describe('when deletion is requested from an open dataset item', () => {
-    test('allows cancelling deletion above the item overlay', async ({ page }) => {
+    test('allows cancelling deletion above the item drawer', async ({ page }) => {
       await page.goto('/datasets/ds-1/items/item-a');
       const panel = page.getByRole('dialog', { name: 'Dataset item item-a' });
-      await panel.getByRole('button', { name: 'Actions menu' }).click();
+      await panel.getByRole('button', { name: 'Open actions menu' }).click();
       await page.getByRole('menuitem', { name: 'Delete Item' }).click();
       const confirmation = page.getByRole('alertdialog', { name: 'Delete Item' });
       await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
-      await expect(confirmation).not.toBeVisible();
+      await expect(confirmation).toBeHidden();
       await expect(panel).toBeVisible();
       await expect(panel.getByText('alpha', { exact: false })).toBeVisible();
     });
   });
 
-  test.describe('when another item is selected from the unobscured list', () => {
+  test.describe('when another item is selected after closing the drawer', () => {
     test('restores the previous selection with browser back', async ({ page }) => {
       await page.goto('/datasets/ds-1/items/item-a');
-      await expect(page.getByRole('dialog', { name: 'Dataset item item-a' })).toBeVisible();
+      const first = page.getByRole('dialog', { name: 'Dataset item item-a' });
+      await expect(first).toBeVisible();
+      await first.getByRole('button', { name: 'Close Panel', exact: true }).click();
+      await expect(first).toBeHidden();
       await page.getByText('item-b', { exact: true }).click();
       await expect(page.getByRole('dialog', { name: 'Dataset item item-b' })).toBeVisible();
+      await page.goBack();
       await page.goBack();
       await expect(page.getByRole('dialog', { name: 'Dataset item item-a' })).toBeVisible();
       await expect(page).toHaveURL(/\/datasets\/ds-1\/items\/item-a$/);
@@ -135,21 +103,14 @@ test.describe('Item and review panel layout', () => {
       await page.route('**/api/datasets/ds-1/items?*', route => route.fulfill({ json: longPanelItems }));
     });
 
-    test('scrolls inside the card without moving its navigation controls', async ({ page }) => {
+    test('scrolls inside the card and keeps navigating', async ({ page }) => {
       await page.goto('/datasets/ds-1/items/item-a');
       const panel = page.getByRole('dialog', { name: 'Dataset item item-a' });
-      const close = panel.getByRole('button', { name: 'Close Panel', exact: true });
-      await expect(close).toBeVisible();
-      const card = panel.locator('section').first();
-      const panelBox = await panel.boundingBox();
-      const cardBox = await card.boundingBox();
-      expect(cardBox!.y + cardBox!.height).toBeCloseTo(panelBox!.y + panelBox!.height - 12, 0);
-      const closeBox = await close.boundingBox();
-      const contentScrollTop = await scrollCardContent(page, card);
+      await expect(panel.getByRole('button', { name: 'Close Panel', exact: true })).toBeVisible();
+      const contentScrollTop = await scrollCardContent(page, panel);
       await expect.poll(contentScrollTop).toBeGreaterThan(0);
       expect(await panel.evaluate(element => element.scrollTop)).toBe(0);
-      expect((await close.boundingBox())!.y).toBeCloseTo(closeBox!.y, 0);
-      await panel.getByRole('button', { name: 'Next item', exact: true }).click();
+      await panel.getByRole('button', { name: 'Go to next item', exact: true }).click();
       await expect(page.getByRole('dialog', { name: 'Dataset item item-b' })).toBeVisible();
     });
   });
@@ -170,78 +131,46 @@ test.describe('Item and review panel layout', () => {
         );
       });
 
-      test('keeps the close control fixed while scrolling within the card', async ({ page }) => {
+      test('scrolls inside the card and still closes', async ({ page }) => {
         await page.goto(url);
         const panel = page.getByRole('dialog', { name: label });
         const close = panel.getByRole('button', { name: 'Close Panel', exact: true });
         await expect(close).toBeVisible();
-        await expectCardInset(panel);
-        const closeBox = await close.boundingBox();
-        const contentScrollTop = await scrollCardContent(page, panel.locator('section').first());
+        const contentScrollTop = await scrollCardContent(page, panel);
         await expect.poll(contentScrollTop).toBeGreaterThan(0);
         expect(await panel.evaluate(element => element.scrollTop)).toBe(0);
-        expect((await close.boundingBox())!.y).toBeCloseTo(closeBox!.y, 0);
         await close.click();
-        await expect(panel).not.toBeVisible();
+        await expect(panel).toBeHidden();
       });
     });
   }
 
-  test.describe('when an experiment result is opened directly', () => {
-    test('fills the Studio frame including the route header', async ({ page }) => {
-      await page.goto('/experiments/exp-1/items/item-1');
-      const panel = page.getByRole('dialog', { name: 'Experiment item item-1' });
-      await expect(panel.getByRole('button', { name: 'Close Panel', exact: true })).toBeVisible();
-      await expectFrameHeight(page, panel);
-    });
-  });
-
   test.describe('when a result trace span is inspected', () => {
-    test('restores the full-height result card after closing the expanded trace', async ({ page }) => {
+    test('stacks the trace drawer over the result and restores it after closing', async ({ page }) => {
       await page.goto('/experiments/exp-1/items/item-1');
       const panel = page.getByRole('dialog', { name: 'Experiment item item-1' });
       await expect(panel.getByText('first question', { exact: false })).toBeVisible();
-      const initialBox = await panel.boundingBox();
-      await panel.getByRole('button', { name: 'Trace', exact: true }).click();
-      await panel.getByText('Experiment tool call', { exact: true }).click();
-      const span = panel
-        .locator('section')
-        .filter({ has: page.getByRole('heading', { name: /span-child/ }) })
-        .last();
-      await expect(span).toBeVisible();
-      await expect.poll(async () => (await panel.boundingBox())!.width).toBeGreaterThan(initialBox!.width * 1.5);
-      await expectFrameHeight(page, panel);
-      await span.getByRole('button', { name: 'Close Panel', exact: true }).click();
-      const trace = panel.locator('section').filter({ has: page.getByText('Experiment agent run', { exact: true }) });
-      await trace.getByRole('button', { name: 'Close Panel', exact: true }).click();
+      await panel.getByRole('button', { name: 'See trace', exact: true }).click();
+      const trace = page.getByRole('dialog', { name: /^Trace / });
+      await expect(trace).toBeVisible();
+      await trace.getByText('Experiment tool call', { exact: true }).click();
+      await expect(trace.getByRole('heading', { name: /span-child/ })).toBeVisible();
+      await trace.getByRole('button', { name: 'Close Panel', exact: true }).last().click();
+      await expect(trace.getByRole('heading', { name: /span-child/ })).toBeHidden();
+      await trace.getByRole('button', { name: 'Close Panel', exact: true }).first().click();
+      await expect(trace).toBeHidden();
       await expect(panel.getByText('first question', { exact: false })).toBeVisible();
-      await expect.poll(async () => (await panel.boundingBox())!.width).toBeCloseTo(initialBox!.width, 0);
-      await expectCardInset(panel);
     });
   });
 
   test.describe('when a review result is opened directly', () => {
-    test('fills the Studio frame with the same card inset as trace details', async ({ page }) => {
-      await page.goto('/experiments/review-queue?experiment=exp-1&review=res-3');
-      const panel = page.getByRole('dialog', { name: 'Review item res-3' });
-      await expect(panel.getByRole('button', { name: 'Close Panel', exact: true })).toBeVisible();
-      await expectFrameHeight(page, panel);
-      await expectCardInset(panel);
-    });
-
-    test('closes from the control over the route header', async ({ page }) => {
+    test('closes from the close control', async ({ page }) => {
       await page.goto('/experiments/review-queue?experiment=exp-1&review=res-3');
       const panel = page.getByRole('dialog', { name: 'Review item res-3' });
       const close = panel.getByRole('button', { name: 'Close Panel', exact: true });
       await expect(close).toBeVisible();
-      const header = page.locator('header').filter({ has: page.getByRole('navigation', { name: 'breadcrumb' }) });
-      const headerBox = await header.boundingBox();
-      const closeBox = await close.boundingBox();
-      expect(headerBox).not.toBeNull();
-      expect(closeBox).not.toBeNull();
-      expect(closeBox!.y).toBeLessThan(headerBox!.y + headerBox!.height);
       await close.click({ timeout: 3000 });
-      await expect(panel).toHaveCount(0);
+      await expect(panel).toBeHidden();
     });
   });
 });

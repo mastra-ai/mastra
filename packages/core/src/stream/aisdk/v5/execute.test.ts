@@ -252,6 +252,181 @@ describe('execute structured output prompt handling', () => {
   });
 });
 
+describe('execute compact structuredOutput.instructions (issue #23798)', () => {
+  const INLINE_SCHEMA_PREFIX = 'Return your response as JSON matching this schema';
+  const SYSTEM_SCHEMA_PREFIX = 'JSON schema:';
+  const SENTINEL = '__mastra23798Sentinel';
+  const INSTRUCTIONS = 'FIELDS: a,b';
+  const sentinelSchema = z.object({
+    __mastra23798Sentinel: z.string(),
+  });
+
+  function makeCapturingModel() {
+    const captured: { prompt?: any } = {};
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }: any) => {
+        captured.prompt = prompt;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-23798', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"__mastra23798Sentinel":"ok"}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+    return { model, captured };
+  }
+
+  async function run({ messages, structuredOutput, runId }: { messages: any[]; structuredOutput: any; runId: string }) {
+    const { model, captured } = makeCapturingModel();
+    const stream = execute({
+      runId,
+      model: model as any,
+      inputMessages: messages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput,
+    });
+    await readStream(stream);
+    return captured.prompt as any[];
+  }
+
+  it('substitutes instructions for the schema dump in the leading system message', async () => {
+    const prompt = await run({
+      runId: 'test-run-23798-system',
+      messages: [
+        { role: 'system' as const, content: 'Keep this prefix stable.' },
+        { role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] },
+      ],
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'system', instructions: INSTRUCTIONS },
+    });
+
+    expect(prompt[0]).toEqual({ role: 'system', content: `Keep this prefix stable.\n\n${INSTRUCTIONS}` });
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it("substitutes instructions when 'auto' resolves to injection on a model without native support", async () => {
+    const prompt = await run({
+      runId: 'test-run-23798-auto',
+      messages: [
+        { role: 'system' as const, content: 'Keep this prefix stable.' },
+        { role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] },
+      ],
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'auto', instructions: INSTRUCTIONS },
+    });
+
+    // 'auto' resolves to inline injection when capability data says the model has no native
+    // structured output, so the compact text lands on the latest user message.
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).toContain(INSTRUCTIONS);
+    expect(prompt[0]).toEqual({ role: 'system', content: 'Keep this prefix stable.' });
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it('creates a system message carrying the instructions when none exists', async () => {
+    const prompt = await run({
+      runId: 'test-run-23798-system-none',
+      messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] }],
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: true, instructions: INSTRUCTIONS },
+    });
+
+    expect(prompt[0]).toEqual({ role: 'system', content: INSTRUCTIONS });
+    expect(prompt[1]).toEqual({ role: 'user', content: [{ type: 'text', text: 'Extract now.' }] });
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it('substitutes instructions for the schema dump in the latest user message for inline mode', async () => {
+    const messages = [
+      { role: 'system' as const, content: 'Keep this prefix stable.' },
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'First request.' }] },
+      { role: 'assistant' as const, content: [{ type: 'text' as const, text: 'First response.' }] },
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] },
+    ];
+    const prompt = await run({
+      runId: 'test-run-23798-inline',
+      messages,
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'inline', instructions: INSTRUCTIONS },
+    });
+
+    expect(prompt[0]).toEqual(messages[0]);
+    expect(prompt[3].content.at(-1)).toEqual({ type: 'text', text: INSTRUCTIONS });
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it('adds a user message carrying the instructions for inline mode when no user message exists', async () => {
+    const prompt = await run({
+      runId: 'test-run-23798-inline-none',
+      messages: [{ role: 'system' as const, content: 'System only.' }],
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'inline', instructions: INSTRUCTIONS },
+    });
+
+    expect(prompt[0]).toEqual({ role: 'system', content: 'System only.' });
+    expect(prompt[1]).toEqual({ role: 'user', content: [{ type: 'text', text: INSTRUCTIONS }] });
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it('falls back to the generated schema instruction for whitespace-only instructions', async () => {
+    const messages = [
+      { role: 'system' as const, content: 'Keep this prefix stable.' },
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] },
+    ];
+    const withWhitespace = await run({
+      runId: 'test-run-23798-blank',
+      messages,
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'system', instructions: '   ' },
+    });
+    const withNone = await run({
+      runId: 'test-run-23798-none',
+      messages,
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'system' },
+    });
+
+    expect(JSON.stringify(withWhitespace)).toBe(JSON.stringify(withNone));
+    expect(JSON.stringify(withWhitespace)).toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(JSON.stringify(withWhitespace)).toContain(SENTINEL);
+  });
+
+  it('does not substitute instructions on the processor path', async () => {
+    const { model: structuringModel } = makeCapturingModel();
+    const prompt = await run({
+      runId: 'test-run-23798-processor',
+      messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] }],
+      structuredOutput: {
+        schema: sentinelSchema,
+        model: structuringModel as any,
+        jsonPromptInjection: 'system',
+        instructions: INSTRUCTIONS,
+      },
+    });
+
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).toContain('Your response will be processed by another agent to extract structured data');
+    expect(promptJson).toContain(SENTINEL);
+    expect(promptJson).not.toContain(INSTRUCTIONS);
+  });
+});
+
 describe('execute sampling-param stripping (issue #23319)', () => {
   function makeCapturingModel(provider: string, modelId: string) {
     const captured: { options?: any } = {};

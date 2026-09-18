@@ -76,6 +76,10 @@
                         "required": ["input"],
                         "additionalProperties": false
                       },
+                      "suspendedToolCallId": {
+                        "type": ["string", "null"],
+                        "description": "The toolCallId of the suspended tool to resume"
+                      },
                       "suspendedToolRunId": {
                         "type": ["string", "null"],
                         "description": "The runId of the suspended tool"
@@ -132,7 +136,18 @@
               "reasoning": [],
               "sources": [],
               "text": "Mock V2 stream response",
-              "warnings": []
+              "warnings": [],
+              "toolCalls": [
+                {
+                  "toolCallId": "call-workflow-1",
+                  "toolName": "workflow-simpleWorkflow",
+                  "args": {
+                    "inputData": {
+                      "input": "test input"
+                    }
+                  }
+                }
+              ]
             }
           },
           "children": [

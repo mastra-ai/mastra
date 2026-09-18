@@ -1,6 +1,6 @@
 {
   "name": "@mastra/oracledb",
-  "version": "0.3.0",
+  "version": "0.4.0-alpha.0",
   "description": "Oracle Database provider for Mastra storage and vector retrieval",
   "type": "module",
   "main": "dist/index.js",
@@ -51,7 +51,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.61.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.68.0-0 <2.0.0-0"
   },
   "files": [
     "dist"

@@ -139,6 +139,7 @@ async function getInputPlugins(
     transpilePackages,
     workspaceMap,
     bundlerOptions,
+    projectRoot,
     rootDir,
     externals,
     platform,
@@ -146,6 +147,7 @@ async function getInputPlugins(
     transpilePackages: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     bundlerOptions: { noBundling: boolean };
+    projectRoot: string;
     rootDir: string;
     externals: string[];
     platform: BundlerPlatform;
@@ -172,7 +174,7 @@ async function getInputPlugins(
         {} as Record<string, string>,
       ),
     ),
-    tsConfigPaths(),
+    tsConfigPaths({ cwd: projectRoot }),
     protocolExternalResolver(),
     subpathExternalsResolver(externals),
     transpilePackagesMap.size
@@ -238,7 +240,13 @@ async function getInputPlugins(
       transformMixedEsModules: true,
       ignoreTryCatch: false,
     }),
-    bundlerOptions.noBundling ? null : nodeResolve(getNodeResolveOptions(platform)),
+    bundlerOptions.noBundling
+      ? null
+      : nodeResolve({
+          ...getNodeResolveOptions(platform),
+          rootDir: projectRoot,
+          modulePaths: [path.join(rootDir, 'node_modules')],
+        }),
     bundlerOptions.noBundling ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
@@ -294,6 +302,7 @@ async function buildExternalDependencies(
     externals,
     packagesToTranspile,
     workspaceMap,
+    projectRoot,
     rootDir,
     outputDir,
     bundlerOptions,
@@ -302,6 +311,7 @@ async function buildExternalDependencies(
     externals: string[];
     packagesToTranspile: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
+    projectRoot: string;
     rootDir: string;
     outputDir: string;
     bundlerOptions: {
@@ -326,6 +336,7 @@ async function buildExternalDependencies(
     bundlerOptions: {
       noBundling,
     },
+    projectRoot,
     rootDir,
     externals,
     platform,
@@ -515,6 +526,7 @@ export async function bundleExternals(
     externals: mergedExternals,
     packagesToTranspile,
     workspaceMap,
+    projectRoot,
     rootDir: workspaceRoot || projectRoot,
     outputDir,
     bundlerOptions: {

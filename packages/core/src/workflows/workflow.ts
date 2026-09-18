@@ -4838,6 +4838,9 @@ export class Run<
         if (!params.isVNext && result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
         }
+        if (result.status !== 'suspended') {
+          this.cleanup?.();
+        }
         result.traceId = traceId;
         result.spanId = spanId;
         return result;

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -71,12 +71,15 @@ describe('TraceSpanTree — revealing a span', () => {
 });
 
 describe('TraceSpanTree — trailing cell', () => {
-  it('shows the span duration as seconds at the end of each row by default', () => {
+  it('shows the span duration as seconds under each span name', () => {
     render(<Harness />);
 
     // Both fixture spans last exactly one second.
-    const durations = screen.getAllByText((_, el) => el?.textContent === '1.000\u00a0s' && el.tagName === 'DIV');
+    const durations = screen.getAllByText((_, el) => el?.textContent === '1.000\u00a0s' && el.tagName === 'SPAN');
     expect(durations).toHaveLength(2);
+    // The duration lives inside the row's name button, right after the name.
+    const root = screen.getByLabelText('View details for span agent run');
+    expect(within(root).getByRole('button', { name: /agent run/ }).textContent).toBe('agent run1.000\u00a0s');
   });
 
   it('renders a custom trailing cell with the row context', () => {
@@ -85,6 +88,7 @@ describe('TraceSpanTree — trailing cell', () => {
 
     screen.getByText('root@0');
     screen.getByText('child@1');
-    expect(screen.queryByText((_, el) => el?.textContent === '1.000\u00a0s')).toBeNull();
+    // The duration line is kept alongside the custom trailing cell.
+    expect(screen.getAllByText((_, el) => el?.textContent === '1.000\u00a0s' && el.tagName === 'SPAN')).toHaveLength(2);
   });
 });

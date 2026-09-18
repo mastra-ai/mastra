@@ -1,6 +1,6 @@
 import type { Server } from 'node:http';
-import { createMCPTransportTestSuite } from '@internal/server-adapter-test-utils';
 import type { Mastra } from '@mastra/core/mastra';
+import { createMCPTransportTestSuite } from '@mastra/server-adapters-test-suite';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import express from 'express';

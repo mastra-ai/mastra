@@ -8,7 +8,12 @@ import { ToolCard } from './ToolCard';
 export function ToolGroup({ tools }: { tools: ToolCall[] }) {
   return (
     <ToolCallGroup
-      steps={tools.map(tool => ({ toolName: tool.toolName, args: tool.args, status: toolCallStatus(tool.status) }))}
+      steps={tools.map(tool => ({
+        toolName: tool.toolName,
+        args: tool.args,
+        status: toolCallStatus(tool.status),
+        hasResult: tool.status === 'done',
+      }))}
       leading={<ToolTime at={tools[0].createdAt} />}
     >
       {tools.map(tool => (

@@ -43,6 +43,7 @@ import type {
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart } from './utils/stamp-part';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
@@ -425,6 +426,15 @@ export class MessageList {
    */
   private get promptConversionMode(): ToolCallConversionMode {
     return this.filterIncompleteToolCalls ? 'prompt' : 'prompt-with-suspended';
+  }
+
+  /**
+   * Whether tool calls without a result are dropped from the prompt (the default) rather than
+   * paired with a pending placeholder result. Lets prompt-shape-aware processors reason about
+   * what a trailing assistant message will look like once converted.
+   */
+  get dropsIncompleteToolCalls(): boolean {
+    return this.filterIncompleteToolCalls;
   }
 
   private getMessagesForModelPrompt(): MastraDBMessage[] {
@@ -1414,7 +1424,13 @@ export class MessageList {
                   ? { ...existing, ...values }
                   : values;
             }
-            return merged as AIV5Type.ProviderMetadata;
+            // Some hosted tools (e.g. OpenAI `tool_search`) give the call and its
+            // output DIFFERENT Responses item ids (tsc_… / tso_…). The namespace
+            // merge above keeps only one `itemId`, so replay would reference the
+            // same item twice ("Duplicate item found"). Retain the call's id and
+            // stash the result's beside it; prompt conversion splits them back
+            // onto their own tool parts.
+            return preserveResponseItemIdsOnMerge(original, incoming, merged) as AIV5Type.ProviderMetadata;
           })()
         : undefined;
 

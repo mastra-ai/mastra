@@ -27,6 +27,15 @@ describe('Input', () => {
     expect(screen.getByPlaceholderText('Name').className).toContain('bg-surface-overlay-soft');
   });
 
+  it.each(inputVariants)('uses the shared neutral6 text color at rest for the %s variant', variant => {
+    render(<Input variant={variant} placeholder={variant} />);
+
+    const cls = screen.getByPlaceholderText(variant).className;
+    expect(cls).toContain('text-neutral6');
+    expect(cls).not.toContain('text-neutral5');
+    expect(cls).toContain('placeholder:text-neutral2');
+  });
+
   it('supports an outline variant without an initial filled background', () => {
     render(<Input variant="outline" placeholder="Name" />);
 

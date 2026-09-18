@@ -1,5 +1,11 @@
 # @mastra/codemod
 
+## 1.1.3-alpha.0
+
+### Patch Changes
+
+- Fixed verbose codemod runs so they pass a valid diagnostic level to jscodeshift. ([#24251](https://github.com/mastra-ai/mastra/pull/24251))
+
 ## 1.1.2
 
 ### Patch Changes
