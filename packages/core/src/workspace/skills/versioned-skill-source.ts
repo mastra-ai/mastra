@@ -105,7 +105,7 @@ export class VersionedSkillSource implements SkillSource {
         createdAt: this.#versionCreatedAt,
         modifiedAt: this.#versionCreatedAt,
         mimeType: entry.mimeType,
-        encoding: entry.sourceEncoding ?? entry.encoding,
+        encoding: entry.sourceEncoding ?? entry.encoding ?? 'utf-8',
       };
     }
 
@@ -136,17 +136,9 @@ export class VersionedSkillSource implements SkillSource {
       throw new Error(`Blob not found for hash ${entry.blobHash} (file: ${path})`);
     }
 
-    if (entry.sourceEncoding) {
-      const content = decodeCanonicalOrLegacyBlob(blob.content, entry.blobHash);
-      return entry.sourceEncoding === 'base64' ? content : content.toString('utf-8');
-    }
-
-    // Legacy trees used encoding for both the blob representation and the file's logical type.
-    if (entry.encoding === 'base64') {
-      return Buffer.from(blob.content, 'base64');
-    }
-
-    return blob.content;
+    const content = decodeCanonicalOrLegacyBlob(blob.content, entry.blobHash);
+    const sourceEncoding = entry.sourceEncoding ?? entry.encoding ?? 'utf-8';
+    return sourceEncoding === 'base64' ? content : content.toString('utf-8');
   }
 
   async readdir(path: string): Promise<SkillSourceEntry[]> {

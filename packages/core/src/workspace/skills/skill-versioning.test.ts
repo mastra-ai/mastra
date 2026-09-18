@@ -1152,6 +1152,63 @@ describe('Binary asset support', () => {
       expect(content).toBe(textContent);
     });
 
+    it('decodes canonical Base64 rows referenced by legacy text trees', async () => {
+      const blobStore = new InMemoryBlobStore();
+      const textContent = '# Legacy version';
+      const blobHash = sha256(textContent);
+
+      await blobStore.put({
+        hash: blobHash,
+        content: Buffer.from(textContent, 'utf-8').toString('base64'),
+        size: Buffer.byteLength(textContent, 'utf-8'),
+        mimeType: 'text/markdown',
+        createdAt: new Date(),
+      });
+
+      const tree: SkillVersionTree = {
+        entries: {
+          'SKILL.md': {
+            blobHash,
+            size: Buffer.byteLength(textContent, 'utf-8'),
+            mimeType: 'text/markdown',
+            encoding: 'utf-8',
+          },
+        },
+      };
+
+      const source = new VersionedSkillSource(tree, blobStore, new Date());
+
+      await expect(source.readFile('SKILL.md')).resolves.toBe(textContent);
+    });
+
+    it('rejects legacy tree rows whose content does not match the expected hash', async () => {
+      const blobStore = new InMemoryBlobStore();
+      const expectedHash = sha256('expected content');
+
+      await blobStore.put({
+        hash: expectedHash,
+        content: Buffer.from('different content', 'utf-8').toString('base64'),
+        size: Buffer.byteLength('different content', 'utf-8'),
+        mimeType: 'text/markdown',
+        createdAt: new Date(),
+      });
+
+      const tree: SkillVersionTree = {
+        entries: {
+          'SKILL.md': {
+            blobHash: expectedHash,
+            size: Buffer.byteLength('expected content', 'utf-8'),
+            mimeType: 'text/markdown',
+            encoding: 'utf-8',
+          },
+        },
+      };
+
+      const source = new VersionedSkillSource(tree, blobStore, new Date());
+
+      await expect(source.readFile('SKILL.md')).rejects.toThrow(`Blob content does not match hash ${expectedHash}`);
+    });
+
     it.each([
       ['canonical Base64', 'YWJj'],
       ['legacy UTF-8', 'abc'],
