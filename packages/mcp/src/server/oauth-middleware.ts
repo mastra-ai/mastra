@@ -4,7 +4,7 @@
  * Implements OAuth 2.0 Protected Resource support per RFC 9728 for MCP servers.
  * This allows MCP servers to require OAuth authentication from clients.
  *
- * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
+ * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization
  * @see https://www.rfc-editor.org/rfc/rfc9728.html
  */
 

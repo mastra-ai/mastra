@@ -21,6 +21,7 @@ import type {
 
 import type { DbClient, TxClient } from '../../../client';
 import { qualifiedTable, TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import { latestScorePredicate } from './scores';
 
 type SqlFragment = { sql: string; values: unknown[] };
 type FieldRegistry<TField extends string> = Record<TField, string>;
@@ -230,14 +231,6 @@ function latestSpanPredicate(spanTable: string): string {
     WHERE newer."traceId" = s."traceId"
       AND newer."spanId" = s."spanId"
       AND (newer."isPending" < s."isPending" OR (newer."isPending" = s."isPending" AND newer."cursorId" > s."cursorId"))
-  )`;
-}
-
-function latestScorePredicate(scoreTable: string): string {
-  return `NOT EXISTS (
-    SELECT 1 FROM ${scoreTable} newer
-    WHERE newer."scoreId" = s."scoreId"
-      AND newer."cursorId" > s."cursorId"
   )`;
 }
 
@@ -455,7 +448,11 @@ function compilePostgresTraceScope(
   return { ctes, values };
 }
 
-export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQueryPlan): CompiledPostgresTraceQuery {
+export function compilePostgresTraceQuery(
+  schema: string,
+  plan: TrustedTraceQueryPlan,
+  mode: 'data' | 'count' = 'data',
+): CompiledPostgresTraceQuery {
   const relationCollections = collectRelationCollections(plan.where);
   const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections);
 
@@ -471,6 +468,15 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
     WHERE ${predicateSql}
   )`);
   const candidates = `WITH ${ctes.join(',\n')}`;
+
+  if (plan.paginationMode === 'page' && mode === 'count') {
+    return {
+      text: `${candidates}
+SELECT COUNT(*)::text AS count
+FROM candidates`,
+      values,
+    };
+  }
 
   if (plan.result === 'groups') {
     const pageCondition = plan.cursor ? `AND "threadId" > $${values.length + 1}` : '';
@@ -490,6 +496,18 @@ LIMIT $${values.length}`,
 
   const orderField = plan.orderBy.field === 'startedAt' ? '"startedAt"' : '"endedAt"';
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  if (plan.paginationMode === 'page') {
+    values.push(plan.perPage, plan.page * plan.perPage);
+    return {
+      text: `${candidates}
+SELECT *
+FROM candidates
+ORDER BY ${orderField} ${direction}, "traceId" ASC
+LIMIT $${values.length - 1} OFFSET $${values.length}`,
+      values,
+    };
+  }
+
   let pageCondition = '';
   if (plan.cursor) {
     const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
@@ -664,10 +682,14 @@ export async function runWithPostgresTraceQueryTimeout<T>(
   client: DbClient,
   timeoutMs: number,
   execute: (transaction: TxClient) => Promise<T>,
+  options: { repeatableRead?: boolean } = {},
 ): Promise<T> {
   const resolvedTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
   try {
     return await client.tx(async transaction => {
+      if (options.repeatableRead) {
+        await transaction.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+      }
       await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${resolvedTimeoutMs}ms`]);
       return execute(transaction);
     });
@@ -719,6 +741,53 @@ export async function queryTraces(
   plan: TrustedTraceQueryPlan,
   timeoutMs: number,
 ): Promise<TraceQueryResponse> {
+  if (plan.paginationMode === 'page') {
+    const resolvedTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
+    const deadline = performance.now() + resolvedTimeoutMs;
+    const countQuery = compilePostgresTraceQuery(schema, plan, 'count');
+    const dataQuery = compilePostgresTraceQuery(schema, plan);
+    const { total, rows } = await runWithPostgresTraceQueryTimeout(
+      client,
+      resolvedTimeoutMs,
+      async transaction => {
+        const countRows = await transaction.any<{ count: string }>(countQuery.text, countQuery.values);
+        const remainingTimeoutMs = Math.floor(deadline - performance.now());
+        if (remainingTimeoutMs <= 0) throw new coreStorage.TraceQueryExecutionError();
+        await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
+        const rows = await transaction.any<Record<string, unknown>>(dataQuery.text, dataQuery.values);
+        return { total: Number(countRows[0]?.count ?? 0), rows };
+      },
+      { repeatableRead: true },
+    );
+    const traces = rows.map(row => ({
+      traceId: String(row.traceId),
+      rootSpanId: String(row.rootSpanId),
+      name: row.name,
+      entityId: row.entityId ?? null,
+      parentSpanId: row.parentSpanId ?? null,
+      createdAt: asIsoTimestamp(row.startedAt),
+      metadata: row.metadata ?? null,
+      inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+      threadId: row.threadId == null ? null : String(row.threadId),
+      resourceId: row.resourceId == null ? null : String(row.resourceId),
+      startedAt: asIsoTimestamp(row.startedAt),
+      endedAt: asIsoTimestamp(row.endedAt),
+      entityName: row.entityName == null ? null : String(row.entityName),
+      entityType: row.entityType == null ? null : String(row.entityType),
+      environment: row.environment == null ? null : String(row.environment),
+      status: row.status,
+    }));
+    return coreStorage.traceQueryResponseSchema.parse({
+      traces,
+      pagination: {
+        total,
+        page: plan.page,
+        perPage: plan.perPage,
+        hasMore: (plan.page + 1) * plan.perPage < total,
+      },
+    });
+  }
+
   const query = compilePostgresTraceQuery(schema, plan);
   const rows = await runWithPostgresTraceQueryTimeout(client, timeoutMs, transaction =>
     transaction.any<Record<string, unknown>>(query.text, query.values),

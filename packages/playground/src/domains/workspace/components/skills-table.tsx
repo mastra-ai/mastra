@@ -195,9 +195,8 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
           <Button
             size="lg"
             variant="default"
-            as="a"
-            href="https://mastra.ai/en/docs/workspace/skills"
-            target="_blank"
+            render={<a href="https://mastra.ai/en/docs/workspace/skills" target="_blank" />}
+
             icon={<BookOpen />}
           >
             Learn about Skills

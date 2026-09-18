@@ -13,7 +13,7 @@ import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
-import { ABORTED_BY_USER_REASON, SUSPENDED_RUN_AGENT_KEY } from './session';
+import { ABORTED_BY_USER_REASON, SUSPENDED_RUN_AGENT_KEY, SUSPENDED_RUN_MEMORY_KEY } from './session';
 import {
   addOptionalUsageField,
   describeNonSuccessFinishReason,
@@ -828,7 +828,12 @@ export class SessionRunEngine {
         const suspPayload = getDisplayTransform(chunk.metadata, 'suspend', getPayload(chunk).suspendPayload);
         const suspResumeSchema = getString(getPayload(chunk).resumeSchema);
 
+        // Capture the whole binding before the memory-resolution await below:
+        // a rebind during that await must not pair this run with the new
+        // session's resource.
         const suspRunId = this.#session.run.getRunId();
+        const suspThreadId = this.#session.thread.getId();
+        const suspResourceId = this.#session.identity.getResourceId();
         if (suspRunId) {
           const runScope = this.#machinery.getRunScope(suspRunId);
           // A subscription restored for the current mode can replay this
@@ -837,11 +842,33 @@ export class SessionRunEngine {
           if (!runScope?.get(SUSPENDED_RUN_AGENT_KEY)) {
             runScope?.set(SUSPENDED_RUN_AGENT_KEY, agent);
           }
-          this.#session.suspensions.register({
-            toolCallId: suspToolCallId,
-            runId: suspRunId,
-            toolName: suspToolName,
-          });
+          // Resolve the run's memory with its own RequestContext while the
+          // stream is still live: abort settlement runs after the context is
+          // gone, and a dynamic memory config would resolve differently (or
+          // not at all) against an empty context. A resolution failure is not
+          // fatal — settlement falls back to a bare getMemory().
+          if (runScope && !runScope.get(SUSPENDED_RUN_MEMORY_KEY)) {
+            try {
+              const suspMemory = await agent.getMemory({ requestContext });
+              if (suspMemory) runScope.set(SUSPENDED_RUN_MEMORY_KEY, suspMemory);
+            } catch {
+              // Leave the key unset; settlement uses its fallback path.
+            }
+          }
+          if (suspThreadId) {
+            // Record the thread/resource the stream is bound to right now: if
+            // the session is later rebound while this run stays suspended,
+            // abort settlement must still target where the suspended
+            // invocation was persisted. register() preserves the original
+            // binding when a replayed stream re-emits the same suspension.
+            this.#session.suspensions.register({
+              toolCallId: suspToolCallId,
+              runId: suspRunId,
+              toolName: suspToolName,
+              threadId: suspThreadId,
+              resourceId: suspResourceId,
+            });
+          }
         }
         state.isSuspended = true;
 
@@ -1272,6 +1299,96 @@ export class SessionRunEngine {
       default:
         break;
     }
+  }
+
+  /**
+   * Settle parked native tool suspensions before aborting their suspended run.
+   * The run cannot emit another chunk after `suspend()`, so update the saved
+   * assistant message directly instead of leaving its tool invocation in
+   * `state: 'call'` forever.
+   *
+   * Each suspension is settled through its own originating binding: the agent
+   * retained on its run scope and the thread/resource it was persisted under.
+   * The session may have been rebound (new thread, resource, or agent) while
+   * the run stayed suspended, so the current binding cannot be assumed. If one
+   * suspension fails to settle, the rest are still attempted and the first
+   * error is rethrown for the caller to surface.
+   */
+  async settleSuspendedToolCallsAsDenied(
+    suspensions: Array<{ toolCallId: string; runId: string; toolName: string; threadId: string; resourceId: string }>,
+  ): Promise<void> {
+    if (suspensions.length === 0) return;
+
+    const currentMessage = this.#session.displayState.get().currentMessage;
+    const currentThreadId = this.#session.thread.getId();
+    const currentResourceId = this.#session.identity.getResourceId();
+    const currentMessageUpdates = new Map<number, MastraMessagePart>();
+    let firstError: Error | undefined;
+
+    for (const suspension of suspensions) {
+      try {
+        const runScope = this.#machinery.getRunScope(suspension.runId);
+        const agent = runScope?.get(SUSPENDED_RUN_AGENT_KEY) ?? this.#machinery.getAgent();
+        // Prefer the memory resolved with the run's own RequestContext at
+        // suspension time; a bare getMemory() cannot see context-dependent
+        // (dynamic or inherited) memory configs.
+        const memory = runScope?.get(SUSPENDED_RUN_MEMORY_KEY) ?? (await agent.getMemory());
+        const persistedMessages = memory
+          ? (await memory.recall({ threadId: suspension.threadId, resourceId: suspension.resourceId })).messages
+          : [];
+        // The live display message belongs to the session's current binding;
+        // only treat it as a candidate when this suspension originated there.
+        const candidates =
+          currentMessage && suspension.threadId === currentThreadId && suspension.resourceId === currentResourceId
+            ? [currentMessage, ...persistedMessages]
+            : persistedMessages;
+        const changedMessages = new Map<string, MastraDBMessage>();
+        let settled = false;
+
+        for (const message of candidates) {
+          const partIndex = message.content.parts.findIndex(
+            part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === suspension.toolCallId,
+          );
+          const part = message.content.parts[partIndex];
+          if (!part || part.type !== 'tool-invocation' || part.toolInvocation.state !== 'call') continue;
+
+          part.toolInvocation = Object.assign(part.toolInvocation, {
+            state: 'output-denied' as const,
+            approval: { id: suspension.toolCallId, approved: false as const, reason: ABORTED_BY_USER_REASON },
+          });
+          if (message.threadId) changedMessages.set(message.id, message);
+          if (message === currentMessage) currentMessageUpdates.set(partIndex, part);
+          settled = true;
+        }
+
+        if (settled) {
+          this.#session.emit({
+            type: 'tool_end',
+            toolCallId: suspension.toolCallId,
+            result: ABORTED_BY_USER_REASON,
+            isError: false,
+            denied: true,
+          });
+        }
+        if (changedMessages.size > 0) {
+          await memory?.saveMessages({ messages: [...changedMessages.values()] });
+        }
+      } catch (error) {
+        firstError ??= getErrorFromUnknown(error);
+      }
+    }
+
+    if (currentMessage) {
+      for (const [index, part] of currentMessageUpdates) {
+        this.#session.emit({
+          type: 'message_update',
+          id: currentMessage.id,
+          event: { type: 'part', index, part: structuredClone(part) },
+        });
+      }
+    }
+
+    if (firstError) throw firstError;
   }
 
   /**

@@ -8,9 +8,10 @@ import { useInView } from '@/hooks/use-in-view';
 export const TRACE_QUERY_PER_PAGE = 25;
 
 type TraceQueryResponse = Awaited<ReturnType<MastraClient['queryTraces']>>;
+type TraceQueryCursorResponse = Extract<TraceQueryResponse, { page: { next: string | null } }>;
 type TraceQueryTrace = TraceQueryResponse['traces'][number];
 
-export type TraceQueryArgs = Omit<QueryTracesInput, 'page'>;
+export type TraceQueryArgs = Omit<QueryTracesInput, 'page' | 'pagination'>;
 
 export interface UseTraceQueryArgs {
   query: TraceQueryArgs | undefined;
@@ -35,11 +36,11 @@ export interface UseTraceQueryReturn {
   setEndOfListElement: (node: HTMLDivElement | null) => void;
 }
 
-export function getTraceQueryNextPageParam(lastPage: TraceQueryResponse | undefined): string | undefined {
+export function getTraceQueryNextPageParam(lastPage: TraceQueryCursorResponse | undefined): string | undefined {
   return lastPage?.page.next ?? undefined;
 }
 
-export function selectTraceQueryTraces(data: { pages: TraceQueryResponse[] }): TraceQueryTrace[] {
+export function selectTraceQueryTraces(data: { pages: TraceQueryCursorResponse[] }): TraceQueryTrace[] {
   const seen = new Set<string>();
   return data.pages.flatMap(page =>
     page.traces.filter(trace => {
@@ -60,26 +61,32 @@ export function useTraceQuery({
 }: UseTraceQueryArgs): UseTraceQueryReturn {
   const client = useMastraClient();
   const { inView, setRef: setEndOfListElement } = useInView();
-  const result = useInfiniteQuery<TraceQueryResponse, Error, TraceQueryTrace[], readonly unknown[], string | undefined>(
-    {
-      queryKey: ['trace-query', query, limit] as const,
-      queryFn: query
-        ? ({ pageParam }) => {
-            // Capability failures must reach the fallback without the SDK retrying 501 responses.
-            const queryClient = new MastraClient({ ...client.options, retries: 0 });
-            return queryClient.queryTraces({ ...query, page: { limit, after: pageParam ?? null } });
-          }
-        : skipToken,
-      initialPageParam: undefined,
-      getNextPageParam: getTraceQueryNextPageParam,
-      select: selectTraceQueryTraces,
-      retry: false,
-      placeholderData: keepPreviousData,
-      refetchInterval,
-      refetchOnWindowFocus,
-      enabled,
-    },
-  );
+  const result = useInfiniteQuery<
+    TraceQueryCursorResponse,
+    Error,
+    TraceQueryTrace[],
+    readonly unknown[],
+    string | undefined
+  >({
+    queryKey: ['trace-query', query, limit] as const,
+    queryFn: query
+      ? async ({ pageParam }) => {
+          // Capability failures must reach the fallback without the SDK retrying 501 responses.
+          const queryClient = new MastraClient({ ...client.options, retries: 0 });
+          const response = await queryClient.queryTraces({ ...query, page: { limit, after: pageParam ?? null } });
+          if ('page' in response) return response;
+          throw new Error('Expected a cursor-paginated trace query response');
+        }
+      : skipToken,
+    initialPageParam: undefined,
+    getNextPageParam: getTraceQueryNextPageParam,
+    select: selectTraceQueryTraces,
+    retry: false,
+    placeholderData: keepPreviousData,
+    refetchInterval,
+    refetchOnWindowFocus,
+    enabled,
+  });
   const {
     data,
     hasNextPage,

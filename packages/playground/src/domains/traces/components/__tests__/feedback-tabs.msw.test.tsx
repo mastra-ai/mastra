@@ -109,7 +109,8 @@ describe('feedback tabs delete', () => {
     render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
     await waitFor(() => expect(onList).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Feedback actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete feedback' }));
 
     expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
     expect(onDelete).not.toHaveBeenCalled();
@@ -139,7 +140,8 @@ describe('feedback tabs delete', () => {
     );
 
     render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Feedback actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete feedback' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(onDelete).toHaveBeenCalled());
@@ -157,7 +159,8 @@ describe('feedback tabs delete', () => {
     );
 
     render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Feedback actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete feedback' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
@@ -177,7 +180,8 @@ describe('feedback tabs delete', () => {
     );
 
     render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Feedback actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete feedback' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1));
@@ -250,12 +254,15 @@ describe('feedback tabs review status', () => {
     render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
     await screen.findByText('Needs review');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Mark reviewed' }));
 
     await waitFor(() => expect(onPatch).toHaveBeenCalledWith('authored', { reviewStatus: 'reviewed' }));
     expect(await screen.findByText('Reviewed')).toBeTruthy();
     expect(onList).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole('button', { name: 'Mark reviewed' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback actions' }));
+    await screen.findByRole('menu');
+    expect(screen.queryByRole('menuitem', { name: 'Mark reviewed' })).toBeNull();
   });
 
   it('marks span feedback reviewed and refetches the thread', async () => {
@@ -267,7 +274,8 @@ describe('feedback tabs review status', () => {
     render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
     await screen.findByText('Needs review');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Mark reviewed' }));
 
     await waitFor(() => expect(onPatch).toHaveBeenCalledWith('span-a-feedback', { reviewStatus: 'reviewed' }));
     expect(await screen.findByText('Reviewed')).toBeTruthy();

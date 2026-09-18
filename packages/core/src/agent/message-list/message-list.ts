@@ -43,6 +43,7 @@ import type {
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart } from './utils/stamp-part';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
@@ -427,6 +428,15 @@ export class MessageList {
     return this.filterIncompleteToolCalls ? 'prompt' : 'prompt-with-suspended';
   }
 
+  /**
+   * Whether tool calls without a result are dropped from the prompt (the default) rather than
+   * paired with a pending placeholder result. Lets prompt-shape-aware processors reason about
+   * what a trailing assistant message will look like once converted.
+   */
+  get dropsIncompleteToolCalls(): boolean {
+    return this.filterIncompleteToolCalls;
+  }
+
   private getMessagesForModelPrompt(): MastraDBMessage[] {
     return this.messages.flatMap(message => {
       if ((message.role as string) !== 'signal') {
@@ -660,10 +670,31 @@ export class MessageList {
             for (let i = 0; i < modelMsg.content.length; i++) {
               const part = modelMsg.content[i]!;
               if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
-                modelMsg.content[i] = {
+                const replacement = {
                   ...part,
                   output: storedModelOutputs.get(part.toolCallId) as any,
                 };
+                // The stored modelOutput was substituted into `output` above — don't
+                // also leak the internal `mastra.modelOutput` copy to the provider.
+                // Stored DB messages keep it; this only strips at prompt-assembly time.
+                const providerOptions = replacement.providerOptions as Record<string, unknown> | undefined;
+                const mastraOptions = providerOptions?.mastra as Record<string, unknown> | undefined;
+                if (mastraOptions && typeof mastraOptions === 'object' && 'modelOutput' in mastraOptions) {
+                  const restMastra = { ...mastraOptions };
+                  delete restMastra.modelOutput;
+                  const restOptions = { ...providerOptions };
+                  if (Object.keys(restMastra).length > 0) {
+                    restOptions.mastra = restMastra;
+                  } else {
+                    delete restOptions.mastra;
+                  }
+                  if (Object.keys(restOptions).length > 0) {
+                    replacement.providerOptions = restOptions as typeof replacement.providerOptions;
+                  } else {
+                    delete replacement.providerOptions;
+                  }
+                }
+                modelMsg.content[i] = replacement;
               }
             }
           }
@@ -1414,7 +1445,13 @@ export class MessageList {
                   ? { ...existing, ...values }
                   : values;
             }
-            return merged as AIV5Type.ProviderMetadata;
+            // Some hosted tools (e.g. OpenAI `tool_search`) give the call and its
+            // output DIFFERENT Responses item ids (tsc_… / tso_…). The namespace
+            // merge above keeps only one `itemId`, so replay would reference the
+            // same item twice ("Duplicate item found"). Retain the call's id and
+            // stash the result's beside it; prompt conversion splits them back
+            // onto their own tool parts.
+            return preserveResponseItemIdsOnMerge(original, incoming, merged) as AIV5Type.ProviderMetadata;
           })()
         : undefined;
 

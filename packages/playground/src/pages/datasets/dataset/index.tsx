@@ -88,7 +88,7 @@ function DatasetPage() {
           titleSlot="Dataset not found"
           descriptionSlot={`No dataset with id "${datasetId}".`}
           actionSlot={
-            <Button as={Link} to="/datasets" icon={<ArrowLeft />}>
+            <Button render={<Link to="/datasets" />} icon={<ArrowLeft />}>
               Back to Datasets
             </Button>
           }
@@ -133,7 +133,7 @@ function DatasetPage() {
               }
               rightSlot={
                 <ButtonsGroup>
-                  <Button as={Link} to={`/experiments?dataset=${datasetId}`} icon={<FlaskConical />}>
+                  <Button render={<Link to={`/experiments?dataset=${datasetId}`} />} icon={<FlaskConical />}>
                     View experiments
                   </Button>
                   <DatasetVersions

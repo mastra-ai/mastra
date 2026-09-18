@@ -190,7 +190,18 @@
               "reasoning": [],
               "sources": [],
               "text": "Mock V2 generate response",
-              "warnings": []
+              "warnings": [],
+              "toolCalls": [
+                {
+                  "toolCallId": "call-calc-1",
+                  "toolName": "calculator",
+                  "args": {
+                    "operation": "add",
+                    "a": 5,
+                    "b": 3
+                  }
+                }
+              ]
             }
           },
           "children": [

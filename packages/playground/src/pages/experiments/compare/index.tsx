@@ -16,8 +16,8 @@ function ExperimentIdLink({ experimentId }: { experimentId: string }) {
   const { Link, paths } = useLinkComponent();
   return (
     <Button
-      as={Link}
-      href={paths.experimentLink(experimentId)}
+      render={<Link href={paths.experimentLink(experimentId)} />}
+
       size="sm"
       aria-label={`Open experiment ${experimentId}`}
     >
