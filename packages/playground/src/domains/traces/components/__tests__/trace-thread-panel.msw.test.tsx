@@ -91,22 +91,13 @@ describe('TraceThreadPanel', () => {
       expect(wrapper?.className).toContain('[&_[data-slot=thread-trace-details]]:border-y-0');
     });
 
-    it('when no span is selected, then the panel is wide, and selecting a span makes it full width', async () => {
-      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
+    it('when rendered, then the panel covers the full frame like the trace panel', async () => {
       installHandlers();
       const { queryClient } = renderPanel();
-      const dialog = () => screen.getByRole('dialog', { name: `Thread ${THREAD_ID}` });
 
       expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(dialog().className).toContain('w-4/5');
-
-      fireEvent.click(screen.getByText('Chef agent run'));
-      await waitFor(() => expect(dialog().className).toContain('w-full'));
-
-      // Re-clicking the selected span toggles the span panel off.
-      fireEvent.click(screen.getByText('Chef agent run'));
-      await waitFor(() => expect(dialog().className).toContain('w-4/5'));
+      expect(screen.getByRole('dialog', { name: `Thread ${THREAD_ID}` }).className).toContain('w-full');
     });
 
     it('when "Back to trace" is clicked, then onBack is called', async () => {

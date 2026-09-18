@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ThreadTrace, useThreadTraceRow } from '@mastra/playground-ui/domains/traces/components/thread-trace';
-import type { ThreadTraceRootProps } from '@mastra/playground-ui/domains/traces/components/thread-trace';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -18,7 +17,6 @@ import { useTracesListSource } from '@/pages/traces/hooks/use-traces-list-source
 export interface ThreadViewByTraceProps {
   threadId: string;
   /** Fires when a span detail opens or closes (`null`). */
-  onSelectedSpanChange?: ThreadTraceRootProps['onSelectedSpanChange'];
 }
 
 /**
@@ -26,7 +24,7 @@ export interface ThreadViewByTraceProps {
  * reconstructed messages on the left and the span tree on the right. Clicking a span opens
  * its detail panel on the side so the conversation stays readable.
  */
-export function ThreadViewByTrace({ threadId, onSelectedSpanChange }: ThreadViewByTraceProps) {
+export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
   const { rows, isLoading, setEndOfListElement, error } = useTracesListSource({
     initialAutoRefetch: false,
     query: now => ({
@@ -60,27 +58,16 @@ export function ThreadViewByTrace({ threadId, onSelectedSpanChange }: ThreadView
     );
   }
 
-  return (
-    <LoadedThreadViewByTrace
-      key={threadId}
-      traceIds={traceIds}
-      setEndOfListElement={setEndOfListElement}
-      onSelectedSpanChange={onSelectedSpanChange}
-    />
-  );
+  return <LoadedThreadViewByTrace key={threadId} traceIds={traceIds} setEndOfListElement={setEndOfListElement} />;
 }
 
-interface LoadedThreadViewByTraceProps extends Pick<ThreadViewByTraceProps, 'onSelectedSpanChange'> {
+interface LoadedThreadViewByTraceProps {
   traceIds: string[];
   setEndOfListElement: (node: HTMLDivElement | null) => void;
 }
 
 /** Mounts once the first page is in, so state seeded from `traces` at mount only sees that page. */
-function LoadedThreadViewByTrace({
-  traceIds,
-  setEndOfListElement,
-  onSelectedSpanChange,
-}: LoadedThreadViewByTraceProps) {
+function LoadedThreadViewByTrace({ traceIds, setEndOfListElement }: LoadedThreadViewByTraceProps) {
   const railTurns = useThreadRailTurns(traceIds);
 
   // "Open full thread" on the traces page lands here with the originating trace: that row starts
@@ -93,7 +80,7 @@ function LoadedThreadViewByTrace({
   });
 
   return (
-    <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId} onSelectedSpanChange={onSelectedSpanChange}>
+    <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId}>
       <ThreadTrace.List data-testid="thread-view-by-trace">
         <ThreadTrace.Rail turns={railTurns} />
         {traceIds.map((traceId, index) => (

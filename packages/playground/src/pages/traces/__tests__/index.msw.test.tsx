@@ -265,7 +265,7 @@ describe('Traces page usage columns', () => {
         );
       };
 
-      it('when "Open full thread" is clicked, then the side panel shows every turn at wide width, and "Back to trace" restores the full-width trace', async () => {
+      it('when "Open full thread" is clicked, then the side panel shows every turn at full width, and "Back to trace" restores the trace', async () => {
         setMultiTurnThreadHandlers();
 
         const { queryClient } = renderPage('/traces?traceId=trace-a');
@@ -275,7 +275,7 @@ describe('Traces page usage columns', () => {
 
         expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
         await waitFor(() => expect(dialog().querySelectorAll('[data-trace-id]')).toHaveLength(2));
-        expect(dialog().className).toContain('w-4/5');
+        expect(dialog().className).toContain('w-full');
         expect(screen.queryByTestId('messages-panel')).toBeNull();
         // The page did not navigate away from the traces list.
         expect(screen.getByRole('button', { name: 'Back to trace' })).not.toBeNull();
