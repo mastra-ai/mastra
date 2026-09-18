@@ -290,14 +290,16 @@ export class MastraCodeAcpAgent implements Agent {
       return await this.enqueue(entry, async () => {
         if (turn.cancelled || this.disposed) return { stopReason: 'cancelled' };
         const usage: PromptState['usage'] = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-        const completion = Promise.withResolvers<'complete' | 'aborted' | 'error' | 'suspended'>();
+        let complete!: PromptState['resolve'];
+        const completion = new Promise<Parameters<PromptState['resolve']>[0]>(resolve => {
+          complete = resolve;
+        });
         const state: PromptState = {
           sessionId: request.sessionId,
-          lastTextLength: 0,
           usage,
           resolve: reason => {
             state.finished = true;
-            completion.resolve(reason);
+            complete(reason);
           },
         };
         entry.state = state;
@@ -306,7 +308,7 @@ export class MastraCodeAcpAgent implements Agent {
           const expanded = await expandSkillCommand(content, skills, entry.commands ?? []);
           if (turn.cancelled || this.disposed) return { stopReason: 'cancelled' };
           await entry.session.sendMessage({ content: expanded });
-          const reason = await completion.promise;
+          const reason = await completion;
           if (reason === 'error' && !state.cancelled && !state.stopReason) {
             throw RequestError.internalError(undefined, state.error?.message ?? 'Mastra Code turn failed');
           }
