@@ -1,3 +1,5 @@
+import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
 import { TimelineStructureSign } from './timeline-structure-sign';
@@ -13,8 +15,12 @@ type TimelineNameColProps = {
   revealSpanId?: string;
   isLastChild?: boolean;
   hasChildren?: boolean;
+  numOfChildren?: number;
   isRootSpan?: boolean;
   isExpanded?: boolean;
+  toggleChildren?: () => void;
+  /** Secondary line rendered under the span name (duration, ...). */
+  meta?: ReactNode;
 };
 
 export function TimelineNameCol({
@@ -26,9 +32,12 @@ export function TimelineNameCol({
   selectedSpanId,
   revealSpanId,
   isLastChild,
-  hasChildren: _hasChildren,
+  hasChildren,
+  numOfChildren = 0,
   isRootSpan,
-  isExpanded: _isExpanded,
+  isExpanded,
+  toggleChildren,
+  meta,
 }: TimelineNameColProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const isSelected = selectedSpanId === span.id;
@@ -41,24 +50,30 @@ export function TimelineNameCol({
     if (shouldScrollIntoView) rowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [shouldScrollIntoView]);
 
+  const toggleLabel = isExpanded ? `Collapse children (${numOfChildren})` : `Expand children (${numOfChildren})`;
+
   return (
     <div
       ref={rowRef}
       aria-label={`View details for span ${span.name}`}
-      className={cn('flex min-h-8 items-center rounded-md rounded-l-lg opacity-80', {
-        'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
-        'bg-surface4': isSelected,
-      })}
+      aria-selected={isSelected}
+      // The whole row selects the span; the name button is the keyboard target and its click bubbles here.
+      onClick={() => onSpanClick?.(span.id)}
+      className={cn(
+        'flex min-h-8 cursor-pointer items-stretch rounded-md opacity-80 transition-colors hover:bg-surface4',
+        {
+          'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
+          'bg-surface4': isSelected,
+        },
+      )}
       style={{ paddingLeft: `${depth * 1}rem` }}
     >
       {!isRootSpan && <TimelineStructureSign isLastChild={isLastChild} />}
 
       <button
-        onClick={() => onSpanClick?.(span.id)}
+        type="button"
         className={cn(
-          'flex size-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-left text-ui-smd text-neutral6 transition-colors',
-          '[&>svg]:ml-auto [&>svg]:size-[1em] [&>svg]:shrink-0 [&>svg]:opacity-0 [&>svg]:transition-all',
-          'hover:bg-surface4 [&:hover>svg]:opacity-60',
+          'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 self-stretch rounded-md px-2 py-1 text-left text-ui-sm text-neutral6',
           'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:ring-inset',
         )}
       >
@@ -73,15 +88,41 @@ export function TimelineNameCol({
         {/* Searchable: the span name is what the timeline search matches on. When the match
             is in the span's payload instead, the whole name is painted in the indirect color
             so the row explains its own presence. */}
-        <span
-          data-highlight={span.matchedInPayloadOnly ? undefined : ''}
-          data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
-          title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
-          className="min-w-0 truncate"
-        >
-          {span.name}
+        {/* Duration stacks under the name on narrow layouts and moves inline at the end of the row from lg. */}
+        <span className="flex min-w-0 flex-1 flex-col lg:flex-row lg:items-center lg:justify-between lg:gap-2">
+          <span
+            data-highlight={span.matchedInPayloadOnly ? undefined : ''}
+            data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
+            title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
+            className="min-w-0 truncate"
+          >
+            {span.name}
+          </span>
+          {meta && <span className="text-ui-xs text-neutral3 shrink-0 lg:tabular-nums">{meta}</span>}
         </span>
       </button>
+
+      {/* Expand toggle sits at the end of the row; the slot is always present so names stay aligned. */}
+      <div className="flex w-8 shrink-0 items-center justify-center self-stretch pr-1">
+        {hasChildren && (
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              toggleChildren?.();
+            }}
+            aria-label={toggleLabel}
+            aria-expanded={isExpanded}
+            className={cn(
+              'flex size-5 cursor-pointer items-center justify-center rounded-md transition-colors',
+              'hover:bg-surface5 [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
+              'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1',
+            )}
+          >
+            {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

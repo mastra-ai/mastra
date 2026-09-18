@@ -378,6 +378,14 @@ export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo>
    */
   grep?(options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]>;
 
+  /**
+   * Check whether a file should be treated as text based on its extension,
+   * honoring any provider-configured extra text extensions.
+   *
+   * Optional: when absent, callers fall back to the built-in text-extension set.
+   */
+  isTextFile?(filename: string): boolean;
+
   // ---------------------------------------------------------------------------
   // Path Operations
   // ---------------------------------------------------------------------------

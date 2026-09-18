@@ -2,7 +2,6 @@
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
@@ -30,15 +29,21 @@ import { useLinkComponent } from '@/lib/framework';
 export type ExperimentResultPanelResult = Pick<DatasetExperimentResult, 'id' | 'itemId' | 'input' | 'output'> &
   Partial<Pick<DatasetExperimentResult, 'createdAt' | 'status' | 'groundTruth' | 'toolMockReport' | 'traceId'>> & {
     error?: unknown;
-    tags: string[] | null;
+    tags?: string[] | null;
   };
 
 export type ExperimentResultPanelScore = { id: string; scorerId: string; score: number };
 
 export type ExperimentResultPanelProps = {
-  result: ExperimentResultPanelResult;
+  /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
+  result?: ExperimentResultPanelResult;
+  /** Item the panel is opened for while `result` is not available yet; keeps the drawer open showing `fallback`. */
+  itemId?: string;
+  /** Rendered instead of the result body while `itemId` is set but `result` is missing (loading / not found). */
+  fallback?: ReactNode;
+  /** Accessible dialog name. Defaults to `Experiment item <itemId>` when opened by item, else `Result <id>`. */
+  title?: string;
   scores?: ExperimentResultPanelScore[];
-  className?: string;
   onPrevious?: () => void;
   onNext?: () => void;
   onClose: () => void;
@@ -46,13 +51,6 @@ export type ExperimentResultPanelProps = {
   onScoreClick?: (scoreId: string) => void;
   featuredScoreId?: string | null;
   onFlagForReview?: (resultId: string) => void;
-  /** Controlled collapsed state used when opening related trace details. */
-  collapsed?: boolean;
-  /**
-   * When provided, the panel splits into two columns inside the same card: the
-   * result content on the left, this slot (typically the score detail) on the right.
-   */
-  scorePanelSlot?: ReactNode;
   /** When provided, tags become editable in the metadata block (add via picker, remove via badge). */
   onTagsChange?: (tags: string[]) => void;
   /** Known tags offered by the tag picker. */
@@ -71,8 +69,41 @@ export type ExperimentResultPanelProps = {
 
 export function ExperimentResultPanel({
   result,
+  itemId,
+  fallback,
+  title,
+  onClose,
+  ...bodyProps
+}: ExperimentResultPanelProps) {
+  const dialogTitle = title ?? (itemId ? `Experiment item ${itemId}` : `Result ${result?.id ?? ''}`);
+  return (
+    <DataPanel open={!!(result ?? itemId)} onClose={onClose} title={dialogTitle} depth={1} size="half">
+      {result ? (
+        <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
+      ) : itemId ? (
+        <>
+          <DataPanel.Header>
+            <DataPanel.Heading>
+              Experiment item <b>#{itemId}</b>
+            </DataPanel.Heading>
+            <DataPanel.HeaderActions>
+              <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
+            </DataPanel.HeaderActions>
+          </DataPanel.Header>
+          {fallback}
+        </>
+      ) : null}
+    </DataPanel>
+  );
+}
+
+type ExperimentResultPanelBodyProps = Omit<ExperimentResultPanelProps, 'result' | 'itemId' | 'fallback'> & {
+  result: ExperimentResultPanelResult;
+};
+
+function ExperimentResultPanelBody({
+  result,
   scores,
-  className,
   onPrevious,
   onNext,
   onClose,
@@ -80,15 +111,13 @@ export function ExperimentResultPanel({
   onScoreClick,
   featuredScoreId,
   onFlagForReview,
-  collapsed = false,
-  scorePanelSlot,
   onTagsChange,
   tagVocabulary = [],
   isUpdatingTags = false,
   experimentLink,
   onComplete,
   feedbackTabSlot,
-}: ExperimentResultPanelProps) {
+}: ExperimentResultPanelBodyProps) {
   const hasError = Boolean(result?.error);
   const inputStr = formatValue(result?.input);
   const outputStr = formatValue(result?.output);
@@ -231,13 +260,12 @@ export function ExperimentResultPanel({
   );
 
   return (
-    <DataPanel collapsed={collapsed} className={className}>
-      {/* Actions may wrap on narrow panels; the close button sits outside the group so it stays on the first row. */}
-      <DataPanel.Header className="items-start">
-        <DataPanel.Heading className="shrink-0 self-center whitespace-nowrap">
+    <>
+      <DataPanel.Header>
+        <DataPanel.Heading>
           Result <b># {result.id.length > 12 ? `${result.id.slice(0, 12)}…` : result.id}</b>
         </DataPanel.Heading>
-        <ButtonsGroup className="ml-auto flex-wrap justify-end">
+        <DataPanel.HeaderActions>
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}
             onNext={onNext}
@@ -245,73 +273,51 @@ export function ExperimentResultPanel({
             nextLabel="Next result"
           />
           {experimentLink && (
-            <Button size="md" as={Link} to={experimentLink} icon={<FlaskConical />}>
+            <Button size="sm" variant="ghost" as={Link} to={experimentLink} icon={<FlaskConical />}>
               See experiment
             </Button>
           )}
           {result.traceId && onShowTrace && (
-            <Button size="md" onClick={onShowTrace} icon={<TraceIcon />}>
+            <Button size="sm" variant="ghost" onClick={onShowTrace} icon={<TraceIcon />}>
               Trace
             </Button>
           )}
           {canFlag && (
-            <Button size="md" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardCheck />}>
+            <Button size="sm" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardCheck />}>
               Flag for Review
             </Button>
           )}
           {onComplete && result.status === 'needs-review' && (
-            <Button size="md" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
+            <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
               Mark as reviewed
             </Button>
           )}
-        </ButtonsGroup>
-        <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" className="shrink-0" />
+          <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
 
-      {!collapsed && (
-        <SplitWithScorePanel scorePanelSlot={scorePanelSlot}>
-          {feedbackTraceId ? (
-            <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
-              <DataPanel.Header className="py-2">
-                <TabList variant="pill-ghost" className="px-0">
-                  <Tab value="details">Details</Tab>
-                  <Tab value="feedback">
-                    Feedback
-                    <NeedsReviewDot feedback={traceFeedback?.feedback} />
-                  </Tab>
-                </TabList>
-              </DataPanel.Header>
-              <TabContent value="details" className="min-h-0 py-0">
-                {details}
-              </TabContent>
-              <TabContent value="feedback" className="h-full min-h-0 py-0">
-                <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
-              </TabContent>
-            </Tabs>
-          ) : (
-            details
-          )}
-        </SplitWithScorePanel>
+      {feedbackTraceId ? (
+        <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
+          <DataPanel.Header>
+            <TabList variant="pill-ghost">
+              <Tab value="details">Details</Tab>
+              <Tab value="feedback">
+                Feedback
+                <NeedsReviewDot feedback={traceFeedback?.feedback} />
+              </Tab>
+            </TabList>
+          </DataPanel.Header>
+          <TabContent value="details" className="min-h-0 py-0">
+            {details}
+          </TabContent>
+          <TabContent value="feedback" className="h-full min-h-0 py-0">
+            <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
+          </TabContent>
+        </Tabs>
+      ) : (
+        details
       )}
-    </DataPanel>
-  );
-}
-
-/**
- * Renders the result content as-is, or — when a score panel is provided — as a
- * two-column split inside the same card, with the score detail on the right.
- * Mirrors `SplitWithSpanPanel` from the traces domain.
- */
-function SplitWithScorePanel({ scorePanelSlot, children }: { scorePanelSlot?: ReactNode; children: ReactNode }) {
-  if (!scorePanelSlot) return <>{children}</>;
-
-  return (
-    <div className="grid min-h-0 flex-1 grid-cols-[1fr_1fr]">
-      <div className="flex min-h-0 flex-col overflow-hidden">{children}</div>
-      <div className="animate-in border-border1 fade-in-0 flex min-h-0 flex-col overflow-hidden border-l duration-300">
-        {scorePanelSlot}
-      </div>
-    </div>
+    </>
   );
 }
 

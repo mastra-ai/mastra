@@ -92,8 +92,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
       }
 
-      // Parse request context from query params (GET)
-      if (req.method === 'GET') {
+      // Parse request context from query params.
+      if (req.method === 'GET' || req.method === 'POST') {
         try {
           const encodedRequestContext = req.query.requestContext;
           if (typeof encodedRequestContext === 'string') {
@@ -509,7 +509,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           }
         }
 
-        if (params.body) {
+        if (params.body !== undefined || route.bodySchema) {
           try {
             params.body = await this.parseBody(route, params.body);
           } catch (error) {

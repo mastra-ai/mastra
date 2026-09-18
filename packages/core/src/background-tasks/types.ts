@@ -350,6 +350,8 @@ export interface ToolExecutor {
        * execution.
        */
       resumeData?: unknown;
+      /** Framework-resolved delegated run ID recovered from persisted suspension state. */
+      suspendedToolRunId?: string;
     },
   ): Promise<unknown>;
 }

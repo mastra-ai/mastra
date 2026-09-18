@@ -14,7 +14,7 @@ export const useMCPServerTools = (selectedServer: ServerInfo) => {
       const fetchedToolsArray: SdkMcpToolInfo[] = response.tools;
       const transformedTools: Record<string, SdkMcpToolInfo> = {};
       fetchedToolsArray.forEach((sdkToolInfo: SdkMcpToolInfo) => {
-        transformedTools[sdkToolInfo.id] = sdkToolInfo;
+        transformedTools[sdkToolInfo.name] = sdkToolInfo;
       });
 
       return transformedTools;

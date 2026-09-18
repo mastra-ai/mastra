@@ -1,21 +1,37 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { MessageRow } from '../../messages/message-row';
 import { ChatProvider } from '../chat-provider';
+import {
+  approvalChunks,
+  approvalHistory,
+  emptyApprovalHistory,
+  generatedApprovalResponse,
+} from './fixtures/nested-approval';
+import {
+  acceptedToolRun,
+  emptyMcpServers,
+  toolRunChunks,
+  toolRunFinish,
+  unfinishedToolHistory,
+} from './fixtures/tool-run';
 import { workingMemoryFixture } from './fixtures/working-memory';
 import { WorkingMemoryProvider, useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
 import { useMemoryConfig } from '@/domains/memory/hooks';
+import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -203,6 +219,240 @@ describe('ChatProvider', () => {
     // Default tests target the legacy stream-until-idle route, not signals.
     (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
+  });
+
+  describe.each(['nested', 'ordinary'] as const)('when same-named %s calls need approval', kind => {
+    describe.each(['signals-live', 'legacy-live', 'signals-history', 'legacy-history', 'generate-history'])(
+      'when the transcript uses %s',
+      scenario => {
+        it.each(['Approve', 'Decline'])(
+          'routes %s independently and keeps decided controls disabled after settling',
+          async action => {
+            const signals = scenario.startsWith('signals');
+            const generate = scenario.startsWith('generate');
+            const live = scenario.endsWith('live');
+            Object.assign(window, { MASTRA_AGENT_SIGNALS: signals ? 'true' : 'false' });
+            const requests: Captured[] = [];
+            const gates = [createDeferred(), createDeferred()];
+            let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+            let subscribed = false;
+            let sent = false;
+            const response = () =>
+              new HttpResponse(
+                new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    stream = controller;
+                  },
+                }),
+                { headers: { 'content-type': 'text/event-stream' } },
+              );
+            const toolName = kind === 'nested' ? 'agent-child' : 'approvedLookup';
+            const decision = action === 'Approve' ? 'approve' : 'decline';
+            const endpoint = signals ? 'send-tool-approval' : `${decision}-tool-call${generate ? '-generate' : ''}`;
+            server.use(
+              http.get(`${BASE_URL}/api/memory/threads/thread-1/messages`, () =>
+                HttpResponse.json(
+                  live ? emptyApprovalHistory : approvalHistory(kind, generate ? 'generate' : 'stream'),
+                ),
+              ),
+              http.post(`${BASE_URL}/api/agents/agent-1/threads/subscribe`, () => {
+                subscribed = true;
+                return response();
+              }),
+              http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+                sent = true;
+                return response();
+              }),
+              http.post(`${BASE_URL}/api/agents/agent-1/send-message`, () => {
+                sent = true;
+                return HttpResponse.json(acceptedToolRun('parent-run'));
+              }),
+              http.post(`${BASE_URL}/api/agents/agent-1/${endpoint}`, async ({ request }) => {
+                const index = requests.length;
+                requests.push({ url: request.url, body: await captureBody(request) });
+                await gates[index].promise;
+                if (signals) return HttpResponse.json(acceptedToolRun('parent-run'));
+                return generate ? HttpResponse.json(generatedApprovalResponse) : sseResponse();
+              }),
+              http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
+              ...baseHandlers([]),
+            );
+            const Transcript = () => {
+              const messages = useChatMessages();
+              const send = useChatSend();
+              const { isRunning } = useToolCall();
+              return (
+                <>
+                  <button onClick={() => send({ message: 'Look up both companies' })}>Start approval run</button>
+                  <output data-testid="approval-request-state">{isRunning ? 'running' : 'idle'}</output>
+                  {messages.map(message => (
+                    <MessageRow key={message.id} message={message} />
+                  ))}
+                </>
+              );
+            };
+            const LoadedChat = () => {
+              const { data } = useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true });
+              if (!data) return null;
+              return (
+                <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={data.messages}>
+                  <Transcript />
+                </ChatProvider>
+              );
+            };
+            const rendered = render(
+              <Wrapper>
+                <LoadedChat />
+              </Wrapper>,
+            );
+            await screen.findByRole('button', { name: 'Start approval run' });
+            if (signals) await waitFor(() => expect(subscribed).toBe(true));
+            if (live) {
+              fireEvent.click(screen.getByRole('button', { name: 'Start approval run' }));
+              await waitFor(() => expect(sent).toBe(true));
+              await act(async () => {
+                for (const chunk of approvalChunks(kind))
+                  stream?.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              });
+            }
+            // Live tool rows share the transcript's paced reveal.
+            await waitFor(
+              () => expect(screen.getAllByRole('button', { name: `Approve ${toolName}` })).toHaveLength(2),
+              {
+                timeout: 3000,
+              },
+            );
+            const cards = screen.getAllByTestId(kind === 'nested' ? 'agent-badge' : 'tool-badge');
+            expect(cards).toHaveLength(2);
+            for (const [index, id] of ['first', 'second'].entries()) {
+              fireEvent.click(within(cards[index]).getByRole('button', { name: `${action} ${toolName}` }));
+              await waitFor(() => expect(requests).toHaveLength(index + 1));
+              expect(requests[index].body).toMatchObject({ toolCallId: id });
+              if (signals)
+                expect(requests[index].body).toMatchObject({ approved: action === 'Approve', threadId: 'thread-1' });
+              else expect(requests[index].body).toMatchObject({ runId: 'parent-run' });
+              expect(screen.getByTestId('approval-request-state').textContent).toBe('running');
+              await act(async () => gates[index].resolve());
+              await waitFor(() => expect(screen.getByTestId('approval-request-state').textContent).toBe('idle'));
+              expect(
+                within(cards[index])
+                  .getByRole('button', { name: `Approve ${toolName}` })
+                  .hasAttribute('disabled'),
+              ).toBe(true);
+              expect(
+                within(cards[index])
+                  .getByRole('button', { name: `Decline ${toolName}` })
+                  .hasAttribute('disabled'),
+              ).toBe(true);
+              if (index === 0)
+                expect(
+                  within(cards[1])
+                    .getByRole('button', { name: `${action} ${toolName}` })
+                    .hasAttribute('disabled'),
+                ).toBe(false);
+            }
+            rendered.unmount();
+            stream?.close();
+          },
+        );
+      },
+    );
+  });
+
+  describe('when a later run starts after an interrupted run', () => {
+    it.each(['legacy', 'signals'])(
+      'keeps historical calls incomplete while the new %s run progresses',
+      async transport => {
+        Object.assign(window, { MASTRA_AGENT_SIGNALS: transport === 'signals' ? 'true' : 'false' });
+        const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
+        let requests = 0;
+        const streamResponse = () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                streams.push(controller);
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        server.use(
+          http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
+          http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+            requests++;
+            return streamResponse();
+          }),
+          http.post(`${BASE_URL}/api/agents/agent-1/threads/subscribe`, streamResponse),
+          http.post(`${BASE_URL}/api/agents/agent-1/send-message`, () => {
+            requests++;
+            return HttpResponse.json(acceptedToolRun(requests === 1 ? 'first-run' : 'second-run'));
+          }),
+          ...baseHandlers([]),
+        );
+        const Transcript = () => {
+          const messages = useChatMessages();
+          const send = useChatSend();
+          const { isRunning } = useChatRunning();
+          return (
+            <>
+              <button onClick={() => send({ message: 'Run tools' })}>Run tools</button>
+              <output>{isRunning ? 'Running' : 'Stopped'}</output>
+              {messages.map(message => (
+                <section key={message.id} aria-label={message.id}>
+                  <MessageRow message={message} />
+                </section>
+              ))}
+            </>
+          );
+        };
+        render(
+          <Wrapper>
+            <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={unfinishedToolHistory}>
+              <Transcript />
+            </ChatProvider>
+          </Wrapper>,
+        );
+        const emit = (index: number, chunks: ReturnType<typeof toolRunChunks>) =>
+          act(() => {
+            for (const chunk of chunks)
+              streams[index].enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+          });
+        fireEvent.click(screen.getByRole('button', { name: 'Run tools' }));
+        await waitFor(() => expect(requests).toBe(1));
+        expect(within(screen.getByRole('region', { name: 'first-response' })).getByText('3 incomplete')).toBeTruthy();
+        await emit(0, toolRunChunks('first-run', 'first-response').slice(0, 1));
+        await screen.findByText('0/3');
+        await emit(0, toolRunChunks('first-run', 'first-response').slice(1));
+        await emit(0, [toolRunFinish('first-run')]);
+        if (transport === 'legacy') await act(() => streams[0].close());
+        await screen.findByText('Stopped');
+        const history = screen.getByRole('region', { name: 'first-response' });
+        fireEvent.click(within(history).getByRole('button', { name: /3 steps/ }));
+        expect(within(history).getAllByText('Incomplete')).toHaveLength(3);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Run tools' }));
+        await waitFor(() => expect(requests).toBe(2));
+        expect(within(history).getByText('3 incomplete')).toBeTruthy();
+        expect(within(history).getAllByText('Incomplete')).toHaveLength(3);
+        const currentStream = transport === 'legacy' ? 1 : 0;
+        await emit(currentStream, toolRunChunks('second-run', 'second-response'));
+        await waitFor(() =>
+          expect(within(screen.getByRole('region', { name: 'second-response' })).getByText('0/3')).toBeTruthy(),
+        );
+        await emit(currentStream, [
+          { type: 'step-start', runId: 'second-run', from: 'AGENT', payload: { messageId: 'rotated-response' } },
+          ...toolRunChunks('second-run', 'rotated-response').slice(1),
+        ]);
+        await waitFor(() =>
+          expect(within(screen.getByRole('region', { name: 'rotated-response' })).getByText('0/3')).toBeTruthy(),
+        );
+        expect(within(screen.getByRole('region', { name: 'second-response' })).getByText('0/3')).toBeTruthy();
+        expect(within(history).getByText('3 incomplete')).toBeTruthy();
+        expect(within(history).getAllByText('Incomplete')).toHaveLength(3);
+        expect(within(history).queryAllByRole('group', { busy: true })).toHaveLength(0);
+        await emit(currentStream, [toolRunFinish('second-run')]);
+        await act(() => streams[currentStream].close());
+      },
+    );
   });
 
   describe('when Studio selects a request-scoped model', () => {

@@ -2,7 +2,7 @@
 '@mastra/client-js': minor
 ---
 
-Deprecated grouped results from `queryTraces()`. Existing grouped queries continue to work until the next major release; use `queryThreads()` for new code.
+Deprecated grouped results from `queryTraces()`. Existing grouped queries continue to work until the next major release; use `queryTraceThreads()` for new code.
 
 Before:
 
@@ -13,5 +13,5 @@ await mastraClient.queryTraces({ timeRange, group: { by: ['threadId'] } });
 After:
 
 ```ts
-await mastraClient.queryThreads({ traces: { timeRange } });
+await mastraClient.queryTraceThreads({ traces: { timeRange } });
 ```

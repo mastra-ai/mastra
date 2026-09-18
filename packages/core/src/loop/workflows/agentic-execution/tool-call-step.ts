@@ -46,6 +46,8 @@ import {
   THREAD_ID_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
+import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
+import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -257,123 +259,58 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       };
 
       const removeToolMetadata = async (
-        target: { toolCallId: string; toolName: string },
+        target: { toolCallId?: string; toolName: string; runId?: string },
         type: 'suspension' | 'approval',
       ) => {
         const { saveQueueManager, memoryConfig, threadId } = _internal || {};
-
-        if (!saveQueueManager || !threadId) {
-          return;
-        }
-
-        const { toolCallId, toolName } = target;
-
-        // Maps are keyed by toolCallId. Resolve this call's key in order: exact toolCallId (key,
-        // then entry value), then toolName (entry value, then legacy toolName key). The toolName
-        // match covers autoResumeSuspendedTools, where resume runs in a fresh turn so the resumed
-        // toolCallId differs from the suspended one, plus pre-upgrade metadata keyed by toolName.
-        const resolveEntryKey = (entries: Record<string, any> | undefined): string | undefined => {
-          if (!entries) return undefined;
-          if (entries[toolCallId]) return toolCallId;
-          const byCallId = Object.keys(entries).find(key => entries[key]?.toolCallId === toolCallId);
-          if (byCallId) return byCallId;
-          const byName = Object.keys(entries).find(
-            key => entries[key]?.parentToolName === toolName || entries[key]?.toolName === toolName,
-          );
-          if (byName) return byName;
-          return entries[toolName] ? toolName : undefined;
-        };
-
-        // Match this call's data part. Prefer toolCallId; otherwise fall back to toolName so the
-        // autoResume (fresh-turn) and legacy paths still resolve.
-        const partMatches = (data: any): boolean => data?.toolCallId === toolCallId || data?.toolName === toolName;
-
-        const getMetadata = (message: MastraDBMessage) => {
-          const content = message.content;
-          if (!content) return undefined;
-          const metadata =
-            typeof content.metadata === 'object' && content.metadata !== null
-              ? (content.metadata as Record<string, any>)
-              : undefined;
-          return metadata;
-        };
+        if (!saveQueueManager || !threadId) return;
 
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
+        const expectedPartType = type === 'suspension' ? 'data-tool-call-suspended' : 'data-tool-call-approval';
+        const entryMatches = (entry: any, fallbackToolCallId?: string): boolean => {
+          const entryToolCallId = typeof entry?.toolCallId === 'string' ? entry.toolCallId : fallbackToolCallId;
+          const entryToolName = entry?.parentToolName ?? entry?.toolName;
+          const entryRunId = type === 'approval' ? entry?.delegatedRunId : (entry?.delegatedRunId ?? entry?.runId);
+          if (target.toolCallId) return entryToolCallId === target.toolCallId;
+          return entryToolName === target.toolName && !!target.runId && entryRunId === target.runId;
+        };
 
-        // Find and update the assistant message to remove approval metadata
-        // At this point, messages have been persisted, so we look in all messages
-        const allMessages = messageList.get.all.db();
-        const lastAssistantMessage = [...allMessages].reverse().find(msg => {
-          const metadata = getMetadata(msg);
-          const suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
-          if (resolveEntryKey(suspendedTools)) {
-            return true;
-          }
-          const dataToolSuspendedParts = msg.content.parts?.filter(
-            part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval',
-          );
-          if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
-            const foundTool = dataToolSuspendedParts.find((part: any) => partMatches(part.data));
-            if (foundTool) {
-              return true;
-            }
-          }
-          return false;
-        });
+        const changedMessages: MastraDBMessage[] = [];
+        for (const message of messageList.get.all.db()) {
+          if (message.role !== 'assistant') continue;
 
-        if (lastAssistantMessage) {
-          const metadata = getMetadata(lastAssistantMessage);
-          let suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
-          if (!suspendedTools) {
-            suspendedTools = lastAssistantMessage.content.parts
-              ?.filter(part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval')
-              ?.reduce(
-                (acc, part) => {
-                  if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
-                    const data = part.data as any;
-                    acc[data.toolCallId ?? data.toolName] = data;
-                  }
-                  return acc;
-                },
-                {} as Record<string, any>,
-              );
-          }
-
-          if (suspendedTools && typeof suspendedTools === 'object') {
-            if (metadata) {
-              const entryKey = resolveEntryKey(suspendedTools);
-              if (entryKey) {
-                delete suspendedTools[entryKey];
+          let messageChanged = false;
+          const metadata =
+            typeof message.content.metadata === 'object' && message.content.metadata !== null
+              ? (message.content.metadata as Record<string, any>)
+              : undefined;
+          const entries = metadata?.[metadataKey] as Record<string, any> | undefined;
+          if (entries) {
+            for (const [key, entry] of Object.entries(entries)) {
+              if (entryMatches(entry, key)) {
+                delete entries[key];
+                messageChanged = true;
               }
-            } else {
-              lastAssistantMessage.content.parts = lastAssistantMessage.content.parts?.map(part => {
-                if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
-                  if (partMatches(part.data)) {
-                    return {
-                      ...part,
-                      data: {
-                        ...(part.data as any),
-                        resumed: true,
-                      },
-                    };
-                  }
-                }
-                return part;
-              });
             }
-
-            // If no more pending suspensions, remove the whole object
-            if (metadata && Object.keys(suspendedTools).length === 0) {
-              delete metadata[metadataKey];
-            }
-
-            // Flush to persist the metadata removal
-            try {
-              await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
-            } catch (error) {
-              logger?.error('Error removing tool suspension metadata:', error);
-            }
+            if (Object.keys(entries).length === 0) delete metadata![metadataKey];
           }
+
+          message.content.parts = message.content.parts?.map(part => {
+            if (part.type !== expectedPartType || !entryMatches(part.data)) return part;
+            if ((part.data as { resumed?: boolean }).resumed) return part;
+            messageChanged = true;
+            return { ...part, data: { ...(part.data as any), resumed: true } };
+          });
+
+          if (messageChanged) changedMessages.push(message);
+        }
+
+        if (changedMessages.length === 0) return;
+        messageList.add(changedMessages, 'response');
+        try {
+          await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
+        } catch (error) {
+          logger?.error('Error removing tool suspension metadata:', error);
         }
       };
 
@@ -478,7 +415,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         const resumeData = resumeDataFromArgs ?? workflowResumeData;
 
-        const isResumeToolCall = !!resumeDataFromArgs;
+        // Match the nullish fallback above: null/undefined use framework identity, while other falsy values are valid model payloads.
+        const isResumeToolCall = resumeDataFromArgs != null;
 
         // Check if approval is required.
         //
@@ -774,6 +712,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
               return suspend(
                 {
+                  type: 'approval',
                   requireToolApproval: {
                     toolCallId: inputData.toolCallId,
                     toolName: approvalToolName,
@@ -844,76 +783,45 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
           },
           resumeData: resumeDataToPassToToolOptions,
+          // The payload this tool call suspended with (see `toolCallSuspended` above), so a
+          // resumed tool can continue from its own state instead of re-deriving it.
+          ...(resumeDataToPassToToolOptions != null &&
+          suspendData &&
+          typeof suspendData === 'object' &&
+          'toolCallSuspended' in suspendData
+            ? { suspendPayload: (suspendData as { toolCallSuspended?: unknown }).toolCallSuspended }
+            : {}),
         };
 
-        //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
-        // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
-        // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
-        // Nullish, not truthy, for the same reason as the cleanup gate below: a delegated tool can
-        // be resumed with `false` / `0` / `''`, and skipping the lookup there would start a fresh
-        // sub-run (and the cleanup below would drop the entry that could still recover the id).
+        const modelSuppliedSuspendedToolCallId = args?.suspendedToolCallId;
+        const modelSuppliedSuspendedToolRunId = args?.suspendedToolRunId;
+        if (args && typeof args === 'object') {
+          delete args.suspendedToolCallId;
+          delete args.suspendedToolRunId;
+        }
+
+        // Delegated identity is trusted only after it is tied to framework-persisted
+        // suspension state. Nullish, not truthy: false / 0 / '' are valid resume payloads.
         const needsRunIdLookup = resumeDataToPassToToolOptions != null && (isAgentTool || isWorkflowTool);
+        let resolvedSuspensionIdentity: ResolvedSuspendedToolIdentity | undefined;
         if (needsRunIdLookup) {
-          // Primary source: the per-iteration workflow suspend payload, which carries the
-          // suspended run id partitioned per tool call (resumeLabel = toolCallId). This is
-          // collision-free for parallel delegations to the same sub-agent, where the shared,
-          // toolName-keyed per-message pendingToolApprovals metadata is overwritten by a sibling
-          // branch — so the message lookup below would return the wrong (surviving) run id and
-          // resume the wrong call (or fail with AGENT_RESUME_NO_SNAPSHOT_FOUND). The message
-          // metadata / data parts remain as a fallback for page-refresh resumes where the
-          // workflow snapshot is unavailable.
-          let suspendedToolRunId = (suspendData as any)?.suspendedToolRunId || '';
-          const shouldUsePartsFallback = !isResumeToolCall || !args.suspendedToolRunId;
-          const messages = messageList.get.all.db();
-          const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
-          for (const message of assistantMessages) {
-            if (suspendedToolRunId) break;
-            const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
-              message.content.metadata?.pendingToolApprovals) as Record<string, any>;
-            if (pendingOrSuspendedTools) {
-              // Entries are now keyed by toolCallId so parallel calls to the SAME tool each keep
-              // their own suspension. Resolution order:
-              //   1. Exact toolCallId match (key, then entry value) — used by approveToolCall-style
-              //      resume where the resumed call id equals the suspended one.
-              //   2. toolName match — used by autoResumeSuspendedTools, where resume happens via a
-              //      fresh stream() turn so inputData.toolCallId differs from the suspended call.
-              //      Also covers legacy metadata that was keyed by toolName.
-              const entry =
-                pendingOrSuspendedTools[inputData.toolCallId] ??
-                Object.values(pendingOrSuspendedTools).find((e: any) => e?.toolCallId === inputData.toolCallId) ??
-                pendingOrSuspendedTools[inputData.toolName] ??
-                Object.values(pendingOrSuspendedTools).find((e: any) => e?.toolName === inputData.toolName);
-              if (entry) {
-                // Prefer the inner delegated run id — that's the run the sub-agent/workflow tool
-                // must resume. `entry.runId` is the outer resumable run; older persisted entries
-                // stored the inner run there, so it remains the fallback.
-                suspendedToolRunId = entry.delegatedRunId ?? entry.runId;
-                break;
-              }
-            }
+          resolvedSuspensionIdentity = resolveFrameworkSuspendedToolIdentity({
+            toolCallId: inputData.toolCallId,
+            toolName: inputData.toolName,
+            resumeSource: isResumeToolCall ? 'model' : 'framework',
+            modelSuppliedSuspendedToolCallId: isResumeToolCall ? modelSuppliedSuspendedToolCallId : undefined,
+            modelSuppliedSuspendedToolRunId: isResumeToolCall ? modelSuppliedSuspendedToolRunId : undefined,
+            suspendData,
+            messages: messageList.get.all.db(),
+          });
 
-            if (shouldUsePartsFallback) {
-              const dataToolSuspendedParts = message.content.parts?.filter(
-                part =>
-                  (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
-                  !(part.data as any).resumed,
-              );
-              if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
-                // Prefer the part for this exact tool call; fall back to toolName for older parts
-                // that may not carry a toolCallId.
-                const foundTool =
-                  dataToolSuspendedParts.find((part: any) => part.data.toolCallId === inputData.toolCallId) ??
-                  dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
-                if (foundTool) {
-                  suspendedToolRunId = (foundTool as any).data.delegatedRunId ?? (foundTool as any).data.runId;
-                  break;
-                }
-              }
+          if (resolvedSuspensionIdentity) {
+            // Agentic execution disables input validation, so a resumed call can carry
+            // `args: null`; guard the mutation so the invalid-arguments check below still runs.
+            if (args && typeof args === 'object') {
+              args.suspendedToolRunId = resolvedSuspensionIdentity.runId;
             }
-          }
-
-          if (suspendedToolRunId) {
-            args.suspendedToolRunId = suspendedToolRunId;
+            toolOptions.suspendedToolRunId = resolvedSuspensionIdentity.runId;
           }
         }
 
@@ -932,7 +840,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // top of it, and `removeToolMetadata`'s toolCallId -> toolName fallback could then drop a
         // concurrently suspended sibling that shares this tool name.
         if (!approvalGated && resumeData != null) {
-          await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'suspension');
+          const cleanupTarget = needsRunIdLookup
+            ? resolvedSuspensionIdentity
+            : { toolCallId: inputData.toolCallId, toolName: inputData.toolName };
+          if (cleanupTarget) {
+            await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension');
+          }
         }
 
         if (args === null || args === undefined) {
@@ -1023,6 +936,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>;
                       suspend?: (data?: unknown, options?: SuspendOptions) => Promise<void>;
                       resumeData?: unknown;
+                      suspendedToolRunId?: string;
                     },
                   ) => {
                     // Override the agent loop's `suspend`/`resumeData` (which
@@ -1040,6 +954,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
                       },
                       ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                      suspendedToolRunId: opts?.suspendedToolRunId,
                       suspend: async (data?: unknown, options?: SuspendOptions) => {
                         await toolOptions.suspend?.(data, options);
                         return opts?.suspend?.(data, options);

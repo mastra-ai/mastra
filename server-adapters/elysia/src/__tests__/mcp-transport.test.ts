@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net';
-import { createMCPTransportTestSuite } from '@internal/server-adapter-test-utils';
 import type { Mastra } from '@mastra/core/mastra';
+import { createMCPTransportTestSuite } from '@mastra/server-adapters-test-suite';
 import { Elysia } from 'elysia';
 import { describe } from 'vitest';
 import { MastraServer } from '../index';

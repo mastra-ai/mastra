@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
-import type { GetWorkflowResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef, useEffect } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { stringify } from 'superjson';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { useWorkflowSelectedStep } from '../../context/use-workflow-selected-step';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import type { WorkflowRunContextType } from '../../context/workflow-run-context';
 import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
+import { twoStepWorkflow } from '../../workflow/__tests__/fixtures/workflow-debug-step-controls';
 import { WorkflowInformation } from '../workflow-information';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
@@ -35,13 +36,13 @@ const paths = {
 } as unknown as LinkComponentProviderProps['paths'];
 
 const workflowDetails = {
+  ...twoStepWorkflow,
   name: WORKFLOW_ID,
   stepGraph: [{ type: 'step', step: { id: 'step-a', description: '' } }],
-  inputSchema: undefined,
-} as unknown as GetWorkflowResponse;
+  inputSchema: stringify({ type: 'object', properties: { title: { type: 'string' } }, required: ['title'] }),
+  stateSchema: undefined,
+};
 
-// Reads the live selected-step context so the test can observe it before/after
-// the "New workflow run" click, and seeds a selection on mount.
 function SelectionProbe({ initial }: { initial: string }) {
   const { selectedStepId, setSelectedStepId } = useWorkflowSelectedStep();
 
@@ -53,21 +54,20 @@ function SelectionProbe({ initial }: { initial: string }) {
   return <div data-testid="selected-step">{selectedStepId ?? ''}</div>;
 }
 
-function renderInformation() {
+function renderInformation({ runId = 'run-1' }: { runId?: string } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-  // A finished run makes the "New workflow run" button visible.
   const contextValue = {
     result: null,
     payload: undefined,
     clearData: () => {},
     setRunId: () => {},
-    runId: '',
+    runId,
     workflowError: null,
     closeStreamsAndReset: () => {},
-    streamResult: { status: 'success' },
+    streamResult: null,
     isStreamingWorkflow: false,
     createWorkflowRun: async () => ({ runId: 'r' }),
     streamWorkflow: () => {},
@@ -98,24 +98,24 @@ function renderInformation() {
 }
 
 afterEach(cleanup);
+beforeEach(() => {
+  server.use(
+    http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, () => HttpResponse.json(workflowDetails)),
+    http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () => HttpResponse.json({ runs: [], total: 0 })),
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({})),
+  );
+});
 
 describe('WorkflowInformation', () => {
   describe('when "New workflow run" is pressed with a step selected', () => {
     it('clears the currently selected step', async () => {
-      server.use(
-        http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, () => HttpResponse.json(workflowDetails)),
-        http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () => HttpResponse.json({ runs: [], total: 0 })),
-        http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({})),
-      );
-
       renderInformation();
 
-      // The probe seeds a selection on mount.
       await waitFor(() => {
         expect(screen.getByTestId('selected-step').textContent).toBe('step-a');
       });
 
-      const newRunButton = await screen.findByText('New workflow run');
+      const newRunButton = await screen.findByRole('link', { name: 'New workflow run' });
 
       act(() => {
         fireEvent.click(newRunButton);
@@ -124,6 +124,30 @@ describe('WorkflowInformation', () => {
       await waitFor(() => {
         expect(screen.getByTestId('selected-step').textContent).toBe('');
       });
+    });
+  });
+
+  describe('when the run panel is collapsed', () => {
+    it('keeps the input draft mounted and restores its edited value', async () => {
+      renderInformation({ runId: '' });
+      const input = await screen.findByRole('textbox', { name: /Title/ });
+      fireEvent.change(input, { target: { value: 'My draft' } });
+      const trigger = screen.getByRole('button', { name: /Workflow run/ });
+      fireEvent.click(trigger);
+      await waitFor(() => expect(screen.queryByRole('textbox', { name: /Title/ })).toBeNull());
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(input.isConnected).toBe(true);
+      fireEvent.click(trigger);
+      expect(await screen.findByRole('textbox', { name: /Title/ })).toBe(input);
+      expect(screen.getByDisplayValue('My draft')).toBe(input);
+    });
+
+    it('opens the panel when creating a new run', async () => {
+      renderInformation();
+      const newRunButton = await screen.findByRole('link', { name: 'New workflow run' });
+      fireEvent.click(screen.getByRole('button', { name: /Workflow run/ }));
+      fireEvent.click(newRunButton);
+      expect(screen.getByRole('button', { name: /Workflow run/ }).getAttribute('aria-expanded')).toBe('true');
     });
   });
 });

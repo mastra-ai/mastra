@@ -1,5 +1,5 @@
 // Typescript tooling really sucks so we are going to do some transfomrations ourselves
-import { readFile, mkdir, copyFile, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, copyFile, stat } from 'node:fs/promises';
 import { join, dirname, relative, resolve, extname, sep } from 'node:path';
 import { Project, SyntaxKind } from 'ts-morph';
 import { getPackageInfo } from 'local-pkg';
@@ -199,6 +199,13 @@ async function replaceBundledReferences(file, rootDir, bundledPackages, visited,
       typesFiles = resolveExports(pkgJson, exportSpecifier, {
         conditions: ['types'],
       });
+      if (!pkgJson.exports) {
+        const subpath = moduleSpecifier.getLiteralValue().slice(pkgName.length + 1);
+        const typesEntry = subpath || pkgJson.types || pkgJson.typings;
+        if (typesEntry) {
+          typesFiles = [typesEntry];
+        }
+      }
     }
 
     if (!typesFiles || typesFiles.length === 0) {
@@ -218,35 +225,27 @@ async function replaceBundledReferences(file, rootDir, bundledPackages, visited,
       continue;
     }
 
-    let typesFile = typesFiles[0];
-    let sourceTypesPath = join(sourcePkgRootPath, typesFile);
-
-    if (/\.(mjs|cjs|js)$/.test(typesFile)) {
-      const declarationCandidates = [
-        sourceTypesPath.replace(/\.(mjs|cjs|js)$/, '.d.ts'),
-        sourceTypesPath.replace(/\.(mjs|cjs|js)$/, '.d.mts'),
-        sourceTypesPath.replace(/\.(mjs|cjs|js)$/, '.d.cts'),
-      ];
-
-      for (const candidate of declarationCandidates) {
-        if (await pathExists(candidate)) {
-          sourceTypesPath = candidate;
-          typesFile = relative(sourcePkgRootPath, candidate);
-          break;
-        }
-      }
-    }
-
+    const sourceTypesPath =
+      (await resolveRelativeDeclaration(`./${typesFiles[0]}`, join(sourcePkgRootPath, 'package.json'))) ??
+      join(sourcePkgRootPath, typesFiles[0]);
+    const typesFile = relative(sourcePkgRootPath, sourceTypesPath);
     const destTypesRoot = join(typesDestDir, sourcePkgName.replace('/', '_'));
     const destTypesPath = join(destTypesRoot, typesFile);
 
+    // Legacy CommonJS declarations must not inherit the consuming package's ESM mode.
+    const sourcePackage = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
+    await mkdir(destTypesRoot, { recursive: true });
+    await writeFile(join(destTypesRoot, 'package.json'), JSON.stringify({ type: sourcePackage.type ?? 'commonjs' }));
     await copyDeclarationGraph(sourceTypesPath, sourcePkgRootPath, destTypesRoot, rootDir, bundledPackages, visited);
 
     // Module specifiers must always use POSIX separators ('/'), but path.relative()
     // returns OS-native separators (backslashes on Windows). Without this normalization,
     // generated .d.ts files contain unresolvable specifiers like '..\_types\...' that
     // break `moduleResolution: "bundler"` on Windows. On POSIX, sep === '/' so this is a no-op.
-    let relativeImport = relative(fileDirname, destTypesPath).split(sep).join('/');
+    let relativeImport = relative(fileDirname, destTypesPath)
+      .split(sep)
+      .join('/')
+      .replace(/\.d\.([cm]?)ts$/, '.$1js');
     if (!relativeImport.startsWith('.')) {
       relativeImport = './' + relativeImport;
     }

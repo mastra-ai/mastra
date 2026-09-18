@@ -5,7 +5,7 @@
 import { SpanType } from '@mastra/core/observability';
 import type {
   ExportedSpan,
-  ModelGenerationAttributes,
+  ModelInferenceAttributes,
   RagEmbeddingAttributes,
   AgentRunAttributes,
   ToolCallAttributes,
@@ -15,8 +15,9 @@ import type {
 } from '@mastra/core/observability';
 import { SpanKind } from '@opentelemetry/api';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, beforeAll } from 'vitest';
 import { MODEL_TOKENS } from '../../../docs/src/plugins/remark-model-tokens/models';
+import { __setObservabilityFeaturesForTest } from './features';
 import { SpanConverter } from './span-converter.js';
 
 // Mock the Resource class
@@ -37,6 +38,9 @@ vi.mock('@opentelemetry/resources', async () => {
   };
 });
 
+// Paired packages emit MODEL_INFERENCE, so it is the exported `chat` call.
+beforeAll(() => __setObservabilityFeaturesForTest(new Set(['model-inference-span'])));
+
 describe('SpanConverter', () => {
   let converter: SpanConverter;
 
@@ -53,11 +57,11 @@ describe('SpanConverter', () => {
   // =============================================================================
   describe('Span Naming Conventions', () => {
     it('should format LLM generation span names correctly', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'original-name',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -66,7 +70,7 @@ describe('SpanConverter', () => {
           model: 'gpt-4',
           provider: 'openai',
           resultType: 'response_generation',
-        } as ModelGenerationAttributes,
+        } as ModelInferenceAttributes,
       };
 
       const result = await converter.convertSpan(span);
@@ -179,11 +183,11 @@ describe('SpanConverter', () => {
     });
 
     it('should use OTEL-compliant span names for LLM and tool spans', async () => {
-      const llmSpan: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const llmSpan: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'llm-1',
         traceId: 'trace-1',
         name: 'original-name',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -192,7 +196,7 @@ describe('SpanConverter', () => {
         attributes: {
           model: 'claude-3',
           resultType: 'response_generation',
-        } as ModelGenerationAttributes,
+        } as ModelInferenceAttributes,
       };
 
       const toolSpan: ExportedSpan<SpanType.TOOL_CALL> = {
@@ -224,16 +228,16 @@ describe('SpanConverter', () => {
   // =============================================================================
   describe('Span Kind Mapping', () => {
     it('should use CLIENT for LLM generation spans', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
-        attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
+        attributes: { model: 'gpt-4' } as ModelInferenceAttributes,
       };
 
       const result = await converter.convertSpan(span);
@@ -303,11 +307,11 @@ describe('SpanConverter', () => {
   // =============================================================================
   describe('Token Usage Attribute Mapping', () => {
     it('should map token format with inputDetails/outputDetails correctly', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -320,7 +324,7 @@ describe('SpanConverter', () => {
             inputDetails: { cacheRead: 30 },
             outputDetails: { reasoning: 20 },
           },
-        } as ModelGenerationAttributes,
+        } as ModelInferenceAttributes,
       };
 
       const result = await converter.convertSpan(span);
@@ -343,11 +347,11 @@ describe('SpanConverter', () => {
   // =============================================================================
   describe('OTEL GenAI Attributes', () => {
     it('should include gen_ai.operation.name', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -355,7 +359,7 @@ describe('SpanConverter', () => {
         attributes: {
           model: 'gpt-4',
           resultType: 'response_generation',
-        } as ModelGenerationAttributes,
+        } as ModelInferenceAttributes,
       };
 
       const result = await converter.convertSpan(span);
@@ -400,11 +404,11 @@ describe('SpanConverter', () => {
     });
 
     it('should map LLM parameters to OTEL conventions', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -422,7 +426,7 @@ describe('SpanConverter', () => {
             stopSequences: ['\\n', 'END'],
           },
           finishReason: 'stop',
-        } as ModelGenerationAttributes,
+        } as ModelInferenceAttributes,
       };
 
       const result = await converter.convertSpan(span);
@@ -441,11 +445,11 @@ describe('SpanConverter', () => {
     });
 
     it('should include all OTEL Gen AI semantic conventions', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -462,7 +466,7 @@ describe('SpanConverter', () => {
             temperature: 0.7,
             maxOutputTokens: 1000,
           },
-        } as ModelGenerationAttributes,
+        } as ModelInferenceAttributes,
       };
 
       const result = await converter.convertSpan(span);
@@ -476,12 +480,12 @@ describe('SpanConverter', () => {
       expect(result.attributes['gen_ai.request.max_tokens']).toBe(1000);
     });
 
-    it('should include agent context attributes on MODEL_GENERATION spans when provided', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+    it('should include agent context attributes on MODEL_INFERENCE spans when provided', async () => {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -496,7 +500,7 @@ describe('SpanConverter', () => {
             inputTokens: 100,
             outputTokens: 50,
           },
-        } as ModelGenerationAttributes,
+        } as ModelInferenceAttributes,
       };
 
       const result = await converter.convertSpan(span);
@@ -513,12 +517,12 @@ describe('SpanConverter', () => {
       expect(attrs['gen_ai.usage.output_tokens']).toBe(50);
     });
 
-    it('should not include agent context attributes on MODEL_GENERATION spans when not provided', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+    it('should not include agent context attributes on MODEL_INFERENCE spans when not provided', async () => {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -526,7 +530,7 @@ describe('SpanConverter', () => {
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
-        } as ModelGenerationAttributes,
+        } as ModelInferenceAttributes,
       };
 
       const result = await converter.convertSpan(span);
@@ -626,16 +630,16 @@ describe('SpanConverter', () => {
   // =============================================================================
   describe('Input/Output Handling', () => {
     it('should use gen_ai.prompt/completion for LLM spans', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
-        attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
+        attributes: { model: 'gpt-4' } as ModelInferenceAttributes,
         input: 'What is the capital of France?',
         output: 'The capital of France is Paris.',
       };
@@ -652,16 +656,16 @@ describe('SpanConverter', () => {
     });
 
     it('should serialize complex input/output', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
-        attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
+        attributes: { model: 'gpt-4' } as ModelInferenceAttributes,
         input: {
           messages: [
             { role: 'user', content: 'Hello' },
@@ -704,11 +708,11 @@ describe('SpanConverter', () => {
     });
 
     it('should include both generic and specific input/output attributes for LLM spans', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -718,7 +722,7 @@ describe('SpanConverter', () => {
         output: { content: 'Hi there!' },
         attributes: {
           model: 'gpt-4',
-        } as ModelGenerationAttributes,
+        } as ModelInferenceAttributes,
       };
 
       const result = await converter.convertSpan(span);
@@ -757,16 +761,16 @@ describe('SpanConverter', () => {
   // =============================================================================
   describe('Error Handling', () => {
     it('should add error attributes when error info is present', async () => {
-      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
-        attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
+        attributes: { model: 'gpt-4' } as ModelInferenceAttributes,
         errorInfo: {
           message: 'Rate limit exceeded',
           id: 'RATE_LIMIT_ERROR',
@@ -907,17 +911,17 @@ describe('SpanConverter', () => {
         attributes: { agentId: 'test-agent' } as AgentRunAttributes,
       };
 
-      const childSpan: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const childSpan: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'child-span',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
         parentSpanId: 'root-span',
-        attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
+        attributes: { model: 'gpt-4' } as ModelInferenceAttributes,
       };
 
       const rootResult = await converter.convertSpan(rootSpan);
@@ -954,17 +958,17 @@ describe('SpanConverter', () => {
         attributes: { stepId: 'process-data' } as WorkflowStepAttributes,
       };
 
-      const llmSpan: ExportedSpan<SpanType.MODEL_GENERATION> = {
+      const llmSpan: ExportedSpan<SpanType.MODEL_INFERENCE> = {
         id: 'llm-1',
         traceId: 'trace-1',
         name: 'llm',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
         parentSpanId: 'step-1',
-        attributes: { model: 'claude-3' } as ModelGenerationAttributes,
+        attributes: { model: 'claude-3' } as ModelInferenceAttributes,
       };
 
       const toolSpan: ExportedSpan<SpanType.TOOL_CALL> = {
@@ -1074,13 +1078,13 @@ describe('SpanConverter', () => {
           id: 'span-2',
           traceId,
           name: 'child1',
-          type: SpanType.MODEL_GENERATION,
+          type: SpanType.MODEL_INFERENCE,
           startTime: new Date(),
           endTime: new Date(),
           isEvent: false,
           isRootSpan: false,
           parentSpanId: 'span-1',
-          attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
+          attributes: { model: 'gpt-4' } as ModelInferenceAttributes,
         },
         {
           id: 'span-3',
@@ -1157,7 +1161,7 @@ describe('SpanConverter', () => {
           id: 'llm-1',
           traceId: 'trace-1',
           name: 'llm-planning',
-          type: SpanType.MODEL_GENERATION,
+          type: SpanType.MODEL_INFERENCE,
           startTime: new Date(baseTime.getTime() + 100),
           endTime: new Date(baseTime.getTime() + 1100),
           isEvent: false,
@@ -1166,7 +1170,7 @@ describe('SpanConverter', () => {
           attributes: {
             model: 'gpt-4',
             resultType: 'tool_selection',
-          } as ModelGenerationAttributes,
+          } as ModelInferenceAttributes,
         },
         {
           id: 'tool-1',
@@ -1188,7 +1192,7 @@ describe('SpanConverter', () => {
           id: 'llm-2',
           traceId: 'trace-1',
           name: 'llm-response',
-          type: SpanType.MODEL_GENERATION,
+          type: SpanType.MODEL_INFERENCE,
           startTime: new Date(baseTime.getTime() + 2300),
           endTime: new Date(baseTime.getTime() + 3300),
           isEvent: false,
@@ -1197,7 +1201,7 @@ describe('SpanConverter', () => {
           attributes: {
             model: 'gpt-4',
             resultType: 'response_generation',
-          } as ModelGenerationAttributes,
+          } as ModelInferenceAttributes,
         },
       ];
 

@@ -37,12 +37,11 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
   // `controller`. We link them here so a single `session` override drives both.
   const { session: sessionOverride, controller: agentControllerOverride, ...rest } = overrides as any;
   const session = {
-    followUps: { count: vi.fn(() => 0) },
     getCurrentRunId: vi.fn(() => null),
     stream: { isActive: vi.fn(() => false) },
     sendSignal: vi.fn(() => ({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) })),
     sendMessage: vi.fn().mockResolvedValue(undefined),
-    displayState: { get: vi.fn(() => ({ isRunning: false })) },
+    displayState: { get: vi.fn(() => ({ isRunning: false, queuedFollowUps: 0 })) },
     thread: { create: vi.fn().mockResolvedValue({ id: 'thread-new' }) },
     mode: { switch: vi.fn().mockResolvedValue(undefined) },
     ...(sessionOverride ?? {}),
@@ -897,7 +896,7 @@ describe('MastraTUI queueing', () => {
 
   it('waits for controller-level follow-ups to finish before draining the local queue', () => {
     const state = createQueueState({
-      session: { followUps: { count: vi.fn(() => 1) } } as any,
+      session: { displayState: { get: vi.fn(() => ({ isRunning: false, queuedFollowUps: 1 })) } } as any,
       pendingQueuedActions: ['message'],
       pendingFollowUpMessages: [{ content: 'queued' }],
     });
@@ -992,6 +991,93 @@ describe('syncInitialThreadState', () => {
 
     expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
     expect(state.goalManager.loadFromThreadMetadata).not.toHaveBeenCalled();
+  });
+});
+
+describe('background completion queue', () => {
+  it.each([undefined, false])('does not refresh background activity when enabled is %s', backgroundToolsEnabled => {
+    const setActivities = vi.fn();
+    const getActivities = vi.fn();
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = {
+      options: { backgroundToolsEnabled },
+      globalBackgroundNotice: { setActivities },
+    };
+    tui.getCurrentThreadBackgroundActivities = getActivities;
+
+    tui.refreshBackgroundActivity();
+
+    expect(getActivities).not.toHaveBeenCalled();
+    expect(setActivities).not.toHaveBeenCalled();
+  });
+
+  beforeEach(() => {
+    mocks.showError.mockReset();
+  });
+
+  it('continues processing completions after a render failure', async () => {
+    const refreshBackgroundActivity = vi.fn().mockImplementationOnce(() => {
+      throw new Error('render failed');
+    });
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = { backgroundActivities: new Map() };
+    tui.backgroundNoticeQueue = Promise.resolve();
+    tui.refreshBackgroundActivity = refreshBackgroundActivity;
+
+    tui.handleBackgroundCompletion({
+      taskId: 'task-1',
+      originToolCallId: 'call-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      toolName: 'view',
+      status: 'completed',
+    });
+    tui.handleBackgroundCompletion({
+      taskId: 'task-2',
+      originToolCallId: 'call-2',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      toolName: 'search_content',
+      status: 'completed',
+    });
+    await tui.backgroundNoticeQueue;
+
+    expect(refreshBackgroundActivity).toHaveBeenCalledTimes(2);
+    expect(tui.state.backgroundActivities.get('task-2')?.status).toBe('completed');
+    expect(mocks.showError).toHaveBeenCalledWith(tui.state, 'render failed');
+  });
+});
+
+describe('background activity cancellation', () => {
+  it('reports cancellation failures and closes the activity overlay', async () => {
+    const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'));
+    const hideOverlay = vi.fn();
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = {
+      controller: { getMastra: () => ({ backgroundTaskManager: { cancel } }) },
+      ui: { hideOverlay },
+    };
+
+    await tui.abortBackgroundActivity({ taskId: 'task-1' });
+
+    expect(cancel).toHaveBeenCalledWith('task-1');
+    expect(mocks.showError).toHaveBeenCalledWith(tui.state, 'cancel failed');
+    expect(hideOverlay).toHaveBeenCalledOnce();
+  });
+
+  it('closes the activity overlay when no background task manager exists', async () => {
+    mocks.showError.mockClear();
+    const hideOverlay = vi.fn();
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = {
+      controller: { getMastra: () => undefined },
+      ui: { hideOverlay },
+    };
+
+    await tui.abortBackgroundActivity({ taskId: 'task-1' });
+
+    expect(mocks.showError).not.toHaveBeenCalled();
+    expect(hideOverlay).toHaveBeenCalledOnce();
   });
 });
 

@@ -13,5 +13,5 @@ await mastraClient.queryTraces({ timeRange, group: { by: ['threadId'] } });
 After:
 
 ```ts
-await mastraClient.queryThreads({ traces: { timeRange } });
+await mastraClient.queryTraceThreads({ traces: { timeRange } });
 ```

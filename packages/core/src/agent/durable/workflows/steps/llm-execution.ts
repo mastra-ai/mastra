@@ -10,6 +10,7 @@ import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-arg
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
+import { recordTerminalErrorMessage } from '../../../../loop/shared/record-terminal-error-message';
 import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
@@ -26,8 +27,8 @@ import { EntityType } from '../../../../observability';
 import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
-import { isMaybeAnthropicWithoutAssistantPrefill } from '../../../../processors/provider-history-compat';
 import { ProcessorRunner } from '../../../../processors/runner';
+import { needsTrailingAssistantGuard } from '../../../../processors/trailing-assistant-guard';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
@@ -96,6 +97,8 @@ const durableLLMInputSchema = z.object({
   modelSpanData: z.any().optional(),
   // Step index for continuation (step: 0, 1, 2, ...)
   stepIndex: z.number().optional(),
+  // Step results from previous iterations, passed to processor hooks as `steps`
+  accumulatedSteps: z.array(z.any()).optional(),
 });
 
 /**
@@ -314,12 +317,32 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         currentMessageId = messageList.rotateResponseMessageId(currentMessageId);
         return currentMessageId;
       };
+      let terminalAttemptContext:
+        | {
+            recordTerminalError: (error: unknown) => void;
+          }
+        | undefined;
 
       for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
         const modelEntry = modelList[modelIndex]!;
         const maxRetries = modelEntry.maxRetries || 0;
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          // Capture this attempt before processors can rotate the active id. The
+          // fallback callback covers failures before a stream can materialize;
+          // it resolves currentMessageId only when the terminal error is known.
+          const attemptMessageId = currentMessageId;
+          terminalAttemptContext = {
+            recordTerminalError: error => {
+              recordTerminalErrorMessage({
+                messageList,
+                attemptId: attemptMessageId,
+                activeId: currentMessageId,
+                error,
+              });
+            },
+          };
+
           // Declared outside the try so the outer catch can persist
           // already-streamed partial output on abort (#22593). Assigned inside
           // once streaming state exists; undefined means nothing streamed yet.
@@ -362,7 +385,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // modelSpanData is threaded through the iteration state (seeded in preparation.ts);
             // after a resume the registry override points steps at the resumed generation.
             const inputModelSpanData = (globalRunRegistry.get(runId)?.resumeModelSpanData ??
-              (inputData as any).modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
+              inputData.modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
             const modelSpan = inputModelSpanData
               ? (observability?.rebuildSpan(inputModelSpanData) as AIModelGenerationSpan | undefined)
               : undefined;
@@ -372,7 +395,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // Set the step index for continuation (step: 0, 1, 2, ...)
             // This ensures step numbering continues across agentic loop iterations
-            const stepIndex = (inputData as any).stepIndex ?? 0;
+            const stepIndex = inputData.stepIndex ?? 0;
             modelSpanTracker?.setStepIndex(stepIndex);
 
             // Build structured output for AI SDK if configured. Held in a `let`
@@ -384,6 +407,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 ? {
                     schema: structuredOutputConfig.schema,
                     jsonPromptInjection: structuredOutputConfig.jsonPromptInjection,
+                    instructions: structuredOutputConfig.instructions,
                   }
                 : undefined;
 
@@ -396,7 +420,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepInputProcessors = registryEntry?.prepareStep
               ? [...baseInputProcessors, new PrepareStepProcessor({ prepareStep: registryEntry.prepareStep })]
               : baseInputProcessors;
-            if (stepInputProcessors.length || isMaybeAnthropicWithoutAssistantPrefill(currentModel)) {
+            if (needsTrailingAssistantGuard(currentModel, stepInputProcessors)) {
               const inputStepWriter = pubsub
                 ? {
                     custom: async (data: { type: string }) => {
@@ -416,7 +440,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 const processInputStepResult = await runner.runProcessInputStep({
                   messageList,
                   stepNumber: stepIndex,
-                  steps: (inputData as any).accumulatedSteps ?? [],
+                  steps: inputData.accumulatedSteps ?? [],
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   requestContext,
                   memory: registryEntry?.memory,
@@ -508,6 +532,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                   currentTools = convertedTools as unknown as ToolSet;
                   if (registryEntry) {
+                    // Keep the full toolset this step started from so the NEXT step
+                    // (via resolveRuntimeDependencies) and its processors see the
+                    // complete catalog. Without this, a processor that withholds
+                    // tools (ToolSearchProcessor with includeResolvedTools) would
+                    // shrink the registry to `search_tools` on step 1 and the tool
+                    // it auto-loaded could never surface on step 2 (issue #22933).
+                    registryEntry.baseTools = tools;
                     // Store the exact per-step snapshot rather than merging onto the
                     // previous step's set. `currentTools` already starts from the full
                     // toolset resolved at the top of this step, so a snapshot keeps the
@@ -517,6 +548,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     // tool-call step even though the model was never shown them.
                     registryEntry.tools = convertedTools;
                   }
+                } else if (registryEntry?.baseTools) {
+                  // No processor narrowed this step, so the model sees the full
+                  // toolset; make the tool-call step resolve from the same set
+                  // instead of a previous step's narrowed snapshot.
+                  registryEntry.tools = registryEntry.baseTools;
                 }
               } catch (error) {
                 // Handle TripWire from processInputStep — emit tripwire chunk and
@@ -669,8 +705,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 const requestStepResult = await requestStepRunner.runProcessLLMRequest({
                   prompt: inputMessages,
                   model: currentModel,
-                  stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
-                  steps: (inputData as any).accumulatedSteps ?? [],
+                  messageList,
+                  stepNumber: inputData.stepIndex ?? 0,
+                  steps: inputData.accumulatedSteps ?? [],
                   retryCount: (inputData as any).processorRetryCount ?? 0,
                   requestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
@@ -950,7 +987,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Called on the success path AND both abort returns: the
             // serialized messageListState is the only channel to finalize-run
             // persistence, so skipping this on abort would drop
-            // already-streamed partial output (#22593).
+            // already-streamed partial output (#22593). Keep this attempt's
+            // materialization id stable if an error processor later rotates the
+            // active id before the terminal-error branch runs.
+            const materializationMessageId = currentMessageId;
             materializeStreamedMessages = () => {
               const responseModelId = currentModel.modelId ?? responseMetadata?.modelId;
               const responseTraceId = getRootExportSpan(
@@ -968,7 +1008,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   : undefined;
               const builtMessages = buildMessagesFromChunks({
                 chunks: collectedChunks,
-                messageId: currentMessageId,
+                messageId: materializationMessageId,
                 tools: currentTools,
                 responseModelMetadata,
               });
@@ -984,6 +1024,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   registryEntry.messageList = messageList;
                 }
               }
+            };
+            terminalAttemptContext = {
+              recordTerminalError: error => {
+                materializeStreamedMessages?.();
+                recordTerminalErrorMessage({
+                  messageList,
+                  attemptId: materializationMessageId,
+                  activeId: currentMessageId,
+                  error,
+                });
+              },
             };
 
             // 10. Execute LLM call (or replay cached response)
@@ -1467,8 +1518,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     messageList,
                     messageId: currentMessageId,
                     rotateResponseMessageId,
-                    stepNumber: (inputData as any).stepIndex ?? 0,
-                    steps: (inputData as any).accumulatedSteps ?? [],
+                    stepNumber: inputData.stepIndex ?? 0,
+                    steps: inputData.accumulatedSteps ?? [],
                     retryCount: processorRetryCount,
                     requestContext,
                   });
@@ -1538,8 +1589,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 await requestStepRunner.runProcessLLMResponse({
                   chunks: collectedChunks,
                   model: currentModel,
-                  stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
-                  steps: (inputData as any).accumulatedSteps ?? [],
+                  stepNumber: inputData.stepIndex ?? 0,
+                  steps: inputData.accumulatedSteps ?? [],
                   warnings,
                   request,
                   rawResponse,
@@ -1624,10 +1675,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
               try {
                 await outputStepRunner.runProcessOutputStep({
-                  steps: (inputData as any).accumulatedSteps ?? [],
+                  steps: inputData.accumulatedSteps ?? [],
                   messages: messageList.get.all.db(),
                   messageList,
-                  stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
+                  stepNumber: inputData.stepIndex ?? 0,
                   finishReason,
                   providerMetadata: responseMetadata,
                   toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
@@ -1846,8 +1897,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageList,
                   messageId: currentMessageId,
                   rotateResponseMessageId,
-                  stepNumber: (inputData as any).stepIndex ?? 0,
-                  steps: (inputData as any).accumulatedSteps ?? [],
+                  stepNumber: inputData.stepIndex ?? 0,
+                  steps: inputData.accumulatedSteps ?? [],
                   retryCount: processorRetryCount,
                   requestContext,
                   tracingContext,
@@ -1880,6 +1931,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // a deferred error chunk rather than crashing the loop.
       const fatalError =
         lastError ?? new Error('Exhausted all fallback models and reached the maximum number of retries.');
+
+      // Materialize only the final attempt before serializing MessageList. Its
+      // callback preserves partial parts and model metadata, then appends the
+      // Mastra-only error part; recovered attempts never reach this branch.
+      terminalAttemptContext?.recordTerminalError(fatalError);
 
       // End the root spans here too — this is the only error path that covers EventedAgent,
       // whose fire-and-forget launch never sees the failure (so emitError never runs).

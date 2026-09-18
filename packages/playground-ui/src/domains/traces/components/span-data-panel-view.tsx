@@ -1,16 +1,18 @@
-import type { SpanRecord } from '@mastra/core/storage';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import type { SpanRecord } from '../types';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
 import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
 import { TraceIdButton } from './trace-id-button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { cn } from '@/lib/utils';
+
+const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto p-3';
 
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
   return (
@@ -72,18 +74,19 @@ export function SpanDataPanelView({
   isAnchor,
   className,
 }: SpanDataPanelViewProps) {
+  // Not a DataPanel: this is the span column rendered inside `TraceDataPanelView`,
+  // which already provides the panel chrome.
   return (
-    <DataPanel className={className}>
-      {/* Two-line header (heading + summary); neighbouring panel headers use min-h-16 to stay level. */}
-      <DataPanel.Header className="min-h-16 py-2">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <DataPanel.Heading className="items-center whitespace-nowrap">
+    <section className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
+      <DataPanel.Header>
+        <DataPanel.HeaderContent>
+          <DataPanel.Heading>
             Span
             <TraceIdButton id={spanId} />
           </DataPanel.Heading>
           {span && <SpanSummaryDescription span={span} />}
-        </div>
-        <ButtonsGroup className="ml-auto shrink-0 self-start">
+        </DataPanel.HeaderContent>
+        <DataPanel.HeaderActions>
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}
             onNext={onNext}
@@ -91,7 +94,7 @@ export function SpanDataPanelView({
             nextLabel="Next span"
           />
           <DataPanel.CloseButton onClick={onClose} />
-        </ButtonsGroup>
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
 
       {isLoading ? (
@@ -110,7 +113,7 @@ export function SpanDataPanelView({
           isAnchor={isAnchor}
         />
       )}
-    </DataPanel>
+    </section>
   );
 }
 
@@ -245,13 +248,13 @@ function SpanDataPanelContent({
 
   // No extra tab slots → render details directly without the Tabs/TabList wrapper.
   if (!feedbackTabSlot) {
-    return <DataPanel.Content>{detailsBody}</DataPanel.Content>;
+    return <div className={BODY_CLASS}>{detailsBody}</div>;
   }
 
   return (
-    <DataPanel.Content>
+    <div className={BODY_CLASS}>
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
-        <TabList variant="pill-ghost" className="px-0">
+        <TabList variant="pill-ghost">
           <Tab value="details">Details</Tab>
           <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
         </TabList>
@@ -259,6 +262,6 @@ function SpanDataPanelContent({
         <TabContent value="details">{detailsBody}</TabContent>
         <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>
       </Tabs>
-    </DataPanel.Content>
+    </div>
   );
 }

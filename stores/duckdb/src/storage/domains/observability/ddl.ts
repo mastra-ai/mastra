@@ -292,6 +292,8 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   feedbackSource VARCHAR NOT NULL,
   feedbackType VARCHAR NOT NULL,
   value VARCHAR NOT NULL,
+  valueString VARCHAR,
+  valueNumber DOUBLE,
   comment VARCHAR,
 
   -- JSON fields
@@ -444,6 +446,8 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS scope JSON`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS source VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS feedbackSource VARCHAR`,
+  `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS valueString VARCHAR`,
+  `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS valueNumber DOUBLE`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS reviewStatus VARCHAR DEFAULT 'needs-review'`,
   `ALTER TABLE feedback_events ALTER COLUMN traceId DROP NOT NULL`,
 ];

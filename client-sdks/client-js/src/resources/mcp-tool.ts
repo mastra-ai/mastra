@@ -1,5 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ClientOptions, McpToolInfo } from '../types';
+import type { Body } from '../route-types.generated.js';
+import type { ClientOptions, McpToolExecuteResponse, McpToolInfo } from '../types';
 import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
@@ -31,16 +32,23 @@ export class MCPTool extends BaseResource {
   /**
    * Executes this specific tool on the MCP server.
    * @param params - Parameters for tool execution, including data/args and optional requestContext.
-   * @returns Promise containing the result of the tool execution.
+   * On a 2026-07-28 server a tool can answer `{ status: 'suspended', suspendPayload, resumeSchema }`;
+   * call again with the same `data` plus `resumeData` (matching `resumeSchema`) and the echoed
+   * `suspendPayload` to continue it.
+   * @returns Promise containing `{ result }`, or the suspended shape described above.
    */
-  execute(params: { data?: any; requestContext?: RequestContext }): Promise<any> {
-    const body: { data?: any; requestContext?: RequestContext } = {};
-    if (params.data !== undefined) body.data = params.data;
-    if (params.requestContext !== undefined) body.requestContext = params.requestContext;
-
-    return this.request(`/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}/execute`, {
-      method: 'POST',
-      body,
-    });
+  execute(
+    params: Body<'POST /mcp/:serverId/tools/:toolId/execute'> & {
+      requestContext?: RequestContext | Record<string, unknown>;
+    },
+  ): Promise<McpToolExecuteResponse> {
+    const { requestContext, ...body } = params;
+    return this.request(
+      `/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}/execute${requestContextQueryString(requestContext)}`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
   }
 }

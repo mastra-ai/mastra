@@ -15,6 +15,30 @@
   --surface5: oklch(24.35% 0 0deg / 90%);
   --surface6: oklch(30.92% 0 0deg);
 
+  --background-1: oklch(0 0 0);
+  --background-2: oklch(0.1591 0 0);
+  --background-3: oklch(0.1913 0 0);
+  --gray-1: oklch(0.2178 0 0);
+  --gray-2: oklch(0.2435 0 0);
+  --gray-3: oklch(0.2686 0 0);
+  --gray-4: oklch(0.3092 0 0);
+  --gray-5: oklch(0.3715 0 0);
+  --gray-6: oklch(0.4495 0 0);
+  --gray-7: oklch(0.5208 0 0);
+  --gray-8: oklch(0.65 0 0);
+  --gray-9: oklch(0.7699 0 0);
+  --gray-10: oklch(0.9851 0 0);
+  --gray-alpha-1: rgb(255 255 255 / 4%);
+  --gray-alpha-2: rgb(255 255 255 / 7%);
+  --gray-alpha-3: rgb(255 255 255 / 10%);
+  --gray-alpha-4: rgb(255 255 255 / 14%);
+  --gray-alpha-5: rgb(255 255 255 / 18%);
+  --gray-alpha-6: rgb(255 255 255 / 30%);
+  --gray-alpha-7: rgb(255 255 255 / 45%);
+  --gray-alpha-8: rgb(255 255 255 / 60%);
+  --gray-alpha-9: rgb(255 255 255 / 75%);
+  --gray-alpha-10: rgb(255 255 255 / 90%);
+
   --accent1: oklch(0.723 0.219 149.579);
   --accent2: oklch(0.637 0.237 25.331);
   --accent3: oklch(0.623 0.214 259.815);
@@ -41,11 +65,17 @@
   --neutral6: oklch(0.985 0 0);
 
   --error: oklch(0.637 0.237 25.331);
+  /* Lightness for hue-only generated accents (e.g. per-filter colors) — legible on each theme. */
+  --generated-accent-lightness: 72%;
   --overlay: oklch(0% 0 0deg / 75%);
   --border1: oklch(100% 0 0deg / 7%);
   --border2: oklch(100% 0 0deg / 11%);
   --surface-overlay-soft: oklch(100% 0 0deg / 4%);
   --surface-overlay-strong: oklch(100% 0 0deg / 7%);
+  --button-default-bg: var(--surface5);
+  --button-default-bg-hover: var(--surface6);
+  --button-default-bg-active: var(--surface4);
+  --button-default-border: var(--border1);
   --surface-header: oklch(15% 0 0deg);
   --surface-header-hover: oklch(19% 0 0deg);
   --surface-row-featured: oklch(100% 0 0deg / 12%);
@@ -128,6 +158,30 @@ html.light {
   --surface5: oklch(94.4% 0 0deg / 94%);
   --surface6: oklch(89.5% 0 0deg);
 
+  --background-1: oklch(0.9642 0 0);
+  --background-2: oklch(0.9851 0 0);
+  --background-3: oklch(1 0 0);
+  --gray-1: oklch(0.9431 0 0);
+  --gray-2: oklch(0.9189 0 0);
+  --gray-3: oklch(0.8945 0 0);
+  --gray-4: oklch(0.8452 0 0);
+  --gray-5: oklch(0.7604 0 0);
+  --gray-6: oklch(0.6201 0 0);
+  --gray-7: oklch(0.5486 0 0);
+  --gray-8: oklch(0.4459 0 0);
+  --gray-9: oklch(0.3092 0 0);
+  --gray-10: oklch(0.1286 0 0);
+  --gray-alpha-1: rgb(0 0 0 / 4%);
+  --gray-alpha-2: rgb(0 0 0 / 7%);
+  --gray-alpha-3: rgb(0 0 0 / 10%);
+  --gray-alpha-4: rgb(0 0 0 / 14%);
+  --gray-alpha-5: rgb(0 0 0 / 18%);
+  --gray-alpha-6: rgb(0 0 0 / 30%);
+  --gray-alpha-7: rgb(0 0 0 / 45%);
+  --gray-alpha-8: rgb(0 0 0 / 60%);
+  --gray-alpha-9: rgb(0 0 0 / 75%);
+  --gray-alpha-10: rgb(0 0 0 / 90%);
+
   --accent1: oklch(0.627 0.194 149.214);
   --accent2: oklch(0.577 0.245 27.325);
   --accent3: oklch(0.546 0.245 262.881);
@@ -154,11 +208,16 @@ html.light {
   --neutral6: oklch(0.13 0 0);
 
   --error: oklch(0.577 0.245 27.325);
+  --generated-accent-lightness: 38%;
   --overlay: oklch(20.8% 0 0deg / 45%);
   --border1: oklch(20.8% 0 0deg / 10%);
   --border2: oklch(20.8% 0 0deg / 16%);
   --surface-overlay-soft: oklch(20.8% 0 0deg / 4%);
   --surface-overlay-strong: oklch(20.8% 0 0deg / 7%);
+  --button-default-bg: var(--surface2);
+  --button-default-bg-hover: var(--surface5);
+  --button-default-bg-active: var(--surface5);
+  --button-default-border: var(--border2);
   --surface-header: oklch(92.6% 0 0deg);
   --surface-header-hover: oklch(90% 0 0deg);
   --surface-row-featured: oklch(20.8% 0 0deg / 11%);
@@ -329,8 +388,7 @@ html.light {
   --spacing-form-xs: 1.25rem;
   --spacing-form-sm: 1.5rem;
   --spacing-form-md: 1.75rem;
-  --spacing-form-default: 1.75rem;
-  --spacing-form-lg: 2rem;
+  --spacing-form-lg: 1.75rem;
   --height-header-default: 40px;
   --height-table-header: 28px;
   --height-table-row: 40px;
@@ -353,6 +411,8 @@ html.light {
   --max-height-avatar-md: 32px;
   --max-height-avatar-lg: 40px;
   --max-height-dropdown-max-height: 300px;
+
+  --min-height-header-default: 40px;
 
   --width-icon-default: 16px;
   --width-icon-lg: 20px;
@@ -415,6 +475,10 @@ html.light {
   --color-border2: var(--border2);
   --color-surface-overlay-soft: var(--surface-overlay-soft);
   --color-surface-overlay-strong: var(--surface-overlay-strong);
+  --color-button-default-bg: var(--button-default-bg);
+  --color-button-default-bg-hover: var(--button-default-bg-hover);
+  --color-button-default-bg-active: var(--button-default-bg-active);
+  --color-button-default-border: var(--button-default-border);
   --color-surface-row-featured: var(--surface-row-featured);
 
   /* Semantic color aliases */

@@ -1,8 +1,8 @@
 ---
-title: "Reference: Workspace class | Workspace"
-description: "The Workspace class combines a filesystem and sandbox to provide agents with file storage and command execution capabilities."
+title: 'Reference: Workspace class | Workspace'
+description: 'The Workspace class combines a filesystem and sandbox to provide agents with file storage and command execution capabilities.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Workspace class
@@ -108,7 +108,7 @@ const workspace = new Workspace({
     name: 'skills',
     type: 'string[] | ((context: SkillsContext) => string[] | Promise<string[]>)',
     description:
-      "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically. Supports glob patterns like './**/skills' for discovery.",
+      "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically. Supports glob patterns like './**/skills' for discovery. Skills are read from `skillSource` when set, otherwise from the workspace `filesystem` — including a resolver-backed filesystem, which is resolved per request. With a resolver, use `workspace.skills.getScoped({ requestContext })` so the filesystem is chosen from the request; direct calls such as `workspace.skills.list()` resolve with an empty `RequestContext`. Only when no filesystem is configured are skills read from the local disk.",
     isOptional: true,
   },
   {
@@ -249,7 +249,8 @@ Per-tool overrides accept the following options:
   {
     name: 'requireReadBeforeWrite',
     type: 'boolean | ((context: ToolConfigWithArgsContext) => boolean | Promise<boolean>)',
-    description: 'For write tools, require the agent to read an existing file before changing it.',
+    description:
+      'For write tools, require the agent to read an existing file before changing it. See Read-before-write tracking below.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -303,6 +304,14 @@ const workspace = new Workspace({
 ```
 
 Tool names must be unique across all workspace tools. Setting a custom name that conflicts with another tool's default or custom name throws an error.
+
+### Read-before-write tracking
+
+When `requireReadBeforeWrite` is enabled, write tools reject changes to files the agent hasn't read. When the agent runs with a memory thread inside a Mastra instance, read records are kept per thread in the `threadState` storage domain, the same store that holds task lists and goal objectives. Records automatically survive suspend/resume cycles (for example, a tool awaiting approval), later turns on the same thread, and process restarts on serverless runtimes when the configured storage adapter persists thread state. No configuration is needed beyond registering the agent with a Mastra instance that has storage.
+
+If a file changes on disk after it was read, the write is still rejected until the agent re-reads it, and a successful write always clears the record so the next edit requires a fresh read. Runs without a memory thread or without Mastra storage track reads per run.
+
+Read records are scoped to the filesystem they were read from, identified by the filesystem's provider and base path. Filesystems without a base path are scoped by provider alone, so same-provider instances share read records. If a thread resolves a different filesystem between requests (for example, a dynamic workspace or filesystem that varies by request context), previously read files must be re-read on the new filesystem before writing. Filesystems with the same configuration (such as two `LocalFilesystem` instances with the same `basePath`) share read records.
 
 ### Tool hooks
 

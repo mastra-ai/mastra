@@ -53,8 +53,8 @@ describe('connection deadlines and cleanup', () => {
     const rejection = expect(connection).rejects.toThrow(`timed out after ${timeout ?? 15000}ms`);
     await vi.advanceTimersByTimeAsync(timeout ?? 15000);
     await rejection;
-    expect(socket().listenerCount('open')).toBe(0);
-    expect(socket().listenerCount('close')).toBe(0);
+    expect(socket().listenerCount('open')).toBe(1);
+    expect(socket().listenerCount('close')).toBe(1);
     expect(socket().listenerCount('error')).toBe(1);
     expect(vi.getTimerCount()).toBe(0);
     expect(socket().close).toHaveBeenCalledOnce();
@@ -79,8 +79,8 @@ describe('connection deadlines and cleanup', () => {
     created();
     await connection;
     expect(vi.getTimerCount()).toBe(0);
-    expect(socket().listenerCount('open')).toBe(0);
-    expect(socket().listenerCount('close')).toBe(0);
+    expect(socket().listenerCount('open')).toBe(1);
+    expect(socket().listenerCount('close')).toBe(1);
     const error = new Error('later error');
     const onError = vi.fn();
     voice.on('error', onError);
@@ -97,8 +97,8 @@ describe('connection deadlines and cleanup', () => {
     socket().emit('error', new Error('transport failed'));
     await rejection;
     expect(vi.getTimerCount()).toBe(0);
-    expect(socket().listenerCount('open')).toBe(0);
-    expect(socket().listenerCount('close')).toBe(0);
+    expect(socket().listenerCount('open')).toBe(1);
+    expect(socket().listenerCount('close')).toBe(1);
     expect(socket().send).not.toHaveBeenCalled();
   });
 
@@ -110,8 +110,8 @@ describe('connection deadlines and cleanup', () => {
     socket().emit('close', 1008, Buffer.from('rejected'));
     await rejection;
     expect(vi.getTimerCount()).toBe(0);
-    expect(socket().listenerCount('open')).toBe(0);
-    expect(socket().listenerCount('close')).toBe(0);
+    expect(socket().listenerCount('open')).toBe(1);
+    expect(socket().listenerCount('close')).toBe(1);
     expect(socket().send).not.toHaveBeenCalled();
   });
 

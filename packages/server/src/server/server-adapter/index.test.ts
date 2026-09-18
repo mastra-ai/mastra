@@ -7,8 +7,10 @@ import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod/v4';
 import { GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
 import { HTTPException } from '../http-exception';
+import { createRoute } from './routes/route-builder';
 import { MastraServer, getCustomHTTPExceptionResponse } from './index';
 
 class TestMastraServer extends MastraServer<any, any, any> {
@@ -59,6 +61,122 @@ function createTestAdapter() {
     } as unknown as Mastra,
   });
 }
+
+describe('body schema validation', () => {
+  const requiredBodyRoute = createRoute({
+    method: 'DELETE',
+    path: '/test/required-body',
+    responseType: 'json',
+    bodySchema: z.object({ itemIds: z.array(z.string().min(1)).min(1) }),
+    handler: async ({ itemIds }) => ({ itemIds }),
+  });
+
+  it.each([undefined, null, false, 0, '', {}, { itemIds: [] }])(
+    'rejects missing or invalid required input %#',
+    async body => {
+      await expect(createTestAdapter().parseBody(requiredBodyRoute, body)).rejects.toThrow();
+    },
+  );
+
+  it.each([z.string().min(1), z.array(z.string()), z.object({ name: z.string() })])(
+    'preserves the missing-input error when the empty-object fallback fails %#',
+    async bodySchema => {
+      const missing = await bodySchema.safeParseAsync(undefined);
+      expect(missing.success).toBe(false);
+      if (missing.success) throw new Error('Expected missing input to fail validation');
+      await expect(
+        createTestAdapter().parseBody({ ...requiredBodyRoute, bodySchema }, undefined),
+      ).rejects.toMatchObject({
+        issues: missing.error.issues,
+      });
+    },
+  );
+
+  it.each([z.record(z.string(), z.string()), z.record(z.string(), z.string()).nullable()])(
+    'rejects omitted record bodies without rejecting explicit empty objects %#',
+    async bodySchema => {
+      const adapter = createTestAdapter();
+      await expect(adapter.parseBody({ ...requiredBodyRoute, bodySchema }, undefined)).rejects.toThrow();
+      await expect(adapter.parseBody({ ...requiredBodyRoute, bodySchema }, {})).resolves.toEqual({});
+    },
+  );
+
+  it('preserves optional and defaulted record bodies', async () => {
+    const schema = z.record(z.string(), z.string());
+    const adapter = createTestAdapter();
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: schema.optional() }, undefined),
+    ).resolves.toBeUndefined();
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: schema.default({}) }, undefined),
+    ).resolves.toEqual({});
+  });
+
+  it('validates nullable object schemas through the original schema', async () => {
+    const schema = z.object({ limit: z.number().default(10) });
+    const adapter = createTestAdapter();
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: schema.nullable() }, undefined),
+    ).resolves.toEqual({ limit: 10 });
+    await expect(
+      adapter.parseBody(
+        { ...requiredBodyRoute, bodySchema: schema.refine(value => value.limit < 5).nullable() },
+        undefined,
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('keeps explicit empty objects distinct from omitted bodies', async () => {
+    const bodySchema = z.object({ name: z.string().optional() }).default({ name: 'default' });
+    const adapter = createTestAdapter();
+    await expect(adapter.parseBody({ ...requiredBodyRoute, bodySchema }, undefined)).resolves.toEqual({
+      name: 'default',
+    });
+    await expect(adapter.parseBody({ ...requiredBodyRoute, bodySchema }, {})).resolves.toEqual({});
+  });
+
+  it('accepts valid required input', async () => {
+    const body = { itemIds: ['item-1', 'item-2'] };
+    await expect(createTestAdapter().parseBody(requiredBodyRoute, body)).resolves.toEqual(body);
+  });
+
+  it('preserves bodyless optional fields and applies field defaults', async () => {
+    const bodySchema = z.object({ name: z.string().optional(), limit: z.number().default(10) });
+    await expect(createTestAdapter().parseBody({ ...requiredBodyRoute, bodySchema }, undefined)).resolves.toEqual({
+      limit: 10,
+    });
+  });
+
+  it('preserves root optional, default, and nullable schemas', async () => {
+    const adapter = createTestAdapter();
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: z.string().optional() }, undefined),
+    ).resolves.toBeUndefined();
+    await expect(
+      adapter.parseBody(
+        { ...requiredBodyRoute, bodySchema: z.object({ name: z.string() }).default({ name: 'default' }) },
+        undefined,
+      ),
+    ).resolves.toEqual({ name: 'default' });
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: z.string().nullable() }, null),
+    ).resolves.toBeNull();
+  });
+
+  it('passes explicit falsy values through when the schema accepts them', async () => {
+    const bodySchema = z.union([z.literal(false), z.literal(0), z.literal('')]);
+    for (const body of [false, 0, '']) {
+      await expect(createTestAdapter().parseBody({ ...requiredBodyRoute, bodySchema }, body)).resolves.toBe(body);
+    }
+  });
+
+  it('leaves bodies unchanged when no schema is defined', async () => {
+    const route = { ...requiredBodyRoute, bodySchema: undefined };
+    for (const body of [undefined, null, false, 0, '', { value: true }]) {
+      await expect(createTestAdapter().parseBody(route, body)).resolves.toBe(body);
+    }
+  });
+});
 
 function createWritableResponse() {
   const response = new PassThrough();

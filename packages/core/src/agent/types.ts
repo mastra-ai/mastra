@@ -62,6 +62,7 @@ import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { ShouldPersistSnapshotFn } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
@@ -185,6 +186,12 @@ export type AgentClaimThreadPeerOptions = {
   metadata?: Record<string, unknown>;
 };
 
+export type AgentUpdateThreadPeerOptions = {
+  label?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type AgentThreadPeerAdvertisement = AgentThreadPeerInfo & {
   sourceId: string;
   discoveredAt: Date;
@@ -286,12 +293,51 @@ export type SendAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUT
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT> & {
+  /** Local grouping metadata for queue observation and cancellation. It is not serialized or authorization. */
+  queueOwnerId?: string;
+};
 
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
 export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export interface SubscribeAgentThreadEventsOptions {
+  resourceId: string;
+  threadId: string;
+  /** Omit to observe all locally pending messages on the shared thread. */
+  queueOwnerId?: string;
+}
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type AgentThreadEvent =
+  /** Locally pending messages: FIFO entries plus a non-cancelled lease handoff. */
+  { type: 'queue-count-changed'; count: number };
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type AgentThreadEventListener = (event: AgentThreadEvent) => void;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type CancelQueuedAgentMessagesOptions =
+  | { resourceId: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  | { resourceId: string; threadId: string; queueOwnerId: string; signalIds?: never };
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export interface CancelQueuedAgentMessagesResult {
+  cancelledSignalIds: string[];
+}
 
 /**
  * @experimental Agent stream resume APIs are experimental and may change in a future release.
@@ -417,8 +463,17 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
   model?: MastraModelConfig;
   /**
-   * Custom instructions for the structuring agent.
-   * If not provided, will generate instructions based on the schema.
+   * Custom instructions describing the expected output. The meaning depends on the mode:
+   *
+   * - With `model` set (separate structuring pass): instructions for the structuring agent.
+   * - Without `model`, when `jsonPromptInjection` is active: these instructions are injected
+   *   into the prompt **in place of** the generated schema dump, which can cut thousands of
+   *   tokens per model call on large schemas. Adherence then rests on your wording, so keep
+   *   the field list explicit.
+   * - Without `model` and without prompt injection (native response format): no effect.
+   *
+   * If not provided, instructions are generated from the schema. Output is always validated
+   * against `schema` regardless of what this field contains.
    */
   instructions?: string;
 
@@ -554,7 +609,7 @@ export interface GoalConfig {
  *
  * - `true`  → wrap with `createDurableAgent` using defaults on Mastra registration.
  * - object  → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
- *   cleanupTimeoutMs, id, name).
+ *   cleanupTimeoutMs, shouldCache, shouldPersistSnapshot, id, name).
  *
  * See `packages/core/src/agent/durable/create-durable-agent.ts`.
  */
@@ -571,6 +626,13 @@ export type AgentDurableOption =
       cleanupTimeoutMs?: number;
       /** See createDurableAgent options: per-topic opt-out of the replay cache. */
       shouldCache?: (topic: string) => boolean;
+      /**
+       * See createDurableAgent options: overrides the snapshot-persistence
+       * policy. By default `pending | paused | suspended` are always
+       * persisted and `running` checkpoints only when the Mastra instance
+       * sets `recovery: { durableAgents: 'auto' }`.
+       */
+      shouldPersistSnapshot?: ShouldPersistSnapshotFn;
       /** Optional id override (defaults to agent.id). */
       id?: string;
       /** Optional name override (defaults to agent.name). */

@@ -1,5 +1,11 @@
 # @mastra/auth-okta
 
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- Fixed a jose security advisory by updating jose to 6.2.11. Auth token verification APIs are unchanged. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
 ## 0.2.2
 
 ### Patch Changes

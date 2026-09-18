@@ -102,6 +102,7 @@ export const AgentLayout = ({
             panelRef={leftPanelRef}
             collapsible
             collapsedSize={0}
+            expandShortcut="{"
             minSize={256}
             maxSize={'50%'}
             defaultSize={300}

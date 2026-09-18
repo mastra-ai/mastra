@@ -18,6 +18,7 @@ import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import { createObservabilityCollector } from '../observability/collector';
+import type { Body, PathParams, RouteResponse } from '../route-types.generated.js';
 import type {
   ZodSchema,
   GenerateLegacyParams,
@@ -57,12 +58,17 @@ import type {
   ToolInvocationUIPartWithMeta,
 } from '../types';
 
-import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
+import { mergeAbortSignals, parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
+
+type AgentId = PathParams<'GET /agents/:agentId'>['agentId'];
+type ToolId = PathParams<'GET /agents/:agentId/tools/:toolId'>['toolId'];
+type ToolCallGenerateResponse = RouteResponse<'POST /agents/:agentId/approve-tool-call-generate'> &
+  FullOutput<undefined>;
 
 type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUTPUT> & {
   messages?: MessageListInput;
@@ -291,6 +297,7 @@ async function executeToolCallAndRespond<OUTPUT>({
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
         } = {
           ...params,
+          clientTools: params.clientToolsResolver?.() ?? params.clientTools,
         };
 
         delete (respondOptions as { messages?: MessageListInput }).messages;
@@ -307,7 +314,7 @@ async function executeToolCallAndRespond<OUTPUT>({
 export class AgentVoice extends BaseResource {
   constructor(
     options: ClientOptions,
-    private agentId: string,
+    private agentId: AgentId,
     private version?: AgentVersionIdentifier,
   ) {
     super(options);
@@ -350,7 +357,7 @@ export class AgentVoice extends BaseResource {
    * @param options - Optional provider-specific options
    * @returns Promise containing the transcribed text
    */
-  listen(audio: Blob, options?: Record<string, any>): Promise<{ text: string }> {
+  listen(audio: Blob, options?: Record<string, any>): Promise<RouteResponse<'POST /agents/:agentId/voice/listen'>> {
     const formData = new FormData();
     formData.append('audio', audio);
 
@@ -372,7 +379,7 @@ export class AgentVoice extends BaseResource {
    */
   getSpeakers(
     requestContext?: RequestContext | Record<string, any>,
-  ): Promise<Array<{ voiceId: string; [key: string]: any }>> {
+  ): Promise<RouteResponse<'GET /agents/:agentId/voice/speakers'>> {
     return this.request(`/agents/${this.agentId}/voice/speakers${this.getQueryString(requestContext)}`);
   }
 
@@ -382,7 +389,9 @@ export class AgentVoice extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing a check if the agent has listening capabilities
    */
-  getListener(requestContext?: RequestContext | Record<string, any>): Promise<{ enabled: boolean }> {
+  getListener(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<RouteResponse<'GET /agents/:agentId/voice/listener'> & { enabled: boolean }> {
     return this.request(`/agents/${this.agentId}/voice/listener${this.getQueryString(requestContext)}`);
   }
 }
@@ -392,8 +401,9 @@ export class Agent extends BaseResource {
 
   constructor(
     options: ClientOptions,
-    private agentId: string,
+    private agentId: AgentId,
     private version?: AgentVersionIdentifier,
+    private routeOverrides?: { stream?: string },
   ) {
     super(options);
     this.voice = new AgentVoice(options, this.agentId, this.version);
@@ -498,7 +508,10 @@ export class Agent extends BaseResource {
           streamOptions: {
             ...streamOptions,
             requestContext: parseClientRequestContext(streamOptions.requestContext),
-            clientTools: processClientTools(streamOptions.clientTools),
+            clientTools: processClientTools(streamOptions.clientToolsResolver?.() ?? streamOptions.clientTools),
+            // Functions can't ride along to the server; the live resolver stays
+            // in the local signal runtime options for continuation rounds.
+            clientToolsResolver: undefined,
           },
         },
       } as Params,
@@ -578,6 +591,11 @@ export class Agent extends BaseResource {
    * depending on the toolset's scope).
    *
    * @param threadId - Optional thread ID for thread-scoped browser sessions
+   *
+   * @remarks This is a browser-stream adapter compatibility endpoint, not a
+   * `SERVER_ROUTES` route. Its historical deployer implementation returns
+   * `{ success: true }`; no generated contract exists while the adapter owns it.
+   * The public `boolean` result remains broad for backwards compatibility.
    */
   closeBrowser(threadId?: string): Promise<{ success: boolean }> {
     return this.request(`/agents/${this.agentId}/browser/close`, {
@@ -586,7 +604,10 @@ export class Agent extends BaseResource {
     });
   }
 
-  enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
+  enhanceInstructions(
+    instructions: string,
+    comment: string,
+  ): Promise<RouteResponse<'POST /agents/:agentId/instructions/enhance'>> {
     return this.request(`/agents/${this.agentId}/instructions/enhance`, {
       method: 'POST',
       body: { instructions, comment },
@@ -596,21 +617,21 @@ export class Agent extends BaseResource {
   /**
    * @experimental Agent message APIs are experimental and may change in a future release.
    */
-  sendMessage(params: SendAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+  sendMessage(params: SendAgentMessageParams): Promise<RouteResponse<'POST /agents/:agentId/send-message'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/send-message`, params);
   }
 
   /**
    * @experimental Agent message APIs are experimental and may change in a future release.
    */
-  queueMessage(params: QueueAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+  queueMessage(params: QueueAgentMessageParams): Promise<RouteResponse<'POST /agents/:agentId/queue-message'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/queue-message`, params);
   }
 
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+  sendSignal(params: SendAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/signals'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
   }
 
@@ -729,7 +750,12 @@ export class Agent extends BaseResource {
           }
 
           const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
-          const activeClientTools = activeRuntimeOptions?.clientTools;
+          if (!activeRuntimeOptions) {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
+
+          const activeClientTools = activeRuntimeOptions.clientToolsResolver?.() ?? activeRuntimeOptions.clientTools;
           if (!activeClientTools) {
             agent.deleteSignalRuntimeOptions(runId);
             return;
@@ -951,9 +977,9 @@ export class Agent extends BaseResource {
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  async abortThread(params: SubscribeAgentThreadParams): Promise<{ aborted: boolean }> {
+  async abortThread(params: SubscribeAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
     const { resourceId, threadId } = params;
-    return this.request<{ aborted: boolean }>(`/agents/${this.agentId}/threads/abort`, {
+    return this.request<RouteResponse<'POST /agents/:agentId/threads/abort'>>(`/agents/${this.agentId}/threads/abort`, {
       method: 'POST',
       body: { resourceId, threadId },
     });
@@ -1130,12 +1156,16 @@ export class Agent extends BaseResource {
     Output extends JSONSchema7 | ZodSchema | undefined = undefined,
     _StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
   >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
+    // `abortSignal` is forwarded to fetch and must never be serialized into the request body
+    const { abortSignal: perCallSignal, ...bodyParams } = params;
+    // Continuation guards must honor the client-wide signal too, not just the per-call one.
+    const abortSignal = mergeAbortSignals(this.options.abortSignal, perCallSignal);
     const processedParams = {
-      ...params,
+      ...bodyParams,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
     };
 
     const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
@@ -1143,9 +1173,13 @@ export class Agent extends BaseResource {
     const response: GenerateReturn<any, any, any> = await this.request(`/agents/${this.agentId}/generate-legacy`, {
       method: 'POST',
       body: processedParams,
+      signal: abortSignal,
     });
 
     if (response.finishReason === 'tool-calls') {
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+      }
       const toolCalls = (
         response as unknown as {
           toolCalls: { toolName: string; args: any; toolCallId: string }[];
@@ -1158,7 +1192,7 @@ export class Agent extends BaseResource {
       }
 
       for (const toolCall of toolCalls) {
-        const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
+        const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
           const { result, observability } = await executeClientToolWithObservability({
@@ -1228,10 +1262,15 @@ export class Agent extends BaseResource {
       ...options,
       messages: messages,
     } as StreamParams<OUTPUT>;
+    const resolvedClientTools = params.clientToolsResolver?.() ?? params.clientTools;
+    // `abortSignal` is forwarded to fetch and must never be serialized into the request body
+    // Continuation guards must honor the client-wide signal too, not just the per-call one.
+    const abortSignal = mergeAbortSignals(this.options.abortSignal, params.abortSignal);
     const processedParams = {
       ...params,
+      abortSignal: undefined,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(resolvedClientTools),
       structuredOutput: params.structuredOutput
         ? {
             ...params.structuredOutput,
@@ -1250,13 +1289,20 @@ export class Agent extends BaseResource {
       {
         method: 'POST',
         body: processedParams,
+        signal: abortSignal,
       },
     );
 
     if (response.finishReason === 'tool-calls') {
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+      }
+      // params still carries abortSignal, so the continuation request inherits it
       return executeToolCallAndRespond<OUTPUT>({
         response,
-        params,
+        // Dispatch from the resolved tools so resolver-only calls execute; the
+        // continuation re-invokes the resolver per round via params.clientToolsResolver.
+        params: { ...params, clientTools: resolvedClientTools },
         agentId: this.agentId,
         resourceId,
         threadId,
@@ -1279,7 +1325,11 @@ export class Agent extends BaseResource {
     stream: ReadableStream<Uint8Array>;
     update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
     onToolCall?: UseChatOptions['onToolCall'];
-    onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
+    onFinish?: (options: {
+      message: UIMessage | undefined;
+      finishReason: string;
+      usage: string;
+    }) => void | Promise<void>;
     generateId?: () => string;
     getCurrentDate?: () => Date;
     lastMessage: UIMessage | undefined;
@@ -1527,13 +1577,16 @@ export class Agent extends BaseResource {
         execUpdate();
       },
       async onToolCallPart(value) {
+        const partialToolCall = partialToolCalls[value.toolCallId];
+        const streamedArgs = partialToolCall?.text ? parsePartialJson(partialToolCall.text).value : undefined;
+        const toolCall = streamedArgs === undefined ? value : { ...value, args: streamedArgs };
         const invocation = {
           state: 'call',
           step,
-          ...value,
+          ...toolCall,
         } as const;
 
-        if (partialToolCalls[value.toolCallId] != null) {
+        if (partialToolCall != null) {
           // change the partial tool call to a full tool call
           message.toolInvocations![partialToolCalls[value.toolCallId]!.index] = invocation;
         } else {
@@ -1552,12 +1605,12 @@ export class Agent extends BaseResource {
         // In the future we should make this non-blocking, which
         // requires additional state management for error handling etc.
         if (onToolCall) {
-          const result = await onToolCall({ toolCall: value });
+          const result = await onToolCall({ toolCall });
           if (result != null) {
             const invocation = {
               state: 'result',
               step,
-              ...value,
+              ...toolCall,
               result,
             } as const;
 
@@ -1644,7 +1697,7 @@ export class Agent extends BaseResource {
       },
     });
 
-    onFinish?.({ message, finishReason, usage });
+    await onFinish?.({ message, finishReason, usage });
   }
 
   /**
@@ -1664,14 +1717,34 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
     };
 
     // Create a readable stream that will handle the response processing
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const { readable: innerReadable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+
+    // Wrap the readable so cancelling it aborts the underlying request and any
+    // client-tool continuations, instead of only detaching the consumer.
+    const abortController = new AbortController();
+    const signal = mergeAbortSignals(abortController.signal, params.abortSignal, this.options.abortSignal);
+    const innerReader = innerReadable.getReader();
+    const readable = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const { done, value } = await innerReader.read();
+        if (done) {
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      },
+      cancel(reason) {
+        abortController.abort(reason);
+        return innerReader.cancel(reason).catch(() => {});
+      },
+    });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponseLegacy(processedParams, writable);
+    const response = await this.processStreamResponseLegacy(processedParams, writable, signal);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1705,7 +1778,11 @@ export class Agent extends BaseResource {
     stream: ReadableStream<Uint8Array>;
     update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
     onToolCall?: UseChatOptions['onToolCall'];
-    onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
+    onFinish?: (options: {
+      message: UIMessage | undefined;
+      finishReason: string;
+      usage: string;
+    }) => void | Promise<void>;
     onStreamChunk?: (chunk: any) => void;
     generateId?: () => string;
     getCurrentDate?: () => Date;
@@ -1912,13 +1989,16 @@ export class Agent extends BaseResource {
           }
 
           case 'tool-call': {
+            const partialToolCall = partialToolCalls[chunk.payload.toolCallId];
+            const streamedArgs = partialToolCall?.text ? parsePartialJson(partialToolCall.text).value : undefined;
+            const toolCall = streamedArgs === undefined ? chunk.payload : { ...chunk.payload, args: streamedArgs };
             const invocation = {
               state: 'call',
               step,
-              ...chunk.payload,
+              ...toolCall,
             } as const;
 
-            if (partialToolCalls[chunk.payload.toolCallId] != null) {
+            if (partialToolCall != null) {
               // change the partial tool call to a full tool call
               message.toolInvocations![partialToolCalls[chunk.payload.toolCallId]!.index] =
                 invocation as ToolInvocation;
@@ -1942,12 +2022,12 @@ export class Agent extends BaseResource {
             // In the future we should make this non-blocking, which
             // requires additional state management for error handling etc.
             if (onToolCall) {
-              const result = await onToolCall({ toolCall: chunk.payload as any });
+              const result = await onToolCall({ toolCall: toolCall as any });
               if (result != null) {
                 const invocation = {
                   state: 'result',
                   step,
-                  ...chunk.payload,
+                  ...toolCall,
                   result,
                 } as const;
 
@@ -2094,13 +2174,37 @@ export class Agent extends BaseResource {
       },
     });
 
-    onFinish?.({ message, finishReason, usage });
+    await onFinish?.({ message, finishReason, usage });
+  }
+
+  /**
+   * Creates the consumer-facing stream for the streaming methods. Cancelling the
+   * returned stream (or aborting `externalSignal`) aborts the underlying request
+   * and stops any client-tool continuations.
+   */
+  private createCancellableStream(externalSignal?: AbortSignal) {
+    const abortController = new AbortController();
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+      cancel(reason) {
+        abortController.abort(reason);
+      },
+    });
+    return {
+      readable,
+      controller: readableController!,
+      signal: mergeAbortSignals(abortController.signal, externalSignal, this.options.abortSignal)!,
+    };
   }
 
   async processStreamResponse(
     processedParams: any,
     controller: ReadableStreamDefaultController<Uint8Array>,
     route: string = 'stream',
+    signal?: AbortSignal,
   ) {
     // Extract threadId from memory config if present (matching generate() behavior)
     const { memory } = processedParams ?? {};
@@ -2108,21 +2212,42 @@ export class Agent extends BaseResource {
     const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
     const resourceId = processedParams.resourceId ?? resource;
 
-    let requestBody = processedParams;
+    // `abortSignal` is consumed locally and must never be serialized into the request body
+    const { abortSignal: _abortSignal, ...serializableParams } = processedParams;
+    let requestBody = serializableParams;
     if (route === 'resume-stream') {
-      const { messages: _messages, ...resumeStreamBody } = processedParams;
+      const { messages: _messages, ...resumeStreamBody } = serializableParams;
       requestBody = resumeStreamBody;
     }
 
-    const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
+    const requestPath =
+      route === 'stream' && this.routeOverrides?.stream
+        ? this.routeOverrides.stream
+        : `/agents/${this.agentId}/${route}`;
+    const response: Response = await this.request(requestPath, {
       method: 'POST',
       body: requestBody,
       stream: true,
+      signal,
     });
 
     if (!response.body) {
       throw new Error('No response body');
     }
+
+    const isAborted = () => Boolean(signal?.aborted);
+    const isAbortError = (error: unknown) => isAborted() || (error as Error)?.name === 'AbortError';
+    const safeClose = () => {
+      try {
+        controller.close();
+      } catch {
+        // Already closed or cancelled
+      }
+    };
+    const safeEnqueue = (chunk: Uint8Array) => {
+      if (isAborted()) return;
+      controller.enqueue(chunk);
+    };
 
     try {
       let messages: UIMessage[] = [];
@@ -2142,11 +2267,12 @@ export class Agent extends BaseResource {
           .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
           .join('\n\n');
         if (readableLines) {
-          controller.enqueue(new TextEncoder().encode(`${readableLines}\n\n`));
+          safeEnqueue(new TextEncoder().encode(`${readableLines}\n\n`));
         }
       };
 
-      // Pipe one branch directly to the controller
+      // Pipe one branch directly to the controller. Aborting the signal cancels this
+      // branch; the tee source is released once both branches are cancelled/errored.
       const pipePromise = streamForController
         .pipeTo(
           new WritableStream<Uint8Array>({
@@ -2156,26 +2282,41 @@ export class Agent extends BaseResource {
                 enqueueReadableText(decoder.decode(chunk, { stream: true }));
               } catch (error) {
                 console.error('Error enqueueing to controller:', error);
-                controller.enqueue(chunk);
+                safeEnqueue(chunk);
               }
             },
             close() {
               enqueueReadableText(decoder.decode(), true);
             },
           }),
+          { signal },
         )
         .catch(error => {
-          console.error('Error piping to controller:', error);
-          try {
-            controller.close();
-          } catch {
-            // Already closed
+          if (!isAbortError(error)) {
+            console.error('Error piping to controller:', error);
           }
+          safeClose();
         });
 
-      // Process the other branch for chat response handling
+      // Surface the abort to a consumer that is still reading (e.g. when a caller-provided
+      // abortSignal fires rather than the stream itself being cancelled).
+      const onAbort = () => {
+        try {
+          controller.error(signal?.reason);
+        } catch {
+          // Stream already cancelled/closed by the consumer
+        }
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+
+      // Process the other branch for chat response handling. Routing it through an
+      // abortable pipe lets the abort signal cancel this branch too, releasing the
+      // underlying response body once both tee branches are cancelled.
+      const processingStream = signal
+        ? streamForProcessing.pipeThrough(new TransformStream<Uint8Array, Uint8Array>(), { signal })
+        : streamForProcessing;
       this.processChatResponse_vNext({
-        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
+        stream: processingStream as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -2186,6 +2327,11 @@ export class Agent extends BaseResource {
           }
         },
         onFinish: async ({ finishReason, message }) => {
+          // The consumer cancelled: skip client-tool execution and any continuation request.
+          if (isAborted()) {
+            return;
+          }
+
           if (finishReason === 'tool-calls') {
             const toolInvocationsById = new Map<string, ToolInvocation>();
 
@@ -2253,6 +2399,10 @@ export class Agent extends BaseResource {
               const toolResultContents: Array<Record<string, unknown>> = [];
 
               for (const toolCall of executableToolCalls) {
+                // Re-check between tools so an abort mid-batch stops the remaining executions.
+                if (isAborted()) {
+                  return;
+                }
                 const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
 
                 const runId: string = streamRunId ?? toolCall.toolCallId;
@@ -2338,6 +2488,10 @@ export class Agent extends BaseResource {
                 // pipePromise already has its own .catch; ignore here.
               }
 
+              if (isAborted()) {
+                return;
+              }
+
               for (const synthetic of syntheticChunks) {
                 try {
                   const errorForSerialization = synthetic.type === 'tool-error' ? synthetic.payload.error : undefined;
@@ -2354,7 +2508,7 @@ export class Agent extends BaseResource {
                       ? { ...synthetic, payload: { ...synthetic.payload, error: serializedError } }
                       : synthetic;
                   const sseLine = `data: ${JSON.stringify(payloadForWire)}\n\n`;
-                  controller.enqueue(new TextEncoder().encode(sseLine));
+                  safeEnqueue(new TextEncoder().encode(sseLine));
                 } catch (enqueueErr) {
                   console.error('Failed to enqueue synthetic tool-result chunk:', enqueueErr);
                 }
@@ -2385,28 +2539,38 @@ export class Agent extends BaseResource {
                   : route === 'resume-stream-until-idle'
                     ? 'stream-until-idle'
                     : route;
+              if (isAborted()) {
+                return;
+              }
+
               try {
                 await this.processStreamResponse(
                   {
                     ...processedParams,
                     messages: updatedMessages,
+                    clientTools: processClientTools(
+                      processedParams.clientToolsResolver?.() ?? processedParams.clientTools,
+                    ),
                   },
                   controller,
                   recursionRoute,
+                  signal,
                 );
               } catch (error) {
-                console.error('Error processing recursive stream response:', error);
+                if (!isAbortError(error)) {
+                  console.error('Error processing recursive stream response:', error);
+                }
               }
             } else {
               // Close the controller after all processing is complete
               // Wait for current pipe to finish before closing
               await pipePromise;
-              controller.close();
+              safeClose();
             }
           } else {
             // No tool calls - wait for pipe to complete then close the stream
             await pipePromise;
-            controller.close();
+            safeClose();
           }
         },
         onStreamChunk: chunk => {
@@ -2415,18 +2579,26 @@ export class Agent extends BaseResource {
           }
         },
         lastMessage: undefined,
-      }).catch(async error => {
-        console.error('Error processing stream response:', error);
-        // On error, wait for pipe to complete then close the controller
-        try {
-          await pipePromise;
-          controller.close();
-        } catch {
-          // Already closed
-        }
-      });
+      })
+        .catch(async error => {
+          if (!isAbortError(error)) {
+            console.error('Error processing stream response:', error);
+          }
+          // On error, wait for pipe to complete then close the controller
+          try {
+            await pipePromise;
+          } catch {
+            // pipePromise already has its own .catch; ignore here.
+          }
+          safeClose();
+        })
+        .finally(() => {
+          signal?.removeEventListener('abort', onAbort);
+        });
     } catch (error) {
-      console.error('Error processing stream response:', error);
+      if (!isAbortError(error)) {
+        console.error('Error processing stream response:', error);
+      }
     }
 
     return response;
@@ -2664,21 +2836,16 @@ export class Agent extends BaseResource {
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
       structuredOutput,
     };
 
     // Create a manually controlled readable stream
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
     // Start processing the response in the background
     // This returns immediately with response metadata and continues streaming in background
-    const response = await this.processStreamResponse(processedParams, readableController!);
+    const response = await this.processStreamResponse(processedParams, readableController, 'stream', signal);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -2786,21 +2953,16 @@ export class Agent extends BaseResource {
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
       structuredOutput,
     };
 
     // Create a manually controlled readable stream
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
     // Start processing the response in the background
     // This returns immediately with response metadata and continues streaming in background
-    const response = await this.processStreamResponse(processedParams, readableController!, 'stream-until-idle');
+    const response = await this.processStreamResponse(processedParams, readableController, 'stream-until-idle', signal);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -2859,6 +3021,8 @@ export class Agent extends BaseResource {
     runId: string;
     toolCallId: string;
     model?: string;
+    /** Aborts the underlying request and any client-tool continuations. */
+    abortSignal?: AbortSignal;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2873,15 +3037,10 @@ export class Agent extends BaseResource {
     const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
 
     // Create a manually controlled readable stream
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, readableController!, 'approve-tool-call');
+    const response = await this.processStreamResponse(processedParams, readableController, 'approve-tool-call', signal);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -2911,18 +3070,15 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async sendToolApproval(params: {
-    resourceId: string;
-    threadId: string;
-    toolCallId: string;
-    approved: boolean;
-    resumeData?: unknown;
-    requestContext?: RequestContext | Record<string, any>;
-    messages?: MessageListInput;
-    streamOptions?: StreamParamsBaseWithoutMessages<any>;
-  }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
+  async sendToolApproval(
+    params: Omit<Body<'POST /agents/:agentId/send-tool-approval'>, 'requestContext' | 'messages' | 'streamOptions'> & {
+      requestContext?: RequestContext | Record<string, any>;
+      messages?: MessageListInput;
+      streamOptions?: StreamParamsBaseWithoutMessages<any>;
+    },
+  ): Promise<RouteResponse<'POST /agents/:agentId/send-tool-approval'>> {
     const { requestContext, ...rest } = params;
-    return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
+    return this.request<RouteResponse<'POST /agents/:agentId/send-tool-approval'>>(
       `/agents/${this.agentId}/send-tool-approval`,
       {
         method: 'POST',
@@ -2935,6 +3091,8 @@ export class Agent extends BaseResource {
     runId: string;
     toolCallId: string;
     model?: string;
+    /** Aborts the underlying request and any client-tool continuations. */
+    abortSignal?: AbortSignal;
     /** Optional explanation surfaced to the model in place of the default decline message. */
     reason?: string;
     requestContext?: RequestContext | Record<string, any>;
@@ -2951,15 +3109,10 @@ export class Agent extends BaseResource {
     const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
 
     // Create a manually controlled readable stream
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, readableController!, 'decline-tool-call');
+    const response = await this.processStreamResponse(processedParams, readableController, 'decline-tool-call', signal);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -3075,7 +3228,7 @@ export class Agent extends BaseResource {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientTools),
+      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3084,14 +3237,9 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(options.abortSignal);
 
-    const response = await this.processStreamResponse(processedParams, readableController!, 'resume-stream');
+    const response = await this.processStreamResponse(processedParams, readableController, 'resume-stream', signal);
 
     const streamResponse = new Response(readable, {
       status: response.status,
@@ -3197,7 +3345,7 @@ export class Agent extends BaseResource {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientTools),
+      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3206,14 +3354,14 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    let readableController: ReadableStreamDefaultController<Uint8Array>;
-    const readable = new ReadableStream<Uint8Array>({
-      start(controller) {
-        readableController = controller;
-      },
-    });
+    const { readable, controller: readableController, signal } = this.createCancellableStream(options.abortSignal);
 
-    const response = await this.processStreamResponse(processedParams, readableController!, 'resume-stream-until-idle');
+    const response = await this.processStreamResponse(
+      processedParams,
+      readableController,
+      'resume-stream-until-idle',
+      signal,
+    );
 
     const streamResponse = new Response(readable, {
       status: response.status,
@@ -3245,12 +3393,11 @@ export class Agent extends BaseResource {
    * Approves a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */
-  async approveToolCallGenerate(params: {
-    runId: string;
-    toolCallId: string;
-    model?: string;
-    requestContext?: RequestContext | Record<string, any>;
-  }): Promise<any> {
+  async approveToolCallGenerate(
+    params: Omit<Body<'POST /agents/:agentId/approve-tool-call-generate'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<ToolCallGenerateResponse> {
     const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
       method: 'POST',
@@ -3262,14 +3409,11 @@ export class Agent extends BaseResource {
    * Declines a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
    */
-  async declineToolCallGenerate(params: {
-    runId: string;
-    toolCallId: string;
-    model?: string;
-    /** Optional explanation surfaced to the model in place of the default decline message. */
-    reason?: string;
-    requestContext?: RequestContext | Record<string, any>;
-  }): Promise<any> {
+  async declineToolCallGenerate(
+    params: Omit<Body<'POST /agents/:agentId/decline-tool-call-generate'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<ToolCallGenerateResponse> {
     const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
       method: 'POST',
@@ -3280,19 +3424,29 @@ export class Agent extends BaseResource {
   /**
    * Processes the stream response and handles tool calls
    */
-  private async processStreamResponseLegacy(processedParams: any, writable: WritableStream<Uint8Array>) {
+  private async processStreamResponseLegacy(
+    processedParams: any,
+    writable: WritableStream<Uint8Array>,
+    signal?: AbortSignal,
+  ) {
     // Extract threadId from memory config if present (matching generate() behavior)
     const { memory } = processedParams ?? {};
     const { resource, thread } = memory ?? {};
     const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
     const resourceId = processedParams.resourceId ?? resource;
 
+    // The signal is not serializable; keep it out of the request body.
+    const { abortSignal: _abortSignal, ...bodyParams } = processedParams ?? {};
+    const isAborted = () => signal?.aborted === true;
+    const isAbortError = (error: unknown) => isAborted() || (error as Error)?.name === 'AbortError';
+
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    } = await this.request(`/agents/${this.agentId}/stream-legacy`, {
+    } = await this.request(this.routeOverrides?.stream ?? `/agents/${this.agentId}/stream-legacy`, {
       method: 'POST',
-      body: processedParams,
+      body: bodyParams,
       stream: true,
+      signal,
     });
 
     if (!response.body) {
@@ -3306,18 +3460,25 @@ export class Agent extends BaseResource {
       // Use tee() to split the stream into two branches
       const [streamForWritable, streamForProcessing] = response.body.tee();
 
-      // Pipe one branch to the writable stream
+      // Pipe one branch to the writable stream. Passing the signal lets an abort
+      // cancel this tee branch so the underlying response body is released.
       streamForWritable
         .pipeTo(writable, {
           preventClose: true,
+          signal,
         })
         .catch(error => {
-          console.error('Error piping to writable stream:', error);
+          if (!isAbortError(error)) {
+            console.error('Error piping to writable stream:', error);
+          }
         });
 
       // Process the other branch for chat response handling
+      const processingStream = signal
+        ? streamForProcessing.pipeThrough(new TransformStream<Uint8Array, Uint8Array>(), { signal })
+        : streamForProcessing;
       this.processChatResponse({
-        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
+        stream: processingStream as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -3328,6 +3489,10 @@ export class Agent extends BaseResource {
           }
         },
         onFinish: async ({ finishReason, message }) => {
+          // Consumer cancelled: skip client-tool side effects and continuations.
+          if (isAborted()) {
+            return;
+          }
           if (finishReason === 'tool-calls') {
             const toolCall = [...(message?.parts ?? [])]
               .reverse()
@@ -3367,6 +3532,10 @@ export class Agent extends BaseResource {
                     },
                   },
                 });
+
+                if (isAborted()) {
+                  return;
+                }
 
                 // write the tool result part to the stream
                 const writer = writable.getWriter();
@@ -3408,32 +3577,42 @@ export class Agent extends BaseResource {
                       toolResultMessage,
                     ];
 
-                // Recursively call stream with updated messages
+                // Recursively call stream with updated messages, refreshing
+                // client tools from the resolver so continuations see current tools
                 this.processStreamResponseLegacy(
                   {
                     ...processedParams,
+                    clientTools: processClientTools(
+                      processedParams.clientToolsResolver?.() ?? processedParams.clientTools,
+                    ),
                     messages: updatedMessages,
                   },
                   writable,
+                  signal,
                 ).catch(error => {
-                  console.error('Error processing stream response:', error);
+                  if (!isAbortError(error)) {
+                    console.error('Error processing stream response:', error);
+                  }
                 });
               }
             }
           } else {
             setTimeout(() => {
               // We can't close the stream in this function, we have to wait until it's done
-              // eslint-disable-next-line @typescript-eslint/no-floating-promises
-              writable.close();
+              writable.close().catch(() => {});
             }, 0);
           }
         },
         lastMessage: undefined,
       }).catch(error => {
-        console.error('Error processing stream response:', error);
+        if (!isAbortError(error)) {
+          console.error('Error processing stream response:', error);
+        }
       });
     } catch (error) {
-      console.error('Error processing stream response:', error);
+      if (!isAbortError(error)) {
+        console.error('Error processing stream response:', error);
+      }
     }
     return response;
   }
@@ -3444,7 +3623,7 @@ export class Agent extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing tool details
    */
-  getTool(toolId: string, requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
+  getTool(toolId: ToolId, requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
     return this.request(`/agents/${this.agentId}/tools/${toolId}${this.getQueryString(requestContext)}`);
   }
 
@@ -3455,10 +3634,12 @@ export class Agent extends BaseResource {
    * @returns Promise containing the tool execution results
    */
   executeTool(
-    toolId: string,
-    params: { data: any; requestContext?: RequestContext | Record<string, any> },
-  ): Promise<any> {
-    const body = {
+    toolId: PathParams<'POST /agents/:agentId/tools/:toolId/execute'>['toolId'],
+    params: Omit<Body<'POST /agents/:agentId/tools/:toolId/execute'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<RouteResponse<'POST /agents/:agentId/tools/:toolId/execute'>> {
+    const body: Body<'POST /agents/:agentId/tools/:toolId/execute'> = {
       data: params.data,
       requestContext: parseClientRequestContext(params.requestContext),
     };
@@ -3473,7 +3654,7 @@ export class Agent extends BaseResource {
    * @param params - Parameters for updating the model
    * @returns Promise containing the updated model
    */
-  updateModel(params: UpdateModelParams): Promise<{ message: string }> {
+  updateModel(params: UpdateModelParams): Promise<RouteResponse<'POST /agents/:agentId/model'>> {
     return this.request(`/agents/${this.agentId}/model`, {
       method: 'POST',
       body: params,
@@ -3484,7 +3665,7 @@ export class Agent extends BaseResource {
    * Resets the agent's model to the original model that was set during construction
    * @returns Promise containing a success message
    */
-  resetModel(): Promise<{ message: string }> {
+  resetModel(): Promise<RouteResponse<'POST /agents/:agentId/model/reset'>> {
     return this.request(`/agents/${this.agentId}/model/reset`, {
       method: 'POST',
       body: {},
@@ -3496,7 +3677,10 @@ export class Agent extends BaseResource {
    * @param params - Parameters for updating the model
    * @returns Promise containing the updated model
    */
-  updateModelInModelList({ modelConfigId, ...params }: UpdateModelInModelListParams): Promise<{ message: string }> {
+  updateModelInModelList({
+    modelConfigId,
+    ...params
+  }: UpdateModelInModelListParams): Promise<RouteResponse<'POST /agents/:agentId/models/:modelConfigId'>> {
     return this.request(`/agents/${this.agentId}/models/${modelConfigId}`, {
       method: 'POST',
       body: params,
@@ -3508,7 +3692,7 @@ export class Agent extends BaseResource {
    * @param params - Parameters for reordering the model list
    * @returns Promise containing the updated model list
    */
-  reorderModelList(params: ReorderModelListParams): Promise<{ message: string }> {
+  reorderModelList(params: ReorderModelListParams): Promise<RouteResponse<'POST /agents/:agentId/models/reorder'>> {
     return this.request(`/agents/${this.agentId}/models/reorder`, {
       method: 'POST',
       body: params,

@@ -8,3 +8,26 @@ services:
       interval: 2s
       timeout: 3s
       retries: 10
+  # Single-node Redis Cluster so the `cluster` option is exercised against a
+  # real cluster-mode server (slot discovery, MOVED routing, CLUSTER SLOTS).
+  # Announces 127.0.0.1 so the host-side cluster client can follow the
+  # topology it discovers.
+  redis-cluster:
+    image: redis:8-alpine
+    command:
+      - sh
+      - -c
+      - |
+        redis-server --port 6382 --cluster-enabled yes --cluster-announce-ip 127.0.0.1 \
+          --cluster-announce-port 6382 --cluster-announce-bus-port 16382 --save '' --appendonly no &
+        until redis-cli -p 6382 ping >/dev/null 2>&1; do sleep 0.2; done
+        redis-cli -p 6382 cluster addslotsrange 0 16383 >/dev/null
+        wait
+    ports:
+      - '6382:6382'
+      - '16382:16382'
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -p 6382 cluster info | grep -q cluster_state:ok']
+      interval: 2s
+      timeout: 3s
+      retries: 15
