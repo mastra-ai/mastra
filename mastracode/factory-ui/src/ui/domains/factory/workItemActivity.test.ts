@@ -239,6 +239,28 @@ describe('workItemActivity', () => {
     ]);
   });
 
+  it('shows incident.io creator and assignee metadata like Linear work items', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'incidentio-follow-up',
+        metadata: { identifier: 'INC-42', assignee: 'Grace Hopper', creator: 'Ada Lovelace' },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'incidentio:Grace Hopper', name: 'Grace Hopper' });
+    expect(activity.extraActors).toEqual({
+      'incidentio:Grace Hopper': { id: 'incidentio:Grace Hopper', name: 'Grace Hopper' },
+      'incidentio:Ada Lovelace': { id: 'incidentio:Ada Lovelace', name: 'Ada Lovelace' },
+    });
+    expect(activity.events.map(candidate => ({ id: candidate.id, actorId: candidate.actorId }))).toEqual([
+      { id: `synthetic-assigned:${item.id}`, actorId: 'incidentio:Grace Hopper' },
+      { id: `synthetic-created:${item.id}`, actorId: 'incidentio:Ada Lovelace' },
+    ]);
+  });
+
   it('accepts legacy Linear metadata that stored the assignee under `linearAssignee`', () => {
     const activity = workItemActivity(
       {

@@ -7,10 +7,17 @@ import {
   useIntakeConfigQuery,
   useIntakeLabelRoutesQuery,
 } from '../../../../hooks/useIntakeConfig';
+import { useIncidentioIssuesQuery, useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
 import { useJiraIssuesQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
-import { issueCandidate, jiraCandidate, linearCandidate, pullRequestCandidate } from '../boardCandidates';
+import {
+  incidentioCandidate,
+  issueCandidate,
+  jiraCandidate,
+  linearCandidate,
+  pullRequestCandidate,
+} from '../boardCandidates';
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
 import { hasLabel } from '../boardItems';
 import type { InstalledBoardInfo } from '../../../../api/types';
@@ -49,6 +56,7 @@ export function useBoardIntake({
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
   const jiraStatusQuery = useJiraStatusQuery();
+  const incidentioStatusQuery = useIncidentioStatusQuery();
 
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
@@ -73,14 +81,23 @@ export function useBoardIntake({
   const jiraRouted = routedHereFor('jira');
   const jiraEligible =
     !review && (config?.jira.enabled ?? false) && jiraConfigured && (config?.jira.sourceIds?.length ?? 0) > 0;
-  // Bindings decide whether this board gets a Linear or Jira feed at all, so
-  // an eligible board stays pending until they load rather than looking empty,
+  const incidentioConfigured = Boolean(incidentioStatusQuery.data?.enabled && incidentioStatusQuery.data.configured);
+  const incidentioRouted = routedHereFor('incidentio');
+  const incidentioEligible =
+    !review &&
+    (config?.incidentio?.enabled ?? false) &&
+    incidentioConfigured &&
+    (config?.incidentio?.sourceIds?.length ?? 0) > 0;
+  // Bindings decide whether this board gets a provider feed at all, so an
+  // eligible board stays pending until they load rather than looking empty,
   // and a failed load is shown as a feed error (with retry) rather than
   // being mistaken for "nothing bound here".
-  const bindingsPending = (linearEligible || jiraEligible) && bindingsQuery.isPending;
-  const bindingsFailed = (linearEligible || jiraEligible) && bindingsQuery.isError;
+  const providerEligible = linearEligible || jiraEligible || incidentioEligible;
+  const bindingsPending = providerEligible && bindingsQuery.isPending;
+  const bindingsFailed = providerEligible && bindingsQuery.isError;
   const linearReady = linearEligible && (linearRouted || bindingsFailed);
   const jiraReady = jiraEligible && (jiraRouted || bindingsFailed);
+  const incidentioReady = incidentioEligible && (incidentioRouted || bindingsFailed);
 
   // GitHub issues route by label: a label routed to a board sends its issues
   // there, and Work keeps every unrouted issue. A custom board only offers the
@@ -109,6 +126,7 @@ export function useBoardIntake({
         ...(githubIntakeActive ? (['github'] as const) : []),
         ...(linearReady ? (['linear'] as const) : []),
         ...(jiraReady ? (['jira'] as const) : []),
+        ...(incidentioReady ? (['incidentio'] as const) : []),
       ];
   const [selected, setSelected] = useState<IntakeSource>(review ? 'github-prs' : 'github');
   const active: IntakeSource | undefined = available.includes(selected) ? selected : available[0];
@@ -153,6 +171,16 @@ export function useBoardIntake({
       return binding?.board === kind;
     });
   }, [jiraIssues.data, bindingsQuery.data, factoryProjectId, kind]);
+  const incidentioIssues = useIncidentioIssuesQuery(!review && incidentioReady ? factoryProjectId : undefined);
+  const boardIncidentioIssues = useMemo(() => {
+    const bindings = (bindingsQuery.data ?? []).filter(
+      binding => binding.integrationId === 'incidentio' && binding.factoryProjectId === factoryProjectId,
+    );
+    return (incidentioIssues.data ?? []).filter(issue => {
+      const binding = issue.sourceId ? bindings.find(candidate => candidate.sourceId === issue.sourceId) : undefined;
+      return binding?.board === kind;
+    });
+  }, [incidentioIssues.data, bindingsQuery.data, factoryProjectId, kind]);
 
   const intakeIssues = useMemo(
     () => boardIssues.filter(issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL)),
@@ -166,8 +194,9 @@ export function useBoardIntake({
             ...boardIssues.map(issueCandidate),
             ...boardLinearIssues.map(linearCandidate),
             ...boardJiraIssues.map(jiraCandidate),
+            ...boardIncidentioIssues.map(incidentioCandidate),
           ],
-    [boardIssues, pulls.data, boardLinearIssues, boardJiraIssues, review],
+    [boardIssues, pulls.data, boardLinearIssues, boardJiraIssues, boardIncidentioIssues, review],
   );
   const { candidates, alreadyMaterialized } = useMemo(() => {
     const all: BoardCandidate[] = review
@@ -176,12 +205,14 @@ export function useBoardIntake({
         ? boardLinearIssues.map(issue => ({ ...linearCandidate(issue), column: initialPhase }))
         : active === 'jira'
           ? boardJiraIssues.map(issue => ({ ...jiraCandidate(issue), column: initialPhase }))
-          : active === 'github'
-            ? [
-                ...intakeIssues.map(issue => ({ ...issueCandidate(issue), column: initialPhase })),
-                ...(triageIssues.data ?? []).map(issueCandidate),
-              ]
-            : [];
+          : active === 'incidentio'
+            ? boardIncidentioIssues.map(issue => ({ ...incidentioCandidate(issue), column: initialPhase }))
+            : active === 'github'
+              ? [
+                  ...intakeIssues.map(issue => ({ ...issueCandidate(issue), column: initialPhase })),
+                  ...(triageIssues.data ?? []).map(issueCandidate),
+                ]
+              : [];
     // A source materializes once per Factory, so items that already have a card
     // are held back. Only those carded on another board get counted: a card on
     // this board is visible in a column, so it needs no explanation.
@@ -228,7 +259,22 @@ export function useBoardIntake({
         refetch: () => bindingsQuery.refetch(),
       }
     : jiraIssues;
-  const browsed = { github: githubFeed, 'github-prs': pulls, linear: linearFeed, jira: jiraFeed };
+  const incidentioFeed = bindingsFailed
+    ? {
+        ...incidentioIssues,
+        isPending: false,
+        error: bindingsQuery.error,
+        isFetchNextPageError: false,
+        refetch: () => bindingsQuery.refetch(),
+      }
+    : incidentioIssues;
+  const browsed = {
+    github: githubFeed,
+    'github-prs': pulls,
+    linear: linearFeed,
+    jira: jiraFeed,
+    incidentio: incidentioFeed,
+  };
   const feed = active ? browsed[active] : undefined;
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
@@ -249,7 +295,8 @@ export function useBoardIntake({
       (!review &&
         (configQuery.isPending ||
           ((config?.linear.enabled ?? false) && linearStatusQuery.isPending) ||
-          ((config?.jira.enabled ?? false) && jiraStatusQuery.isPending))) ||
+          ((config?.jira.enabled ?? false) && jiraStatusQuery.isPending) ||
+          ((config?.incidentio?.enabled ?? false) && incidentioStatusQuery.isPending))) ||
       routesPending ||
       bindingsPending ||
       Boolean(feed?.isPending),

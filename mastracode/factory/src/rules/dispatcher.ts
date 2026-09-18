@@ -382,7 +382,9 @@ function externalSourceForDecision(decision: Extract<FactoryCommitDecision, { ty
           ? ['linear', 'issue']
           : decision.source === 'jira-issue'
             ? ['jira', 'issue']
-            : ['factory', 'manual'];
+            : decision.source === 'incidentio-follow-up'
+              ? ['incidentio', 'issue']
+              : ['factory', 'manual'];
   return { integrationId, type, externalId: decision.sourceKey, url: decision.url ?? undefined };
 }
 

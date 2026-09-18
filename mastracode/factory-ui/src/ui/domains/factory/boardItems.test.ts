@@ -61,4 +61,13 @@ describe('workItemMeta', () => {
     });
     expect(workItemMeta(item)).toBe('ENG-42 · Ada · just now');
   });
+
+  it('shows the incident.io identifier and assignee like other issue sources', () => {
+    const item = workItem({
+      source: 'incidentio-follow-up',
+      sourceKey: 'incidentio:follow-up:01HFOLLOWUP',
+      metadata: { identifier: 'INC-42', author: 'Ada Lovelace', assignee: 'Grace Hopper' },
+    });
+    expect(workItemMeta(item)).toBe('INC-42 · Grace Hopper · just now');
+  });
 });

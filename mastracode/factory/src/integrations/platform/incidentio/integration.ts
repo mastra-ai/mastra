@@ -1,3 +1,5 @@
+import type { RequestContext } from '@mastra/core/request-context';
+import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
@@ -16,23 +18,32 @@ import type {
   ResolvedIntakeDispatch,
   UpdateIntakeIssueInput,
 } from '../../../capabilities/intake.js';
-import type { FactoryIntegration, IntegrationContext } from '../../base.js';
+import type { RouteAuth } from '../../../routes/route.js';
+import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import { buildIncidentioAgentTools } from '../../incidentio/agent-tools.js';
 import { IncidentioApiClient, IncidentioApiError } from '../../incidentio/api.js';
 import {
   createIncidentioIntake,
   INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
   INCIDENTIO_INCIDENTS_SOURCE_ID,
 } from '../../incidentio/intake.js';
+import { resolveIncidentioRules } from '../../incidentio/default-rules.js';
+import type { IncidentioEventRules, IncidentioRuleOverrides } from '../../incidentio/default-rules.js';
 import { attachIncidentioIssueReconciler } from '../../incidentio/issue-reconciler.js';
 import {
   incidentioReconciliationEnabled,
   incidentioReconciliationInterval,
 } from '../../incidentio/reconciliation-config.js';
+import { buildIncidentioRoutes } from '../../incidentio/routes.js';
+import { attachIncidentioRules } from '../../incidentio/rules.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv, type PlatformApiClientConfig } from '../api-client.js';
 
 export interface PlatformIncidentioIntegrationConfig {
   clientConfig?: PlatformApiClientConfig;
+  /** Per-event replacements for the default Factory incident.io rules. */
+  rules?: IncidentioRuleOverrides;
 }
 
 /**
@@ -41,6 +52,7 @@ export interface PlatformIncidentioIntegrationConfig {
  * deploy-time connection ID wiring.
  */
 const PLATFORM_INCIDENTIO_PROVIDER_CONFIG_KEY = 'incident-io';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CONNECTION_TOKEN_PREFIX = 'incidentio-connection:';
 const SCOPED_SOURCE_PREFIX = 'incidentio-source:';
 const BASE_SOURCE_IDS = [INCIDENTIO_INCIDENTS_SOURCE_ID, INCIDENTIO_FOLLOW_UPS_SOURCE_ID] as const;
@@ -136,11 +148,77 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
   readonly #platformClient: PlatformApiClient;
   readonly #endpointHost: string;
   readonly #intakeByConnectionId = new Map<string, Intake>();
+  readonly #rules: IncidentioEventRules;
+
+  /** Bound once by the factory via `initialize()` before any surface is used. */
+  #projects: FactoryProjectsStorage | undefined;
+  #auth: RouteAuth | undefined;
+  readonly #orgIdByResourceId = new Map<string, string | null>();
 
   constructor(config: PlatformIncidentioIntegrationConfig = {}) {
     this.#clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
     this.#platformClient = new PlatformApiClient(this.#clientConfig);
     this.#endpointHost = new URL(this.#clientConfig.baseUrl).host;
+    this.#rules = resolveIncidentioRules(config.rules);
+  }
+
+  /** Event rules driving automatic follow-up materialization and close handling. */
+  get rules(): IncidentioEventRules {
+    return this.#rules;
+  }
+
+  initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth: RouteAuth }): void {
+    this.#projects = projects;
+    this.#auth = auth;
+  }
+
+  /** Factory projects domain — maps a session's resourceId to its owning org. */
+  get projects(): FactoryProjectsStorage {
+    if (!this.#projects) {
+      throw new Error('PlatformIncidentioIntegration is not initialized — the factory binds storage during prepare().');
+    }
+    return this.#projects;
+  }
+
+  /** Whether the host runs with web auth enabled; every surface is inert without it. */
+  get authEnabled(): boolean {
+    return this.#auth?.enabled() ?? false;
+  }
+
+  /**
+   * Map a session's resourceId (the factory project id) to its owning org.
+   * Same caching semantics as the Jira integration: definitive misses are
+   * cached, transient database failures are not.
+   */
+  async resolveOrgId(resourceId: string): Promise<string | null> {
+    const cached = this.#orgIdByResourceId.get(resourceId);
+    if (cached !== undefined) return cached;
+    if (!UUID_RE.test(resourceId)) {
+      this.#orgIdByResourceId.set(resourceId, null);
+      return null;
+    }
+    let orgId: string | null;
+    try {
+      await this.projects.ensureReady();
+      const project = await this.projects.getById({ id: resourceId });
+      orgId = project?.orgId ?? null;
+    } catch {
+      // Transient database failure: skip the tools for this request but don't
+      // cache the miss, so the next request retries the lookup.
+      return null;
+    }
+    this.#orgIdByResourceId.set(resourceId, orgId);
+    return orgId;
+  }
+
+  /**
+   * Org-scoped agent tools: the read-only follow-up detail tool for sessions
+   * whose resource is a factory project with an active Platform-managed
+   * incident.io connection.
+   */
+  async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {
+    if (!(await this.hasActiveConnections())) return {};
+    return buildIncidentioAgentTools({ requestContext: args.requestContext, incidentio: this });
   }
 
   async listConnections(): Promise<PlatformIntegrationConnection[]> {
@@ -158,6 +236,7 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
 
   clearCaches(): void {
     this.#intakeByConnectionId.clear();
+    this.#orgIdByResourceId.clear();
   }
 
   async #activeConnections(): Promise<PlatformIntegrationConnection[]> {
@@ -387,8 +466,19 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
     ];
   }
 
-  routes(): [] {
-    return [];
+  /**
+   * The integration's HTTP surface: `/web/incidentio/*` Mastra `apiRoutes`
+   * (status + follow-up listing/detail for Intake), aggregated across every
+   * discovered Platform connection. A board-scoped listing also feeds the
+   * incident.io event rules.
+   */
+  routes(ctx: IntegrationContext): ApiRoute[] {
+    return buildIncidentioRoutes({
+      incidentio: this,
+      auth: ctx.auth,
+      intake: ctx.storage.intake,
+      ingestFactoryIssues: attachIncidentioRules(this, ctx),
+    });
   }
 
   diagnostics(): Record<string, unknown> {

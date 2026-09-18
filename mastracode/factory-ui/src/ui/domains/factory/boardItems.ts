@@ -12,6 +12,7 @@ export const SOURCE_LABELS: Record<WorkItemSource, string> = {
   'github-pr': 'PR Review',
   'linear-issue': 'Linear',
   'jira-issue': 'Jira',
+  'incidentio-follow-up': 'incident.io',
   'slack-thread': 'Slack',
   manual: 'Manual',
 };
@@ -55,6 +56,19 @@ export function jiraIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>)
   return typeof reference === 'string' && reference ? reference : undefined;
 }
 
+/** The human reference an incident.io follow-up card carries (`INC-42` or the item id), when it has one. */
+export function incidentioIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'incidentio-follow-up' || typeof item.metadata.identifier !== 'string') return;
+  return item.metadata.identifier;
+}
+
+/** The prefixed incident.io item reference a card carries, when it has one. */
+export function incidentioIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'incidentio-follow-up') return;
+  const reference = item.metadata.issueRef ?? item.metadata.issueReference;
+  return typeof reference === 'string' && reference ? reference : undefined;
+}
+
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
 
 export const PULL_REQUEST_STATUS_LABELS: Record<PullRequestStatus, string> = {
@@ -85,6 +99,7 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
 export function externalLinkLabel(source: WorkItemSource): string {
   if (source === 'linear-issue') return 'Open in Linear';
   if (source === 'jira-issue') return 'Open in Jira';
+  if (source === 'incidentio-follow-up') return 'Open in incident.io';
   if (source === 'slack-thread') return 'Open in Slack';
   if (source === 'manual') return 'Open link';
   return 'Open in GitHub';
@@ -102,7 +117,8 @@ export function workItemMeta(item: WorkItem): string {
   const age = relativeTime(sourceCreatedAt ?? item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
-  const issueIdentifier = linearIdentifierForItem(item) ?? jiraIdentifierForItem(item);
+  const issueIdentifier =
+    linearIdentifierForItem(item) ?? jiraIdentifierForItem(item) ?? incidentioIdentifierForItem(item);
   const issueOwner = assignee ?? author;
   if (issueIdentifier !== undefined) return `${issueIdentifier}${issueOwner ? ` · ${issueOwner}` : ''} · ${age}`;
   return `${SOURCE_LABELS[item.source]} · ${age}`;
@@ -113,7 +129,7 @@ export function cardMatchesSearch(card: Pick<WorkItem, 'source' | 'metadata' | '
   const needle = query.trim().toLowerCase();
   if (needle === '') return true;
   const number = githubNumberForItem(card);
-  const identifier = linearIdentifierForItem(card) ?? jiraIdentifierForItem(card);
+  const identifier = linearIdentifierForItem(card) ?? jiraIdentifierForItem(card) ?? incidentioIdentifierForItem(card);
   const named = [card.title, number === undefined ? '' : `#${number}`, identifier ?? ''];
   return named.some(text => text.toLowerCase().includes(needle));
 }

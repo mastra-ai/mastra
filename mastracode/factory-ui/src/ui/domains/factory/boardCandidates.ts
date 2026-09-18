@@ -3,6 +3,7 @@ import { relativeTime } from '../../../lib/date/relativeTime';
 import { hasLabel } from './boardItems';
 import { itemAppearsInStage } from './boardStages';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
+import type { IncidentioIssue } from './services/incidentio';
 import type { JiraIssue } from './services/jira';
 import type { LinearIssue } from './services/linear';
 import type { WorkItem, WorkItemSource } from './services/workItems';
@@ -18,6 +19,7 @@ export const INTAKE_SOURCES = [
   { id: 'github-prs', label: 'PRs' },
   { id: 'linear', label: 'Linear' },
   { id: 'jira', label: 'Jira' },
+  { id: 'incidentio', label: 'incident.io' },
 ] as const;
 
 export type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
@@ -112,6 +114,32 @@ export function jiraCandidate(issue: JiraIssue): BoardCandidate {
       priority: issue.priorityLabel,
       project: issue.project,
       site: issue.site ?? null,
+      assignee: issue.assignee,
+      assignees: issue.assignee ? [issue.assignee] : [],
+      creator: issue.author ?? null,
+      author: issue.author ?? null,
+      labels: issue.labels,
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
+    },
+  };
+}
+
+export function incidentioCandidate(issue: IncidentioIssue): BoardCandidate {
+  return {
+    sourceKey: issue.id,
+    source: 'incidentio-follow-up',
+    title: issue.title,
+    url: issue.url,
+    meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
+    column: 'intake',
+    metadata: {
+      identifier: issue.identifier,
+      issueRef: issue.id,
+      state: issue.state,
+      stateType: issue.stateType,
+      priority: issue.priorityLabel,
+      incident: issue.incident,
       assignee: issue.assignee,
       assignees: issue.assignee ? [issue.assignee] : [],
       creator: issue.author ?? null,

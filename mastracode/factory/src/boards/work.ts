@@ -21,6 +21,10 @@ function sourceRef(item: FactoryRuleItemContext): string {
     const identifier = sourceIdentifier(item);
     return identifier ? `Jira issue ${identifier}${link}` : `Jira issue ${item.title}${link}`;
   }
+  if (item.source === 'incidentio-follow-up') {
+    const identifier = sourceIdentifier(item);
+    return identifier ? `incident.io follow-up ${identifier}${link}` : `incident.io follow-up ${item.title}${link}`;
+  }
   if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;
   const noun = item.source === 'github-pr' ? 'GitHub pull request' : 'GitHub issue';
   const number = workItemNumber(item);
@@ -76,6 +80,19 @@ function investigateTriagedJiraIssue(context: FactoryStageRuleContext) {
     role: 'triage',
     skillName: 'factory-triage',
     arguments: `${sourceRef(context.item)}\n\n${JIRA_FETCH_HINT}`,
+  } as const;
+}
+
+const INCIDENTIO_FETCH_HINT =
+  "Start by fetching the follow-up's full details (description and incident context) with the incidentio_get_issue tool.";
+
+function investigateTriagedIncidentioFollowUp(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:factory-triage-incidentio`,
+    role: 'triage',
+    skillName: 'factory-triage',
+    arguments: `${sourceRef(context.item)}\n\n${INCIDENTIO_FETCH_HINT}`,
   } as const;
 }
 
@@ -157,6 +174,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
         issue: triageIssueEntry,
         linearIssue: investigateTriagedLinearIssue,
         jiraIssue: investigateTriagedJiraIssue,
+        incidentioFollowUp: investigateTriagedIncidentioFollowUp,
       },
     },
     planning: {
@@ -164,14 +182,26 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       kind: 'working',
       role: 'plan',
       outcomes: allOtherPhases,
-      onEnter: { issue: planWorkItem, linearIssue: planWorkItem, jiraIssue: planWorkItem, manual: planWorkItem },
+      onEnter: {
+        issue: planWorkItem,
+        linearIssue: planWorkItem,
+        jiraIssue: planWorkItem,
+        incidentioFollowUp: planWorkItem,
+        manual: planWorkItem,
+      },
     },
     execute: {
       title: 'Building',
       kind: 'working',
       role: 'work',
       outcomes: allOtherPhases,
-      onEnter: { issue: buildWorkItem, linearIssue: buildWorkItem, jiraIssue: buildWorkItem, manual: buildWorkItem },
+      onEnter: {
+        issue: buildWorkItem,
+        linearIssue: buildWorkItem,
+        jiraIssue: buildWorkItem,
+        incidentioFollowUp: buildWorkItem,
+        manual: buildWorkItem,
+      },
     },
     review: {
       title: 'Review',

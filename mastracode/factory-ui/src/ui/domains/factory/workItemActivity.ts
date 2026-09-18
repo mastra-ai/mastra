@@ -52,6 +52,11 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
     if (!creator) return undefined;
     return { id: `jira:${creator}`, name: creator };
   }
+  if (item.source === 'incidentio-follow-up') {
+    const creator = metadataString(item.metadata, 'creator') ?? metadataString(item.metadata, 'author');
+    if (!creator) return undefined;
+    return { id: `incidentio:${creator}`, name: creator };
+  }
   return undefined;
 }
 
@@ -71,6 +76,11 @@ function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined 
     const assignee = metadataString(item.metadata, 'assignee');
     if (!assignee) return undefined;
     return { id: `jira:${assignee}`, name: assignee };
+  }
+  if (item.source === 'incidentio-follow-up') {
+    const assignee = metadataString(item.metadata, 'assignee') ?? metadataString(item.metadata, 'incidentioAssignee');
+    if (!assignee) return undefined;
+    return { id: `incidentio:${assignee}`, name: assignee };
   }
   return undefined;
 }

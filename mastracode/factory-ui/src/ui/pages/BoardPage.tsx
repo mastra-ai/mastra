@@ -248,6 +248,7 @@ function BoardContent({
       if (intake.active === 'github') return item.source === 'github-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
       if (intake.active === 'jira') return item.source === 'jira-issue';
+      if (intake.active === 'incidentio') return item.source === 'incidentio-follow-up';
       return false;
     });
   const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
