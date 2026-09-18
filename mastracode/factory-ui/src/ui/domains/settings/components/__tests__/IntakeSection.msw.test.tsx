@@ -48,7 +48,8 @@ const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
 const LINEAR_TEAMS_URL = `${TEST_BASE_URL}/web/linear/teams`;
 const JIRA_STATUS_URL = `${TEST_BASE_URL}/web/jira/status`;
 const JIRA_PROJECTS_URL = `${TEST_BASE_URL}/web/jira/projects`;
-type PlatformConnectProvider = 'jira' | 'gitlab';
+const JIRA_CONNECT_SESSION_URL = `${TEST_BASE_URL}/web/integrations/platform/jira/connect-session`;
+const JIRA_CONNECTIONS_URL = `${TEST_BASE_URL}/web/integrations/platform/jira/connections`;
 
 /**
  * Stub the platform connect seam: session minting plus the connection list
@@ -56,39 +57,28 @@ type PlatformConnectProvider = 'jira' | 'gitlab';
  * can assert which session (connect vs reconnect) was requested.
  */
 function usePlatformConnectHandlers({
-  provider = 'jira',
   connections = [{ id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' }],
 }: {
-  provider?: PlatformConnectProvider;
   connections?: Array<{ id: string; integrationId: string; status: string; accountLabel: string | null }>;
 } = {}) {
   const minted: Array<{ kind: 'connect' | 'reconnect'; connectionId: string }> = [];
-  const connectionsUrl = `${TEST_BASE_URL}/web/integrations/platform/${provider}/connections`;
-  const connectSessionUrl = `${TEST_BASE_URL}/web/integrations/platform/${provider}/connect-session`;
-  let authorized = false;
-  const activeConnections =
-    connections.length > 0
-      ? connections.map(connection => ({ ...connection, status: 'active' }))
-      : [{ id: 'a1b_new', integrationId: provider, status: 'active', accountLabel: `${provider}-account` }];
   const session = (connectionId: string) => ({
     connectionId,
-    integrationId: provider,
+    integrationId: 'jira',
     connectUrl: 'https://connect.nango.dev/session-token',
     sessionToken: 'session-token',
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
   });
   server.use(
-    http.get(connectionsUrl, () => HttpResponse.json({ connections: authorized ? activeConnections : connections })),
-    http.post(connectSessionUrl, () => {
-      const connectionId = activeConnections[0]!.id;
+    http.get(JIRA_CONNECTIONS_URL, () => HttpResponse.json({ connections })),
+    http.post(JIRA_CONNECT_SESSION_URL, () => {
+      const connectionId = connections[0]?.id ?? 'a1b_new';
       minted.push({ kind: 'connect', connectionId });
-      authorized = true;
       return HttpResponse.json(session(connectionId), { status: 201 });
     }),
-    http.post(`${connectionsUrl}/:connectionId/reconnect-session`, ({ params }) => {
+    http.post(`${JIRA_CONNECTIONS_URL}/:connectionId/reconnect-session`, ({ params }) => {
       const connectionId = String(params.connectionId);
       minted.push({ kind: 'reconnect', connectionId });
-      authorized = true;
       return HttpResponse.json(session(connectionId), { status: 201 });
     }),
   );
@@ -648,26 +638,6 @@ describe('IntakeSection', () => {
       await waitFor(() => expect(nangoAuthCalls).toHaveLength(1));
       expect(minted).toEqual([{ kind: 'reconnect', connectionId: 'a1b_acme' }]);
       expect(nangoConstructorOptions[0]).toEqual({ connectSessionToken: 'session-token' });
-    });
-  });
-
-  describe('given the organization has no connected GitLab account', () => {
-    it('connects GitLab headlessly through a minted platform session', async () => {
-      useIntakeHandlers();
-      const minted = usePlatformConnectHandlers({ provider: 'gitlab', connections: [] });
-
-      renderIntakeSection();
-
-      await userEvent.click(await screen.findByRole('button', { name: 'Connect GitLab' }));
-
-      await waitFor(() => expect(nangoAuthCalls).toHaveLength(1));
-      expect(minted).toEqual([{ kind: 'connect', connectionId: 'a1b_new' }]);
-      expect(nangoConstructorOptions[0]).toEqual({ connectSessionToken: 'session-token' });
-      expect(nangoAuthCalls[0]).toEqual({
-        integrationId: 'gitlab',
-        options: { detectClosedAuthWindow: true },
-      });
-      expect(await screen.findByText('gitlab-account')).toBeInTheDocument();
     });
   });
 

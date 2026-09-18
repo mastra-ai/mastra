@@ -38,13 +38,10 @@ describe('ProjectManagementFactoryStep', () => {
     });
   });
 
-  describe('given the Jira and GitLab connect routes are mounted', () => {
-    it('offers both providers inline without leaving the wizard', async () => {
+  describe('given the Jira connect route is mounted', () => {
+    it('offers Jira inline without leaving the wizard', async () => {
       server.use(
         http.get(`${TEST_BASE_URL}/web/integrations/platform/jira/connections`, () =>
-          HttpResponse.json({ connections: [] }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/integrations/platform/gitlab/connections`, () =>
           HttpResponse.json({ connections: [] }),
         ),
       );
@@ -53,8 +50,7 @@ describe('ProjectManagementFactoryStep', () => {
       expect(await screen.findByText('Also sync issues from')).toBeInTheDocument();
       const list = screen.getByRole('list');
       expect(within(list).getByText('Jira')).toBeInTheDocument();
-      expect(within(list).getByText('GitLab')).toBeInTheDocument();
-      expect(within(list).getAllByRole('button', { name: 'Connect' })).toHaveLength(2);
+      expect(within(list).getByRole('button', { name: 'Connect' })).toBeInTheDocument();
     });
   });
 });
