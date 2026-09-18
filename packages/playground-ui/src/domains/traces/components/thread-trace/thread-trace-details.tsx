@@ -6,19 +6,18 @@ import { cn } from '@/lib/utils';
 
 export type ThreadTraceDetailsProps = ComponentProps<'div'>;
 
-/** The bordered details column of a row: a `ThreadTrace.DetailsHeader` above `ThreadTrace.Spans`. */
+/** The details column of a row: a `ThreadTrace.DetailsHeader` above `ThreadTrace.Spans`. The row draws the borders. */
 export function ThreadTraceDetails({ className, children, ...props }: ThreadTraceDetailsProps) {
-  const { isExpanded, isFirst } = useThreadTraceRow();
+  const { isExpanded } = useThreadTraceRow();
   return (
     <div
       data-slot="thread-trace-details"
       className={cn(
-        'min-w-0 overflow-hidden border-x border-b border-border1 group-last:rounded-b-xl',
+        'min-w-0 overflow-hidden',
         // While collapsed the messages column alone sets the row height: `h-0` keeps this
         // cell out of the grid's row sizing (so measurement rounding can't nudge the row by
         // a pixel) and `min-h-full` stretches it back to the row afterwards.
         !isExpanded && 'h-0 min-h-full',
-        isFirst && 'rounded-t-xl border-t',
         className,
       )}
       {...props}

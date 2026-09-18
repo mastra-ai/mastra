@@ -1,5 +1,4 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { cn } from '@mastra/playground-ui/utils/cn';
 
 import { TraceMessagesSkeleton } from './trace-messages-skeleton';
 
@@ -7,22 +6,16 @@ const ROWS = [0, 1, 2];
 
 /**
  * Same geometry as the resolved `ThreadTrace` rows — the rail gutter on the left, a `24rem`
- * messages column, then the bordered details column with its tab header — so the panel
- * does not reflow once the thread's traces arrive.
+ * messages column closed by a right border, then the details column with its header, each row
+ * underlined — so the panel does not reflow once the thread's traces arrive.
  */
 export function ThreadViewSkeleton() {
   return (
     <div role="status" aria-label="Loading thread" className="min-h-0 overflow-hidden">
       {ROWS.map(idx => (
-        <div key={idx} className="grid grid-cols-[24rem_minmax(0,1fr)] pr-4 pl-14">
-          <TraceMessagesSkeleton className="pr-4 pl-0" />
-          <div
-            className={cn(
-              'min-w-0 overflow-hidden border-x border-b border-border1',
-              idx === 0 && 'rounded-t-xl border-t',
-              idx === ROWS.length - 1 && 'rounded-b-xl',
-            )}
-          >
+        <div key={idx} className="border-border1 grid grid-cols-[24rem_minmax(0,1fr)] border-b pr-4 pl-14">
+          <TraceMessagesSkeleton className="border-border1 border-r pr-4 pl-0" />
+          <div className="min-w-0 overflow-hidden">
             <div className="min-h-header-default border-border1 flex items-center gap-2 border-b px-2 py-1.5">
               <Skeleton className="h-6 w-16 rounded-full" />
               <Skeleton className="h-6 w-20 rounded-full" />

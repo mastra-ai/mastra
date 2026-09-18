@@ -102,8 +102,8 @@ function LoadedThreadViewByTrace({
     <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId} onSelectedSpanChange={onSelectedSpanChange}>
       <ThreadTrace.List data-testid="thread-view-by-trace">
         <ThreadTrace.Rail turns={railTurns} />
-        {traceIds.map((traceId, index) => (
-          <ThreadTrace.Row key={traceId} traceId={traceId} isFirst={index === 0}>
+        {traceIds.map(traceId => (
+          <ThreadTrace.Row key={traceId} traceId={traceId}>
             <ThreadTraceRowContent />
           </ThreadTrace.Row>
         ))}

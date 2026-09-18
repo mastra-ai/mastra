@@ -29,8 +29,7 @@ export function TraceThreadPanel({ threadId, onBack, onClose, title }: TraceThre
           </DataPanel.Heading>
         </DataPanel.HeaderContent>
       </DataPanel.Header>
-      {/* Inside the framed panel the turns' details columns read as one strip: no top rounding, no horizontal borders. */}
-      <div className="min-h-0 flex-1 [&_[data-slot=thread-trace-details]]:rounded-t-none [&_[data-slot=thread-trace-details]]:border-y-0">
+      <div className="min-h-0 flex-1">
         <ThreadViewByTrace
           threadId={threadId}
           onSelectedSpanChange={selected => setHasSelectedSpan(selected !== null)}

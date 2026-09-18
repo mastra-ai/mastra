@@ -76,21 +76,6 @@ describe('TraceThreadPanel', () => {
       expect(screen.getAllByRole('button', { name: 'Show less' })).toHaveLength(1);
     });
 
-    it('strips the top rounding and horizontal borders of the details columns, only in this panel', async () => {
-      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
-      installHandlers();
-      const { queryClient } = renderPanel();
-
-      expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-
-      const details = screen.getByTestId('thread-view-by-trace').querySelector('[data-slot="thread-trace-details"]');
-      expect(details).not.toBeNull();
-      const wrapper = details!.closest<HTMLElement>('[class*="thread-trace-details"]');
-      expect(wrapper?.className).toContain('[&_[data-slot=thread-trace-details]]:rounded-t-none');
-      expect(wrapper?.className).toContain('[&_[data-slot=thread-trace-details]]:border-y-0');
-    });
-
     it('when rendered, then the panel opens wide and only takes the full frame once a span is selected', async () => {
       installHandlers();
       const { queryClient } = renderPanel();

@@ -26,7 +26,7 @@ import { ThreadTraceSpans } from './thread-trace-spans';
  *     <ThreadTrace.Rail turns={turns} />
  *     <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />
  *     {ids.map((traceId, i) => (
- *       <ThreadTrace.Row key={traceId} traceId={traceId} isFirst={i === 0}>
+ *       <ThreadTrace.Row key={traceId} traceId={traceId}>
  *         <ThreadTrace.Messages>
  *           <ThreadTrace.MessagesHeader>
  *             <ThreadTrace.TabList>

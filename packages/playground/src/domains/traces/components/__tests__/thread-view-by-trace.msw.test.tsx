@@ -201,24 +201,21 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toEqual(['trace-a', 'trace-b']);
   });
 
-  it('frames the timeline columns with rounded outer corners', async () => {
+  it('underlines each turn and closes the messages column with a right border, like the trace panel', async () => {
     installHandlers();
     const { queryClient } = renderView();
 
     expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    // The timeline column is the row's second grid child (the Spans / Feedback tabs root).
-    const [first, second] = screen
+    const rows = screen
       .getAllByTestId('trace-row-timeline')
-      .map(el => el.closest<HTMLElement>('[data-trace-id]')!.children[1] as HTMLElement);
-    expect(first.className).toContain('border-t');
-    expect(first.className).toContain('rounded-t-xl');
-    expect(second.className).not.toContain('rounded-t-xl');
-    for (const column of [first, second]) {
-      expect(column.className).toContain('border-x');
-      expect(column.className).toContain('border-b');
-      expect(column.className).toContain('group-last:rounded-b-xl');
+      .map(el => el.closest<HTMLElement>('[data-trace-id]') as HTMLElement);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.className).toContain('border-b');
+      expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-r');
+      expect((row.children[1] as HTMLElement).className).not.toMatch(/border|rounded/);
     }
   });
 

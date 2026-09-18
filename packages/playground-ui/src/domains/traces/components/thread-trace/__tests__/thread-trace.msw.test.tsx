@@ -116,8 +116,8 @@ const renderView = ({
       <ThreadTrace.List data-testid="thread-trace-list">
         <ThreadTrace.Rail turns={railTurns} />
         <ThreadTrace.LoadMoreSentinel data-testid="sentinel" />
-        {traceIds.map((traceId, index) => (
-          <ThreadTrace.Row key={traceId} traceId={traceId} isFirst={index === 0}>
+        {traceIds.map(traceId => (
+          <ThreadTrace.Row key={traceId} traceId={traceId}>
             <ThreadTrace.Messages>
               <ThreadTrace.MessagesHeader>
                 <ThreadTrace.TabList>
@@ -278,13 +278,36 @@ describe('ThreadTrace', () => {
   });
 
   describe('details column', () => {
-    it('gives only the first row the top border and renders custom actions', async () => {
+    it('draws the borders on the row — a line under each turn, the messages column closed on the right — and renders custom actions', async () => {
       renderView();
       await screen.findByText('Chef agent run');
 
-      expect(screen.getByTestId('details-trace-a').className).toContain('rounded-t-xl');
-      expect(screen.getByTestId('details-trace-b').className).not.toContain('rounded-t-xl');
+      for (const id of ['trace-a', 'trace-b']) {
+        const details = screen.getByTestId(`details-${id}`);
+        const row = getRow(id);
+        expect(row.className).toContain('border-b');
+        expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-r');
+        expect(details.className).not.toMatch(/border|rounded/);
+      }
       expect(screen.getByRole('button', { name: 'Action trace-a' })).toBeTruthy();
+    });
+
+    it('keeps clamping to the Messages view height while another view is showing', async () => {
+      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
+      renderView({ traceIds: ['trace-a'] });
+      await screen.findByText('Chef agent run');
+
+      const timeline = await screen.findByTestId('trace-row-timeline');
+      expect(timeline.style.maxHeight).toBe('300px');
+
+      mockHeights({ 'trace-row-messages': 80, 'trace-row-timeline': 900 });
+      fireEvent.click(screen.getByRole('tab', { name: 'Extra' }));
+
+      expect(screen.getByRole('tab', { name: 'Extra' }).getAttribute('aria-selected')).toBe('true');
+      expect(timeline.style.maxHeight).toBe('300px');
+      expect(getRow('trace-a').querySelector<HTMLElement>('[data-slot=thread-trace-messages]')?.style.minHeight).toBe(
+        '300px',
+      );
     });
 
     it('clamps a long timeline to the messages height and expands on Show more', async () => {
