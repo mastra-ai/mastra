@@ -48,6 +48,7 @@ import { AuthStorage } from './storage.js';
 import type { CredentialStore } from './types.js';
 
 const PROVIDER = 'anthropic';
+const KIMI_PROVIDER = 'kimi-for-coding';
 const FUTURE = Date.now() + 60 * 60 * 1000;
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
@@ -770,6 +771,124 @@ describe('AccountStartNoticeProcessor.processInput', () => {
       .find(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to === null);
     expect(unavailable?.data).toMatchObject({ reason: 'pool-exhausted', exclusive: true });
     expect(accountSwitchNoticeText(unavailable!.data)).toBe('Pinned Anthropic account unavailable (pool exhausted)');
+  });
+
+  it('A12: a pin on another provider’s route does not make this provider exclusive', async () => {
+    // The session resolves to a pinned Anthropic route, but the request that
+    // failed carries a Kimi URL: during a cascade the URL can still describe the
+    // session model, so the pin belongs to an unrelated route. Kimi has a
+    // healthy sibling and must be allowed to rotate onto it — treating the
+    // failure as exclusive would skip rotation and blame a provider that has no
+    // pin.
+    const seeded = await makeTwoAccountStorage();
+    const kimiA = await seeded.storage.addAccount(
+      KIMI_PROVIDER,
+      { access: 'kimi-token-a', refresh: 'kimi-refresh-a', expires: FUTURE },
+      { label: 'Kimi Account A' },
+    );
+    const kimiB = await seeded.storage.addAccount(
+      KIMI_PROVIDER,
+      { access: 'kimi-token-b', refresh: 'kimi-refresh-b', expires: FUTURE },
+      { label: 'Kimi Account B' },
+    );
+    seeded.storage.activateAccount(KIMI_PROVIDER, kimiA.id);
+    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models: {
+          activeModelPackId: 'anthropic',
+          packAccountPreferences: {
+            anthropic: { 'anthropic/claude-fable-5': seeded.accountB.id },
+          },
+        },
+      }),
+      'utf-8',
+    );
+    let controllerState: Record<string, unknown> = { activeModelPackId: 'anthropic' };
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      threadId: 'thread-1',
+      getState: () => controllerState,
+      setState: async (updates: Record<string, unknown>) => {
+        controllerState = { ...controllerState, ...updates };
+      },
+      setThreadSetting: vi.fn(async () => {}),
+    });
+
+    const errorArgs = makeArgs({ requestContext, state: {} });
+    const rotationProcessor = new AccountRotationProcessor({
+      credentialStore: seeded.storage,
+      maxProcessorRetries: 22,
+    });
+    const result = await rotationProcessor.processAPIError({
+      ...errorArgs,
+      error: apiError(429, { url: 'https://api.kimi.com/coding/v1/messages' }),
+    } as never);
+
+    expect(result.retry).toBe(true);
+    const switchParts = errorArgs.writer.custom.mock.calls
+      .map(call => call[0])
+      .filter(part => part.type === ACCOUNT_SWITCH_PART_TYPE);
+    expect(switchParts).toHaveLength(1);
+    expect(switchParts[0].data).toMatchObject({
+      provider: KIMI_PROVIDER,
+      reason: 'rate-limit',
+      to: { id: kimiB.id, label: 'Kimi Account B' },
+    });
+    // No pool-unavailable part: Kimi was never declared exhausted, and the
+    // Anthropic pin was not allowed to speak for it.
+    expect(switchParts.some(part => part.data.to === null)).toBe(false);
+  });
+
+  it('A12: a pinned route failing with a persistent outage reads as pinned, not pool-wide', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models: {
+          activeModelPackId: 'anthropic',
+          packFallbacks: { anthropic: 'custom:Fallback' },
+          packAccountPreferences: {
+            anthropic: { 'anthropic/claude-fable-5': seeded.accountB.id },
+          },
+        },
+      }),
+      'utf-8',
+    );
+    let controllerState: Record<string, unknown> = { activeModelPackId: 'anthropic' };
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      threadId: 'thread-1',
+      getState: () => controllerState,
+      setState: async (updates: Record<string, unknown>) => {
+        controllerState = { ...controllerState, ...updates };
+      },
+      setThreadSetting: vi.fn(async () => {}),
+    });
+
+    const errorArgs = makeArgs({ requestContext, state: {} });
+    const rotationProcessor = new AccountRotationProcessor({
+      credentialStore: seeded.storage,
+      maxProcessorRetries: 22,
+    });
+    const result = await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(503) } as never);
+    expect(result.retry).toBe(false);
+
+    const unavailable = errorArgs.writer.custom.mock.calls
+      .map(call => call[0])
+      .find(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to === null);
+    // The sibling subscription was never consulted, so the notice must not
+    // report the whole provider pool as unavailable.
+    expect(unavailable?.data).toMatchObject({ reason: 'persistent-outage', exclusive: true });
+    expect(accountSwitchNoticeText(unavailable!.data)).toBe('Pinned Anthropic account unavailable (persistent outage)');
   });
 
   it('A12: an Automatic route still rotates through the remaining accounts in insertion order', async () => {

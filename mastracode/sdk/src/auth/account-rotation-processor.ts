@@ -558,8 +558,12 @@ export async function clearExhaustedAccountRoute(
   await updateExhaustedAccountRouting(controller, exhausted => {
     if (!exhausted[route.packId]?.[route.modelId]) return null;
     const next = structuredClone(exhausted);
-    delete next[route.packId][route.modelId];
-    if (Object.keys(next[route.packId]).length === 0) delete next[route.packId];
+    // `noUncheckedIndexedAccess` keeps the optional read visible on the clone,
+    // so narrow the bucket once instead of indexing three times.
+    const bucket = next[route.packId];
+    if (!bucket) return null;
+    delete bucket[route.modelId];
+    if (Object.keys(bucket).length === 0) delete next[route.packId];
     return next;
   });
 }
@@ -796,8 +800,18 @@ export class AccountRotationProcessor implements Processor {
       await persistExhaustedAccount(args, route, active.id);
     }
 
+    // A12: only a pin on the provider that actually failed makes this failure
+    // exclusive. `route.providerId` is derived from the route's model while
+    // `providerId` comes from the failed request's URL, which during a cascade
+    // can still describe the session model rather than the entry being retried;
+    // when they differ the pin belongs to an unrelated route, so the provider
+    // that failed keeps its normal pool handling (line above applies the same
+    // guard before recording the exhausted entry).
+    const targetAccountId =
+      route?.providerId === providerId ? getRouteTargetAccountId(this.options.settingsPath, route) : undefined;
+
     if (classification.kind === 'hop') {
-      return this.declarePoolUnavailable(args, providerId, 'persistent-outage');
+      return this.declarePoolUnavailable(args, providerId, 'persistent-outage', targetAccountId !== undefined);
     }
 
     // A12: a targeted route never activates a sibling subscription. A
@@ -807,7 +821,7 @@ export class AccountRotationProcessor implements Processor {
     // check sits above the pool-size test: a targeted route has nothing to
     // rotate to at any pool size. A stale id for an account the user removed
     // reads the same way: fail closed rather than silently land on a sibling.
-    if (getRouteTargetAccountId(this.options.settingsPath, route)) {
+    if (targetAccountId !== undefined) {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted', true);
     }
 
