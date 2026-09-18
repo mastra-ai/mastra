@@ -166,9 +166,9 @@ describe('WorkflowEventProcessor #dispatch', () => {
       // The schedule row was written by the current build, which added a gate
       // step ahead of the side effect — so its hash differs from ours.
       const currentWf = makeWorkflow(['gate', 'side-effect']);
-      const currentHash = computeScheduleDefinitionHash(currentWf.serializedStepGraph);
+      const currentHash = await computeScheduleDefinitionHash(currentWf.serializedStepGraph);
       expect(currentHash).toBeDefined();
-      expect(currentHash).not.toBe(computeScheduleDefinitionHash(staleWf.serializedStepGraph));
+      expect(currentHash).not.toBe(await computeScheduleDefinitionHash(staleWf.serializedStepGraph));
 
       await fire(mastra, currentHash);
 
@@ -183,7 +183,7 @@ describe('WorkflowEventProcessor #dispatch', () => {
       const wf = makeWorkflow(['side-effect']);
       const { mastra, started } = makeMastra(wf);
 
-      await fire(mastra, computeScheduleDefinitionHash(wf.serializedStepGraph));
+      await fire(mastra, await computeScheduleDefinitionHash(wf.serializedStepGraph));
 
       expect(started).toHaveLength(1);
 

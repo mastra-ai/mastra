@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto';
-
 import { StorageDomain } from '../base';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -419,7 +417,7 @@ export function createKnowledgeUlid(now = Date.now()): string {
     lastUlidRandom = (lastUlidRandom + 1n) & ((1n << 80n) - 1n);
   } else {
     lastUlidTime = now;
-    lastUlidRandom = BigInt(`0x${randomBytes(10).toString('hex')}`);
+    lastUlidRandom = BigInt(`0x${Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(10))).toString('hex')}`);
   }
   return `${encodeCrockford(BigInt(now), 10)}${encodeCrockford(lastUlidRandom, 16)}`;
 }
