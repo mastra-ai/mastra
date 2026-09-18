@@ -1,26 +1,12 @@
-import type { ReactNode } from 'react';
+import { BreadcrumbBar, BreadcrumbItem } from './breadcrumb-bar';
+import type { BreadcrumbBarProps, BreadcrumbItemProps } from './breadcrumb-bar';
+import { BreadcrumbRoot } from './breadcrumb-root';
+import type { BreadcrumbRootProps } from './breadcrumb-root';
 
-import {
-  BreadcrumbBarCrumb as Crumb,
-  BreadcrumbBarCrumbSkeleton as CrumbSkeleton,
-} from '@/ds/new/layout/breadcrumb-bar/breadcrumb-bar-crumb';
-import type { BreadcrumbBarCrumbProps as CrumbProps } from '@/ds/new/layout/breadcrumb-bar/breadcrumb-bar-crumb';
-import { cn } from '@/lib/utils';
+export const Breadcrumb = Object.assign(BreadcrumbRoot, {
+  Bar: BreadcrumbBar,
+  Item: BreadcrumbItem,
+});
 
-export interface BreadcrumbProps {
-  children?: ReactNode;
-  label?: string;
-  className?: string;
-  listClassName?: string;
-}
-
-export function Breadcrumb({ children, label, className, listClassName }: BreadcrumbProps) {
-  return (
-    <nav aria-label={label} className={className}>
-      <ol className={cn('flex items-center gap-0.5', listClassName)}>{children}</ol>
-    </nav>
-  );
-}
-
-export { Crumb, CrumbSkeleton };
-export type { CrumbProps };
+export type { BreadcrumbSeparator } from './breadcrumb-context';
+export type { BreadcrumbBarProps, BreadcrumbItemProps, BreadcrumbRootProps };

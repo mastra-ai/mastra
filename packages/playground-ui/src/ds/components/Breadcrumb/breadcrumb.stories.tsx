@@ -11,7 +11,8 @@ import { Combobox } from '../Combobox';
 import { CopyButton } from '../CopyButton';
 import { Header } from '../Header';
 import { Txt } from '../Txt';
-import { Breadcrumb, Crumb } from './Breadcrumb';
+import { Breadcrumb } from './Breadcrumb';
+import { Crumb } from './breadcrumb-crumb';
 
 const meta: Meta<typeof Breadcrumb> = {
   title: 'Navigation/Breadcrumb',
@@ -43,6 +44,19 @@ export const Default: Story = {
 export const TwoLevels: Story = {
   render: () => (
     <Breadcrumb label="Navigation">
+      <Crumb as="a" to="/dashboard">
+        Dashboard
+      </Crumb>
+      <Crumb as="span" to="/dashboard/settings" isCurrent>
+        Settings
+      </Crumb>
+    </Breadcrumb>
+  ),
+};
+
+export const ChevronSeparators: Story = {
+  render: () => (
+    <Breadcrumb label="Navigation" separator="chevron">
       <Crumb as="a" to="/dashboard">
         Dashboard
       </Crumb>
@@ -87,15 +101,20 @@ const AgentSwitcher = () => (
 );
 
 export const WithAction: Story = {
+  parameters: { layout: 'fullscreen' },
   render: () => (
-    <Breadcrumb label="Navigation">
-      <Crumb as="a" to="/agents" icon={<AgentIcon />}>
-        Agents
-      </Crumb>
-      <Crumb as="span" isCurrent action={<AgentSwitcher />}>
-        Weather agent
-      </Crumb>
-    </Breadcrumb>
+    <Breadcrumb.Bar icon={<AgentIcon />} actions={<Button size="sm">Create agent</Button>}>
+      <Breadcrumb.Item pathname="/agents">
+        <Crumb as="a" to="/agents">
+          Agents
+        </Crumb>
+      </Breadcrumb.Item>
+      <Breadcrumb.Item pathname="/agents/weather">
+        <Crumb as="span" isCurrent action={<AgentSwitcher />}>
+          Weather agent
+        </Crumb>
+      </Breadcrumb.Item>
+    </Breadcrumb.Bar>
   ),
 };
 

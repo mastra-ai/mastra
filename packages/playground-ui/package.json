@@ -142,12 +142,6 @@
         "default": "./dist/new/layout/app-shell.es.js"
       }
     },
-    "./new/layout/breadcrumb-bar": {
-      "import": {
-        "types": "./dist/new/layout/breadcrumb-bar.d.ts",
-        "default": "./dist/new/layout/breadcrumb-bar.es.js"
-      }
-    },
     "./layout/tabbed-container": {
       "import": {
         "types": "./dist/layout/tabbed-container.d.ts",

@@ -1,7 +1,7 @@
 import type { ElementType, ReactNode } from 'react';
 
-import { useBreadcrumbBarCrumb } from './breadcrumb-bar-context';
-import type { BreadcrumbBarSeparator } from './breadcrumb-bar-context';
+import { useBreadcrumbSeparator } from './breadcrumb-context';
+import type { BreadcrumbSeparator } from './breadcrumb-context';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { ChevronIcon } from '@/ds/icons/ChevronIcon';
 import { Icon } from '@/ds/icons/Icon';
@@ -10,7 +10,7 @@ import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-export interface BreadcrumbBarCrumbProps {
+export interface CrumbProps {
   isCurrent?: boolean;
   as: ElementType;
   className?: string;
@@ -20,15 +20,15 @@ export interface BreadcrumbBarCrumbProps {
   icon?: ReactNode;
   isLoading?: boolean;
   action?: ReactNode;
-  separator?: BreadcrumbBarSeparator;
+  separator?: BreadcrumbSeparator;
   'data-testid'?: string;
 }
 
-export function BreadcrumbBarCrumbSkeleton(props: { 'data-testid'?: string }) {
+export function CrumbSkeleton(props: { 'data-testid'?: string }) {
   return <Skeleton className="h-3 w-24" {...props} />;
 }
 
-export function BreadcrumbBarCrumb({
+export function Crumb({
   className,
   as,
   isCurrent,
@@ -38,10 +38,10 @@ export function BreadcrumbBarCrumb({
   children,
   separator,
   ...props
-}: BreadcrumbBarCrumbProps) {
-  const context = useBreadcrumbBarCrumb();
+}: CrumbProps) {
+  const contextSeparator = useBreadcrumbSeparator();
   const Root = as || 'span';
-  const separatorIcon = separator ?? context?.separator ?? 'slash';
+  const separatorIcon = separator ?? contextSeparator;
 
   return (
     <>
@@ -53,8 +53,8 @@ export function BreadcrumbBarCrumb({
             controlSizeClasses.sm,
             transitions.colors,
             isCurrent
-              ? 'max-w-xs cursor-default font-medium text-neutral6'
-              : 'max-w-48 cursor-pointer text-neutral4 hover:bg-neutral6/10 hover:text-neutral6 active:bg-neutral6/15',
+              ? 'max-w-xs cursor-default font-medium text-foreground'
+              : 'max-w-48 cursor-pointer text-muted-foreground hover:bg-foreground/10 hover:text-foreground active:bg-foreground/15',
             className,
           )}
           {...props}
@@ -70,7 +70,7 @@ export function BreadcrumbBarCrumb({
             </Icon>
           )}
           {isLoading ? (
-            <BreadcrumbBarCrumbSkeleton />
+            <CrumbSkeleton />
           ) : (
             <span className="flex min-w-0 flex-1 items-center truncate">{children}</span>
           )}
@@ -79,7 +79,7 @@ export function BreadcrumbBarCrumb({
       </li>
       {!isCurrent && (
         <li aria-hidden="true" className="flex h-full items-center">
-          <Icon className={cn('text-neutral2', transitions.colors)}>
+          <Icon className={cn('text-muted-foreground/50', transitions.colors)}>
             {separatorIcon === 'chevron' ? <ChevronIcon className="-rotate-90" /> : <SlashIcon />}
           </Icon>
         </li>

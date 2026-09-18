@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Bot, Boxes, Search, Settings, Workflow } from 'lucide-react';
 
-import { BreadcrumbBar } from '../breadcrumb-bar';
 import { PageHeader } from '../page-header';
 import { AppShell } from './app-shell';
 import type { AppShellFrameProps } from './app-shell';
+import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@/ds/components/MainSidebar';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
@@ -78,13 +78,13 @@ function MobileHeader() {
 
 function ExampleRouteHeader() {
   return (
-    <BreadcrumbBar>
-      <BreadcrumbBar.Item pathname="/agents/research">
-        <BreadcrumbBar.Crumb as="span" isCurrent icon={<Bot />}>
+    <Breadcrumb.Bar>
+      <Breadcrumb.Item pathname="/agents/research">
+        <Crumb as="span" isCurrent icon={<Bot />}>
           Research agent
-        </BreadcrumbBar.Crumb>
-      </BreadcrumbBar.Item>
-    </BreadcrumbBar>
+        </Crumb>
+      </Breadcrumb.Item>
+    </Breadcrumb.Bar>
   );
 }
 

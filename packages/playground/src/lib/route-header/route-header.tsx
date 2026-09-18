@@ -1,4 +1,4 @@
-import { BreadcrumbBar, useBreadcrumbBarCrumb } from '@mastra/playground-ui/new/layout/breadcrumb-bar';
+import { Breadcrumb, Crumb, useBreadcrumbItem } from '@mastra/playground-ui/components/Breadcrumb';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { RouteHeaderActionsSlot } from './route-header-actions';
@@ -17,14 +17,14 @@ function routeHeaderCrumbContent(def: CrumbDef): ReactNode {
 }
 
 function RouteHeaderCrumb({ def }: { def: CrumbDef }) {
-  const slot = useBreadcrumbBarCrumb();
-  const isCurrent = slot?.isLeaf ?? false;
-  const to = isCurrent ? undefined : slot?.pathname;
+  const item = useBreadcrumbItem();
+  const isCurrent = item?.isLeaf ?? false;
+  const to = isCurrent ? undefined : item?.pathname;
   const IconComponent = def.icon;
   const Action = def.Action;
 
   return (
-    <BreadcrumbBar.Crumb
+    <Crumb
       as={to ? Link : 'span'}
       to={to}
       isCurrent={isCurrent}
@@ -32,7 +32,7 @@ function RouteHeaderCrumb({ def }: { def: CrumbDef }) {
       action={Action ? <Action /> : undefined}
     >
       {routeHeaderCrumbContent(def)}
-    </BreadcrumbBar.Crumb>
+    </Crumb>
   );
 }
 
@@ -42,12 +42,12 @@ export function RouteHeader() {
   const crumbs = override ?? handleCrumbs;
 
   return (
-    <BreadcrumbBar actions={<RouteHeaderActionsSlot className="contents" />}>
+    <Breadcrumb.Bar actions={<RouteHeaderActionsSlot className="contents" />}>
       {crumbs.map(def => (
-        <BreadcrumbBar.Item key={def.id} pathname={def.to}>
+        <Breadcrumb.Item key={def.id} pathname={def.to}>
           <RouteHeaderCrumb def={def} />
-        </BreadcrumbBar.Item>
+        </Breadcrumb.Item>
       ))}
-    </BreadcrumbBar>
+    </Breadcrumb.Bar>
   );
 }
