@@ -464,7 +464,7 @@ describe('dispatchEvent compact message lifecycle', () => {
       state,
     );
 
-    const replacement = {
+    const replacement: MastraMessagePart = {
       type: 'tool-invocation',
       toolInvocation: { state: 'call', toolCallId: 't1', toolName: 'read_file', args: {} },
     };

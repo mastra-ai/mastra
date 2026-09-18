@@ -376,7 +376,6 @@ The state is coalesced for `message_update` and `tool_input_delta` over a short 
 The `applyUpdate` above is also exported from `@mastra/core/agent-controller`, so a server-side consumer can import it instead of inlining a copy:
 
 ```typescript
-import { applyUpdate } from '@mastra/core/agent-controller'
 import { isKnownAgentControllerEvent } from '@mastra/client-js'
 import { applyUpdate } from '@mastra/core/agent-controller'
 import type { MastraDBMessage } from '@mastra/core/agent-controller'
