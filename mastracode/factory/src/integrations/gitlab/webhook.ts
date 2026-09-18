@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Context } from 'hono';
 
 export const SUPPORTED_GITLAB_WEBHOOK_EVENTS = new Set([
@@ -10,6 +10,8 @@ export const SUPPORTED_GITLAB_WEBHOOK_EVENTS = new Set([
 
 export interface ParsedGitLabWebhook {
   event: string;
+  deliveryId: string;
+  instanceHost?: string;
   payload: Record<string, unknown>;
 }
 
@@ -39,6 +41,15 @@ function normalizeHeader(value: string | undefined | null): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeInstanceHost(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return new URL(value.includes('://') ? value : 'https://' + value).host.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
 export function verifyGitLabToken(receivedToken: string, secret: string): boolean {
   const received = Buffer.from(receivedToken, 'utf8');
   const expected = Buffer.from(secret, 'utf8');
@@ -61,16 +72,29 @@ export async function parseGitLabWebhook(
     return { status: 401, body: { error: 'unauthorized', message: 'Invalid GitLab webhook token' } };
   }
 
+  const rawBody = await c.req.text();
   let payload: unknown;
   try {
-    payload = JSON.parse(await c.req.text());
+    payload = JSON.parse(rawBody);
   } catch {
     return { status: 400, body: { error: 'bad_request', message: 'Malformed JSON payload' } };
   }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return { status: 400, body: { error: 'bad_request', message: 'Payload must be a JSON object' } };
   }
-  return { event, payload: payload as Record<string, unknown> };
+  const deliveryId =
+    normalizeHeader(c.req.header('webhook-id')) ??
+    normalizeHeader(c.req.header('idempotency-key')) ??
+    normalizeHeader(c.req.header('x-gitlab-webhook-uuid')) ??
+    normalizeHeader(c.req.header('x-gitlab-event-uuid')) ??
+    createHash('sha256').update(event).update('\0').update(rawBody).digest('hex');
+  const instanceHost = normalizeInstanceHost(c.req.header('x-gitlab-instance'));
+  return {
+    event,
+    deliveryId,
+    ...(instanceHost ? { instanceHost } : {}),
+    payload: payload as Record<string, unknown>,
+  };
 }
 
 function getObject(value: unknown): Record<string, unknown> | undefined {
@@ -124,13 +148,6 @@ export async function handleGitLabWebhook(
     return { status: 202, body: { ok: true, ignored: true } };
   }
 
-  // FUTURE: dispatch normalized GitLab events into session-signal subscriptions once GitLab owns that machinery.
-  if (options.ingestFactoryEvent) {
-    try {
-      await options.ingestFactoryEvent(parsed);
-    } catch {
-      // Webhook delivery is best-effort; acknowledge verified events so GitLab does not retry indefinitely.
-    }
-  }
+  if (options.ingestFactoryEvent) await options.ingestFactoryEvent(parsed);
   return { status: 202, body: { ok: true } };
 }

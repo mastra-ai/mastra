@@ -21,7 +21,12 @@ function context(options: { headers?: Record<string, string>; body?: string } = 
 
 const validContext = () =>
   context({
-    headers: { 'x-gitlab-event': 'Merge Request Hook', 'x-gitlab-token': 'webhook-secret' },
+    headers: {
+      'x-gitlab-event': 'Merge Request Hook',
+      'x-gitlab-token': 'webhook-secret',
+      'webhook-id': 'delivery-17',
+      'x-gitlab-instance': 'https://gitlab.example.com',
+    },
     body: JSON.stringify({ object_kind: 'merge_request', object_attributes: { iid: 17 } }),
   });
 
@@ -80,11 +85,31 @@ describe('parseGitLabWebhook', () => {
     ).resolves.toMatchObject({ status: 400, body: { message: 'Payload must be a JSON object' } });
   });
 
-  it('returns the event and object payload for a valid request', async () => {
+  it('returns the event, delivery identity, instance host, and object payload for a valid request', async () => {
     await expect(parseGitLabWebhook(validContext(), 'webhook-secret')).resolves.toEqual({
       event: 'Merge Request Hook',
+      deliveryId: 'delivery-17',
+      instanceHost: 'gitlab.example.com',
       payload: { object_kind: 'merge_request', object_attributes: { iid: 17 } },
     });
+  });
+
+  it('prefers a retry-stable idempotency key and otherwise derives a deterministic payload digest', async () => {
+    const headers = {
+      'x-gitlab-event': 'Issue Hook',
+      'x-gitlab-token': 'webhook-secret',
+      'idempotency-key': 'retry-key',
+      'x-gitlab-event-uuid': 'event-uuid',
+    };
+    await expect(
+      parseGitLabWebhook(context({ headers, body: '{"object_kind":"issue"}' }), 'webhook-secret'),
+    ).resolves.toMatchObject({ deliveryId: 'retry-key' });
+
+    const fallbackHeaders = { 'x-gitlab-event': 'Issue Hook', 'x-gitlab-token': 'webhook-secret' };
+    const first = await parseGitLabWebhook(context({ headers: fallbackHeaders, body: '{}' }), 'webhook-secret');
+    const replay = await parseGitLabWebhook(context({ headers: fallbackHeaders, body: '{}' }), 'webhook-secret');
+    expect(first).toMatchObject({ deliveryId: expect.any(String) });
+    expect(replay).toMatchObject({ deliveryId: (first as { deliveryId: string }).deliveryId });
   });
 });
 
@@ -93,6 +118,7 @@ describe('normalizeGitLabWebhookMetadata', () => {
     expect(
       normalizeGitLabWebhookMetadata({
         event: 'Merge Request Hook',
+        deliveryId: 'delivery-17',
         payload: {
           project: { id: 101, path_with_namespace: 'acme/app' },
           object_attributes: { iid: 17 },
@@ -114,6 +140,7 @@ describe('normalizeGitLabWebhookMetadata', () => {
     expect(
       normalizeGitLabWebhookMetadata({
         event: 'Note Hook',
+        deliveryId: 'delivery-18',
         payload: {
           project: { id: 101, path_with_namespace: 'acme/app' },
           object_attributes: { noteable_type: 'MergeRequest' },
@@ -146,7 +173,7 @@ describe('handleGitLabWebhook', () => {
     expect(ingestFactoryEvent).not.toHaveBeenCalled();
   });
 
-  it('forwards supported events and acknowledges ingestion failures', async () => {
+  it('forwards supported events and lets ingestion failures trigger a GitLab retry', async () => {
     const ingestFactoryEvent = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('failed'));
 
     await expect(
@@ -154,7 +181,7 @@ describe('handleGitLabWebhook', () => {
     ).resolves.toEqual({ status: 202, body: { ok: true } });
     await expect(
       handleGitLabWebhook(validContext(), { webhookSecret: 'webhook-secret', ingestFactoryEvent }),
-    ).resolves.toEqual({ status: 202, body: { ok: true } });
+    ).rejects.toThrow('failed');
     expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
   });
 
