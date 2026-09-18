@@ -102,7 +102,8 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
 
   // LSP is opt-in — when it is off the tool is never registered, so its
   // guidance must not be advertised either.
-  if (resolveLspSetting(loadSettings().lsp) === false) deniedTools.add(MC_TOOLS.LSP_INSPECT);
+  if (resolveLspSetting(loadSettings(undefined, ctx.state?.configDir).lsp) === false)
+    deniedTools.add(MC_TOOLS.LSP_INSPECT);
 
   // Build mode-aware tool guidance
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;

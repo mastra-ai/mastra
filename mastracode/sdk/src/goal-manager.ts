@@ -16,6 +16,7 @@ import { getGoalActivityDurationMs } from '@mastra/core/agent';
 import type { Agent } from '@mastra/core/agent';
 import type { AgentController, Session } from '@mastra/core/agent-controller';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
+import { DEFAULT_CONFIG_DIR } from './constants.js';
 import { loadSettings } from './onboarding/settings.js';
 
 export interface GoalManagerState<TState extends Record<string, unknown> = Record<string, unknown>> {
@@ -62,6 +63,12 @@ function normalizeActiveDurationMs(value: number | undefined): number {
 // =============================================================================
 
 export class GoalManager {
+  private readonly configDirName: string;
+
+  constructor(configDirName = DEFAULT_CONFIG_DIR) {
+    this.configDirName = configDirName;
+  }
+
   /** Synchronous in-memory view of the active objective record (source of truth is ThreadState). */
   private record: (GoalObjectiveRecord & { id: string }) | null = null;
   private threadId: string | undefined;
@@ -342,7 +349,7 @@ export class GoalManager {
 
   /** Resolve effective judge model + max runs (record value → settings default). */
   private effectiveSettings(record: GoalObjectiveRecord): { judgeModelId: string; maxTurns: number } {
-    const settings = loadSettings();
+    const settings = loadSettings(undefined, this.configDirName);
     return {
       judgeModelId: record.judgeModelId ?? settings.models.goalJudgeModel ?? '',
       maxTurns: record.maxRuns ?? settings.models.goalMaxTurns ?? DEFAULT_MAX_TURNS,

@@ -1,4 +1,13 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import fs, {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -349,18 +358,19 @@ describe('default config and state storage', () => {
     });
   });
 
-  it('leaves an unreadable config file untouched', () => {
+  it('leaves an unreadable config file untouched after a save', () => {
     withTempDefaultSettings(() => {
       writeFileSync(getSettingsPath(), '{invalid', 'utf-8');
-      writeFileSync(
-        getLegacySettingsPath(),
-        JSON.stringify({ preferences: { theme: 'dark' }, onboarding: { completedAt: 'legacy' } }),
-        'utf-8',
-      );
+      const legacy = JSON.stringify({ preferences: { theme: 'dark' }, onboarding: { completedAt: 'legacy' } });
+      writeFileSync(getLegacySettingsPath(), legacy, 'utf-8');
 
-      loadSettings();
+      const settings = loadSettings();
+      settings.modelUseCounts['openai/gpt-5.5'] = 1;
+      saveSettings(settings);
 
       expect(readFileSync(getSettingsPath(), 'utf-8')).toBe('{invalid');
+      expect(readFileSync(getLegacySettingsPath(), 'utf-8')).toBe(legacy);
+      expect(existsSync(getStatePath())).toBe(false);
     });
   });
 
@@ -400,6 +410,35 @@ describe('default config and state storage', () => {
 
       expect(loadSettings().preferences.theme).toBe('dark');
       expect(JSON.parse(readFileSync(getSettingsPath(), 'utf-8')).preferences.theme).toBe('dark');
+    });
+  });
+
+  it('loads valid settings when permission hardening fails', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), JSON.stringify({ preferences: { theme: 'dark' } }), 'utf-8');
+      writeFileSync(getStatePath(), JSON.stringify({ onboarding: {}, modelUseCounts: {} }), 'utf-8');
+      const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+        throw new Error('permission denied');
+      });
+
+      const settings = loadSettings();
+      chmod.mockRestore();
+
+      expect(settings.preferences.theme).toBe('dark');
+    });
+  });
+
+  it('persists settings when permission hardening fails', () => {
+    withTempDefaultSettings(() => {
+      const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+        throw new Error('permission denied');
+      });
+
+      expect(() => saveSettings(createSettings())).not.toThrow();
+      chmod.mockRestore();
+
+      expect(JSON.parse(readFileSync(getSettingsPath(), 'utf-8')).models.activeModelPackId).toBe('anthropic');
+      expect(JSON.parse(readFileSync(getLegacySettingsPath(), 'utf-8')).models.activeModelPackId).toBe('anthropic');
     });
   });
 
@@ -525,6 +564,37 @@ describe('default config and state storage', () => {
 
   it('uses the configured global directory for config files', () => {
     expect(getSettingsPath('.mastracode-test')).toBe(join(homedir(), '.mastracode-test', 'config.json'));
+  });
+
+  it('does not retain the last loaded config directory as a module default', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mastracode-config-dirs-'));
+    const previousHome = process.env.HOME;
+    const previousXdgDataHome = process.env.XDG_DATA_HOME;
+    const previousAppDataDir = process.env.MASTRA_APP_DATA_DIR;
+    process.env.HOME = dir;
+    process.env.XDG_DATA_HOME = join(dir, 'xdg-data');
+    delete process.env.MASTRA_APP_DATA_DIR;
+    try {
+      const first = loadSettings(undefined, '.mastracode-first');
+      const second = loadSettings(undefined, '.mastracode-second');
+      first.preferences.theme = 'dark';
+      second.preferences.theme = 'light';
+
+      saveSettings(second);
+      saveSettings(first);
+
+      expect(JSON.parse(readFileSync(getSettingsPath('.mastracode-first'), 'utf-8')).preferences.theme).toBe('dark');
+      expect(JSON.parse(readFileSync(getSettingsPath('.mastracode-second'), 'utf-8')).preferences.theme).toBe('light');
+      expect(getSettingsPath()).toBe(join(dir, '.mastracode', 'config.json'));
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousXdgDataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = previousXdgDataHome;
+      if (previousAppDataDir === undefined) delete process.env.MASTRA_APP_DATA_DIR;
+      else process.env.MASTRA_APP_DATA_DIR = previousAppDataDir;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('keeps explicit settings paths as combined files', () => {

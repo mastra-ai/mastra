@@ -7,6 +7,7 @@ import {
   stripMastraCodeCustomProviderPrefix,
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
+import type { MastraCodeState } from '../schema.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import { resolveCredentialStore } from './credential-resolver.js';
@@ -44,6 +45,13 @@ export type { CustomProvidersSource } from './custom-provider-source.js';
 
 type ResolvedModel = GatewayLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
+
+function getAgentControllerState(requestContext?: RequestContext): MastraCodeState | undefined {
+  const agentControllerContext = requestContext?.get('controller') as
+    | AgentControllerRequestContext<MastraCodeState>
+    | undefined;
+  return typeof agentControllerContext?.getState === 'function' ? agentControllerContext.getState() : undefined;
+}
 
 function getAgentControllerHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
   const agentControllerContext = requestContext?.get('controller') as AgentControllerRequestContext<any> | undefined;
@@ -89,7 +97,8 @@ export function resolveModel(
 ): GatewayLanguageModel {
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
-  const settings = loadSettings();
+  const configDirName = getAgentControllerState(options?.requestContext)?.configDir;
+  const settings = configDirName ? loadSettings(undefined, configDirName) : loadSettings();
   // Bedrock was previously cataloged under the MastraCode gateway namespace
   // (`mastracode/amazon-bedrock/<model>`). Normalize any legacy saved ids to the
   // standalone `amazon-bedrock/<model>` form so they resolve through the
@@ -194,11 +203,13 @@ export interface ThinkingRequestContext {
 export function resolveRequestThinkingLevel(
   agentControllerContext: ThinkingRequestContext | undefined,
   settingsPath?: string,
+  configDirName?: string,
 ): ThinkingLevelSetting {
   const override = agentControllerContext?.state?.thinkingLevel;
   if (isThinkingLevelSetting(override)) return override;
   const modeId = agentControllerContext?.session?.modeId;
-  return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
+  const settings = configDirName ? loadSettings(settingsPath, configDirName) : loadSettings(settingsPath);
+  return resolveDefaultThinkingLevel(settings, modeId).level;
 }
 
 /**
@@ -208,6 +219,7 @@ export function resolveRequestThinkingLevel(
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
+  configDirName?: string,
 ): ResolvedModel {
   const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
 
@@ -225,7 +237,7 @@ export function getDynamicModel(
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = resolveRequestThinkingLevel(agentControllerContext, settingsPath);
+  const thinkingLevel = resolveRequestThinkingLevel(agentControllerContext, settingsPath, configDirName);
 
   return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
 }
@@ -247,8 +259,10 @@ export function getDynamicModel(
 export function getGoalJudgeModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
+  configDirName?: string,
 ): ResolvedModel | undefined {
-  const judgeModelId = loadSettings(settingsPath).models.goalJudgeModel;
+  const settings = configDirName ? loadSettings(settingsPath, configDirName) : loadSettings(settingsPath);
+  const judgeModelId = settings.models.goalJudgeModel;
   if (!judgeModelId) return undefined;
   return resolveModel(judgeModelId, { remapForCodexOAuth: true, requestContext });
 }

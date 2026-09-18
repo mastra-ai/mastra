@@ -4,7 +4,7 @@
  * so they carry across threads and restarts.
  */
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import fs, { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -459,7 +459,7 @@ const DEFAULTS: GlobalSettings = {
 export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 
-function rememberLoadedSettings(settings: GlobalSettings, configDirName = activeConfigDirName): GlobalSettings {
+function rememberLoadedSettings(settings: GlobalSettings, configDirName = DEFAULT_CONFIG_DIR): GlobalSettings {
   loadedSettingsRecords.set(settings, toSettingsRecord(settings));
   loadedSettingsConfigDirs.set(settings, configDirName);
   return settings;
@@ -581,13 +581,11 @@ function getNewInstallDefaults(): GlobalSettings {
   return settings;
 }
 
-let activeConfigDirName = DEFAULT_CONFIG_DIR;
-
-function getGlobalSettingsDir(configDirName = activeConfigDirName): string {
+function getGlobalSettingsDir(configDirName = DEFAULT_CONFIG_DIR): string {
   return process.env.MASTRA_APP_DATA_DIR ?? join(homedir(), configDirName);
 }
 
-export function getSettingsPath(configDirName = activeConfigDirName): string {
+export function getSettingsPath(configDirName = DEFAULT_CONFIG_DIR): string {
   return join(getGlobalSettingsDir(configDirName), 'config.json');
 }
 
@@ -975,16 +973,23 @@ function parseNestedSettingsRecord(value: SettingsRecord[string] | undefined): S
   return result.success ? result.data : undefined;
 }
 
+function restrictSettingsFilePermissions(filePath: string): void {
+  try {
+    fs.chmodSync(filePath, 0o600);
+  } catch {}
+}
+
 function readSettingsRecord(filePath: string): SettingsRecordRead {
   if (!existsSync(filePath)) return { status: 'missing' };
+  let result: ReturnType<typeof settingsRecordSchema.safeParse>;
   try {
-    const result = settingsRecordSchema.safeParse(JSON.parse(readFileSync(filePath, 'utf-8')));
-    if (!result.success) return { status: 'invalid' };
-    chmodSync(filePath, 0o600);
-    return { status: 'valid', value: result.data };
+    result = settingsRecordSchema.safeParse(JSON.parse(readFileSync(filePath, 'utf-8')));
   } catch {
     return { status: 'invalid' };
   }
+  if (!result.success) return { status: 'invalid' };
+  restrictSettingsFilePermissions(filePath);
+  return { status: 'valid', value: result.data };
 }
 
 function getSettingsRecord(read: SettingsRecordRead): SettingsRecord | undefined {
@@ -1093,7 +1098,7 @@ function mergeSettingsRecords(config: SettingsRecord | undefined, state: Setting
   return raw;
 }
 
-export function loadSettings(filePath?: string, configDirName = activeConfigDirName): GlobalSettings {
+export function loadSettings(filePath?: string, configDirName = DEFAULT_CONFIG_DIR): GlobalSettings {
   if (filePath !== undefined) {
     const stored = readSettingsRecord(filePath);
     const raw = stored.status === 'valid' ? stripMirrorMetadata(stored.value) : undefined;
@@ -1108,7 +1113,6 @@ export function loadSettings(filePath?: string, configDirName = activeConfigDirN
     return rememberLoadedSettings(settings, configDirName);
   }
 
-  activeConfigDirName = configDirName;
   const configPath = getSettingsPath(configDirName);
   const statePath = getStatePath();
   const legacyPath = getLegacySettingsPath();
@@ -1373,7 +1377,7 @@ function writeSettingsRecord(filePath: string, value: SettingsRecord): void {
   try {
     writeFileSync(temporaryPath, JSON.stringify(value, null, 2), { encoding: 'utf-8', mode: 0o600 });
     renameSync(temporaryPath, filePath);
-    chmodSync(filePath, 0o600);
+    restrictSettingsFilePermissions(filePath);
   } finally {
     rmSync(temporaryPath, { force: true });
   }
@@ -1397,13 +1401,14 @@ function writeLegacyMirror(filePath: string, settings: SettingsRecord, current?:
 export function saveSettings(
   settings: GlobalSettings,
   filePath?: string,
-  configDirName = loadedSettingsConfigDirs.get(settings) ?? activeConfigDirName,
+  configDirName = loadedSettingsConfigDirs.get(settings) ?? DEFAULT_CONFIG_DIR,
 ): void {
   const desired = toSettingsRecord(settings);
   const baseline = loadedSettingsRecords.get(settings);
 
   if (filePath !== undefined) {
     const currentRead = readSettingsRecord(filePath);
+    if (currentRead.status === 'invalid') return;
     const storedCurrent = getSettingsRecord(currentRead);
     const current = storedCurrent
       ? toSettingsRecord(parseSettingsRecord(stripMirrorMetadata(storedCurrent)).settings)
@@ -1416,11 +1421,13 @@ export function saveSettings(
     return;
   }
 
-  activeConfigDirName = configDirName;
   const configPath = getSettingsPath(configDirName);
   const statePath = getStatePath();
-  const currentConfig = getSettingsRecord(readSettingsRecord(configPath));
-  const currentState = getSettingsRecord(readSettingsRecord(statePath));
+  const configRead = readSettingsRecord(configPath);
+  const stateRead = readSettingsRecord(statePath);
+  if (configRead.status === 'invalid' || stateRead.status === 'invalid') return;
+  const currentConfig = getSettingsRecord(configRead);
+  const currentState = getSettingsRecord(stateRead);
   const current =
     currentConfig || currentState
       ? toSettingsRecord(parseSettingsRecord(mergeSettingsRecords(currentConfig, currentState)).settings)
@@ -1428,7 +1435,9 @@ export function saveSettings(
   let merged = baseline ? mergeChangedSettings(baseline, desired, current) : desired;
   if (!isSettingsRecord(merged)) throw new Error('Unable to merge settings');
 
-  const legacyRecord = getSettingsRecord(readSettingsRecord(getLegacySettingsPath()));
+  const legacyPath = getLegacySettingsPath();
+  const legacyRead = readSettingsRecord(legacyPath);
+  const legacyRecord = getSettingsRecord(legacyRead);
   const mirrorBaseline = legacyRecord ? getMirrorBaseline(legacyRecord) : undefined;
   if (legacyRecord && mirrorBaseline) {
     const legacySettings = toSettingsRecord(parseSettingsRecord(stripMirrorMetadata(legacyRecord)).settings);
@@ -1439,7 +1448,7 @@ export function saveSettings(
   const split = splitSettingsRecord(merged);
   writeSettingsRecordIfChanged(configPath, split.config, currentConfig);
   writeSettingsRecordIfChanged(statePath, split.state, currentState);
-  writeLegacyMirror(getLegacySettingsPath(), merged, legacyRecord);
+  if (legacyRead.status !== 'invalid') writeLegacyMirror(legacyPath, merged, legacyRecord);
   loadedSettingsRecords.set(settings, desired);
   loadedSettingsConfigDirs.set(settings, configDirName);
 }
