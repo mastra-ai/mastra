@@ -3,6 +3,8 @@ import {
   DownloadIcon,
   Link2Icon,
   Loader2Icon,
+  MessageSquareReplyIcon,
+  MessageSquareTextIcon,
   MoreHorizontalIcon,
   SaveIcon,
   WrenchIcon,
@@ -27,6 +29,8 @@ import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { Icon } from '@/ds/icons/Icon';
+import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
 import { useTextHighlight } from '@/hooks/use-text-highlight';
@@ -164,20 +168,45 @@ export function TraceDataPanelView({
   // which one is shown is purely a local viewing choice.
   const sideViews = useMemo(() => {
     const views: Array<{ value: TraceSideView; label: ReactNode }> = [];
-    if (messagesPanelSlot) views.push({ value: 'messages', label: 'Messages' });
+    if (messagesPanelSlot) {
+      views.push({
+        value: 'messages',
+        label: (
+          <span className="inline-flex items-center gap-1.5">
+            <Icon size="sm">
+              <MessageSquareTextIcon />
+            </Icon>
+            Messages
+          </span>
+        ),
+      });
+    }
     if (feedbackTabSlot) {
       views.push({
         value: 'feedback',
         label: (
-          <>
+          <span className="inline-flex items-center gap-1.5">
+            <Icon size="sm">
+              <MessageSquareReplyIcon />
+            </Icon>
             Feedback
             {feedbackTabBadge}
-          </>
+          </span>
         ),
       });
     }
     if (scoresTabSlot) {
-      views.push({ value: 'scores', label: <>Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</> });
+      views.push({
+        value: 'scores',
+        label: (
+          <span className="inline-flex items-center gap-1.5">
+            <Icon size="sm">
+              <ScorersIcon />
+            </Icon>
+            Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}
+          </span>
+        ),
+      });
     }
     return views;
   }, [messagesPanelSlot, feedbackTabSlot, feedbackTabBadge, scoresTabSlot, scoresTabBadge]);
@@ -411,7 +440,12 @@ export function TraceDataPanelView({
                               <DataPanel.HeaderContent>
                                 {sideViews.length > 1 ? (
                                   <Select<TraceSideView> value={sideView} onValueChange={handleSideViewChange}>
-                                    <SelectTrigger variant="ghost" size="sm" aria-label="Side column view">
+                                    <SelectTrigger
+                                      variant="ghost"
+                                      size="sm"
+                                      className="w-fit"
+                                      aria-label="Side column view"
+                                    >
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
