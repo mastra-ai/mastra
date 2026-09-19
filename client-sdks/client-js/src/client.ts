@@ -32,7 +32,9 @@ import type {
   ListScoresBySpanParams,
   QueryTraceThreadsInput,
   QueryTraceThreadsResult,
+  QueryTracesGroupedInput,
   QueryTracesInput,
+  QueryTracesUngroupedInput,
 } from './resources/observability';
 import type {
   TraceRecord,
@@ -41,8 +43,9 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
-  TraceQueryRequest,
+  TraceQueryGroupResponse,
   TraceQueryResponse,
+  TraceQueryTraceResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -1123,7 +1126,13 @@ export class MastraClient extends BaseResource {
     return this.observability.listTraces(params);
   }
 
-  /** Queries completed logical traces using recursive trace and related-record predicates. */
+  /**
+   * Queries completed logical traces using recursive trace and related-record predicates.
+   * Grouped results remain supported but are deprecated. Use `queryTraceThreads()` to retrieve thread identities.
+   */
+  queryTraces(params: QueryTracesGroupedInput): Promise<TraceQueryGroupResponse>;
+  queryTraces(params: QueryTracesUngroupedInput): Promise<TraceQueryTraceResponse>;
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.observability.queryTraces(params);
   }

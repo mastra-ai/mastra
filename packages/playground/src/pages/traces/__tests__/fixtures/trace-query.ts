@@ -1,4 +1,8 @@
-import type { GetTraceQueryFieldsResponse, GetTraceQueryValuesResponse, MastraClient } from '@mastra/client-js';
+import type {
+  GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesResponse,
+  TraceQueryTraceResponse,
+} from '@mastra/client-js';
 
 export const emptyTraceQueryFields: GetTraceQueryFieldsResponse = {
   canonicalFields: [],
@@ -28,7 +32,7 @@ export const traceQueryRegionValues: GetTraceQueryValuesResponse = {
   valuesTruncated: false,
 };
 
-export const traceQueryPage: Awaited<ReturnType<MastraClient['queryTraces']>> = {
+export const traceQueryPage: Extract<TraceQueryTraceResponse, { page: { next: string | null } }> = {
   traces: [
     {
       traceId: 'trace-a',

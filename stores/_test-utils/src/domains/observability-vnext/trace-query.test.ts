@@ -23,6 +23,15 @@ import {
 } from './trace-query';
 
 describe('trace-query reference evaluator', () => {
+  it('owns only trace expectations; grouped requests live in thread-query conformance', () => {
+    for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
+      expect(testCase.request.group, `${testCase.name} must not use deprecated grouping`).toBeUndefined();
+      for (const entry of testCase.expected) {
+        expect(Object.keys(entry)).toEqual(['traceId']);
+      }
+    }
+  });
+
   for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
     it(testCase.name, () => {
       expect(

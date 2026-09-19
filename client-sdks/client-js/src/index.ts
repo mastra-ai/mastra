@@ -42,9 +42,12 @@ export type {
   GetTraceQueryValuesArgs,
   GetTraceQueryValuesResponse,
   TraceQueryCanonicalFieldDescriptor,
+  TraceQueryGroupResponse,
   TraceQueryObservedFieldDescriptor,
   TraceQueryOperator,
   TraceQueryPredicateScope,
+  TraceQueryResponse,
+  TraceQueryTraceResponse,
   TraceQueryValueKind,
 } from './resources/observability-route-types';
 export type {

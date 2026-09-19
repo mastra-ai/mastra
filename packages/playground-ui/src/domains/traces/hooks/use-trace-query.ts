@@ -1,5 +1,5 @@
 import { MastraClient } from '@mastra/client-js';
-import type { QueryTracesInput } from '@mastra/client-js';
+import type { QueryTracesInput, TraceQueryTraceResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, skipToken, useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -7,11 +7,10 @@ import { useInView } from '@/hooks/use-in-view';
 
 export const TRACE_QUERY_PER_PAGE = 25;
 
-type TraceQueryResponse = Awaited<ReturnType<MastraClient['queryTraces']>>;
-type TraceQueryCursorResponse = Extract<TraceQueryResponse, { page: { next: string | null } }>;
-type TraceQueryTrace = TraceQueryResponse['traces'][number];
+type TraceQueryCursorResponse = Extract<TraceQueryTraceResponse, { page: { next: string | null } }>;
+type TraceQueryTrace = TraceQueryCursorResponse['traces'][number];
 
-export type TraceQueryArgs = Omit<QueryTracesInput, 'page' | 'pagination'>;
+export type TraceQueryArgs = Omit<QueryTracesInput, 'group' | 'page' | 'pagination'>;
 
 export interface UseTraceQueryArgs {
   query: TraceQueryArgs | undefined;
@@ -74,7 +73,7 @@ export function useTraceQuery({
           // Capability failures must reach the fallback without the SDK retrying 501 responses.
           const queryClient = new MastraClient({ ...client.options, retries: 0 });
           const response = await queryClient.queryTraces({ ...query, page: { limit, after: pageParam ?? null } });
-          if ('page' in response) return response;
+          if ('traces' in response && 'page' in response) return response;
           throw new Error('Expected a cursor-paginated trace query response');
         }
       : skipToken,

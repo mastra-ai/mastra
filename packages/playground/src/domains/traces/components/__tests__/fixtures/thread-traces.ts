@@ -1,4 +1,4 @@
-import type { MastraClient } from '@mastra/client-js';
+import type { MastraClient, TraceQueryTraceResponse } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
 
@@ -7,7 +7,9 @@ type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;
 type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
 
-export function queryPageFromList(list: ListTracesLightResponse): Awaited<ReturnType<MastraClient['queryTraces']>> {
+export function queryPageFromList(
+  list: ListTracesLightResponse,
+): Extract<TraceQueryTraceResponse, { page: { next: string | null } }> {
   return {
     traces: [...list.spans]
       .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime())

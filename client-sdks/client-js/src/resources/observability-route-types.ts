@@ -20,7 +20,9 @@ export type ListTracesArgs = ListArgs<Query<'GET /observability/traces'>>;
 export type ListTracesResponse = Response<'GET /observability/traces'>;
 export type ListTracesLightResponse = Response<'GET /observability/traces/light'>;
 export type TraceQueryRequest = Body<'POST /observability/traces/query'>;
-export type TraceQueryResponse = Extract<Response<'POST /observability/traces/query'>, { traces: unknown[] }>;
+export type TraceQueryResponse = Response<'POST /observability/traces/query'>;
+export type TraceQueryTraceResponse = Extract<TraceQueryResponse, { traces: unknown[] }>;
+export type TraceQueryGroupResponse = Extract<TraceQueryResponse, { groups: unknown[] }>;
 export type GetTraceQueryFieldsArgs = Body<'POST /observability/traces/query/fields'>;
 export type GetTraceQueryFieldsResponse = Extract<
   Response<'POST /observability/traces/query/fields'>,

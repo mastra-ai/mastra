@@ -154,7 +154,7 @@ describe('useTraceQuery', () => {
   describe('when pages contain duplicate trace IDs', () => {
     it('returns each trace only once', async () => {
       let requests = 0;
-      const overlappingPage: Awaited<ReturnType<MastraClient['queryTraces']>> = {
+      const overlappingPage: typeof firstTraceQueryPage = {
         ...lastTraceQueryPage,
         traces: [...firstTraceQueryPage.traces, ...lastTraceQueryPage.traces],
       };

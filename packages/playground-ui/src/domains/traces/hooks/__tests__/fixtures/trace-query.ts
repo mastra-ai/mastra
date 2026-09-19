@@ -1,6 +1,6 @@
-import type { MastraClient } from '@mastra/client-js';
+import type { TraceQueryTraceResponse } from '@mastra/client-js';
 
-type TraceQueryResponse = Awaited<ReturnType<MastraClient['queryTraces']>>;
+type TraceQueryResponse = Extract<TraceQueryTraceResponse, { page: { next: string | null } }>;
 
 export const firstTraceQueryPage: TraceQueryResponse = {
   traces: [

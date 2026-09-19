@@ -10,7 +10,7 @@ import type {
 } from '@mastra/core/storage';
 import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import type { QueryTraceThreadsResult, QueryTracesInput } from './observability';
+import type { QueryTraceThreadsResult, QueryTracesGroupedInput, QueryTracesInput } from './observability';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -495,6 +495,32 @@ describe('Observability Methods', () => {
         page: { limit: number };
         pagination: { page: number; perPage: number };
       }>().not.toMatchTypeOf<QueryTracesInput>();
+      expectTypeOf<{
+        timeRange: { from: string; to: string };
+        group: { by: ['threadId'] };
+        pagination: { page: number; perPage: number };
+      }>().not.toMatchTypeOf<QueryTracesInput>();
+    });
+
+    it('should continue to post deprecated grouped queries with group result types', async () => {
+      mockSuccessfulResponse();
+      const request: QueryTracesGroupedInput = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        group: { by: ['threadId'] },
+        page: { limit: 25 },
+      };
+
+      const result = await client.queryTraces(request);
+
+      expectTypeOf(result).toEqualTypeOf<TraceQueryGroupResponse>();
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
     });
 
     it('should post the advanced query body unchanged with trace result types', async () => {
