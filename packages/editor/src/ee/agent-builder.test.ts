@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { StreamErrorRetryProcessor } from '@mastra/core/processors';
+import { createBuilderAgent, DEFAULT_BUILDER_ERROR_PROCESSORS } from './agent-builder-agent';
 import { EditorAgentBuilder } from './agent-builder';
 
 describe('EditorAgentBuilder', () => {
@@ -329,5 +331,37 @@ describe('EditorAgentBuilder', () => {
       new EditorAgentBuilder(input);
       expect(input.features.agent.browser).toBe(true);
     });
+  });
+});
+
+describe('createBuilderAgent stability processors', () => {
+  it('resolves the shared stability defaults on a plain Agent', async () => {
+    const agent = createBuilderAgent();
+
+    expect(await agent.listErrorProcessors()).toEqual(expect.arrayContaining(DEFAULT_BUILDER_ERROR_PROCESSORS));
+    expect((await agent.listErrorProcessors()).map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'stream-error-retry-processor',
+      'prefill-error-handler',
+    ]);
+  });
+
+  it('keeps a caller-supplied processor with a default id instead of duplicating it', async () => {
+    const callerRetry = new StreamErrorRetryProcessor({ maxRetries: 5 });
+    const agent = createBuilderAgent({ errorProcessors: [callerRetry] });
+
+    const resolved = await agent.listErrorProcessors();
+    expect(resolved[0]).toBe(callerRetry);
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'stream-error-retry-processor',
+      'provider-history-compat',
+      'prefill-error-handler',
+    ]);
+  });
+
+  it('treats an explicitly empty error processor list as an opt-out', async () => {
+    const agent = createBuilderAgent({ errorProcessors: [] });
+
+    expect(await agent.listErrorProcessors()).toEqual([]);
   });
 });
