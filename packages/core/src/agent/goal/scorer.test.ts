@@ -1,6 +1,7 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
+import { Agent } from '../agent';
 import { createScorer } from '../../evals/base';
 import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
 import { createMockModel } from '../../test-utils/llm-mock';
@@ -173,15 +174,13 @@ describe('createGoalScorer tool support', () => {
 });
 
 describe('createGoalScorer provider history compatibility', () => {
-  it('gives the judge agent ProviderHistoryCompat by default (input + error lanes)', () => {
+  it('leaves the judge processor lanes unset so the Agent default applies', () => {
     const scorer = createGoalScorer({ judgeModel });
-    const input = scorer.config.judge?.inputProcessors ?? [];
-    const error = scorer.config.judge?.errorProcessors ?? [];
-    expect(input.some(p => p instanceof ProviderHistoryCompat)).toBe(true);
-    expect(error.some(p => p instanceof ProviderHistoryCompat)).toBe(true);
+    expect(scorer.config.judge?.inputProcessors).toBeUndefined();
+    expect(scorer.config.judge?.errorProcessors).toBeUndefined();
   });
 
-  it('lets a caller override the judge processor lanes', () => {
+  it('keeps caller-supplied judge processors, including an empty error lane', () => {
     const custom = new ProviderHistoryCompat();
     const scorer = createGoalScorer({
       judgeModel,
@@ -190,6 +189,21 @@ describe('createGoalScorer provider history compatibility', () => {
     });
     expect(scorer.config.judge?.inputProcessors).toEqual([custom]);
     expect(scorer.config.judge?.errorProcessors).toEqual([]);
+  });
+
+  it('gets ProviderHistoryCompat from the Agent when the judge is built the way the runtime builds it', async () => {
+    // Mirrors the judge construction in `evals/base.ts`: a bare `new Agent` with
+    // only the scorer's configured processor lanes spread in when set. The judge
+    // therefore inherits the Agent's default error processors, which is where
+    // provider-history repair now comes from.
+    const agent = new Agent({
+      id: 'judge',
+      name: 'judge',
+      model: judgeModel,
+      instructions: DEFAULT_GOAL_JUDGE_PROMPT,
+    });
+
+    expect((await agent.listErrorProcessors()).map(processor => processor.id)).toContain('provider-history-compat');
   });
 });
 

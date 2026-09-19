@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '@mastra/core/processors';
+import { defaultStabilityErrorProcessors } from '@mastra/core/processors';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 
 import path from 'node:path';
@@ -50,26 +50,16 @@ const workspace = new Workspace({
  *   (anthropic tool-id format, cerebras reasoning-content strip, anthropic
  *   foreign-reasoning strip) so model swaps don't break history.
  *
+ * These are the shared stability defaults from `@mastra/core`, so builder agents
+ * stay aligned with every other agent instead of carrying their own copy.
+ *
  * Exported so callers can compose a custom processor list that keeps the
  * subset they want (e.g. `[...DEFAULT_BUILDER_ERROR_PROCESSORS.filter(p => p.id !== 'stream-error-retry-processor'), myCustom]`).
  */
-export const DEFAULT_BUILDER_ERROR_PROCESSORS = [
-  new StreamErrorRetryProcessor(),
-  new PrefillErrorHandler(),
-  new ProviderHistoryCompat(),
-];
+export const DEFAULT_BUILDER_ERROR_PROCESSORS = defaultStabilityErrorProcessors();
 
 export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>): Agent<'builder-agent'> {
   const memory = new Memory();
-
-  // Merge defaults with any caller-supplied processors. Caller processors run
-  // after defaults so they can observe/extend retries the defaults trigger.
-  // A function-typed override (DynamicArgument) is passed through unchanged —
-  // callers using the dynamic form are assumed to manage the full list.
-  const callerErrorProcessors = args?.errorProcessors;
-  const errorProcessors = Array.isArray(callerErrorProcessors)
-    ? [...DEFAULT_BUILDER_ERROR_PROCESSORS, ...callerErrorProcessors]
-    : (callerErrorProcessors ?? DEFAULT_BUILDER_ERROR_PROCESSORS);
 
   const config: AgentConfig<'builder-agent'> = {
     instructions: `You are the Agent Builder.
@@ -203,7 +193,6 @@ Keep this to 2–4 focused paragraphs or compact bullet groups. Do not include w
     memory,
     workspace,
     ...(args || {}),
-    errorProcessors,
     id: 'builder-agent',
     name: 'Agent Builder Agent',
     description: 'An agent that can build agents',

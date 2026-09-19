@@ -7,7 +7,6 @@ import type { MastraModelConfig } from '../../llm';
 import type { StreamCompletionContext } from '../../loop/network/validation';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
-import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
 import type { RequestContext } from '../../request-context';
 import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING, GOAL_SCORER_ID } from './objective';
@@ -157,11 +156,13 @@ export function createGoalScorer({
       // The judge agent talks to the same providers as the main agent, so a prompt
       // assembled from history written by a different provider can carry history
       // that provider will reject (e.g. a foreign provider's signed thinking
-      // blocks). Run the same provider-history compat processor Mastra Code puts
-      // on its own agents so the judge cannot be bricked by an incompatible
-      // prompt. Callers may override either list.
-      inputProcessors: inputProcessors ?? [new ProviderHistoryCompat()],
-      errorProcessors: errorProcessors ?? [new ProviderHistoryCompat()],
+      // blocks). The Agent's default error processors include
+      // `ProviderHistoryCompat`, and error-phase processors now receive
+      // `processLLMRequest`, so the judge gets the same provider-history repair
+      // Mastra Code puts on its own agents without wiring it here. Callers may
+      // still supply either list.
+      ...(inputProcessors ? { inputProcessors } : {}),
+      ...(errorProcessors ? { errorProcessors } : {}),
       ...(hasTools ? { tools } : {}),
       ...(memory ? { memory } : {}),
       ...(defaultMemoryOptions ? { defaultMemoryOptions } : {}),
