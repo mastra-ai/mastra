@@ -3664,9 +3664,15 @@ export class DurableAgent<
         // Register the loop workflow there so a worker process (or the
         // in-process worker) can find it. Steps resolve the agent from the
         // serialized input's agentId at runtime, so the graph is shared.
+        // `distributed: true` — these runs are consumed by a (possibly
+        // remote) orchestration worker, so their workflows-topic events must
+        // fan out through the broker instead of being tagged `localOnly` by
+        // the mastra.pubsub proxy.
         if (this.resolveEngine() === 'evented' && !this.#mastra.__hasInternalWorkflow(this.#workflow.id)) {
           this.#mastra.__registerInternalWorkflow(
             this.#workflow as unknown as Parameters<Mastra['__registerInternalWorkflow']>[0],
+            undefined,
+            { distributed: true },
           );
         }
       }
