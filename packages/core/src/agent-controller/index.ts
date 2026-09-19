@@ -38,6 +38,7 @@ export type {
   AvailableModel,
   CustomAvailableModel,
   CustomModelCatalogProvider,
+  AgentControllerBranch,
   AgentControllerConfig,
   AgentControllerDisplayState,
   AgentControllerEvent,
