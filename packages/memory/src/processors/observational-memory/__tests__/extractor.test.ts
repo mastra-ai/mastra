@@ -390,26 +390,29 @@ describe('Extractor', () => {
     RETRY_CONFIG.initialDelayMs = 1;
     RETRY_CONFIG.maxDelayMs = 4;
     RETRY_CONFIG.jitter = 0;
-    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
-    const stream = vi
-      .fn()
-      .mockRejectedValueOnce(Object.assign(new Error('rate limited'), { statusCode: 429 }))
-      .mockResolvedValueOnce({ object: Promise.resolve({ priority: 'high' }) });
+    try {
+      const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+      const stream = vi
+        .fn()
+        .mockRejectedValueOnce(Object.assign(new Error('rate limited'), { statusCode: 429 }))
+        .mockResolvedValueOnce({ object: Promise.resolve({ priority: 'high' }) });
 
-    const result = await extractStructuredValues({
-      agent: { stream } as unknown as Agent<any, any, any, any>,
-      source: 'observer',
-      extractors: [priority],
-      maxRetries: 1,
-    });
+      const result = await extractStructuredValues({
+        agent: { stream } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+        maxRetries: 1,
+      });
 
-    expect(result.values).toEqual({ priority: 'high' });
-    expect(result.failures).toEqual([]);
-    expect(stream).toHaveBeenCalledTimes(2);
-    // Retried in the same (native) output mode rather than falling through to
-    // the json-prompt-injection fallback.
-    expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBeUndefined();
-    Object.assign(RETRY_CONFIG, originalRetryConfig);
+      expect(result.values).toEqual({ priority: 'high' });
+      expect(result.failures).toEqual([]);
+      expect(stream).toHaveBeenCalledTimes(2);
+      // Retried in the same (native) output mode rather than falling through to
+      // the json-prompt-injection fallback.
+      expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBeUndefined();
+    } finally {
+      Object.assign(RETRY_CONFIG, originalRetryConfig);
+    }
   });
 
   it('uses streaming for structured extraction', async () => {

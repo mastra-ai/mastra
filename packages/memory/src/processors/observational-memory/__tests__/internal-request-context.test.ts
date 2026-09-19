@@ -428,12 +428,19 @@ describe('multi-thread structured-extractor branch', () => {
       tokenCounter: { countMessages: () => 1 } as any,
     });
 
-    vi.spyOn(observer as any, 'callObserver').mockRejectedValue(new TypeError('fetch failed'));
+    // First thread succeeds, second fails: marking is deferred until every
+    // thread lands, so nothing may be marked.
+    vi.spyOn(observer as any, 'callObserver')
+      .mockResolvedValueOnce({ observations: '- observed', extractedValues: {}, extractionFailures: [] })
+      .mockRejectedValueOnce(new TypeError('fetch failed'));
 
-    const messagesByThread = new Map([['thread-1', [createMessage('message-1', 'thread-1')]]]);
+    const messagesByThread = new Map([
+      ['thread-1', [createMessage('message-1', 'thread-1')]],
+      ['thread-2', [createMessage('message-2', 'thread-2')]],
+    ]);
 
     await expect(
-      (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1']),
+      (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']),
     ).rejects.toThrow();
     expect([...observedMessageIds]).toEqual([]);
   });

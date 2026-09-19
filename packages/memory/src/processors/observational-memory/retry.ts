@@ -82,13 +82,15 @@ function hasIsRetryableFlag(value: unknown): boolean {
 }
 
 /**
- * Returns true when the given error looks like a transient transport-class
- * failure that's worth retrying — undici `terminated`, `fetch failed`,
- * `UND_ERR_*` codes, AI SDK `APICallError` with `isRetryable: true`, and
- * common HTTP 408/425/429/5xx statuses. Walks the `error.cause` chain so
- * wrapper errors don't hide the real failure.
+ * Returns true when a user-initiated abort appears anywhere in the error's
+ * `cause`/`error` wrapper chain.
  *
- * Never retries on user-initiated aborts.
+ * @internal
+ */
+/**
+ * Returns true when a user-initiated cancellation appears anywhere in the
+ * error's `cause`/`error` wrapper chain, so a wrapped abort can never be
+ * mistaken for a retryable or survivable provider failure.
  *
  * @internal
  */
@@ -108,6 +110,17 @@ export function hasAbortInChain(error: unknown): boolean {
   return visit(error);
 }
 
+/**
+ * Returns true when the given error looks like a transient transport-class
+ * failure that's worth retrying — undici `terminated`, `fetch failed`,
+ * `UND_ERR_*` codes, AI SDK `APICallError` with `isRetryable: true`, and
+ * common HTTP 408/425/429/5xx statuses. Walks the `error.cause` chain so
+ * wrapper errors don't hide the real failure.
+ *
+ * Never retries on user-initiated aborts.
+ *
+ * @internal
+ */
 export function isTransientLLMError(error: unknown): boolean {
   if (hasAbortInChain(error)) return false;
 
@@ -202,7 +215,7 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions)
     try {
       return await fn();
     } catch (error) {
-      if (isAbortError(error) || abortSignal?.aborted) throw error;
+      if (hasAbortInChain(error) || abortSignal?.aborted) throw error;
       if (attempt >= maxRetries || !isTransientLLMError(error)) {
         if (attempt > 0) {
           omDebug(
