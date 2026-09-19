@@ -10692,12 +10692,27 @@ export class Session {
           },
         );
         if (responseLogicalMessageIdentity !== undefined) {
+          const callerAbortSignal = opts.abortSignal;
+          let callerAbortListener: (() => void) | undefined;
+          if (lineagedWakeAbortController !== undefined && callerAbortSignal !== undefined) {
+            const abortWake = () => lineagedWakeAbortController.abort(callerAbortSignal.reason);
+            if (callerAbortSignal.aborted) {
+              abortWake();
+            } else {
+              callerAbortListener = abortWake;
+              callerAbortSignal.addEventListener('abort', abortWake, { once: true });
+            }
+          }
           const accepted = await this._awaitSignalNativeAcceptance(
             dispatched.accepted,
             opts.abortSignal,
             undefined,
             'signal().logicalMessageIdentity',
-          );
+          ).finally(() => {
+            if (callerAbortListener !== undefined) {
+              callerAbortSignal?.removeEventListener('abort', callerAbortListener);
+            }
+          });
           if (accepted.action === 'discard') {
             throw lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
           }

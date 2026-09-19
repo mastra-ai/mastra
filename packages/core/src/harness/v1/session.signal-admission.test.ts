@@ -612,6 +612,56 @@ describe('Session.signal() admissionId', () => {
     expect(session.isRunning()).toBe(false);
   });
 
+  it('aborts an interleaving full logical wake when the caller cancels acceptance', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseActive!: () => void;
+    let dispatchStarted!: () => void;
+    let nativeAbortObserved!: () => void;
+    const dispatchStartedPromise = new Promise<void>(resolve => {
+      dispatchStarted = resolve;
+    });
+    const nativeAbort = new Promise<void>(resolve => {
+      nativeAbortObserved = resolve;
+    });
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseActive = resolve;
+      }),
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const active = session.message({ content: 'active turn' });
+    await waitForStreamCalls(agent, 1);
+
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal as AbortSignal | undefined;
+      nativeAbortSignal?.addEventListener('abort', () => nativeAbortObserved(), { once: true });
+      releaseActive();
+      dispatchStarted();
+      return {
+        signal: createSignal({ ...signal, acceptedAt: new Date() }),
+        runId: 'interleaving-cancelled-wake',
+        accepted: new Promise<never>(() => {}),
+      };
+    }) as typeof agent.sendSignal;
+
+    const callerAbortController = new AbortController();
+    const pending = session.signal({
+      content: 'cancel interleaving wake acceptance',
+      abortSignal: callerAbortController.signal,
+      logicalMessageIdentity: { input: 'interleave-cancel-input', response: 'interleave-cancel-response' },
+    });
+    await dispatchStartedPromise;
+    callerAbortController.abort(new Error('caller stopped waiting'));
+    await expect(pending).rejects.toBeDefined();
+
+    await active;
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await expect(nativeAbort).resolves.toBeUndefined();
+    expect(session.isRunning()).toBe(false);
+  });
+
   it('rejects payload conflicts and non-hash-safe options before another dispatch', async () => {
     const { harness, agent } = setupHarness();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
