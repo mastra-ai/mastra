@@ -2427,6 +2427,66 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
     expect(afterDisconnectCount).toBe(initialListenerCount);
   });
 
+  describe('failed connect()', () => {
+    let unresponsiveServer: HttpServer;
+    let unreachableUrl: URL;
+
+    beforeEach(async () => {
+      // Accepts the request and never replies, so connect() fails via connectTimeout
+      // rather than a transport-level refusal.
+      unresponsiveServer = createServer(() => {});
+      await new Promise<void>(resolve => unresponsiveServer.listen(0, '127.0.0.1', resolve));
+      const { port } = unresponsiveServer.address() as AddressInfo;
+      unreachableUrl = new URL(`http://127.0.0.1:${port}/mcp`);
+    });
+
+    afterEach(() => {
+      unresponsiveServer?.close();
+    });
+
+    const makeFailingClient = (name: string) =>
+      new InternalMastraMCPClient({
+        name,
+        server: { url: unreachableUrl, connectTimeout: 100 },
+      });
+
+    it('should not leak SIGTERM/SIGHUP listeners when connect() fails', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+      const initialSigHup = process.listenerCount('SIGHUP');
+
+      const client = makeFailingClient('failed-connect-client');
+      await expect(client.connect()).rejects.toThrow();
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+      expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
+    });
+
+    it('should not accumulate listeners across repeated failed connects', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+      const initialSigHup = process.listenerCount('SIGHUP');
+
+      // Above Node's default max of 10, so a leak also trips MaxListenersExceededWarning.
+      for (let i = 0; i < 12; i++) {
+        const client = makeFailingClient(`failed-connect-loop-${i}`);
+        await client.connect().catch(() => {});
+        await client.disconnect();
+      }
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+      expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
+    });
+
+    it('should release listeners on disconnect() after a failed connect', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+
+      const client = makeFailingClient('failed-connect-then-disconnect');
+      await client.connect().catch(() => {});
+      await client.disconnect();
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+    });
+  });
+
   it('should not create duplicate connections when connect is called concurrently', async () => {
     const client = new InternalMastraMCPClient({
       name: 'concurrent-connect-test-client',

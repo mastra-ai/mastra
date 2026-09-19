@@ -813,6 +813,12 @@ export class InternalMastraMCPClient extends MastraBase {
         this.clientConnectionOnClose = connectionOnClose;
         this.client.onclose = connectionOnClose;
       } catch (e) {
+        // A connect that never reached a transport leaves nothing for disconnect() to
+        // tear down, so the process hooks must not outlive the failed attempt. A live
+        // transport means an earlier connection still owns them.
+        if (!this.transport) {
+          this.unregisterProcessHooks();
+        }
         this.isConnected = null;
         // A failed connect invalidates the cached verdict so a legacy verdict cannot stick.
         this.priorDiscovery = undefined;
@@ -820,6 +826,19 @@ export class InternalMastraMCPClient extends MastraBase {
       }
     });
 
+    // Registered before the connection settles so an exit during a connect attempt still
+    // tears down anything the transport already started (a spawned stdio child, say).
+    // The failure path inside the promise removes them again.
+    this.registerProcessHooks();
+
+    return this.isConnected;
+  }
+
+  /**
+   * Installs the process-exit and signal handlers that tear this client down when the
+   * host process goes away. Idempotent, so repeated connects add at most one of each.
+   */
+  private registerProcessHooks() {
     if (!this.exitHookUnsubscribe) {
       this.exitHookUnsubscribe = asyncExitHook(
         async () => {
@@ -839,8 +858,26 @@ export class InternalMastraMCPClient extends MastraBase {
       this.sigHupHandler = () => gracefulExit();
       process.on('SIGHUP', this.sigHupHandler);
     }
+  }
 
-    return this.isConnected;
+  /**
+   * Removes whatever {@link registerProcessHooks} installed. Keyed on the handlers this
+   * client actually registered rather than on connection state, so a client that never
+   * reached a transport still releases its process listeners.
+   */
+  private unregisterProcessHooks() {
+    if (this.exitHookUnsubscribe) {
+      this.exitHookUnsubscribe();
+      this.exitHookUnsubscribe = undefined;
+    }
+    if (this.sigTermHandler) {
+      process.off('SIGTERM', this.sigTermHandler);
+      this.sigTermHandler = undefined;
+    }
+    if (this.sigHupHandler) {
+      process.off('SIGHUP', this.sigHupHandler);
+      this.sigHupHandler = undefined;
+    }
   }
 
   /**
@@ -903,6 +940,9 @@ export class InternalMastraMCPClient extends MastraBase {
     this.closePendingAuthTransport();
     if (!this.transport) {
       await this.detachStaleClientTransport();
+      // A client whose connect() failed still holds process hooks; there is simply no
+      // transport to close. Release them here or they outlive the client entirely.
+      this.unregisterProcessHooks();
       this.log('debug', 'Disconnect called but no transport was connected.');
       return;
     }
@@ -923,18 +963,7 @@ export class InternalMastraMCPClient extends MastraBase {
       this.isConnected = null;
       this.serverInstructions = undefined;
 
-      if (this.exitHookUnsubscribe) {
-        this.exitHookUnsubscribe();
-        this.exitHookUnsubscribe = undefined;
-      }
-      if (this.sigTermHandler) {
-        process.off('SIGTERM', this.sigTermHandler);
-        this.sigTermHandler = undefined;
-      }
-      if (this.sigHupHandler) {
-        process.off('SIGHUP', this.sigHupHandler);
-        this.sigHupHandler = undefined;
-      }
+      this.unregisterProcessHooks();
     }
   }
 
