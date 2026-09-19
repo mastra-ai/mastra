@@ -1287,7 +1287,7 @@ describe('createMastraCode', () => {
     expect(controllerSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
-  it('runs provider history compat before stream error retries so bad requests are repaired, not blindly retried', async () => {
+  it('names only its tuned stream retry policy and lets the shared defaults supply the rest', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -1297,12 +1297,10 @@ describe('createMastraCode', () => {
       .map(call => call[0] as { errorProcessors?: Array<{ id?: string }>; maxProcessorRetries?: number } | undefined)
       .find(config => config?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'));
     expect(agentConfig?.maxProcessorRetries).toBe(64);
-    // ProviderHistoryCompat is named first because the shared defaults are
-    // inserted at the position their id gives them, so relying on inheritance
-    // alone would place it after the retry processor. `prefill-error-handler` is
-    // not named: it is inherited and still lands between the two.
+    // The Agent inserts the missing shared defaults at their canonical positions, so both
+    // `provider-history-compat` and `prefill-error-handler` still resolve ahead of this
+    // processor without being named here.
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
-      'provider-history-compat',
       'stream-error-retry-processor',
       'mastracode-account-rotation',
     ]);
@@ -1624,18 +1622,21 @@ describe('createMastraCode', () => {
     warn.mockRestore();
   });
 
-  it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
+  it('does not construct its own ProviderHistoryCompat — the shared default supplies it', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls
-      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }> } | undefined)
-      .find(config => config?.errorProcessors?.some(processor => processor.id === 'provider-history-compat'));
-    // The processor lives in the error lane and still receives `processLLMRequest`
-    // there, because error-phase processors participate in the LLM request lane.
-    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+    const configs = agentConstructorMock.mock.calls.map(
+      call => call[0] as { errorProcessors?: Array<{ id?: string }>; inputProcessors?: unknown[] } | undefined,
+    );
+    // A second instance would duplicate the rule set; the Agent inserts the shared
+    // default, which also receives `processLLMRequest` because error-phase processors
+    // participate in the LLM request lane.
+    expect(
+      configs.some(config => config?.errorProcessors?.some(processor => processor.id === 'provider-history-compat')),
+    ).toBe(false);
   });
 
   it('does not configure the polling GitHub provider when the embedding disables it', async () => {

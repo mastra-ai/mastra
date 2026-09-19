@@ -23,7 +23,6 @@ import {
   AgentsMDInjector,
   createBackgroundWorkSignalProcessor,
   isBadRequestError,
-  ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
 import type { InputProcessor, Processor } from '@mastra/core/processors';
@@ -1090,17 +1089,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ...(pluginSignalLane?.getOutputProcessors() ?? []),
     ],
     errorProcessors: [
-      // ProviderHistoryCompat must run before StreamErrorRetryProcessor: both react to
-      // HTTP 400s, but ProviderHistoryCompat repairs the incompatible history (e.g.
-      // sanitizing tool-call IDs) before retrying, while StreamErrorRetryProcessor's
-      // isBadRequestError matcher retries the identical request. Error processors
-      // short-circuit on the first `retry: true`, so a blind retry first would resend
-      // the broken history and fail again. It is named here rather than inherited
-      // because the Agent appends missing defaults after a caller's list, which would
-      // place this after the retry processor.
-      // `prefill-error-handler` is deliberately absent: the Agent appends it from the
-      // shared stability defaults, which lands in the same position it occupied here.
-      new ProviderHistoryCompat(),
+      // Only the tuned stream-retry policy is named here; `ProviderHistoryCompat` and
+      // `PrefillErrorHandler` come from the shared stability defaults, which the Agent inserts
+      // ahead of this one at their canonical positions. Error processors short-circuit on the
+      // first `retry: true`, so that relative order matters: this processor's bad-request
+      // matcher claims any 400, and ahead of the repairs it would resend the identical broken
+      // request instead of letting them fix it.
       new StreamErrorRetryProcessor({
         matchers: [
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },

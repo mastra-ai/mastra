@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Mastra Code no longer wires its own prefill error processor or a duplicate provider-history copy in its input lane. It inherits the prefill handler from `@mastra/core` and keeps only its own stream-retry policy.
+Mastra Code no longer wires its own prefill error processor, a duplicate provider-history copy in its input lane, or a positional `ProviderHistoryCompat` in its error lane. It names only its tuned stream-retry policy and inherits the rest from the `@mastra/core` shared defaults, which place each one at the position its id gives it.

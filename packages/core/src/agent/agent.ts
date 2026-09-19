@@ -98,7 +98,7 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
-import { defaultStabilityErrorProcessors } from '../processors/stability-defaults';
+import { defaultStabilityErrorProcessors, STABILITY_ERROR_PROCESSOR_IDS } from '../processors/stability-defaults';
 import {
   RequestContext,
   MASTRA_INHERITED_MEMORY_KEY,
@@ -1808,9 +1808,12 @@ export class Agent<
   /**
    * Resolves the error processors for a generation.
    *
-   * The caller's list is the base. Each shared stability default is added only when no configured
-   * processor already carries its id, so supplying your own instance means the default is not added
-   * alongside it. An explicitly empty array means no error processors.
+   * The caller's list is the base and keeps its order. Each shared stability default is added only
+   * when no configured processor already carries its id, and is inserted at the position its id
+   * gives it among the defaults, so naming a subset of them still yields the correct relative order
+   * — supplying only `stream-error-retry-processor`, for instance, still puts `provider-history-compat`
+   * ahead of it. Configured processors are never reordered. An explicitly empty array means no error
+   * processors.
    *
    * Pass `includeDefaults: false` to resolve only what the caller configured. `getConfiguredProcessorIds`
    * uses that mode because its contract is the raw configured list — the editor clones it to storage, so
@@ -1841,8 +1844,31 @@ export class Agent<
 
     const configuredIds = new Set(configured.map(processor => processor.id));
     const missingDefaults = defaultStabilityErrorProcessors().filter(processor => !configuredIds.has(processor.id));
+    if (missingDefaults.length === 0) return configured;
 
-    return [...configured, ...missingDefaults];
+    // Insert each missing default before the first configured processor that follows it in the
+    // canonical order, so a caller naming a later default does not invert the pair. Configured
+    // processors keep their positions; defaults with no successor are appended in canonical order.
+    const canonicalIndex = new Map<string, number>(STABILITY_ERROR_PROCESSOR_IDS.map((id, index) => [id, index]));
+    const resolved = [...configured];
+
+    for (const defaultProcessor of missingDefaults) {
+      const index = canonicalIndex.get(defaultProcessor.id);
+      if (index === undefined) {
+        resolved.push(defaultProcessor);
+        continue;
+      }
+
+      const insertAt = resolved.findIndex(processor => {
+        const processorIndex = canonicalIndex.get(processor.id);
+        return processorIndex !== undefined && processorIndex > index;
+      });
+
+      if (insertAt === -1) resolved.push(defaultProcessor);
+      else resolved.splice(insertAt, 0, defaultProcessor);
+    }
+
+    return resolved;
   }
 
   /**
@@ -2167,7 +2193,11 @@ export class Agent<
   /**
    * Returns the error processors for this agent: your configured list plus whichever shared
    * stability defaults it does not already name. A configured processor whose id matches a default
-   * means that default is not added again. `errorProcessors: []` means no error processors.
+   * means that default is not added again. Each added default is placed at the position its id gives
+   * it, so the defaults keep their relative order even when you name only one of them — the two
+   * processors that repair a request stay ahead of the retry processor, whose bad-request matcher
+   * claims any `400` and would otherwise resend a request they could have fixed.
+   * `errorProcessors: []` means no error processors.
    */
   public async listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]> {
     return this.#resolveErrorProcessors({

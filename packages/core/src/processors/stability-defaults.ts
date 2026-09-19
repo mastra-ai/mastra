@@ -38,14 +38,18 @@ export function isECONNRESETError(error: unknown): boolean {
  * The ids of the default stability error processors, in their default order.
  *
  * The order is load-bearing: error processors short-circuit on the first
- * `{ retry: true }`, so `provider-history-compat` must repair provider history
- * **before** `stream-error-retry-processor`'s bad-request matcher blindly
- * resends the same, still-broken request.
+ * `{ retry: true }`, so the two processors that repair a request must run
+ * **before** `stream-error-retry-processor`, whose `isBadRequestError` matcher
+ * claims any `400` and blindly resends the same, still-broken request.
+ *
+ * `stream-error-retry-processor` goes last for that reason. Whichever repair
+ * processor matches first gets its one shot at fixing the request; the retry
+ * processor is the backstop for everything the repairs do not claim.
  */
 export const STABILITY_ERROR_PROCESSOR_IDS = [
   'provider-history-compat',
-  'stream-error-retry-processor',
   'prefill-error-handler',
+  'stream-error-retry-processor',
 ] as const;
 
 /**
@@ -55,14 +59,14 @@ export const STABILITY_ERROR_PROCESSOR_IDS = [
  * Turning these on means a plain `new Agent({...})` recovers from three
  * provider-side failure classes without any caller wiring:
  *
- * - transient stream/connection failures — including a bare `500`/`isRetryable`
- *   error that would otherwise surface as an empty response;
- * - assistant-prefill rejections from Anthropic/Qwen-style models;
  * - provider history incompatibilities (e.g. another provider's tool calls or
- *   reasoning content in the history).
+ *   reasoning content in the history);
+ * - assistant-prefill rejections from Anthropic/Qwen-style models;
+ * - transient stream/connection failures — including a bare `500`/`isRetryable`
+ *   error that would otherwise surface as an empty response.
  *
- * A caller-supplied processor whose id matches one of these replaces that
- * default in its slot; `errorProcessors: []` opts out entirely.
+ * A caller-supplied processor whose id matches one of these keeps its place at
+ * that id's position; `errorProcessors: []` opts out entirely.
  *
  * Returns a fresh array of fresh instances on every call — never a shared
  * mutable array.
@@ -70,6 +74,7 @@ export const STABILITY_ERROR_PROCESSOR_IDS = [
 export function defaultStabilityErrorProcessors(): ErrorProcessorOrWorkflow[] {
   return [
     new ProviderHistoryCompat(),
+    new PrefillErrorHandler(),
     new StreamErrorRetryProcessor({
       retryUnknownErrors: true,
       maxRetries: 2,
@@ -84,6 +89,5 @@ export function defaultStabilityErrorProcessors(): ErrorProcessorOrWorkflow[] {
         },
       ],
     }),
-    new PrefillErrorHandler(),
   ];
 }

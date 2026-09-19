@@ -3775,8 +3775,8 @@ describe('error processors — shared stability defaults', () => {
 
   const DEFAULT_ERROR_PROCESSOR_IDS = [
     'provider-history-compat',
-    'stream-error-retry-processor',
     'prefill-error-handler',
+    'stream-error-retry-processor',
   ] as const;
 
   const bareAgent = (config: Record<string, unknown> = {}) =>
@@ -3821,8 +3821,8 @@ describe('error processors — shared stability defaults', () => {
     expect(compatProcessors).toEqual([customCompat]);
     expect(resolved.map(processor => processor.id)).toEqual([
       'provider-history-compat',
-      'stream-error-retry-processor',
       'prefill-error-handler',
+      'stream-error-retry-processor',
     ]);
     // The caller's instance is the one that runs, and it stays in the caller's position.
     expect(resolved[0]).toBe(customCompat);
@@ -3859,10 +3859,56 @@ describe('error processors — shared stability defaults', () => {
     expect(resolved.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'custom-error-processor',
-      'stream-error-retry-processor',
       'prefill-error-handler',
+      'stream-error-retry-processor',
     ]);
     expect(resolved[0]).toBe(customCompat);
+  });
+
+  it('inserts the added repair processors ahead of a caller retry processor', async () => {
+    const customRetry = new StreamErrorRetryProcessor({ maxRetries: 5 });
+    const agent = bareAgent({ errorProcessors: [customRetry] });
+
+    const resolved = await agent.listErrorProcessors();
+
+    // Naming only the retry processor must not put it ahead of the repairs: error processors
+    // short-circuit on the first `{ retry: true }`, and the retry processor's bad-request matcher
+    // claims any 400, so both repairs have to stay ahead of it.
+    expect(resolved.map(processor => processor.id)).toEqual([...DEFAULT_ERROR_PROCESSOR_IDS]);
+    expect(resolved[2]).toBe(customRetry);
+  });
+
+  it('inserts added defaults in canonical order around a caller processor naming the last one', async () => {
+    const customPrefill = new PrefillErrorHandler();
+    const agent = bareAgent({ errorProcessors: [customPrefill] });
+
+    const resolved = await agent.listErrorProcessors();
+
+    expect(resolved.map(processor => processor.id)).toEqual([...DEFAULT_ERROR_PROCESSOR_IDS]);
+    expect(resolved[1]).toBe(customPrefill);
+  });
+
+  it('does not reorder caller processors that carry no default id', async () => {
+    const customRetry = new StreamErrorRetryProcessor({ maxRetries: 5 });
+    const customProcessor: Processor = {
+      id: 'custom-error-processor',
+      processAPIError: async () => ({ retry: true }),
+    };
+    const agent = bareAgent({ errorProcessors: [customRetry, customProcessor] });
+
+    const resolved = await agent.listErrorProcessors();
+
+    // Caller processors keep their relative order; the added default goes to the position its id
+    // gives it relative to the other defaults, and the unordered caller processor stays put.
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'prefill-error-handler',
+      'stream-error-retry-processor',
+      'custom-error-processor',
+    ]);
+    expect(resolved[1]).toBeInstanceOf(PrefillErrorHandler);
+    expect(resolved[2]).toBe(customRetry);
+    expect(resolved[3]).toBe(customProcessor);
   });
 
   it('leaves getConfiguredProcessorIds reporting only what the caller configured', async () => {
