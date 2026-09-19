@@ -89,6 +89,7 @@ export {
   type ToolSearchFilterArgs,
   type ToolSearchFilterPhase,
   type ToolSearchProcessorOptions,
+  type ToolSearchPreselectOptions,
 } from './tool-search';
 export { SkillsProcessor, formatSkillsCatalog, type SkillCatalogEntry, type SkillsProcessorOptions } from './skills';
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';

@@ -107,6 +107,48 @@ const toolSearch = new ToolSearchProcessor({
               'Optional request-aware hook for hiding tools from search results, blocking tool loading, or hiding already-loaded tools for the current request.',
             isOptional: true,
           },
+          {
+            name: 'preselect',
+            type: 'ToolSearchPreselectOptions',
+            description:
+              'Seed the loaded-tool set from a classifier before the first turn, so the agent starts with tools already available instead of discovering them. Runs once per user message. Additive: it only adds tools, and the meta-tools stay available as the correction path. Classifier failures fail open.',
+            isOptional: true,
+          },
+          {
+            name: 'preselect.classifier',
+            type: 'Classifier | string',
+            description:
+              'A classifier with configured questions, or the ID of one registered on Mastra. String IDs resolve at request time.',
+            isOptional: false,
+          },
+          {
+            name: 'preselect.question',
+            type: 'string',
+            description:
+              'Which configured choice question selects the tool group. The question must be a choice question, since stable criteria are what make probabilities comparable across requests.',
+            isOptional: false,
+          },
+          {
+            name: 'preselect.tools',
+            type: 'Record<string, string[]>',
+            description:
+              'Maps every choice of the question to the tools to load for it. The mapping is explicit and exhaustive; no implicit ordering or name matching is applied between criteria and tools. Map the "no tools needed" criterion to an empty array.',
+            isOptional: false,
+          },
+          {
+            name: 'preselect.minProbability',
+            type: 'number',
+            description:
+              'Minimum probability the selected choice needs before its tools are loaded. Below it the classifier abstains and the normal model-driven flow runs unchanged. Only applies when the evaluation model returns a probability distribution.',
+            isOptional: true,
+            default: '0.6',
+          },
+          {
+            name: 'preselect.providerOptions',
+            type: 'SharedV4ProviderOptions',
+            description: 'Provider-specific options forwarded to the evaluation model.',
+            isOptional: true,
+          },
         ],
       },
     ],
@@ -304,6 +346,76 @@ With `autoLoad` the workflow becomes:
 1. Agent uses the tool normally
 
 Every match is activated, so keep `topK` small (for example, `3`) to avoid adding tools the agent didn't need. Activated tools are appended after existing tools, which keeps the cached prompt prefix stable for providers that support prompt caching.
+
+## Zero-step discovery with `preselect`
+
+Both flows above are model-driven: the agent spends a turn calling `search_tools` before it can act. Set `preselect` to have a [classifier](/reference/classifier/classifier) choose a group of tools before the first turn, so the agent starts with those tools already loaded.
+
+Preselection runs inside the processor, before the step takes its loaded-tool snapshot, so seeded tools are available immediately rather than on the next turn.
+
+```typescript
+import { Classifier } from '@mastra/core/classifier'
+import { ToolSearchProcessor } from '@mastra/core/processors'
+
+const router = new Classifier({
+  id: 'tool-router',
+  model,
+  questions: {
+    domain: {
+      type: 'choice',
+      instructions: 'Which capability area does this request need?',
+      criteria: {
+        github: 'Repositories, issues, pull requests, code review',
+        deploys: 'Deployments, builds, releases, rollbacks',
+        oncall: 'Incidents, alerts, paging, who is on call',
+        none: 'Conversational, or a request no internal tool can serve',
+      },
+    },
+  },
+})
+
+const toolSearch = new ToolSearchProcessor({
+  tools: allTools,
+  preselect: {
+    classifier: router,
+    question: 'domain',
+    tools: {
+      github: ['listPullRequests', 'mergePullRequest', 'getCommit'],
+      deploys: ['getDeployStatus', 'rollbackDeploy', 'listReleases'],
+      oncall: ['listOncall', 'listIncidents', 'acknowledgeIncident'],
+      none: [],
+    },
+  },
+})
+```
+
+The mapping from criteria to tools is explicit. Mastra doesn't match criterion names against tool names, so renaming a criterion doesn't silently change which tools load. Map the "no tools needed" criterion to an empty array.
+
+### How preselection behaves
+
+Preselection is an additive prior, not a routing decision. It only adds tools to the set the model already has. The catalog is never narrowed and `search_tools` stays exposed, so an incorrect prediction costs a few unused tool definitions instead of making a tool unreachable.
+
+The classifier runs once per user message rather than once per step. A multi-step turn reuses one decision, and a follow-up that changes the subject gets a fresh one instead of inheriting the previous message's tools.
+
+When the selected choice falls below `minProbability`, the classifier abstains and the normal model-driven flow runs unchanged. If the classifier errors, preselection fails open and the request proceeds without seeded tools.
+
+### Choosing between `autoLoad` and `preselect`
+
+Both remove discovery turns, and they solve different problems. `autoLoad` ranks tools with keyword search (BM25), which depends on the model writing a query whose wording overlaps the tool description. `preselect` picks a group by classifying intent, so it doesn't depend on lexical overlap.
+
+A measurement over 32 prompts against a 64-tool catalog, scored on whether the agent called the intended tool:
+
+| Mode | Correct tool | Agent input tokens |
+| - | - | - |
+| `search_tools` and `load_tool` | 14 / 32 | 42,316 |
+| `search.autoLoad` | 15 / 32 | 35,288 |
+| `preselect` | 25 / 32 | 74,731 |
+
+Preselection trades tokens for tool-selection accuracy. It seeds a whole group, so it loads more tool definitions than keyword search, which returns one or two matches. Treat the exact numbers as indicative: they depend on the catalog, the taxonomy, and the evaluation model.
+
+Reach for `preselect` when calling the wrong tool is expensive and requests fall into a small number of stable groups. Prefer `autoLoad` when prompt tokens matter more than selection accuracy, or when the catalog has no stable grouping to classify over.
+
+Criteria describe groups, not individual tools, so the question stays the same size as the catalog grows. Avoid enumerating every tool as a criterion, since choice quality degrades as criteria multiply.
 
 ## Loaded-tool storage
 
