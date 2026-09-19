@@ -172,11 +172,24 @@ Routing was evaluated on a tool-using support agent over 26 requests, weighted t
 
 Two results matter more than the headline saving.
 
-**The classifier call is not free relative to what it saves.** It used around 424 tokens per request, against roughly 436 input tokens for the agent call it was optimizing. The saving was about $0.0008 per request at the list prices above. Whether routing is net positive depends on your evaluation model's price and on the gap between your two agent models being wide enough to clear that cost. A narrow gap can make routing cost more than it saves.
+**The saving scales with context, but the classifier call does not.** The classifier reads only the latest user message, so its cost stays flat while the agent's input grows with system prompt, retrieved context, and history. Measured across four context sizes on the same requests:
+
+| Agent input | Saving per request | Max viable classifier price |
+| - | - | - |
+| \~330 tokens | $0.0014 | $3.41 per 1M tokens |
+| \~4,000 tokens | $0.0100 | $24.01 per 1M tokens |
+| \~15,000 tokens | $0.0355 | $85.02 per 1M tokens |
+| \~38,000 tokens | $0.0904 | $216.36 per 1M tokens |
+
+Agent input grew 114x across that range while classifier cost stayed at roughly 418 tokens. The last column is the most useful one: it is the most you can pay per million classifier tokens before the classifier eats the saving. On a small agent that headroom is thin enough that routing can genuinely cost more than it saves. On an agent with a large system prompt or retrieved context, the headroom is wide and routing is close to free.
+
+This makes agent context size, not the model price ratio, the main thing determining whether routing is worth enabling.
 
 **Downgrading is not quality-neutral.** Three of thirteen downgraded answers were judged worse by a stronger model, consistently in both orders. The failures were omitted policy conditions and less precise details rather than outright wrong answers, and one occurred on a request that looked entirely routine. Treat some quality cost on downgraded traffic as expected, not as a bug to tune away.
 
 With 13 downgraded samples, one provider, one taxonomy, and one judge, the regression rate is directionally useful and not a precise figure. Run the comparison on your own traffic before enabling this broadly: answer the same requests with both models, compare the downgraded subset, and confirm the saving clears your classifier cost.
+
+Whether that quality cost grows with context is **unresolved**. A repeat of the comparison at roughly 400 and 37,000 input tokens moved the regression rate from 10% to 20%, but that is a difference of one case out of ten per group, and the failing requests were not the same ones at each size, which points at judge variance rather than degradation. Treat quality under long context as something to measure on your own traffic rather than as a settled property in either direction.
 
 ## Cost and behavior notes
 
