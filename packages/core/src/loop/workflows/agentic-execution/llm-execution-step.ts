@@ -29,6 +29,7 @@ import { executeWithContextSync, getRootExportSpan, getStepAvailableToolNames } 
 import type {
   CachedLLMStepResponse,
   InputProcessorOrWorkflow,
+  LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessorStreamWriter,
 } from '../../../processors/index';
@@ -137,8 +138,8 @@ function getRequestInputProcessors({
   llmRequestInputProcessors,
 }: {
   inputProcessors?: InputProcessorOrWorkflow[];
-  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
-}): InputProcessorOrWorkflow[] {
+  llmRequestInputProcessors?: LLMRequestProcessorOrWorkflow[];
+}): LLMRequestProcessorOrWorkflow[] {
   if (!llmRequestInputProcessors?.length) {
     return inputProcessors || [];
   }

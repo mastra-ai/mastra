@@ -3877,3 +3877,160 @@ describe('error processors — shared stability defaults', () => {
     ).toEqual(['custom-error-processor']);
   });
 });
+
+describe('LLM request lane — error-phase processors', () => {
+  const promptTexts = (prompt: LanguageModelV2Prompt): string[] =>
+    prompt.flatMap(message =>
+      typeof message.content === 'string'
+        ? [message.content]
+        : message.content.flatMap(part => (part.type === 'text' ? [part.text] : [])),
+    );
+
+  /**
+   * Error processor that rewrites the outbound prompt and records what it saw, so a test can prove both
+   * that it ran and that its rewrite reached the model.
+   */
+  const makePromptRewritingErrorProcessor = () => {
+    const seenPrompts: LanguageModelV2Prompt[] = [];
+    const calls = { processLLMRequest: 0, processInput: 0, processInputStep: 0, processAPIError: 0 };
+    const processor: Processor & { id: string } = {
+      id: 'prompt-rewriting-error-processor',
+      processLLMRequest: ({ prompt }) => {
+        calls.processLLMRequest += 1;
+        seenPrompts.push(prompt);
+        return {
+          prompt: prompt.map(message => {
+            if (message.role !== 'user') return message;
+            return {
+              ...message,
+              content: [{ type: 'text' as const, text: 'REWRITTEN_BY_ERROR_PROCESSOR' }],
+            };
+          }),
+        };
+      },
+      processInput: async () => {
+        calls.processInput += 1;
+      },
+      processInputStep: async () => {
+        calls.processInputStep += 1;
+        return {};
+      },
+      processAPIError: async () => {
+        calls.processAPIError += 1;
+      },
+    };
+    return { processor, seenPrompts, calls };
+  };
+
+  it('runs processLLMRequest for an error-lane processor and shows it the model prompt', async () => {
+    const { processor, seenPrompts, calls } = makePromptRewritingErrorProcessor();
+    const capturedPrompts: LanguageModelV2Prompt[] = [];
+    const model = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        capturedPrompts.push(prompt);
+        return {
+          content: [{ type: 'text' as const, text: 'ok' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'llm-request-lane-agent',
+      name: 'LLM Request Lane Agent',
+      instructions: 'test',
+      model,
+      errorProcessors: [processor],
+    });
+
+    await agent.generate('hello');
+
+    expect(calls.processLLMRequest).toBeGreaterThan(0);
+    expect(seenPrompts[0]).toBeTruthy();
+    // The rewrite is what the model actually receives.
+    expect(capturedPrompts.length).toBeGreaterThan(0);
+    expect(promptTexts(capturedPrompts[0]!)).toContain('REWRITTEN_BY_ERROR_PROCESSOR');
+  });
+
+  it('does not leak an error-lane processor into the input step', async () => {
+    const { processor, calls } = makePromptRewritingErrorProcessor();
+    const agent = new Agent({
+      id: 'llm-request-lane-agent',
+      name: 'LLM Request Lane Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text' as const, text: 'ok' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      }),
+      errorProcessors: [processor],
+    });
+
+    await agent.generate('hello');
+
+    // The widening reaches the provider-boundary lane only: the input steps must not run for it.
+    expect(calls.processInput).toBe(0);
+    expect(calls.processInputStep).toBe(0);
+    expect(await agent.listResolvedInputProcessors()).not.toContain(processor);
+  });
+
+  it('lists an error-lane processor once when it is also an input processor', async () => {
+    const { processor } = makePromptRewritingErrorProcessor();
+    const agent = new Agent({
+      id: 'llm-request-lane-agent',
+      name: 'LLM Request Lane Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text' as const, text: 'ok' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      }),
+      inputProcessors: [processor],
+      errorProcessors: [processor],
+    });
+
+    const lane = await agent.__listLLMRequestProcessors();
+    expect(lane.filter(entry => !isProcessorWorkflow(entry) && entry.id === processor.id)).toHaveLength(1);
+  });
+
+  it('adds the error-phase defaults to the request lane without disturbing the input lane', async () => {
+    const agent = new Agent({
+      id: 'llm-request-lane-agent',
+      name: 'LLM Request Lane Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text' as const, text: 'ok' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      }),
+    });
+
+    const laneIds = (await agent.__listLLMRequestProcessors())
+      .filter(entry => !isProcessorWorkflow(entry))
+      .map(entry => entry.id);
+
+    // An error-lane `ProviderHistoryCompat` is the reason the lane widens.
+    expect(laneIds).toContain('provider-history-compat');
+    // The input lane itself is untouched.
+    const inputIds = (await agent.listResolvedInputProcessors())
+      .filter(entry => !isProcessorWorkflow(entry))
+      .map(entry => entry.id);
+    expect(inputIds).not.toContain('provider-history-compat');
+    expect(laneIds).toEqual([...new Set(laneIds)]);
+  });
+});
