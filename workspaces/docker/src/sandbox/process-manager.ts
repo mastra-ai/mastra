@@ -295,6 +295,11 @@ class DockerProcessHandle extends ProcessHandle {
       return;
     }
 
+    if (this._timedOut) {
+      this._settleTimeoutFallback();
+      return;
+    }
+
     this._setExitCode(1);
     this._settle({
       ...this._buildResult(1),

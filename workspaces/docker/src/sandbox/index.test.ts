@@ -1485,6 +1485,40 @@ describe('DockerSandbox', () => {
       expect(killStream.destroy).toHaveBeenCalledOnce();
     });
 
+    it('should preserve timeout fallback when a timed-out kill fails during a stream error', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const waitPromise = handle.wait();
+
+      let confirmKill!: (info: { Running: boolean; ExitCode: number }) => void;
+      const killInspect = new Promise<{ Running: boolean; ExitCode: number }>(resolve => {
+        confirmKill = resolve;
+      });
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+        inspect: vi.fn().mockReturnValue(killInspect),
+      });
+
+      const killPromise = handle.kill();
+      (handle as any)._markTimedOut();
+      const errorHandler = mockStream.on.mock.calls.find(([event]) => event === 'error')?.[1] as () => void;
+      errorHandler();
+
+      await Promise.resolve();
+      confirmKill({ Running: false, ExitCode: 1 });
+
+      await expect(killPromise).resolves.toBe(false);
+      const result = await waitPromise;
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(137);
+      expect(result.killed).toBe(false);
+      expect(result.timedOut).toBe(true);
+    });
+
     it('should mark timeout results as killed and timed out', async () => {
       vi.useFakeTimers();
       try {
