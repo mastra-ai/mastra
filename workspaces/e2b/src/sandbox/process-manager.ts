@@ -120,7 +120,19 @@ class E2BProcessHandle extends ProcessHandle {
  * E2B implementation of SandboxProcessManager.
  * Uses the E2B SDK's commands.run() with background: true.
  */
+export interface E2BProcessManagerOptions {
+  /** Default timeout in milliseconds for commands that don't specify one. */
+  defaultTimeout?: number;
+}
+
 export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
+  private readonly _defaultTimeout?: number;
+
+  constructor(opts: E2BProcessManagerOptions = {}) {
+    super();
+    this._defaultTimeout = opts.defaultTimeout;
+  }
+
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     return this.sandbox.retryOnDead(async () => {
       const e2b = this.sandbox.e2b;
@@ -145,7 +157,10 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
         stdin: options.stdinMode !== 'ignore',
         cwd: options.cwd ?? this.sandbox.workingDirectory,
         envs,
-        timeoutMs: options.timeout,
+        // Without this the E2B SDK falls back to its own 60s connection
+        // deadline, which bounds the whole streaming command lifetime and kills
+        // any command that runs longer than a minute.
+        timeoutMs: options.timeout ?? this._defaultTimeout,
         onStdout: (data: string) => handle.emitStdout(data),
         onStderr: (data: string) => handle.emitStderr(data),
       });

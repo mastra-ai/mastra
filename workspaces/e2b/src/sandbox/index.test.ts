@@ -889,6 +889,44 @@ describe('E2BSandbox', () => {
         expect.objectContaining({ envs: expect.objectContaining({ GH_TOKEN: 'tok_2' }) }),
       );
     });
+
+    it('fills in a provider default timeout when the caller omits one', async () => {
+      // Regression: an undefined timeoutMs reaches the E2B SDK, which falls back
+      // to its private 60s connection deadline and kills any longer command.
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ timeoutMs: 300_000 }),
+      );
+    });
+
+    it('uses the configured sandbox timeout as the per-command default', async () => {
+      const sandbox = new E2BSandbox({ timeout: 900_000 });
+      await sandbox._start();
+
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ timeoutMs: 900_000 }),
+      );
+    });
+
+    it('per-command timeout still wins over the default', async () => {
+      const sandbox = new E2BSandbox({ timeout: 900_000 });
+      await sandbox._start();
+
+      await sandbox.executeCommand('echo', ['test'], { timeout: 5_000 });
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ timeoutMs: 5_000 }),
+      );
+    });
   });
 
   describe('Stop/Destroy', () => {
