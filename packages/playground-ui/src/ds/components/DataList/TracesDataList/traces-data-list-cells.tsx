@@ -4,6 +4,7 @@ import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { cn } from '@/lib/utils';
 
@@ -70,6 +71,8 @@ function EntityTypeIcon({ entityType, className }: { entityType: string; classNa
     case 'workflow':
     case 'workflow_run':
       return <WorkflowIcon className={iconClass} aria-hidden />;
+    case 'mcp_server':
+      return <McpServerIcon className={iconClass} aria-hidden />;
     default:
       return null;
   }
