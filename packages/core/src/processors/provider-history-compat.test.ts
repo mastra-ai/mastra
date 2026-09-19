@@ -1796,8 +1796,8 @@ describe('openaiOrphanItemId', () => {
     const result = await handler.processAPIError(args);
     const parts = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-mixed')!.content.parts;
     const metadataOf = (type: string) =>
-      (parts.find(p => p.type === type) as { providerMetadata?: { openai?: Record<string, unknown> } })
-        .providerMetadata?.openai;
+      (parts.find(p => p.type === type) as { providerMetadata?: { openai?: Record<string, unknown> } }).providerMetadata
+        ?.openai;
 
     expect(result).toEqual({ retry: true });
     expect(metadataOf('tool-invocation')).not.toHaveProperty('itemId');
@@ -1842,7 +1842,7 @@ describe('openaiOrphanItemId', () => {
     expect(azure).toEqual({ cachedPromptTokens: 1024 });
   });
 
-  it('A16: strips an id carried on providerOptions as well as providerMetadata', async () => {
+  it('A16: strips ids from both metadata containers on the same part', async () => {
     // The shared lookup reads an id from either container, so a part repaired in only one of
     // them would still report as item-bearing — and would still send the reference that failed.
     const handler = new ProviderHistoryCompat();
@@ -1859,7 +1859,8 @@ describe('openaiOrphanItemId', () => {
                 {
                   type: 'text' as const,
                   text: 'About 522,969.',
-                  providerOptions: { openai: { itemId: 'msg_via_options' } },
+                  providerMetadata: { openai: { itemId: 'msg_via_metadata', cachedPromptTokens: 1024 } },
+                  providerOptions: { openai: { itemId: 'msg_via_options', reasoningTokens: 256 } },
                 } as any,
               ],
             },
@@ -1872,11 +1873,59 @@ describe('openaiOrphanItemId', () => {
     });
 
     const result = await handler.processAPIError(args);
-    const part = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-options')!.content.parts[0];
+    const part = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-options')!.content.parts[0] as {
+      providerMetadata?: { openai?: Record<string, unknown> };
+      providerOptions?: { openai?: Record<string, unknown> };
+    };
 
     expect(result).toEqual({ retry: true });
-    expect((part as { providerOptions?: { openai?: Record<string, unknown> } }).providerOptions?.openai).not.toHaveProperty(
-      'itemId',
-    );
+    expect(part.providerMetadata?.openai).toEqual({ cachedPromptTokens: 1024 });
+    expect(part.providerOptions?.openai).toEqual({ reasoningTokens: 256 });
+  });
+
+  it('A17: clears the result half of a tool pair, not just the call id', async () => {
+    // A merged tool part keeps the result item under `resultItemId`, and
+    // `splitResponsesToolItemReferences` turns that back into an `itemId` on the tool-result
+    // part during conversion. Stripping only the call id would leave a live reference into the
+    // response that was just rejected, and the repaired request would fail the same way.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-orphan-pair',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: 'call-1',
+                    toolName: 'tool_search',
+                    args: {},
+                    result: { hits: [] },
+                  },
+                  providerMetadata: { openai: { itemId: 'tso_call', resultItemId: 'tso_result' } },
+                },
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+    const part = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-pair')!.content.parts[0];
+    const openai = (part as { providerMetadata?: { openai?: Record<string, unknown> } }).providerMetadata?.openai;
+
+    expect(result).toEqual({ retry: true });
+    expect(openai).not.toHaveProperty('itemId');
+    expect(openai).not.toHaveProperty('resultItemId');
   });
 });

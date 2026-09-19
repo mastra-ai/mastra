@@ -3,7 +3,10 @@ import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart, MessageList } from '../agent/message-list';
 import { getResponseProviderItemIdFromPart } from '../agent/message-list';
-import { RESPONSE_ITEM_ID_PROVIDERS } from '../agent/message-list/utils/response-item-metadata';
+import {
+  RESPONSE_ITEM_ID_PROVIDERS,
+  RESPONSE_RESULT_ITEM_ID_KEY,
+} from '../agent/message-list/utils/response-item-metadata';
 import type {
   Processor,
   ProcessAPIErrorArgs,
@@ -733,10 +736,16 @@ function isUnpairedReasoningRow(message: MastraDBMessage): boolean {
 }
 
 /**
- * Strips `itemId` from every Responses namespace a part carries, in both
- * metadata containers, leaving every other field (cache counts,
- * reasoning-token counts, logprobs) intact. Mirrors the narrow destructure in
- * `client-sdks/ai-sdk/src/helpers.ts` (PR #23323).
+ * Strips `itemId` and its result-side partner from every Responses namespace a
+ * part carries, in both metadata containers, leaving every other field (cache
+ * counts, reasoning-token counts, logprobs) intact. Mirrors the narrow
+ * destructure in `client-sdks/ai-sdk/src/helpers.ts` (PR #23323).
+ *
+ * {@link RESPONSE_RESULT_ITEM_ID_KEY} has to go with it: a merged tool part
+ * keeps the result half of the pair under that key, and
+ * `splitResponsesToolItemReferences` turns it back into an `itemId` on the
+ * tool-result part during conversion. Dropping only `itemId` would leave a
+ * live reference into the very response that was rejected.
  *
  * Both `providerMetadata` and `providerOptions` are cleared because
  * {@link getResponseProviderItemIdFromPart} reads an id from either, so
@@ -756,8 +765,9 @@ function stripResponseItemIds(part: MastraMessagePart): boolean {
     if (!container) continue;
     for (const provider of RESPONSE_ITEM_ID_PROVIDERS) {
       const namespace = container[provider] as Record<string, unknown> | undefined;
-      if (!namespace || !('itemId' in namespace)) continue;
-      const { itemId: _itemId, ...rest } = namespace;
+      if (!namespace) continue;
+      if (!('itemId' in namespace) && !(RESPONSE_RESULT_ITEM_ID_KEY in namespace)) continue;
+      const { itemId: _itemId, [RESPONSE_RESULT_ITEM_ID_KEY]: _resultItemId, ...rest } = namespace;
       container[provider] = rest;
       stripped = true;
     }
@@ -827,9 +837,18 @@ function stripResponseItemIds(part: MastraMessagePart): boolean {
  * The cost of that breadth: in a thread that mixes a reasoning model with a
  * non-reasoning Responses model, the non-reasoning turns are also orphan-shaped
  * (an `itemId`, no reasoning) but are perfectly valid, and they lose their item
- * references too. They still replay correctly — by value instead of by
- * reference — so the effect is a lost item reference, not a failure. The asymmetry is deliberate: under-stripping ends the turn,
- * over-stripping only costs the reference.
+ * references too. Ordinary text and tool parts still replay correctly — by
+ * value instead of by reference — so for them the effect is a lost item
+ * reference, not a failure.
+ *
+ * One part type pays more than a reference. A hosted `tool_search` call cannot
+ * be replayed by value at all, so `isUnreplayableHostedToolSearchPart`
+ * (`output-converter.ts`) drops it from the prompt once its ids are gone. On a
+ * genuinely orphaned message that is the right outcome — the ids pointed into
+ * the rejected response. On a swept-along valid message it costs the model that
+ * search result, and it would have to search again. That is accepted: the
+ * asymmetry is still deliberate, because under-stripping ends the turn outright
+ * while over-stripping costs a reference, or at worst one hosted search.
  *
  * Known limitation: the guard reasons about message *shape*, because the
  * required `rs_…` id named in the error is not available to `fix`. A turn whose
