@@ -33131,6 +33131,16 @@ snapshots:
       aws4fetch: 1.0.20
       zod: 4.6.5
 
+  '@ai-sdk/amazon-bedrock@3.0.113(zod@4.6.5)':
+    dependencies:
+      '@ai-sdk/anthropic': 2.0.93(zod@4.6.5)
+      '@ai-sdk/provider': 2.0.3
+      '@ai-sdk/provider-utils': 3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@4.6.5)
+      '@smithy/eventstream-codec': 4.2.14
+      '@smithy/util-utf8': 4.4.6
+      aws4fetch: 1.0.20
+      zod: 4.6.5
+
   '@ai-sdk/anthropic@1.2.12(zod@4.6.5)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -33169,6 +33179,12 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 2.0.3
       '@ai-sdk/provider-utils': 3.0.30(zod@4.6.5)
+      zod: 4.6.5
+
+  '@ai-sdk/anthropic@2.0.93(zod@4.6.5)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.3
+      '@ai-sdk/provider-utils': 3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@4.6.5)
       zod: 4.6.5
 
   '@ai-sdk/anthropic@2.0.93(zod@4.6.5)':

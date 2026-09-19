@@ -2971,6 +2971,8 @@ export class SessionBus {
 }
 
 export class Session<TState = unknown> {
+  /** Every cancellation intent invalidates pending startup, even when teardown is already in progress. */
+  #abortGeneration = 0;
   /** This session's event bus. Constructed first so every subsystem can route its events here. */
   readonly #bus = new SessionBus();
   /** Process-local hooks that must finish before the session exposes a terminal agent event. */
@@ -3295,6 +3297,7 @@ export class Session<TState = unknown> {
    * the gated tool is rejected and the run can finalize rather than hang.
    */
   abortRun(): void {
+    this.#abortGeneration++;
     // Aborting twice while a gate is parked would tear the stream down before
     // the deferred decline lands (the second call sees the gate already
     // cancelled), which is the exact failure the deferral exists to avoid. Two
@@ -3640,6 +3643,14 @@ export class Session<TState = unknown> {
       const settled = await result.accepted.catch(() => undefined);
       return settled && 'runId' in settled ? settled.runId : undefined;
     };
+    const submittedAbortGeneration = this.#abortGeneration;
+    const assertNotCancelled = () => {
+      if (this.#abortGeneration !== submittedAbortGeneration) {
+        // A newer signal may already own the session controller. Reject only
+        // this obsolete startup, without aborting that newer run.
+        throw new DOMException('Session startup cancelled', 'AbortError');
+      }
+    };
     const contentOptions = 'content' in input ? input : undefined;
     const tracingContext = options?.tracingContext ?? contentOptions?.tracingContext;
     const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
@@ -3686,6 +3697,7 @@ export class Session<TState = unknown> {
 
       const agent = this.machinery.getAgent();
       await this.thread.ensureSubscription(threadId, agent);
+      assertNotCancelled();
 
       // A deferred abort (parked approval gate) leaves the AbortController
       // armed until the decline lands, so `submittedIsRunning` stays true for a
@@ -3747,12 +3759,14 @@ export class Session<TState = unknown> {
         // it, so wait for the real teardown before falling back below.
         const teardownDeadline = Date.now() + POST_ABORT_TEARDOWN_TIMEOUT_MS;
         const idle = await this.waitForStreamIdle(submittedIsRunning ? undefined : POST_ABORT_TEARDOWN_TIMEOUT_MS);
+        assertNotCancelled();
         // The stream can read idle before the run engine detaches the aborted
         // subscription (it detaches, then resets the run). Ensuring the
         // subscription in that gap reuses the handle about to be detached, and
         // the new run's events never reach this session: wait for the detach.
         if (idle && abortedStreamTeardown && this.run.isAbortRequested()) {
           await abortedStreamTeardown.wait(Math.max(0, teardownDeadline - Date.now()));
+          assertNotCancelled();
         }
         if (!idle) {
           // On the normal path the abort teardown detached the live subscription
@@ -3768,6 +3782,7 @@ export class Session<TState = unknown> {
           this.thread.cleanupSubscription();
         }
         await this.thread.ensureSubscription(threadId, agent);
+        assertNotCancelled();
       } else if (abortedStreamTeardown) {
         // Stop on a run parked on a tool suspension leaves no run id behind,
         // but the stopped run's subscription is still attached and is about to
@@ -3777,11 +3792,13 @@ export class Session<TState = unknown> {
         // detach; if it never comes, drop the subscription and the abort state
         // here. Either way the new run starts on a fresh subscription.
         await abortedStreamTeardown.wait(1_000);
+        assertNotCancelled();
         if (this.stream.isOpen() && this.run.isAbortRequested()) {
           this.thread.cleanupSubscription();
           this.run.reset();
         }
         await this.thread.ensureSubscription(threadId, agent);
+        assertNotCancelled();
       }
       abortedStreamTeardown?.cancel();
 
@@ -3792,6 +3809,7 @@ export class Session<TState = unknown> {
         untilIdle,
       });
 
+      assertNotCancelled();
       const result = agent.sendSignal(signal, {
         resourceId: this.identity.getResourceId(),
         threadId,
@@ -3823,7 +3841,7 @@ export class Session<TState = unknown> {
       return { accepted: true as const, runId: undefined };
     });
 
-    return { id: signal.id, type: signal.type, accepted };
+    return { id: signal.id, type: signal.type, accepted: accepted.finally(() => abortedStreamTeardown?.cancel()) };
   }
 
   /**

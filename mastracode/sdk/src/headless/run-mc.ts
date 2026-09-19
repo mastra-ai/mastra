@@ -439,6 +439,9 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
         await session.sendMessage({ content: options.prompt });
       }
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return finish(timedOut ? 'timeout' : maxTurnsExceeded ? 'max_turns' : 'aborted');
+      }
       return fail(`Failed to start run: ${(err as Error).message}`);
     }
   })();
