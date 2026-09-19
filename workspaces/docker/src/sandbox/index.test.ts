@@ -288,7 +288,7 @@ describe('DockerSandbox', () => {
 
         expect(template.build).toHaveBeenCalledTimes(1);
         // Built on the sandbox's own daemon, not whatever the template defaulted to.
-        expect(template.build).toHaveBeenCalledWith({ docker: mockDocker });
+        expect(template.build).toHaveBeenCalledWith({ docker: mockDocker, abortSignal: undefined });
         expect(mockDocker.createContainer).toHaveBeenCalledWith(
           expect.objectContaining({ Image: 'mastra-template:abc', WorkingDir: '/srv/repo' }),
         );
@@ -306,6 +306,28 @@ describe('DockerSandbox', () => {
         const sandbox = new DockerSandbox({ template: resolver });
         await sandbox._start();
         expect(resolver).toHaveBeenCalledTimes(1);
+      });
+
+      it('passes start cancellation through the resolver and template build', async () => {
+        const controller = new AbortController();
+        const template = fakeTemplate();
+        const resolver = vi.fn(async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
+          expect(abortSignal).toBe(controller.signal);
+          return template;
+        });
+        const sandbox = new DockerSandbox({ template: resolver });
+        await sandbox.start({ abortSignal: controller.signal });
+        expect(template.build).toHaveBeenCalledWith({ docker: mockDocker, abortSignal: controller.signal });
+      });
+
+      it('rejects pre-aborted template starts before resolving or creating a container', async () => {
+        const resolver = vi.fn(async () => fakeTemplate());
+        const sandbox = new DockerSandbox({ template: resolver });
+        const controller = new AbortController();
+        controller.abort();
+        await expect(sandbox.start({ abortSignal: controller.signal })).rejects.toBeInstanceOf(SandboxAbortError);
+        expect(resolver).not.toHaveBeenCalled();
+        expect(mockDocker.createContainer).not.toHaveBeenCalled();
       });
 
       it('fails start when the template build fails', async () => {

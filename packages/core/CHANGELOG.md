@@ -1,5 +1,108 @@
 # @mastra/core
 
+## 1.68.0-alpha.7
+
+### Minor Changes
+
+- Added `notScorable()`. Return it from a scorer step when a run has nothing to evaluate, for example a refund judge on a chat that never called the refund tool. Remaining steps are skipped, so the judge is never called and the run stays out of that scorer's averages. `runEvals()` omits `verdict` when every configured gate or threshold was not scorable. ([#24378](https://github.com/mastra-ai/mastra/pull/24378))
+
+  ```ts
+  import { createScorer, notScorable } from '@mastra/core/evals';
+  import { extractToolCalls } from '@mastra/evals/scorers/utils';
+
+  const refundJudge = createScorer({
+    id: 'refund-judge',
+    description: 'Judges refund handling',
+    type: 'agent',
+    judge: { model: 'openai/gpt-5-mini', instructions: '...' },
+  })
+    .preprocess(({ run }) => {
+      const { tools } = extractToolCalls(run.output);
+      return tools.includes('refundCustomer') ? { tools } : notScorable('refundCustomer was not called');
+    })
+    .generateScore({
+      description: 'Score the refund handling from 0 to 1',
+      createPrompt: ({ run }) => `Rate the refund handling: ${JSON.stringify(run.output)}`,
+    });
+  ```
+
+  **Reading the result.** `scorer.run()` is either scored or skipped. Check `notScorable` before using `score` as a number, including on scorers that never skip:
+
+  ```ts
+  const result = await refundJudge.run(input);
+  if (result.notScorable) {
+    // skipped — no score
+  } else {
+    result.score;
+  }
+  ```
+
+- Added `usedFallbackValue` to agent `generate()` and `stream()` results. With `structuredOutput.errorStrategy: 'fallback'`, `result.object` was previously indistinguishable from a real answer once the configured `fallbackValue` had been substituted: `finishReason` stayed `'stop'`, `tripwire` stayed empty, and the only marker was a `metadata.fallback` flag on the internal `object-result` chunk, which never reached the result. The result — and the `onFinish` callback payload — now report the substitution directly, for both the native and separate-structuring-model paths. ([#24424](https://github.com/mastra-ai/mastra/pull/24424))
+
+  ```ts
+  const result = await agent.generate('Summarize the ticket.', {
+    structuredOutput: { schema, errorStrategy: 'fallback', fallbackValue: { summary: 'unknown', tags: [] } },
+  });
+
+  if (result.usedFallbackValue) {
+    // result.object is the fallback, not something the model produced
+  }
+  ```
+
+### Patch Changes
+
+- Fixed model settings returned by an input processor being ignored when the agent also configured them. Fixes https://github.com/mastra-ai/mastra/issues/22395 ([#24429](https://github.com/mastra-ai/mastra/pull/24429))
+
+  Values returned from `processInputStep` or `prepareStep` now take effect for the model call, including `maxRetries`. Previously any setting the model list also specified won the conflict, so a processor could not change it. This affected single-model agents as well as fallback chains.
+
+  A processor that returns only some settings (for example just `{ temperature }`) keeps the configured retry and timeout limits. Inference telemetry now reports the settings the model actually received.
+
+- Fixed ModelRouter URL capability discovery failures being hidden and permanently cached. See #24436. ([#24454](https://github.com/mastra-ai/mastra/pull/24454))
+
+- Fixed structured output fallback warnings to use the agent logger and aligned the loop fallback logger with error-level defaults. ([#24455](https://github.com/mastra-ai/mastra/pull/24455))
+
+- Fixed idle wake signals losing the caller's request context and misreporting their outcome when the thread had a claimed owner. ([#24347](https://github.com/mastra-ai/mastra/pull/24347))
+
+  A wake that starts a run on a locally claimed owner now applies the incoming `streamOptions.requestContext` to that run. The claimed owner's own stream options were used verbatim, so a dispatcher waking a session on behalf of an authenticated caller started the run without that identity, and downstream lookups that require a caller — a workspace resolver, for example — failed. The owner's remaining options stay authoritative, since the run executes inside the owner's session.
+
+  The same path now reports `wake` instead of `deliver`. `deliver` promises that no run started locally and that the signal joined a run already in flight; callers that waited on that run, or re-sent because they believed it was still busy, never saw the work happen.
+
+  A claimed owner in another process is unchanged: the wake event carries no `requestContext`, so a remote owner still starts the run with its own options.
+
+- Fixed a processor-forced mid-turn retry discarding steps the assistant had already completed. When an output processor aborted a step with `{ retry: true }`, the whole in-flight assistant message was deleted. That took the reasoning and tool calls from earlier steps in the same turn that had already been accepted. The retry now discards only the rejected step. The model still never re-sees the rejected answer, and it keeps every step it had already accepted. ([#24344](https://github.com/mastra-ai/mastra/pull/24344))
+
+  Two things stop happening on this retry path as a result. An accepted tool call is no longer thrown away and run a second time. And with OpenAI reasoning models, the saved message no longer ends up carrying an assistant `itemId` (`msg_…`) with no matching `reasoning` item. OpenAI rejects that shape with a non-retryable HTTP 400: `Item 'msg_…' of type 'message' was provided without its required 'reasoning' item`. The rejection then recurs whenever that stored history is replayed on a later turn (#22291).
+
+- Fixed thread aborts so callers can require the intended run to still be active before it is stopped. ([#24452](https://github.com/mastra-ai/mastra/pull/24452))
+
+- **Fixed commands that read stdin hanging until timeout** ([#24336](https://github.com/mastra-ai/mastra/pull/24336))
+
+  Commands that read standard input without being given anything to read — a bare `cat`, `grep` or `rg` with no path argument, `read` — used to block until the command timeout expired, leaving tools stuck for minutes.
+
+  `executeCommand()` now runs commands with standard input closed, so anything that reads stdin sees end-of-input immediately and exits:
+
+  ```ts
+  // previously hung until the timeout when the command read stdin
+  await sandbox.executeCommand('/bin/sh', ['-c', 'rg -n "pattern" --files-with-matches | head']);
+  ```
+
+  `execute_command` with `background: true` also closes standard input: a background command that reads stdin now sees end-of-input instead of staying alive until it is killed. Retrieving that background process's handle no longer provides a writable stdin — use `processes.spawn()` with the default `'pipe'` mode for interactive processes.
+
+  `processes.spawn()` keeps a writable stdin by default so long-running processes can be driven with `sendStdin()`. It now also accepts a public `stdinMode` option — pass `'ignore'` to close stdin when nothing will feed it:
+
+  ```ts
+  // opt-in: close stdin on a spawned process
+  const handle = await sandbox.processes.spawn('node server.js', { stdinMode: 'ignore' });
+  ```
+
+  Output-only execution paths (`executeCommand()` and `execute_command` with `background: true`) pass this option automatically. Honored by the local, Docker, and E2B providers; other providers may not expose stdin control.
+
+- Fixed execute command exit events to preserve provider termination details for Studio status displays. ([#24453](https://github.com/mastra-ai/mastra/pull/24453))
+
+- Fixed model router cache initialization so Cloudflare Workers can load bundles before request handling begins. ([#24454](https://github.com/mastra-ai/mastra/pull/24454))
+
+- Fixed durable agent runs so thread title generation no longer delays completion. ([#24335](https://github.com/mastra-ai/mastra/pull/24335))
+
 ## 1.68.0-alpha.6
 
 ### Minor Changes
