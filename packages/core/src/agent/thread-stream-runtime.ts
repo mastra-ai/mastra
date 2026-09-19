@@ -3396,7 +3396,18 @@ export class AgentThreadStreamRuntime {
     const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
     if (currentRecord) {
       localStreamIds.add(currentRecord.streamId);
-      enqueueRun(currentRecord);
+      // An aborted run stays in `activeThreadRunIds` until it terminalizes, and
+      // its `run-aborted` event was published before this subscription existed
+      // (a consumer that aborts and tears down in the same tick leaves nobody
+      // to observe it). Seeding from it would replay the stopped run's buffered
+      // parts to the replacement subscriber as a brand-new run — a phantom
+      // `agent_start` and terminal lifecycle after the abort was already
+      // reported — and park the subscriber on a stream that never ends, so the
+      // follow-up that opened this subscription would never be delivered. Later
+      // runs on this thread still seed and stream normally.
+      if (!state.abortedRunIds.has(currentRecord.runId)) {
+        enqueueRun(currentRecord);
+      }
     }
 
     const unsubscribe = () => {
