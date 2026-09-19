@@ -1173,6 +1173,12 @@ describe('StructuredOutputProcessor', () => {
       expect(instructions).toContain('data structuring specialist');
       expect(instructions).toContain('JSON format');
       expect(instructions).toContain('Extract relevant information');
+      expect(instructions).toContain('"color"');
+      expect(instructions).toContain('"intensity"');
+      expect(instructions).toContain('"count"');
+      expect(instructions).toContain('"required": [');
+      expect(instructions).toContain('"type": "string"');
+      expect(instructions).toContain('"type": "number"');
       expect(typeof instructions).toBe('string');
     });
 

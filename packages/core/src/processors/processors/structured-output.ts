@@ -11,6 +11,7 @@ import type { ObservabilityContext } from '../../observability';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { StandardSchemaWithJSON } from '../../schema';
+import { standardSchemaToJSONSchema } from '../../schema';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
@@ -385,9 +386,12 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
    * Generate instructions for the structuring agent based on the schema
    */
   private generateInstructions(): string {
+    const jsonSchema = standardSchemaToJSONSchema(this.schema);
+
     return `You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.
 
 TASK: Convert the provided unstructured text into valid JSON that matches the following schema:
+${JSON.stringify(jsonSchema, null, 2)}
 
 REQUIREMENTS:
 - Return ONLY valid JSON, no additional text or explanation
