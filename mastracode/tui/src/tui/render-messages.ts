@@ -13,6 +13,7 @@ import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import { disposeAssistantRenderState, finalizeStreamingAssistant } from './assistant-render-registry.js';
+import { loadBranchForkMarkers } from './branch-markers.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -54,6 +55,7 @@ import {
   isSignalMessage,
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
+import { InfoMessageComponent } from './display.js';
 import {
   formatToolResult,
   getBackgroundToolTaskId,
@@ -942,6 +944,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
 
+  // Branch lineage markers annotate fork points on both source and branch
+  // views. Loaded once per render; empty when branching is unsupported.
+  const branchForkMarkers = await loadBranchForkMarkers(state);
+
   const backgroundTasksByToolCallId = new Map<string, string>();
   const cancelledBackgroundToolCalls = new Set<string>();
   for (const message of messages) {
@@ -1268,6 +1274,13 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
       // Render any remaining text after the last tool call
       flushAccumulated(true);
+    }
+
+    const forkMarkerLines = branchForkMarkers.get(message.id);
+    if (forkMarkerLines) {
+      for (const line of forkMarkerLines) {
+        state.chatContainer.addChild(new InfoMessageComponent([new Text(theme.fg('muted', line), 1, 0)]));
+      }
     }
   }
 

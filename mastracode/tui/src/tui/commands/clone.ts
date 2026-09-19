@@ -43,7 +43,11 @@ export async function askCloneName(state: TUIState): Promise<string | null> {
  * and shows an info banner. Every clone path should call this after
  * `controller.session.thread.clone()` succeeds.
  */
-export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: string): Promise<void> {
+export async function resetUIAfterClone(
+  ctx: CloneResetContext,
+  clonedTitle: string,
+  banner?: string,
+): Promise<void> {
   const { state } = ctx;
   disposeAssistantRenderState(state);
   state.chatContainer.clear();
@@ -68,7 +72,7 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
   ctx.updateStatusLine();
   await ctx.renderExistingMessages();
   state.ui.requestRender();
-  ctx.showInfo(`Cloned thread: ${clonedTitle}`);
+  ctx.showInfo(banner ?? `Cloned thread: ${clonedTitle}`);
 }
 
 export async function handleCloneCommand(ctx: SlashCommandContext): Promise<void> {

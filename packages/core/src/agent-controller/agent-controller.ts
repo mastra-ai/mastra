@@ -25,7 +25,12 @@ import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
-import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
+import type {
+  ObservationalMemoryRecord,
+  PaginationInfo,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+} from '../storage/types';
 import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
 
@@ -43,6 +48,7 @@ import {
 import type {
   AvailableModel,
   IntervalHandler,
+  AgentControllerBranch,
   AgentControllerConfig,
   AgentControllerMode,
   AgentControllerRequestContext,
@@ -1167,6 +1173,18 @@ export class AgentController<TState = {}> {
           metadata,
           resolvedMemory: await getConfiguredMemory(),
         }),
+      branchThread: async ({ sourceThreadId, branchPointMessageId, title, metadata }) =>
+        this.branchThreadRow({
+          session,
+          sourceThreadId,
+          branchPointMessageId,
+          title,
+          metadata,
+          resolvedMemory: await getConfiguredMemory(),
+        }),
+      getThreadParent: async ({ threadId }) => this.getParentThreadRow(session, threadId),
+      listThreadBranches: async ({ threadId, page, perPage }) =>
+        this.listThreadBranchesRow(session, { threadId, page, perPage }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -1279,6 +1297,99 @@ export class AgentController<TState = {}> {
       createdAt: result.thread.createdAt,
       updatedAt: result.thread.updatedAt,
       metadata: result.thread.metadata,
+    };
+  }
+
+  /** Branch a thread at a fork-point message via the host's memory (gateway primitive for the Session thread domain). */
+  private async branchThreadRow({
+    session,
+    sourceThreadId,
+    branchPointMessageId,
+    title,
+    metadata,
+    resolvedMemory,
+  }: {
+    session: Session<TState>;
+    sourceThreadId: string;
+    branchPointMessageId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+    resolvedMemory?: MastraMemory;
+  }): Promise<AgentControllerBranch> {
+    if (!this.config.memory) {
+      throw createThreadBranchError(
+        'BRANCHING_UNSUPPORTED',
+        'Thread branching requires a configured Memory with branch support.',
+      );
+    }
+    const memory = resolvedMemory ?? (await this.resolveMemory(session));
+    if (!memory) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+    if (!memory.supportsThreadBranching || typeof memory.branchThread !== 'function') {
+      throw createThreadBranchError(
+        'BRANCHING_UNSUPPORTED',
+        `Thread branching is not supported by this memory implementation.`,
+      );
+    }
+    const result = await memory.branchThread({ threadId: sourceThreadId, branchPointMessageId, title, metadata });
+    return {
+      thread: {
+        id: result.thread.id,
+        resourceId: result.thread.resourceId,
+        title: result.thread.title ?? 'Branched Thread',
+        createdAt: result.thread.createdAt,
+        updatedAt: result.thread.updatedAt,
+        metadata: result.thread.metadata,
+      },
+      branch: result.branch,
+    };
+  }
+
+  /** Return a branch's parent thread via the host's memory (gateway primitive for the Session thread domain). */
+  private async getParentThreadRow(session: Session<TState>, threadId: string): Promise<AgentControllerThread | null> {
+    if (!this.config.memory) return null;
+    const memory = await this.resolveMemory(session);
+    if (!memory || !memory.supportsThreadBranching) return null;
+    const thread = await memory.getParentThread({ threadId });
+    return thread
+      ? {
+          id: thread.id,
+          resourceId: thread.resourceId,
+          title: thread.title ?? undefined,
+          createdAt: thread.createdAt,
+          updatedAt: thread.updatedAt,
+          metadata: thread.metadata,
+        }
+      : null;
+  }
+
+  /** List a thread's direct branches via the host's memory (gateway primitive for the Session thread domain). */
+  private async listThreadBranchesRow(
+    session: Session<TState>,
+    { threadId, page, perPage }: { threadId: string; page?: number; perPage?: number | false },
+  ): Promise<PaginationInfo & { branches: AgentControllerBranch[] }> {
+    if (!this.config.memory) {
+      return { total: 0, page: 0, perPage: false, hasMore: false, branches: [] };
+    }
+    const memory = await this.resolveMemory(session);
+    if (!memory || !memory.supportsThreadBranching) {
+      return { total: 0, page: 0, perPage: false, hasMore: false, branches: [] };
+    }
+    const result = await memory.listBranches({ threadId, page, perPage });
+    return {
+      ...result,
+      branches: result.branches.map(entry => ({
+        thread: {
+          id: entry.thread.id,
+          resourceId: entry.thread.resourceId,
+          title: entry.thread.title ?? undefined,
+          createdAt: entry.thread.createdAt,
+          updatedAt: entry.thread.updatedAt,
+          metadata: entry.thread.metadata,
+        },
+        branch: entry.branch,
+      })),
     };
   }
 

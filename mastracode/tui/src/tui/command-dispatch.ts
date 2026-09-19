@@ -21,6 +21,9 @@ import {
   handleSkillsCommand,
   handleNewCommand,
   handleCloneCommand,
+  handleBranchCommand,
+  handleParentCommand,
+  handleBranchesCommand,
   handleResourceCommand,
   handleDiffCommand,
   handleThreadsCommand,
@@ -164,6 +167,15 @@ export async function dispatchSlashCommand(
       return true;
     case 'clone':
       await handleCloneCommand(ctx);
+      return true;
+    case 'branch':
+      await handleBranchCommand(ctx);
+      return true;
+    case 'parent':
+      await handleParentCommand(ctx);
+      return true;
+    case 'branches':
+      await handleBranchesCommand(ctx);
       return true;
     case 'threads':
       await handleThreadsCommand(ctx);
