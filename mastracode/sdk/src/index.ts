@@ -24,7 +24,6 @@ import {
   createBackgroundWorkSignalProcessor,
   CyberRefusalHandler,
   isBadRequestError,
-  PrefillErrorHandler,
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
@@ -934,7 +933,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         return getStaticallyLoadedInstructionPaths(projectPath, undefined, projectReader);
       },
     }),
-    new ProviderHistoryCompat(),
   ];
 
   // Built-in providers are named so the plugin lane can reserve their ids.
@@ -1102,7 +1100,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // sanitizing tool-call IDs) before retrying, while StreamErrorRetryProcessor's
       // isBadRequestError matcher retries the identical request. Error processors
       // short-circuit on the first `retry: true`, so a blind retry first would resend
-      // the broken history and fail again.
+      // the broken history and fail again. It is named here rather than inherited
+      // because the Agent appends missing defaults after a caller's list, which would
+      // place this after the retry processor.
+      // `prefill-error-handler` is deliberately absent: the Agent appends it from the
+      // shared stability defaults, which lands in the same position it occupied here.
       new ProviderHistoryCompat(),
       // Same ordering reason: OpenAI surfaces some cyber refusals as retryable
       // 5xx errors, and a blind retry would resend the request without the
@@ -1127,7 +1129,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           },
         ],
       }),
-      new PrefillErrorHandler(),
       // Rotation runs last in the error lane: a transient error reaching here
       // means StreamErrorRetryProcessor already spent its budget, which is the
       // hop condition; quota/auth errors were never transient-matched and

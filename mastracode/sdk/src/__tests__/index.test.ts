@@ -1305,11 +1305,14 @@ describe('createMastraCode', () => {
       .map(call => call[0] as { errorProcessors?: Array<{ id?: string }>; maxProcessorRetries?: number } | undefined)
       .find(config => config?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'));
     expect(agentConfig?.maxProcessorRetries).toBe(64);
+    // ProviderHistoryCompat is named first because the shared defaults are
+    // inserted at the position their id gives them, so relying on inheritance
+    // alone would place it after the retry processor. `prefill-error-handler` is
+    // not named: it is inherited and still lands between the two.
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'cyber-refusal-handler',
       'stream-error-retry-processor',
-      'prefill-error-handler',
       'mastracode-account-rotation',
     ]);
   });
@@ -1460,7 +1463,6 @@ describe('createMastraCode', () => {
       'embedding-reconciler',
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
     expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
@@ -1487,7 +1489,6 @@ describe('createMastraCode', () => {
       'needs-mastra',
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
     ]);
   });
 
@@ -1518,7 +1519,6 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
       'mastracode-account-start-notice',
       'acme-input',
     ]);
@@ -1531,7 +1531,6 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
     expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
@@ -1575,7 +1574,6 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
       'mastracode-account-start-notice',
       'acme-provider-input',
     ]);
@@ -1644,7 +1642,6 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
     expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
@@ -1662,7 +1659,8 @@ describe('createMastraCode', () => {
     const agentConfig = agentConstructorMock.mock.calls
       .map(call => call[0] as { errorProcessors?: Array<{ id?: string }> } | undefined)
       .find(config => config?.errorProcessors?.some(processor => processor.id === 'provider-history-compat'));
-    expect(resolveInputProcessors().map(processor => processor.id)).toContain('provider-history-compat');
+    // The processor lives in the error lane and still receives `processLLMRequest`
+    // there, because error-phase processors participate in the LLM request lane.
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
 
