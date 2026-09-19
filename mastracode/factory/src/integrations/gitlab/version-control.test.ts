@@ -318,7 +318,11 @@ describe('buildGitLabVersionControl', () => {
 
   it('lists, creates, updates, and deletes merge request notes with packed ids', async () => {
     const result = setup();
-    vi.spyOn(result.api, 'listMergeRequestNotes').mockResolvedValue([note(), note({ id: 93, system: true })]);
+    vi.spyOn(result.api, 'listMergeRequestNotes').mockResolvedValue([
+      note(),
+      note({ id: 92, type: 'DiffNote' }),
+      note({ id: 93, system: true }),
+    ]);
     vi.spyOn(result.api, 'createMergeRequestNote').mockResolvedValue(note({ id: 92, body: 'New comment' }));
     vi.spyOn(result.api, 'updateMergeRequestNote').mockResolvedValue(note({ body: 'Updated comment' }));
     vi.spyOn(result.api, 'deleteMergeRequestNote').mockResolvedValue();
@@ -329,7 +333,10 @@ describe('buildGitLabVersionControl', () => {
         sourceId: 'acme/app',
         pullRequestId: '17',
       }),
-    ).resolves.toMatchObject({ comments: [{ id: '17:91', author: 'alice', body: 'Looks good' }] });
+    ).resolves.toEqual({
+      comments: [expect.objectContaining({ id: '17:91', author: 'alice', body: 'Looks good' })],
+      nextCursor: null,
+    });
     await expect(
       result.versionControl.createComment({
         connection: CONNECTION,

@@ -129,7 +129,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     const notes = await context.api.listMergeRequestNotes(input.sourceId, mergeRequestIid, { page });
     return {
       comments: notes
-        .filter(note => !note.system)
+        .filter(note => !note.system && note.type !== 'DiffNote')
         .map(note => toPullRequestComment(context.host, input.sourceId, mergeRequestIid, note)),
       nextCursor: notes.length === GITLAB_NOTES_PAGE_SIZE ? String(page + 1) : null,
     };

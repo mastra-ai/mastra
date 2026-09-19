@@ -67,6 +67,7 @@ export interface GitLabIssue {
 export interface GitLabNote {
   id: number;
   body: string;
+  type?: string | null;
   author?: GitLabUser | null;
   created_at: string;
   updated_at?: string;
