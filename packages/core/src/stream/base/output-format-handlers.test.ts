@@ -14,6 +14,20 @@ import {
   escapeUnescapedControlCharsInJsonStrings,
 } from './output-format-handlers';
 
+function finishChunk(reason: 'stop' | 'length' | 'content-filter'): ChunkType<unknown> {
+  return {
+    type: 'finish',
+    runId: 'test-run',
+    from: ChunkFrom.AGENT,
+    payload: {
+      stepResult: { reason },
+      output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+      metadata: {},
+      messages: { all: [], user: [], nonUser: [] },
+    },
+  };
+}
+
 describe('escapeUnescapedControlCharsInJsonStrings', () => {
   it('should escape newlines inside JSON strings', () => {
     const input = '{"message": "Hello\nWorld"}';
@@ -98,6 +112,123 @@ continued", "item2"]}`;
 });
 
 describe('output-format-handlers', () => {
+  describe('truncated structured output', () => {
+    const schema = z.object({ name: z.string(), items: z.array(z.string()), total: z.number().optional() });
+
+    async function transform(
+      text: string,
+      options: Parameters<typeof createObjectStreamTransformer<z.infer<typeof schema>>>[0] = {
+        structuredOutput: { schema },
+      },
+      endChunks: ChunkType<z.infer<typeof schema>>[] = [finishChunk('length') as ChunkType<z.infer<typeof schema>>],
+    ) {
+      const chunks = await convertAsyncIterableToArray(
+        convertArrayToReadableStream<ChunkType<z.infer<typeof schema>>>([
+          {
+            type: 'text-delta',
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            payload: { id: 'text-1', text },
+          },
+          {
+            type: 'text-end',
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            payload: { id: 'text-1' },
+          },
+          ...endChunks,
+        ]).pipeThrough(createObjectStreamTransformer(options)),
+      );
+      return chunks;
+    }
+
+    it.each(['length', 'content-filter'] as const)('rejects schema-valid JSON repaired after %s', async reason => {
+      const chunks = await transform('{"name":"Ana","items":["lettuce","carrot"', { structuredOutput: { schema } }, [
+        finishChunk(reason) as ChunkType<z.infer<typeof schema>>,
+      ]);
+
+      expect(chunks.filter(chunk => chunk.type === 'object-result')).toEqual([]);
+      const errors = chunks.filter(chunk => chunk.type === 'error');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.payload.error).toMatchObject({
+        id: 'STRUCTURED_OUTPUT_TRUNCATED',
+        details: { finishReason: reason },
+      });
+    });
+
+    it('reports truncation before schema validation for a missing required field', async () => {
+      const requiredSchema = schema.extend({ total: z.number() });
+      const chunks = await transform('{"name":"Ana","items":["lettuce"]', {
+        structuredOutput: { schema: requiredSchema },
+      });
+
+      expect(chunks.find(chunk => chunk.type === 'error')?.payload.error).toMatchObject({
+        id: 'STRUCTURED_OUTPUT_TRUNCATED',
+      });
+    });
+
+    it('routes truncation through warn without emitting a final result', async () => {
+      const logger = new ConsoleLogger({ level: 'debug' });
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      const chunks = await transform('{"name":"Ana","items":[]', {
+        structuredOutput: { schema, errorStrategy: 'warn' },
+        logger,
+      });
+
+      expect(warn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('finished with reason "length"'));
+      expect(chunks.filter(chunk => chunk.type === 'error' || chunk.type === 'object-result')).toEqual([]);
+    });
+
+    it('routes truncation through fallback exactly once', async () => {
+      const fallbackValue = { name: 'Fallback', items: [] };
+      const chunks = await transform('{"name":"Ana","items":[]', {
+        structuredOutput: { schema, errorStrategy: 'fallback', fallbackValue },
+      });
+
+      expect(chunks.filter(chunk => chunk.type === 'object-result')).toEqual([
+        {
+          type: 'object-result',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          object: fallbackValue,
+          metadata: { fallback: true },
+        },
+      ]);
+      expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([]);
+    });
+
+    it('finalizes normal stop output once after the finish chunk', async () => {
+      const chunks = await transform('{"name":"Ana","items":[]}', { structuredOutput: { schema } }, [
+        finishChunk('stop') as ChunkType<z.infer<typeof schema>>,
+      ]);
+
+      expect(chunks.filter(chunk => chunk.type === 'object-result')).toHaveLength(1);
+      expect(chunks.map(chunk => chunk.type)).toEqual(['object', 'text-delta', 'text-end', 'finish', 'object-result']);
+    });
+
+    it('finalizes on finish without text-end', async () => {
+      const chunks = await convertAsyncIterableToArray(
+        convertArrayToReadableStream<ChunkType<z.infer<typeof schema>>>([
+          {
+            type: 'text-delta',
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            payload: { id: 'text-1', text: '{"name":"Ana","items":[]}' },
+          },
+          finishChunk('stop') as ChunkType<z.infer<typeof schema>>,
+        ]).pipeThrough(createObjectStreamTransformer({ structuredOutput: { schema } })),
+      );
+
+      expect(chunks.filter(chunk => chunk.type === 'object-result')).toHaveLength(1);
+    });
+
+    it('preserves flush finalization when finish is omitted', async () => {
+      const chunks = await transform('{"name":"Ana","items":[]}', { structuredOutput: { schema } }, []);
+
+      expect(chunks.filter(chunk => chunk.type === 'object-result')).toHaveLength(1);
+    });
+  });
+
   describe.each([true, false])('recovery with text-end: %s', includeTextEnd => {
     it.each(['warn', 'fallback'] as const)(
       'handles %s validation once through the configured logger',

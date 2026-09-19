@@ -8,7 +8,7 @@ import type { ZodType, PublicSchema, StandardSchemaWithJSON } from '../../schema
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
-import type { ChunkType } from '../types';
+import type { ChunkType, MastraFinishReason } from '../types';
 import { getTransformedSchema } from './schema';
 import type { ZodLikePartialSchema } from './schema';
 
@@ -653,6 +653,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   let previousObject: unknown = undefined;
   let currentRunId: string | undefined;
   let finalResult: ValidateAndTransformFinalResult<OUTPUT> | undefined;
+  let finishReason: MastraFinishReason | undefined;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
@@ -682,49 +683,56 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         }
       }
 
-      // Validate and resolve object when text generation completes
-      if (chunk.type === 'text-end') {
-        controller.enqueue(chunk);
-
-        if (accumulatedText?.trim() && !finalResult) {
-          finalResult = await handler.validateAndTransformFinal(accumulatedText);
-          if (finalResult.success) {
-            controller.enqueue({
-              from: ChunkFrom.AGENT,
-              runId: currentRunId ?? '',
-              type: 'object-result',
-              object: finalResult.value,
-            });
-          }
-        }
-        return;
-      }
-
       // Always pass through the original chunk for downstream processing
       controller.enqueue(chunk);
+
+      // Wait for the terminal finish reason before resolving the final object.
+      // Providers that omit finish are handled by the flush fallback below.
+      if (chunk.type === 'finish') {
+        finishReason = chunk.payload.stepResult.reason;
+        await finalize(controller);
+      }
     },
 
     async flush(controller) {
-      if (finalResult && !finalResult.success) {
-        handleValidationError(finalResult.error, controller);
-      }
-      // Safety net: If text-end was never emitted, validate now as fallback
-      // This handles edge cases where providers might not emit text-end
-      if (accumulatedText?.trim() && !finalResult) {
-        finalResult = await handler.validateAndTransformFinal(accumulatedText);
-        if (finalResult.success) {
-          controller.enqueue({
-            from: ChunkFrom.AGENT,
-            runId: currentRunId ?? '',
-            type: 'object-result',
-            object: finalResult.value,
-          });
-        } else {
-          handleValidationError(finalResult.error, controller);
-        }
-      }
+      await finalize(controller);
     },
   });
+
+  async function finalize(controller: TransformStreamDefaultController<ChunkType<OUTPUT>>) {
+    if (!accumulatedText?.trim() || finalResult) {
+      return;
+    }
+
+    if (finishReason === 'length' || finishReason === 'content-filter') {
+      finalResult = {
+        success: false,
+        error: new MastraError({
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          id: 'STRUCTURED_OUTPUT_TRUNCATED',
+          text: `Structured output was truncated because the model finished with reason "${finishReason}".`,
+          details: {
+            finishReason,
+            value: accumulatedText,
+          },
+        }),
+      };
+    } else {
+      finalResult = await handler.validateAndTransformFinal(accumulatedText);
+    }
+
+    if (finalResult.success) {
+      controller.enqueue({
+        from: ChunkFrom.AGENT,
+        runId: currentRunId ?? '',
+        type: 'object-result',
+        object: finalResult.value,
+      });
+    } else {
+      handleValidationError(finalResult.error, controller);
+    }
+  }
 
   /**
    * Handle validation errors based on error strategy

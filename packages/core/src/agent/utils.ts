@@ -23,7 +23,9 @@ function isStructuredOutputFormatError(error: unknown): boolean {
     NoObjectGeneratedError.isInstance(error) ||
     TypeValidationError.isInstance(error) ||
     (error instanceof MastraError &&
-      (error.id === 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED' || error.id === 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED'))
+      (error.id === 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED' ||
+        error.id === 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED' ||
+        error.id === 'STRUCTURED_OUTPUT_TRUNCATED'))
   );
 }
 
