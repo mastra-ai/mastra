@@ -29,7 +29,7 @@ export function MainSidebarMobileTrigger({
         if (!event.defaultPrevented) setOpenMobile(true);
       }}
       className={cn(
-        'new-theme inline-flex size-10 items-center justify-center rounded-md',
+        'new-theme inline-flex size-10 items-center justify-center rounded-md select-none',
         // compound selector, not `in-*` — its `:where()` ties with a consumer's later `.inline-flex`
         "[[data-sidebar-mobile='false']_&]:hidden",
         "[[data-sidebar-mobile-present='true']_&]:invisible",

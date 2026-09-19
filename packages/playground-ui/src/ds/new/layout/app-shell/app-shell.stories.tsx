@@ -134,7 +134,15 @@ function FrameWithPanel({ children, className }: AppShellFrameProps) {
 const meta = {
   title: 'Layout/AppShell',
   component: AppShell,
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Regression coverage for existing AppShell consumers. Its API and behavior remain supported. For new app composition, use [Layout / AppLayout](?path=/docs/layout-applayout--docs). Detailed sidebar behavior belongs in [New / SidebarNew](?path=/docs/new-sidebarnew--docs); the sidebar here provides layout context rather than a second navigation showcase.',
+      },
+    },
+  },
   args: { children: null, mainLabel: 'Page content' },
 } satisfies Meta<typeof AppShell>;
 

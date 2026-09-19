@@ -19,6 +19,7 @@ describe('Button', () => {
         'transition-[background-color,border-color,color]',
         'motion-reduce:transition-none',
         'aria-disabled:pointer-events-none',
+        'select-none',
       ]),
     );
     expect(baseClasses).not.toContain('transition-all');

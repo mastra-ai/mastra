@@ -44,6 +44,7 @@ export type ScrollAreaScrollButtons =
 
 export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root> & {
   viewPortClassName?: string;
+  viewportRender?: React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Viewport>['render'];
   maxHeight?: string;
   autoScroll?: boolean;
   orientation?: Orientation;
@@ -231,6 +232,7 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
       className,
       children,
       viewPortClassName,
+      viewportRender,
       maxHeight,
       autoScroll = false,
       orientation = 'vertical',
@@ -288,6 +290,7 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
         {...props}
       >
         <ScrollAreaPrimitive.Viewport
+          render={viewportRender}
           ref={setViewportRef}
           className={cn('size-full', maskClasses(sides), viewPortClassName)}
           style={viewportStyle}

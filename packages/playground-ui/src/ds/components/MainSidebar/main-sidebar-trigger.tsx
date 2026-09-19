@@ -25,7 +25,7 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
               if (!event.defaultPrevented) toggleSidebar();
             }}
             className={cn(
-              'flex items-center justify-center rounded-md text-muted-foreground',
+              'flex items-center justify-center rounded-md text-muted-foreground select-none',
               'size-7',
               isCollapsed ? 'mx-auto' : 'ml-auto',
               'hover:bg-sidebar-accent hover:text-foreground',

@@ -41,7 +41,7 @@ const NEUTRAL_ICON_STATE = cn(
 // eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API
 export const buttonVariants = cva(
   cn(
-    'new-theme inline-flex cursor-pointer items-center justify-center',
+    'new-theme inline-flex cursor-pointer items-center justify-center select-none',
     'transition-[background-color,border-color,color] duration-normal ease-out-custom motion-reduce:transition-none',
     sharedFormElementDisabledStyle,
     'aria-disabled:pointer-events-none aria-disabled:text-muted-foreground',

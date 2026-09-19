@@ -34,6 +34,23 @@ const renderArea = (props: Partial<React.ComponentProps<typeof ScrollArea>> = {}
   );
 
 describe('ScrollArea', () => {
+  it('composes a semantic viewport with native props, a ref, and scroll events', () => {
+    const ref = React.createRef<HTMLElement>();
+    const onScroll = vi.fn();
+    renderArea({
+      viewportRender: (
+        <main role="main" ref={ref} aria-label="Page" className="custom-viewport" tabIndex={-1} onScroll={onScroll} />
+      ),
+    });
+    const viewport = screen.getByRole('main', { name: 'Page' });
+    expect(viewport).toBe(getViewport());
+    expect(ref.current).toBe(viewport);
+    expect(viewport.tabIndex).toBe(-1);
+    expect(viewport.classList.contains('custom-viewport')).toBe(true);
+    fireEvent.scroll(viewport);
+    expect(onScroll).toHaveBeenCalledOnce();
+  });
+
   describe('orientation="vertical" (default)', () => {
     it('clips horizontal overflow on the viewport so wide children do not trigger x-scroll', () => {
       renderArea();

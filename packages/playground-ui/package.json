@@ -136,6 +136,12 @@
         "default": "./dist/new/sidebar.es.js"
       }
     },
+    "./new/layout/app-layout": {
+      "import": {
+        "types": "./dist/new/layout/app-layout.d.ts",
+        "default": "./dist/new/layout/app-layout.es.js"
+      }
+    },
     "./new/layout/app-shell": {
       "import": {
         "types": "./dist/new/layout/app-shell.d.ts",

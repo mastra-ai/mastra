@@ -2,7 +2,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
-const navItemVariants = cva('flex min-w-0 cursor-pointer items-center rounded-lg whitespace-nowrap', {
+const navItemVariants = cva('flex min-w-0 cursor-pointer items-center rounded-lg whitespace-nowrap select-none', {
   variants: {
     size: {
       default: 'h-8 text-ui-md',
