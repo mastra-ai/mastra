@@ -239,6 +239,84 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 }
 ```
 
+### Run result
+
+`POST /api/workflows/:workflowId/start-async` responds when the run settles: it finished, failed, or stopped at a suspend point. `status` tells you which, and `steps` holds one entry per step keyed by step ID. A step entry carries its own `output` when the step produced one, so a failed or suspended step has a status without an output. The workflow's own output, when there is one, is the top-level `result`. The declared response schema is:
+
+```typescript oxfmt:false
+{
+  status?:
+    | 'running'
+    | 'success'
+    | 'failed'
+    | 'tripwire'
+    | 'suspended'
+    | 'waiting'
+    | 'pending'
+    | 'canceled'
+    | 'bailed'
+    | 'paused'
+    | 'skipped';
+  result?: unknown;                    // Workflow output, present when status is 'success'
+  error?: unknown;                     // Present when status is 'failed'
+  payload?: unknown;                   // The inputData the run started with
+  initialState?: unknown;
+  steps?: {
+    [stepId: string]: {
+      status: string;
+      output?: unknown;
+      error?: unknown;                 // Present when the step failed
+      startedAt: number;               // Unix time in milliseconds
+      endedAt?: number;
+    };
+  };
+  activeStepsPath?: Record<string, number[]>;
+  serializedStepGraph?: unknown[];
+}
+```
+
+The handler returns the value of `run.start()` unchanged, so a response can carry fields outside this schema, such as `runId`.
+
+`GET /api/workflows/:workflowId/runs/:runId` returns the persisted run state with run metadata. The run's input is exposed as `payload`, and the persisted path fields are included. `workflowName` is the workflow's `id`, which can differ from the registry key used in the path:
+
+```typescript oxfmt:false
+{
+  runId: string;
+  workflowName: string;
+  resourceId: string | null;
+  createdAt: string;                   // ISO date string
+  updatedAt: string;                   // ISO date string
+  status: string;                      // Same values as above
+  result?: unknown;
+  error?: { message: string; name: string };
+  payload?: unknown;                   // The inputData the run started with
+  steps?: {
+    [stepId: string]: {
+      payload?: unknown;               // This step's input
+      status: string;
+      output?: unknown;
+      error?: unknown;                 // Present when the step failed
+      startedAt: number;
+      endedAt?: number;
+    };
+  };
+  activeStepsPath?: Record<string, number[]>;
+  serializedStepGraph?: unknown[];
+  suspendedPaths?: Record<string, number[]>;
+  resumeLabels?: Record<string, unknown>;
+  waitingPaths?: Record<string, number[]>;
+}
+```
+
+Use the `fields` query parameter to trim the response. It accepts a comma-separated subset of `result`, `error`, `payload`, `steps`, `activeStepsPath`, and `serializedStepGraph`. Any other name is rejected with a 400. The metadata fields and `status` are always included:
+
+```bash
+# Metadata, status and the final output only
+GET /api/workflows/my-workflow/runs/1faf6f91-b9ac-4db0-9fb3-326687ba1972?fields=result
+```
+
+Pass `withNestedWorkflows=false` to leave nested workflow data out of `steps`.
+
 ### Stream workflow request body
 
 ```typescript oxfmt:false
@@ -509,6 +587,86 @@ Returns the persisted experiment result row.
 | `400` | Result submitted to an experiment that has a target (`EXPERIMENT_HAS_TARGET`), item run requested on a target-less experiment (`EXPERIMENT_HAS_NO_TARGET`), `targetType` and `targetId` weren't provided together (`EXPERIMENT_INVALID_TARGET`), or the dataset has no items at the pinned version (`EXPERIMENT_NO_ITEMS`) |
 | `404` | Dataset, experiment, dataset item, or target not found (`EXPERIMENT_TARGET_NOT_FOUND`) |
 | `409` | Caller-supplied experiment `id` already exists for a different dataset or target (`EXPERIMENT_ID_CONFLICT`), or a call arrived after finalization (`EXPERIMENT_ALREADY_FINALIZED`) |
+
+## Scores
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/api/scores/scorers` | List scorers with the agents and workflows that use them |
+| `GET` | `/api/scores/scorers/:scorerId` | Get scorer by ID |
+| `GET` | `/api/scores/run/:runId` | List scores for a run |
+| `GET` | `/api/scores/scorer/:scorerId` | List scores produced by a scorer |
+| `GET` | `/api/scores/entity/:entityType/:entityId` | List scores for an agent or workflow |
+| `POST` | `/api/scores` | Save a score record |
+
+### List scorers response
+
+The response is a record keyed by scorer ID, not an array. It merges the scorers registered through the `scorers` option of the [`Mastra` class](/reference/core/mastra-class) with the scorers attached to agents and workflows:
+
+```typescript oxfmt:false
+{
+  [scorerId: string]: {
+    scorer: {
+      config: {
+        id: string;
+        name?: string;
+        description: string;
+        type?: unknown;
+        judge?: unknown;
+      };
+    };
+    sampling?: object;
+    agentIds: string[];
+    agentNames: string[];
+    workflowIds: string[];
+    isRegistered: boolean;             // True when the scorer is in the Mastra `scorers` option
+    source: 'code' | 'stored' | 'fs';
+  };
+}
+```
+
+Only `scorer.config` is part of the supported contract. The `scorer` object also carries implementation fields such as `steps`, which can change between releases.
+
+`GET /api/scores/scorers/:scorerId` returns a single entry of the same shape. An unknown ID returns `null` with status 200 rather than a 404.
+
+### Score list query parameters
+
+```typescript oxfmt:false
+{
+  page?: number;        // Page number (0-indexed)
+  perPage?: number;     // Items per page (default: 10)
+  entityId?: string;    // `/api/scores/scorer/:scorerId` only
+  entityType?: string;  // `/api/scores/scorer/:scorerId` only
+}
+```
+
+For `/api/scores/entity/:entityType/:entityId`, use `AGENT` or `WORKFLOW` as `entityType` and the agent or workflow registry key as `entityId`. The server resolves the key to the entity's own `id` before querying storage. Other `entityType` values are passed to storage as-is.
+
+### Score list response
+
+```typescript oxfmt:false
+{
+  pagination: {
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  };
+  scores: ScoreRowData[];
+}
+```
+
+Each record has the shape written by [score persistence](/docs/evals/overview#score-persistence). The fields you will read most often are `id`, `scorerId`, `runId`, `entityId`, `score`, `output`, `scorer`, `entity`, `source` (`LIVE` or `TEST`), the optional `entityType`, `input`, `reason`, `traceId`, `spanId`, `resourceId` and `threadId`, and the `createdAt` and `updatedAt` timestamps. Records also carry the scorer's intermediate step results and prompts. Without a `scores` store configured the list routes return an empty page instead of an error.
+
+### Save score request body
+
+```typescript oxfmt:false
+{
+  score: ScoreRowData;  // Same fields as the list routes return. Storage assigns createdAt and updatedAt
+}
+```
+
+How a supplied `id` is treated depends on the storage adapter. Some adapters upsert by it, others always generate a new ID, so retried submissions can create duplicate rows there. The response is `{ score: ScoreRowData }` with the stored record. Saving requires storage. Without it the route responds with a 500.
 
 ## MCP
 
