@@ -118,6 +118,53 @@ describe('Session.signal()', () => {
     expect(secondResult.runId).toBe(firstResult.runId);
   });
 
+  it('keeps a full response identity when active attachment preparation falls back to idle wake', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseFirst!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      }),
+      text: 'first',
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const firstPromise = session.message({ content: 'first' });
+    await waitForStreamCalls(agent, 1);
+
+    let releaseContents!: () => void;
+    let contentsStarted!: () => void;
+    const contentsStartedPromise = new Promise<void>(resolve => {
+      contentsStarted = resolve;
+    });
+    const contentsGate = new Promise<void>(resolve => {
+      releaseContents = resolve;
+    });
+    (session as any)._buildSignalContentsWithAttachments = async () => {
+      contentsStarted();
+      await contentsGate;
+      return 'second';
+    };
+
+    const second = session.signal({
+      content: 'second',
+      logicalMessageIdentity: { input: 'input-2', response: 'response-2' },
+    });
+    await contentsStartedPromise;
+    releaseFirst();
+    await firstPromise;
+    releaseContents();
+
+    const handle = await second;
+    expect(handle.willInterleave).toBe(false);
+    await handle.result;
+    expect(agent.streamCalls).toHaveLength(2);
+    expect(agent.streamCalls[1]!.options.logicalMessageIdentity).toEqual({
+      input: 'input-2',
+      response: 'response-2',
+    });
+  });
+
   it('rejects active-delivery dispatch with a mode override', async () => {
     const agent = new MockAgent({ id: 'default' });
     let release!: () => void;

@@ -39,6 +39,8 @@ import {
   AGENT_RESPONSE_RECOVERY_STEP,
   type AgentExecutionOptionComposers,
 } from '../../agent/merge-execution-options';
+import { normalizeLogicalMessageInputIdentity, normalizeLogicalMessageIdentity } from '../../agent/message-list';
+import type { LogicalMessageIdentity, LogicalMessageSignalIdentity } from '../../agent/message-list';
 import { createSignal } from '../../agent/signals';
 import type { AgentSignalContents, CreatedAgentSignal } from '../../agent/signals';
 import {
@@ -1454,6 +1456,34 @@ export interface SessionInternals {
    * (live subscribers still receive them). Defaults to true.
    */
   persistTransientStreamingEvents?: boolean;
+}
+
+function normalizeSessionLogicalMessageIdentity(
+  value: LogicalMessageIdentity | undefined,
+  methodName: string,
+): LogicalMessageIdentity | undefined {
+  try {
+    return normalizeLogicalMessageIdentity(value);
+  } catch (error) {
+    throw new HarnessValidationError(
+      `${methodName}.logicalMessageIdentity`,
+      error instanceof Error ? error.message : 'must contain valid input and response ids',
+    );
+  }
+}
+
+function normalizeSessionLogicalMessageInputIdentity(
+  value: LogicalMessageSignalIdentity | undefined,
+  methodName: string,
+): LogicalMessageSignalIdentity | undefined {
+  try {
+    return normalizeLogicalMessageInputIdentity(value);
+  } catch (error) {
+    throw new HarnessValidationError(
+      `${methodName}.logicalMessageIdentity`,
+      error instanceof Error ? error.message : 'must contain a valid input id',
+    );
+  }
 }
 
 export class Session {
@@ -7428,6 +7458,11 @@ export class Session {
   async message(opts: MessageOptions): Promise<AgentResult | AgentStream | unknown> {
     this._assertLive('message()');
     this._assertOpenForTurn('message()');
+    const logicalMessageIdentity = normalizeSessionLogicalMessageIdentity(opts.logicalMessageIdentity, 'message()');
+    const admittedOpts = {
+      ...opts,
+      ...(logicalMessageIdentity === undefined ? {} : { logicalMessageIdentity }),
+    };
 
     if (opts.stream === true && opts.output !== undefined) {
       throw new HarnessConfigError('message()', '`stream: true` and `output` are mutually exclusive');
@@ -7497,7 +7532,7 @@ export class Session {
     const admissionHashes =
       opts.admissionId !== undefined
         ? this._computeMessageAdmissionHashes(
-            opts,
+            admittedOpts,
             {
               modeId: effectiveModeId,
               modelId: effectiveModelId,
@@ -7628,6 +7663,7 @@ export class Session {
       // (temperature, maxOutputTokens, …) layered onto the structured generate
       // turn. Omitted → model/provider defaults, so existing turns are unchanged.
       ...(opts.modelSettings ? { modelSettings: opts.modelSettings } : {}),
+      ...(logicalMessageIdentity ? { logicalMessageIdentity } : {}),
     };
 
     // Structured + sync path: agent.generate with structuredOutput.
@@ -7752,6 +7788,30 @@ export class Session {
       throw err;
     }
 
+    // A full logical pair owns a fresh response stream. If an active run
+    // appears before the durable reservation, fail at the boundary instead of
+    // letting the native default active-delivery policy silently drop the
+    // response identity. Idempotent retries still attach to their durable
+    // duplicate before this guard rejects new work.
+    if (logicalMessageIdentity !== undefined && sub.activeRunId() !== null) {
+      const duplicate = duplicateProbe !== undefined ? await duplicateProbe.catch(() => undefined) : undefined;
+      if (duplicate) {
+        if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
+        admissionStart?.resolve(duplicate);
+        try {
+          return await this._returnDuplicateMessageResult(duplicate, opts);
+        } finally {
+          finishOwnedMessageTurn();
+        }
+      }
+      const err = new HarnessConfigError(
+        'message().logicalMessageIdentity',
+        'a full logical message identity cannot be delivered into an active run',
+      );
+      failOwnedMessageTurnBeforeDispatch(err);
+      throw err;
+    }
+
     if (admissionIdentity !== undefined && admissionHash !== undefined && admissionStart !== undefined) {
       try {
         const reservation = await Promise.race([
@@ -7805,17 +7865,22 @@ export class Session {
     reportAdmissionPhase('evidence_reserved');
 
     let signal;
+    let nativeDispatchStarted = false;
+    let nativeAccepted = false;
+    let nativeRejected = false;
     try {
       signal = agent.sendSignal(
         {
           ...(admissionIdentity ? { id: admissionIdentity.signalId } : {}),
           type: 'user-message',
           contents: opts.content as never,
+          ...(logicalMessageIdentity ? { metadata: { logicalMessageId: logicalMessageIdentity.input } } : {}),
         },
         {
           ...(admissionIdentity ? { runId: admissionIdentity.runId } : {}),
           resourceId: this.resourceId,
           threadId: this.threadId,
+          ...(logicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
           ifIdle: {
             behavior: 'wake',
             // The wake branch starts a REAL streamed turn; carry the silent-turn nudge.
@@ -7826,9 +7891,49 @@ export class Session {
           },
         },
       );
+      if (logicalMessageIdentity !== undefined) {
+        nativeDispatchStarted = true;
+        const accepted = await this._awaitSignalNativeAcceptance(
+          signal.accepted,
+          turnAbortSignal,
+          activeTurnWaiter.promise,
+          'message().logicalMessageIdentity',
+        );
+        if (accepted.action !== 'wake') {
+          nativeRejected = true;
+          throw lineagedSignalAcceptanceError('message().logicalMessageIdentity', accepted.action);
+        }
+        if (accepted.runId !== signal.runId) {
+          nativeRejected = true;
+          const mismatch = lineagedSignalRunMismatchError(
+            'message().logicalMessageIdentity',
+            signal.runId,
+            accepted.runId,
+          );
+          turnAbortController.abort(mismatch);
+          throw mismatch;
+        }
+        nativeAccepted = true;
+      }
     } catch (err) {
       let thrown = err;
-      if (admissionIdentity !== undefined && admissionHash !== undefined) {
+      if (
+        err instanceof NativeSignalAcceptanceTimeoutError &&
+        nativeDispatchStarted &&
+        !nativeAccepted &&
+        !nativeRejected
+      ) {
+        // `sendSignal()` may already have started the native stream when its
+        // acceptance acknowledgement times out. Abort that stream before
+        // dropping this caller's ownership, but leave the durable admission
+        // pending so a later retry can recover the ambiguous dispatch.
+        turnAbortController.abort(err);
+      }
+      if (
+        admissionIdentity !== undefined &&
+        admissionHash !== undefined &&
+        (!nativeDispatchStarted || nativeAccepted || nativeRejected)
+      ) {
         try {
           await Promise.race([
             this._writeMessageResultEvidence(
@@ -8232,6 +8337,14 @@ export class Session {
    */
   async admitMessage(opts: MessageOptionsDefault): Promise<MessageAdmissionResult> {
     this._assertLive('admitMessage()');
+    const logicalMessageIdentity = normalizeSessionLogicalMessageIdentity(
+      opts.logicalMessageIdentity,
+      'admitMessage()',
+    );
+    const admittedOpts = {
+      ...opts,
+      ...(logicalMessageIdentity === undefined ? {} : { logicalMessageIdentity }),
+    };
     if (opts.admissionId === undefined || opts.admissionId.length === 0) {
       throw new HarnessValidationError('admitMessage().admissionId', 'admissionId must be a non-empty string');
     }
@@ -8246,7 +8359,7 @@ export class Session {
     }
 
     const effectiveModeId = opts.mode ?? this._record.modeId;
-    const admissionHashes = this._computeMessageAdmissionHashes(opts, {
+    const admissionHashes = this._computeMessageAdmissionHashes(admittedOpts, {
       modeId: effectiveModeId,
       modelId: opts.model ?? this._record.modelId,
     });
@@ -8292,7 +8405,7 @@ export class Session {
       };
     }
 
-    const streamPromise = this.message({ ...opts, stream: true });
+    const streamPromise = this.message({ ...admittedOpts, stream: true });
     void streamPromise.catch(() => {});
     const admissionStart = await this._waitForMessageAdmissionStart(opts.admissionId, streamPromise);
     const evidence =
@@ -8927,6 +9040,9 @@ export class Session {
             ...(opts.model !== undefined ? { model: opts.model } : {}),
           }),
       ...(opts.modelSettings !== undefined ? { modelSettings: opts.modelSettings } : {}),
+      ...(opts.logicalMessageIdentity !== undefined
+        ? { logicalMessageIdentity: { ...opts.logicalMessageIdentity } }
+        : {}),
       attachments: (opts.attachments ?? []).map(attachment => ({
         attachmentId: attachment.attachmentId,
         resourceId: attachment.resourceId,
@@ -8956,7 +9072,7 @@ export class Session {
   }
 
   private _computeSignalAdmissionHash(
-    opts: Pick<SessionSignalOptions, 'content' | 'mode'>,
+    opts: Pick<SessionSignalOptions, 'content' | 'mode' | 'logicalMessageIdentity'>,
     attachments: PersistedAttachment[],
     requestContext?: PersistedRequestContextInput,
   ): string {
@@ -8964,6 +9080,9 @@ export class Session {
       kind: 'signal',
       content: opts.content,
       ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
+      ...(opts.logicalMessageIdentity !== undefined
+        ? { logicalMessageIdentity: { ...opts.logicalMessageIdentity } }
+        : {}),
       attachments: attachments.map(attachment => ({
         kind: attachment.kind,
         name: attachment.name,
@@ -9195,8 +9314,9 @@ export class Session {
     accepted: Promise<T>,
     abortSignal?: AbortSignal,
     interrupted?: Promise<never>,
+    validationPath = 'signal().admissionId',
   ): Promise<T> {
-    throwIfAborted(abortSignal, 'signal().admissionId');
+    throwIfAborted(abortSignal, validationPath);
     return new Promise<T>((resolve, reject) => {
       let settled = false;
       const finish = (callback: () => void) => {
@@ -9209,7 +9329,7 @@ export class Session {
       const onAbort = () =>
         finish(() => reject(abortSignal?.reason ?? new HarnessValidationError('signal()', 'operation aborted')));
       const timer = setTimeout(() => {
-        finish(() => reject(new HarnessValidationError('signal().admissionId', 'native signal acceptance timed out')));
+        finish(() => reject(new NativeSignalAcceptanceTimeoutError(validationPath)));
       }, SIGNAL_NATIVE_ACCEPT_TIMEOUT_MS);
       timer.unref?.();
       abortSignal?.addEventListener('abort', onAbort, { once: true });
@@ -9233,6 +9353,7 @@ export class Session {
       id: evidence.signalId,
       type: 'user-message',
       contents: opts.content,
+      ...(opts.logicalMessageIdentity ? { metadata: { logicalMessageId: opts.logicalMessageIdentity.input } } : {}),
       createdAt,
       acceptedAt: createdAt,
     });
@@ -9523,6 +9644,13 @@ export class Session {
   ): Promise<SessionSignalResult> {
     this._assertLive('signal()');
     this._assertOpenForTurn('signal()');
+    const logicalMessageIdentity = normalizeSessionLogicalMessageInputIdentity(opts.logicalMessageIdentity, 'signal()');
+    const responseLogicalMessageIdentity =
+      logicalMessageIdentity !== undefined && 'response' in logicalMessageIdentity ? logicalMessageIdentity : undefined;
+    const admittedOpts = {
+      ...opts,
+      ...(logicalMessageIdentity === undefined ? {} : { logicalMessageIdentity }),
+    };
     if (typeof opts.content !== 'string') {
       throw new HarnessValidationError('signal()', '`content` must be a string');
     }
@@ -9550,7 +9678,7 @@ export class Session {
     // active when the caller retries it.
     const signalAdmissionHash =
       opts.admissionId !== undefined
-        ? this._computeSignalAdmissionHash(opts, internal?.attachments ?? [], persistedRequestContext)
+        ? this._computeSignalAdmissionHash(admittedOpts, internal?.attachments ?? [], persistedRequestContext)
         : undefined;
     const signalAdmissionIdentity =
       opts.admissionId !== undefined ? this._signalAdmissionIdentity(opts.admissionId) : undefined;
@@ -9575,7 +9703,7 @@ export class Session {
         });
         if (existing !== undefined && !this._signalAdmissionCanRedispatch(existing)) {
           this._assertOpenForTurn('signal()');
-          return await this._returnDuplicateSignalResult(existing, opts, signalAdmissionIdentity);
+          return await this._returnDuplicateSignalResult(existing, admittedOpts, signalAdmissionIdentity);
         }
         if (existing !== undefined && 'status' in existing && this._signalAdmissionCanRedispatch(existing)) {
           redispatchEvidence = existing;
@@ -9591,7 +9719,7 @@ export class Session {
             );
           }
           const admitted = await inFlight.promise;
-          return await this._returnDuplicateSignalResult(admitted, opts, signalAdmissionIdentity);
+          return await this._returnDuplicateSignalResult(admitted, admittedOpts, signalAdmissionIdentity);
         }
       } catch (err) {
         throw internal === undefined ? redactPublicBoundaryRejection(err) : err;
@@ -9672,7 +9800,7 @@ export class Session {
         });
         if (existing !== undefined && !this._signalAdmissionCanRedispatch(existing)) {
           this._assertOpenForTurn('signal()');
-          return await this._returnDuplicateSignalResult(existing, opts, identity);
+          return await this._returnDuplicateSignalResult(existing, admittedOpts, identity);
         }
 
         const inFlight = this._messageAdmissionStarts.get(opts.admissionId);
@@ -9681,7 +9809,7 @@ export class Session {
             throw new HarnessAdmissionConflictError(this.id, opts.admissionId, inFlight.admissionHash, admissionHash);
           }
           const admitted = await inFlight.promise;
-          return await this._returnDuplicateSignalResult(admitted, opts, identity);
+          return await this._returnDuplicateSignalResult(admitted, admittedOpts, identity);
         }
 
         signalAdmissionStart = createDeferred<AgentSignalResultEvidence | OperationAdmissionTombstone>();
@@ -9721,7 +9849,7 @@ export class Session {
         ) {
           signalAdmissionStart.resolve(reservedEvidence);
           this._messageAdmissionStarts.delete(opts.admissionId);
-          return await this._returnDuplicateSignalResult(reservedEvidence, opts, identity);
+          return await this._returnDuplicateSignalResult(reservedEvidence, admittedOpts, identity);
         }
         signalAdmission = {
           admissionId: opts.admissionId,
@@ -9784,6 +9912,26 @@ export class Session {
       rejectSignalAdmissionStart(err);
     };
 
+    const settleLineagedSignalDispatchRejection = async (runId: string, err: unknown) => {
+      if (signalAdmission === undefined || responseLogicalMessageIdentity === undefined) return;
+      const settled = await this._settleSignalResult(
+        signalAdmission.identity.signalId,
+        {
+          status: 'failed',
+          runId,
+          error: projectHarnessPublicError(err),
+        },
+        signalAdmission,
+      );
+      if (settled === undefined) {
+        throw new HarnessConfigError(
+          'signal().logicalMessageIdentity',
+          'native rejection did not produce durable signal outcome',
+        );
+      }
+      resolveSignalAdmissionStart(settled);
+    };
+
     const isSignalRunActive = (runId: string) => {
       const pendingResume = this._record.pendingResume;
       return (
@@ -9804,7 +9952,7 @@ export class Session {
     ): Promise<SessionSignalResult> => {
       if (claim.kind === 'duplicate') {
         resolveSignalAdmissionStart(claim.evidence);
-        return this._returnDuplicateSignalResult(claim.evidence, opts, signalAdmission!.identity);
+        return this._returnDuplicateSignalResult(claim.evidence, admittedOpts, signalAdmission!.identity);
       }
 
       const err = new HarnessConfigError(
@@ -9822,7 +9970,7 @@ export class Session {
       );
       const evidence = await this._loadSignalAdmissionEvidence(signalAdmission!);
       resolveSignalAdmissionStart(evidence);
-      return this._returnDuplicateSignalResult(evidence, opts, signalAdmission!.identity);
+      return this._returnDuplicateSignalResult(evidence, admittedOpts, signalAdmission!.identity);
     };
 
     // The awaited durable reservation can outlive the run observed above.
@@ -9947,6 +10095,7 @@ export class Session {
       const heartbeat = this._startSignalDispatchClaimHeartbeat(admission, dispatching);
       let heartbeatStopped = false;
       let claimOwned = true;
+      let idleSignalDiscarded = false;
       const stopHeartbeat = async () => {
         if (heartbeatStopped) return dispatching;
         heartbeatStopped = true;
@@ -9967,12 +10116,20 @@ export class Session {
             acceptedAt: new Date(admission.createdAt),
             type: 'user-message',
             contents: contents as never,
+            ...(logicalMessageIdentity ? { metadata: { logicalMessageId: logicalMessageIdentity.input } } : {}),
           },
           {
             runId: dispatching.runId,
             resourceId: this.resourceId,
             threadId: this.threadId,
-            ifIdle: { behavior: 'discard', streamOptions: {} as never },
+            ...(responseLogicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
+            ifIdle: {
+              behavior: 'discard',
+              streamOptions: {} as never,
+              _onThreadStreamSignalDiscarded: () => {
+                idleSignalDiscarded = true;
+              },
+            },
             _signalAdmissionAttemptId: dispatching.attemptId,
           } as never,
         );
@@ -9982,9 +10139,29 @@ export class Session {
         // only a synchronous pre-send throw or an explicit non-acceptance action
         // below proves it is safe to release.
         signalAdmissionNativeDispatchStarted = true;
-        const accepted = await this._awaitSignalNativeAcceptance(dispatched.accepted, opts.abortSignal);
+        const accepted = await this._awaitSignalNativeAcceptance(
+          dispatched.accepted,
+          opts.abortSignal,
+          undefined,
+          'signal().admissionId',
+        );
         if (accepted.action === 'discard') {
           await stopHeartbeat();
+          if (idleSignalDiscarded) {
+            await releaseSignalDispatch(dispatching);
+            claimOwned = false;
+            signalAdmissionNativeDispatchStarted = false;
+            return undefined;
+          }
+          if (responseLogicalMessageIdentity !== undefined) {
+            const err = new HarnessConfigError(
+              'signal().logicalMessageIdentity',
+              'a full logical message identity cannot be delivered into an active run',
+            );
+            await settleLineagedSignalDispatchRejection(dispatching.runId, err);
+            claimOwned = false;
+            throw err;
+          }
           await releaseSignalDispatch(dispatching);
           signalAdmissionNativeDispatchStarted = false;
           return undefined;
@@ -9995,6 +10172,13 @@ export class Session {
           claimOwned = false;
           signalAdmissionNativeDispatchStarted = false;
           throw new HarnessConfigError('signal()', 'signal delivery was blocked by a suspended thread');
+        }
+        if (accepted.action === 'deliver' && responseLogicalMessageIdentity !== undefined) {
+          await stopHeartbeat();
+          const err = lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
+          await settleLineagedSignalDispatchRejection(dispatching.runId, err);
+          claimOwned = false;
+          throw err;
         }
         if (accepted.action !== 'deliver') {
           throw new HarnessConfigError('signal()', `active signal delivery was not accepted (${accepted.action})`);
@@ -10045,6 +10229,7 @@ export class Session {
         activeTurnWaiter.cleanup();
         this._endTurn(turnAbortController);
       };
+      let nativeLineagedDispatchStarted = false;
       const assertOwnedSignalTurnNotDeleted = () => {
         if (this._state === 'deleted') {
           throw new HarnessSessionDeletedError(this.id, this._record.resourceId, this._record.threadId);
@@ -10076,6 +10261,7 @@ export class Session {
           ...this._createEmptySynthesisOptions(),
           ...toolSurface,
           ...(turnInstructions ? { instructions: turnInstructions } : {}),
+          ...(responseLogicalMessageIdentity ? { logicalMessageIdentity: responseLogicalMessageIdentity } : {}),
         };
         assertOwnedSignalTurnNotDeleted();
         this._assertOpenForTurn('signal()');
@@ -10094,13 +10280,36 @@ export class Session {
               ...(internal?.signalId !== undefined ? { id: internal.signalId } : {}),
               type: 'user-message',
               contents: signalContents as never,
+              ...(logicalMessageIdentity ? { metadata: { logicalMessageId: logicalMessageIdentity.input } } : {}),
             },
             {
               resourceId: this.resourceId,
               threadId: this.threadId,
+              ...(responseLogicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
               ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
             },
           );
+          if (responseLogicalMessageIdentity !== undefined) {
+            nativeLineagedDispatchStarted = true;
+            const accepted = await this._awaitSignalNativeAcceptance(
+              dispatched.accepted,
+              turnAbortSignal,
+              activeTurnWaiter.promise,
+              'signal().logicalMessageIdentity',
+            );
+            if (accepted.action !== 'wake') {
+              throw lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
+            }
+            if (accepted.runId !== dispatched.runId) {
+              const mismatch = lineagedSignalRunMismatchError(
+                'signal().logicalMessageIdentity',
+                dispatched.runId,
+                accepted.runId,
+              );
+              turnAbortController.abort(mismatch);
+              throw mismatch;
+            }
+          }
           // Preserve the historical optimistic boundary for ordinary signals:
           // callers receive the handle without waiting for distributed lease or
           // provider preflight.
@@ -10163,11 +10372,13 @@ export class Session {
                   acceptedAt: new Date(signalAdmission.createdAt),
                   type: 'user-message',
                   contents: signalContents as never,
+                  ...(logicalMessageIdentity ? { metadata: { logicalMessageId: logicalMessageIdentity.input } } : {}),
                 },
                 {
                   runId: dispatching.runId,
                   resourceId: this.resourceId,
                   threadId: this.threadId,
+                  ...(responseLogicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
                   _signalAdmissionAttemptId: dispatching.attemptId,
                   ifIdle: {
                     behavior: 'wake',
@@ -10177,22 +10388,30 @@ export class Session {
                 } as never,
               );
               signalAdmissionNativeDispatchStarted = true;
+              nativeLineagedDispatchStarted = responseLogicalMessageIdentity !== undefined;
               const accepted = await this._awaitSignalNativeAcceptance(
                 dispatched.accepted,
                 turnAbortSignal,
                 activeTurnWaiter.promise,
+                'signal().admissionId',
               );
               if (accepted.action === 'blocked' || accepted.action === 'discard' || accepted.action === 'persist') {
                 await stopHeartbeat();
-                await releaseSignalDispatch(dispatching);
-                claimOwned = false;
-                signalAdmissionNativeDispatchStarted = false;
-                throw new HarnessConfigError(
+                const err = new HarnessConfigError(
                   'signal()',
                   accepted.action === 'blocked'
                     ? 'signal delivery was blocked by a suspended thread'
                     : `signal delivery was not accepted (${accepted.action})`,
                 );
+                if (accepted.action === 'discard' && responseLogicalMessageIdentity !== undefined) {
+                  await settleLineagedSignalDispatchRejection(dispatching.runId, err);
+                  claimOwned = false;
+                  throw err;
+                }
+                await releaseSignalDispatch(dispatching);
+                claimOwned = false;
+                signalAdmissionNativeDispatchStarted = false;
+                throw err;
               }
               signalAdmissionNativeAccepted = true;
               if (accepted.runId !== dispatching.runId) {
@@ -10227,6 +10446,17 @@ export class Session {
           }
         }
       } catch (err) {
+        if (
+          err instanceof NativeSignalAcceptanceTimeoutError &&
+          nativeLineagedDispatchStarted &&
+          signalAdmission === undefined
+        ) {
+          // `sendSignal()` may already have started the native stream while
+          // its full-pair acknowledgement is unresolved. Abort that stream
+          // before releasing the owned turn; there is no durable admission
+          // record to recover this non-admitted dispatch.
+          turnAbortController.abort(err);
+        }
         finishOwnedSignalTurn();
         let thrown = err;
         if ((signalAdmissionNativeAccepted || signalAdmissionNativeDispatchStarted) && signalAdmission !== undefined) {
@@ -10442,6 +10672,9 @@ export class Session {
 
     if (willInterleave && signalAdmission === undefined) {
       let dispatched: ReturnType<typeof agent.sendSignal>;
+      const lineagedWakeAbortController =
+        responseLogicalMessageIdentity !== undefined ? new AbortController() : undefined;
+      let cleanupCallerAbortListener: (() => void) | undefined;
       try {
         this._assertOpenForTurn('signal()');
         const interleavedContents = await this._buildSignalContentsWithAttachments(opts.content, internal?.attachments);
@@ -10451,10 +10684,12 @@ export class Session {
             ...(internal?.signalId !== undefined ? { id: internal.signalId } : {}),
             type: 'user-message',
             contents: interleavedContents as never,
+            ...(logicalMessageIdentity ? { metadata: { logicalMessageId: logicalMessageIdentity.input } } : {}),
           },
           {
             resourceId: this.resourceId,
             threadId: this.threadId,
+            ...(responseLogicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
             // The interleave path ignores streamOptions (they cannot reach an
             // active run), but the ifIdle wake fallback starts a REAL turn —
             // without the ceiling it would die at the agent's 5-step default.
@@ -10463,11 +10698,60 @@ export class Session {
               streamOptions: {
                 maxSteps: HARNESS_SESSION_MAX_STEPS,
                 ...this._createEmptySynthesisOptions(),
+                ...(lineagedWakeAbortController ? { abortSignal: lineagedWakeAbortController.signal } : {}),
+                ...(responseLogicalMessageIdentity ? { logicalMessageIdentity: responseLogicalMessageIdentity } : {}),
               } as never,
             },
           },
         );
+        if (responseLogicalMessageIdentity !== undefined) {
+          const callerAbortSignal = opts.abortSignal;
+          let callerAbortListener: (() => void) | undefined;
+          if (lineagedWakeAbortController !== undefined && callerAbortSignal !== undefined) {
+            const abortWake = () => lineagedWakeAbortController.abort(callerAbortSignal.reason);
+            if (callerAbortSignal.aborted) {
+              abortWake();
+            } else {
+              callerAbortListener = abortWake;
+              callerAbortSignal.addEventListener('abort', abortWake, { once: true });
+            }
+          }
+          cleanupCallerAbortListener = () => {
+            if (callerAbortListener !== undefined) {
+              callerAbortSignal?.removeEventListener('abort', callerAbortListener);
+              callerAbortListener = undefined;
+            }
+          };
+          const accepted = await this._awaitSignalNativeAcceptance(
+            dispatched.accepted,
+            opts.abortSignal,
+            undefined,
+            'signal().logicalMessageIdentity',
+          );
+          if (accepted.action === 'discard') {
+            throw lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
+          }
+          if (accepted.action !== 'wake') {
+            throw lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
+          }
+          if (accepted.runId !== dispatched.runId) {
+            const mismatch = lineagedSignalRunMismatchError(
+              'signal().logicalMessageIdentity',
+              dispatched.runId,
+              accepted.runId,
+            );
+            lineagedWakeAbortController?.abort(mismatch);
+            throw mismatch;
+          }
+        }
       } catch (err) {
+        cleanupCallerAbortListener?.();
+        if (err instanceof NativeSignalAcceptanceTimeoutError && lineagedWakeAbortController !== undefined) {
+          // The interleaving signal can fall back to a fresh idle wake after
+          // its observed active run ends. Abort that native stream when its
+          // full-pair acceptance acknowledgement times out.
+          lineagedWakeAbortController.abort(err);
+        }
         let thrown = err;
         try {
           await failSignalAdmissionBeforeDispatch(err);
@@ -10478,7 +10762,18 @@ export class Session {
       }
       // Non-admitted signals intentionally preserve the optimistic first-tick
       // behavior: the native synchronous route/run id is the public receipt.
-      return returnInterleavedSignalResult(dispatched, dispatched.runId);
+      const result = await returnInterleavedSignalResult(
+        dispatched,
+        dispatched.runId,
+        responseLogicalMessageIdentity === undefined,
+      );
+      // A full logical wake owns the native stream after acceptance. Keep the
+      // caller's abort linked until that stream settles so cancellation after
+      // `signal()` returns still reaches the run it just admitted.
+      if (cleanupCallerAbortListener !== undefined) {
+        void result.result.then(cleanupCallerAbortListener, cleanupCallerAbortListener);
+      }
+      return result;
     }
 
     if (willInterleave) {
@@ -14459,6 +14754,11 @@ export class Session {
   }> {
     this._assertLive(methodName);
     this._assertOpenForTurn(methodName);
+    const logicalMessageIdentity = normalizeSessionLogicalMessageIdentity(opts.logicalMessageIdentity, methodName);
+    const admittedOpts = {
+      ...opts,
+      ...(logicalMessageIdentity === undefined ? {} : { logicalMessageIdentity }),
+    };
     if (typeof opts.content !== 'string' || opts.content.length === 0) {
       throw new HarnessValidationError(`${methodName}.content`, 'must be a non-empty string');
     }
@@ -14491,7 +14791,7 @@ export class Session {
     }
     const effectiveModeId = opts.mode ?? this._record.modeId;
     const admissionId = opts.admissionId ?? `queue-${randomUUID()}`;
-    const admissionHash = this._computeQueueAdmissionHash(opts, attachments, effectivePersistedRequestContext);
+    const admissionHash = this._computeQueueAdmissionHash(admittedOpts, attachments, effectivePersistedRequestContext);
     if (internal?.expectedAdmissionHash !== undefined && internal.expectedAdmissionHash !== admissionHash) {
       throw new HarnessAdmissionConflictError(this.id, admissionId, internal.expectedAdmissionHash, admissionHash);
     }
@@ -14523,6 +14823,7 @@ export class Session {
       ...(effectivePersistedRequestContext
         ? { requestContext: clonePersistedRequestContext(effectivePersistedRequestContext) }
         : {}),
+      ...(logicalMessageIdentity ? { logicalMessageIdentity } : {}),
       ...(opts.model !== undefined ? { model: opts.model } : {}),
       mode: effectiveModeId,
       ...(opts.yolo !== undefined ? { yolo: opts.yolo } : {}),
@@ -14620,6 +14921,7 @@ export class Session {
     mode?: string;
     model?: string;
     yolo?: boolean;
+    logicalMessageIdentity?: LogicalMessageIdentity;
     attachments: PersistedAttachment[];
     requestContext?: PersistedRequestContextInput;
   }): Promise<QueueAdmissionResult> {
@@ -14630,6 +14932,7 @@ export class Session {
         ...(item.mode !== undefined ? { mode: item.mode } : {}),
         ...(item.model !== undefined ? { model: item.model } : {}),
         ...(item.yolo === true ? { yolo: true } : {}),
+        ...(item.logicalMessageIdentity !== undefined ? { logicalMessageIdentity: item.logicalMessageIdentity } : {}),
       },
       'admitQueue()',
       {
@@ -14775,6 +15078,9 @@ export class Session {
       ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
       ...(opts.model !== undefined ? { model: opts.model } : {}),
       ...(opts.yolo === true ? { yolo: true } : {}),
+      ...(opts.logicalMessageIdentity !== undefined
+        ? { logicalMessageIdentity: { ...opts.logicalMessageIdentity } }
+        : {}),
       ...(opts.priority !== undefined && opts.priority !== 0 ? { priority: opts.priority } : {}),
       ...(opts.deadline !== undefined ? { deadline: opts.deadline } : {}),
       ...(opts.notBefore !== undefined ? { notBefore: opts.notBefore } : {}),
@@ -15309,6 +15615,7 @@ export class Session {
         maxSteps: HARNESS_SESSION_MAX_STEPS,
         ...toolSurface,
         ...(turnInstructions ? { instructions: turnInstructions } : {}),
+        ...(item.logicalMessageIdentity ? { logicalMessageIdentity: item.logicalMessageIdentity } : {}),
       };
 
       await Promise.race([this._ensureThreadSubscription(agent), activeTurnWaiter.promise]);
@@ -15331,11 +15638,17 @@ export class Session {
       ]);
       assertQueuedTurnNotDeleted();
       const signal = agent.sendSignal(
-        { id: identity.signalId, type: 'user-message', contents: queuedContents as never },
+        {
+          id: identity.signalId,
+          type: 'user-message',
+          contents: queuedContents as never,
+          ...(item.logicalMessageIdentity ? { metadata: { logicalMessageId: item.logicalMessageIdentity.input } } : {}),
+        },
         {
           runId: identity.runId,
           resourceId: this.resourceId,
           threadId: this.threadId,
+          ...(item.logicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
           ifIdle: {
             behavior: 'wake',
             // The wake branch starts a REAL streamed turn; carry the silent-turn nudge.
@@ -15346,6 +15659,53 @@ export class Session {
           },
         },
       );
+      if (item.logicalMessageIdentity !== undefined) {
+        let accepted: Awaited<typeof signal.accepted>;
+        try {
+          accepted = await this._awaitSignalNativeAcceptance(
+            signal.accepted,
+            turnAbortController.signal,
+            activeTurnWaiter.promise,
+            'queue().logicalMessageIdentity',
+          );
+        } catch (err) {
+          if (err instanceof NativeSignalAcceptanceTimeoutError) {
+            await this._updateQueueAdmissionReceipt(item.id, (receipt, now) =>
+              receipt.status === 'admitting'
+                ? {
+                    ...receipt,
+                    status: 'accepted',
+                    acceptedAt: receipt.acceptedAt ?? now,
+                    updatedAt: now,
+                  }
+                : receipt,
+            );
+            throw new QueueRecoveryPendingError(Date.now() + QUEUE_ACCEPTED_RECOVERY_STALE_MS);
+          }
+          throw err;
+        }
+        if (accepted.action === 'discard' || accepted.action === 'blocked' || accepted.action === 'persist') {
+          const err = lineagedSignalAcceptanceError('queue().logicalMessageIdentity', accepted.action);
+          await this._writeQueueSignalResultEvidence({
+            status: 'failed',
+            signalId: identity.signalId,
+            runId: identity.runId,
+            error: projectHarnessPublicError(err),
+          });
+          throw err;
+        }
+        if (accepted.runId !== identity.runId) {
+          const err = lineagedSignalRunMismatchError('queue().logicalMessageIdentity', identity.runId, accepted.runId);
+          turnAbortController.abort(err);
+          await this._writeQueueSignalResultEvidence({
+            status: 'failed',
+            signalId: identity.signalId,
+            runId: identity.runId,
+            error: projectHarnessPublicError(err),
+          });
+          throw err;
+        }
+      }
       const signalIdentity =
         signal.runId === identity.runId && signal.signal.id === identity.signalId
           ? identity
@@ -18657,6 +19017,23 @@ function clonePersistedRequestContext(input: PersistedRequestContextInput): Pers
   return JSON.parse(JSON.stringify(input)) as PersistedRequestContextInput;
 }
 
+function lineagedSignalAcceptanceError(path: string, action: string): HarnessConfigError {
+  if (action === 'discard' || action === 'deliver') {
+    return new HarnessConfigError(path, 'a full logical message identity cannot be delivered into an active run');
+  }
+  if (action === 'blocked') {
+    return new HarnessConfigError(path, 'a full logical message identity was blocked by a suspended thread');
+  }
+  return new HarnessConfigError(path, `a full logical message identity was not accepted (${action})`);
+}
+
+function lineagedSignalRunMismatchError(path: string, expectedRunId: string, actualRunId: string): HarnessConfigError {
+  return new HarnessConfigError(
+    path,
+    `a full logical message identity was accepted by run "${actualRunId}" instead of its reserved run "${expectedRunId}"`,
+  );
+}
+
 class QueueRecoveryPendingError extends HarnessError {
   readonly code = 'harness.queue_recovery_pending';
   readonly retryAt: number;
@@ -18665,6 +19042,12 @@ class QueueRecoveryPendingError extends HarnessError {
     super('queued turn was accepted by the signal runtime and is awaiting durable terminal result evidence');
     this.name = 'harness.queue_recovery_pending';
     this.retryAt = retryAt;
+  }
+}
+
+class NativeSignalAcceptanceTimeoutError extends HarnessValidationError {
+  constructor(validationPath: string) {
+    super(validationPath, `native signal acceptance timed out after ${SIGNAL_NATIVE_ACCEPT_TIMEOUT_MS}ms`);
   }
 }
 

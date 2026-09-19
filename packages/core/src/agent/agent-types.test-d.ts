@@ -24,8 +24,10 @@ describe('Agent Type Tests', () => {
       const options: DurableAgentResumeOptions = {
         toolCallId: 'call-123',
         memory: { thread: 'thread-123', resource: 'resource-123' },
+        logicalMessageIdentity: { input: 'input-123', response: 'response-123' },
       };
       expectTypeOf(options.toolCallId).toEqualTypeOf<string | undefined>();
+      expectTypeOf(options.logicalMessageIdentity).toEqualTypeOf<{ input: string; response: string } | undefined>();
 
       const durableAgent = undefined as unknown as DurableAgent;
       void durableAgent.resumeStream({}, { runId: 'run-123', toolCallId: 'call-123' });
@@ -35,6 +37,17 @@ describe('Agent Type Tests', () => {
   });
 
   describe('Issue #9657: defaultOptions.structuredOutput should accept Zod schemas', () => {
+    it('does not allow logical message identity in reusable Agent defaults', () => {
+      const config: Pick<AgentConfig<any, any>, 'defaultOptions'> = {
+        defaultOptions: {
+          // @ts-expect-error Logical message identity belongs to one execution.
+          logicalMessageIdentity: { input: 'input-1', response: 'response-1' },
+        },
+      };
+
+      void config;
+    });
+
     it('should allow Zod schema in AgentExecutionOptions.structuredOutput when OUTPUT is specified', () => {
       const mySchema = z.object({
         status: z.enum(['error', 'success', 'pending']),

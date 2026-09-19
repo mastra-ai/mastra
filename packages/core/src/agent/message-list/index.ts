@@ -1,6 +1,20 @@
 // Main class export
 export { MessageList } from './message-list';
 
+export {
+  getLogicalMessageId,
+  LOGICAL_MESSAGE_ID_METADATA_KEY,
+  MAX_LOGICAL_MESSAGE_ID_BYTES,
+  normalizeLogicalMessageInputIdentity,
+  normalizeLogicalMessageIdentity,
+  withLogicalMessageId,
+} from './logical-message-identity';
+export type {
+  LogicalMessageIdentity,
+  LogicalMessageInputIdentity,
+  LogicalMessageSignalIdentity,
+} from './logical-message-identity';
+
 // Type exports
 export type {
   AIV5ResponseMessage,

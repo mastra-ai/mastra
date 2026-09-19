@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { AGENT_EXECUTION_OPTION_COMPOSERS, mergeAgentExecutionOptions } from './merge-execution-options';
 
 describe('mergeAgentExecutionOptions', () => {
+  it('does not carry logical message identity from reusable defaults', () => {
+    const defaultIdentity = { input: 'default-input', response: 'default-response' };
+    const callerIdentity = { input: 'call-input', response: 'call-response' };
+
+    expect(mergeAgentExecutionOptions({ logicalMessageIdentity: defaultIdentity }, { maxSteps: 1 })).not.toHaveProperty(
+      'logicalMessageIdentity',
+    );
+    expect(
+      mergeAgentExecutionOptions(
+        { logicalMessageIdentity: defaultIdentity },
+        {
+          logicalMessageIdentity: callerIdentity,
+        },
+      ),
+    ).toMatchObject({ logicalMessageIdentity: callerIdentity });
+  });
+
   it('keeps caller scalar options authoritative', () => {
     expect(mergeAgentExecutionOptions({ maxSteps: 8 }, { maxSteps: 1 })).toMatchObject({ maxSteps: 1 });
   });

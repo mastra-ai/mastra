@@ -3095,6 +3095,94 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('rejects a full logical message before local claimed-owner execution', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'local-lineage-owner-user', threadId: 'local-lineage-owner-thread' };
+    const stream = vi.fn(async () => ({
+      runId: 'should-not-start',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: () => new Promise<void>(() => {}),
+    }));
+    const agent = { id: 'local-lineage-owner-agent', stream } as any;
+    let idleSignalDiscarded = false;
+    const claim = await runtime.claimThreadOwnership(
+      agent,
+      {
+        ...target,
+        streamOptions: { logicalMessageIdentity: { input: 'owner-input', response: 'owner-response' } },
+      } as any,
+      pubsub,
+    );
+
+    try {
+      const result = runtime.sendSignal(
+        agent,
+        {
+          id: 'local-lineage-owner-signal',
+          type: 'user-message',
+          contents: 'preserve response identity',
+          metadata: { logicalMessageId: 'request-input' },
+        } as any,
+        {
+          ...target,
+          ifIdle: {
+            behavior: 'wake',
+            streamOptions: { logicalMessageIdentity: { input: 'request-input', response: 'request-response' } },
+            _onThreadStreamSignalDiscarded: () => {
+              idleSignalDiscarded = true;
+            },
+          },
+        } as any,
+        pubsub,
+      );
+
+      await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+      expect(idleSignalDiscarded).toBe(true);
+      expect(stream).not.toHaveBeenCalled();
+    } finally {
+      claim.unsubscribe();
+    }
+  });
+
+  it('does not cache a discarded full logical message during claimed-owner discovery', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'remote-lineage-owner-user', threadId: 'remote-lineage-owner-thread' };
+    const ownerAgent = { id: 'remote-lineage-owner-agent', stream: vi.fn() } as any;
+    const senderAgent = { id: 'remote-lineage-sender-agent' } as any;
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    const signal = {
+      id: 'remote-lineage-owner-signal',
+      type: 'user-message' as const,
+      contents: 'preserve response identity',
+    };
+    const options = {
+      ...target,
+      ifIdle: {
+        behavior: 'wake' as const,
+        requireClaimedOwner: true,
+        streamOptions: { logicalMessageIdentity: { input: 'remote-input', response: 'remote-response' } },
+      },
+    } as any;
+
+    try {
+      const first = senderRuntime.sendSignal(senderAgent, signal, options, pubsub);
+      await expect(first.accepted).resolves.toEqual({ action: 'discard' });
+
+      const retry = senderRuntime.sendSignal(senderAgent, signal, options, pubsub);
+      expect(retry.runId).not.toBe(first.runId);
+      expect(retry.accepted).not.toBe(first.accepted);
+      await expect(retry.accepted).resolves.toEqual({ action: 'discard' });
+    } finally {
+      claim.unsubscribe();
+      ownerRuntime.resetForTests();
+      senderRuntime.resetForTests();
+    }
+  });
+
   it('runs a local claimed-owner wake through public request-context preflight', async () => {
     const pubsub = new EventEmitterPubSub();
     const requestContext = new RequestContext();
@@ -8799,7 +8887,92 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('does not reuse a pending native acknowledgement for a newer durable admission attempt', async () => {
+  it('discards a full logical message when distributed idle wake loses to an active owner', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'lineage-lease-resource', threadId: 'lineage-lease-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const runId = 'lineage-lease-loser-run';
+    const signal = { id: 'lineage-lease-signal', type: 'user-message' as const, contents: 'preserve response owner' };
+    let idleSignalDiscarded = false;
+    const agent = {
+      id: 'lineage-lease-agent',
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({
+        runId: options.runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      })),
+    } as any;
+    await pubsub.acquireLease(key, 'lineage-lease-winning-run');
+
+    const result = runtime.sendSignal(
+      agent,
+      signal,
+      {
+        ...target,
+        runId,
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { logicalMessageIdentity: { input: 'lease-input', response: 'lease-response' } },
+          _onThreadStreamSignalDiscarded: () => {
+            idleSignalDiscarded = true;
+          },
+        },
+      },
+      pubsub,
+    );
+
+    await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+    expect(idleSignalDiscarded).toBe(true);
+    expect(pubsub.publishedData.filter(event => event?.type === 'signal-enqueued')).toEqual([]);
+    expect(agent.stream).not.toHaveBeenCalled();
+  });
+
+  it('discards a full logical message behind a foreign reservation instead of queueing it', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'foreign-reservation-lineage-user', threadId: 'foreign-reservation-lineage-thread' };
+    const release = runtime.reserveRun(
+      {
+        runId: 'foreign-reservation-lineage-run',
+        memory: { resource: target.resourceId, thread: target.threadId },
+      } as any,
+      pubsub,
+      'foreign-owner-agent',
+    );
+    const stream = vi.fn();
+    let idleSignalDiscarded = false;
+    const sender = { id: 'lineage-sender-agent', stream } as any;
+
+    try {
+      const result = runtime.sendSignal(
+        sender,
+        { id: 'foreign-reservation-lineage-signal', type: 'user-message', contents: 'preserve response identity' },
+        {
+          ...target,
+          ifActive: { behavior: 'discard' },
+          ifIdle: {
+            behavior: 'wake',
+            streamOptions: { logicalMessageIdentity: { input: 'foreign-input', response: 'foreign-response' } },
+            _onThreadStreamSignalDiscarded: () => {
+              idleSignalDiscarded = true;
+            },
+          },
+        } as any,
+        pubsub,
+      );
+
+      await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+      expect(idleSignalDiscarded).toBe(true);
+      expect(stream).not.toHaveBeenCalled();
+      expect(runtime.drainPendingSignals('foreign-reservation-lineage-run', pubsub)).toEqual([]);
+    } finally {
+      release?.();
+    }
+  });
+
+  it('reuses an exact full logical signal on its pending run after a newer admission attempt', async () => {
     const pubsub = new EventEmitterPubSub();
     const runtime = new AgentThreadStreamRuntime();
     const target = { resourceId: 'attempt-retry-resource', threadId: 'attempt-retry-thread' };
@@ -8816,7 +8989,11 @@ describe('Agent signals', () => {
       {
         ...target,
         runId,
-        ifIdle: { behavior: 'wake' },
+        ifActive: { behavior: 'discard' },
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { logicalMessageIdentity: { input: 'attempt-input', response: 'attempt-response' } },
+        },
         _signalAdmissionAttemptId: 'attempt-a',
       } as any,
       pubsub,
@@ -8835,7 +9012,11 @@ describe('Agent signals', () => {
       {
         ...target,
         runId,
-        ifIdle: { behavior: 'wake' },
+        ifActive: { behavior: 'discard' },
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { logicalMessageIdentity: { input: 'attempt-input', response: 'attempt-response' } },
+        },
         _signalAdmissionAttemptId: 'attempt-b',
       } as any,
       pubsub,
@@ -8856,6 +9037,140 @@ describe('Agent signals', () => {
       ),
     ).toThrow('already accepted with a different payload');
     runtime.resetForTests();
+  });
+
+  it('keeps a retry attached while the original idle admission is still provisional', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'provisional-retry-resource', threadId: 'provisional-retry-thread' };
+    const runId = 'provisional-retry-run';
+    const signal = { id: 'provisional-retry-signal', type: 'user-message' as const, contents: 'wait for admission' };
+    const agent = {
+      id: 'provisional-retry-agent',
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({
+        runId: options.runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      })),
+    } as any;
+    let releaseLease!: () => void;
+    pubsub.acquireLeaseWait = new Promise<void>(resolve => {
+      releaseLease = resolve;
+    });
+    let markAcquireStarted!: () => void;
+    const acquireStarted = new Promise<void>(resolve => {
+      markAcquireStarted = resolve;
+    });
+    pubsub.onAcquireLease = markAcquireStarted;
+
+    const first = runtime.sendSignal(
+      agent,
+      signal,
+      {
+        ...target,
+        runId,
+        ifActive: { behavior: 'discard' },
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { logicalMessageIdentity: { input: 'provisional-input', response: 'provisional-response' } },
+        },
+        _signalAdmissionAttemptId: 'attempt-a',
+      } as any,
+      pubsub,
+    );
+    await acquireStarted;
+
+    const retry = runtime.sendSignal(
+      agent,
+      signal,
+      {
+        ...target,
+        runId,
+        ifActive: { behavior: 'discard' },
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { logicalMessageIdentity: { input: 'provisional-input', response: 'provisional-response' } },
+        },
+        _signalAdmissionAttemptId: 'attempt-b',
+      } as any,
+      pubsub,
+    );
+    expect(retry.accepted).toBe(first.accepted);
+    expect(agent.stream).not.toHaveBeenCalled();
+
+    releaseLease();
+    await expect(retry.accepted).resolves.toMatchObject({ action: 'wake', runId });
+    expect(agent.stream).toHaveBeenCalledTimes(1);
+    runtime.abortRun(runId, pubsub);
+  });
+
+  it('allows a newer attempt to redispatch after a lost lease rolls back before forwarding', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'retry-after-forward-resource', threadId: 'retry-after-forward-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const signal = { id: 'retry-after-forward-signal', type: 'user-message' as const, contents: 'retry this signal' };
+    const agent = {
+      id: 'retry-after-forward-agent',
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({
+        runId: options.runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      })),
+    } as any;
+    let releaseForward!: () => void;
+    let markForwardStarted!: () => void;
+    const forwardGate = new Promise<void>(resolve => {
+      releaseForward = resolve;
+    });
+    const forwardStarted = new Promise<void>(resolve => {
+      markForwardStarted = resolve;
+    });
+    const realPublish = pubsub.publish.bind(pubsub);
+    let blockedForward = true;
+    pubsub.publish = async (topic, event) => {
+      if (blockedForward && event.data?.type === 'signal-enqueued') {
+        blockedForward = false;
+        markForwardStarted();
+        await forwardGate;
+      }
+      await realPublish(topic, event);
+    };
+    pubsub.owners.set(key, 'winner-run');
+
+    const first = runtime.sendSignal(
+      agent,
+      signal,
+      {
+        ...target,
+        ifIdle: { behavior: 'wake' },
+        _signalAdmissionAttemptId: 'attempt-a',
+      } as any,
+      pubsub,
+    );
+    await forwardStarted;
+
+    pubsub.owners.delete(key);
+    const retry = runtime.sendSignal(
+      agent,
+      signal,
+      {
+        ...target,
+        ifIdle: { behavior: 'wake' },
+        _signalAdmissionAttemptId: 'attempt-b',
+      } as any,
+      pubsub,
+    );
+
+    await expect(retry.accepted).resolves.toMatchObject({ action: 'wake', runId: retry.runId });
+    expect(retry.accepted).not.toBe(first.accepted);
+    expect(agent.stream).toHaveBeenCalledTimes(1);
+
+    releaseForward();
+    await expect(first.accepted).resolves.toMatchObject({ action: 'deliver', runId: 'winner-run' });
+    runtime.abortRun(retry.runId, pubsub);
   });
 
   it('retains stable signal admission through the run-completed publication window', async () => {

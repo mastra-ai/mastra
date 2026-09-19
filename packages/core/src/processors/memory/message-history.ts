@@ -1,6 +1,6 @@
 import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
-import { MessageList, type MastraDBMessage } from '../../agent/message-list';
-import { isTransientSignalMessage } from '../../agent/signals';
+import { getLogicalMessageId, MessageList, type MastraDBMessage } from '../../agent/message-list';
+import { isTransientSignalMessage, isUserAuthoredMessage } from '../../agent/signals';
 import { materializeTerminalToolResult } from '../../loop/shared/terminal-tool-result';
 import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
@@ -149,6 +149,11 @@ export class MessageHistory implements Processor {
     if (typeof message.id !== 'string') return undefined;
     const isSealed =
       (message.content?.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed === true;
+    const logicalMessageId = getLogicalMessageId(message.content?.metadata);
+    const metadata = {
+      ...(logicalMessageId ? { logicalMessageId } : {}),
+      ...(isSealed ? { mastra: { sealed: true } } : {}),
+    };
 
     return {
       id: message.id,
@@ -158,7 +163,7 @@ export class MessageHistory implements Processor {
       createdAt: message.createdAt,
       content: {
         format: 2,
-        ...(isSealed ? { metadata: { mastra: { sealed: true } } } : {}),
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
         parts: [],
       },
     };
@@ -403,7 +408,7 @@ export class MessageHistory implements Processor {
     messages: MastraDBMessage[],
     options: MessageHistoryFinalTurnPersistenceOptions,
   ): MastraDBMessage[] {
-    const stableUserIndex = messages.findLastIndex(message => message.role === 'user');
+    const stableUserIndex = messages.findLastIndex(message => isUserAuthoredMessage(message));
     const stableUser = stableUserIndex === -1 ? undefined : messages[stableUserIndex];
     const finalTurnMessages = stableUserIndex === -1 ? messages : messages.slice(stableUserIndex);
     const finalAssistant = [...finalTurnMessages].reverse().find(message => message.role === 'assistant');
@@ -417,6 +422,7 @@ export class MessageHistory implements Processor {
         toolInvocations: _toolInvocations,
         ...stableUserContent
       } = stableUser.content;
+      const logicalMessageId = getLogicalMessageId(stableUser.content.metadata);
       const stableUserParts = stableUser.content.parts
         .filter(part => part.type !== 'tool-invocation' && part.type !== 'step-start' && part.type !== 'reasoning')
         .map(part => {
@@ -430,10 +436,14 @@ export class MessageHistory implements Processor {
           stableUserContent.experimental_attachments.length > 0);
 
       if (hasStableUserContent) {
+        const { role: _stableUserRole, type: _stableUserType, ...stableUserFields } = stableUser;
         projected.push({
-          ...stableUser,
+          ...stableUserFields,
+          role: stableUser.role === 'signal' ? 'user' : stableUser.role,
+          ...(stableUser.role === 'signal' || stableUser.type === undefined ? {} : { type: stableUser.type }),
           content: {
             ...stableUserContent,
+            ...(logicalMessageId ? { metadata: { logicalMessageId } } : {}),
             parts: stableUserParts,
           },
         });
@@ -470,6 +480,9 @@ export class MessageHistory implements Processor {
         ...(finalAssistant.type === undefined ? {} : { type: finalAssistant.type }),
         content: {
           format: 2,
+          ...(getLogicalMessageId(finalAssistant.content.metadata)
+            ? { metadata: { logicalMessageId: getLogicalMessageId(finalAssistant.content.metadata) } }
+            : {}),
           parts: assistantParts,
         },
       });

@@ -104,6 +104,44 @@ const queued = harness.session.followUps.count()
 
 Queue a follow-up with `harness.followUp({ content })`. To redirect the agent mid-run instead of waiting, use `harness.steer({ content })`. Both build on [signals](/docs/harness/signals).
 
+## Native logical message identity
+
+Trusted native Session callers can associate an input and its response segments with application message IDs. After constructing a v1 `Harness` from `@mastra/core/harness/v1`, resolve a Session for the thread:
+
+```typescript
+const session = await harness.session({
+  resourceId: 'researcher',
+  threadId: { fresh: true },
+})
+
+await session.message({
+  content: 'Summarize the selected paper.',
+  logicalMessageIdentity: {
+    input: 'app-message-input-123',
+    response: 'app-message-response-123',
+  },
+})
+
+await session.queue({
+  content: 'Continue the summary.',
+  logicalMessageIdentity: {
+    input: 'app-message-input-124',
+    response: 'app-message-response-124',
+  },
+})
+```
+
+Use an input-only identity with `signal()` for an active steer. It keeps the active response owner instead of assigning a new response identity. A full pair on an active signal uses discard admission for the competing response, so the active response keeps ownership when it wins the race:
+
+```typescript
+await session.signal({
+  content: 'Use the second source.',
+  logicalMessageIdentity: { input: 'app-message-input-125' },
+})
+```
+
+The identity is serialized with the native MessageList state for durable recovery. Input rows keep the input identity, assistant segments keep the response identity across response rotation, and recalled memory retains its existing ownership. Native storage rows still use their own IDs. This option belongs to trusted native Session APIs. Generic remote HTTP schemas and SDK adapters don't expose it.
+
 ## State
 
 `session.state` holds the conversation's application state, including structured values that agents and the UI share, such as model preferences, feature flags, or progress. The Harness defines the shape with a `stateSchema`. The Session owns the live snapshot and validates updates against the schema. It emits `state_changed` on every write:

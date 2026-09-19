@@ -233,6 +233,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   instructions?: AgentExecutionOptions<OUTPUT>['instructions'];
   /** Additional context messages to provide to the agent */
   context?: AgentExecutionOptions<OUTPUT>['context'];
+  /** Native identity for the admitted input and the response segments it owns. */
+  logicalMessageIdentity?: AgentExecutionOptions<OUTPUT>['logicalMessageIdentity'];
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentExecutionOptions<OUTPUT>['memory'];
   /** Unique identifier for this execution run */
@@ -3235,7 +3237,7 @@ export class DurableAgent<
     registerGlobalRunRegistryEntry(runId, registryEntry);
     return {
       requestContext,
-      defaultOptions: resolvedDefaultOptions as AgentExecutionOptions<TOutput>,
+      defaultOptions: resolvedDefaultOptions as unknown as AgentExecutionOptions<TOutput>,
       resolvedMemory: { value: memory },
     };
   }

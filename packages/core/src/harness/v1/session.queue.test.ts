@@ -20,6 +20,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { createSignal } from '../../agent/signals';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryStore } from '../../storage/mock';
@@ -27,6 +28,7 @@ import { InMemoryStore } from '../../storage/mock';
 import { extractSignalContents, MockAgent, setupHarness } from './__test-utils__';
 import {
   HarnessAdmissionConflictError,
+  HarnessConfigError,
   HarnessQueueFullDroppedError,
   HarnessQueueFullError,
   HarnessSessionDeletedError,
@@ -35,6 +37,7 @@ import {
 } from './errors';
 import type { HarnessEvent } from './events';
 import { Harness } from './harness';
+import type { QueueOptions } from './types';
 
 // ---------------------------------------------------------------------------
 // Admission
@@ -138,6 +141,183 @@ describe('Session.queue() — admission', () => {
       }),
     ]);
     await session.cancelQueuedItem({ queuedItemId: admitted.queuedItemId, reason: 'test cleanup' });
+    await session.close();
+  });
+
+  it('persists logical identity with the queued admission and includes it in duplicate hashing', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    const admitted = await session.admitQueue({
+      content: 'lineaged work',
+      admissionId: 'queue-lineage',
+      logicalMessageIdentity: { input: 'input-1', response: 'response-1' },
+      notBefore: Date.now() + 60_000,
+    });
+    expect(session.getRecord().pendingQueue).toEqual([
+      expect.objectContaining({
+        id: admitted.queuedItemId,
+        logicalMessageIdentity: { input: 'input-1', response: 'response-1' },
+      }),
+    ]);
+
+    await expect(
+      session.admitQueue({
+        content: 'lineaged work',
+        admissionId: 'queue-lineage',
+        logicalMessageIdentity: { input: 'input-2', response: 'response-2' },
+      }),
+    ).rejects.toBeInstanceOf(HarnessAdmissionConflictError);
+
+    await session.cancelQueuedItem({ queuedItemId: admitted.queuedItemId, reason: 'test cleanup' });
+    await session.close();
+  });
+
+  it('freezes an omitted logical identity before attachment resolution and queue hashing', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const notBefore = Date.now() + 60_000;
+    const realResolveAttachmentRefs = (session as any)._resolveAttachmentRefs.bind(session);
+    let releaseAttachments!: () => void;
+    let attachmentsStarted!: () => void;
+    const attachmentsStartedPromise = new Promise<void>(resolve => {
+      attachmentsStarted = resolve;
+    });
+    const attachmentsGate = new Promise<void>(resolve => {
+      releaseAttachments = resolve;
+    });
+    let gated = false;
+    (session as any)._resolveAttachmentRefs = async (...args: any[]) => {
+      if (!gated) {
+        gated = true;
+        attachmentsStarted();
+        await attachmentsGate;
+      }
+      return realResolveAttachmentRefs(...args);
+    };
+
+    const options: QueueOptions = {
+      content: 'ordinary queued message',
+      admissionId: 'queue-omitted-identity',
+      notBefore,
+    };
+    const pending = session.admitQueue(options);
+    await attachmentsStartedPromise;
+    options.logicalMessageIdentity = { input: 'late-input', response: 'late-response' };
+    releaseAttachments();
+
+    const admitted = await pending;
+    const duplicate = await session.admitQueue({
+      content: 'ordinary queued message',
+      admissionId: 'queue-omitted-identity',
+      notBefore,
+    });
+    expect(duplicate).toEqual({ accepted: true, queuedItemId: admitted.queuedItemId, duplicate: true });
+    expect(session.getRecord().pendingQueue?.[0]).not.toHaveProperty('logicalMessageIdentity');
+
+    await session.cancelQueuedItem({ queuedItemId: admitted.queuedItemId, reason: 'test cleanup' });
+    await session.close();
+  });
+
+  it('restores queued logical identity into the native turn options and signal', async () => {
+    const { harness, agent } = setupHarness();
+    agent.enqueueRun({ finishReason: 'stop', text: 'lineaged reply' });
+    const sendSignal = vi.spyOn(agent, 'sendSignal');
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await session.queue({
+      content: 'lineaged queued work',
+      logicalMessageIdentity: { input: 'input-queued', response: 'response-queued' },
+    });
+
+    expect(agent.streamCalls[0]?.options.logicalMessageIdentity).toEqual({
+      input: 'input-queued',
+      response: 'response-queued',
+    });
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      metadata: { logicalMessageId: 'input-queued' },
+    });
+    await session.close();
+  });
+
+  it('aborts the owned wake stream when a lineaged queue item is accepted by another run', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal;
+      return {
+        signal: createSignal({ ...signal, acceptedAt: new Date() }),
+        runId: 'reserved-run',
+        accepted: Promise.resolve({ action: 'wake' as const, runId: 'foreign-run' }),
+      };
+    }) as typeof agent.sendSignal;
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await expect(
+      session.queue({
+        content: 'mismatched queued wake',
+        logicalMessageIdentity: { input: 'queue-mismatch-input', response: 'queue-mismatch-response' },
+      }),
+    ).rejects.toBeInstanceOf(HarnessConfigError);
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await session.close();
+  });
+
+  it('rejects a lineaged queued turn when another native run becomes active during dispatch preparation', async () => {
+    let releaseActive!: () => void;
+    const activeRun = new Promise<void>(resolve => {
+      releaseActive = resolve;
+    });
+    const agent = new MockAgent({
+      id: 'default',
+      defaultOutput: { holdUntil: activeRun, text: 'foreign active run' },
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    let releaseContents!: () => void;
+    let contentsStarted!: () => void;
+    const contentsStartedPromise = new Promise<void>(resolve => {
+      contentsStarted = resolve;
+    });
+    const contentsGate = new Promise<void>(resolve => {
+      releaseContents = resolve;
+    });
+    (session as any)._buildSignalContentsWithAttachments = async () => {
+      contentsStarted();
+      await contentsGate;
+      return 'lineaged queued work';
+    };
+
+    const queued = session.queue({
+      content: 'lineaged queued work',
+      logicalMessageIdentity: { input: 'input-queued-race', response: 'response-queued-race' },
+    });
+    await contentsStartedPromise;
+    const queuedItemId = session.getRecord().pendingQueue?.[0]?.id;
+    expect(queuedItemId).toBeDefined();
+
+    await agent.stream('foreign active run', {
+      memory: { thread: session.threadId, resource: session.resourceId },
+    });
+    agent.enqueueRun({ text: 'queued run must not start' });
+    const subscription = await agent.subscribeToThread({
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+    });
+    await vi.waitFor(() => expect(subscription.activeRunId()).not.toBeNull());
+    releaseContents();
+
+    await expect(queued).rejects.toBeInstanceOf(HarnessConfigError);
+    expect(session.getRecord().queueAdmissionReceipts?.[queuedItemId!]).toMatchObject({ status: 'failed' });
+    const signalId = session.getRecord().queueAdmissionReceipts?.[queuedItemId!]?.signalId;
+    expect(signalId).toBeDefined();
+    await expect(session.lookupMessageResult(signalId!)).resolves.toMatchObject({ status: 'failed' });
+    expect(agent.streamCalls).toHaveLength(1);
+
+    releaseActive();
+    subscription.unsubscribe();
     await session.close();
   });
 

@@ -27,6 +27,19 @@ const AGENT_CONFIGURED_EXECUTION_HOOKS = Symbol('agentConfiguredExecutionHooks')
 type AgentConfiguredExecutionHooks = Partial<Record<'onIterationComplete' | 'prepareStep', unknown>>;
 
 /**
+ * Logical message identity belongs to one admitted execution. Even when a
+ * caller bypasses the AgentConfig type with JavaScript or a cast, reusable
+ * defaults must not seed a later run with that identity.
+ */
+export function omitLogicalMessageIdentity<T extends Record<string, any>>(
+  options: T,
+): Omit<T, 'logicalMessageIdentity'> {
+  const { logicalMessageIdentity, ...sanitized } = options;
+  void logicalMessageIdentity;
+  return sanitized as Omit<T, 'logicalMessageIdentity'>;
+}
+
+/**
  * Merge agent defaults beneath per-execution options while preserving the
  * replacement tool-surface ceiling. Plain deep merge is unsafe here because
  * it would retain default toolsets when a caller explicitly requested a
@@ -37,7 +50,7 @@ export function mergeAgentExecutionOptions(
   callerOptions: Record<string, any>,
 ): Record<string, any> {
   const merged = deepMerge(
-    defaultOptions as Record<string, unknown>,
+    omitLogicalMessageIdentity(defaultOptions) as Record<string, unknown>,
     callerOptions as Record<string, unknown>,
   ) as Record<string, any>;
   const callerSymbols = callerOptions as Record<PropertyKey, any>;

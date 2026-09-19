@@ -4,9 +4,15 @@ import { createSignal } from '../../agent/signals';
 import type { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { MockAgent } from './__test-utils__/mock-agent';
 import { setupHarness } from './__test-utils__/setup';
-import { HarnessAdmissionConflictError, HarnessSessionNotFoundError, HarnessValidationError } from './errors';
+import {
+  HarnessAdmissionConflictError,
+  HarnessConfigError,
+  HarnessSessionNotFoundError,
+  HarnessValidationError,
+} from './errors';
 import type { HarnessEvent } from './events';
 import type { Session } from './session';
+import type { SessionSignalOptions } from './types';
 
 async function waitForStreamCalls(agent: MockAgent, expected: number): Promise<void> {
   for (let i = 0; i < 100 && agent.streamCalls.length < expected; i++) {
@@ -101,6 +107,114 @@ describe('Session.signal() admissionId', () => {
     });
   });
 
+  it('reconstructs a duplicate signal from the normalized identity snapshot', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let release!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        release = resolve;
+      }),
+      text: 'normalized signal',
+    });
+    const { harness, storage } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const identity = {
+      input: 'signal-input',
+      response: 'signal-response',
+      extra: 'ignored by the native identity contract',
+    } as any;
+
+    const first = await session.signal({
+      content: 'signal snapshot',
+      admissionId: 'signal-normalized-identity',
+      logicalMessageIdentity: identity,
+    });
+    expect(first.signal.metadata).toEqual({ logicalMessageId: 'signal-input' });
+
+    let releaseLookup!: () => void;
+    let lookupStarted!: () => void;
+    const lookupStartedPromise = new Promise<void>(resolve => {
+      lookupStarted = resolve;
+    });
+    const lookupGate = new Promise<void>(resolve => {
+      releaseLookup = resolve;
+    });
+    const realResolve = storage.resolveOperationAdmissionEvidence.bind(storage);
+    let gated = false;
+    storage.resolveOperationAdmissionEvidence = async options => {
+      if (!gated && options.admissionId === 'signal-normalized-identity') {
+        gated = true;
+        lookupStarted();
+        await lookupGate;
+      }
+      return realResolve(options);
+    };
+
+    const duplicatePromise = session.signal({
+      content: 'signal snapshot',
+      admissionId: 'signal-normalized-identity',
+      logicalMessageIdentity: identity,
+    });
+    await lookupStartedPromise;
+    identity.input = 'mutated-after-duplicate-admission';
+    identity.response = 'mutated-response-after-duplicate-admission';
+    releaseLookup();
+
+    const duplicate = await duplicatePromise;
+    expect(duplicate.signal.metadata).toEqual({ logicalMessageId: 'signal-input' });
+    expect(duplicate.id).toBe(first.id);
+    release();
+    await Promise.all([first.result, duplicate.result]);
+  });
+
+  it('keeps an omitted logical identity out of duplicate signal reconstruction after caller mutation', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let release!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        release = resolve;
+      }),
+      text: 'ordinary signal',
+    });
+    const { harness, storage } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const first = await session.signal({ content: 'ordinary signal', admissionId: 'signal-omitted-identity' });
+    let releaseLookup!: () => void;
+    let lookupStarted!: () => void;
+    const lookupStartedPromise = new Promise<void>(resolve => {
+      lookupStarted = resolve;
+    });
+    const lookupGate = new Promise<void>(resolve => {
+      releaseLookup = resolve;
+    });
+    const realResolve = storage.resolveOperationAdmissionEvidence.bind(storage);
+    let gated = false;
+    storage.resolveOperationAdmissionEvidence = async options => {
+      if (!gated && options.admissionId === 'signal-omitted-identity') {
+        gated = true;
+        lookupStarted();
+        await lookupGate;
+      }
+      return realResolve(options);
+    };
+
+    const options: SessionSignalOptions = {
+      content: 'ordinary signal',
+      admissionId: 'signal-omitted-identity',
+    };
+    const duplicatePromise = session.signal(options);
+    await lookupStartedPromise;
+    options.logicalMessageIdentity = { input: 'late-input' };
+    releaseLookup();
+
+    const duplicate = await duplicatePromise;
+    expect(duplicate.signal.metadata).toBeUndefined();
+    expect(duplicate.id).toBe(first.id);
+    release();
+    await Promise.all([first.result, duplicate.result]);
+  });
+
   it('deduplicates concurrent exact admissions before a second idle dispatch', async () => {
     const agent = new MockAgent({ id: 'default' });
     let release!: () => void;
@@ -155,6 +269,43 @@ describe('Session.signal() admissionId', () => {
     expect(events.filter(event => event.type === 'signal_completed' && event.signalId === first.id)).toHaveLength(1);
   });
 
+  it('keeps steer input identity separate from the active response owner', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let release!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        release = resolve;
+      }),
+      text: 'shared terminal',
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const sendSignal = vi.spyOn(agent, 'sendSignal');
+
+    const firstTurn = session.message({
+      content: 'first',
+      logicalMessageIdentity: { input: 'input-1', response: 'response-1' },
+    });
+    await waitForStreamCalls(agent, 1);
+
+    const steer = await session.signal({
+      content: 'steer once',
+      logicalMessageIdentity: { input: 'input-2' },
+    });
+
+    const firstCall = sendSignal.mock.calls[0]?.[0] as { metadata?: unknown } | undefined;
+    const steerCall = sendSignal.mock.calls[1]?.[0] as { metadata?: unknown } | undefined;
+    expect(firstCall?.metadata).toEqual({ logicalMessageId: 'input-1' });
+    expect(steerCall?.metadata).toEqual({ logicalMessageId: 'input-2' });
+    expect((agent.streamCalls[0]!.options as { logicalMessageIdentity?: unknown }).logicalMessageIdentity).toEqual({
+      input: 'input-1',
+      response: 'response-1',
+    });
+
+    release();
+    await Promise.all([firstTurn, steer.result]);
+  });
+
   it('rechecks routing after durable admission when the previously active run finishes', async () => {
     const agent = new MockAgent({ id: 'default' });
     let releaseActive!: () => void;
@@ -197,6 +348,68 @@ describe('Session.signal() admissionId', () => {
     expect(handle.willInterleave).toBe(false);
     await expect(handle.result).resolves.toMatchObject({ text: 'idle recovery terminal' });
     expect(agent.streamCalls).toHaveLength(2);
+  });
+
+  it('rejects a full logical pair when a run becomes active during its reservation', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseActive!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseActive = resolve;
+      }),
+      text: 'active terminal',
+    });
+    const { harness, storage } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const realWrite = storage.writeMessageResultEvidence.bind(storage);
+    let reservationStarted!: () => void;
+    const reservationObserved = new Promise<void>(resolve => {
+      reservationStarted = resolve;
+    });
+    let releaseReservation!: () => void;
+    const reservationGate = new Promise<void>(resolve => {
+      releaseReservation = resolve;
+    });
+    storage.writeMessageResultEvidence = async record => {
+      if (record.admissionId === 'lineage-active-race' && record.status === 'pending') {
+        reservationStarted();
+        await reservationGate;
+      }
+      return realWrite(record);
+    };
+
+    const pending = session.signal({
+      content: 'wake with a response owner',
+      admissionId: 'lineage-active-race',
+      logicalMessageIdentity: { input: 'input-race', response: 'response-race' },
+    });
+    await reservationObserved;
+
+    const active = session.message({ content: 'active work' });
+    await waitForStreamCalls(agent, 1);
+    const nativeSubscription = await agent.subscribeToThread({
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+    });
+    await waitFor(() => nativeSubscription.activeRunId() !== null, 'native active run registration');
+    releaseReservation();
+
+    await expect(pending).rejects.toBeInstanceOf(HarnessConfigError);
+    const identity = (session as any)._signalAdmissionIdentity('lineage-active-race') as { signalId: string };
+    await expect(session.lookupMessageResult(identity.signalId)).resolves.toMatchObject({ status: 'failed' });
+
+    releaseActive();
+    await active;
+    const duplicate = await session.signal({
+      content: 'wake with a response owner',
+      admissionId: 'lineage-active-race',
+      logicalMessageIdentity: { input: 'input-race', response: 'response-race' },
+    });
+    expect(duplicate).toMatchObject({ accepted: true, willInterleave: true });
+    await expect(duplicate.result).rejects.toMatchObject({ name: 'HarnessExecutionError' });
+    expect(agent.streamCalls).toHaveLength(1);
+    nativeSubscription.unsubscribe();
   });
 
   it('uses the native accepted run id for an admitted active delivery', async () => {
@@ -255,6 +468,7 @@ describe('Session.signal() admissionId', () => {
           accepted: (async () => {
             releaseActive();
             await active;
+            (target.ifIdle as { _onThreadStreamSignalDiscarded?: () => void })._onThreadStreamSignalDiscarded?.();
             return { action: 'discard' as const };
           })(),
         };
@@ -262,11 +476,281 @@ describe('Session.signal() admissionId', () => {
       return realSendSignal(signal, target);
     }) as typeof agent.sendSignal;
 
-    const handle = await session.signal({ content: 'reroute once', admissionId: 'active-discard-race' });
+    const handle = await session.signal({
+      content: 'reroute once',
+      admissionId: 'active-discard-race',
+      logicalMessageIdentity: { input: 'reroute-input', response: 'reroute-response' },
+    });
     expect(handle).toMatchObject({ willInterleave: false, accepted: true });
     expect(handle.runId).not.toBe('discarded-provisional-run');
     await expect(handle.result).resolves.toMatchObject({ text: 'rerouted owned terminal' });
     expect(agent.streamCalls).toHaveLength(2);
+    expect(agent.streamCalls[1]!.options.logicalMessageIdentity).toEqual({
+      input: 'reroute-input',
+      response: 'reroute-response',
+    });
+    const identity = (session as any)._signalAdmissionIdentity('active-discard-race') as { signalId: string };
+    await expect(session.lookupMessageResult(identity.signalId)).resolves.toMatchObject({
+      status: 'completed',
+      admissionId: 'active-discard-race',
+    });
+  });
+
+  it.each([
+    { action: 'blocked', accepted: { action: 'blocked', reason: 'thread-blocked', runId: 'blocked-run' } },
+    { action: 'persist', accepted: { action: 'persist' } },
+    { action: 'deliver', accepted: { action: 'deliver', runId: 'active-run' } },
+  ] as const)(
+    'rejects an unexpected native $action result for a non-admitted full logical pair',
+    async ({ accepted }) => {
+      const agent = new MockAgent({ id: 'default' });
+      const { harness } = setupHarness({ agents: { default: agent } });
+      const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+      agent.sendSignal = ((signal: any) => ({
+        signal: createSignal({ ...signal, acceptedAt: new Date() }),
+        runId: 'unexpected-native-run',
+        accepted: Promise.resolve(accepted),
+      })) as typeof agent.sendSignal;
+
+      await expect(
+        session.signal({
+          content: 'unexpected native action',
+          logicalMessageIdentity: { input: `input-${accepted.action}`, response: `response-${accepted.action}` },
+        }),
+      ).rejects.toBeInstanceOf(HarnessConfigError);
+      expect(agent.streamCalls).toHaveLength(0);
+    },
+  );
+
+  it('aborts the owned wake stream when a lineaged signal is accepted by another run', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal;
+      return {
+        signal: createSignal({ ...signal, acceptedAt: new Date() }),
+        runId: 'reserved-run',
+        accepted: Promise.resolve({ action: 'wake' as const, runId: 'foreign-run' }),
+      };
+    }) as typeof agent.sendSignal;
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(
+      session.signal({
+        content: 'mismatched native wake',
+        logicalMessageIdentity: { input: 'mismatch-input', response: 'mismatch-response' },
+      }),
+    ).rejects.toBeInstanceOf(HarnessConfigError);
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await session.close();
+  });
+
+  it('aborts an unresolved native acceptance for a non-admitted full logical signal', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseRun!: () => void;
+    let nativeAbortObserved!: () => void;
+    const nativeAbort = new Promise<void>(resolve => {
+      nativeAbortObserved = resolve;
+    });
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseRun = resolve;
+      }),
+      onAbort: () => nativeAbortObserved(),
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const realSendSignal = agent.sendSignal.bind(agent);
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal;
+      const dispatched = realSendSignal(signal, target);
+      return { ...dispatched, accepted: new Promise<never>(() => {}) };
+    }) as typeof agent.sendSignal;
+
+    vi.useFakeTimers();
+    try {
+      const pending = session.signal({
+        content: 'wait for native signal acceptance',
+        logicalMessageIdentity: { input: 'signal-timeout-input', response: 'signal-timeout-response' },
+      });
+      const rejection = expect(pending).rejects.toMatchObject({ name: 'HarnessValidationError' });
+      await vi.advanceTimersByTimeAsync(30_001);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await expect(nativeAbort).resolves.toBeUndefined();
+    expect(session.isRunning()).toBe(false);
+    releaseRun();
+  });
+
+  it('aborts an unresolved interleaving full logical wake after the active run releases', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseActive!: () => void;
+    let nativeAbortObserved!: () => void;
+    const nativeAbort = new Promise<void>(resolve => {
+      nativeAbortObserved = resolve;
+    });
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseActive = resolve;
+      }),
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const active = session.message({ content: 'active turn' });
+    await waitForStreamCalls(agent, 1);
+
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal as AbortSignal | undefined;
+      nativeAbortSignal?.addEventListener('abort', () => nativeAbortObserved(), { once: true });
+      releaseActive();
+      return {
+        signal: createSignal({ ...signal, acceptedAt: new Date() }),
+        runId: 'interleaving-wake',
+        accepted: new Promise<never>(() => {}),
+      };
+    }) as typeof agent.sendSignal;
+
+    vi.useFakeTimers();
+    try {
+      const pending = session.signal({
+        content: 'wait for interleaving wake acceptance',
+        logicalMessageIdentity: { input: 'interleave-timeout-input', response: 'interleave-timeout-response' },
+      });
+      const rejection = expect(pending).rejects.toMatchObject({ name: 'HarnessValidationError' });
+      await vi.advanceTimersByTimeAsync(30_001);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await active;
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await expect(nativeAbort).resolves.toBeUndefined();
+    expect(session.isRunning()).toBe(false);
+  });
+
+  it('aborts an interleaving full logical wake when the caller cancels acceptance', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseActive!: () => void;
+    let dispatchStarted!: () => void;
+    let nativeAbortObserved!: () => void;
+    const dispatchStartedPromise = new Promise<void>(resolve => {
+      dispatchStarted = resolve;
+    });
+    const nativeAbort = new Promise<void>(resolve => {
+      nativeAbortObserved = resolve;
+    });
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseActive = resolve;
+      }),
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const active = session.message({ content: 'active turn' });
+    await waitForStreamCalls(agent, 1);
+
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal as AbortSignal | undefined;
+      nativeAbortSignal?.addEventListener('abort', () => nativeAbortObserved(), { once: true });
+      releaseActive();
+      dispatchStarted();
+      return {
+        signal: createSignal({ ...signal, acceptedAt: new Date() }),
+        runId: 'interleaving-cancelled-wake',
+        accepted: new Promise<never>(() => {}),
+      };
+    }) as typeof agent.sendSignal;
+
+    const callerAbortController = new AbortController();
+    const pending = session.signal({
+      content: 'cancel interleaving wake acceptance',
+      abortSignal: callerAbortController.signal,
+      logicalMessageIdentity: { input: 'interleave-cancel-input', response: 'interleave-cancel-response' },
+    });
+    await dispatchStartedPromise;
+    callerAbortController.abort(new Error('caller stopped waiting'));
+    await expect(pending).rejects.toBeDefined();
+
+    await active;
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await expect(nativeAbort).resolves.toBeUndefined();
+    expect(session.isRunning()).toBe(false);
+  });
+
+  it('keeps caller cancellation connected after an interleaving full logical wake is accepted', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseActive!: () => void;
+    let releaseWake!: () => void;
+    let nativeAbortObserved!: () => void;
+    const nativeAbort = new Promise<void>(resolve => {
+      nativeAbortObserved = resolve;
+    });
+    agent.enqueueRuns([
+      {
+        holdUntil: new Promise<void>(resolve => {
+          releaseActive = resolve;
+        }),
+      },
+      {
+        holdUntil: new Promise<void>(resolve => {
+          releaseWake = resolve;
+        }),
+        onAbort: () => nativeAbortObserved(),
+      },
+    ]);
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const active = session.message({ content: 'active turn' });
+    await waitForStreamCalls(agent, 1);
+
+    const realBuildSignalContents = (session as any)._buildSignalContentsWithAttachments.bind(session);
+    let releaseSignalContents!: () => void;
+    let signalContentsStarted!: () => void;
+    const signalContentsStartedPromise = new Promise<void>(resolve => {
+      signalContentsStarted = resolve;
+    });
+    const signalContentsGate = new Promise<void>(resolve => {
+      releaseSignalContents = resolve;
+    });
+    (session as any)._buildSignalContentsWithAttachments = async (...args: any[]) => {
+      signalContentsStarted();
+      await signalContentsGate;
+      return realBuildSignalContents(...args);
+    };
+
+    const callerAbortController = new AbortController();
+    const pending = session.signal({
+      content: 'cancel accepted interleaving wake',
+      abortSignal: callerAbortController.signal,
+      logicalMessageIdentity: { input: 'interleave-after-accept-input', response: 'interleave-after-accept-response' },
+    });
+    await signalContentsStartedPromise;
+    releaseActive();
+    await active;
+    releaseSignalContents();
+
+    const handle = await pending;
+    await waitForStreamCalls(agent, 2);
+    const nativeAbortSignal = agent.streamCalls[1]?.options.abortSignal as AbortSignal | undefined;
+    expect(nativeAbortSignal?.aborted).toBe(false);
+
+    callerAbortController.abort(new Error('caller stopped after admission'));
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await expect(nativeAbort).resolves.toBeUndefined();
+    await expect(handle.result).resolves.toMatchObject({ finishReason: 'aborted' });
+
+    releaseWake();
+    expect(session.isRunning()).toBe(false);
   });
 
   it('rejects payload conflicts and non-hash-safe options before another dispatch', async () => {

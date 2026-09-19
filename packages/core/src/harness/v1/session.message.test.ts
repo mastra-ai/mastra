@@ -19,14 +19,18 @@ import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 
 import { buildFakeOutput, extractSignalContents } from './__test-utils__/fake-output';
+import { MockAgent } from './__test-utils__/mock-agent';
+import { setupHarness } from './__test-utils__/setup';
 import {
   HarnessAbortedError,
   HarnessAdmissionConflictError,
   HarnessBusyError,
+  HarnessConfigError,
   HarnessOutputGenerationError,
   HarnessValidationError,
 } from './errors';
 import { Harness } from './harness';
+import type { MessageOptionsDefault } from './types';
 
 // ---------------------------------------------------------------------------
 // Fake agent: skips the model layer entirely. Records what message() passed
@@ -359,6 +363,172 @@ describe('Session.message() — default path', () => {
     expect(agent.calls).toHaveLength(1);
   });
 
+  it('binds logical identity to the admitted message hash', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.message({
+      content: 'hi',
+      admissionId: 'lineage-admission',
+      logicalMessageIdentity: { input: 'input-1', response: 'response-1' },
+    });
+
+    await expect(
+      session.message({
+        content: 'hi',
+        admissionId: 'lineage-admission',
+        logicalMessageIdentity: { input: 'input-2', response: 'response-2' },
+      }),
+    ).rejects.toBeInstanceOf(HarnessAdmissionConflictError);
+    expect(agent.calls).toHaveLength(1);
+  });
+
+  it('aborts an unresolved native logical-message dispatch without failing its admission', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseRun!: () => void;
+    let nativeAbortObserved!: () => void;
+    const nativeAbort = new Promise<void>(resolve => {
+      nativeAbortObserved = resolve;
+    });
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseRun = resolve;
+      }),
+      onAbort: () => nativeAbortObserved(),
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const realSendSignal = agent.sendSignal.bind(agent);
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal;
+      const dispatched = realSendSignal(signal, target);
+      return { ...dispatched, accepted: new Promise<never>(() => {}) };
+    }) as typeof agent.sendSignal;
+
+    vi.useFakeTimers();
+    try {
+      const pending = session.message({
+        content: 'wait for native acceptance',
+        admissionId: 'message-native-timeout',
+        logicalMessageIdentity: { input: 'timeout-input', response: 'timeout-response' },
+      });
+      const rejection = expect(pending).rejects.toMatchObject({ name: 'HarnessValidationError' });
+      await vi.advanceTimersByTimeAsync(30_001);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await expect(nativeAbort).resolves.toBeUndefined();
+    const identity = (session as any)._messageAdmissionIdentity('message-native-timeout') as { signalId: string };
+    await expect(session.lookupMessageResult(identity.signalId)).resolves.toMatchObject({ status: 'pending' });
+    expect(session.isRunning()).toBe(false);
+    releaseRun();
+  });
+
+  it('keeps an omitted logical identity out of direct dispatch after caller mutation', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const sendSignal = vi.spyOn(agent, 'sendSignal');
+    const realBuildRequestContext = (session as any)._buildRequestContext.bind(session);
+    let releaseContext!: () => void;
+    let contextStarted!: () => void;
+    const contextStartedPromise = new Promise<void>(resolve => {
+      contextStarted = resolve;
+    });
+    const contextGate = new Promise<void>(resolve => {
+      releaseContext = resolve;
+    });
+    (session as any)._buildRequestContext = async (...args: any[]) => {
+      contextStarted();
+      await contextGate;
+      return realBuildRequestContext(...args);
+    };
+
+    const options: MessageOptionsDefault = {
+      content: 'ordinary message',
+      admissionId: 'message-omitted-identity',
+    };
+    const pending = session.message(options);
+    await contextStartedPromise;
+    options.logicalMessageIdentity = { input: 'late-input', response: 'late-response' };
+    releaseContext();
+
+    await pending;
+    expect(agent.calls[0]?.options.logicalMessageIdentity).toBeUndefined();
+    expect(sendSignal.mock.calls[0]?.[0]).not.toHaveProperty('metadata');
+  });
+
+  it('rejects a full logical message when a run becomes active during reservation', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseActive!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseActive = resolve;
+      }),
+      text: 'active terminal',
+    });
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const realWrite = storage.writeMessageResultEvidence.bind(storage);
+    let reservationStarted!: () => void;
+    const reservationObserved = new Promise<void>(resolve => {
+      reservationStarted = resolve;
+    });
+    let releaseReservation!: () => void;
+    const reservationGate = new Promise<void>(resolve => {
+      releaseReservation = resolve;
+    });
+    storage.writeMessageResultEvidence = async record => {
+      if (record.admissionId === 'lineage-message-active-race' && record.status === 'pending') {
+        reservationStarted();
+        await reservationGate;
+      }
+      return realWrite(record);
+    };
+
+    const pending = session.message({
+      content: 'wake with a response owner',
+      admissionId: 'lineage-message-active-race',
+      logicalMessageIdentity: { input: 'input-race', response: 'response-race' },
+    });
+    await reservationObserved;
+
+    const nativeSubscription = await agent.subscribeToThread({
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+    });
+    const active = session.message({ content: 'active work' });
+    await vi.waitFor(() => expect(agent.streamCalls).toHaveLength(1));
+    await vi.waitFor(() => expect(nativeSubscription.activeRunId()).not.toBeNull());
+    releaseReservation();
+
+    await expect(pending).rejects.toBeInstanceOf(HarnessConfigError);
+    const identity = (session as any)._messageAdmissionIdentity('lineage-message-active-race') as { signalId: string };
+    await expect(session.lookupMessageResult(identity.signalId)).resolves.toMatchObject({ status: 'failed' });
+
+    releaseActive();
+    await active;
+    nativeSubscription.unsubscribe();
+    await expect(
+      session.message({
+        content: 'wake with a response owner',
+        admissionId: 'lineage-message-active-race',
+        logicalMessageIdentity: { input: 'input-race', response: 'response-race' },
+      }),
+    ).rejects.toMatchObject({ name: 'HarnessExecutionError' });
+    expect(agent.streamCalls).toHaveLength(1);
+  });
+
   it('replays a completed admitted message after a cold Harness and storage restart', async () => {
     const db = new InMemoryDB();
     const storage1 = new InMemoryHarness({ db });
@@ -443,6 +613,84 @@ describe('Session.message() — default path', () => {
       runId: admitted.runId,
     });
     expect(agent.calls).toHaveLength(1);
+  });
+
+  it('freezes the normalized logical identity before admitMessage awaits or dispatches', async () => {
+    const { harness, agent, storage } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const identity = {
+      input: 'admit-input',
+      response: 'admit-response',
+      extra: 'ignored by the native identity contract',
+    } as any;
+    let releaseLookup!: () => void;
+    let lookupStarted!: () => void;
+    const lookupStartedPromise = new Promise<void>(resolve => {
+      lookupStarted = resolve;
+    });
+    const lookupGate = new Promise<void>(resolve => {
+      releaseLookup = resolve;
+    });
+    const realResolve = storage.resolveOperationAdmissionEvidence.bind(storage);
+    let gated = false;
+    storage.resolveOperationAdmissionEvidence = async options => {
+      if (!gated && options.admissionId === 'admit-normalized-identity') {
+        gated = true;
+        lookupStarted();
+        await lookupGate;
+      }
+      return realResolve(options);
+    };
+
+    const pending = session.admitMessage({
+      content: 'freeze this identity',
+      admissionId: 'admit-normalized-identity',
+      logicalMessageIdentity: identity,
+    });
+    await lookupStartedPromise;
+    identity.response = 'mutated-after-admission-start';
+    releaseLookup();
+
+    await expect(pending).resolves.toMatchObject({ accepted: true, duplicate: false });
+    expect(agent.calls[0]?.options.logicalMessageIdentity).toEqual({
+      input: 'admit-input',
+      response: 'admit-response',
+    });
+  });
+
+  it('keeps an omitted logical identity out of admitMessage dispatch after caller mutation', async () => {
+    const { harness, agent, storage } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    let releaseLookup!: () => void;
+    let lookupStarted!: () => void;
+    const lookupStartedPromise = new Promise<void>(resolve => {
+      lookupStarted = resolve;
+    });
+    const lookupGate = new Promise<void>(resolve => {
+      releaseLookup = resolve;
+    });
+    const realResolve = storage.resolveOperationAdmissionEvidence.bind(storage);
+    let gated = false;
+    storage.resolveOperationAdmissionEvidence = async options => {
+      if (!gated && options.admissionId === 'admit-omitted-identity') {
+        gated = true;
+        lookupStarted();
+        await lookupGate;
+      }
+      return realResolve(options);
+    };
+
+    const options: MessageOptionsDefault = {
+      content: 'ordinary admitted message',
+      admissionId: 'admit-omitted-identity',
+    };
+    const pending = session.admitMessage(options);
+    await lookupStartedPromise;
+    options.logicalMessageIdentity = { input: 'late-input', response: 'late-response' };
+    releaseLookup();
+
+    await expect(pending).resolves.toMatchObject({ accepted: true, duplicate: false });
+    expect(agent.calls[0]?.options.logicalMessageIdentity).toBeUndefined();
   });
 
   it('returns message admission before a slow stream output is available', async () => {

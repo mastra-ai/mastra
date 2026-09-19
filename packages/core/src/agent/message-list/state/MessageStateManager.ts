@@ -1,5 +1,6 @@
 import type { CoreSystemMessage } from '@internal/ai-sdk-v4';
 
+import type { LogicalMessageIdentity } from '../logical-message-identity';
 import { serializeMessages, deserializeMessages } from './serialization';
 import type { SerializedMessage } from './serialization';
 import type { MastraDBMessage, MessageSource, MemoryInfo } from './types';
@@ -159,6 +160,16 @@ export class MessageStateManager {
     this.newUserMessages.delete(message);
     this.newResponseMessages.delete(message);
     this.userContextMessages.delete(message);
+  }
+
+  /** Replace a tracked object while keeping source membership unique by message ID. */
+  replaceMessage(message: MastraDBMessage, replacement: MastraDBMessage, source: MessageSource): void {
+    this.removeMessage(message);
+    this.memoryMessagesPersisted.delete(message);
+    this.newUserMessagesPersisted.delete(message);
+    this.newResponseMessagesPersisted.delete(message);
+    this.userContextMessagesPersisted.delete(message);
+    this.addToSource(replacement, source);
   }
 
   /**
@@ -360,4 +371,7 @@ export interface SerializedMessageListState {
   newUserMessagesPersisted: string[];
   newResponseMessagesPersisted: string[];
   userContextMessagesPersisted: string[];
+  logicalMessageIdentity?: LogicalMessageIdentity;
+  /** Whether the first admitted input batch may still inherit the active input id. */
+  logicalMessageInputBatchPending?: boolean;
 }
