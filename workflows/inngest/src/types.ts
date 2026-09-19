@@ -1,5 +1,5 @@
 import type { Step, WorkflowConfig } from '@mastra/core/workflows';
-import type { Inngest } from 'inngest';
+import type { GetStepTools, Inngest } from 'inngest';
 
 // Extract Inngest's native flow control configuration types from createFunction first argument
 export type InngestCreateFunctionConfig = Parameters<Inngest['createFunction']>[0];
@@ -36,6 +36,12 @@ export type _AssertInngestCompatibility =
     : never;
 export const _compatibilityCheck: _AssertInngestCompatibility = true;
 
+/**
+ * Engine context handed to `execute({ engine })` for steps running on the
+ * Inngest engine. `step` is Inngest's own step tooling, so `step.run`,
+ * `step.sendEvent`, `step.waitForEvent` and `step.sleep` are checked at
+ * compile time rather than duck-typed at runtime.
+ */
 export type InngestEngineType = {
-  step: any;
+  step: GetStepTools<Inngest.Any>;
 };

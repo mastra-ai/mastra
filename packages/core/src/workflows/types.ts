@@ -940,6 +940,12 @@ export type StepParams<
   TResumeSchema extends PublicSchema<any> | undefined = undefined,
   TSuspendSchema extends PublicSchema<any> | undefined = undefined,
   TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
+  /**
+   * Execution engine context handed to `execute({ engine })`. Engine adapters
+   * (e.g. `@mastra/inngest`) narrow this so engine-specific primitives are
+   * typed at the call site; defaults to the built-in engine.
+   */
+  TEngineType = DefaultEngineType,
 > = {
   id: TStepId;
   description?: string;
@@ -962,7 +968,7 @@ export type StepParams<
     InferPublicSchema<TOutputSchema>,
     TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
     TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
-    DefaultEngineType,
+    TEngineType,
     TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
   >;
 };
