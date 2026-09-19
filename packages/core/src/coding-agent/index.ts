@@ -1,7 +1,6 @@
 import { Agent } from '../agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '../agent/goal/objective';
 import type { AgentConfig } from '../agent/types';
-<<<<<<< HEAD
 import {
   CyberRefusalHandler,
   isBadRequestError,
@@ -10,16 +9,13 @@ import {
   StreamErrorRetryProcessor,
 } from '../processors';
 import { DEFAULT_MAX_PROCESSOR_RETRIES } from '../processors/retry-budget';
-=======
 import { defaultStabilityErrorProcessors } from '../processors/stability-defaults';
->>>>>>> 73ab3a0c01ca (refactor(core): extract the shared stability error processors)
 import { TaskSignalProvider } from '../signals';
 import { LocalFilesystem, LocalSandbox, Workspace } from '../workspace';
 
 export { buildBasePrompt, type PromptContext } from './prompt';
 
 /**
-<<<<<<< HEAD
  * Retry policy for transient network resets (e.g. provider sockets dropping
  * mid-stream). Applied centrally to every model call via the default
  * `StreamErrorRetryProcessor` so all modes/subagents benefit from a short wait
@@ -82,8 +78,6 @@ function defaultErrorProcessors(): NonNullable<AgentConfig['errorProcessors']> {
 }
 
 /**
-=======
->>>>>>> 73ab3a0c01ca (refactor(core): extract the shared stability error processors)
  * Builds a portable default workspace from core's local primitives, rooted at
  * `basePath` (defaults to `process.cwd()`). Used when the caller passes no
  * `workspace`.
@@ -130,20 +124,17 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  *   {@link CyberRefusalHandler}, which retries once after an Anthropic cyber
  *   classifier stop.
  * - `errorProcessors` is used verbatim when provided; otherwise it defaults to
-<<<<<<< HEAD
  *   the provider-history, prefill, and cyber-refusal repair processors, followed by catch-all
  *   stream retries with specialized ECONNRESET/bad-request policies.
  * - `maxProcessorRetries` defaults to {@link DEFAULT_MAX_PROCESSOR_RETRIES} so
  *   the default output-lane cyber-refusal retry has a budget. Output-step
  *   retries only read this option, so the implicit error-lane cap does not
  *   cover them.
-=======
  *   {@link defaultStabilityErrorProcessors} — provider-history compatibility,
  *   then prefill-error recovery, then catch-all stream retries with specialized
  *   ECONNRESET/bad-request policies. The repairs run before the retry because
  *   error processors short-circuit on the first `retry: true`, and the retry's
  *   bad-request matcher claims the same `400`s they repair.
->>>>>>> 73ab3a0c01ca (refactor(core): extract the shared stability error processors)
  * - `goal.prompt` defaults to {@link DEFAULT_GOAL_JUDGE_PROMPT} when a goal is
  *   configured without one.
  *
@@ -183,7 +174,6 @@ export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
     memory,
     workspace,
     signals: resolvedSignals,
-<<<<<<< HEAD
     // CyberRefusalHandler also sits in the error lane (see defaultErrorProcessors)
     // for OpenAI refusals; here it catches Anthropic refusals, which finish a
     // step instead of throwing.
@@ -193,9 +183,7 @@ export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
     // from `resolveMaxProcessorRetries` never reaches them. Default it here so
     // the default output-lane handler can retry instead of ending as a tripwire.
     maxProcessorRetries: rest.maxProcessorRetries ?? DEFAULT_MAX_PROCESSOR_RETRIES,
-=======
     errorProcessors: errorProcessors ?? defaultStabilityErrorProcessors(),
->>>>>>> 73ab3a0c01ca (refactor(core): extract the shared stability error processors)
     ...(resolvedGoal ? { goal: resolvedGoal } : {}),
   });
 }

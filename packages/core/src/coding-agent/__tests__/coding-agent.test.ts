@@ -336,12 +336,14 @@ describe('createCodingAgent', () => {
     const customRetry = new StreamErrorRetryProcessor({ maxRetries: 7 });
     const agent = createCodingAgent(baseConfig({ errorProcessors: [customRetry] }));
 
-    const ids = (await agent.listErrorProcessors()).map(processor => processor.id);
-
-    expect(ids).toEqual(['stream-error-retry-processor', 'provider-history-compat', 'prefill-error-handler']);
-    // The caller's tuned instance is the one that runs — the default is not added alongside it.
     const resolved = await agent.listErrorProcessors();
-    expect(resolved[0]).toBe(customRetry);
+    const ids = resolved.map(processor => processor.id);
+
+    // The added defaults are placed at their own positions, so both repairs still run before the
+    // retry processor even though the caller named only the latter.
+    expect(ids).toEqual([...STABILITY_ERROR_PROCESSOR_IDS]);
+    // The caller's tuned instance is the one that runs — the default is not added alongside it.
+    expect(resolved[2]).toBe(customRetry);
     expect(resolved.filter(processor => processor.id === 'stream-error-retry-processor')).toHaveLength(1);
   });
 

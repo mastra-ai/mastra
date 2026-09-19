@@ -54,8 +54,8 @@ describe('STABILITY_ERROR_PROCESSOR_IDS', () => {
   it('matches the ids declared by the three default processor classes, in order', () => {
     expect([...STABILITY_ERROR_PROCESSOR_IDS]).toEqual([
       new ProviderHistoryCompat().id,
-      new StreamErrorRetryProcessor().id,
       new PrefillErrorHandler().id,
+      new StreamErrorRetryProcessor().id,
     ]);
   });
 });
@@ -67,7 +67,8 @@ describe('defaultStabilityErrorProcessors', () => {
     expect(processors).toHaveLength(3);
     expect(processors.map(p => p.id)).toEqual([...STABILITY_ERROR_PROCESSOR_IDS]);
     expect(processors[0]).toBeInstanceOf(ProviderHistoryCompat);
-    expect(processors[2]).toBeInstanceOf(PrefillErrorHandler);
+    expect(processors[1]).toBeInstanceOf(PrefillErrorHandler);
+    expect(processors[2]).toBeInstanceOf(StreamErrorRetryProcessor);
   });
 
   it('returns distinct arrays and distinct instances on each call', () => {
@@ -91,8 +92,8 @@ describe('defaultStabilityErrorProcessors', () => {
 
 describe('default stability StreamErrorRetryProcessor policy', () => {
   function retryProcessor() {
-    // The defaults order is [provider-history-compat, stream-error-retry-processor, prefill-error-handler].
-    return defaultStabilityErrorProcessors()[1];
+    // The defaults order is [provider-history-compat, prefill-error-handler, stream-error-retry-processor].
+    return defaultStabilityErrorProcessors()[2];
   }
 
   it('retries a bad-request (400) error exactly once, then stops', async () => {
