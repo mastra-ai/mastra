@@ -724,7 +724,9 @@ export const bedrockMantleGptOssStripReasoningContent: CompatRule = {
   name: 'bedrock-mantle-gpt-oss-strip-reasoning-content',
   applyToPrompt({ prompt, model }) {
     if (!isMaybeBedrockMantleGptOss(model)) return undefined;
-    return stripReasoningFromPrompt(prompt);
+    const strippedPrompt = stripReasoningFromPrompt(prompt);
+    // Mantle rejects empty content, so drop only messages rewritten to become empty.
+    return strippedPrompt?.filter((message, index) => message === prompt[index] || message.content.length > 0);
   },
 };
 
@@ -808,7 +810,8 @@ export const providerBoundaryCompat = new ProviderBoundaryCompat();
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
  * - **bedrock-mantle-gpt-oss-strip-reasoning-content** — strips assistant
  *   `reasoning` parts for Bedrock Mantle Chat GPT-OSS models in the outbound
- *   prompt. Mantle Responses is not matched.
+ *   prompt. Turns emptied by the removal are dropped. Mantle Responses is not
+ *   matched.
  * - **anthropic-strip-foreign-signed-reasoning** — drops signed thinking
  *   blocks from the outbound prompt when their origin turn was stamped with a
  *   provider different from the current target (preemptive). Turns emptied of

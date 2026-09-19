@@ -941,11 +941,17 @@ describe('cerebrasStripReasoningContent', () => {
 describe('ProviderHistoryCompat.processLLMRequest', () => {
   it('matches only Bedrock Mantle Chat GPT-OSS models', () => {
     expect(isMaybeBedrockMantleGptOss({ provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-oss-20b' })).toBe(true);
-    expect(isMaybeBedrockMantleGptOss([{ model: { provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-oss-120b' } }])).toBe(true);
-    expect(isMaybeBedrockMantleGptOss({ provider: 'bedrock-mantle.responses', modelId: 'openai.gpt-oss-20b' })).toBe(false);
+    expect(
+      isMaybeBedrockMantleGptOss([{ model: { provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-oss-120b' } }]),
+    ).toBe(true);
+    expect(isMaybeBedrockMantleGptOss({ provider: 'bedrock-mantle.responses', modelId: 'openai.gpt-oss-20b' })).toBe(
+      false,
+    );
     expect(isMaybeBedrockMantleGptOss({ provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-4o' })).toBe(false);
     expect(isMaybeBedrockMantleGptOss({ provider: 'amazon-bedrock', modelId: 'openai.gpt-oss-20b' })).toBe(false);
-    expect(isMaybeBedrockMantleGptOss({ provider: 'bedrock-mantle.chat', modelId: 'vendor/openai.gpt-oss-20b' })).toBe(false);
+    expect(isMaybeBedrockMantleGptOss({ provider: 'bedrock-mantle.chat', modelId: 'vendor/openai.gpt-oss-20b' })).toBe(
+      false,
+    );
     expect(isMaybeBedrockMantleGptOss('bedrock-mantle.chat/openai.gpt-oss-20b')).toBe(false);
     expect(isMaybeBedrockMantleGptOss(() => undefined)).toBe(false);
   });
@@ -968,11 +974,47 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     });
 
     expect(result).toBeDefined();
-    expect((result!.find(message => message.role === 'assistant')!.content as any[]).map(part => part.type)).toEqual(['text']);
+    expect((result!.find(message => message.role === 'assistant')!.content as any[]).map(part => part.type)).toEqual([
+      'text',
+    ]);
     expect((prompt.find(message => message.role === 'assistant')!.content as any[]).map(part => part.type)).toEqual([
       'reasoning',
       'text',
     ]);
+  });
+
+  it('drops assistant messages emptied by reasoning removal', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'Explain this.' }] },
+      { role: 'assistant', content: [{ type: 'reasoning', text: 'private reasoning' }] },
+      { role: 'user', content: [{ type: 'text', text: 'Continue.' }] },
+    ];
+    const result = bedrockMantleGptOssStripReasoningContent.applyToPrompt!({
+      prompt,
+      model: { provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-oss-20b' },
+    });
+
+    expect(result).toEqual([prompt[0], prompt[2]]);
+    expect(prompt).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'Explain this.' }] },
+      { role: 'assistant', content: [{ type: 'reasoning', text: 'private reasoning' }] },
+      { role: 'user', content: [{ type: 'text', text: 'Continue.' }] },
+    ]);
+  });
+
+  it('preserves pre-existing empty assistant messages', () => {
+    const emptyAssistant = { role: 'assistant' as const, content: [] };
+    const prompt: LanguageModelV2Prompt = [
+      emptyAssistant,
+      { role: 'assistant', content: [{ type: 'reasoning', text: 'private reasoning' }] },
+    ];
+    const result = bedrockMantleGptOssStripReasoningContent.applyToPrompt!({
+      prompt,
+      model: { provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-oss-20b' },
+    });
+
+    expect(result).toEqual([emptyAssistant]);
+    expect(result![0]).toBe(emptyAssistant);
   });
 
   it.each([
