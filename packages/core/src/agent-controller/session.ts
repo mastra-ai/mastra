@@ -35,6 +35,7 @@ import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
 
+import { applyUpdate } from './apply-update';
 import { readMessageAuthor, withMessageAuthor } from './message-author';
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
@@ -2462,29 +2463,8 @@ export class SessionDisplayState {
       case 'message_update': {
         if (ds.currentMessage?.id !== event.id) break;
 
-        const parts = [...ds.currentMessage.content.parts];
-        if (event.event.type === 'text-delta') {
-          const textIndex = parts.findLastIndex(part => part.type === 'text');
-          const textPart = parts[textIndex];
-          if (textPart?.type === 'text') {
-            parts[textIndex] = { ...textPart, text: textPart.text + event.event.delta };
-          } else {
-            parts.push({ type: 'text', text: event.event.delta });
-          }
-        } else if (event.event.type === 'reasoning-delta') {
-          const reasoningPart = parts[event.event.index];
-          if (reasoningPart?.type === 'reasoning') {
-            const reasoning = reasoningPart.reasoning + event.event.delta;
-            parts[event.event.index] = { ...reasoningPart, reasoning, details: [{ type: 'text', text: reasoning }] };
-          }
-        } else {
-          parts[event.event.index] = structuredClone(event.event.part);
-        }
-
-        ds.currentMessage = {
-          ...ds.currentMessage,
-          content: { ...ds.currentMessage.content, parts },
-        };
+        const next = applyUpdate(ds.currentMessage, event.event);
+        if (next) ds.currentMessage = next;
         break;
       }
 

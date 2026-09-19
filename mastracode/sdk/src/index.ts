@@ -1792,6 +1792,8 @@ export async function prepareAgentControllerMount(
 export const createMastraCode = bootLocalAgentController;
 export * from './knowledge-inspector.js';
 export { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
+export { applyUpdate } from '@mastra/core/agent-controller';
+export type { AgentControllerMessageUpdate } from '@mastra/core/agent-controller';
 
 /**
  * Programmatic headless API. `runMC` runs an already-built controller/session

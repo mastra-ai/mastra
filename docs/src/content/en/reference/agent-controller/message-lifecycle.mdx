@@ -1,0 +1,132 @@
+---
+title: "Reference: Message Lifecycle | AgentController"
+description: "Reconstruct a streamed assistant message from AgentController compact events with applyUpdate, session display state, or text-delta accumulation."
+packages:
+  - "@mastra/core"
+---
+
+# Message lifecycle
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+A streamed assistant message arrives as one `message_start`, zero or more `message_update` deltas, and one `message_end`. The updates are addressed by message id and carry only the change, so a consumer reconstructs the message from the ordered events. This page covers the event contract and the supported ways to consume it.
+
+For the surrounding runtime, see the [`Session`](/reference/agent-controller/session) and [`AgentController`](/reference/agent-controller/agent-controller-class) references.
+
+## Compact event contract
+
+| Event | Payload | Purpose |
+| - | - | - |
+| `message_start` | `MastraDBMessage` | Opens the message and carries its initial parts. A text part opens empty, with its content arriving in deltas. |
+| `message_update` | `{ type: 'text-delta', delta }`, `{ type: 'reasoning-delta', index, delta }`, or `{ type: 'part', index, part }` | Carries one change to the message identified by `event.id`. |
+| `message_end` | Message id | Closes the message after terminal metadata is applied. |
+
+`message_update` and `message_end` don't carry a message. Only `message_start` does, and it carries the message as it looks at that moment. The message's `content.parts` array holds its parts, and streamed assistant text accumulates in a `type: 'text'` part.
+
+```typescript
+session.subscribe(event => {
+  if (event.type === 'message_start') console.log(event.message.id)
+  if (event.type === 'message_update') console.log(event.id, event.event.type)
+  if (event.type === 'message_end') console.log(event.id)
+})
+```
+
+## `applyUpdate(message, update)`
+
+Fold one `message_update` delta into the message it addresses.
+
+```typescript
+import { applyUpdate } from '@mastra/core/agent-controller'
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'message',
+    type: 'MastraDBMessage | undefined',
+    description:
+      'The message to fold into. Pass the value stored for the update id. Pass undefined when the id has no stored message.',
+  },
+  {
+    name: 'update',
+    type: 'AgentControllerMessageUpdate',
+    description: 'The `event.event` payload of a `message_update` event: a text delta, a reasoning delta, or a part.',
+  },
+]}
+/>
+
+Returns: `MastraDBMessage | undefined`
+
+The function is pure. It returns a new message and never mutates the input, so store the result rather than relying on the argument changing.
+
+The return value is `undefined` when the delta doesn't apply: no message was passed, the message `content` is a string rather than parts, or a `reasoning-delta` doesn't address a reasoning part. The last case occurs when a consumer folds a partial stream and hasn't seen the `message_start` or `part` update that announced the reasoning part. Always check the result before storing it, or a delta that doesn't apply overwrites the stored message with `undefined`.
+
+Address the message by id, and store the result of each applied update:
+
+```typescript
+import { applyUpdate } from '@mastra/core/agent-controller'
+import type { MastraDBMessage } from '@mastra/core/agent-controller'
+
+const messages = new Map<string, MastraDBMessage>()
+
+session.subscribe(event => {
+  if (event.type === 'message_start') messages.set(event.message.id, event.message)
+  if (event.type === 'message_update') {
+    const updated = applyUpdate(messages.get(event.id), event.event)
+    if (updated) messages.set(event.id, updated)
+  }
+})
+```
+
+Read the folded parts to get the text (continuing the `messages` map from the snippet above):
+
+```typescript
+function messageText(id: string): string {
+  const message = messages.get(id)
+  if (!message || typeof message.content === 'string') return ''
+  return message.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('')
+}
+```
+
+## Read the folded message from a session
+
+When a `Session` is available, the session already folds every delta for the streaming message. Read [`session.displayState.get()`](/reference/agent-controller/session#sessiondisplaystateget) and take `currentMessage` instead of folding events:
+
+```typescript
+session.subscribe(event => {
+  if (event.type === 'message_end') {
+    const message = session.displayState.get().currentMessage
+    if (message?.id === event.id) render(message)
+  }
+})
+```
+
+`currentMessage` holds only the message currently streaming. Each update replaces it with the accumulated result, and a new `message_start` replaces it with the next message, so a turn that emits several assistant messages, such as a tool-calling turn, needs a snapshot per `message_end` rather than one read at the end.
+
+## Accumulate text deltas
+
+A consumer that only needs the assistant's text doesn't have to reconstruct messages. Within this lifecycle `text-delta` is the only event that carries streamed text, so append `event.event.delta` for each one and the turn's text accumulates in arrival order. Reset the buffer when `agent_start` opens a new turn, or the string keeps growing across turns:
+
+```typescript
+let text = ''
+
+session.subscribe(event => {
+  if (event.type === 'agent_start') text = ''
+  if (event.type === 'message_update' && event.event.type === 'text-delta') {
+    text += event.event.delta
+  }
+})
+```
+
+This path drops the message and part structure: it merges every assistant message in the turn into one string, and it can't recover reasoning, tool calls, or other parts. Use `applyUpdate` or display state when the consumer needs those.
+
+## Related
+
+- [`Session`](/reference/agent-controller/session)
+- [`AgentController`](/reference/agent-controller/agent-controller-class)
+- [AgentController overview](/docs/harness/agent-controller)
+- [Client-side sessions](/reference/client-js/agent-controller)
