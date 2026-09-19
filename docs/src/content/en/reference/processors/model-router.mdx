@@ -127,6 +127,16 @@ Measured over five four-step support runs:
 
 Single-step runs are unaffected, because the two scopes are identical when there is only one model call.
 
+## Multi-turn conversations
+
+Because only the latest message is classified, a terse follow-up like `"now apply that to the rest of them"` is routed on that sentence alone. On ten multi-turn support conversations with deliberately anaphoric final turns, that misrouted 4 of 5 turns whose difficulty appeared to carry over from earlier context. Adding the conversation to the classifier state fixed the routing at 1.14x the classifier tokens, and did not over-upgrade: the five genuinely easy follow-ups stayed on the cheap model either way.
+
+The routing difference did not show up in answer quality. Re-answering those four turns with both models and judging blind in both A/B orders produced **no stable regression** — three verdicts flipped when the order was swapped, and on the fourth the cheap model's answer was preferred.
+
+The likely reason is that in a multi-turn exchange the hard reasoning is usually already in the transcript. The assistant worked out the policy in the earlier turn, so the follow-up inherits a derived answer rather than the original difficulty, and applying an established rule is work a cheap model does well.
+
+Treat this as a reason to measure rather than a guarantee. The quality comparison is n=4 on one provider and a single-domain script, which is too small to conclude the effect is absent. If your follow-ups genuinely re-open the hard reasoning instead of applying its result, classify the conversation yourself and pass the model in through the `select` form.
+
 ## Routing on more than one dimension
 
 Choice criteria are mutually exclusive, which is the wrong shape when routing depends on independent dimensions. Use `select` instead and combine the answers yourself. It receives the fully typed answers, so the policy stays yours:
@@ -217,7 +227,7 @@ Whether that quality cost grows with context is **unresolved**. A repeat of the 
 ## Cost and behavior notes
 
 - The classifier runs **once per request**, in `processInput`, not once per step. The decision is stashed in per-request state and read on each step.
-- Only the **latest user message** is classified. The system prompt, retrieved context, and earlier turns are not sent to the classifier. This keeps the routing call cheap and flat, but it means a request whose difficulty is only apparent from earlier turns — `"and now do the same for the other twelve accounts"` — is classified on that sentence alone. Where that matters, use the `select` form to combine the answer with your own signals, or set `scope: 'first-step'` so later steps return to the configured model.
+- Only the **latest user message** is classified. The system prompt, retrieved context, and earlier turns are not sent to the classifier. This keeps the routing call flat as context grows. See [Multi-turn conversations](#multi-turn-conversations) for what it costs.
 - Only downgrade. Keep the capable model as the agent's configured default and use the router to move down, so an incorrect routing decision costs quality on one step rather than removing the capable model from the run entirely.
 - The router adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on. As the measurements above show, this round-trip can be comparable in size to the agent call it is optimizing, so confirm the saving is real for your model pair rather than assuming it.
 
