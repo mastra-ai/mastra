@@ -996,16 +996,26 @@ export class Mastra<
                 // for workflow ids only known to this instance's public registry
                 // (e.g. background scheduler runs like the notification
                 // dispatcher) — they have no cross-instance consumer.
+                // Internal workflows registered as *distributed* (e.g. an
+                // evented durable agent's `durable-agentic-loop`) execute
+                // cross-process by design: the publishing process may run no
+                // workers at all (MASTRA_WORKERS=false API topology) and rely
+                // on a remote orchestration worker to consume `workflows`
+                // events. Tagging those `localOnly` would strand the run in
+                // the publishing process forever — so they never count as
+                // locally-owned here.
+                const ownsLocalInternal = (id: string | undefined, run: string | undefined) => {
+                  if (!id || !run || !self.__hasInternalWorkflow(id, run)) return false;
+                  return !self.__isDistributedInternalWorkflow(id);
+                };
                 const isOwnedHere = (() => {
-                  if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) return true;
+                  if (ownsLocalInternal(wfId, rId)) return true;
                   let parent = data?.parentWorkflow as
                     | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
                     | undefined;
                   let depth = 0;
                   while (parent && depth < 16) {
-                    const pwfId = parent.workflowId;
-                    const prId = parent.runId;
-                    if (pwfId && prId && self.__hasInternalWorkflow(pwfId, prId)) return true;
+                    if (ownsLocalInternal(parent.workflowId, parent.runId)) return true;
                     parent = parent.parentWorkflow as typeof parent;
                     depth++;
                   }
@@ -3618,7 +3628,22 @@ export class Mastra<
    *   a run-scoped registration — so a run-scoped lookup can never resolve a
    *   *different* run's instance via an id scan.
    */
-  __registerInternalWorkflow(workflow: AnyWorkflow, runId?: string) {
+  /**
+   * Internal workflow ids whose runs are executed cross-process (published to
+   * the `workflows` topic for a possibly-remote orchestration worker). Their
+   * events must never be tagged `localOnly` by the pubsub proxy — the
+   * publishing process may run no workers at all.
+   */
+  #distributedInternalWorkflowIds = new Set<string>();
+
+  __isDistributedInternalWorkflow(id: string): boolean {
+    return this.#distributedInternalWorkflowIds.has(id);
+  }
+
+  __registerInternalWorkflow(workflow: AnyWorkflow, runId?: string, opts?: { distributed?: boolean }) {
+    if (opts?.distributed) {
+      this.#distributedInternalWorkflowIds.add(workflow.id);
+    }
     workflow.__markInternal();
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({

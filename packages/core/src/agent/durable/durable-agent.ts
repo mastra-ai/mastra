@@ -408,6 +408,20 @@ export interface DurableAgentConfig<
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 
   /**
+   * Which execution engine the agentic workflows are built on.
+   *
+   * - `'default'` (default): in-process `DefaultExecutionEngine` — the loop
+   *   executes in the process that called `stream()`/`generate()`.
+   * - `'evented'`: `EventedExecutionEngine` — steps are dispatched through the
+   *   workflows pubsub topic and executed by whichever process consumes it
+   *   (e.g. a dedicated `OrchestrationWorker` under `--workers dedicated`).
+   *   Requires a cross-process `PubSub` (and shared storage) for the worker
+   *   topology to function; with the default in-process pubsub the evented
+   *   engine still works but executes locally.
+   */
+  engine?: 'default' | 'evented';
+
+  /**
    * Per-topic opt-out of the replay cache.
    *
    * Return `false` to publish a topic straight through to the underlying
@@ -628,6 +642,12 @@ export class DurableAgent<
   #warnedPersistencePolicy = false;
 
   /**
+   * User-supplied execution-engine selection
+   * (see DurableAgentConfig.engine). Protected so subclasses can consult it.
+   */
+  protected readonly userEngine: 'default' | 'evented' | undefined;
+
+  /**
    * Create a new DurableAgent that wraps an existing Agent
    */
   constructor(config: DurableAgentConfig<TAgentId, TTools, TOutput>) {
@@ -641,6 +661,7 @@ export class DurableAgent<
       cleanupTimeoutMs,
       shouldCache,
       shouldPersistSnapshot,
+      engine,
     } = config;
 
     // Use provided id/name or fall back to agent.id/agent.name
@@ -666,6 +687,7 @@ export class DurableAgent<
     this.#cleanupTimeoutMs = cleanupTimeoutMs ?? 30_000;
     this.#shouldCache = shouldCache;
     this.userShouldPersistSnapshot = shouldPersistSnapshot;
+    this.userEngine = engine;
   }
 
   // ===========================================================================
@@ -1646,6 +1668,7 @@ export class DurableAgent<
       cleanupTimeoutMs: this.#cleanupTimeoutMs,
       shouldCache: this.#shouldCache,
       shouldPersistSnapshot: this.userShouldPersistSnapshot,
+      engine: this.userEngine,
     });
 
     // Preserve runtime state set after construction (mastra registration and the
@@ -1748,7 +1771,19 @@ export class DurableAgent<
     return createDurableAgenticWorkflow({
       maxSteps: this.#maxSteps,
       shouldPersistSnapshot: this.resolveShouldPersistSnapshot(),
+      engine: this.resolveEngine(),
     });
+  }
+
+  /**
+   * Resolve the execution engine for this agent's workflows: the
+   * user-supplied selection when set, otherwise `'default'`. Subclasses may
+   * override to change their default (see EventedAgent).
+   *
+   * @internal
+   */
+  protected resolveEngine(): 'default' | 'evented' {
+    return this.userEngine ?? 'default';
   }
 
   /**
@@ -3622,6 +3657,24 @@ export class DurableAgent<
           logger: this.#mastra.getLogger(),
           storage: this.#mastra.getStorage(),
         });
+        // The evented engine dispatches step execution through the workflows
+        // pubsub topic; the consuming WorkflowEventProcessor resolves the
+        // workflow by id via Mastra's internal-workflow registry (see
+        // getNestedWorkflow in workflows/evented/workflow-event-processor).
+        // Register the loop workflow there so a worker process (or the
+        // in-process worker) can find it. Steps resolve the agent from the
+        // serialized input's agentId at runtime, so the graph is shared.
+        // `distributed: true` — these runs are consumed by a (possibly
+        // remote) orchestration worker, so their workflows-topic events must
+        // fan out through the broker instead of being tagged `localOnly` by
+        // the mastra.pubsub proxy.
+        if (this.resolveEngine() === 'evented' && !this.#mastra.__hasInternalWorkflow(this.#workflow.id)) {
+          this.#mastra.__registerInternalWorkflow(
+            this.#workflow as unknown as Parameters<Mastra['__registerInternalWorkflow']>[0],
+            undefined,
+            { distributed: true },
+          );
+        }
       }
     }
     return this.#workflow;
@@ -3773,6 +3826,15 @@ export class DurableAgent<
     // This must happen before CachingPubSub initialization.
     if (!this.#hasCustomPubsub && !this.#cachingPubsub) {
       this.#innerPubsub = mastra.pubsub;
+    }
+
+    // Evented engine: eagerly build and register the loop workflow so a
+    // worker-only process (which never calls getWorkflow() itself) can resolve
+    // `durable-agentic-loop` events consumed off the workflows topic. In-process
+    // setups get the same registration lazily via getWorkflow(); doing it here
+    // covers consumers that only ever register the agent.
+    if (this.resolveEngine() === 'evented') {
+      this.getWorkflow();
     }
   }
 }

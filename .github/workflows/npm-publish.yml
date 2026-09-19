@@ -580,6 +580,9 @@ jobs:
           const files = execSync('git ls-files "*/package.json"').toString().trim().split('\n');
           let changedCount = 0;
           for (const file of files) {
+            // mcp-docs-server targets the published @mastra/mcp v1 API; linking it to the
+            // workspace mcp (2.0.0-alpha) breaks its build, so leave its deps untouched.
+            if (file === 'packages/mcp-docs-server/package.json') continue;
             const content = fs.readFileSync(file, 'utf8');
             let updated = content.replace(/"workspace:\^"/g, '"workspace:*"');
             // Only rewrite @mastra/* deps that are actual workspace packages;

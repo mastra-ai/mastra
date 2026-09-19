@@ -2424,7 +2424,28 @@ export class WorkflowEventProcessor extends EventProcessor {
       const mergedForeachStepResults =
         !newStepResults || Object.keys(newStepResults).length === 0
           ? { ...(stepResults ?? {}), [getEntryId(step.step)]: newResult }
-          : newStepResults;
+          : newStepResults.input === undefined && stepResults?.input !== undefined
+            ? // Same as the regular step path: the store's context may never have
+              // received the `input` seed (running snapshot skipped) — keep it
+              // from the event payload so getInitData() survives.
+              { ...newStepResults, input: stepResults.input }
+            : newStepResults;
+      if (
+        newStepResults &&
+        Object.keys(newStepResults).length > 0 &&
+        newStepResults.input === undefined &&
+        stepResults?.input !== undefined
+      ) {
+        // Write the seed back so resume/recovery rehydrating from
+        // snapshot.context also sees it (see regular step path above).
+        await workflowsStore?.updateWorkflowResults({
+          workflowName: workflow.id,
+          runId,
+          stepId: 'input',
+          result: stepResults.input as any,
+          requestContext,
+        });
+      }
       stepResults = { ...mergedForeachStepResults, __state: currentState };
 
       // For foreach iterations, check if all iterations are complete before emitting events
@@ -2687,6 +2708,22 @@ export class WorkflowEventProcessor extends EventProcessor {
       // of treating it as a hard early-return.
       if (!newStepResults || Object.keys(newStepResults).length === 0) {
         stepResults = { ...(stepResults ?? {}), [stepId]: storedResult };
+      } else if (newStepResults.input === undefined && stepResults?.input !== undefined) {
+        // The store may hold a context that never received the `input` seed:
+        // the initial `running` snapshot is the only write that records it, and
+        // shouldPersistSnapshot can opt out of `running` (durable agents do)
+        // while a `pending` snapshot with an empty context still exists. The
+        // event payload carries the seed — keep it inline so getInitData()
+        // survives, and write it back so a later resume/recovery that
+        // rehydrates from snapshot.context also sees it.
+        await workflowsStore?.updateWorkflowResults({
+          workflowName: workflow.id,
+          runId,
+          stepId: 'input',
+          result: stepResults.input as any,
+          requestContext,
+        });
+        stepResults = { ...newStepResults, input: stepResults.input };
       } else {
         stepResults = newStepResults;
       }

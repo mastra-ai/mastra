@@ -83,6 +83,13 @@ export interface CreateEventedAgentOptions<
    * multi-worker coordination build on.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+
+  /**
+   * Which execution engine the agentic workflows are built on.
+   * See {@link DurableAgentConfig.engine}. Defaults to `'default'`
+   * (in-process execution).
+   */
+  engine?: 'default' | 'evented';
 }
 
 /**
@@ -114,7 +121,7 @@ export function createEventedAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateEventedAgentOptions<TAgentId, TTools, TOutput>): EventedAgent<TAgentId, TTools, TOutput> {
-  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot } = options;
+  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot, engine } = options;
 
   return new EventedAgent({
     agent,
@@ -123,6 +130,7 @@ export function createEventedAgent<
     maxSteps,
     shouldCache,
     shouldPersistSnapshot,
+    engine,
   } as EventedAgentConfig<TAgentId, TTools, TOutput>);
 }
 
