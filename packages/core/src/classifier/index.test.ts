@@ -276,6 +276,83 @@ describe('Classifier', () => {
     );
   });
 
+  it('rejects provider envelope fields that do not match their declared types', async () => {
+    const cases: { name: string; result: unknown; message: RegExp }[] = [
+      {
+        name: 'non-numeric token count',
+        result: {
+          answers: { unsafe: { type: 'boolean', probability: 0.5 } },
+          usage: { inputTokens: '52', outputTokens: 2 },
+          warnings: [],
+        },
+        message: /non-numeric 'inputTokens'/,
+      },
+      {
+        name: 'NaN token count',
+        result: {
+          answers: { unsafe: { type: 'boolean', probability: 0.5 } },
+          usage: { inputTokens: Number.NaN, outputTokens: 2 },
+          warnings: [],
+        },
+        message: /non-numeric 'inputTokens'/,
+      },
+      {
+        name: 'warnings that are not an array',
+        result: { answers: { unsafe: { type: 'boolean', probability: 0.5 } }, warnings: 'oops' },
+        message: /warnings that are not an array/,
+      },
+      {
+        name: 'timestamp that is not a Date',
+        result: {
+          answers: { unsafe: { type: 'boolean', probability: 0.5 } },
+          warnings: [],
+          response: { timestamp: 'not-a-date' },
+        },
+        message: /timestamp that is not a Date/,
+      },
+    ];
+
+    for (const { name, result, message } of cases) {
+      const classifier = new Classifier({
+        id: name,
+        model: createModel({ doEvaluate: async () => result as ProviderResult }),
+        questions: booleanQuestions,
+      });
+      await expect(classifier.evaluate({ state: 'content' }), name).rejects.toThrow(message);
+    }
+  });
+
+  it('rejects score criteria that are holes rather than rubric levels', () => {
+    expect(
+      () =>
+        new Classifier({
+          id: 'holes',
+          model: createModel(),
+          // `length` satisfies the two-level check, but neither level exists.
+          questions: { quality: { type: 'score', criteria: new Array(2) } } as never,
+        }),
+    ).toThrow(/criterion 0 is missing/);
+  });
+
+  it('preserves the provider error when retries are exhausted', async () => {
+    const classifier = new Classifier({
+      id: 'exhausted',
+      model: createModel({
+        doEvaluate: async () => {
+          throw retryableError();
+        },
+      }),
+      questions: booleanQuestions,
+    });
+
+    // Core reads `APICallError.isInstance` and `isRetryable` for control flow,
+    // so exhaustion must not replace the provider error with a generic one.
+    const error = await classifier.evaluate({ state: 'content', maxRetries: 1 }).catch((e: unknown) => e);
+    expect(APICallError.isInstance(error)).toBe(true);
+    expect((error as APICallError).isRetryable).toBe(true);
+    expect((error as APICallError).statusCode).toBe(503);
+  });
+
   it('records only safe classifier tracing metadata', async () => {
     const childSpan = { update: vi.fn(), end: vi.fn(), error: vi.fn() };
     const parentSpan = { createChildSpan: vi.fn(() => childSpan) };

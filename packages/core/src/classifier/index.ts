@@ -193,19 +193,36 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
         abortSignal: options.abortSignal,
         shouldRetry: error => APICallError.isInstance(error) && error.isRetryable,
       });
-      const providerResult = await retry(async () => {
-        options.abortSignal?.throwIfAborted();
-        attemptCount += 1;
-        return this.model.doEvaluate({
-          state: options.state,
-          questions: providerQuestions,
-          abortSignal: options.abortSignal,
-          providerOptions: options.providerOptions,
+      // The last provider error is kept so it can be restored below.
+      let lastProviderError: unknown;
+      let providerResult: Awaited<ReturnType<EvaluationModelV4['doEvaluate']>>;
+      try {
+        providerResult = await retry(async () => {
+          options.abortSignal?.throwIfAborted();
+          attemptCount += 1;
+          try {
+            return await this.model.doEvaluate({
+              state: options.state,
+              questions: providerQuestions,
+              abortSignal: options.abortSignal,
+              providerOptions: options.providerOptions,
+            });
+          } catch (error) {
+            lastProviderError = error;
+            throw error;
+          }
         });
-      });
+      } catch (error) {
+        // When retries are exhausted the helper reports a generic retry error,
+        // which drops `APICallError.isInstance` and `isRetryable`. Core reads
+        // both for control flow, so the provider's own error is rethrown.
+        if (lastProviderError !== undefined && !APICallError.isInstance(error)) throw lastProviderError;
+        throw error;
+      }
 
       options.abortSignal?.throwIfAborted();
       validateProviderResult(questions, providerResult.answers, providerResult.rounding);
+      validateProviderEnvelope(providerResult);
 
       const inputTokens = providerResult.usage?.inputTokens;
       const outputTokens = providerResult.usage?.outputTokens;
@@ -317,9 +334,15 @@ function validateQuestions(questions: ClassifierQuestions, model: EvaluationMode
       if (!Array.isArray(question.criteria) || question.criteria.length < 2) {
         throw new TypeError(`Score question '${questionId}' criteria must contain at least two levels.`);
       }
-      question.criteria.forEach((description, index) => {
+      // Indexed rather than `forEach`, which skips holes: `new Array(2)` has the
+      // required length but no rubric levels, and would otherwise reach the model.
+      for (let index = 0; index < question.criteria.length; index++) {
+        const description = question.criteria[index];
+        if (!(index in question.criteria) || description === undefined) {
+          throw new TypeError(`Score question '${questionId}' criterion ${index} is missing.`);
+        }
         if (description !== null) validateJsonValue(description, `Score question '${questionId}' criterion ${index}`);
-      });
+      }
     } else if (question.criteria !== undefined) {
       if (!isPlainObject(question.criteria)) {
         throw new TypeError(`Boolean question '${questionId}' criteria must be an object.`);
@@ -335,6 +358,33 @@ function validateQuestions(questions: ClassifierQuestions, model: EvaluationMode
         }
       }
     }
+  }
+}
+
+/**
+ * Check the parts of the provider result that surround the answers.
+ *
+ * These fields are declared by the provider interface but not guaranteed by it.
+ * A non-numeric token count would otherwise turn `totalTokens` into a string or
+ * `NaN`, and a non-`Date` timestamp would reach callers typed as a `Date`.
+ */
+function validateProviderEnvelope(result: {
+  usage?: { inputTokens?: number; outputTokens?: number };
+  warnings?: unknown;
+  response?: { timestamp?: unknown };
+}): void {
+  for (const field of ['inputTokens', 'outputTokens'] as const) {
+    const value = result.usage?.[field];
+    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) {
+      throw new TypeError(`The evaluation model returned a non-numeric '${field}' token count.`);
+    }
+  }
+  if (result.warnings !== undefined && !Array.isArray(result.warnings)) {
+    throw new TypeError('The evaluation model returned warnings that are not an array.');
+  }
+  const timestamp = result.response?.timestamp;
+  if (timestamp !== undefined && !(timestamp instanceof Date)) {
+    throw new TypeError('The evaluation model returned a response timestamp that is not a Date.');
   }
 }
 
