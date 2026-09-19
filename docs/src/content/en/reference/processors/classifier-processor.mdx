@@ -1,21 +1,21 @@
 ---
 title: 'Reference: ClassifierProcessor | Processors'
-description: 'Use ClassifierProcessor to run a typed Classifier over agent input, output, or stream chunks and apply a caller-supplied pass, block, or filter policy.'
+description: 'Use ClassifierProcessor to run a typed Classifier over agent input, output, or stream chunks and abort or filter content based on the answers.'
 packages:
   - '@mastra/core'
 ---
 
 # ClassifierProcessor
 
-The `ClassifierProcessor` is a hybrid processor that runs a [`Classifier`](/reference/classifier/classifier) over message text and applies a `decide` policy to the typed answers. The classifier provides evidence such as probabilities, choices, and scores. The `decide` function owns application policy: it returns `pass`, `block`, or `filter`.
+The `ClassifierProcessor` is a hybrid processor that runs a [`Classifier`](/reference/classifier/classifier) over message text and passes the typed answers to `onResult`. In `onResult`, call `abort(reason)` to stop the request with a tripwire, call `filter()` to drop the content and continue, or do nothing to let it through. The classifier provides evidence such as probabilities, choices, and scores. `onResult` owns application policy.
 
-Block reasons are always the string supplied by the caller. Provider-generated text is never included in the abort message.
+Abort reasons are always the string supplied by the caller. Provider-generated text is never included in the abort message.
 
 ## Usage example
 
 ```typescript
 import { Classifier } from '@mastra/core/classifier'
-import { ClassifierProcessor, decisions } from '@mastra/core/processors'
+import { ClassifierProcessor } from '@mastra/core/processors'
 
 const safety = new Classifier({
   id: 'safety',
@@ -30,12 +30,30 @@ const safety = new Classifier({
 
 const processor = new ClassifierProcessor({
   classifier: safety,
-  decide: decisions.blockIf('unsafe', {
-    probability: 0.8,
-    reason: 'Message rejected by safety policy',
-  }),
+  onResult: (answers, { abort }) => {
+    if (answers.unsafe.probability > 0.8) abort('Message rejected by safety policy')
+  },
   lastMessageOnly: true,
 })
+```
+
+Several conditions can share one `onResult`, or use separate processors when they need different classifiers:
+
+```typescript
+inputProcessors: [
+  new ClassifierProcessor({
+    classifier: safety,
+    onResult: (a, { abort }) => {
+      if (a.unsafe.probability > 0.8) abort('Rejected by safety policy')
+    },
+  }),
+  new ClassifierProcessor({
+    classifier: topic,
+    onResult: (a, { abort }) => {
+      if (a.topic.choice === 'other') abort('Support questions only')
+    },
+  }),
+]
 ```
 
 ## Constructor parameters
@@ -55,21 +73,14 @@ const processor = new ClassifierProcessor({
             name: 'classifier',
             type: 'Classifier | string',
             description:
-              'A Classifier instance, or the key or ID of a classifier registered on the Mastra instance. Registered classifiers are resolved lazily through mastra.getClassifierById() on first use.',
+              'A Classifier instance with configured questions, or the key or ID of a classifier registered on the Mastra instance. Registered classifiers are resolved lazily through mastra.getClassifierById() on first use.',
             isOptional: false,
           },
           {
-            name: 'questions',
-            type: 'ClassifierQuestions',
+            name: 'onResult',
+            type: '(answers, context) => void | Promise<void>',
             description:
-              'Questions to evaluate. Required when the classifier has no configured questions. Not allowed when the classifier instance already has configured questions.',
-            isOptional: true,
-          },
-          {
-            name: 'decide',
-            type: '(answers, ctx) => ClassifierDecision | Promise<ClassifierDecision>',
-            description:
-              "Maps typed answers to a decision. ctx contains phase ('input' | 'output' | 'stream') and the full ClassifierResult.",
+              'Called after each classification. answers is typed from the classifier questions. context provides abort(reason) to stop the request with a tripwire, filter() to drop the message or chunk, phase, and the full ClassifierResult including usage and provider metadata.',
             isOptional: false,
           },
           {
@@ -121,61 +132,24 @@ const processor = new ClassifierProcessor({
 ]}
 />
 
-## Decisions
+## Behavior by phase
 
-`decide` returns one of:
-
-- `{ action: 'pass' }` — content continues unchanged.
-- `{ action: 'block', reason }` — the request is aborted with a tripwire using `reason`.
-- `{ action: 'filter' }` — the offending message or stream chunk is dropped.
-
-| Phase | `pass` | `block` | `filter` |
+| Phase | no call | `abort(reason)` | `filter()` |
 | - | - | - | - |
-| `input` | messages pass | abort before the LLM | message removed |
-| `output` | messages pass | abort the response | message removed |
-| `stream` | chunk emitted | abort the stream | chunk not emitted |
+| Input (`inputProcessors`) | message passes | abort before the LLM | message removed from context |
+| Output result (`outputProcessors`) | message passes | abort the response | message removed from the response |
+| Stream (`outputProcessors`) | chunk emitted | abort the stream | chunk not emitted |
 
 Messages with no text content are passed through without calling the classifier.
 
-## `decisions` helpers
-
-`decisions` builds typed `decide` functions for common policies. Question keys and choice options are narrowed from the classifier's question map, so mismatched shapes are compile errors.
-
-Every helper accepts `reason` and an optional `action` (`'block'` by default, or `'filter'`).
-
-<PropertiesTable
-  content={[
-  {
-    name: 'decisions.blockIf(question, options)',
-    type: 'ClassifierDecide',
-    description:
-      'Triggers when the answer matches. Boolean: { probability } triggers when P(true) >= probability. Choice: { oneOf } triggers when the selected option is in the list. Score: { scoreBelow?, scoreAbove? } triggers when the score is outside the range.',
-    isOptional: false,
-  },
-  {
-    name: 'decisions.blockUnless(question, options)',
-    type: 'ClassifierDecide',
-    description:
-      'Triggers when the answer does not satisfy the condition. Boolean: { probability } passes when P(true) >= probability. Choice: { oneOf } passes when the selected option is in the list. Score: { scoreAtLeast?, scoreAtMost? } passes when the score is inside the range.',
-    isOptional: false,
-  },
-  {
-    name: 'decisions.all(...decides)',
-    type: 'ClassifierDecide',
-    description: 'Runs the given decide functions in order. The first non-pass decision wins.',
-    isOptional: false,
-  },
-]}
-/>
-
 ## Extended usage examples
 
-### Topic scoping with `blockUnless`
+### Topic scoping
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { Classifier } from '@mastra/core/classifier'
-import { ClassifierProcessor, decisions } from '@mastra/core/processors'
+import { ClassifierProcessor } from '@mastra/core/processors'
 
 const topic = new Classifier({
   id: 'topic',
@@ -201,21 +175,22 @@ export const agent = new Agent({
     new ClassifierProcessor({
       classifier: topic,
       lastMessageOnly: true,
-      decide: decisions.blockUnless('topic', {
-        oneOf: ['billing', 'account'],
-        reason: 'This assistant only handles billing and account questions',
-      }),
+      onResult: (answers, { abort }) => {
+        if (answers.topic.choice === 'other') {
+          abort('This assistant only handles billing and account questions')
+        }
+      },
     }),
   ],
 })
 ```
 
-### Output quality gate with `filter`
+### Output quality gate
 
 ```typescript title="src/mastra/agents/quality-gated-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { Classifier } from '@mastra/core/classifier'
-import { ClassifierProcessor, decisions } from '@mastra/core/processors'
+import { ClassifierProcessor } from '@mastra/core/processors'
 
 const quality = new Classifier({
   id: 'quality',
@@ -237,29 +212,11 @@ export const agent = new Agent({
   outputProcessors: [
     new ClassifierProcessor({
       classifier: quality,
-      decide: decisions.blockIf('quality', {
-        scoreBelow: 1,
-        action: 'filter',
-        reason: 'Low quality response',
-      }),
+      onResult: (answers, { filter }) => {
+        if (answers.quality.score < 1) filter()
+      },
     }),
   ],
-})
-```
-
-### Custom `decide` with phase awareness
-
-```typescript
-import { ClassifierProcessor } from '@mastra/core/processors'
-
-const processor = new ClassifierProcessor({
-  classifier: safety,
-  decide: (answers, ctx) => {
-    if (answers.unsafe.probability < 0.5) return { action: 'pass' }
-    // Drop unsafe output chunks silently, but reject unsafe input outright
-    if (ctx.phase === 'stream') return { action: 'filter' }
-    return { action: 'block', reason: 'Message rejected by safety policy' }
-  },
 })
 ```
 
@@ -279,15 +236,17 @@ export const mastra = new Mastra({
 ```
 
 ```typescript
-import { ClassifierProcessor, decisions } from '@mastra/core/processors'
+import { ClassifierProcessor } from '@mastra/core/processors'
 
 const processor = new ClassifierProcessor({
   classifier: 'safety',
-  decide: decisions.blockIf('unsafe', { probability: 0.8, reason: 'Rejected' }),
+  onResult: (answers, { abort }) => {
+    if (answers.unsafe.probability > 0.8) abort('Message rejected by safety policy')
+  },
 })
 ```
 
-When using a registered classifier by string, answer types are not inferred; provide `questions` to the processor to narrow them, or index `answers` generically.
+When using a registered classifier by string, answer types are not inferred from the instance. Pass the question map as a type argument to narrow them: `new ClassifierProcessor<typeof safety.questions>({ ... })`.
 
 ## Related
 

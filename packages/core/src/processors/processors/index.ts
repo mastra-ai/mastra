@@ -8,14 +8,11 @@ export {
 export {
   ClassifierProcessor,
   type ClassifierProcessorOptions,
-  type ClassifierProcessorConfiguredOptions,
-  type ClassifierProcessorPerCallOptions,
+  type ClassifierProcessorInstanceOptions,
   type ClassifierProcessorRegisteredOptions,
-  type ClassifierProcessorPhase,
-  type ClassifierDecision,
-  type ClassifierDecide,
+  type ClassifierOnResult,
+  type ClassifierResultContext,
 } from './classifier';
-export { decisions, type BlockIfOptions, type BlockUnlessOptions } from './classifier-decisions';
 export {
   PromptInjectionDetector,
   type PromptInjectionOptions,

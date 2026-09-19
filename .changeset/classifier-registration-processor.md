@@ -6,14 +6,16 @@ Added classifier registration on `Mastra` and a `ClassifierProcessor` for classi
 
 Classifiers can now be passed to `new Mastra({ classifiers })` and retrieved with `getClassifier`, `getClassifierById`, `listClassifiers`, `addClassifier`, and `removeClassifier`. Registration wires the classifier to Mastra's logger and observability.
 
-`ClassifierProcessor` runs a `Classifier` over agent input, output, or stream chunks and applies a caller-supplied `decide` policy that returns `pass`, `block`, or `filter`. Built-in `decisions.blockIf`, `decisions.blockUnless`, and `decisions.all` helpers generate typed policies for common cases.
+`ClassifierProcessor` runs a `Classifier` over agent input, output, or stream chunks and passes the typed answers to `onResult`, which can `abort(reason)` to tripwire the request or `filter()` to drop the content.
 
 ```ts
-import { ClassifierProcessor, decisions } from '@mastra/core/processors';
+import { ClassifierProcessor } from '@mastra/core/processors';
 
 const guardrail = new ClassifierProcessor({
   classifier: safetyClassifier,
-  decide: decisions.blockIf('unsafe', { probability: 0.8, reason: 'Message rejected' }),
+  onResult: (answers, { abort }) => {
+    if (answers.unsafe.probability > 0.8) abort('Message rejected');
+  },
 });
 ```
 

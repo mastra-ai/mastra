@@ -15,27 +15,32 @@ import type { LastMessageOnlyOption } from './message-selection';
 import { handleModelError } from './model-error-strategy';
 import type { ModelErrorStrategy } from './model-error-strategy';
 
-export type ClassifierProcessorPhase = 'input' | 'output' | 'stream';
+/** Context passed to `onResult` alongside the typed answers. */
+export interface ClassifierResultContext<Q extends ClassifierQuestions> {
+  /** Where the text came from. */
+  phase: 'input' | 'output' | 'stream';
+  /** Full classifier result, including probability distributions, usage, and provider metadata. */
+  result: ClassifierResult<Q>;
+  /** Abort the request with a TripWire. The reason is what the caller sees; never pass model output. */
+  abort: (reason?: string) => never;
+  /** Drop this message (input/output) or skip emitting this chunk (stream) and continue. */
+  filter: () => void;
+}
 
 /**
- * Decision returned by a `decide` policy function.
- *
- * - `pass`: leave the message or chunk unchanged.
- * - `block`: abort the request with a TripWire. `reason` is the exact abort message.
- * - `filter`: drop the message (input/output) or skip emitting the chunk (stream).
+ * Called with the typed answers after each classification. Call `abort(reason)` to tripwire,
+ * `filter()` to drop the content, or neither to let it through.
  */
-export type ClassifierDecision = { action: 'pass' } | { action: 'block'; reason: string } | { action: 'filter' };
-
-export type ClassifierDecide<Q extends ClassifierQuestions> = (
+export type ClassifierOnResult<Q extends ClassifierQuestions> = (
   answers: ClassifierAnswers<Q>,
-  ctx: { phase: ClassifierProcessorPhase; result: ClassifierResult<Q> },
-) => ClassifierDecision | Promise<ClassifierDecision>;
+  context: ClassifierResultContext<Q>,
+) => void | Promise<void>;
 
 interface ClassifierProcessorBaseOptions<Q extends ClassifierQuestions> extends LastMessageOnlyOption {
   /** Processor id. Default: 'classifier'. */
   id?: string;
-  /** Maps typed classifier answers to a processor decision. Application policy lives here. */
-  decide: ClassifierDecide<Q>;
+  /** Receives the answers and decides what to do. Application policy lives here. */
+  onResult: ClassifierOnResult<Q>;
   /**
    * What to do when the classifier call fails.
    * - 'warn' (default): log and let the content through.
@@ -53,46 +58,37 @@ interface ClassifierProcessorBaseOptions<Q extends ClassifierQuestions> extends 
   providerOptions?: SharedV4ProviderOptions;
 }
 
-/** Options when the classifier instance already has configured questions. */
-export type ClassifierProcessorConfiguredOptions<Q extends ClassifierQuestions> = ClassifierProcessorBaseOptions<Q> & {
+/** Options when passing a `Classifier` instance with configured questions. */
+export interface ClassifierProcessorInstanceOptions<
+  Q extends ClassifierQuestions,
+> extends ClassifierProcessorBaseOptions<Q> {
   classifier: Classifier<Q>;
-  questions?: never;
-};
+}
 
-/** Options when the classifier instance has no configured questions; questions are required. */
-export type ClassifierProcessorPerCallOptions<Q extends ClassifierQuestions> = ClassifierProcessorBaseOptions<Q> & {
-  classifier: Classifier<undefined>;
-  questions: Q;
-};
-
-/**
- * Options when the classifier is referenced by registered key/id and resolved via `mastra.getClassifierById`.
- * Pass `questions` when the registered classifier has none configured.
- */
-export type ClassifierProcessorRegisteredOptions<Q extends ClassifierQuestions> = ClassifierProcessorBaseOptions<Q> & {
+/** Options when referencing a classifier registered on Mastra by key or id. */
+export interface ClassifierProcessorRegisteredOptions<
+  Q extends ClassifierQuestions = ClassifierQuestions,
+> extends ClassifierProcessorBaseOptions<Q> {
   classifier: string;
-  questions?: Q;
-};
+}
 
 export type ClassifierProcessorOptions<Q extends ClassifierQuestions> =
-  | ClassifierProcessorConfiguredOptions<Q>
-  | ClassifierProcessorPerCallOptions<Q>
+  | ClassifierProcessorInstanceOptions<Q>
   | ClassifierProcessorRegisteredOptions<Q>;
 
 /**
- * Runs a `Classifier` over agent input, output, or stream chunks and applies a caller-supplied
- * `decide` policy. The classifier provides typed evidence; `decide` decides what happens.
+ * Runs a `Classifier` over agent input, output, or stream chunks and hands the typed answers
+ * to `onResult`, which can `abort` (tripwire), `filter` (drop the content), or do nothing.
  */
-export class ClassifierProcessor<const Q extends ClassifierQuestions = ClassifierQuestions>
-  implements Processor<string>
-{
+export class ClassifierProcessor<
+  const Q extends ClassifierQuestions = ClassifierQuestions,
+> implements Processor<string> {
   readonly id: string;
   readonly name = 'Classifier';
 
   private classifierOrId: Classifier<any> | string;
   private resolvedClassifier?: Classifier<any>;
-  private questions?: Q;
-  private decide: ClassifierDecide<Q>;
+  private onResult: ClassifierOnResult<Q>;
   private errorStrategy: ModelErrorStrategy;
   private chunkWindow: number;
   private maxInputLength?: number;
@@ -100,14 +96,12 @@ export class ClassifierProcessor<const Q extends ClassifierQuestions = Classifie
   private lastMessageOnly: boolean;
   private mastra?: Mastra;
 
-  constructor(options: ClassifierProcessorConfiguredOptions<Q>);
-  constructor(options: ClassifierProcessorPerCallOptions<Q>);
+  constructor(options: ClassifierProcessorInstanceOptions<Q>);
   constructor(options: ClassifierProcessorRegisteredOptions<Q>);
   constructor(options: ClassifierProcessorOptions<Q>) {
     this.id = options.id ?? 'classifier';
     this.classifierOrId = options.classifier;
-    this.questions = options.questions;
-    this.decide = options.decide;
+    this.onResult = options.onResult;
     this.errorStrategy = options.errorStrategy ?? 'warn';
     this.chunkWindow = options.chunkWindow ?? 0;
     this.maxInputLength = options.maxInputLength;
@@ -115,6 +109,14 @@ export class ClassifierProcessor<const Q extends ClassifierQuestions = Classifie
     this.lastMessageOnly = options.lastMessageOnly ?? false;
 
     if (typeof this.classifierOrId !== 'string') {
+      if (this.classifierOrId.questions === undefined) {
+        throw new MastraError({
+          id: 'CLASSIFIER_PROCESSOR_QUESTIONS_REQUIRED',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `ClassifierProcessor '${this.id}' requires a Classifier with configured questions.`,
+        });
+      }
       this.resolvedClassifier = this.classifierOrId;
     }
   }
@@ -163,12 +165,8 @@ export class ClassifierProcessor<const Q extends ClassifierQuestions = Classifie
     }
 
     const observabilityContext = resolveObservabilityContext(rest);
-    const decision = await this.classify(text, 'stream', abort, observabilityContext);
-
-    if (decision.action === 'filter') {
-      return null;
-    }
-    return part;
+    const filtered = await this.classify(text, 'stream', abort, observabilityContext);
+    return filtered ? null : part;
   }
 
   private async processMessages(
@@ -197,42 +195,33 @@ export class ClassifierProcessor<const Q extends ClassifierQuestions = Classifie
         continue;
       }
 
-      const decision = await this.classify(text, phase, abort, observabilityContext);
-      if (decision.action === 'filter') {
-        continue;
+      const filtered = await this.classify(text, phase, abort, observabilityContext);
+      if (!filtered) {
+        passed.push(message);
       }
-      passed.push(message);
     }
 
     return passed;
   }
 
   /**
-   * Evaluate text and apply `decide`. Returns `pass` when the classifier call fails and
-   * `errorStrategy` is 'warn'. `block` decisions never return: they call `abort`.
+   * Evaluate text and run `onResult`. Returns `true` when the content should be dropped.
+   * Aborts never return. Classifier failures return `false` under 'warn'.
    */
   private async classify(
     text: string,
-    phase: ClassifierProcessorPhase,
+    phase: 'input' | 'output' | 'stream',
     abort: (reason?: string) => never,
     observabilityContext: ObservabilityContext,
-  ): Promise<ClassifierDecision> {
+  ): Promise<boolean> {
     const state = this.maxInputLength !== undefined ? text.slice(0, this.maxInputLength) : text;
 
     let result: ClassifierResult<Q>;
     try {
       const classifier = this.resolveClassifier();
-      // Configured questions on the classifier always win; per-processor questions only apply when it has none.
-      const questions = classifier.questions === undefined ? this.questions : undefined;
       result = (await executeWithContext({
         span: observabilityContext.tracing.currentSpan,
-        fn: () =>
-          questions
-            ? (classifier as Classifier<undefined>).evaluate({ state, questions, providerOptions: this.providerOptions })
-            : (classifier as Classifier<ClassifierQuestions>).evaluate({
-                state,
-                providerOptions: this.providerOptions,
-              }),
+        fn: () => classifier.evaluate({ state, providerOptions: this.providerOptions }),
       })) as ClassifierResult<Q>;
     } catch (error) {
       if (error instanceof TripWire) {
@@ -245,17 +234,22 @@ export class ClassifierProcessor<const Q extends ClassifierQuestions = Classifie
         warningMessage: `[ClassifierProcessor:${this.id}] Classifier evaluation failed, allowing content:`,
         abortMessage: 'Classification failed because the classifier call failed',
       });
-      return { action: 'pass' };
+      return false;
     }
 
-    const decision = await this.decide(result.answers, { phase, result });
-    if (decision.action === 'block') {
-      abort(decision.reason);
-    }
-    return decision;
+    let filtered = false;
+    await this.onResult(result.answers, {
+      phase,
+      result,
+      abort,
+      filter: () => {
+        filtered = true;
+      },
+    });
+    return filtered;
   }
 
-  private resolveClassifier(): Classifier<any> {
+  private resolveClassifier(): Classifier<ClassifierQuestions> {
     if (this.resolvedClassifier) {
       return this.resolvedClassifier;
     }
@@ -270,8 +264,17 @@ export class ClassifierProcessor<const Q extends ClassifierQuestions = Classifie
       });
     }
 
-    this.resolvedClassifier = this.mastra.getClassifierById(id);
-    return this.resolvedClassifier;
+    const classifier = this.mastra.getClassifierById(id);
+    if (classifier.questions === undefined) {
+      throw new MastraError({
+        id: 'CLASSIFIER_PROCESSOR_QUESTIONS_REQUIRED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `ClassifierProcessor '${this.id}' requires classifier '${id}' to have configured questions.`,
+      });
+    }
+    this.resolvedClassifier = classifier;
+    return classifier;
   }
 
   private buildContextFromChunks(streamParts: ChunkType[]): string {

@@ -172,11 +172,11 @@ Visit [`ModerationProcessor()`](/reference/processors/moderation-processor) refe
 
 ### Classifier-based guardrails
 
-The `ClassifierProcessor()` runs a typed [`Classifier`](/reference/classifier/classifier) over messages and applies a policy you define. The classifier returns evidence such as probabilities, choices, and scores; your `decide` function turns that evidence into `pass`, `block`, or `filter`. Built-in `decisions` helpers cover common thresholds.
+The `ClassifierProcessor()` runs a typed [`Classifier`](/reference/classifier/classifier) over messages. The classifier returns evidence such as probabilities, choices, and scores; your `onResult` callback turns that evidence into a decision by calling `abort(reason)` to stop the request or `filter()` to drop the content.
 
-```typescript {8-14} title="src/mastra/agents/classified-agent.ts"
+```typescript {8-17} title="src/mastra/agents/classified-agent.ts"
 import { Classifier } from '@mastra/core/classifier'
-import { ClassifierProcessor, decisions } from '@mastra/core/processors'
+import { ClassifierProcessor } from '@mastra/core/processors'
 
 export const classifiedAgent = new Agent({
   id: 'classified-agent',
@@ -188,13 +188,15 @@ export const classifiedAgent = new Agent({
         model: evaluationModel,
         questions: { unsafe: { type: 'boolean' } },
       }),
-      decide: decisions.blockIf('unsafe', { probability: 0.8, reason: 'Message rejected' }),
+      onResult: (answers, { abort }) => {
+        if (answers.unsafe.probability > 0.8) abort('Message rejected')
+      },
     }),
   ],
 })
 ```
 
-Visit [`ClassifierProcessor()`](/reference/processors/classifier-processor) reference for decision semantics and the `decisions` helpers.
+Visit [`ClassifierProcessor()`](/reference/processors/classifier-processor) reference for behavior by phase and the `filter()` option.
 
 ### Detect and redact PII
 

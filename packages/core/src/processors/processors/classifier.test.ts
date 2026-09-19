@@ -9,6 +9,7 @@ import { Mastra } from '../../mastra';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream';
 import { ClassifierProcessor } from './classifier';
+import type { ClassifierOnResult } from './classifier';
 
 const safetyQuestions = {
   unsafe: { type: 'boolean', criteria: { true: 'Unsafe', false: 'Safe' } },
@@ -24,14 +25,20 @@ function createModel(doEvaluate: EvaluationModelV4['doEvaluate']): EvaluationMod
   };
 }
 
+function unsafeResult(probability: number) {
+  return {
+    answers: { unsafe: { type: 'boolean' as const, probability } },
+    usage: { inputTokens: 1, outputTokens: 1 },
+    warnings: [],
+  };
+}
+
 function unsafeModel(probability: number) {
-  return createModel(
-    vi.fn(async () => ({
-      answers: { unsafe: { type: 'boolean' as const, probability } },
-      usage: { inputTokens: 1, outputTokens: 1 },
-      warnings: [],
-    })),
-  );
+  return createModel(vi.fn(async () => unsafeResult(probability)));
+}
+
+function safetyClassifier(model: EvaluationModelV4) {
+  return new Classifier({ id: 'safety', model, questions: safetyQuestions });
 }
 
 function message(id: string, text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage {
@@ -53,22 +60,42 @@ function abortThatThrows() {
   }) as unknown as (reason?: string) => never;
 }
 
-const blockAbove = (threshold: number) =>
-  ((answers: { unsafe: { probability: number } }) =>
-    answers.unsafe.probability >= threshold
-      ? { action: 'block' as const, reason: 'Content blocked by policy' }
-      : { action: 'pass' as const }) as any;
+const blockUnsafeAbove =
+  (threshold: number, reason: string): ClassifierOnResult<typeof safetyQuestions> =>
+  (answers, { abort }) => {
+    if (answers.unsafe.probability >= threshold) abort(reason);
+  };
+
+const filterUnsafeAbove =
+  (threshold: number): ClassifierOnResult<typeof safetyQuestions> =>
+  (answers, { filter }) => {
+    if (answers.unsafe.probability >= threshold) filter();
+  };
+
+const noop = () => {};
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe('ClassifierProcessor', () => {
+  describe('constructor', () => {
+    it('rejects a classifier instance without configured questions', () => {
+      expect(
+        () =>
+          new ClassifierProcessor({
+            classifier: new Classifier({ id: 'bare', model: unsafeModel(0) }) as any,
+            onResult: noop,
+          }),
+      ).toThrow(/configured questions/);
+    });
+  });
+
   describe('processInput', () => {
-    it('passes messages when decide returns pass', async () => {
+    it('passes messages when onResult does nothing', async () => {
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model: unsafeModel(0.1), questions: safetyQuestions }),
-        decide: blockAbove(0.5),
+        classifier: safetyClassifier(unsafeModel(0.1)),
+        onResult: blockUnsafeAbove(0.5, 'Content blocked by policy'),
       });
       const abort = abortThatThrows();
       const messages = [message('1', 'hello')];
@@ -82,15 +109,13 @@ describe('ClassifierProcessor', () => {
     it('aborts with the caller-supplied reason only', async () => {
       const model = createModel(
         vi.fn(async () => ({
-          answers: { unsafe: { type: 'boolean' as const, probability: 0.95 } },
-          usage: { inputTokens: 1, outputTokens: 1 },
-          warnings: [],
+          ...unsafeResult(0.95),
           providerMetadata: { test: { explanation: 'MODEL_GENERATED_TEXT' } },
         })),
       );
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model, questions: safetyQuestions }),
-        decide: blockAbove(0.5),
+        classifier: safetyClassifier(model),
+        onResult: blockUnsafeAbove(0.5, 'Content blocked by policy'),
       });
       const abort = abortThatThrows();
 
@@ -100,22 +125,11 @@ describe('ClassifierProcessor', () => {
       expect(String((abort as any).mock.calls[0][0])).not.toContain('MODEL_GENERATED_TEXT');
     });
 
-    it('filters only the flagged message', async () => {
-      const doEvaluate = vi
-        .fn()
-        .mockResolvedValueOnce({
-          answers: { unsafe: { type: 'boolean', probability: 0.9 } },
-          usage: { inputTokens: 1, outputTokens: 1 },
-          warnings: [],
-        })
-        .mockResolvedValueOnce({
-          answers: { unsafe: { type: 'boolean', probability: 0.1 } },
-          usage: { inputTokens: 1, outputTokens: 1 },
-          warnings: [],
-        });
+    it('filters only the matched message', async () => {
+      const doEvaluate = vi.fn().mockResolvedValueOnce(unsafeResult(0.9)).mockResolvedValueOnce(unsafeResult(0.1));
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model: createModel(doEvaluate), questions: safetyQuestions }),
-        decide: answers => (answers.unsafe.probability > 0.5 ? { action: 'filter' } : { action: 'pass' }),
+        classifier: safetyClassifier(createModel(doEvaluate)),
+        onResult: filterUnsafeAbove(0.5),
       });
 
       const result = await processor.processInput({
@@ -126,15 +140,44 @@ describe('ClassifierProcessor', () => {
       expect(result.map(m => m.id)).toEqual(['2']);
     });
 
-    it('evaluates only the last message when lastMessageOnly is set', async () => {
-      const doEvaluate = vi.fn(async () => ({
-        answers: { unsafe: { type: 'boolean' as const, probability: 0.1 } },
-        usage: { inputTokens: 1, outputTokens: 1 },
-        warnings: [],
-      }));
+    it('passes phase and the full result to `onResult`', async () => {
+      const onResult = vi.fn();
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model: createModel(doEvaluate), questions: safetyQuestions }),
-        decide: () => ({ action: 'pass' }),
+        classifier: safetyClassifier(unsafeModel(0.3)),
+        onResult,
+      });
+
+      await processor.processInput({ messages: [message('1', 'hello')], abort: abortThatThrows() });
+
+      expect(onResult).toHaveBeenCalledWith(
+        { unsafe: { type: 'boolean', probability: 0.3 } },
+        expect.objectContaining({
+          phase: 'input',
+          result: expect.objectContaining({ answers: { unsafe: { type: 'boolean', probability: 0.3 } } }),
+          abort: expect.any(Function),
+          filter: expect.any(Function),
+        }),
+      );
+    });
+
+    it('supports an async onResult', async () => {
+      const processor = new ClassifierProcessor({
+        classifier: safetyClassifier(unsafeModel(0.9)),
+        onResult: async (a, { abort }) => {
+          if (a.unsafe.probability > 0.5) abort('Async blocked');
+        },
+      });
+      const abort = abortThatThrows();
+
+      await expect(processor.processInput({ messages: [message('1', 'bad')], abort })).rejects.toThrow(TripWire);
+      expect(abort).toHaveBeenCalledWith('Async blocked');
+    });
+
+    it('evaluates only the last message when lastMessageOnly is set', async () => {
+      const doEvaluate = vi.fn(async () => unsafeResult(0.1));
+      const processor = new ClassifierProcessor({
+        classifier: safetyClassifier(createModel(doEvaluate)),
+        onResult: noop,
         lastMessageOnly: true,
       });
 
@@ -150,8 +193,8 @@ describe('ClassifierProcessor', () => {
     it('skips messages with no text', async () => {
       const doEvaluate = vi.fn();
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model: createModel(doEvaluate), questions: safetyQuestions }),
-        decide: () => ({ action: 'block', reason: 'never' }),
+        classifier: safetyClassifier(createModel(doEvaluate)),
+        onResult: noop,
       });
       const empty: MastraDBMessage = {
         id: 'e',
@@ -167,14 +210,10 @@ describe('ClassifierProcessor', () => {
     });
 
     it('truncates state to maxInputLength', async () => {
-      const doEvaluate = vi.fn(async () => ({
-        answers: { unsafe: { type: 'boolean' as const, probability: 0.1 } },
-        usage: { inputTokens: 1, outputTokens: 1 },
-        warnings: [],
-      }));
+      const doEvaluate = vi.fn(async () => unsafeResult(0.1));
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model: createModel(doEvaluate), questions: safetyQuestions }),
-        decide: () => ({ action: 'pass' }),
+        classifier: safetyClassifier(createModel(doEvaluate)),
+        onResult: noop,
         maxInputLength: 5,
       });
 
@@ -182,40 +221,15 @@ describe('ClassifierProcessor', () => {
 
       expect(doEvaluate.mock.calls[0]![0].state).toBe('abcde');
     });
-
-    it('supplies per-processor questions when the classifier has none configured', async () => {
-      const doEvaluate = vi.fn(async () => ({
-        answers: { topic: { type: 'choice' as const, choice: 'billing' } },
-        usage: { inputTokens: 1, outputTokens: 1 },
-        warnings: [],
-      }));
-      const decide = vi.fn(() => ({ action: 'pass' as const }));
-      const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'router', model: createModel(doEvaluate) }),
-        questions: { topic: { type: 'choice', criteria: { billing: 'Billing', other: 'Other' } } },
-        decide,
-      });
-
-      await processor.processInput({ messages: [message('1', 'refund please')], abort: abortThatThrows() });
-
-      expect(Object.keys(doEvaluate.mock.calls[0]![0].questions)).toEqual(['topic']);
-      expect(decide).toHaveBeenCalledWith(
-        { topic: { type: 'choice', choice: 'billing' } },
-        expect.objectContaining({ phase: 'input' }),
-      );
-    });
   });
 
   describe('error handling', () => {
     it('allows content and warns when the classifier fails with errorStrategy warn', async () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const onResult = vi.fn();
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({
-          id: 'safety',
-          model: createModel(vi.fn().mockRejectedValue(new Error('boom'))),
-          questions: safetyQuestions,
-        }),
-        decide: () => ({ action: 'block', reason: 'should not run' }),
+        classifier: safetyClassifier(createModel(vi.fn().mockRejectedValue(new Error('boom')))),
+        onResult,
       });
       const abort = abortThatThrows();
       const messages = [message('1', 'text')];
@@ -224,18 +238,15 @@ describe('ClassifierProcessor', () => {
 
       expect(result).toEqual(messages);
       expect(abort).not.toHaveBeenCalled();
+      expect(onResult).not.toHaveBeenCalled();
       expect(warn).toHaveBeenCalled();
     });
 
     it('aborts when the classifier fails with errorStrategy strict', async () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({
-          id: 'safety',
-          model: createModel(vi.fn().mockRejectedValue(new Error('boom'))),
-          questions: safetyQuestions,
-        }),
-        decide: () => ({ action: 'pass' }),
+        classifier: safetyClassifier(createModel(vi.fn().mockRejectedValue(new Error('boom')))),
+        onResult: noop,
         errorStrategy: 'strict',
       });
       const abort = abortThatThrows();
@@ -244,10 +255,10 @@ describe('ClassifierProcessor', () => {
       expect(abort).toHaveBeenCalledWith('Classification failed because the classifier call failed');
     });
 
-    it('rethrows TripWire errors thrown by abort inside decide', async () => {
+    it('rethrows TripWire errors thrown by abort', async () => {
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model: unsafeModel(0.9), questions: safetyQuestions }),
-        decide: blockAbove(0.5),
+        classifier: safetyClassifier(unsafeModel(0.9)),
+        onResult: blockUnsafeAbove(0.5, 'blocked'),
         errorStrategy: 'warn',
       });
 
@@ -258,19 +269,18 @@ describe('ClassifierProcessor', () => {
   });
 
   describe('processOutputResult', () => {
-    it('passes phase output to decide', async () => {
-      const decide = vi.fn(() => ({ action: 'pass' as const }));
+    it('filters assistant messages', async () => {
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model: unsafeModel(0.1), questions: safetyQuestions }),
-        decide,
+        classifier: safetyClassifier(unsafeModel(0.9)),
+        onResult: filterUnsafeAbove(0.5),
       });
 
-      await processor.processOutputResult({
+      const result = await processor.processOutputResult({
         messages: [message('1', 'response', 'assistant')],
         abort: abortThatThrows(),
       });
 
-      expect(decide).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ phase: 'output' }));
+      expect(result).toEqual([]);
     });
   });
 
@@ -278,12 +288,17 @@ describe('ClassifierProcessor', () => {
     it('emits non-text chunks without classifying', async () => {
       const doEvaluate = vi.fn();
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model: createModel(doEvaluate), questions: safetyQuestions }),
-        decide: () => ({ action: 'filter' }),
+        classifier: safetyClassifier(createModel(doEvaluate)),
+        onResult: noop,
       });
       const part: ChunkType = { type: 'text-start', payload: { id: 't' }, runId: 'r', from: ChunkFrom.AGENT };
 
-      const result = await processor.processOutputStream({ part, streamParts: [part], state: {}, abort: abortThatThrows() });
+      const result = await processor.processOutputStream({
+        part,
+        streamParts: [part],
+        state: {},
+        abort: abortThatThrows(),
+      });
 
       expect(result).toBe(part);
       expect(doEvaluate).not.toHaveBeenCalled();
@@ -291,21 +306,25 @@ describe('ClassifierProcessor', () => {
 
     it('returns null for filtered chunks', async () => {
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model: unsafeModel(0.9), questions: safetyQuestions }),
-        decide: answers => (answers.unsafe.probability > 0.5 ? { action: 'filter' } : { action: 'pass' }),
+        classifier: safetyClassifier(unsafeModel(0.9)),
+        onResult: filterUnsafeAbove(0.5),
       });
       const part = textDelta('bad');
 
-      const result = await processor.processOutputStream({ part, streamParts: [part], state: {}, abort: abortThatThrows() });
+      const result = await processor.processOutputStream({
+        part,
+        streamParts: [part],
+        state: {},
+        abort: abortThatThrows(),
+      });
 
       expect(result).toBeNull();
     });
 
-    it('aborts on block decisions in the stream phase', async () => {
-      const decide = vi.fn(() => ({ action: 'block' as const, reason: 'Stream blocked' }));
+    it('aborts on block in the stream phase', async () => {
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model: unsafeModel(0.9), questions: safetyQuestions }),
-        decide,
+        classifier: safetyClassifier(unsafeModel(0.9)),
+        onResult: blockUnsafeAbove(0.5, 'Stream blocked'),
       });
       const abort = abortThatThrows();
       const part = textDelta('bad');
@@ -314,18 +333,13 @@ describe('ClassifierProcessor', () => {
         TripWire,
       );
       expect(abort).toHaveBeenCalledWith('Stream blocked');
-      expect(decide).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ phase: 'stream' }));
     });
 
     it('uses chunkWindow to build context from preceding text chunks', async () => {
-      const doEvaluate = vi.fn(async () => ({
-        answers: { unsafe: { type: 'boolean' as const, probability: 0.1 } },
-        usage: { inputTokens: 1, outputTokens: 1 },
-        warnings: [],
-      }));
+      const doEvaluate = vi.fn(async () => unsafeResult(0.1));
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({ id: 'safety', model: createModel(doEvaluate), questions: safetyQuestions }),
-        decide: () => ({ action: 'pass' }),
+        classifier: safetyClassifier(createModel(doEvaluate)),
+        onResult: noop,
         chunkWindow: 2,
       });
       const streamParts = [textDelta('a '), textDelta('b '), textDelta('c')];
@@ -343,16 +357,17 @@ describe('ClassifierProcessor', () => {
     it('emits the chunk when classification fails with errorStrategy warn', async () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const processor = new ClassifierProcessor({
-        classifier: new Classifier({
-          id: 'safety',
-          model: createModel(vi.fn().mockRejectedValue(new Error('boom'))),
-          questions: safetyQuestions,
-        }),
-        decide: () => ({ action: 'filter' }),
+        classifier: safetyClassifier(createModel(vi.fn().mockRejectedValue(new Error('boom')))),
+        onResult: noop,
       });
       const part = textDelta('text');
 
-      const result = await processor.processOutputStream({ part, streamParts: [part], state: {}, abort: abortThatThrows() });
+      const result = await processor.processOutputStream({
+        part,
+        streamParts: [part],
+        state: {},
+        abort: abortThatThrows(),
+      });
 
       expect(result).toBe(part);
     });
@@ -360,15 +375,11 @@ describe('ClassifierProcessor', () => {
 
   describe('registered classifier resolution', () => {
     it('resolves a classifier by id through Mastra', async () => {
-      const doEvaluate = vi.fn(async () => ({
-        answers: { unsafe: { type: 'boolean' as const, probability: 0.9 } },
-        usage: { inputTokens: 1, outputTokens: 1 },
-        warnings: [],
-      }));
-      const classifier = new Classifier({ id: 'safety', model: createModel(doEvaluate), questions: safetyQuestions });
+      const doEvaluate = vi.fn(async () => unsafeResult(0.9));
+      const classifier = safetyClassifier(createModel(doEvaluate));
       const processor = new ClassifierProcessor<typeof safetyQuestions>({
         classifier: 'safety',
-        decide: blockAbove(0.5),
+        onResult: blockUnsafeAbove(0.5, 'Content blocked by policy'),
       });
       const mastra = new Mastra({ classifiers: { safety: classifier }, processors: { guard: processor } });
       expect(mastra.getProcessor('guard')).toBe(processor);
@@ -380,23 +391,24 @@ describe('ClassifierProcessor', () => {
     });
 
     it('receives Mastra when two agents use processors with the same default id', async () => {
-      const doEvaluate = vi.fn(async () => ({
-        answers: { unsafe: { type: 'boolean' as const, probability: 0.9 } },
-        usage: { inputTokens: 1, outputTokens: 1 },
-        warnings: [],
-      }));
-      const classifier = new Classifier({ id: 'safety', model: createModel(doEvaluate), questions: safetyQuestions });
-      const first = new ClassifierProcessor<typeof safetyQuestions>({ classifier: 'safety', decide: blockAbove(0.5) });
-      const second = new ClassifierProcessor<typeof safetyQuestions>({ classifier: 'safety', decide: blockAbove(0.5) });
+      const doEvaluate = vi.fn(async () => unsafeResult(0.9));
+      const classifier = safetyClassifier(createModel(doEvaluate));
+      const opts = { classifier: 'safety', onResult: blockUnsafeAbove(0.5, 'blocked') } as const;
+      const first = new ClassifierProcessor<typeof safetyQuestions>(opts);
+      const second = new ClassifierProcessor<typeof safetyQuestions>(opts);
       const mastra = new Mastra({ classifiers: { safety: classifier } });
-      mastra.addAgent(new Agent({ id: 'a', name: 'a', instructions: '', model: 'openai/gpt-4o', inputProcessors: [first] }));
-      mastra.addAgent(new Agent({ id: 'b', name: 'b', instructions: '', model: 'openai/gpt-4o', inputProcessors: [second] }));
+      mastra.addAgent(
+        new Agent({ id: 'a', name: 'a', instructions: '', model: 'openai/gpt-4o', inputProcessors: [first] }),
+      );
+      mastra.addAgent(
+        new Agent({ id: 'b', name: 'b', instructions: '', model: 'openai/gpt-4o', inputProcessors: [second] }),
+      );
 
       // Both processors share the id 'classifier'; the second is deduped by mastra.addProcessor
       // but must still resolve the registered classifier.
-      await expect(
-        second.processInput({ messages: [message('1', 'bad')], abort: abortThatThrows() }),
-      ).rejects.toThrow(TripWire);
+      await expect(second.processInput({ messages: [message('1', 'bad')], abort: abortThatThrows() })).rejects.toThrow(
+        TripWire,
+      );
       expect(doEvaluate).toHaveBeenCalledTimes(1);
     });
 
@@ -404,7 +416,7 @@ describe('ClassifierProcessor', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const processor = new ClassifierProcessor({
         classifier: 'missing',
-        decide: () => ({ action: 'pass' }),
+        onResult: noop,
         errorStrategy: 'strict',
       });
       const abort = abortThatThrows();
@@ -417,7 +429,7 @@ describe('ClassifierProcessor', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const processor = new ClassifierProcessor({
         classifier: 'missing',
-        decide: () => ({ action: 'pass' }),
+        onResult: noop,
         errorStrategy: 'strict',
       });
       new Mastra({ processors: { guard: processor } });
@@ -426,6 +438,24 @@ describe('ClassifierProcessor', () => {
         processor.processInput({ messages: [message('1', 'text')], abort: abortThatThrows() }),
       ).rejects.toThrow(TripWire);
       expect(warn.mock.calls[0]![1]).toMatchObject({ id: 'MASTRA_GET_CLASSIFIER_BY_ID_NOT_FOUND' });
+    });
+
+    it('fails when the registered classifier has no configured questions', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const processor = new ClassifierProcessor({
+        classifier: 'bare',
+        onResult: noop,
+        errorStrategy: 'strict',
+      });
+      new Mastra({
+        classifiers: { bare: new Classifier({ id: 'bare', model: unsafeModel(0) }) },
+        processors: { guard: processor },
+      });
+
+      await expect(
+        processor.processInput({ messages: [message('1', 'text')], abort: abortThatThrows() }),
+      ).rejects.toThrow(TripWire);
+      expect(warn.mock.calls[0]![1]).toMatchObject({ id: 'CLASSIFIER_PROCESSOR_QUESTIONS_REQUIRED' });
     });
   });
 });

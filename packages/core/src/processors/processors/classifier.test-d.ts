@@ -1,7 +1,7 @@
 import { expectTypeOf } from 'vitest';
 
 import { Classifier, type BooleanAnswer, type ChoiceAnswer, type ScoreAnswer } from '../../classifier';
-import { ClassifierProcessor, type ClassifierDecide, type ClassifierDecision } from './classifier';
+import { ClassifierProcessor } from './classifier';
 
 declare const model: ConstructorParameters<typeof Classifier>[0]['model'];
 
@@ -15,57 +15,44 @@ const configured = new Classifier({
   },
 });
 
-// Configured classifier: answers inferred from the classifier, questions not allowed.
+// Instance: answers inferred from the classifier's questions.
 new ClassifierProcessor({
   classifier: configured,
-  decide: (answers, ctx) => {
+  onResult: (answers, { abort, filter, phase, result }) => {
     expectTypeOf(answers.route).toEqualTypeOf<ChoiceAnswer<'support' | 'sales'>>();
     expectTypeOf(answers.quality).toEqualTypeOf<ScoreAnswer>();
     expectTypeOf(answers.unsafe).toEqualTypeOf<BooleanAnswer>();
-    expectTypeOf(ctx.phase).toEqualTypeOf<'input' | 'output' | 'stream'>();
-    expectTypeOf(ctx.result.answers.route.choice).toEqualTypeOf<'support' | 'sales'>();
-    return { action: 'pass' };
+    expectTypeOf(result.answers.route.choice).toEqualTypeOf<'support' | 'sales'>();
+    expectTypeOf(phase).toEqualTypeOf<'input' | 'output' | 'stream'>();
+    expectTypeOf(abort).toEqualTypeOf<(reason?: string) => never>();
+    expectTypeOf(filter).toEqualTypeOf<() => void>();
+    if (answers.unsafe.probability > 0.8) abort('blocked');
   },
 });
 
+// Async handler.
 new ClassifierProcessor({
-  // @ts-expect-error configured classifiers cannot receive processor-level questions
   classifier: configured,
-  questions: { unsafe: { type: 'boolean' } },
-  decide: () => ({ action: 'pass' }),
-});
-
-// Per-call classifier: questions required, answers inferred from them.
-const perCall = new Classifier({ id: 'per-call', model });
-
-new ClassifierProcessor({
-  classifier: perCall,
-  questions: { topic: { type: 'choice', criteria: { billing: 'Billing', other: 'Other' } } },
-  decide: answers => {
-    expectTypeOf(answers.topic).toEqualTypeOf<ChoiceAnswer<'billing' | 'other'>>();
-    return { action: 'pass' };
+  onResult: async (answers, { filter }) => {
+    if (answers.quality.score < 0.3) filter();
   },
 });
 
-// @ts-expect-error questions are required when the classifier has none configured
-new ClassifierProcessor({ classifier: perCall, decide: () => ({ action: 'pass' }) });
+// Classifier without configured questions is rejected.
+const bare = new Classifier({ id: 'bare', model });
+// @ts-expect-error classifier must have configured questions
+new ClassifierProcessor({ classifier: bare, onResult: () => {} });
 
-// Registered id: questions optional.
-new ClassifierProcessor({ classifier: 'safety', decide: () => ({ action: 'pass' }) });
-new ClassifierProcessor({
+// onResult is required.
+// @ts-expect-error onResult is required
+new ClassifierProcessor({ classifier: configured });
+
+// Registered id: answers fall back to the generic map unless Q is supplied.
+new ClassifierProcessor({ classifier: 'safety', onResult: () => {} });
+new ClassifierProcessor<{ unsafe: { type: 'boolean' } }>({
   classifier: 'safety',
-  questions: { unsafe: { type: 'boolean' } },
-  decide: answers => {
+  onResult: (answers, { abort }) => {
     expectTypeOf(answers.unsafe).toEqualTypeOf<BooleanAnswer>();
-    return { action: 'block', reason: 'blocked' };
+    if (answers.unsafe.probability > 0.5) abort('blocked');
   },
 });
-
-// Decision shape is enforced.
-// @ts-expect-error block requires a reason
-const invalidDecide: ClassifierDecide<typeof configured.questions> = () => ({ action: 'block' });
-void invalidDecide;
-
-expectTypeOf<ClassifierDecision>().toEqualTypeOf<
-  { action: 'pass' } | { action: 'block'; reason: string } | { action: 'filter' }
->();
