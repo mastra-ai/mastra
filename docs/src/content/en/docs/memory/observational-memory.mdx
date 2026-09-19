@@ -208,10 +208,10 @@ const memory = new Memory({
 
 ### Retries and failure policy
 
-Observer and Reflector model calls are retried on transient provider errors, and a turn aborts if they still fail. Two independent options control that on each stage:
+Observer and Reflector model calls are retried on transient provider errors, and a turn aborts if they still fail. Each stage is controlled independently by:
 
 - `maxRetries`: retries after the initial model call (default `8`).
-- `failurePolicy`: what happens once retries are exhausted — `'abort'` (default) or `'continue'`.
+- `failurePolicy`: what happens once retries are exhausted, either `'abort'` (default) or `'continue'`.
 
 ```typescript title="src/mastra/agents/agent.ts"
 const memory = new Memory({
