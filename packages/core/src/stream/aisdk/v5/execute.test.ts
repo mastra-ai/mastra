@@ -210,7 +210,7 @@ describe('execute structured output prompt handling', () => {
     );
   });
 
-  it('injects processor schema instructions into the main prompt when useAgent is disabled', async () => {
+  it('injects processor schema instructions into the main system prompt by default and when system injection is requested', async () => {
     let capturedPrompt: unknown;
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }: any) => {
@@ -231,8 +231,57 @@ describe('execute structured output prompt handling', () => {
       },
     });
 
+    for (const jsonPromptInjection of [undefined, 'system'] as const) {
+      const stream = execute({
+        runId: `test-run-id-processor-${jsonPromptInjection ?? 'default'}`,
+        model: model as any,
+        inputMessages,
+        onResult: () => {},
+        methodType: 'stream',
+        structuredOutput: {
+          schema,
+          model: model as any,
+          jsonPromptInjection,
+        },
+      });
+
+      await readStream(stream);
+
+      expect(capturedPrompt).not.toEqual(inputMessages);
+      const promptJson = JSON.stringify(capturedPrompt);
+      expect(promptJson).toContain('Your response will be processed by another agent to extract structured data');
+      expect(promptJson).toContain('suggestions');
+    }
+  });
+
+  it('does not inject processor schema instructions into the main prompt when injection is disabled', async () => {
+    let capturedPrompt: unknown;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }: any) => {
+        capturedPrompt = prompt;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: 'id-processor-disabled',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Main agent summary.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+
     const stream = execute({
-      runId: 'test-run-id',
+      runId: 'test-run-id-processor-disabled',
       model: model as any,
       inputMessages,
       onResult: () => {},
@@ -240,15 +289,62 @@ describe('execute structured output prompt handling', () => {
       structuredOutput: {
         schema,
         model: model as any,
+        jsonPromptInjection: false,
+      },
+    });
+
+    await readStream(stream);
+
+    expect(capturedPrompt).toEqual(inputMessages);
+    expect(JSON.stringify(capturedPrompt)).not.toContain(
+      'Your response will be processed by another agent to extract structured data',
+    );
+  });
+
+  it('injects processor schema instructions into the latest user message for inline mode', async () => {
+    let capturedPrompt: unknown;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }: any) => {
+        capturedPrompt = prompt;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-processor-inline', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Main agent summary.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+
+    const stream = execute({
+      runId: 'test-run-id-processor-inline',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput: {
+        schema,
+        model: model as any,
+        jsonPromptInjection: 'inline',
       },
     });
 
     await readStream(stream);
 
     expect(capturedPrompt).not.toEqual(inputMessages);
+    expect(capturedPrompt as any[]).toHaveLength(inputMessages.length);
+    expect((capturedPrompt as any[])[0].role).toBe('user');
     const promptJson = JSON.stringify(capturedPrompt);
+    expect(promptJson).toContain('Summarize the plan.');
     expect(promptJson).toContain('Your response will be processed by another agent to extract structured data');
     expect(promptJson).toContain('suggestions');
+    expect(promptJson).toContain("You don't need to format your response as JSON unless the user asks you to.");
   });
 });
 
