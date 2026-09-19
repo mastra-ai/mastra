@@ -14,6 +14,14 @@ export {
   type ClassifierResultContext,
 } from './classifier';
 export {
+  ModelRouterProcessor,
+  type ModelRouterProcessorOptions,
+  type ModelRouterMapOptions,
+  type ModelRouterSelectOptions,
+  type ModelRouterSelect,
+  type RoutableModel,
+} from './model-router';
+export {
   PromptInjectionDetector,
   type PromptInjectionOptions,
   type PromptInjectionResult,

@@ -1,0 +1,172 @@
+---
+title: 'Reference: ModelRouterProcessor | Processors'
+description: 'Use ModelRouterProcessor to classify an incoming request once and downgrade the agent to a cheaper model when the classifier is confident the request is simple.'
+packages:
+  - '@mastra/core'
+---
+
+# ModelRouterProcessor
+
+`ModelRouterProcessor` classifies the incoming request once, then overrides the model for the agent's first step. It is intended for cost routing: keep a capable model as the agent's configured default and let the router downgrade to a cheaper model when a [Classifier](/reference/classifier/classifier) is confident the request is simple.
+
+The router only ever replaces the model for step 0. Later steps in the same run use the agent's configured model, so a run that turns out to be harder than the first turn suggested is not locked to the cheap model for its whole life.
+
+```typescript
+import { Classifier } from '@mastra/core/classifier'
+import { Agent } from '@mastra/core/agent'
+import { ModelRouterProcessor } from '@mastra/core/processors'
+
+const triage = new Classifier({
+  id: 'triage',
+  model,
+  questions: {
+    complexity: {
+      type: 'choice',
+      criteria: {
+        trivial:
+          'Answerable in one or two sentences from general knowledge, with no reasoning steps',
+        complex:
+          'Requires multi-step reasoning, planning, weighing trade-offs, or careful judgment',
+      },
+    },
+  },
+})
+
+export const agent = new Agent({
+  name: 'support-agent',
+  instructions: 'Answer the user concisely.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  inputProcessors: [
+    new ModelRouterProcessor({
+      classifier: triage,
+      question: 'complexity',
+      models: {
+        trivial: '__GATEWAY_OPENAI_MODEL_MINI__',
+        complex: '__GATEWAY_OPENAI_MODEL__',
+      },
+    }),
+  ],
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'classifier',
+    type: 'Classifier | string',
+    required: true,
+    description:
+      'A configured Classifier instance, or the ID of a classifier registered with Mastra. String IDs resolve at request time through mastra.getClassifierById().',
+  },
+  {
+    name: 'question',
+    type: 'string',
+    required: false,
+    description:
+      'The name of a choice question on the classifier. Required with models, and mutually exclusive with select.',
+  },
+  {
+    name: 'models',
+    type: 'Record<string, MastraModelConfig>',
+    required: false,
+    description:
+      'Maps every criterion of the chosen question to a model. Validated exhaustively at construction: a missing or unknown criterion throws.',
+  },
+  {
+    name: 'select',
+    type: '(answers) => MastraModelConfig | undefined',
+    required: false,
+    description:
+      'Combine several questions yourself. Receives the full typed answers and returns a model, or undefined to abstain. Mutually exclusive with question and models.',
+  },
+  {
+    name: 'minProbability',
+    type: 'number',
+    required: false,
+    description:
+      'Require a probability at least this high before applying the mapped model. Omit it to route on the selected choice alone. See the note below, because this option fails closed.',
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    required: false,
+    defaultValue: '2',
+    description: 'Retries passed to the classifier evaluation.',
+  },
+  {
+    name: 'providerOptions',
+    type: 'Record<string, unknown>',
+    required: false,
+    description: 'Provider-specific options forwarded to the classifier evaluation.',
+  },
+]}
+/>
+
+## Routing on more than one dimension
+
+Choice criteria are mutually exclusive, which is the wrong shape when routing depends on independent dimensions. Use `select` instead and combine the answers yourself. It receives the fully typed answers, so the policy stays yours:
+
+```typescript
+const triage = new Classifier({
+  id: 'triage',
+  model,
+  questions: {
+    complexity: {
+      type: 'choice',
+      criteria: {
+        trivial: 'Answerable in one or two sentences with no reasoning steps',
+        complex: 'Requires multi-step reasoning or careful judgment',
+      },
+    },
+    sensitive: {
+      type: 'boolean',
+      criteria: {
+        true: 'Involves money, credentials, legal, medical, or safety consequences',
+        false: 'Routine request with no sensitive consequences',
+      },
+    },
+  },
+})
+
+new ModelRouterProcessor({
+  classifier: triage,
+  select: ({ complexity, sensitive }) => {
+    // Never downgrade a sensitive request, however simple it looks.
+    if (sensitive.probability >= 0.3) return undefined
+    return complexity.choice === 'trivial' ? '__GATEWAY_OPENAI_MODEL_MINI__' : undefined
+  },
+})
+```
+
+Returning `undefined` abstains, and the agent's configured model is used.
+
+## Probabilities and `minProbability`
+
+Not every evaluation model returns a probability distribution for choice questions. Boolean questions report `P(true)`, but a choice answer may carry only the selected criterion.
+
+This is why `minProbability` has no default. The two modes are explicit:
+
+- **Omitted**: route on the selected choice. The classifier's answer is the decision.
+- **Set**: require a probability at or above the threshold. If the model returns no probability at all, the router **abstains**, because a threshold that cannot be evaluated must not quietly pass.
+
+Verify that your evaluation model returns choice probabilities before setting `minProbability`, otherwise the router will abstain on every request and the option will look broken. If you want calibrated abstention and your model only reports probabilities for booleans, express the decision as a boolean question and use `select`.
+
+## Failure behavior
+
+Routing fails open. If the classifier errors, the classifier ID is not registered, or the request has no user text to classify, the processor logs a warning and the agent's configured model is used. This is the safe direction for a cost optimization: the worst case is that you pay for the model you already configured.
+
+This is the opposite of the fail-closed stance appropriate for [tool approval](/docs/agents/human-in-the-loop), where uncertainty should escalate rather than pass through.
+
+## Cost and behavior notes
+
+- The classifier runs **once per request**, in `processInput`, not once per step. The decision is stashed in per-request state and read at step 0.
+- Only downgrade. Keep the capable model as the agent's configured default and use the router to move down, so an incorrect routing decision costs quality on one step rather than removing the capable model from the run entirely.
+- The router adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on. This pays off when the price gap between the two models is larger than the cost of the classifier call.
+
+## Related
+
+- [Classifier](/reference/classifier/classifier)
+- [ClassifierProcessor](/reference/processors/classifier-processor)
+- [Processor Interface](/reference/processors/processor-interface)
