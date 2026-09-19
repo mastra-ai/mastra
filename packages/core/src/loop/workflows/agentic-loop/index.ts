@@ -41,8 +41,6 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
   // Track accumulated steps across iterations to pass to stopWhen
   const accumulatedSteps: StepResult<Tools>[] = [];
-  // Track previous content to determine what's new in each step
-  let previousContentLength = 0;
   // When continue:false + feedback, allow one more LLM turn then stop
   let pendingFeedbackStop = false;
   // When this loop is a resume (e.g. after tool approval), the suspended run
@@ -148,15 +146,11 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         pendingFeedbackStop = false;
       }
 
-      const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
-        message => message.content as unknown as StepResult<Tools>['content'],
-      );
-
-      // Only include new content in this step (content added since the previous iteration)
-      const currentContent = allContent.slice(previousContentLength);
-      previousContentLength = allContent.length;
-
-      const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
+      const currentContent = messageList.get.response.aiV5.modelContent(-1) as StepResult<Tools>['content'];
+      const contentToolResults = currentContent.filter(part => part.type === 'tool-result');
+      const toolResults = (
+        contentToolResults.length > 0 ? contentToolResults : typedInputData.output.toolResults || []
+      ) as StepResult<Tools>['toolResults'];
 
       const currentStep: StepResult<Tools> = {
         content: currentContent,
@@ -175,16 +169,22 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         reasoningText: typedInputData.output.reasoningText || '',
         files: typedInputData.output.files || [],
         toolCalls: typedInputData.output.toolCalls || [],
-        toolResults: toolResultParts as StepResult<Tools>['toolResults'],
+        toolResults,
         sources: typedInputData.output.sources || [],
         staticToolCalls: typedInputData.output.staticToolCalls || [],
         dynamicToolCalls: typedInputData.output.dynamicToolCalls || [],
-        staticToolResults: toolResultParts.filter(
-          (part: any) => part.dynamic === false,
-        ) as StepResult<Tools>['staticToolResults'],
-        dynamicToolResults: toolResultParts.filter(
-          (part: any) => part.dynamic === true,
-        ) as StepResult<Tools>['dynamicToolResults'],
+        staticToolResults:
+          contentToolResults.length > 0
+            ? (contentToolResults.filter(
+                (part: any) => part.dynamic === false,
+              ) as StepResult<Tools>['staticToolResults'])
+            : typedInputData.output.staticToolResults || [],
+        dynamicToolResults:
+          contentToolResults.length > 0
+            ? (contentToolResults.filter(
+                (part: any) => part.dynamic === true,
+              ) as StepResult<Tools>['dynamicToolResults'])
+            : typedInputData.output.dynamicToolResults || [],
         providerMetadata: typedInputData.metadata?.providerMetadata,
       };
 
@@ -218,7 +218,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
             name: tc.toolName || tc.name || '',
             args: (tc.args || {}) as Record<string, unknown>,
           })),
-          toolResults: toolResultParts.map(tr => ({
+          toolResults: toolResults.map(tr => ({
             id: tr.toolCallId,
             name: tr.toolName,
             result: unwrapToolResultOutput(tr.output),
