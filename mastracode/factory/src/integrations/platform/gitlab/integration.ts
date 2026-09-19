@@ -52,15 +52,29 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
   }
 
   async listConnections(): Promise<PlatformIntegrationConnection[]> {
-    const result = await this.#client.request<{ connections: PlatformIntegrationConnection[] }>(
-      'GET',
-      '/v2/connections?providerKey=gitlab',
+    // Platform's providerKey filter matches a single integration ID, so query
+    // each supported GitLab credential flow before applying the exact ID filter.
+    const pages = await Promise.all(
+      [...GITLAB_INTEGRATION_IDS].map(async integrationId => {
+        const result = await this.#client.request<{ connections: PlatformIntegrationConnection[] }>(
+          'GET',
+          `/v2/connections?providerKey=${encodeURIComponent(integrationId)}`,
+        );
+        return result.connections;
+      }),
     );
-    return result.connections.filter(
-      connection =>
-        (!this.#connectionId || connection.id === this.#connectionId) &&
-        GITLAB_INTEGRATION_IDS.has(connection.integrationId),
-    );
+    const seen = new Set<string>();
+    return pages.flat().filter(connection => {
+      if (
+        (this.#connectionId && connection.id !== this.#connectionId) ||
+        !GITLAB_INTEGRATION_IDS.has(connection.integrationId) ||
+        seen.has(connection.id)
+      ) {
+        return false;
+      }
+      seen.add(connection.id);
+      return true;
+    });
   }
 
   override async statusConnections(): Promise<GitLabStatusConnection[]> {

@@ -342,7 +342,7 @@ describe('PlatformGitLabIntegration', () => {
     let credentialResponse: unknown = credential;
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.endsWith('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
       if (url.endsWith('/v2/connections/a1b_mastra/credentials')) return json(credentialResponse);
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -383,7 +383,7 @@ describe('PlatformGitLabIntegration', () => {
   it('lists projects only from the explicitly configured Platform connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.endsWith('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
       if (url.includes('a1b_mastra/proxy')) return json([project(10, 'mastra/platform')]);
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -407,7 +407,7 @@ describe('PlatformGitLabIntegration', () => {
   it('keeps issue references scoped to the configured connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.endsWith('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
       if (url.includes('a1b_mastra/proxy')) return json([issue(10, 42, 'mastra/platform')]);
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -434,7 +434,7 @@ describe('PlatformGitLabIntegration', () => {
   });
 
   it('resolves persisted issue references to an opaque Platform connection marker', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json({ connections: platformConnections }));
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => json({ connections: platformConnections }));
     vi.stubGlobal('fetch', fetchMock);
     const reference = encodeIssueReference({
       connectionId: 'a1b_mastra',
@@ -458,7 +458,7 @@ describe('PlatformGitLabIntegration', () => {
   it('tries another account only when the first account cannot access a canonical project', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.endsWith('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
       if (url.includes('a1b_acme/proxy/api/v4/projects/10')) return json({ message: 'Not found' }, 404);
       if (url.includes('a1b_mastra/proxy/api/v4/projects/10')) return json(project(10, 'mastra/platform'));
       throw new Error(`Unexpected request: ${url}`);
@@ -482,7 +482,7 @@ describe('PlatformGitLabIntegration', () => {
   it('preserves transient project lookup failures instead of masking them as another account miss', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.endsWith('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
       if (url.includes('a1b_acme/proxy/api/v4/projects/10')) return json({ message: 'Temporarily unavailable' }, 503);
       if (url.includes('a1b_mastra/proxy/api/v4/projects/10')) return json(project(10, 'mastra/platform'));
       throw new Error(`Unexpected request: ${url}`);
@@ -525,9 +525,10 @@ describe('PlatformGitLabIntegration', () => {
     await expect(direct(fetchMock).getProjectMemberAccessLevel('direct', '10', 'alice')).resolves.toBeUndefined();
   });
   it('uses MASTRA_GITLAB_CONNECTION_ID as an optional filter and otherwise discovers every GitLab connection', async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockImplementation(() => Promise.resolve(json({ connections: platformConnections })));
+    const fetchMock = vi.fn<typeof fetch>(async input => {
+      const providerKey = new URL(String(input)).searchParams.get('providerKey');
+      return json({ connections: platformConnections.filter(connection => connection.integrationId === providerKey) });
+    });
     vi.stubGlobal('fetch', fetchMock);
     vi.stubEnv('MASTRA_GITLAB_CONNECTION_ID', 'a1b_mastra');
     const filtered = new PlatformGitLabIntegration({
@@ -540,7 +541,11 @@ describe('PlatformGitLabIntegration', () => {
     const discovered = new PlatformGitLabIntegration({
       clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
     });
-    await expect(discovered.listConnections()).resolves.toMatchObject([{ id: 'a1b_mastra' }, { id: 'a1b_acme' }]);
+    await expect(discovered.listConnections()).resolves.toMatchObject([{ id: 'a1b_acme' }, { id: 'a1b_mastra' }]);
     expect(discovered.diagnostics()).toMatchObject({ connectionFilterConfigured: false });
+    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).searchParams.get('providerKey'))).toEqual([
+      'gitlab', 'gitlab-group', 'gitlab-group-token',
+      'gitlab', 'gitlab-group', 'gitlab-group-token',
+    ]);
   });
 });
