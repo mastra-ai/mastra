@@ -1,6 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeAll, describe, it, expect, vi } from 'vitest';
 
-import { ToolTracker, editOrPostMessage, extractErrorMessage, postFileAttachment } from '../stream-helpers';
+import { getChatModule } from '../chat-lazy';
+import {
+  ToolTracker,
+  editOrPostMessage,
+  extractErrorMessage,
+  isBlankToolMessage,
+  postFileAttachment,
+  renderBuiltInToolEvent,
+} from '../stream-helpers';
+import type { ToolDisplayEvent } from '../types';
 
 describe('ToolTracker', () => {
   it('tracks a tool start and returns enrichment', () => {
@@ -270,5 +279,97 @@ describe('extractErrorMessage', () => {
   it('returns null/undefined unchanged', () => {
     expect(extractErrorMessage(null)).toBe(null);
     expect(extractErrorMessage(undefined)).toBe(undefined);
+  });
+});
+
+describe('isBlankToolMessage', () => {
+  it('treats empty and whitespace-only strings as blank', () => {
+    expect(isBlankToolMessage('')).toBe(true);
+    expect(isBlankToolMessage('   ')).toBe(true);
+    expect(isBlankToolMessage('\n\t ')).toBe(true);
+  });
+
+  it('treats an empty markdown payload as blank', () => {
+    expect(isBlankToolMessage({ markdown: '' })).toBe(true);
+    expect(isBlankToolMessage({ markdown: '   ' })).toBe(true);
+  });
+
+  it('treats non-empty strings and markdown as non-blank', () => {
+    expect(isBlankToolMessage('x')).toBe(false);
+    expect(isBlankToolMessage({ markdown: 'x' })).toBe(false);
+  });
+
+  it('treats a card payload with no markdown field as non-blank', () => {
+    expect(isBlankToolMessage({ blocks: [] } as never)).toBe(false);
+  });
+});
+
+describe('renderBuiltInToolEvent resolved approval states', () => {
+  // The card path renders through the lazily-loaded Chat SDK.
+  beforeAll(async () => {
+    await getChatModule();
+  });
+
+  const base = {
+    toolCallId: 'tool-call-1',
+    toolName: 'mastra_test-agent_deleteCustomer',
+    displayName: 'deleteCustomer',
+    argsSummary: 'id=42',
+    args: { id: 42 },
+  };
+
+  it('renders `approved` as its own state, not as an actionable approval card', () => {
+    const cards = JSON.stringify(renderBuiltInToolEvent({ ...base, kind: 'approved' }, 'cards'));
+    expect(cards).toContain('Approved');
+    // Must not fall through to the approval branch, which would leave the
+    // Approve/Deny buttons on a card that has already been decided.
+    expect(cards).not.toContain('Requires approval');
+
+    const text = renderBuiltInToolEvent({ ...base, kind: 'approved' }, 'text');
+    expect(typeof text).toBe('string');
+    expect(text).toContain('Approved');
+    expect(text).not.toContain('Requires approval');
+  });
+
+  it('renders `denied` with attribution when byUser is present', () => {
+    const cards = JSON.stringify(renderBuiltInToolEvent({ ...base, kind: 'denied', byUser: 'Alice' }, 'cards'));
+    expect(cards).toContain('Denied');
+    expect(cards).toContain('by Alice');
+    expect(cards).not.toContain('Requires approval');
+
+    const text = renderBuiltInToolEvent({ ...base, kind: 'denied', byUser: 'Alice' }, 'text');
+    expect(text).toContain('Denied by Alice');
+  });
+
+  it('renders `denied` without attribution when byUser is absent', () => {
+    const text = renderBuiltInToolEvent({ ...base, kind: 'denied' }, 'text') as string;
+    expect(text).toContain('Denied');
+    expect(text).not.toContain('by ');
+  });
+
+  it('renders the resolved states as cards in cards mode and strings in text mode', () => {
+    for (const kind of ['approved', 'denied'] as const) {
+      const event: ToolDisplayEvent = { ...base, kind };
+      expect(typeof renderBuiltInToolEvent(event, 'cards')).toBe('object');
+      expect(typeof renderBuiltInToolEvent(event, 'text')).toBe('string');
+    }
+  });
+
+  it('still renders `approval` as an actionable card regardless of mode', () => {
+    const approval: ToolDisplayEvent = { ...base, kind: 'approval' };
+    for (const mode of ['cards', 'text'] as const) {
+      const rendered = JSON.stringify(renderBuiltInToolEvent(approval, mode));
+      expect(rendered).toContain('Requires approval');
+      expect(rendered).toContain(`tool_approve:${base.toolCallId}`);
+      expect(rendered).toContain(`tool_deny:${base.toolCallId}`);
+    }
+  });
+
+  it('never leaves Approve/Deny buttons on a resolved card', () => {
+    for (const kind of ['approved', 'denied'] as const) {
+      const rendered = JSON.stringify(renderBuiltInToolEvent({ ...base, kind }, 'cards'));
+      expect(rendered).not.toContain(`tool_approve:${base.toolCallId}`);
+      expect(rendered).not.toContain(`tool_deny:${base.toolCallId}`);
+    }
   });
 });
