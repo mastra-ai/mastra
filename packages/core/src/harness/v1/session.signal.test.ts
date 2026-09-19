@@ -156,6 +156,7 @@ describe('Session.signal()', () => {
     releaseContents();
 
     const handle = await second;
+    expect(handle.willInterleave).toBe(false);
     await handle.result;
     expect(agent.streamCalls).toHaveLength(2);
     expect(agent.streamCalls[1]!.options.logicalMessageIdentity).toEqual({

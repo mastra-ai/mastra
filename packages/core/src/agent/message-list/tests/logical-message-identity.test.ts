@@ -209,6 +209,28 @@ describe('MessageList logical message identity', () => {
     expect(serialized.newResponseMessagesPersisted).toEqual(['recalled-assistant']);
   });
 
+  it('moves a same-identity merge-false replacement between source sets', () => {
+    const list = new MessageList({
+      threadId: 'thread-1',
+      logicalMessageIdentity: { input: 'input-current', response: 'response-current' },
+    });
+    const recalled = {
+      ...message('same-identity-assistant', 'assistant', 'old answer'),
+      content: {
+        ...message('same-identity-assistant', 'assistant', 'old answer').content,
+        metadata: { logicalMessageId: 'response-current' },
+      },
+    };
+    list.add(recalled, 'memory');
+    list.add(message('same-identity-assistant', 'assistant', 'new answer'), 'response', { merge: false });
+
+    const serialized = list.serialize();
+    expect(serialized.memoryMessages).toEqual([]);
+    expect(serialized.memoryMessagesPersisted).toEqual([]);
+    expect(serialized.newResponseMessages).toEqual(['same-identity-assistant']);
+    expect(serialized.newResponseMessagesPersisted).toEqual(['same-identity-assistant']);
+  });
+
   it('rejects malformed identity values instead of admitting an untracked turn', () => {
     expect(
       () =>

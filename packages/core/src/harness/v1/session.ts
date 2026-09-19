@@ -10752,7 +10752,7 @@ export class Session {
       }
       // Non-admitted signals intentionally preserve the optimistic first-tick
       // behavior: the native synchronous route/run id is the public receipt.
-      return returnInterleavedSignalResult(dispatched, dispatched.runId);
+      return returnInterleavedSignalResult(dispatched, dispatched.runId, responseLogicalMessageIdentity === undefined);
     }
 
     if (willInterleave) {
