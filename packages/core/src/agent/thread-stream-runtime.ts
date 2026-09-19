@@ -2688,6 +2688,17 @@ export class AgentThreadStreamRuntime {
     };
   }
 
+  #hasConfirmedSignalAdmission(state: AgentThreadRuntimeState, key: string, runId: string): boolean {
+    const record = state.threadRunsById.get(runId);
+    if (record) return this.#threadKey(record.resourceId, record.threadId) === key;
+    return (
+      state.leaseRenewalTimers.has(runId) &&
+      (state.threadKeysByRunId.get(runId) === key ||
+        state.activeThreadRunIds.get(key) === runId ||
+        state.inflightIdleThreadKeysByRunId.get(runId) === key)
+    );
+  }
+
   #forgetSignalAdmission(state: AgentThreadRuntimeState, key: string, runId: string, signal: AgentSignal): void {
     const signalId = signal.id;
     const payloadKey = callerSignalPayloadKey(signal);
@@ -6048,6 +6059,18 @@ export class AgentThreadStreamRuntime {
           admissionAttemptId !== undefined &&
           cached.admissionAttemptId !== undefined &&
           cached.admissionAttemptId !== admissionAttemptId;
+        if (
+          supersedesPendingAttempt &&
+          cached.result.runId !== undefined &&
+          key !== undefined &&
+          !this.#hasConfirmedSignalAdmission(state, key, cached.result.runId)
+        ) {
+          // The original attempt has reserved the thread but has not crossed
+          // native admission yet. Keep the retry attached to its acknowledgement
+          // rather than synthesizing a successful duplicate from its provisional
+          // signal tombstone; that reservation may still lose the lease.
+          return cached.result as SendAgentSignalResult<OUTPUT>;
+        }
         if (!supersedesPendingAttempt && cached.status !== 'rejected') {
           return cached.result as SendAgentSignalResult<OUTPUT>;
         }

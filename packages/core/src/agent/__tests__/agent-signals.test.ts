@@ -8947,6 +8947,72 @@ describe('Agent signals', () => {
     runtime.resetForTests();
   });
 
+  it('keeps a retry attached while the original idle admission is still provisional', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'provisional-retry-resource', threadId: 'provisional-retry-thread' };
+    const runId = 'provisional-retry-run';
+    const signal = { id: 'provisional-retry-signal', type: 'user-message' as const, contents: 'wait for admission' };
+    const agent = {
+      id: 'provisional-retry-agent',
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({
+        runId: options.runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      })),
+    } as any;
+    let releaseLease!: () => void;
+    pubsub.acquireLeaseWait = new Promise<void>(resolve => {
+      releaseLease = resolve;
+    });
+    let markAcquireStarted!: () => void;
+    const acquireStarted = new Promise<void>(resolve => {
+      markAcquireStarted = resolve;
+    });
+    pubsub.onAcquireLease = markAcquireStarted;
+
+    const first = runtime.sendSignal(
+      agent,
+      signal,
+      {
+        ...target,
+        runId,
+        ifActive: { behavior: 'discard' },
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { logicalMessageIdentity: { input: 'provisional-input', response: 'provisional-response' } },
+        },
+        _signalAdmissionAttemptId: 'attempt-a',
+      } as any,
+      pubsub,
+    );
+    await acquireStarted;
+
+    const retry = runtime.sendSignal(
+      agent,
+      signal,
+      {
+        ...target,
+        runId,
+        ifActive: { behavior: 'discard' },
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { logicalMessageIdentity: { input: 'provisional-input', response: 'provisional-response' } },
+        },
+        _signalAdmissionAttemptId: 'attempt-b',
+      } as any,
+      pubsub,
+    );
+    expect(retry.accepted).toBe(first.accepted);
+    expect(agent.stream).not.toHaveBeenCalled();
+
+    releaseLease();
+    await expect(retry.accepted).resolves.toMatchObject({ action: 'wake', runId });
+    expect(agent.stream).toHaveBeenCalledTimes(1);
+    runtime.abortRun(runId, pubsub);
+  });
+
   it('retains stable signal admission through the run-completed publication window', async () => {
     const pubsub = new BlockingRunCompletedPubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();

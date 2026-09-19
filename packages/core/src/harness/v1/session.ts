@@ -9308,7 +9308,7 @@ export class Session {
       const onAbort = () =>
         finish(() => reject(abortSignal?.reason ?? new HarnessValidationError('signal()', 'operation aborted')));
       const timer = setTimeout(() => {
-        finish(() => reject(new HarnessValidationError('signal().admissionId', 'native signal acceptance timed out')));
+        finish(() => reject(new NativeSignalAcceptanceTimeoutError()));
       }, SIGNAL_NATIVE_ACCEPT_TIMEOUT_MS);
       timer.unref?.();
       abortSignal?.addEventListener('abort', onAbort, { once: true });
@@ -15552,11 +15552,29 @@ export class Session {
         },
       );
       if (item.logicalMessageIdentity !== undefined) {
-        const accepted = await this._awaitSignalNativeAcceptance(
-          signal.accepted,
-          turnAbortController.signal,
-          activeTurnWaiter.promise,
-        );
+        let accepted: Awaited<typeof signal.accepted>;
+        try {
+          accepted = await this._awaitSignalNativeAcceptance(
+            signal.accepted,
+            turnAbortController.signal,
+            activeTurnWaiter.promise,
+          );
+        } catch (err) {
+          if (err instanceof NativeSignalAcceptanceTimeoutError) {
+            await this._updateQueueAdmissionReceipt(item.id, (receipt, now) =>
+              receipt.status === 'admitting'
+                ? {
+                    ...receipt,
+                    status: 'accepted',
+                    acceptedAt: receipt.acceptedAt ?? now,
+                    updatedAt: now,
+                  }
+                : receipt,
+            );
+            throw new QueueRecoveryPendingError(Date.now() + QUEUE_ACCEPTED_RECOVERY_STALE_MS);
+          }
+          throw err;
+        }
         if (accepted.action === 'discard') {
           const err = new HarnessConfigError(
             'queue().logicalMessageIdentity',
@@ -18890,6 +18908,12 @@ class QueueRecoveryPendingError extends HarnessError {
     super('queued turn was accepted by the signal runtime and is awaiting durable terminal result evidence');
     this.name = 'harness.queue_recovery_pending';
     this.retryAt = retryAt;
+  }
+}
+
+class NativeSignalAcceptanceTimeoutError extends HarnessValidationError {
+  constructor() {
+    super('signal().admissionId', `native signal acceptance timed out after ${SIGNAL_NATIVE_ACCEPT_TIMEOUT_MS}ms`);
   }
 }
 
