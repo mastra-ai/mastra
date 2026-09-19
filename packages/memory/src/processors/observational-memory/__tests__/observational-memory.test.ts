@@ -11171,6 +11171,7 @@ describe('Full Async Buffering Flow', () => {
     /** Number of observer calls that fail before succeeding */
     observerFailures?: number;
     failurePolicy?: 'abort' | 'continue';
+    maxRetries?: number;
   }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
@@ -11249,6 +11250,7 @@ describe('Full Async Buffering Flow', () => {
         bufferActivation: opts.bufferActivation,
         blockAfter: opts.blockAfter,
         failurePolicy: opts.failurePolicy,
+        maxRetries: opts.maxRetries,
       },
       reflection: {
         observationTokens: opts.reflectionObservationTokens,
@@ -11408,6 +11410,52 @@ describe('Full Async Buffering Flow', () => {
     await storage.saveMessages({
       messages: Array.from({ length: 10 }, (_, index) => ({
         id: `retry-msg-${index}`,
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: `Retry message ${index}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 10, index)),
+        threadId,
+        resourceId,
+      })),
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    expect(observerCalls).toHaveLength(2);
+    expect(observerCalls[1]?.input).toContain('The quick brown fox jumps over the lazy dog.');
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(true);
+  });
+
+  // Default (abort) policy: a failed async-buffer cycle must not advance the buffer
+  // cursor either, so the unobserved messages stay eligible for a later cycle
+  // instead of being silently skipped.
+  it('retains messages from a failed async observation under the default failure policy', async () => {
+    const { storage, om, threadId, resourceId, step, waitForAsyncOps, observerCalls } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 10000,
+        bufferTokens: 1000,
+        bufferActivation: 0.7,
+        reflectionObservationTokens: 50000,
+        messageCount: 20,
+        observerFailures: 1,
+        maxRetries: 0,
+      });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const bufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
+    expect(observerCalls).toHaveLength(1);
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(false);
+
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    await storage.saveMessages({
+      messages: Array.from({ length: 10 }, (_, index) => ({
+        id: `abort-retry-msg-${index}`,
         role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
         content: {
           format: 2 as const,
