@@ -7,7 +7,7 @@ packages:
 
 # MemoryInputFilter
 
-The `MemoryInputFilter` is an **input processor** that filters the request input against stored history before any memory loader reads it. It is added automatically by `Memory` ahead of `MessageHistory`, `WorkingMemory`, `SemanticRecall`, and Observational Memory, so you only construct it yourself when you manage memory processors manually.
+The `MemoryInputFilter` is an **input processor** that filters the request input against stored history before any memory loader reads it. It's added automatically by `Memory` ahead of `MessageHistory`, `WorkingMemory`, `SemanticRecall`, and Observational Memory, so you only construct it yourself when you manage memory processors manually.
 
 ## Usage example
 
@@ -72,7 +72,8 @@ const processor = new MemoryInputFilter({
   {
     name: 'processInput',
     type: '(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList>',
-    description: 'Filters the request input down to what stored history does not already cover, or seeds a thread that has no stored messages',
+    description:
+      'Filters the request input down to what stored history does not already cover, or seeds a thread that has no stored messages',
     isOptional: false,
   },
 ]}
@@ -84,14 +85,14 @@ const processor = new MemoryInputFilter({
 
 For a thread that already has stored messages, the input is reduced based on what its last message is:
 
-- **Ends with one or more user messages**: those messages are kept and everything back to the last assistant message is dropped. Several consecutive user messages are all kept because they are all new.
+- **Ends with one or more user messages**: those messages are kept and everything back to the last assistant message is dropped. Several consecutive user messages are all kept because they're all new.
 - **Ends with an assistant message**: only its trailing run of `state: 'result'` tool invocations is kept, which is the client-side tool flow where a stored assistant turn contains a pending call and the client returns the result.
 - **Ends with an assistant message with no new tool results**: the message is dropped only if it exists in storage. Assistant messages that were never persisted, such as internal instruction messages, are left in place.
 - **Contains nothing new**: the input is cleared and the run continues on stored history alone.
 
-For a thread with no stored messages, the entire input seeds the conversation. Provider metadata is stripped from assistant messages so that item references to server-side items from another conversation are not replayed.
+For a thread with no stored messages, the entire input seeds the conversation. Provider metadata is stripped from assistant messages so that item references to server-side items from another conversation aren't replayed.
 
-Trailing user messages are treated as new messages and kept as sent; when they carry no ID the server assigns one. Echoed copies of already-stored messages never replace the stored row, so the stored timestamps and provider metadata stay authoritative for that message.
+Trailing user messages are treated as new messages and kept as sent. When they carry no ID the server assigns one. Echoed copies of already-stored messages never replace the stored row, so the stored timestamps and provider metadata stay authoritative for that message.
 
 ### Stored messages as the base layer
 
