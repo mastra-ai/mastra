@@ -1,5 +1,13 @@
 # @mastra/turso
 
+## 0.1.7-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`f6e7562`](https://github.com/mastra-ai/mastra/commit/f6e7562b2ccfdd5d7d77a7eeea0849b6ffd2ec94), [`53519a2`](https://github.com/mastra-ai/mastra/commit/53519a29ce0063712786b74973ae2dbe97a433a7), [`d4795a4`](https://github.com/mastra-ai/mastra/commit/d4795a42067605d2bbec10ad0b3dcc45acf02147), [`53519a2`](https://github.com/mastra-ai/mastra/commit/53519a29ce0063712786b74973ae2dbe97a433a7)]:
+  - @mastra/core@1.68.0-alpha.9
+  - @mastra/libsql@1.23.1-alpha.2
+
 ## 0.1.7-alpha.1
 
 ### Patch Changes
