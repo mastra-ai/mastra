@@ -15,6 +15,17 @@ function userMessage(text: string): MastraDBMessage {
   } as unknown as MastraDBMessage;
 }
 
+function assistantMessage(text: string): MastraDBMessage {
+  return {
+    id: 'a1',
+    role: 'assistant',
+    createdAt: new Date(),
+    threadId: 't1',
+    resourceId: 'r1',
+    content: { format: 2, parts: [{ type: 'text', text }] },
+  } as unknown as MastraDBMessage;
+}
+
 const mockEvaluationModel = {
   specificationVersion: 'v1',
   provider: 'mock',
@@ -170,6 +181,32 @@ describe('ModelRouterProcessor', () => {
 
       expect(await route(processor, 'what time is it')).toEqual({ model: 'openai/gpt-4o-mini' });
     });
+  });
+
+  it('classifies the latest user message, not the whole history', async () => {
+    const { classifier, evaluate } = stubClassifier({ complexity: { choice: 'trivial' } });
+    const processor = new ModelRouterProcessor({
+      classifier,
+      question: 'complexity',
+      models: { trivial: 'openai/gpt-4o-mini', complex: 'openai/gpt-4o' },
+    });
+
+    const state: Record<string, unknown> = {};
+    await processor.processInput({
+      messages: [
+        userMessage('reconcile these two conflicting refund policies for me'),
+        assistantMessage('Here is the reconciliation...'),
+        userMessage('thanks, what is your support email?'),
+      ],
+      systemMessages: [],
+      state,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as never,
+    } as any);
+
+    expect(evaluate).toHaveBeenCalledTimes(1);
+    expect(evaluate.mock.calls[0]![0].state).toEqual({ request: 'thanks, what is your support email?' });
   });
 
   it('routes every step by default, because later steps carry most of the tokens', async () => {

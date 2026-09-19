@@ -217,6 +217,7 @@ Whether that quality cost grows with context is **unresolved**. A repeat of the 
 ## Cost and behavior notes
 
 - The classifier runs **once per request**, in `processInput`, not once per step. The decision is stashed in per-request state and read on each step.
+- Only the **latest user message** is classified. The system prompt, retrieved context, and earlier turns are not sent to the classifier. This keeps the routing call cheap and flat, but it means a request whose difficulty is only apparent from earlier turns — `"and now do the same for the other twelve accounts"` — is classified on that sentence alone. Where that matters, use the `select` form to combine the answer with your own signals, or set `scope: 'first-step'` so later steps return to the configured model.
 - Only downgrade. Keep the capable model as the agent's configured default and use the router to move down, so an incorrect routing decision costs quality on one step rather than removing the capable model from the run entirely.
 - The router adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on. As the measurements above show, this round-trip can be comparable in size to the agent call it is optimizing, so confirm the saving is real for your model pair rather than assuming it.
 
