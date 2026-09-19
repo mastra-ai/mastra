@@ -127,7 +127,8 @@ export class DockerTemplate {
   readonly #secrets: DockerTemplateSecrets | undefined;
   #docker: Docker | undefined;
   #built = false;
-  #inFlight: InFlightBuild | undefined;
+  #queueTail: InFlightBuild | undefined;
+  #plainBuild: InFlightBuild | undefined;
 
   constructor(options: DockerTemplateOptions = {}, state?: DockerTemplateState) {
     this.#baseImage = state ? state.baseImage : validateString(options.baseImage ?? 'node:22-slim', 'baseImage');
@@ -281,9 +282,9 @@ export class DockerTemplate {
     // plain request may join an in-flight build; a forced build, different
     // secrets, or a different daemon is queued behind it instead.
     const isPlain = !options.force && options.secrets === undefined && options.docker === undefined;
-    if (isPlain && this.#inFlight) return this.#waitForBuild(this.#inFlight, options.abortSignal);
+    if (isPlain && this.#plainBuild) return this.#waitForBuild(this.#plainBuild, options.abortSignal);
 
-    const previous = this.#inFlight?.promise.catch(() => undefined) ?? Promise.resolve();
+    const previous = this.#queueTail?.promise.catch(() => undefined) ?? Promise.resolve();
     const controller = new AbortController();
     const run: InFlightBuild = {
       controller,
@@ -293,10 +294,12 @@ export class DockerTemplate {
         return this.#build({ ...options, abortSignal: controller.signal });
       }),
     };
-    this.#inFlight = run;
+    this.#queueTail = run;
+    if (isPlain) this.#plainBuild = run;
     run.promise
       .finally(() => {
-        if (this.#inFlight === run) this.#inFlight = undefined;
+        if (this.#queueTail === run) this.#queueTail = undefined;
+        if (this.#plainBuild === run) this.#plainBuild = undefined;
       })
       .catch(() => undefined);
     return this.#waitForBuild(run, options.abortSignal);

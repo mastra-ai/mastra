@@ -220,6 +220,32 @@ describe('DockerTemplate.build', () => {
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
   });
 
+  it('lets plain callers join the active plain build while an option-specific build is queued', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    const releases: Array<() => void> = [];
+    mockDocker.modem.followProgress.mockImplementation((_stream, onFinish) => {
+      releases.push(() => onFinish(null, []));
+    });
+    const template = new DockerTemplate().runCmd('echo hi');
+
+    const firstPlain = template.build();
+    const forced = template.build({ force: true });
+    const secondPlain = template.build();
+    await new Promise(r => setImmediate(r));
+
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
+    releases[0]!();
+    await expect(Promise.all([firstPlain, secondPlain])).resolves.toEqual([
+      { status: 'ready', templateId: template.templateId },
+      { status: 'ready', templateId: template.templateId },
+    ]);
+
+    await new Promise(r => setImmediate(r));
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
+    releases[1]!();
+    await expect(forced).resolves.toMatchObject({ status: 'ready' });
+  });
+
   it('builds on the docker client passed in options', async () => {
     const other = {
       getImage: vi.fn(() => ({ inspect: vi.fn().mockRejectedValue(new Error('no such image')) })),
