@@ -63,6 +63,8 @@ import { resolveWaitUntil } from './wait-until';
  *
  * @internal Created automatically by the Agent when `channels` config is provided.
  */
+const HANDED_OFF_PLATFORM = 'handed-off';
+
 export class AgentChannels {
   readonly adapters: Record<string, Adapter>;
   private chat: Chat | null = null;
@@ -1636,6 +1638,13 @@ export class AgentChannels {
     };
 
     const ownerId = this.getOwnerId();
+    const mapping = { ownerId, platform, externalThreadId, externalChannelId: channelId };
+    const mappedThread = await memoryStore.getChannelThreadMapping(mapping);
+    if (mappedThread) {
+      const metadata = ownerId === null ? legacyMetadata : { ...legacyMetadata, channel_ownerId: ownerId };
+      return { thread: mappedThread, memoryStore, metadata };
+    }
+
     if (ownerId === null) {
       // No owner bound yet - scoping is impossible; behave exactly as before
       // and never stamp a null owner id.
@@ -1643,7 +1652,9 @@ export class AgentChannels {
         filter: { metadata: legacyMetadata },
         perPage: 1,
       });
-      return { thread: threads[0], memoryStore, metadata: legacyMetadata };
+      const thread = threads[0];
+      if (thread) await memoryStore.setChannelThreadMapping({ ...mapping, threadId: thread.id });
+      return { thread, memoryStore, metadata: legacyMetadata };
     }
 
     const metadata = { ...legacyMetadata, channel_ownerId: ownerId };
@@ -1653,7 +1664,10 @@ export class AgentChannels {
       filter: { metadata },
       perPage: 1,
     });
-    if (scoped[0]) return { thread: scoped[0], memoryStore, metadata };
+    if (scoped[0]) {
+      await memoryStore.setChannelThreadMapping({ ...mapping, threadId: scoped[0].id });
+      return { thread: scoped[0], memoryStore, metadata };
+    }
 
     // Legacy fallback: pre-upgrade threads carry no channel_ownerId. Metadata
     // filters match subsets, so this query also returns threads claimed by
@@ -1678,10 +1692,112 @@ export class AgentChannels {
         id: unclaimed.id,
         metadata: { ...((unclaimed.metadata ?? {}) as Record<string, unknown>), channel_ownerId: ownerId },
       });
+      await memoryStore.setChannelThreadMapping({ ...mapping, threadId: claimed.id });
       return { thread: claimed, memoryStore, metadata };
     }
 
     return { thread: undefined, memoryStore, metadata };
+  }
+
+  async rebindThread({
+    externalThreadId,
+    channelId,
+    platform,
+    resourceId,
+    threadId,
+    mastra,
+  }: {
+    externalThreadId: string;
+    channelId: string;
+    platform: string;
+    resourceId: string;
+    threadId: string;
+    mastra?: Mastra;
+  }): Promise<{ previous: StorageThreadType | undefined; thread: StorageThreadType }> {
+    const resolvedMastra = mastra ?? this.getMastra();
+    if (!resolvedMastra) {
+      throw new Error(
+        'AgentChannels.rebindThread requires a Mastra instance: pass `mastra` or bind the channels to an agent.',
+      );
+    }
+    const storage = resolvedMastra.getStorage();
+    if (!storage) {
+      throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
+    }
+    const memoryStore = await storage.getStore('memory');
+    if (!memoryStore) {
+      throw new Error(
+        'Memory store is required for channel thread mapping. Configure storage in your Mastra instance.',
+      );
+    }
+
+    const { thread: previous, metadata } = await this.findThreadMapping({
+      externalThreadId,
+      channelId,
+      platform,
+      mastra: resolvedMastra,
+    });
+
+    if (await memoryStore.getThreadById({ threadId })) {
+      throw new Error(`Cannot rebind ${platform} thread ${externalThreadId}: thread ${threadId} already exists`);
+    }
+
+    const boundMetadata: Record<string, unknown> = { ...metadata };
+    if (previous) boundMetadata.channel_handedOffFrom = previous.id;
+    const thread = await memoryStore.saveThread({
+      thread: {
+        id: threadId,
+        title: `${platform} conversation`,
+        resourceId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: boundMetadata,
+      },
+    });
+
+    try {
+      await memoryStore.setChannelThreadMapping({
+        ownerId: this.getOwnerId(),
+        platform,
+        externalThreadId,
+        externalChannelId: channelId,
+        threadId,
+      });
+    } catch (error) {
+      await memoryStore
+        .deleteThread({ threadId })
+        .catch(deleteError =>
+          this.log('error', `Failed to delete ${threadId} after a failed channel mapping update: ${deleteError}`),
+        );
+      throw error;
+    }
+
+    if (previous) {
+      await memoryStore
+        .updateThreadMetadata({
+          id: previous.id,
+          update: current => {
+            const currentMetadata = (current.metadata ?? {}) as Record<string, unknown>;
+            if (
+              currentMetadata.channel_externalThreadId !== externalThreadId ||
+              (currentMetadata.channel_platform !== platform && currentMetadata.channel_handedOffPlatform !== platform)
+            ) {
+              return undefined;
+            }
+            return {
+              ...currentMetadata,
+              channel_platform: HANDED_OFF_PLATFORM,
+              channel_handedOffPlatform: platform,
+              channel_handedOffTo: threadId,
+            };
+          },
+        })
+        .catch(error =>
+          this.log('error', `Failed to retire ${platform} thread ${previous.id} after rebinding: ${error}`),
+        );
+    }
+
+    return { previous, thread };
   }
 
   /**
@@ -1741,9 +1857,10 @@ export class AgentChannels {
       }
     }
 
-    return memoryStore.saveThread({
+    const createdThreadId = resolvedThreadId || defaultThreadId;
+    const thread = await memoryStore.saveThread({
       thread: {
-        id: resolvedThreadId || defaultThreadId,
+        id: createdThreadId,
         title: `${platform} conversation`,
         resourceId: resolvedResourceId,
         createdAt: new Date(),
@@ -1751,6 +1868,26 @@ export class AgentChannels {
         metadata,
       },
     });
+    try {
+      await memoryStore.setChannelThreadMapping({
+        ownerId: this.getOwnerId(),
+        platform,
+        externalThreadId,
+        externalChannelId: channelId,
+        threadId: createdThreadId,
+      });
+    } catch (error) {
+      await memoryStore
+        .deleteThread({ threadId: createdThreadId })
+        .catch(deleteError =>
+          this.log(
+            'error',
+            `Failed to delete ${createdThreadId} after a failed channel mapping update: ${deleteError}`,
+          ),
+        );
+      throw error;
+    }
+    return thread;
   }
 
   /**

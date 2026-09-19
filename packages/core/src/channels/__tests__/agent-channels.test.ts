@@ -1163,8 +1163,7 @@ describe('AgentChannels', () => {
       attachments: [],
     } as any;
 
-    function makeMastra() {
-      const db = new InMemoryDB();
+    function makeMastra(db = new InMemoryDB()) {
       const memoryStore = new InMemoryMemory({ db });
       return {
         getStorage: () => ({ getStore: () => memoryStore }),
@@ -1301,6 +1300,202 @@ describe('AgentChannels', () => {
       expect(threads).toHaveLength(2);
       const agentIds = threads.map(t => (t.metadata as any).channel_ownerId).sort();
       expect(agentIds).toEqual(['agent-a', 'agent-b']);
+    });
+
+    describe('rebindThread', () => {
+      const coordinates = { platform: 'discord', externalThreadId: 'channel-1:thread-1', channelId: 'channel-1' };
+
+      it('moves the channel mapping to a new thread and retires the old one', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+        const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+        await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        const memoryStore = await mockMastra.getStorage().getStore('memory');
+        const [original] = (await memoryStore.listThreads({ filter: { metadata: legacyFilter }, perPage: 10 })).threads;
+
+        const { previous, thread } = await agentChannels.rebindThread({
+          ...coordinates,
+          resourceId: 'session-b',
+          threadId: 'session-b',
+          mastra: mockMastra,
+        });
+
+        expect(previous?.id).toBe(original!.id);
+        expect(thread).toMatchObject({ id: 'session-b', resourceId: 'session-b' });
+        expect(thread.metadata).toMatchObject({
+          ...legacyFilter,
+          channel_ownerId: 'test-agent',
+          channel_handedOffFrom: original!.id,
+        });
+
+        const retired = await memoryStore.getThreadById({ threadId: original!.id });
+        expect(retired!.metadata).toMatchObject({
+          channel_platform: 'handed-off',
+          channel_handedOffPlatform: 'discord',
+          channel_handedOffTo: 'session-b',
+          channel_externalThreadId: 'channel-1:thread-1',
+        });
+
+        const mapping = await (agentChannels as any).findThreadMapping({ ...coordinates, mastra: mockMastra });
+        expect(mapping.thread.id).toBe('session-b');
+      });
+
+      it('routes the next inbound message to the rebound thread', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+        const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+        await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        await agentChannels.rebindThread({
+          ...coordinates,
+          resourceId: 'session-b',
+          threadId: 'session-b',
+          mastra: mockMastra,
+        });
+        mockAgent.sendMessage.mockClear();
+
+        await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+        expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ resourceId: 'session-b', threadId: 'session-b' }),
+        );
+      });
+
+      it('binds a thread that never had a mapping without a previous', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+
+        const { previous, thread } = await agentChannels.rebindThread({
+          ...coordinates,
+          resourceId: 'session-b',
+          threadId: 'session-b',
+          mastra: mockMastra,
+        });
+
+        expect(previous).toBeUndefined();
+        expect(thread.metadata).not.toHaveProperty('channel_handedOffFrom');
+      });
+
+      it('keeps the previous mapping active when the persistent mapping cannot be replaced', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+        const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+        await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        const memoryStore = await mockMastra.getStorage().getStore('memory');
+        const [original] = (await memoryStore.listThreads({ filter: { metadata: legacyFilter }, perPage: 10 })).threads;
+        const setMapping = vi
+          .spyOn(memoryStore, 'setChannelThreadMapping')
+          .mockRejectedValue(new Error('storage down'));
+
+        await expect(
+          agentChannels.rebindThread({
+            ...coordinates,
+            resourceId: 'session-b',
+            threadId: 'session-b',
+            mastra: mockMastra,
+          }),
+        ).rejects.toThrow('storage down');
+        setMapping.mockRestore();
+
+        const mapping = await (agentChannels as any).findThreadMapping({ ...coordinates, mastra: mockMastra });
+        expect(mapping.thread.id).toBe(original!.id);
+        expect(mapping.thread.metadata).toMatchObject({ channel_platform: 'discord' });
+        await expect(memoryStore.getThreadById({ threadId: 'session-b' })).resolves.toBeNull();
+      });
+
+      it('does not rebind when reading the target thread fails', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+        const memoryStore = await mockMastra.getStorage().getStore('memory');
+        const getThreadById = vi.spyOn(memoryStore, 'getThreadById').mockRejectedValue(new Error('read failed'));
+
+        await expect(
+          agentChannels.rebindThread({
+            ...coordinates,
+            resourceId: 'session-b',
+            threadId: 'session-b',
+            mastra: mockMastra,
+          }),
+        ).rejects.toThrow('read failed');
+        getThreadById.mockRestore();
+      });
+
+      it('keeps one persistent mapping across concurrent storage instances', async () => {
+        const db = new InMemoryDB();
+        const firstMastra = makeMastra(db);
+        const secondMastra = makeMastra(db);
+        await agentChannels.initialize(firstMastra);
+        const secondChannels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+        secondChannels.__setAgent(mockAgent);
+        const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+        await (agentChannels as any).processChatMessage(chatThread, message, firstMastra, new RequestContext());
+        const firstStore = await firstMastra.getStorage().getStore('memory');
+        const secondStore = await secondMastra.getStorage().getStore('memory');
+        const setFirstMapping = firstStore.setChannelThreadMapping.bind(firstStore);
+        let markFirstMappingStarted!: () => void;
+        const firstMappingStarted = new Promise<void>(resolve => {
+          markFirstMappingStarted = resolve;
+        });
+        let releaseFirstMapping!: () => void;
+        const firstMappingBlocked = new Promise<void>(resolve => {
+          releaseFirstMapping = resolve;
+        });
+        const firstMapping = vi.spyOn(firstStore, 'setChannelThreadMapping').mockImplementationOnce(async input => {
+          markFirstMappingStarted();
+          await firstMappingBlocked;
+          return setFirstMapping(input);
+        });
+
+        const firstRebind = agentChannels.rebindThread({
+          ...coordinates,
+          resourceId: 'session-b',
+          threadId: 'session-b',
+          mastra: firstMastra,
+        });
+        await firstMappingStarted;
+        await secondChannels.rebindThread({
+          ...coordinates,
+          resourceId: 'session-c',
+          threadId: 'session-c',
+          mastra: secondMastra,
+        });
+        releaseFirstMapping();
+        await expect(firstRebind).resolves.toMatchObject({ thread: { id: 'session-b' } });
+        firstMapping.mockRestore();
+
+        await expect(
+          firstStore.getChannelThreadMapping({
+            ownerId: 'test-agent',
+            platform: 'discord',
+            externalThreadId: 'channel-1:thread-1',
+            externalChannelId: 'channel-1',
+          }),
+        ).resolves.toMatchObject({ id: 'session-b' });
+        const firstResolved = await (agentChannels as any).findThreadMapping({
+          ...coordinates,
+          mastra: firstMastra,
+        });
+        const secondResolved = await (secondChannels as any).findThreadMapping({
+          ...coordinates,
+          mastra: secondMastra,
+        });
+        expect(firstResolved.thread.id).toBe('session-b');
+        expect(secondResolved.thread.id).toBe('session-b');
+        expect(secondStore).not.toBe(firstStore);
+      });
+
+      it('refuses a thread id that already exists', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+        const memoryStore = await mockMastra.getStorage().getStore('memory');
+        await memoryStore.saveThread({
+          thread: { id: 'taken', resourceId: 'x', title: 't', createdAt: new Date(), updatedAt: new Date() },
+        });
+
+        await expect(
+          agentChannels.rebindThread({ ...coordinates, resourceId: 'x', threadId: 'taken', mastra: mockMastra }),
+        ).rejects.toThrow(/already exists/);
+      });
     });
   });
 

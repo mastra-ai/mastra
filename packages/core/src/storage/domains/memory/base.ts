@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { MastraMessageContentV2 } from '../../../agent';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import type {
@@ -160,6 +162,74 @@ export abstract class MemoryStorage extends StorageDomain {
       release();
       if (this.threadMetadataUpdateQueues.get(id) === current) this.threadMetadataUpdateQueues.delete(id);
     }
+  }
+
+  async getChannelThreadMapping({
+    ownerId,
+    platform,
+    externalThreadId,
+    externalChannelId,
+  }: {
+    ownerId: string | null;
+    platform: string;
+    externalThreadId: string;
+    externalChannelId: string;
+  }): Promise<StorageThreadType | null> {
+    const resourceId = this.channelThreadMappingResourceId({
+      ownerId,
+      platform,
+      externalThreadId,
+      externalChannelId,
+    });
+    const resource = await this.getResourceById({ resourceId });
+    const threadId = resource?.metadata?.channel_threadId;
+    return typeof threadId === 'string' ? this.getThreadById({ threadId }) : null;
+  }
+
+  async setChannelThreadMapping({
+    ownerId,
+    platform,
+    externalThreadId,
+    externalChannelId,
+    threadId,
+  }: {
+    ownerId: string | null;
+    platform: string;
+    externalThreadId: string;
+    externalChannelId: string;
+    threadId: string;
+  }): Promise<void> {
+    const resourceId = this.channelThreadMappingResourceId({
+      ownerId,
+      platform,
+      externalThreadId,
+      externalChannelId,
+    });
+    const existing = await this.getResourceById({ resourceId });
+    const now = new Date();
+    await this.saveResource({
+      resource: {
+        id: resourceId,
+        metadata: { channel_threadId: threadId },
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      },
+    });
+  }
+
+  private channelThreadMappingResourceId({
+    ownerId,
+    platform,
+    externalThreadId,
+    externalChannelId,
+  }: {
+    ownerId: string | null;
+    platform: string;
+    externalThreadId: string;
+    externalChannelId: string;
+  }): string {
+    const identity = JSON.stringify([ownerId, platform, externalThreadId, externalChannelId]);
+    return `__mastra_channel_mapping__:${createHash('sha256').update(identity).digest('hex')}`;
   }
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
