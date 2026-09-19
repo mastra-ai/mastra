@@ -34,6 +34,7 @@ import type {
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
+import { resolveMaxProcessorRetries } from '../../../processors/retry-budget';
 import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
@@ -1272,7 +1273,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
       let executedStepModel: string | undefined;
-      const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
+      const maxErrorProcessorRetries = resolveMaxProcessorRetries({
+        maxProcessorRetries,
+        hasErrorProcessors: Boolean(errorProcessors?.length),
+        agentId,
+        logger,
+      });
       const {
         outputStream,
         callBail,
