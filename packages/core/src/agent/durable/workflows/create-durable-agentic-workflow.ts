@@ -6,7 +6,7 @@ import { createObservabilityContext, InternalSpans } from '../../../observabilit
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
-import { createWorkflow } from '../../../workflows/create';
+import { createWorkflow, createEventedWorkflow } from '../../../workflows/create';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
@@ -56,6 +56,17 @@ export interface DurableAgenticWorkflowOptions {
    * `recovery.durableAgents: 'auto'` is configured.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+  /**
+   * Which execution engine the agentic workflows are built on.
+   *
+   * - `'default'` (default): in-process `DefaultExecutionEngine`.
+   * - `'evented'`: `EventedExecutionEngine` — steps are dispatched through the
+   *   workflows pubsub topic and executed by whichever process runs
+   *   `WorkflowEventProcessor` (e.g. a dedicated `OrchestrationWorker`). Use
+   *   this to make durable agents composable with `--workers dedicated`
+   *   topologies where the API tier publishes and a worker executes.
+   */
+  engine?: 'default' | 'evented';
 }
 
 /**
@@ -137,6 +148,10 @@ type IterationState = z.infer<typeof iterationStateSchema>;
 export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOptions) {
   const maxSteps = options?.maxSteps ?? DurableAgentDefaults.MAX_STEPS;
   const shouldPersistSnapshot = options?.shouldPersistSnapshot ?? defaultShouldPersistSnapshot;
+  // Both the inner single-iteration workflow and the outer loop workflow are
+  // built on the same engine — mixing engines would split one run's step
+  // execution across dispatch mechanisms.
+  const createWf = options?.engine === 'evented' ? createEventedWorkflow : createWorkflow;
 
   // Create the LLM execution step - tools and model are resolved from Mastra at runtime
   const llmExecutionStep = createDurableLLMExecutionStep();
@@ -169,7 +184,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   // (see resolveDurableToolCallConcurrency) — approval/suspend flows force
   // sequential execution; otherwise the run's `toolCallConcurrency` applies.
   // The workflow is created once at startup and reused for all runs.
-  const singleIterationWorkflow = createWorkflow({
+  const singleIterationWorkflow = createWf({
     id: DurableStepIds.AGENTIC_EXECUTION,
     inputSchema: iterationStateSchema,
     outputSchema: iterationStateSchema,
@@ -316,7 +331,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
   // Create the main agentic loop workflow with dowhile
   return (
-    createWorkflow({
+    createWf({
       id: DurableStepIds.AGENTIC_LOOP,
       inputSchema: durableAgenticInputSchema,
       outputSchema: durableAgenticOutputSchema,
