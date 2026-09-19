@@ -140,7 +140,7 @@ await session.signal({
 })
 ```
 
-The identity is serialized with the native MessageList state for durable recovery. Input rows keep the input identity, assistant segments keep the response identity across response rotation, and recalled memory retains its existing ownership. Native storage rows still use their own IDs. This option belongs to trusted native Session APIs; generic remote HTTP schemas and SDK adapters do not expose it.
+The identity is serialized with the native MessageList state for durable recovery. Input rows keep the input identity, assistant segments keep the response identity across response rotation, and recalled memory retains its existing ownership. Native storage rows still use their own IDs. This option belongs to trusted native Session APIs. Generic remote HTTP schemas and SDK adapters don't expose it.
 
 ## State
 
