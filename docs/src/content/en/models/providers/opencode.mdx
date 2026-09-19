@@ -606,8 +606,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 2,
-    "outputCost": 10
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "opencode/gpt-5.6-terra",
@@ -668,6 +668,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 256000,
     "inputCost": 1,
     "outputCost": 2
+  },
+  {
+    "model": "opencode/jev-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 64000,
+    "maxOutput": null,
+    "inputCost": 0.042,
+    "outputCost": null
   },
   {
     "model": "opencode/kimi-k2.5",
@@ -872,18 +884,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.5,
     "outputCost": 3
-  },
-  {
-    "model": "opencode/union-alpha",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
   }
 ]}
 />

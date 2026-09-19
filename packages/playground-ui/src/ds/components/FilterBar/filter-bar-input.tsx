@@ -1,4 +1,5 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
+import { Search } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { FilterBarFieldLabel } from './filter-bar-chip';
@@ -183,6 +184,9 @@ export function FilterBarInput({
   const items: readonly Item[] =
     draft.step === 'field' ? visibleFields : draft.step === 'operator' ? fieldOperators : valueStep.options;
 
+  const searchPlaceholder =
+    draft.step === 'field' ? 'Search fields…' : draft.step === 'operator' ? 'Search operators…' : 'Search values…';
+
   const inputPlaceholder =
     draft.step === 'field'
       ? placeholder
@@ -266,9 +270,30 @@ export function FilterBarInput({
             className={comboboxStyles.positioner}
           >
             <ComboboxPrimitive.Popup // The input stretches across the bar, so drop the anchor-width floor: size to content.
-              className={cn(comboboxStyles.popup, 'min-w-44')}
+              className={cn(comboboxStyles.popup, 'min-w-56')}
               data-slot="filter-bar-editor"
             >
+              {(draft.step !== 'value' || valueStep.hasSuggestions) && (
+                // Search row mirroring the bar input, so the popup reads as a searchable combobox.
+                // The bar input stays the only real input: focus and keyboard navigation never move.
+                <div
+                  className={cn(comboboxStyles.searchContainer, 'cursor-text')}
+                  data-slot="filter-bar-search"
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => inputRef.current?.focus()}
+                >
+                  <Search className={comboboxStyles.searchIcon} />
+                  <span
+                    className={cn(
+                      comboboxStyles.searchInput,
+                      'flex items-center truncate',
+                      query === '' && comboboxStyles.placeholder,
+                    )}
+                  >
+                    {query === '' ? searchPlaceholder : query}
+                  </span>
+                </div>
+              )}
               {draft.step === 'field' && (
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"

@@ -64,6 +64,7 @@ import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.
 import { goalFreshThreadPersistenceScenario } from './goal-fresh-thread-persistence.js';
 import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
+import { goalResumeSingleRenderScenario } from './goal-resume-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
 import { integrationCommandsScenario } from './integration-commands.js';
@@ -151,6 +152,7 @@ import { shellPassthroughDuringRunScenario } from './shell-passthrough-during-ru
 import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-override.js';
 import { shellPassthroughLongOutputScenario } from './shell-passthrough-long-output.js';
 import { shellPassthroughNonpersistentScenario } from './shell-passthrough-nonpersistent.js';
+import { skillTabAutocompleteScenario } from './skill-tab-autocomplete.js';
 import { skillsCommandActivationScenario } from './skills-command-activation.js';
 import { skillsSymlinkDedupeScenario } from './skills-symlink-dedupe.js';
 import { startupScenario } from './startup.js';
@@ -261,6 +263,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'goal-fresh-thread-persistence': goalFreshThreadPersistenceScenario,
   'goal-judge-om-model-isolation': goalJudgeOmModelIsolationScenario,
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
+  'goal-resume-single-render': goalResumeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'hidden-reasoning-single-label': hiddenReasoningSingleLabelScenario,
@@ -355,6 +358,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'shell-passthrough-env-override': shellPassthroughEnvOverrideScenario,
   'shell-passthrough-long-output': shellPassthroughLongOutputScenario,
   'shell-passthrough-nonpersistent': shellPassthroughNonpersistentScenario,
+  'skill-tab-autocomplete': skillTabAutocompleteScenario,
   'skills-command-activation': skillsCommandActivationScenario,
   'skills-symlink-dedupe': skillsSymlinkDedupeScenario,
   'storage-fallback-history-reload': storageFallbackHistoryReloadScenario,

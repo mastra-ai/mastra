@@ -1,9 +1,11 @@
 export { FactorySection } from './components/FactorySection';
 export * from '../../../hooks/useFactoryData';
+export * from '../../../hooks/useJiraData';
 export * from '../../../hooks/useLinearData';
 export * from '../../../hooks/useIntakeConfig';
 export * from '../../../hooks/useWorkItems';
 export * from './services/factory';
+export * from './services/jira';
 export * from './services/linear';
 export * from './services/intake';
 export * from './services/workItems';

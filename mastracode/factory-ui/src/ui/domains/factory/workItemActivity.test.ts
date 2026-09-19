@@ -217,6 +217,28 @@ describe('workItemActivity', () => {
     expect(activity.extraActors).toEqual({ 'linear:grace': { id: 'linear:grace', name: 'grace' } });
   });
 
+  it('shows Jira reporter and assignee metadata like Linear work items', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'jira-issue',
+        metadata: { identifier: 'ENG-42', assignee: 'Ada', creator: 'Grace', labels: ['bug'] },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'jira:Ada', name: 'Ada' });
+    expect(activity.extraActors).toEqual({
+      'jira:Ada': { id: 'jira:Ada', name: 'Ada' },
+      'jira:Grace': { id: 'jira:Grace', name: 'Grace' },
+    });
+    expect(activity.events.map(candidate => ({ id: candidate.id, actorId: candidate.actorId }))).toEqual([
+      { id: `synthetic-assigned:${item.id}`, actorId: 'jira:Ada' },
+      { id: `synthetic-created:${item.id}`, actorId: 'jira:Grace' },
+    ]);
+  });
+
   it('accepts legacy Linear metadata that stored the assignee under `linearAssignee`', () => {
     const activity = workItemActivity(
       {

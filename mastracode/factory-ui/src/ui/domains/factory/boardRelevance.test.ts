@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { issueCandidate, linearCandidate, pullRequestCandidate } from './boardCandidates';
+import { issueCandidate, jiraCandidate, linearCandidate, pullRequestCandidate } from './boardCandidates';
 import {
   boardLabels,
   boardLabelsFromQuery,
@@ -129,10 +129,30 @@ describe('board relevance', () => {
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
 
+    const jira = jiraCandidate({
+      id: 'jira-1',
+      identifier: 'ENG-13',
+      title: 'Filter the board from Jira',
+      url: 'https://acme.atlassian.net/browse/ENG-13',
+      state: 'To Do',
+      stateType: 'unstarted',
+      priorityLabel: 'High',
+      assignee: 'Grace Hopper',
+      author: 'Ada Lovelace',
+      project: 'ENG',
+      site: 'acme.atlassian.net',
+      labels: [],
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+      sourceId: '10001',
+    });
+
     expect(candidateMatchesRelevance(githubIssue, 'github:hubot', new Set(['assigned']))).toBe(true);
     expect(candidateMatchesRelevance(githubPr, 'github:monalisa', new Set(['review-requested']))).toBe(true);
     expect(candidateMatchesRelevance(linear, 'linear:ada lovelace', new Set(['authored']))).toBe(true);
     expect(candidateMatchesRelevance(linear, 'linear:grace hopper', new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(jira, 'jira:ada lovelace', new Set(['authored']))).toBe(true);
+    expect(candidateMatchesRelevance(jira, 'jira:grace hopper', new Set(['assigned']))).toBe(true);
   });
 
   it('builds a named teammate list from auth, audit, and provider metadata without raw Factory ids', () => {

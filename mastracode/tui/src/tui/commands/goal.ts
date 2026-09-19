@@ -14,8 +14,6 @@ import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import { createGoalReminderSignal } from '@mastra/code-sdk/goal-signal';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { createSignal } from '@mastra/core/signals';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
@@ -26,10 +24,6 @@ import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { getSelectListTheme, theme } from '../theme.js';
 
 import type { SlashCommandContext } from './types.js';
-
-export interface StartGoalOptions {
-  trigger?: 'send' | 'none';
-}
 
 export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const { state } = ctx;
@@ -82,18 +76,9 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     await goalManager.saveToThread(state);
     ctx.updateStatusLine();
 
-    // Kick off the next turn using the same goal-reminder signal format used by
-    // startGoal, so the model receives a structured system-reminder rather than
-    // a plain user message.
+    // The goal-reminder signal below is echoed back into the live stream as the
+    // goal box; rendering it here too would show the goal twice.
     const resumedGoal = goalManager.getGoal();
-    ctx.addUserMessage(
-      createGoalReminderMessage(
-        resumedGoal!.id,
-        resumedGoal!.objective,
-        resumedGoal!.maxTurns,
-        resumedGoal!.judgeModelId,
-      ),
-    );
     try {
       await state.session.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
     } catch (err) {
@@ -244,13 +229,12 @@ export async function startGoalWithDefaults(
   ctx: SlashCommandContext,
   objective: string,
   cancelMessage = 'Goal cancelled.',
-  options: StartGoalOptions = {},
 ): Promise<void> {
   const defaults = getJudgeDefaults();
   const judgeDefaults = defaults ?? (await promptForJudgeDefaults(ctx, cancelMessage));
   if (!judgeDefaults) return;
 
-  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns, options);
+  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns);
 }
 
 function getJudgeDefaults(): JudgeDefaults | null {
@@ -332,7 +316,6 @@ async function startGoal(
   objective: string,
   judgeModelId: string,
   maxTurns: number,
-  options: StartGoalOptions = {},
 ): Promise<void> {
   const { state } = ctx;
   const goalManager = state.goalManager;
@@ -378,14 +361,6 @@ async function startGoal(
   await goalManager.saveToThread(state);
   ctx.updateStatusLine();
 
-  // Model-only reminders are not echoed to the live stream. Render the goal
-  // locally, including plan handoffs that start their run separately.
-  ctx.addUserMessage(createGoalReminderMessage(goal.id, goal.objective, goal.maxTurns, goal.judgeModelId));
-
-  if (options.trigger === 'none') {
-    return;
-  }
-
   try {
     await state.session.sendSignal(createGoalReminderSignal(goal)).accepted;
   } catch (err) {
@@ -393,22 +368,6 @@ async function startGoal(
     await goalManager.saveToThread(state);
     ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
   }
-}
-
-export function createGoalReminderMessage(
-  goalId: string,
-  objective: string,
-  maxTurns: number,
-  judgeModelId: string,
-): MastraDBMessage {
-  return createSignal({
-    id: `goal-${goalId}`,
-    type: 'reactive',
-    tagName: 'system-reminder',
-    contents: objective,
-    attributes: { type: 'goal' },
-    metadata: { goalMaxTurns: maxTurns, judgeModelId },
-  } as Parameters<typeof createSignal>[0]).toDBMessage();
 }
 
 export function createGoalReminderXml(message: string): string {

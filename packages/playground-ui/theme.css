@@ -82,6 +82,7 @@
   --shadow-main-frame: 0 14px 48px -36px oklch(0% 0 0deg / 85%);
   --sidebar-nav-hover: oklch(100% 0 0deg / 7%);
   --sidebar-nav-active: oklch(100% 0 0deg / 11%);
+  --sidebar-divider: oklch(100% 0 0deg / 11%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -224,6 +225,7 @@ html.light {
   --shadow-main-frame: 0 1px 2px oklch(24% 0 0deg / 4%), 0 18px 48px -34px oklch(24% 0 0deg / 22%);
   --sidebar-nav-hover: oklch(20.8% 0 0deg / 5.5%);
   --sidebar-nav-active: oklch(20.8% 0 0deg / 8.5%);
+  --sidebar-divider: oklch(20.8% 0 0deg / 16%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -385,10 +387,11 @@ html.light {
   --height-icon-default: 16px;
   --height-icon-lg: 20px;
   --height-icon-sm: 12px;
+  --height-icon-smd: 14px;
   --spacing-form-xs: 1.25rem;
   --spacing-form-sm: 1.5rem;
   --spacing-form-md: 1.75rem;
-  --spacing-form-lg: 1.75rem;
+  --spacing-form-lg: 2rem;
   --height-header-default: 40px;
   --height-table-header: 28px;
   --height-table-row: 40px;
@@ -402,6 +405,7 @@ html.light {
   --max-height-icon-default: 16px;
   --max-height-icon-lg: 20px;
   --max-height-icon-sm: 12px;
+  --max-height-icon-smd: 14px;
   --max-height-header-default: 40px;
   --max-height-table-header: 28px;
   --max-height-table-row: 40px;
@@ -417,6 +421,7 @@ html.light {
   --width-icon-default: 16px;
   --width-icon-lg: 20px;
   --width-icon-sm: 12px;
+  --width-icon-smd: 14px;
   /* Using --spacing-form-* for both height and width */
   --width-header-default: 40px;
   --width-table-header: 28px;
@@ -480,6 +485,7 @@ html.light {
   --color-button-default-bg-active: var(--button-default-bg-active);
   --color-button-default-border: var(--button-default-border);
   --color-surface-row-featured: var(--surface-row-featured);
+  --color-sidebar-divider: var(--sidebar-divider);
 
   /* Semantic color aliases */
   --color-text1: var(--text1);
@@ -567,6 +573,24 @@ html.light {
     100% {
       transform: translateX(100%);
     }
+  }
+}
+
+:root {
+  --resize-dur: 300ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-resize {
+  transition:
+    width var(--resize-dur) var(--resize-ease),
+    height var(--resize-dur) var(--resize-ease);
+  will-change: width, height;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-resize {
+    transition: none !important;
   }
 }
 

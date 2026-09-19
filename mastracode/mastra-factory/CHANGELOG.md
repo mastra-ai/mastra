@@ -1,5 +1,34 @@
 # create-factory
 
+## 0.2.0-alpha.7
+
+### Minor Changes
+
+- Added a Jira Cloud intake integration for the Software Factory with full Linear-equivalent behavior, supporting both direct credentials and Platform-managed connections. ([#20579](https://github.com/mastra-ai/mastra/pull/20579))
+
+  Direct mode: set `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN` to use a deployment-global Atlassian API token — no OAuth app setup, intended for self-hosted/single-tenant deployments. Platform mode: with `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` configured, Factory automatically discovers visible Platform Jira connections (multiple sites supported) and proxies Jira requests through the Platform integrations service; an explicitly configured `JiraIntegration` takes precedence.
+
+  Factory settings and onboarding connect Jira accounts in-app, select Jira projects as intake sources, and route each project to a Factory board. Observed issues on routed projects materialize automatically as work items, closed issues transition their linked card to done or canceled, and both Jira integrations accept `rules` overrides for the `issueObserved` and `issueClosed` events. A background reconciliation worker keeps imported work items fresh (`MASTRACODE_JIRA_RECONCILE_ENABLED`, `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS`). Work cards preserve Jira descriptions, labels, reporters, assignees, priority, project, site, state, and timestamps, appear in the board's teammate filters, and offer the same investigate and build actions as Linear issues. Agents get `jira_get_issue` and `jira_create_comment` tools, including on automated board runs.
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.31.0-alpha.7
+
+## 0.1.19-alpha.6
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.31.0-alpha.6
+
+## 0.1.19-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`8770a6c`](https://github.com/mastra-ai/mastra/commit/8770a6c3cfc78f45329761c24da400806eb2cade), [`33d3fad`](https://github.com/mastra-ai/mastra/commit/33d3fad004022a13ea773a0de67936754d630be1), [`a3e3b4a`](https://github.com/mastra-ai/mastra/commit/a3e3b4a1f3a1b878e8b010134915471f784ca1c1)]:
+  - mastra@1.31.0-alpha.5
+
 ## 0.1.19-alpha.4
 
 ### Patch Changes

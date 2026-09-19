@@ -21,6 +21,7 @@ import type {
 
 import type { DbClient, TxClient } from '../../../client';
 import { qualifiedTable, TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import { latestScorePredicate } from './scores';
 
 type SqlFragment = { sql: string; values: unknown[] };
 type FieldRegistry<TField extends string> = Record<TField, string>;
@@ -230,14 +231,6 @@ function latestSpanPredicate(spanTable: string): string {
     WHERE newer."traceId" = s."traceId"
       AND newer."spanId" = s."spanId"
       AND (newer."isPending" < s."isPending" OR (newer."isPending" = s."isPending" AND newer."cursorId" > s."cursorId"))
-  )`;
-}
-
-function latestScorePredicate(scoreTable: string): string {
-  return `NOT EXISTS (
-    SELECT 1 FROM ${scoreTable} newer
-    WHERE newer."scoreId" = s."scoreId"
-      AND newer."cursorId" > s."cursorId"
   )`;
 }
 

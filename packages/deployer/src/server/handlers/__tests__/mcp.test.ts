@@ -97,11 +97,11 @@ describe('Deployer MCP Smoke Test', () => {
       const res = await fetch(`http://localhost:${PORT}/api/mcp/test-server/tools/calculate/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ args: { operation: 'add', a: 5, b: 3 } }),
+        body: JSON.stringify({ data: { operation: 'add', a: 5, b: 3 } }),
       });
       expect(res.status).toBe(200);
       const data = await res.json();
-      expect(data.result).toBeDefined();
+      expect(data.result).toEqual({ result: 8 });
     });
   });
 

@@ -6,6 +6,8 @@
  * `SandboxLifecycle` add the methods each provider kind actually uses.
  */
 
+import type { SandboxStartOptions } from './sandbox/mastra-sandbox';
+
 // =============================================================================
 // Base Lifecycle Interface
 // =============================================================================
@@ -121,7 +123,7 @@ export interface SandboxLifecycle<TInfo = unknown> extends Lifecycle<TInfo> {
    * {@link SandboxStartResult}. Returning `void` means "unknown" (provider
    * not yet migrated); callers fall back to sentinel-guarded idempotency.
    */
-  start?(): void | Promise<SandboxStartResult | void>;
+  start?(options?: SandboxStartOptions): void | Promise<SandboxStartResult | void>;
 
   /**
    * Pause operation, keeping state for potential restart.

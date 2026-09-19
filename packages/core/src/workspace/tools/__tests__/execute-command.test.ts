@@ -67,6 +67,36 @@ describe('executeCommandTool data chunks', () => {
     });
   });
 
+  describe('exit metadata', () => {
+    it('preserves provider termination flags', async () => {
+      const { context, writerCustom } = createMockContext({
+        toolCallId: 'call-terminated',
+        executeCommand: async () => ({
+          success: false,
+          exitCode: 137,
+          stdout: '',
+          stderr: '',
+          executionTimeMs: 50,
+          killed: true,
+          timedOut: true,
+        }),
+      });
+
+      await execute({ command: 'sleep', args: ['999'], timeout: null, cwd: null }, context);
+
+      const exitChunks = getChunks(writerCustom, 'data-sandbox-exit');
+      expect(exitChunks).toHaveLength(1);
+      expect(exitChunks[0].data).toEqual({
+        exitCode: 137,
+        success: false,
+        executionTimeMs: 50,
+        killed: true,
+        timedOut: true,
+        toolCallId: 'call-terminated',
+      });
+    });
+  });
+
   describe('toolCallId in chunks', () => {
     it('includes toolCallId in stdout chunks', async () => {
       const { context, writerCustom } = createMockContext({
@@ -533,6 +563,31 @@ describe('executeCommandTool data chunks', () => {
       await execute({ command: 'cat file.txt | grep error', timeout: null, cwd: null, tail: null }, context);
 
       expect(receivedCommand).toBe('cat file.txt | grep error');
+    });
+
+    it('passes stdinMode ignore to spawn for background commands', async () => {
+      let receivedOptions: any;
+
+      const { context } = createMockContext({
+        executeCommand: async () => {
+          return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      (context.workspace as any).sandbox.processes = {
+        spawn: async (_cmd: string, options: any) => {
+          receivedOptions = options;
+          return { pid: 123 };
+        },
+      };
+
+      const { executeCommandWithBackgroundTool } = await import('../execute-command');
+      await executeCommandWithBackgroundTool.execute!(
+        { command: 'npm start', timeout: null, cwd: null, tail: null, background: true },
+        context,
+      );
+
+      expect(receivedOptions).toHaveProperty('stdinMode', 'ignore');
     });
   });
 });

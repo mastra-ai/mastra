@@ -521,6 +521,17 @@ export class SearchEngine {
   }
 
   /**
+   * Number of indexed documents whose ID starts with the given prefix.
+   */
+  countByPrefix(prefix: string): number {
+    let count = 0;
+    for (const id of this.#indexedIds) {
+      if (id.startsWith(prefix)) count++;
+    }
+    return count;
+  }
+
+  /**
    * Remove all documents whose ID starts with the given prefix.
    * Used to remove all chunks belonging to a single source document.
    */

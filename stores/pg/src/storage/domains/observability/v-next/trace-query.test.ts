@@ -81,7 +81,9 @@ describe('Postgres advanced trace query', () => {
     FROM`);
     expect(compiled.text.match(/EXISTS \(/g)).toHaveLength(3);
     expect(compiled.text).toContain('s."traceId" = r."traceId"');
+    expect(compiled.text).toContain('SELECT 1 FROM "custom"."mastra_score_events" newer');
     expect(compiled.text).toContain('newer."scoreId" = s."scoreId"');
+    expect(compiled.text).toContain('newer."cursorId" > s."cursorId"');
     expect(compiled.text).toContain('s."scorerVersion" IS NOT DISTINCT FROM');
     expect(compiled.text).toContain('s."scoreSource" IS NOT NULL');
     expect(compiled.text).toContain('s."timestamp" IS NOT NULL AND s."timestamp" >=');

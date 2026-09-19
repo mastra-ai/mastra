@@ -33,9 +33,9 @@ import type {
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
-import { isMaybeAnthropicWithoutAssistantPrefill } from '../../../processors/provider-history-compat';
 import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
+import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -1252,9 +1252,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // consecutive tool-only turns are not collapsed into a single block
       // by convertToModelMessages. This ensures the LLM sees them as
       // sequential steps rather than parallel tool calls.
-      if (currentIteration > 1) {
-        messageList.stepStart();
-      }
+      // Held for the rollback below: it identifies *this* iteration's boundary, which
+      // "the last step-start part" does not — markers are also synthesized within a single
+      // response when a tool call is followed by text, and nothing stored tells them apart.
+      // Undefined on the first iteration, and on any iteration with no open assistant message to
+      // append to — both roll the message back whole, which is what the rejection means there.
+      const iterationBoundary = currentIteration > 1 ? messageList.openStepBoundary().boundary : undefined;
 
       let currentMessageId = inputData.isTaskCompleteCheckFailed
         ? `${messageIdPassed}-${currentIteration}`
@@ -1339,6 +1342,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
         }
 
+        // Per-model modelSettings shallow-merge on top of call-time modelSettings,
+        // resolved once here so that input processors see (and can override) the
+        // settings this step will actually run with. Mirrors how per-model
+        // providerOptions are merged below.
+        // An explicit model or agent maxRetries wins; otherwise preserve modelSettings before using the default.
+        const resolvedModelSettings: MastraModelSettings = {
+          ...modelSettings,
+          ...modelConfig.modelSettings,
+          timeout:
+            modelSettings?.timeout || modelConfig.modelSettings?.timeout
+              ? { ...modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
+              : undefined,
+          maxRetries: modelConfig.maxRetriesConfigured
+            ? modelConfig.maxRetries
+            : (modelSettings?.maxRetries ?? modelConfig.maxRetries),
+        };
+
         const currentStep: {
           messageId: string;
           model: MastraLanguageModel;
@@ -1356,7 +1376,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           toolChoice,
           activeTools,
           providerOptions: mergeProviderOptions(providerOptions, modelConfig.providerOptions),
-          modelSettings,
+          modelSettings: resolvedModelSettings,
           structuredOutput,
           workspace,
         };
@@ -1397,7 +1417,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           ...(inputProcessors || []),
           ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
         ];
-        if (inputStepProcessors.length > 0 || isMaybeAnthropicWithoutAssistantPrefill(model)) {
+        if (needsTrailingAssistantGuard(model, inputStepProcessors)) {
           const processorRunner = new ProcessorRunner({
             inputProcessors: inputStepProcessors,
             outputProcessors: [],
@@ -1462,6 +1482,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // `currentStep`. This is the contract the regular path relied on
             // before composeStepInput was extracted.
             Object.assign(currentStep, mergedStepInput);
+            // `composeStepInput` replaces `modelSettings` wholesale, so a processor
+            // returning the idiomatic partial shape (`{ temperature }`) drops every
+            // key it did not restate. `maxRetries` and `timeout` are infrastructure
+            // budgets rather than model knobs, and were re-applied after the
+            // processor ran before this resolution moved into `currentStep` — keep
+            // them rather than silently falling back to provider defaults.
+            const processorSettings = currentStep.modelSettings;
+            currentStep.modelSettings = {
+              ...processorSettings,
+              maxRetries: processorSettings?.maxRetries ?? resolvedModelSettings.maxRetries,
+              timeout: processorSettings?.timeout ?? resolvedModelSettings.timeout,
+            };
             executedStepModel =
               currentStep.model.provider && currentStep.model.modelId
                 ? `${currentStep.model.provider}/${currentStep.model.modelId}`
@@ -1470,7 +1502,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // Update MODEL_GENERATION span if processor actually changed model or modelSettings
             const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
             const modelSettingsChanged =
-              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
+              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== resolvedModelSettings;
             if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
               modelSpanTracker.updateGeneration({
                 ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
@@ -1745,14 +1777,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // input processor / prepareStep / processLLMRequest work, and that
           // availableTools / toolChoice reflect any per-step mutations.
           modelSpanTracker?.setInferenceContext?.({
-            parameters: {
-              ...currentStep.modelSettings,
-              ...modelConfig.modelSettings,
-              timeout:
-                currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
-                  ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
-                  : undefined,
-            } as Record<string, unknown> | undefined,
+            parameters: currentStep.modelSettings as Record<string, unknown> | undefined,
             providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
             availableTools: getStepAvailableToolNames(
               currentStep.tools as Record<string, unknown> | undefined,
@@ -1776,19 +1801,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 toolChoice: currentStep.toolChoice,
                 activeTools: currentStep.activeTools as string[] | undefined,
                 options,
-                // Per-model modelSettings shallow-merge on top of call-time modelSettings.
-                // An explicit model or agent maxRetries wins; otherwise preserve modelSettings before using the default.
-                modelSettings: {
-                  ...currentStep.modelSettings,
-                  ...modelConfig.modelSettings,
-                  timeout:
-                    currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
-                      ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
-                      : undefined,
-                  maxRetries: modelConfig.maxRetriesConfigured
-                    ? modelConfig.maxRetries
-                    : (currentStep.modelSettings?.maxRetries ?? modelConfig.maxRetries),
-                },
+                // Resolved once in `currentStep` above (call-time < per-model < processor).
+                modelSettings: currentStep.modelSettings,
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,
                 headers: mergeLlmCallHeaders({
@@ -2578,11 +2592,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }),
       );
 
-      // Remove rejected response messages from the messageList before the next iteration.
+      // Remove the rejected response from the messageList before the next iteration.
       // Without this, the LLM sees the rejected assistant response in its prompt on retry,
       // which confuses models and often causes empty text responses.
+      //
+      // Scoped to the rejected step, not the whole message: the response message id is stable
+      // across retry iterations, so removing the message outright also destroyed the reasoning
+      // and tool-invocation parts of steps the processor already accepted. That left a persisted
+      // assistant message carrying an OpenAI text itemId with no reasoning item to pair with,
+      // which OpenAI rejects with a non-retryable 400 on the next turn (issue #22291).
       if (shouldRetry) {
-        messageList.removeByIds([outputStream.messageId]);
+        messageList.rollbackToStepBoundary(outputStream.messageId, iterationBoundary);
       }
 
       const retryFeedbackText =

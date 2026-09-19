@@ -58,10 +58,9 @@ export const NoLogsInfo = ({ datePreset, dateFrom, dateTo }: NoLogsInfoProps = {
         actionSlot={
           <Button
             variant="ghost"
-            as="a"
-            href="https://mastra.ai/en/docs/observability/logging"
-            target="_blank"
-            rel="noopener noreferrer"
+            render={
+              <a href="https://mastra.ai/en/docs/observability/logging" target="_blank" rel="noopener noreferrer" />
+            }
             icon={<ExternalLinkIcon />}
           >
             Logging Documentation

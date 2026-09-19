@@ -240,10 +240,10 @@ export function MemorySidebarBody({
                 actionSlot={
                   <Button
                     icon={<ExternalLink />}
-                    as="a"
-                    href="https://mastra.ai/docs/memory/overview"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    render={
+                      <a href="https://mastra.ai/docs/memory/overview" target="_blank" rel="noopener noreferrer" />
+                    }
+
                     variant="outline"
                   >
                     View documentation
