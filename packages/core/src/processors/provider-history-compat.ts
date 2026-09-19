@@ -810,7 +810,8 @@ function stripResponseItemIds(part: MastraMessagePart): boolean {
  *   `msg_…` id was dropped while its `fc_…` id stayed would simply fail on the
  *   next item in the list, spending the one available retry to arrive at the
  *   same error.
- * - Strips only `itemId`; all other fields in the namespace survive.
+ * - Strips only the item-reference keys (`itemId` and its result-side partner
+ *   `resultItemId`); all other fields in the namespace survive.
  * - Reads and strips through the shared Responses helpers, so the `azure`
  *   namespace is covered on the same footing as `openai` — the repo treats
  *   them as one Responses family, and Azure raises this same 400.

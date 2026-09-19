@@ -1910,6 +1910,17 @@ describe('openaiOrphanItemId', () => {
                   },
                   providerMetadata: { openai: { itemId: 'tso_call', resultItemId: 'tso_result' } },
                 },
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: 'call-2',
+                    toolName: 'tool_search',
+                    args: {},
+                    result: { hits: [] },
+                  },
+                  providerOptions: { azure: { itemId: 'tso_call_2', resultItemId: 'tso_result_2' } },
+                } as any,
               ],
             },
             createdAt: new Date(),
@@ -1921,11 +1932,14 @@ describe('openaiOrphanItemId', () => {
     });
 
     const result = await handler.processAPIError(args);
-    const part = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-pair')!.content.parts[0];
-    const openai = (part as { providerMetadata?: { openai?: Record<string, unknown> } }).providerMetadata?.openai;
+    const parts = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-pair')!.content.parts;
+    const openai = (parts[0] as { providerMetadata?: { openai?: Record<string, unknown> } }).providerMetadata?.openai;
+    const azure = (parts[1] as { providerOptions?: { azure?: Record<string, unknown> } }).providerOptions?.azure;
 
     expect(result).toEqual({ retry: true });
-    expect(openai).not.toHaveProperty('itemId');
-    expect(openai).not.toHaveProperty('resultItemId');
+    for (const namespace of [openai, azure]) {
+      expect(namespace).not.toHaveProperty('itemId');
+      expect(namespace).not.toHaveProperty('resultItemId');
+    }
   });
 });
