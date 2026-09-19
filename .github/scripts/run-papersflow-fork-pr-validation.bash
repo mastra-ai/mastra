@@ -4593,7 +4593,10 @@ run_validator_self_tests() {
       > stores/libsql/src/storage/domains/workflows/atomic-resume.test.ts
     printf '%s\n' '{}' > stores/pg/package.json
     printf '%s\n' 'export default {};' > stores/pg/vitest.config.ts
-    printf '%s\n' 'export default {};' > stores/pg/vitest.perf.config.ts
+    printf '%s\n' "import './vitest.perf.config-helper';" 'export default {};' \
+      > stores/pg/vitest.perf.config.ts
+    printf '%s\n' 'export const pgPerformanceConfigHelper = "base";' \
+      > stores/pg/vitest.perf.config-helper.ts
     printf '%s\n' 'export const pgConstraintHelper = "base";' \
       > stores/pg/src/storage/db/constraint-utils.ts
     printf '%s\n' 'export const pgWorkflowStorage = true;' \
@@ -6626,6 +6629,40 @@ NODE
     "$command_log"
   assert_line_match_count 0 'pooler|row-number-performance|performance-indexes\.integration' "$command_log"
   assert_contains 'postgres 127.0.0.1:5434' "$service_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' "fetch('https://invalid.example/pf4243-config-helper-hostile');" \
+      > stores/pg/vitest.perf.config-helper.ts
+    printf '%s\n' "it('pg performance index helper head', () => {});" \
+      >> stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    git add .
+    git commit -q -m 'reject hostile PostgreSQL config helper'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-config-helper-hostile-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'Hostile PostgreSQL unit config helper fixture unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains \
+    'Unsupported fork-test runtime surface for stores/pg/vitest.perf.config.ts:' \
+    "$output"
+  assert_contains 'stores/pg/vitest.perf.config-helper.ts: fetch()' "$output"
+  assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
+  if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
+    echo 'Hostile PostgreSQL unit config helper reached a test runner or service probe.' >&2
+    cat "$command_log" "$service_log" >&2
+    exit 1
+  fi
 
   head_sha="$(
     cd "$fixture_repo"
@@ -14130,7 +14167,8 @@ function approvedExactExternalSpecifier(specifier, importer, occurrences) {
   const bareSpecifier = specifier.startsWith('node:') ? specifier.slice('node:'.length) : specifier;
   return (
     specifier === 'vitest' ||
-    specifier === 'vitest/config' ||
+    (specifier === 'vitest/config' &&
+      repositoryPath(importer) === 'stores/pg/vitest.perf.config.ts') ||
     specifier === 'zod' ||
     specifier.startsWith('zod/') ||
     specifier === '@internal/ai-sdk-v5/test' ||
@@ -14381,11 +14419,10 @@ done
 
 # The native performance configuration is part of the exact unit's execution
 # contract, but it is not imported by the test file. A config-only change must
-# therefore scan that entrypoint and its local dependency closure before
-# enqueueing the unit through the existing runtime-surface policy.
+# therefore enqueue this unit explicitly; the config entrypoint and its local
+# dependency closure are scanned after exact-unit selection below.
 if grep -Fxq "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" "$changed_files"; then
-  if ! git_regular_file_at_head "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" ||
-    test_runtime_surface_has_unsupported_runtime "$PG_PERFORMANCE_INDEX_UNIT_CONFIG"; then
+  if ! git_regular_file_at_head "$PG_PERFORMANCE_INDEX_UNIT_CONFIG"; then
     printf '%s\n' "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" >> "$unsupported_tests"
   elif git_regular_file_at_head "$PG_PERFORMANCE_INDEX_UNIT_TEST"; then
     detected_tests+=("$PG_PERFORMANCE_INDEX_UNIT_TEST")
@@ -14396,6 +14433,23 @@ fi
 
 if (( ${#detected_tests[@]} > 0 )); then
   mapfile -t detected_tests < <(printf '%s\n' "${detected_tests[@]}" | sort -u)
+fi
+
+# The native performance configuration is part of the exact unit's execution
+# contract even when the config file itself is unchanged. Scan it after exact
+# unit selection so a changed local config dependency cannot bypass the
+# runtime-surface policy.
+pg_performance_index_unit_selected=false
+for file in "${detected_tests[@]}"; do
+  if [[ "$file" == "$PG_PERFORMANCE_INDEX_UNIT_TEST" ]]; then
+    pg_performance_index_unit_selected=true
+    break
+  fi
+done
+if [[ "$pg_performance_index_unit_selected" == true ]] &&
+  (! git_regular_file_at_head "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" ||
+    test_runtime_surface_has_unsupported_runtime "$PG_PERFORMANCE_INDEX_UNIT_CONFIG"); then
+  printf '%s\n' "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" >> "$unsupported_tests"
 fi
 
 if (( ${#detected_tests[@]} > 0 )) && [[ "$supervisor_provider_gate_verified" != true ]]; then
