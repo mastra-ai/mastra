@@ -407,6 +407,28 @@ describe('MastraPlatformExporter', () => {
       expect(spanRecord.createdAt).toBeInstanceOf(Date);
     });
 
+    it('should fall back to startTime for endedAt on event spans without endTime', async () => {
+      const eventSpan = { ...mockSpan, id: 'span-event', isEvent: true, endTime: undefined };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: eventSpan,
+      });
+
+      const buffer = (exporter as any).buffer;
+      expect(buffer.spans[0].endedAt).toBe(eventSpan.startTime);
+    });
+
+    it('should keep endedAt null for non-event spans without endTime', async () => {
+      const openSpan = { ...mockSpan, id: 'span-open', isEvent: false, endTime: undefined };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: openSpan,
+      });
+
+      const buffer = (exporter as any).buffer;
+      expect(buffer.spans[0].endedAt).toBeNull();
+    });
+
     it('should reset buffer correctly', () => {
       const buffer = (exporter as any).buffer;
       const resetBuffer = (exporter as any).resetBuffer.bind(exporter);
