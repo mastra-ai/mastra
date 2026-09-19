@@ -45,7 +45,7 @@ function isLanguageModelV3(model: GatewayLanguageModel): model is LanguageModelV
 
 const OPENAI_WS_ALLOWLIST = new Set(['openai']);
 const OPENAI_API_HOST = 'api.openai.com';
-const CACHE_KEY_HMAC_SECRET = randomBytes(32);
+let cacheKeyHmacSecret: Buffer | undefined;
 
 type GatewayModelCache = {
   modelInstances: Map<string, GatewayLanguageModel>;
@@ -510,7 +510,8 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     authScopeKey: string;
     api: 'chat' | 'responses';
   }): string {
-    return createHmac('sha256', CACHE_KEY_HMAC_SECRET)
+    cacheKeyHmacSecret ??= randomBytes(32);
+    return createHmac('sha256', cacheKeyHmacSecret)
       .update(
         JSON.stringify([
           gatewayId,
