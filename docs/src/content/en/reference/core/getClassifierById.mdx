@@ -1,0 +1,53 @@
+---
+title: 'Reference: getClassifierById() | Core'
+description: 'The getClassifierById() method retrieves a classifier by its id property, falling back to the registration key.'
+packages:
+  - '@mastra/core'
+---
+
+# getClassifierById()
+
+The `getClassifierById()` method retrieves a classifier by searching for its `id` property, then falls back to the registration key. `ClassifierProcessor` uses this method to resolve a classifier referenced by string.
+
+## Usage example
+
+```typescript
+import { mastra } from './mastra'
+
+const safety = mastra.getClassifierById('safety')
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'The id property of the classifier to retrieve, or its registration key.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'classifier',
+    type: 'Classifier',
+    description: 'The Classifier instance with the matching id or key.',
+  },
+]}
+/>
+
+## Error handling
+
+This method throws a `MastraError` with id `MASTRA_GET_CLASSIFIER_BY_ID_NOT_FOUND` if no classifier matches the specified id or key.
+
+## Related
+
+- [getClassifier()](/reference/core/getClassifier): Get a classifier by its registration key
+- [listClassifiers()](/reference/core/listClassifiers): Get all registered classifiers
+- [ClassifierProcessor](/reference/processors/classifier-processor)

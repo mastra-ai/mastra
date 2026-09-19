@@ -3639,6 +3639,9 @@ export class Agent<
         // Always register the configuration with agent context
         mastra.addProcessorConfiguration(processor, this.id, 'input');
       });
+      // addProcessor early-returns on a duplicate id, so make sure this agent's
+      // own instances receive the Mastra reference regardless.
+      registerProviderProcessors(this.#inputProcessors, mastra);
     }
 
     // Auto-register output processors with the Mastra instance
@@ -3655,6 +3658,7 @@ export class Agent<
         // Always register the configuration with agent context
         mastra.addProcessorConfiguration(processor, this.id, 'output');
       });
+      registerProviderProcessors(this.#outputProcessors, mastra);
     }
 
     // Propagate Mastra instance to signal providers and the processors they

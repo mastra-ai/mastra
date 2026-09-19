@@ -11,8 +11,9 @@ import {
 } from '@ai-sdk/provider-v7';
 import { retryWithExponentialBackoff } from '@ai-sdk/provider-utils-v7';
 
+import type { Mastra } from '../mastra';
 import { SpanType } from '../observability/types';
-import { resolveCurrentSpan } from '../observability/utils';
+import { getOrCreateSpan, resolveCurrentSpan } from '../observability/utils';
 
 export type ClassifierState = EvaluationModelV4Input;
 
@@ -127,6 +128,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
   readonly id: string;
   readonly model: EvaluationModelV4;
   readonly questions: CONFIGURED_QUESTIONS;
+  #mastra?: Mastra;
 
   constructor(
     options: CONFIGURED_QUESTIONS extends ClassifierQuestions
@@ -144,6 +146,14 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
     if (this.questions !== undefined) {
       validateQuestions(this.questions, this.model);
     }
+  }
+
+  /**
+   * Internal: called by `Mastra.addClassifier()` so evaluations can start root spans
+   * through the registered observability instance when no span is active.
+   */
+  __registerMastra(mastra: Mastra): void {
+    this.#mastra = mastra;
   }
 
   async evaluate(
@@ -171,9 +181,11 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
 
     const providerQuestions = toProviderQuestions(questions);
     const questionTypes = [...new Set(Object.values(questions).map(question => question.type))];
-    const span = resolveCurrentSpan()?.createChildSpan({
+    const span = getOrCreateSpan({
       type: SpanType.CLASSIFIER_EVALUATION,
       name: `classifier evaluate: '${this.id}'`,
+      tracingContext: { currentSpan: resolveCurrentSpan() },
+      mastra: this.#mastra,
       attributes: {
         classifierId: this.id,
         modelId: this.model.modelId,
