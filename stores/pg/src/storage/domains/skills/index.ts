@@ -27,6 +27,7 @@ import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skil
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -54,8 +55,8 @@ export class SkillsPG extends SkillsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (SkillsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -64,7 +65,7 @@ export class SkillsPG extends SkillsStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}idx_skill_versions_skill_version`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_skill_versions_skill_version`),
         table: TABLE_SKILL_VERSIONS,
         columns: ['skillId', 'versionNumber'],
         unique: true,
@@ -107,7 +108,8 @@ export class SkillsPG extends SkillsStorage {
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       try {
         await this.#db.createIndex(indexDef);
-      } catch {
+      } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         // Indexes are performance optimizations, continue on failure
       }
     }
@@ -145,6 +147,7 @@ export class SkillsPG extends SkillsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }

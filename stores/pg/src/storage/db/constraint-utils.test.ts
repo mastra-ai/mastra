@@ -1,7 +1,12 @@
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 
-import { POSTGRES_IDENTIFIER_MAX_LENGTH, truncateIdentifier, buildConstraintName } from './constraint-utils';
+import {
+  POSTGRES_IDENTIFIER_MAX_LENGTH,
+  truncateIdentifier,
+  truncateIdentifierWithHash,
+  buildConstraintName,
+} from './constraint-utils';
 import { generateTableSQL } from './index';
 
 // ---------------------------------------------------------------------------
@@ -87,6 +92,19 @@ describe('buildConstraintName', () => {
     const result = buildConstraintName({ baseName: 'constraint', schemaName: 'schema', maxLength: 10 });
     expect(result.length).toBeLessThanOrEqual(10);
     expect(result).toBe('schema_con');
+  });
+});
+
+describe('truncateIdentifierWithHash', () => {
+  it('preserves short names and distinguishes overlong names', () => {
+    const short = 'schema_idx_short';
+    const first = `${'s'.repeat(59)}_idx_first`;
+    const second = `${'s'.repeat(59)}_idx_second`;
+
+    expect(truncateIdentifierWithHash(short)).toBe(short);
+    expect(truncateIdentifierWithHash(first)).toBe(`${'s'.repeat(54)}_f4ecf79f`);
+    expect(truncateIdentifierWithHash(first)).not.toBe(truncateIdentifierWithHash(second));
+    expect(Buffer.byteLength(truncateIdentifierWithHash(first))).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
   });
 });
 

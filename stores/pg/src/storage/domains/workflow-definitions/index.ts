@@ -7,9 +7,11 @@ import type {
   UpdateWorkflowDefinitionInput,
   WorkflowDefinition,
 } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 
-import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
 
 function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
@@ -52,10 +54,20 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
 
   static readonly MANAGED_TABLES = [TABLE_WORKFLOW_DEFINITIONS] as const;
 
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
+    return [
+      {
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_workflow_definitions_status`),
+        table: TABLE_WORKFLOW_DEFINITIONS,
+        columns: ['status'],
+      },
+    ];
+  }
+
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx =>
@@ -64,6 +76,8 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
   }
 
   static getExportDDL(schemaName?: string): string[] {
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
     return [
       generateTableSQL({
         tableName: TABLE_WORKFLOW_DEFINITIONS,
@@ -71,18 +85,13 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
         schemaName,
         includeAllConstraints: true,
       }),
+      ...WorkflowDefinitionsPG.getDefaultIndexDefs(schemaPrefix).map(index => generateIndexSQL(index, schemaName)),
     ];
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
     const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
-    return [
-      {
-        name: `${schemaPrefix}idx_workflow_definitions_status`,
-        table: TABLE_WORKFLOW_DEFINITIONS,
-        columns: ['status'],
-      },
-    ];
+    return WorkflowDefinitionsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   async createDefaultIndexes(): Promise<void> {
@@ -91,6 +100,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
     }
@@ -102,6 +112,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }

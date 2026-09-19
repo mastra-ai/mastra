@@ -36,8 +36,8 @@ export class FavoritesPG extends FavoritesStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
   }
 

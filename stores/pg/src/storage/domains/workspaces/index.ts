@@ -25,6 +25,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -50,8 +51,8 @@ export class WorkspacesPG extends WorkspacesStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (WorkspacesPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -60,7 +61,7 @@ export class WorkspacesPG extends WorkspacesStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}idx_workspace_versions_workspace_version`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_workspace_versions_workspace_version`),
         table: TABLE_WORKSPACE_VERSIONS,
         columns: ['workspaceId', 'versionNumber'],
         unique: true,
@@ -103,7 +104,8 @@ export class WorkspacesPG extends WorkspacesStorage {
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       try {
         await this.#db.createIndex(indexDef);
-      } catch {
+      } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         // Indexes are performance optimizations, continue on failure
       }
     }
@@ -130,6 +132,7 @@ export class WorkspacesPG extends WorkspacesStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }

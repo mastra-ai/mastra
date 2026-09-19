@@ -146,7 +146,7 @@ import {
 import type { DbClient, TxClient } from '../../client';
 import { PgDB, resolvePgConfig, generateIndexSQL, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { buildConstraintName } from '../../db/constraint-utils';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { PG_UNSAFE_JSON_UNICODE_ESCAPE_PATTERN, sanitizeJsonForPg } from '../../db/sanitize-json';
 import { getSchemaSnapshot } from '../../db/schema-snapshot';
 import type { SchemaCheckConstraint } from '../../db/schema-snapshot';
@@ -260,7 +260,7 @@ const WORKFLOW_SNAPSHOT_CREATEDAT_INDEX = 'mastra_workflow_snapshot_name_created
  * `createDefaultIndexes()` silently drop this index (its per-index catch only logs).
  */
 function workflowSnapshotCreatedAtIndexName(schemaPrefix: string): string {
-  return buildConstraintName({ baseName: `${schemaPrefix}${WORKFLOW_SNAPSHOT_CREATEDAT_INDEX}` });
+  return truncateIdentifierWithHash(`${schemaPrefix}${WORKFLOW_SNAPSHOT_CREATEDAT_INDEX}`.toLowerCase());
 }
 
 /** Base name (before any schema prefix) of the expression index backing the status filter. */
@@ -272,10 +272,8 @@ const WORKFLOW_SNAPSHOT_STATUS_INDEX = 'mastra_workflow_snapshot_name_status_cre
  * no-op `CREATE INDEX` (schema-prefixed names routinely exceed the 63-byte limit).
  */
 function workflowSnapshotStatusIndexName(schemaName?: string): string {
-  return buildConstraintName({
-    baseName: WORKFLOW_SNAPSHOT_STATUS_INDEX,
-    schemaName: schemaName && schemaName !== 'public' ? schemaName : undefined,
-  });
+  const prefix = schemaName && schemaName !== 'public' ? `${schemaName}_` : '';
+  return truncateIdentifierWithHash(`${prefix}${WORKFLOW_SNAPSHOT_STATUS_INDEX}`.toLowerCase());
 }
 
 /**
@@ -318,8 +316,8 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
@@ -4286,6 +4284,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
     }
@@ -4300,11 +4299,26 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       await this.#db.createIndexFromStatement(indexName, workflowSnapshotStatusIndexSQL(indexName, this.#schema));
     } catch (error) {
+      if (this.#db.isExternalSchemaMode()) throw error;
       this.logger?.warn?.(`Failed to create index ${indexName}:`, error);
     }
   }
 
   async init(): Promise<void> {
+    if (this.#db.isExternalSchemaMode()) {
+      // Validate the snapshot table and indexes without running the terminal
+      // table migrations below. The store-level initializer already skips
+      // this path; this covers direct and composite overrides.
+      await this.#db.validateExternalSchemaTables(WorkflowsPG.MANAGED_TABLES);
+      await this.#db.createTable({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      });
+      await this.createDefaultIndexes();
+      await this.createCustomIndexes();
+      return;
+    }
+
     await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
     await this.#db.client.none(WorkflowsPG.getTerminalizationTableDDL(this.#schema));
     await this.#db.client.none(WorkflowsPG.getTerminalEffectTableDDL(this.#schema));
@@ -4343,6 +4357,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           column: entry.column,
         });
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
       }
     }
@@ -4371,6 +4386,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         // Log but continue - indexes are performance optimizations
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }

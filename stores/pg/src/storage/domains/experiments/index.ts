@@ -36,7 +36,7 @@ import type {
   TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { TxClient } from '../../client';
-import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { cutoffFor, runBatchedDelete } from '../../retention';
 import { getTableName, getSchemaName, tenancyWhere } from '../utils';
@@ -50,6 +50,48 @@ export class ExperimentsPG extends ExperimentsStorage {
   #indexes?: CreateIndexOptions[];
 
   static readonly MANAGED_TABLES = [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS] as const;
+
+  static getDefaultIndexDefs(): CreateIndexOptions[] {
+    return [
+      { name: 'idx_experiments_datasetid', table: TABLE_EXPERIMENTS, columns: ['datasetId'] },
+      {
+        name: 'idx_experiments_grouping',
+        table: TABLE_EXPERIMENTS,
+        columns: ['experimentSetId', 'comparisonId', 'variantId', 'trialIndex'],
+      },
+      {
+        name: 'idx_experiment_results_experimentid',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['experimentId'],
+      },
+      // The natural key includes `attempt` so external runners can record
+      // repeated trials as separate rows (retry convergence happens per attempt).
+      {
+        name: 'idx_experiment_results_exp_item_attempt',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['experimentId', 'itemId', 'attempt'],
+        unique: true,
+      },
+      // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
+      {
+        name: 'idx_experiments_org_project',
+        table: TABLE_EXPERIMENTS,
+        columns: ['organizationId', 'projectId'],
+      },
+      {
+        name: 'idx_experiment_results_org_project',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['organizationId', 'projectId'],
+      },
+      // Tags JSONB GIN index — backs the `"tags" @> ...::jsonb` containment filter.
+      {
+        name: 'idx_experiment_results_tags_gin',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['tags'],
+        method: 'gin',
+      },
+    ];
+  }
 
   /**
    * Experiments prune as whole units: an aged experiment and its result rows go
@@ -65,8 +107,8 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (ExperimentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -83,6 +125,9 @@ export class ExperimentsPG extends ExperimentsStorage {
           includeAllConstraints: true,
         }),
       );
+    }
+    for (const index of ExperimentsPG.getDefaultIndexDefs()) {
+      statements.push(generateIndexSQL(index, schemaName));
     }
     return statements;
   }
@@ -145,6 +190,7 @@ export class ExperimentsPG extends ExperimentsStorage {
           column: entry.column,
         });
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
       }
     }
@@ -206,41 +252,7 @@ export class ExperimentsPG extends ExperimentsStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    return [
-      { name: 'idx_experiments_datasetid', table: TABLE_EXPERIMENTS, columns: ['datasetId'] },
-      {
-        name: 'idx_experiments_grouping',
-        table: TABLE_EXPERIMENTS,
-        columns: ['experimentSetId', 'comparisonId', 'variantId', 'trialIndex'],
-      },
-      { name: 'idx_experiment_results_experimentid', table: TABLE_EXPERIMENT_RESULTS, columns: ['experimentId'] },
-      // The natural key includes `attempt` so external runners can record
-      // repeated trials as separate rows (retry convergence happens per attempt).
-      {
-        name: 'idx_experiment_results_exp_item_attempt',
-        table: TABLE_EXPERIMENT_RESULTS,
-        columns: ['experimentId', 'itemId', 'attempt'],
-        unique: true,
-      },
-      // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
-      {
-        name: 'idx_experiments_org_project',
-        table: TABLE_EXPERIMENTS,
-        columns: ['organizationId', 'projectId'],
-      },
-      {
-        name: 'idx_experiment_results_org_project',
-        table: TABLE_EXPERIMENT_RESULTS,
-        columns: ['organizationId', 'projectId'],
-      },
-      // Tags JSONB GIN index — backs the `"tags" @> ...::jsonb` containment filter.
-      {
-        name: 'idx_experiment_results_tags_gin',
-        table: TABLE_EXPERIMENT_RESULTS,
-        columns: ['tags'],
-        method: 'gin',
-      },
-    ];
+    return ExperimentsPG.getDefaultIndexDefs();
   }
 
   async createDefaultIndexes(): Promise<void> {
@@ -256,6 +268,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create default index ${indexDef.name}:`, error);
       }
     }
@@ -267,6 +280,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }

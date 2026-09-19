@@ -24,6 +24,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { DbClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { resolveTargets, runPrune } from '../../retention';
 
 function getSchemaName(schema?: string) {
@@ -117,10 +118,10 @@ export class SchedulesPG extends SchedulesStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
     this.#client = client;
     this.#readClient = readClient;
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (SchedulesPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -159,6 +160,7 @@ export class SchedulesPG extends SchedulesStorage {
           column: entry.column,
         });
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
       }
     }
@@ -185,12 +187,12 @@ export class SchedulesPG extends SchedulesStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}idx_mastra_schedules_status_next_fire`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_mastra_schedules_status_next_fire`),
         table: TABLE_SCHEDULES,
         columns: ['status', 'next_fire_at'],
       },
       {
-        name: `${schemaPrefix}idx_mastra_schedule_triggers_schedule_fire`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_mastra_schedule_triggers_schedule_fire`),
         table: TABLE_SCHEDULE_TRIGGERS,
         columns: ['schedule_id', 'actual_fire_at DESC'],
       },
@@ -210,6 +212,7 @@ export class SchedulesPG extends SchedulesStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
     }
@@ -223,6 +226,7 @@ export class SchedulesPG extends SchedulesStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }

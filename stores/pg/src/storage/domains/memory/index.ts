@@ -41,6 +41,7 @@ import {
  * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
+const OM_LOOKUP_INDEX = 'idx_om_lookup_key';
 const POSTGRES_MAX_BIND_PARAMETERS = 65535;
 // Keep in sync with the message INSERT column list in saveMessages.
 const MESSAGE_INSERT_BIND_PARAMETERS = 8;
@@ -176,6 +177,7 @@ import {
   getTableName as dbGetTableName,
 } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { runPrune, runBatchedDelete, resolveTargets } from '../../retention';
 
 // Database row type that includes timezone-aware columns
@@ -396,12 +398,47 @@ export class MemoryPG extends MemoryStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.#indexes = indexes?.filter(idx => (MemoryPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  private async renameLegacyOmLookupIndex(indexName: string): Promise<void> {
+    if (this.#db.isExternalSchemaMode() || this.#schema === 'public' || indexName === OM_LOOKUP_INDEX) return;
+
+    // PostgresStore's init snapshot already answers the common warm-init case.
+    // Only a snapshot that contains the legacy name needs the migration DDL;
+    // a cold/direct domain init falls through to the live catalog check.
+    const desiredInSnapshot = this.#db.getSchemaSnapshotIndex(indexName);
+    const legacyInSnapshot = this.#db.getSchemaSnapshotIndex(OM_LOOKUP_INDEX);
+    if (desiredInSnapshot === true || legacyInSnapshot === false) return;
+
+    await this.#db.client.tx(async tx => {
+      // Serialize the check and rename across migration processes. Without a
+      // lock, two initializers can both observe the legacy name and the loser
+      // fails after the winner has renamed it.
+      await tx.none('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        `mastra:om-lookup-index:${this.#schema}`,
+      ]);
+
+      const existingIndexes = await tx.manyOrNone<{ indexname: string }>(
+        `SELECT indexname
+         FROM pg_catalog.pg_indexes
+         WHERE schemaname = $1
+           AND tablename = $2
+           AND indexname IN ($3, $4)`,
+        [this.#schema, OM_TABLE, OM_LOOKUP_INDEX, indexName],
+      );
+      const existingNames = new Set(existingIndexes.map(index => index.indexname));
+      if (existingNames.has(indexName) || !existingNames.has(OM_LOOKUP_INDEX)) return;
+
+      await tx.none(
+        `ALTER INDEX IF EXISTS ${dbGetSchemaName(this.#schema)}."${OM_LOOKUP_INDEX}" RENAME TO "${indexName}"`,
+      );
+    });
   }
 
   async init(): Promise<void> {
@@ -435,14 +472,20 @@ export class MemoryPG extends MemoryStorage {
       ifNotExists: ['resourceId'],
     });
     if (omSchema) {
-      // Create index on lookupKey for efficient OM queries
+      // Create index on lookupKey for efficient OM queries. Keep the schema
+      // prefix aligned with getExportDDL() so external validation recognizes
+      // the index created by the exported schema.
       const omTableName = getTableName({
         indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
+      const omIndexName = truncateIdentifierWithHash(
+        this.#schema !== 'public' ? `${this.#schema}_${OM_LOOKUP_INDEX}` : OM_LOOKUP_INDEX,
+      );
+      await this.renameLegacyOmLookupIndex(omIndexName);
       await this.#db.createIndexFromStatement(
-        'idx_om_lookup_key',
-        `CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`,
+        omIndexName,
+        `CREATE INDEX IF NOT EXISTS "${omIndexName}" ON ${omTableName} ("lookupKey")`,
       );
     }
     await this.createDefaultIndexes();
@@ -469,6 +512,7 @@ export class MemoryPG extends MemoryStorage {
           column: entry.column,
         });
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
       }
     }
@@ -481,12 +525,12 @@ export class MemoryPG extends MemoryStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_threads_resourceid_createdat_idx`),
         table: TABLE_THREADS,
         columns: ['resourceId', 'createdAt DESC'],
       },
       {
-        name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_messages_thread_id_createdat_idx`),
         table: TABLE_MESSAGES,
         columns: ['thread_id', 'createdAt DESC'],
       },
@@ -528,10 +572,8 @@ export class MemoryPG extends MemoryStorage {
       );
       // idx_om_lookup_key index
       const fullOmTableName = dbGetTableName({ indexName: OM_TABLE, schemaName: quotedSchemaName });
-      const idxPrefix = schemaPrefix ? `${schemaPrefix}` : '';
-      statements.push(
-        `CREATE INDEX IF NOT EXISTS "${idxPrefix}idx_om_lookup_key" ON ${fullOmTableName} ("lookupKey");`,
-      );
+      const omIndexName = truncateIdentifierWithHash(`${schemaPrefix}${OM_LOOKUP_INDEX}`);
+      statements.push(`CREATE INDEX IF NOT EXISTS "${omIndexName}" ON ${fullOmTableName} ("lookupKey");`);
     }
 
     // Default indexes
@@ -562,6 +604,7 @@ export class MemoryPG extends MemoryStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         // Log but continue - indexes are performance optimizations
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
@@ -580,6 +623,7 @@ export class MemoryPG extends MemoryStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         // Log but continue - indexes are performance optimizations
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }

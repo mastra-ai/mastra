@@ -20,7 +20,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
 import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
-import { buildConstraintName } from './constraint-utils';
+import { buildConstraintName, truncateIdentifierWithHash } from './constraint-utils';
 import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { getSchemaSnapshot } from './schema-snapshot';
 import type { SchemaSnapshot } from './schema-snapshot';
@@ -46,6 +46,11 @@ export interface PgDomainClientConfig {
   readClient?: DbClient;
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
+  /**
+   * When true, the schema is managed outside the runtime process. Domain
+   * operations validate required tables and indexes without issuing DDL.
+   */
+  disableInit?: boolean;
   /** When true, default indexes will not be created during initialization */
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
@@ -62,6 +67,11 @@ export interface PgDomainPoolConfig {
   readPool?: Pool;
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
+  /**
+   * When true, the schema is managed outside the runtime process. Domain
+   * operations validate required tables and indexes without issuing DDL.
+   */
+  disableInit?: boolean;
   /** When true, default indexes will not be created during initialization */
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
@@ -74,6 +84,11 @@ export interface PgDomainPoolConfig {
 export type PgDomainRestConfig = {
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
+  /**
+   * When true, the schema is managed outside the runtime process. Domain
+   * operations validate required tables and indexes without issuing DDL.
+   */
+  disableInit?: boolean;
   /** When true, default indexes will not be created during initialization */
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
@@ -101,6 +116,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
   client: DbClient;
   readClient: DbClient;
   schemaName?: string;
+  disableInit?: boolean;
   skipDefaultIndexes?: boolean;
   indexes?: CreateIndexOptions[];
 } {
@@ -110,6 +126,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
       client: config.client,
       readClient: config.readClient ?? config.client,
       schemaName: config.schemaName,
+      disableInit: config.disableInit,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
     };
@@ -122,6 +139,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
       client,
       readClient: config.readPool && config.readPool !== config.pool ? new PoolAdapter(config.readPool) : client,
       schemaName: config.schemaName,
+      disableInit: config.disableInit,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
     };
@@ -160,6 +178,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
     client,
     readClient: client,
     schemaName: config.schemaName,
+    disableInit: config.disableInit,
     skipDefaultIndexes: config.skipDefaultIndexes,
     indexes: config.indexes,
   };
@@ -415,6 +434,8 @@ export interface PgDBInternalConfig {
   client: DbClient;
   readClient?: DbClient;
   schemaName?: string;
+  /** When true, runtime helpers must validate schema objects without DDL. */
+  disableInit?: boolean;
   skipDefaultIndexes?: boolean;
 }
 
@@ -438,6 +459,7 @@ export class PgDB extends MastraBase {
   public client: DbClient;
   public readClient: DbClient;
   public schemaName?: string;
+  public disableInit?: boolean;
   public skipDefaultIndexes?: boolean;
 
   /** Cache of actual table columns: tableName -> Set<columnName> */
@@ -445,6 +467,18 @@ export class PgDB extends MastraBase {
 
   /** Cache of column Postgres data types: tableName -> columnName -> data_type */
   private columnTypeCache = new Map<string, Map<string, string>>();
+
+  /**
+   * Read-only schema validation cache used when initialization is disabled.
+   * Successful observations are reused for this domain instance to keep lazy
+   * operations DML-only; missing or failed checks are discarded so a completed
+   * external migration can be observed on a later attempt.
+   */
+  private externalSchemaTableCache = new Map<
+    string,
+    Promise<{ exists: boolean; columns: Set<string>; primaryKeyColumns: string[] }>
+  >();
+  private externalSchemaIndexCache: Promise<Set<string>> | null = null;
 
   constructor(config: PgDBInternalConfig) {
     super({
@@ -455,6 +489,7 @@ export class PgDB extends MastraBase {
     this.client = config.client;
     this.readClient = config.readClient ?? config.client;
     this.schemaName = config.schemaName;
+    this.disableInit = config.disableInit;
     this.skipDefaultIndexes = config.skipDefaultIndexes;
   }
 
@@ -468,6 +503,236 @@ export class PgDB extends MastraBase {
    */
   private get schemaSnapshot(): SchemaSnapshot | null {
     return getSchemaSnapshot(this.client, this.schemaName);
+  }
+
+  /**
+   * Reports whether an index is present in the current init snapshot.
+   *
+   * `null` means no snapshot is installed, so callers that need a live
+   * answer must query the catalog. This keeps migration helpers from adding a
+   * warm-init catalog round trip when the snapshot already proves the result.
+   */
+  getSchemaSnapshotIndex(indexName: string): boolean | null {
+    const snapshot = this.schemaSnapshot;
+    return snapshot ? snapshot.indexes.has(indexName) : null;
+  }
+
+  /**
+   * Whether automatic schema initialization and lazy schema DDL are disabled.
+   *
+   * Keep checking the environment here so a domain constructed before the
+   * variable is set still cannot issue runtime DDL. Explicit privileged
+   * migration helpers can opt out of the environment check when invoked by
+   * the migration CLI.
+   */
+  isExternalSchemaMode(): boolean {
+    return this.disableInit === true || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true';
+  }
+
+  private async getExternalSchemaTable(tableName: string): Promise<{
+    exists: boolean;
+    columns: Set<string>;
+    primaryKeyColumns: string[];
+  }> {
+    const cached = this.externalSchemaTableCache.get(tableName);
+    if (cached) return cached;
+
+    const schemaName = this.schemaName || 'public';
+    const query = this.client
+      .manyOrNone<{ column_name: string; primary_key_columns: string[] }>(
+        `SELECT attribute_row.attname AS column_name,
+                ARRAY(
+                  SELECT primary_column.attname::text
+                  FROM pg_catalog.pg_index AS primary_index
+                  CROSS JOIN LATERAL unnest(primary_index.indkey)
+                    WITH ORDINALITY AS key_column(attnum, ordinal_position)
+                  JOIN pg_catalog.pg_attribute AS primary_column
+                    ON primary_column.attrelid = primary_index.indrelid
+                   AND primary_column.attnum = key_column.attnum
+                  WHERE primary_index.indrelid = relation_row.oid
+                    AND primary_index.indisprimary
+                    AND key_column.ordinal_position <= primary_index.indnkeyatts
+                  ORDER BY key_column.ordinal_position
+                ) AS primary_key_columns
+           FROM pg_catalog.pg_class AS relation_row
+           JOIN pg_catalog.pg_namespace AS namespace_row
+             ON namespace_row.oid = relation_row.relnamespace
+           JOIN pg_catalog.pg_attribute AS attribute_row
+             ON attribute_row.attrelid = relation_row.oid
+          WHERE namespace_row.nspname = $1
+            AND relation_row.relname = $2
+            AND relation_row.relkind IN ('r', 'p')
+            AND attribute_row.attnum > 0
+            AND NOT attribute_row.attisdropped`,
+        [schemaName, tableName],
+      )
+      .then(rows => ({
+        exists: rows.length > 0,
+        columns: new Set(rows.map(row => row.column_name)),
+        primaryKeyColumns: rows[0]?.primary_key_columns ?? [],
+      }));
+
+    this.externalSchemaTableCache.set(tableName, query);
+    try {
+      return await query;
+    } catch (error) {
+      if (this.externalSchemaTableCache.get(tableName) === query) {
+        this.externalSchemaTableCache.delete(tableName);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Checks the presence of raw-DDL tables owned by a domain without attempting
+   * to reproduce their full constraint definitions in PgDB.
+   */
+  async validateExternalSchemaTables(tableNames: readonly string[]): Promise<void> {
+    for (const tableName of tableNames) {
+      const actual = await this.getExternalSchemaTable(tableName);
+      if (actual.exists) continue;
+
+      this.externalSchemaTableCache.delete(tableName);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'CREATE_TABLE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        new Error(
+          `PostgreSQL external schema is missing required table ${getTableName({
+            indexName: tableName as TABLE_NAMES,
+            schemaName: getSchemaName(this.schemaName),
+          })}`,
+        ),
+      );
+    }
+  }
+
+  private async getExternalSchemaIndexes(): Promise<Set<string>> {
+    const cached = this.externalSchemaIndexCache;
+    if (cached) return cached;
+
+    const schemaName = this.schemaName || 'public';
+    const query = this.client
+      .manyOrNone<{ index_name: string }>(
+        `SELECT index_row.relname AS index_name
+           FROM pg_catalog.pg_class AS index_row
+           JOIN pg_catalog.pg_namespace AS namespace_row
+             ON namespace_row.oid = index_row.relnamespace
+           JOIN pg_catalog.pg_index AS index_metadata
+             ON index_metadata.indexrelid = index_row.oid
+          WHERE namespace_row.nspname = $1
+            AND index_row.relkind IN ('i', 'I')
+            AND index_metadata.indisvalid
+            AND index_metadata.indisready`,
+        [schemaName],
+      )
+      .then(rows => new Set(rows.map(row => row.index_name)));
+
+    this.externalSchemaIndexCache = query;
+    try {
+      return await query;
+    } catch (error) {
+      if (this.externalSchemaIndexCache === query) {
+        this.externalSchemaIndexCache = null;
+      }
+      throw error;
+    }
+  }
+
+  private async validateExternalSchemaTable(
+    tableName: TABLE_NAMES,
+    schema: Record<string, StorageColumn>,
+    compositePrimaryKey?: string[],
+  ): Promise<void> {
+    const actual = await this.getExternalSchemaTable(tableName);
+    const requiredColumns = new Set<string>();
+    const requiredPrimaryKeyColumns = (
+      compositePrimaryKey ??
+      Object.entries(schema)
+        .filter(([, columnDef]) => columnDef.primaryKey)
+        .map(([columnName]) => columnName)
+    ).map(columnName => parseSqlIdentifier(columnName, 'column name'));
+    if (tableName === TABLE_SPANS && requiredPrimaryKeyColumns.length === 0) {
+      requiredPrimaryKeyColumns.push(
+        parseSqlIdentifier('traceId', 'column name'),
+        parseSqlIdentifier('spanId', 'column name'),
+      );
+    }
+    for (const [columnName, columnDef] of Object.entries(schema)) {
+      const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+      requiredColumns.add(parsedColumnName);
+      if (columnDef.type === 'timestamp') {
+        requiredColumns.add(`${parsedColumnName}Z`);
+      }
+    }
+
+    if (!actual.exists) {
+      this.externalSchemaTableCache.delete(tableName);
+      throw new Error(
+        `PostgreSQL external schema is missing required table ${getTableName({
+          indexName: tableName,
+          schemaName: getSchemaName(this.schemaName),
+        })}`,
+      );
+    }
+
+    const missingColumns = [...requiredColumns].filter(column => !actual.columns.has(column));
+    if (missingColumns.length > 0) {
+      this.externalSchemaTableCache.delete(tableName);
+      throw new Error(
+        `PostgreSQL external schema table ${getTableName({
+          indexName: tableName,
+          schemaName: getSchemaName(this.schemaName),
+        })} is missing required columns: ${missingColumns.join(', ')}`,
+      );
+    }
+
+    if (
+      requiredPrimaryKeyColumns.length > 0 &&
+      (actual.primaryKeyColumns.length !== requiredPrimaryKeyColumns.length ||
+        actual.primaryKeyColumns.some((columnName, index) => columnName !== requiredPrimaryKeyColumns[index]))
+    ) {
+      this.externalSchemaTableCache.delete(tableName);
+      const expected = requiredPrimaryKeyColumns.join(', ');
+      const actualPrimaryKey = actual.primaryKeyColumns.join(', ');
+      throw new Error(
+        `PostgreSQL external schema table ${getTableName({
+          indexName: tableName,
+          schemaName: getSchemaName(this.schemaName),
+        })} has an incompatible primary key; expected (${expected}) but found (${actualPrimaryKey})`,
+      );
+    }
+  }
+
+  private async validateExternalSchemaIndex(indexName: string): Promise<void> {
+    const indexes = await this.getExternalSchemaIndexes();
+    if (!indexes.has(indexName)) {
+      // An external migration may have completed after this PgDB instance
+      // warmed its schema-wide catalog cache. Refresh once before reporting a
+      // miss, then discard the failed result so a later migration can repair it.
+      this.externalSchemaIndexCache = null;
+      const refreshedIndexes = await this.getExternalSchemaIndexes();
+      if (refreshedIndexes.has(indexName)) return;
+      this.externalSchemaIndexCache = null;
+      throw new Error(
+        `PostgreSQL external schema is missing required index "${parseSqlIdentifier(indexName, 'index name')}"`,
+      );
+    }
+  }
+
+  private assertSchemaDdlAllowed(operation: string, allowEnvironment = false): void {
+    if (this.disableInit === true || (!allowEnvironment && process.env.MASTRA_DISABLE_STORAGE_INIT === 'true')) {
+      throw new MastraError({
+        id: createStorageErrorId('PG', 'SCHEMA_DDL', 'DISABLED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `PostgreSQL schema DDL is disabled in external-schema mode; ${operation} requires an externally managed migration`,
+        details: { operation },
+      });
+    }
   }
 
   /**
@@ -921,6 +1186,11 @@ export class PgDB extends MastraBase {
     compositePrimaryKey?: string[];
   }): Promise<void> {
     try {
+      if (this.isExternalSchemaMode()) {
+        await this.validateExternalSchemaTable(tableName, schema, compositePrimaryKey);
+        return;
+      }
+
       const timeZColumnNames = Object.entries(schema)
         .filter(([_, def]) => def.type === 'timestamp')
         .map(([name]) => name);
@@ -1350,6 +1620,10 @@ export class PgDB extends MastraBase {
     duplicatesRemoved: number;
     message: string;
   }> {
+    // The CLI sets MASTRA_DISABLE_STORAGE_INIT while importing the migration
+    // bundle to suppress startup initialization, then invokes this explicit
+    // privileged migration helper. `disableInit: true` still forbids it.
+    this.assertSchemaDdlAllowed('migrateSpans', true);
     const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
 
     // Check if already migrated
@@ -1447,6 +1721,11 @@ export class PgDB extends MastraBase {
     const knownColumns = snapshot ? this.snapshotColumns(snapshot, tableName) : null;
 
     try {
+      if (this.isExternalSchemaMode()) {
+        await this.validateExternalSchemaTable(tableName, schema);
+        return;
+      }
+
       for (const columnName of ifNotExists) {
         if (schema[columnName]) {
           const columnDef = schema[columnName];
@@ -1559,10 +1838,12 @@ export class PgDB extends MastraBase {
 
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
+      this.assertSchemaDdlAllowed('dropTable');
       const schemaName = getSchemaName(this.schemaName);
       const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
       await this.client.none(`DROP TABLE IF EXISTS ${tableNameWithSchema}`);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DROP_TABLE', 'FAILED'),
@@ -1582,7 +1863,13 @@ export class PgDB extends MastraBase {
   }
 
   async createIndex(options: CreateIndexOptions): Promise<void> {
+    let attemptedConcurrentDdl = false;
     try {
+      if (this.isExternalSchemaMode()) {
+        await this.validateExternalSchemaIndex(options.name);
+        return;
+      }
+
       const {
         name,
         table,
@@ -1651,10 +1938,11 @@ export class PgDB extends MastraBase {
       const quotedIndexName = `"${parseSqlIdentifier(name, 'index name')}"`;
       const sql = `CREATE ${uniqueStr}INDEX ${concurrentStr}${quotedIndexName} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
 
+      attemptedConcurrentDdl = concurrent;
       await this.client.none(sql);
       snapshot?.indexes.add(name);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('CONCURRENTLY')) {
+      if (attemptedConcurrentDdl && error instanceof Error && error.message.includes('CONCURRENTLY')) {
         const retryOptions = { ...options, concurrent: false };
         return this.createIndex(retryOptions);
       }
@@ -1684,6 +1972,25 @@ export class PgDB extends MastraBase {
    * every warm init.
    */
   async createIndexFromStatement(indexName: string, sql: string): Promise<void> {
+    if (this.isExternalSchemaMode()) {
+      try {
+        await this.validateExternalSchemaIndex(indexName);
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: createStorageErrorId('PG', 'INDEX_CREATE', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+            },
+          },
+          error,
+        );
+      }
+      return;
+    }
+
     const snapshot = this.schemaSnapshot;
     if (snapshot?.indexes.has(indexName)) return;
 
@@ -1693,6 +2000,7 @@ export class PgDB extends MastraBase {
 
   async dropIndex(indexName: string): Promise<void> {
     try {
+      this.assertSchemaDdlAllowed('dropIndex');
       const schemaName = this.schemaName || 'public';
       const snapshot = this.schemaSnapshot;
       if (snapshot) {
@@ -1715,6 +2023,7 @@ export class PgDB extends MastraBase {
       await this.client.none(sql);
       snapshot?.indexes.delete(indexName);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'INDEX_DROP', 'FAILED'),
@@ -2097,7 +2406,7 @@ export class PgDB extends MastraBase {
     tableName: TABLE_NAMES;
     column: string;
   }): Promise<void> {
-    const name = buildConstraintName({ baseName: indexName });
+    const name = truncateIdentifierWithHash(indexName.toLowerCase());
     await this.createIndex({ name, table: tableName, columns: [column] });
   }
 

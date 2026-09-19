@@ -17,6 +17,7 @@ import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { runPrune, resolveTargets } from '../../retention';
 
 function getSchemaName(schema?: string) {
@@ -92,8 +93,8 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (BackgroundTasksPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -134,6 +135,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
           column: entry.column,
         });
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
       }
     }
@@ -153,22 +155,22 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}mastra_bg_tasks_status_created_at_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_bg_tasks_status_created_at_idx`),
         table: TABLE_BACKGROUND_TASKS,
         columns: ['status', 'createdAt'],
       },
       {
-        name: `${schemaPrefix}mastra_bg_tasks_agent_status_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_bg_tasks_agent_status_idx`),
         table: TABLE_BACKGROUND_TASKS,
         columns: ['agent_id', 'status'],
       },
       {
-        name: `${schemaPrefix}mastra_bg_tasks_thread_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_bg_tasks_thread_idx`),
         table: TABLE_BACKGROUND_TASKS,
         columns: ['thread_id', 'createdAt'],
       },
       {
-        name: `${schemaPrefix}mastra_bg_tasks_tool_call_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_bg_tasks_tool_call_idx`),
         table: TABLE_BACKGROUND_TASKS,
         columns: ['tool_call_id'],
       },
@@ -207,6 +209,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
     }
@@ -218,6 +221,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }

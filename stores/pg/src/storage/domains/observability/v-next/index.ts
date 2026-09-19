@@ -146,8 +146,16 @@ import * as tracingOps from './tracing';
 export type { PartitionMode, PartitioningOptions } from './partitioning';
 export type { DiscoveryConfig } from './discovery';
 
-/** Configuration for the v-next Postgres observability domain. */
+/**
+ * Configuration for the v-next Postgres observability domain.
+ *
+ * This standalone adapter is outside PF-4243's externally managed-schema
+ * contract. Its initializer still manages the v-next schema, so `disableInit`
+ * is intentionally rejected here.
+ */
 export type VNextPostgresObservabilityConfig = PgDomainConfig & {
+  /** External schema mode is not supported by this standalone adapter. */
+  disableInit?: never;
   /** Daily-partition / Timescale hypertable behavior. Default 'auto'. */
   partitioning?: PartitioningOptions;
   /** Discovery cache configuration. */

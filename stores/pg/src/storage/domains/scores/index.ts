@@ -23,6 +23,7 @@ import {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { runPrune, resolveTargets } from '../../retention';
 
 /**
@@ -88,8 +89,8 @@ export class ScoresPG extends ScoresStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
@@ -128,6 +129,7 @@ export class ScoresPG extends ScoresStorage {
           column: entry.column,
         });
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
       }
     }
@@ -140,7 +142,7 @@ export class ScoresPG extends ScoresStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`),
         table: TABLE_SCORERS,
         columns: ['traceId', 'spanId', 'createdAt DESC'],
       },
@@ -194,6 +196,7 @@ export class ScoresPG extends ScoresStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         // Log but continue - indexes are performance optimizations
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
@@ -212,6 +215,7 @@ export class ScoresPG extends ScoresStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         // Log but continue - indexes are performance optimizations
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }

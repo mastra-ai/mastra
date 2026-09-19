@@ -25,6 +25,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -48,8 +49,8 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx =>
@@ -64,7 +65,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}idx_scorer_definition_versions_def_version`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_scorer_definition_versions_def_version`),
         table: TABLE_SCORER_DEFINITION_VERSIONS,
         columns: ['scorerDefinitionId', 'versionNumber'],
         unique: true,
@@ -113,7 +114,8 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       try {
         await this.#db.createIndex(indexDef);
-      } catch {
+      } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         // Indexes are performance optimizations, continue on failure
       }
     }
@@ -146,6 +148,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }

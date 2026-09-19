@@ -21,6 +21,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { runPrune, resolveTargets } from '../../retention';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
 
@@ -129,8 +130,8 @@ export class NotificationsPG extends NotificationsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (NotificationsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -165,6 +166,7 @@ export class NotificationsPG extends NotificationsStorage {
           column: entry.column,
         });
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
       }
     }
@@ -184,17 +186,17 @@ export class NotificationsPG extends NotificationsStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}idx_notifications_thread_status_updated`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_notifications_thread_status_updated`),
         table: TABLE_NOTIFICATIONS,
         columns: ['threadId', 'status', 'updatedAt'],
       },
       {
-        name: `${schemaPrefix}idx_notifications_coalescing`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_notifications_coalescing`),
         table: TABLE_NOTIFICATIONS,
         columns: ['threadId', 'source', 'kind', 'status', 'agentId', 'resourceId', 'dedupeKey', 'coalesceKey'],
       },
       {
-        name: `${schemaPrefix}idx_notifications_due`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_notifications_due`),
         table: TABLE_NOTIFICATIONS,
         columns: ['status', 'deliverAt', 'summaryAt'],
       },
@@ -233,6 +235,7 @@ export class NotificationsPG extends NotificationsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
     }
@@ -244,6 +247,7 @@ export class NotificationsPG extends NotificationsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }

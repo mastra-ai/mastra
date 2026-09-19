@@ -25,6 +25,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = ['name', 'description', 'servers'] as const;
@@ -39,8 +40,8 @@ export class MCPClientsPG extends MCPClientsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (MCPClientsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -49,7 +50,7 @@ export class MCPClientsPG extends MCPClientsStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}idx_mcp_client_versions_client_version`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_mcp_client_versions_client_version`),
         table: TABLE_MCP_CLIENT_VERSIONS,
         columns: ['mcpClientId', 'versionNumber'],
         unique: true,
@@ -92,7 +93,8 @@ export class MCPClientsPG extends MCPClientsStorage {
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       try {
         await this.#db.createIndex(indexDef);
-      } catch {
+      } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         // Indexes are performance optimizations, continue on failure
       }
     }
@@ -119,6 +121,7 @@ export class MCPClientsPG extends MCPClientsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }

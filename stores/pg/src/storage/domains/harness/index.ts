@@ -594,13 +594,13 @@ export class HarnessPG extends HarnessStorage {
 
   constructor(config: PgDomainConfig & { harnessName?: string }) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    const { client, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
     this.#client = new PgHarnessClient(client, schemaName);
     this.#harnessName = config.harnessName ?? 'default';
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (HarnessPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    this.#db = new PgDB({ client, schemaName, disableInit, skipDefaultIndexes });
   }
 
   static getDefaultIndexDefs(schemaPrefix: string) {
@@ -737,6 +737,7 @@ export class HarnessPG extends HarnessStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
     }

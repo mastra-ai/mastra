@@ -36,10 +36,10 @@ export class ThreadStatePG extends ThreadStateStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes } = resolvePgConfig(config);
     this.#client = client;
     this.#schema = schemaName || 'public';
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
   }
 
   async init(): Promise<void> {
@@ -72,6 +72,7 @@ export class ThreadStatePG extends ThreadStateStorage {
           column: 'updatedAtZ',
         });
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create retention index for ${TABLE_THREAD_STATE}:`, error);
       }
     }

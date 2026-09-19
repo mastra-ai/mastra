@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 export const POSTGRES_IDENTIFIER_MAX_LENGTH = 63;
 
 export function truncateIdentifier(value: string, maxLength = POSTGRES_IDENTIFIER_MAX_LENGTH): string {
@@ -13,6 +15,19 @@ export function truncateIdentifier(value: string, maxLength = POSTGRES_IDENTIFIE
     end += ch.length; // surrogate pairs have .length === 2
   }
   return value.slice(0, end);
+}
+
+/**
+ * Bounds an index name without making distinct long names share PostgreSQL's
+ * silent prefix truncation. Names that already fit retain their existing
+ * spelling; only the overlong form gets a short deterministic hash suffix.
+ */
+export function truncateIdentifierWithHash(value: string): string {
+  if (Buffer.byteLength(value, 'utf-8') <= POSTGRES_IDENTIFIER_MAX_LENGTH) return value;
+
+  const suffix = `_${createHash('sha256').update(value).digest('hex').slice(0, 8)}`;
+  const prefix = truncateIdentifier(value, POSTGRES_IDENTIFIER_MAX_LENGTH - Buffer.byteLength(suffix, 'utf-8'));
+  return `${prefix}${suffix}`;
 }
 
 /**

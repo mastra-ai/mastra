@@ -277,6 +277,7 @@ export class PostgresStore extends MastraCompositeStore {
         client: this.#db,
         readClient: this.#readDb,
         schemaName: this.schema,
+        disableInit: config.disableInit,
         skipDefaultIndexes: config.skipDefaultIndexes,
         indexes: config.indexes,
       };

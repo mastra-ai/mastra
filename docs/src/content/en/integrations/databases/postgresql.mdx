@@ -112,7 +112,7 @@ const storage = new PostgresStore({
     name: 'disableInit',
     type: 'boolean',
     description:
-      'When true, automatic table creation/migrations are disabled. Useful for CI/CD pipelines where migrations are run separately.',
+      'When true, automatic table creation/migrations are disabled and lazy schema helpers validate required tables and indexes without issuing DDL. Use a privileged migration role to manage the schema separately.',
     isOptional: true,
   },
   {
@@ -271,6 +271,38 @@ await storage.init()
 const memoryStore = await storage.getStore('memory')
 const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
+
+#### Externally managed schemas
+
+Use `disableInit: true` when schema changes run separately from the runtime process. `PostgresStore.init()` returns without connecting to PostgreSQL, and lazy Harness and retention helpers read PostgreSQL's catalog to validate their required tables and indexes without issuing `CREATE`, `ALTER`, or `DROP` statements. Missing structure fails with a typed storage error so the runtime does not report a successful operation against an incomplete schema.
+
+Read-only catalog results are reused by each domain instance, so complete an external migration before constructing runtime stores. After an external schema change, reconstruct the affected storage instance so it validates the new schema.
+
+Schema-prefixed native indexes use a deterministic hash suffix when the combined name exceeds PostgreSQL's 63-byte identifier limit. If an older migration created a silently prefix-truncated index name, rerun the privileged schema migration before starting the external runtime; it creates the canonical name, while any old truncated object remains for explicit privileged cleanup.
+
+Run migrations with a role that can change the schema, then start the runtime with a role that has only the table DML and schema privileges it needs:
+
+```typescript
+const migrator = new PostgresStore({
+  id: 'pg-migrator',
+  connectionString: process.env.DATABASE_MIGRATION_URL,
+  disableInit: false,
+})
+await migrator.init()
+
+const runtime = new PostgresStore({
+  id: 'pg-runtime',
+  connectionString: process.env.DATABASE_RUNTIME_URL,
+  disableInit: true,
+})
+await runtime.init() // no startup connection or schema DDL
+```
+
+Retention anchor indexes are created lazily when a retention policy first runs and are not included in `exportSchemas()`. If a runtime retention policy is enabled, create its anchor indexes with the privileged migration role before switching to the restricted runtime role; external-schema mode validates those indexes and reports a typed error before pruning when one is missing.
+
+`MASTRA_DISABLE_STORAGE_INIT=true` provides the same no-initialization and no-lazy-DDL behavior for processes configured through environment variables.
+
+The environment flag suppresses automatic initialization while allowing the explicit privileged migration CLI path. `disableInit: true` also disables `PgDB`'s explicit schema migration helpers.
 
 #### Workflow revision migration rollout and recovery
 

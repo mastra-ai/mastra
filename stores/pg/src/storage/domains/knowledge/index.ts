@@ -367,12 +367,12 @@ export class KnowledgePG extends KnowledgeStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes } = resolvePgConfig(config);
     this.#client = client;
     this.#schemaName = schemaName;
     this.#executor = createExecutor(client, schemaName);
     this.#readExecutor = createExecutor(readClient, schemaName);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
   }
 
   async init(): Promise<void> {

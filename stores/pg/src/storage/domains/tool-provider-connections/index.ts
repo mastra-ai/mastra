@@ -18,6 +18,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { getTableName, getSchemaName } from '../utils';
 
 function normaliseScope(raw: unknown): StorageToolProviderConnectionScope {
@@ -50,8 +51,8 @@ export class ToolProviderConnectionsPG extends ToolProviderConnectionsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx =>
@@ -72,7 +73,7 @@ export class ToolProviderConnectionsPG extends ToolProviderConnectionsStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}idx_tool_provider_connections_author`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_tool_provider_connections_author`),
         table: TABLE_TOOL_PROVIDER_CONNECTIONS,
         columns: ['authorId', 'providerId', 'toolkit'],
       },
@@ -112,6 +113,7 @@ export class ToolProviderConnectionsPG extends ToolProviderConnectionsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
     }
@@ -123,6 +125,7 @@ export class ToolProviderConnectionsPG extends ToolProviderConnectionsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }

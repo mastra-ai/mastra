@@ -36,6 +36,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL, generateTimestampTriggerSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { runPrune, resolveTargets } from '../../retention';
 import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
@@ -59,8 +60,8 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
@@ -99,6 +100,7 @@ export class ObservabilityPG extends ObservabilityStorage {
           column: entry.column,
         });
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
       }
     }
@@ -111,59 +113,59 @@ export class ObservabilityPG extends ObservabilityStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`),
         table: TABLE_SPANS,
         columns: ['traceId', 'startedAt DESC'],
       },
       {
-        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`),
         table: TABLE_SPANS,
         columns: ['parentSpanId', 'startedAt DESC'],
       },
       {
-        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_ai_spans_name_idx`),
         table: TABLE_SPANS,
         columns: ['name'],
       },
       {
-        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`),
         table: TABLE_SPANS,
         columns: ['spanType', 'startedAt DESC'],
       },
       // Root spans partial index - every listTraces query filters parentSpanId IS NULL
       {
-        name: `${schemaPrefix}mastra_ai_spans_root_spans_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_ai_spans_root_spans_idx`),
         table: TABLE_SPANS,
         columns: ['startedAt DESC'],
         where: '"parentSpanId" IS NULL',
       },
       // Entity identification indexes - common filtering patterns
       {
-        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityid_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_ai_spans_entitytype_entityid_idx`),
         table: TABLE_SPANS,
         columns: ['entityType', 'entityId'],
       },
       {
-        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityname_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_ai_spans_entitytype_entityname_idx`),
         table: TABLE_SPANS,
         columns: ['entityType', 'entityName'],
       },
       // Multi-tenant filtering - organizationId + userId
       {
-        name: `${schemaPrefix}mastra_ai_spans_orgid_userid_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_ai_spans_orgid_userid_idx`),
         table: TABLE_SPANS,
         columns: ['organizationId', 'userId'],
       },
       // Metadata JSONB GIN index - for custom filtering with @> containment
       {
-        name: `${schemaPrefix}mastra_ai_spans_metadata_gin_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_ai_spans_metadata_gin_idx`),
         table: TABLE_SPANS,
         columns: ['metadata'],
         method: 'gin',
       },
       // Tags array GIN index - for array containment queries
       {
-        name: `${schemaPrefix}mastra_ai_spans_tags_gin_idx`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}mastra_ai_spans_tags_gin_idx`),
         table: TABLE_SPANS,
         columns: ['tags'],
         method: 'gin',
@@ -221,6 +223,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         // Log but continue - indexes are performance optimizations
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
@@ -239,6 +242,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         // Log but continue - indexes are performance optimizations
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }

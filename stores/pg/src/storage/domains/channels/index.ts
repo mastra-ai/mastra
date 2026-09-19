@@ -9,6 +9,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { truncateIdentifierWithHash } from '../../db/constraint-utils';
 import { getTableName, getSchemaName } from '../utils';
 
 export class ChannelsPG extends ChannelsStorage {
@@ -21,8 +22,8 @@ export class ChannelsPG extends ChannelsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, disableInit, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (ChannelsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -44,13 +45,13 @@ export class ChannelsPG extends ChannelsStorage {
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: `${schemaPrefix}idx_channel_installations_webhook`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_channel_installations_webhook`),
         table: TABLE_CHANNEL_INSTALLATIONS,
         columns: ['webhookId'],
         unique: true,
       },
       {
-        name: `${schemaPrefix}idx_channel_installations_platform_agent`,
+        name: truncateIdentifierWithHash(`${schemaPrefix}idx_channel_installations_platform_agent`),
         table: TABLE_CHANNEL_INSTALLATIONS,
         columns: ['platform', 'agentId'],
       },
@@ -91,6 +92,7 @@ export class ChannelsPG extends ChannelsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
     }
@@ -102,6 +104,7 @@ export class ChannelsPG extends ChannelsStorage {
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
+        if (this.#db.isExternalSchemaMode()) throw error;
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }
