@@ -697,6 +697,44 @@ describe('api command executor', () => {
     expect(JSON.parse(stdout)).toEqual({ data: response });
   });
 
+  it('queries traces with page pagination and preserves pagination metadata', async () => {
+    const input = {
+      timeRange: {
+        from: '2026-08-01T00:00:00.000Z',
+        to: '2026-08-08T00:00:00.000Z',
+      },
+      pagination: { page: 2, perPage: 10 },
+    };
+    const response = {
+      traces: [],
+      pagination: {
+        total: 42,
+        page: 2,
+        perPage: 10,
+        hasMore: true,
+      },
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+
+    await executeDescriptor(API_COMMANDS.traceQuery, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://observability.mastra.ai/api/observability/traces/query', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Mastra-Project-Id': 'project-1',
+        'content-type': 'application/json',
+      },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify(input),
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: response });
+  });
+
   it('gets lightweight trace details by default, full trace details with --verbose, and a specific trace span', async () => {
     fetchMock
       .mockResolvedValueOnce(
