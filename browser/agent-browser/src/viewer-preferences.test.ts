@@ -54,9 +54,7 @@ describe('viewer preferences in Chromium', () => {
     });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const session = await context.newCDPSession(page);
-    const frame = new Promise<{ data: string }>(resolve => session.once('Page.screencastFrame', resolve));
-    await session.send('Page.startScreencast', { format: 'png', maxWidth: 4096, maxHeight: 4096 });
-    const { data } = await frame;
+    const data = (await settings.capture(page, { format: 'png', maxWidth: 4096, maxHeight: 4096 }))!;
     const png = Buffer.from(data, 'base64');
     expect(png.subarray(1, 4).toString()).toBe('PNG');
     expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([780, 1688]);
@@ -89,7 +87,6 @@ describe('viewer preferences in Chromium', () => {
     expect(await page.evaluate(() => document.activeElement?.id)).toBe('draft');
     await page.keyboard.insertText(' Arabic input');
     expect(await page.locator('#draft').inputValue()).toContain('Arabic input');
-    await session.send('Page.stopScreencast');
     await session.detach();
   }, 20000);
 });

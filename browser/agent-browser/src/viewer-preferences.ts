@@ -1,4 +1,4 @@
-import type { BrowserViewerPreferences } from '@mastra/core/browser';
+import type { BrowserViewerPreferences, ScreencastOptions } from '@mastra/core/browser';
 import type { BrowserContext, CDPSession, Page } from 'playwright-core';
 
 /** Browser protocol settings, shared by the tools and viewer on the same context. */
@@ -18,6 +18,36 @@ export class ViewerPreferences {
 
   get(page: Page): BrowserViewerPreferences | undefined {
     return this.pages.get(page)?.applied;
+  }
+
+  async capture(page: Page, options: ScreencastOptions): Promise<string | undefined> {
+    await this.apply(page);
+    const entry = this.pages.get(page);
+    const preferences = entry?.applied;
+    if (!entry || !preferences || preferences.deviceScaleFactor <= 1) return undefined;
+    // Chromium capture uses the emulation state of the calling CDP session.
+    // Reuse the preference session; a second session can temporarily resize the
+    // page while capturing, breaking input and tools during that interval.
+    const session = await entry.session;
+    const { width, height, deviceScaleFactor } = preferences;
+    const { layoutViewport } = await session.send('Page.getLayoutMetrics');
+    const { data } = await session.send('Page.captureScreenshot', {
+      format: options.format ?? 'jpeg',
+      ...(options.format !== 'png' ? { quality: options.quality ?? 80 } : {}),
+      captureBeyondViewport: false,
+      clip: {
+        x: layoutViewport.pageX,
+        y: layoutViewport.pageY,
+        width,
+        height,
+        scale: Math.min(
+          1,
+          (options.maxWidth ?? 1280) / (width * deviceScaleFactor),
+          (options.maxHeight ?? 720) / (height * deviceScaleFactor),
+        ),
+      },
+    });
+    return data;
   }
 
   async set(preferences: BrowserViewerPreferences) {
@@ -60,12 +90,6 @@ export class ViewerPreferences {
         height: preferences.height,
         deviceScaleFactor: preferences.deviceScaleFactor,
         mobile: false,
-        scale: preferences.deviceScaleFactor,
-        dontSetVisibleSize: true,
-      });
-      await session.send('Emulation.setVisibleSize', {
-        width: Math.round(preferences.width * preferences.deviceScaleFactor),
-        height: Math.round(preferences.height * preferences.deviceScaleFactor),
       });
       if (target.applied?.locale !== preferences.locale) {
         const { userAgent } = await session.send('Browser.getVersion');

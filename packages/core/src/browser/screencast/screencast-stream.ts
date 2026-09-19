@@ -92,9 +92,47 @@ export class ScreencastStream extends EventEmitter {
     try {
       // Get CDP session from provider
       this.cdpSession = await this.provider.getCdpSession();
+      const session = this.cdpSession;
+      let capturing = false;
+      let pending: CdpScreencastFrame | undefined;
+      const deliver = async (params: CdpScreencastFrame) => {
+        capturing = true;
+        try {
+          const data = (await this.provider.captureFrame?.(this.options)) ?? params.data;
+          if (this.cdpSession !== session || this.stopping) return;
+          this.emit('frame', {
+            data,
+            timestamp: params.metadata?.timestamp ? params.metadata.timestamp * 1000 : Date.now(),
+            viewport: {
+              width: params.metadata?.deviceWidth ?? 0,
+              height: params.metadata?.deviceHeight ?? 0,
+              offsetTop: params.metadata?.offsetTop,
+              scrollOffsetX: params.metadata?.scrollOffsetX,
+              scrollOffsetY: params.metadata?.scrollOffsetY,
+              pageScaleFactor: params.metadata?.pageScaleFactor,
+            },
+            sessionId: params.sessionId,
+          } satisfies ScreencastFrameData);
+        } catch (error) {
+          if (this.cdpSession === session && !this.stopping) this.emit('error', error);
+        } finally {
+          void session.send('Page.screencastFrameAck', { sessionId: params.sessionId }).catch(() => {});
+          capturing = false;
+          const next = pending;
+          pending = undefined;
+          if (next && this.cdpSession === session && !this.stopping) void deliver(next);
+        }
+      };
 
       // Set up frame handler
       this.frameHandler = (params: CdpScreencastFrame) => {
+        if (this.provider.captureFrame) {
+          if (capturing) {
+            if (pending) void session.send('Page.screencastFrameAck', { sessionId: pending.sessionId }).catch(() => {});
+            pending = params;
+          } else void deliver(params);
+          return;
+        }
         const frameData: ScreencastFrameData = {
           data: params.data,
           // CDP provides timestamp in seconds, convert to milliseconds for consistency

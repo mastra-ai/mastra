@@ -30,6 +30,39 @@ function createMockProvider(overrides?: {
 }
 
 describe('ScreencastStream', () => {
+  it('bounds high-density capture and drops an in-flight frame after stop', async () => {
+    let receive!: (frame: any) => void;
+    const finish: Array<(value: string) => void> = [];
+    const session = createMockCdpSession({
+      on: vi.fn((_event, handler) => {
+        receive = handler;
+      }),
+      detach: vi.fn(async () => {}),
+    });
+    const capture = new ScreencastStream(
+      {
+        getCdpSession: async () => session,
+        isBrowserRunning: () => true,
+        captureFrame: async () => new Promise(resolve => finish.push(resolve)),
+      },
+      { maxWidth: 1600, maxHeight: 1200, format: 'png' },
+    );
+    const frames = vi.fn();
+    capture.on('frame', frames);
+    await capture.start();
+    for (let id = 0; id < 10; id++)
+      receive({ data: 'low', sessionId: id, metadata: { deviceWidth: 800, deviceHeight: 600 } });
+    expect(finish).toHaveLength(1);
+    finish[0]('sharp');
+    await vi.waitFor(() => expect(finish).toHaveLength(2));
+    expect(frames).toHaveBeenCalledTimes(1);
+    expect(frames.mock.calls[0][0]).toMatchObject({ data: 'sharp', viewport: { width: 800, height: 600 } });
+    await capture.stop();
+    finish[1]('late');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(frames).toHaveBeenCalledTimes(1);
+  });
   it('serializes tab reconnects and releases a capture stopped while reconnecting', async () => {
     const first = createMockCdpSession({ detach: vi.fn(async () => {}) });
     const second = createMockCdpSession({ detach: vi.fn(async () => {}) });

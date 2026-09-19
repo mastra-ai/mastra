@@ -16,7 +16,9 @@ describe('AgentBrowser shared viewer', () => {
       const manager = await browser.getManagerForThread();
       const original = manager.getPage();
       expect(await original.evaluate(() => [innerWidth, innerHeight, devicePixelRatio])).toEqual([640, 480, 2]);
-      await original.setContent('<input id="draft"><div style="height:1000px">Scroll content</div>');
+      await original.setContent(
+        '<input id="draft" style="position:absolute;left:200px;top:200px;width:100px;height:40px"><div style="height:1000px">Scroll content</div>',
+      );
       await original.evaluate(
         () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))),
       );
@@ -32,15 +34,17 @@ describe('AgentBrowser shared viewer', () => {
       // Protocol metadata and input coordinates must stay in CSS pixels.
       expect(frames.at(-1).viewport).toMatchObject({ width: 640, height: 480 });
       await viewer.command(
-        { type: 'mouse', event: { type: 'mousePressed', x: 40, y: 16, button: 'left', clickCount: 1 } },
+        { type: 'mouse', event: { type: 'mousePressed', x: 220, y: 220, button: 'left', clickCount: 1 } },
         incarnation,
       );
       await viewer.command(
-        { type: 'mouse', event: { type: 'mouseReleased', x: 40, y: 16, button: 'left', clickCount: 1 } },
+        { type: 'mouse', event: { type: 'mouseReleased', x: 220, y: 220, button: 'left', clickCount: 1 } },
         incarnation,
       );
       await viewer.command({ type: 'text', text: '\u0645\u0631\u062d\u0628\u0627' }, incarnation);
       expect(await original.locator('#draft').inputValue()).toBe('\u0645\u0631\u062d\u0628\u0627');
+      await original.locator('#draft').click({ timeout: 2000 });
+      expect(await original.evaluate(() => document.activeElement?.id)).toBe('draft');
       await viewer.command(
         { type: 'preferences', preferences: { width: 390, height: 844, deviceScaleFactor: 2, locale: 'ar-SA' } },
         incarnation,

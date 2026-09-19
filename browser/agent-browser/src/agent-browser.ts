@@ -1752,6 +1752,8 @@ export class AgentBrowser extends MastraBrowser {
         return cdpSession as unknown as CdpSessionLike;
       },
       isBrowserRunning: () => browserManager.isLaunched(),
+      captureFrame: async options =>
+        this.viewerPreferences.get(browserManager)?.capture(browserManager.getPage(), options),
     };
 
     const stream = new ScreencastStreamImpl(provider, _options);

@@ -101,4 +101,7 @@ export interface CdpSessionProvider {
    * Check if the browser is currently running.
    */
   isBrowserRunning(): boolean;
+
+  /** Optional device-density image using the provider's configured capture session. */
+  captureFrame?(options: ScreencastOptions): Promise<string | undefined>;
 }
