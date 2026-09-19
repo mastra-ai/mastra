@@ -4,6 +4,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import { modelSupportsStructuredOutput, modelSupportsTemperature } from '../../../llm/model/provider-registry';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
@@ -300,6 +301,7 @@ export function execute<OUTPUT = undefined>({
     onResult,
     createStream: async () => {
       try {
+        const timeout = validateModelTimeoutSettings(modelSettings?.timeout);
         let filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'timeout']);
 
         // Capability-gated stripping of sampling params for models that reject them
@@ -316,7 +318,7 @@ export function execute<OUTPUT = undefined>({
         // returned stream ends, so a provider that stalls mid-stream is caught too.
         const { signal: abortSignal, cleanup: cleanupStepTimeout } = createTimeoutAbortSignal({
           parentSignal: options?.abortSignal,
-          timeoutMs: modelSettings?.timeout?.stepMs,
+          timeoutMs: timeout?.stepMs,
           timeoutType: 'step',
         });
         let callAbortSignal = abortSignal;
@@ -328,7 +330,7 @@ export function execute<OUTPUT = undefined>({
             async () => {
               const firstChunkTimeout = createTimeoutAbortSignal({
                 parentSignal: abortSignal,
-                timeoutMs: methodType === 'stream' ? modelSettings?.timeout?.firstChunkMs : undefined,
+                timeoutMs: methodType === 'stream' ? timeout?.firstChunkMs : undefined,
                 timeoutType: 'firstChunk',
               });
               callAbortSignal = firstChunkTimeout.signal;

@@ -10,6 +10,7 @@ import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraModelSettings } from '../../../llm/model/model-settings';
+import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
@@ -1739,6 +1740,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             },
           }) as unknown as ReturnType<typeof execute>;
         } else if (isSupportedLanguageModel(currentStep.model)) {
+          const callTimeout = validateModelTimeoutSettings(currentStep.modelSettings?.timeout);
+          const modelTimeout = validateModelTimeoutSettings(modelConfig.modelSettings?.timeout);
+          const timeout = callTimeout || modelTimeout ? { ...callTimeout, ...modelTimeout } : undefined;
+
           // Apply request-side context to MODEL_INFERENCE using the post-processor
           // tool set + per-step settings, then open the inference span. Doing this
           // immediately before execute() ensures the span's startTime excludes
@@ -1748,10 +1753,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             parameters: {
               ...currentStep.modelSettings,
               ...modelConfig.modelSettings,
-              timeout:
-                currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
-                  ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
-                  : undefined,
+              timeout,
             } as Record<string, unknown> | undefined,
             providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
             availableTools: getStepAvailableToolNames(
@@ -1781,10 +1783,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 modelSettings: {
                   ...currentStep.modelSettings,
                   ...modelConfig.modelSettings,
-                  timeout:
-                    currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
-                      ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
-                      : undefined,
+                  timeout,
                   maxRetries: modelConfig.maxRetriesConfigured
                     ? modelConfig.maxRetries
                     : (currentStep.modelSettings?.maxRetries ?? modelConfig.maxRetries),

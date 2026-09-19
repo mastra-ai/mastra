@@ -1,6 +1,7 @@
 import { generateId } from '@internal/ai-sdk-v5';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import { validateModelTimeoutSettings } from '../llm/model/model-settings';
 import { ConsoleLogger } from '../logger';
 import { createObservabilityContext } from '../observability';
 import type { ProcessorState } from '../processors';
@@ -43,6 +44,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     loggerToUse.trackException(mastraError);
     throw mastraError;
   }
+
+  validateModelTimeoutSettings(modelSettings?.timeout);
 
   const firstModel = models[0];
 
