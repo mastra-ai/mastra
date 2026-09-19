@@ -28,6 +28,33 @@ const storage = new PostgresStore({
 })
 ```
 
+## Scan retained message history
+
+Use the PostgreSQL memory domain's `scanMessages()` and `scanThreads()` methods for bounded maintenance reads. They return records in stable ID order. Deleting an earlier record, or changing its date or metadata, doesn't shift an unread record behind the cursor.
+
+```typescript
+import { MemoryPG } from '@mastra/pg'
+
+const memory = await storage.getStore('memory')
+if (!(memory instanceof MemoryPG)) throw new Error('PostgreSQL memory is required')
+
+let cursor: string | null = null
+do {
+  const page = await memory.scanMessages({ resourceId: 'user-123', limit: 200, cursor })
+  // Process this batch successfully before saving page.nextCursor as progress.
+  console.log(page.records)
+  cursor = page.nextCursor
+} while (cursor)
+```
+
+Both methods accept `limit` (1–500, default 200), an optional `resourceId`, and an opaque `cursor`. `scanMessages()` also accepts `threadId`. Keep filters unchanged when continuing a scan. A cursor from another schema, record type, or filter is rejected. `nextCursor: null` marks the end. Omitting filters scans all records, so restrict access to trusted server code. A cursor isn't an authorization token.
+
+The first page fixes the scan's highest ID. Later pages use ID comparisons and read at most `limit + 1` records without offsets or total-count queries. Scans don't hold a database transaction across requests and aren't snapshots. Records inserted behind the cursor, or above the initial highest ID, are visited by the next scan. Start repeated scans when continued coverage matters.
+
+`scanMessages()` returns stored history directly as `MastraMessageV1 | MastraDBMessage`, including legacy text rows and messages whose thread record is absent. It doesn't run semantic search, hide signals, or filter message metadata. Ordinary `Memory.recall()` and list APIs are unchanged.
+
+Native initialization creates resource-plus-ID and thread-plus-ID indexes for filtered scans. The row limit bounds returned data; query cost also depends on the filter, indexes, and database statistics. With `skipDefaultIndexes`, supply equivalent indexes when needed.
+
 ## Parameters
 
 <PropertiesTable

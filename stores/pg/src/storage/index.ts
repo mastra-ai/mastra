@@ -30,6 +30,7 @@ import { KnowledgePG } from './domains/knowledge';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
+export type { MemoryScanInput, MemoryMessageScanInput, MemoryScanPage } from './domains/memory/scan';
 import { NotificationsPG } from './domains/notifications';
 import { ObservabilityPG } from './domains/observability';
 import { ObservabilityStoragePostgresVNext } from './domains/observability/v-next';

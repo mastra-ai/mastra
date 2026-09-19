@@ -104,6 +104,8 @@ import {
 } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { runPrune, runBatchedDelete, resolveTargets } from '../../retention';
+import { scanById } from './scan';
+import type { MemoryScanInput, MemoryMessageScanInput, MemoryScanPage } from './scan';
 
 // Database row type that includes timezone-aware columns
 type MessageRowFromDB = {
@@ -273,7 +275,7 @@ export class MemoryPG extends MemoryStorage {
    * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
    */
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
-    return [
+    const indexes: CreateIndexOptions[] = [
       {
         name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
         table: TABLE_THREADS,
@@ -284,7 +286,29 @@ export class MemoryPG extends MemoryStorage {
         table: TABLE_MESSAGES,
         columns: ['thread_id', 'createdAt DESC'],
       },
+      {
+        name: `${schemaPrefix}mastra_threads_resourceid_id_idx`,
+        table: TABLE_THREADS,
+        columns: ['resourceId', 'id'],
+      },
+      {
+        name: `${schemaPrefix}mastra_messages_resourceid_id_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['resourceId', 'id'],
+      },
+      {
+        name: `${schemaPrefix}mastra_messages_thread_id_id_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['thread_id', 'id'],
+      },
     ];
+    // Index names are scoped to their table's schema. Drop the redundant prefix
+    // only when it would exceed PostgreSQL's identifier limit; preserve existing
+    // valid names so initialization doesn't create duplicate indexes.
+    return indexes.map(index => ({
+      ...index,
+      name: index.name.length > 63 ? index.name.slice(schemaPrefix.length) : index.name,
+    }));
   }
 
   /**
@@ -596,6 +620,71 @@ export class MemoryPG extends MemoryStorage {
         error,
       );
     }
+  }
+
+  /**
+   * Scan retained threads in stable ID order. Deletions and metadata/date edits
+   * do not shift later records behind the cursor. This is not a snapshot:
+   * inserts behind the cursor are visited by the next scan.
+   */
+  public async scanThreads(input: MemoryScanInput = {}): Promise<MemoryScanPage<StorageThreadType>> {
+    if (input.resourceId !== undefined && (typeof input.resourceId !== 'string' || !input.resourceId.trim())) {
+      throw new Error('Memory scan resourceId must be a nonempty string.');
+    }
+    const table = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const page = await scanById<StorageThreadType & { createdAtZ?: Date; updatedAtZ?: Date }>({
+      client: this.#db.client,
+      table,
+      select: 'id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"',
+      scope: JSON.stringify([table, input.resourceId ?? null]),
+      input,
+      conditions: input.resourceId === undefined ? [] : ['"resourceId" = $1'],
+      values: input.resourceId === undefined ? [] : [input.resourceId],
+    });
+    return {
+      ...page,
+      records: page.records.map(thread => ({
+        id: thread.id,
+        resourceId: thread.resourceId,
+        title: thread.title,
+        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        createdAt: thread.createdAtZ || thread.createdAt,
+        updatedAt: thread.updatedAtZ || thread.updatedAt,
+      })),
+    };
+  }
+
+  /**
+   * Bounded raw history scan, including messages whose thread row is absent.
+   * No semantic search, signal hiding, metadata filtering or total-count read.
+   * Resource/thread filters are applied on every page and bound into the cursor.
+   */
+  public async scanMessages(
+    input: MemoryMessageScanInput = {},
+  ): Promise<MemoryScanPage<MastraMessageV1 | MastraDBMessage>> {
+    const conditions: string[] = [];
+    const values: string[] = [];
+    for (const [column, value] of [
+      ['"resourceId"', input.resourceId],
+      ['thread_id', input.threadId],
+    ] as const) {
+      if (value === undefined) continue;
+      if (typeof value !== 'string' || !value.trim())
+        throw new Error('Memory scan resourceId/threadId must be nonempty strings.');
+      values.push(value);
+      conditions.push(`${column} = $${values.length}`);
+    }
+    const table = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+    const page = await scanById<MessageRowFromDB>({
+      client: this.#db.client,
+      table,
+      select: 'id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"',
+      scope: JSON.stringify([table, input.resourceId ?? null, input.threadId ?? null]),
+      input,
+      conditions,
+      values,
+    });
+    return { ...page, records: page.records.map(row => this.parseRow(row)) };
   }
 
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
