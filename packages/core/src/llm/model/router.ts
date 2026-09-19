@@ -217,8 +217,20 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       return this._supportedUrlsPromise;
     }
 
-    this._supportedUrlsPromise = this._fetchSupportedUrls();
-    return this._supportedUrlsPromise;
+    const supportedUrlsPromise = this._fetchSupportedUrls().catch(error => {
+      console.warn(
+        `[ModelRouter] Failed to resolve supportedUrls for "${this.config.routerId}". Retrying on next access.`,
+        error,
+      );
+
+      if (this._supportedUrlsPromise === supportedUrlsPromise) {
+        this._supportedUrlsPromise = null;
+      }
+
+      return {};
+    });
+    this._supportedUrlsPromise = supportedUrlsPromise;
+    return supportedUrlsPromise;
   }
 
   /**
@@ -226,35 +238,28 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
    * @internal
    */
   private async _fetchSupportedUrls(): Promise<Record<string, RegExp[]>> {
-    let apiKey: string;
-    try {
-      const resolved = this.#manager.resolveModelId(this.config.routerId);
-      const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
-      apiKey = auth.apiKey ?? '';
-      const model = await this.resolveLanguageModel({
-        apiKey,
-        auth,
-        headers: mergeHeaders(this.config.headers, auth.headers),
-        ...resolved,
-      });
+    const resolved = this.#manager.resolveModelId(this.config.routerId);
+    const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
+    const model = await this.resolveLanguageModel({
+      apiKey: auth.apiKey ?? '',
+      auth,
+      headers: mergeHeaders(this.config.headers, auth.headers),
+      ...resolved,
+    });
 
-      // Get supportedUrls from the underlying model
-      const modelSupportedUrls = model.supportedUrls;
-      if (!modelSupportedUrls) {
-        return {};
-      }
-
-      // Handle both Promise and plain object supportedUrls
-      if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
-        const resolved = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
-        return resolved ?? {};
-      }
-
-      return (modelSupportedUrls as Record<string, RegExp[]>) ?? {};
-    } catch {
-      // If model resolution fails, return empty supportedUrls
+    // Get supportedUrls from the underlying model
+    const modelSupportedUrls = model.supportedUrls;
+    if (!modelSupportedUrls) {
       return {};
     }
+
+    // Handle both Promise and plain object supportedUrls
+    if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
+      const resolved = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
+      return resolved ?? {};
+    }
+
+    return (modelSupportedUrls as Record<string, RegExp[]>) ?? {};
   }
 
   /** @internal */
