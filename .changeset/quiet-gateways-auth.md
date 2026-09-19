@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Expose the native `GatewayManager` and its model entry type from `@mastra/core/llm` for offline gateway authentication checks.
+Expose the native `GatewayManager` and its model entry type from `@mastra/core/llm` for gateway authentication preflight checks.
 
 ```ts
 import { GatewayManager, defaultGateways, type GatewayModel } from '@mastra/core/llm'
