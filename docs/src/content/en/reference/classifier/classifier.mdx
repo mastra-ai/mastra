@@ -70,6 +70,10 @@ result.answers.route.choice // 'support' | 'sales'
 
 Constructor-configured questions and per-call questions are mutually exclusive.
 
+## Use a classifier as a scorer
+
+Use [`createClassifierScorer()`](/reference/evals/create-classifier-scorer) to evaluate one constructor-configured question inside Mastra's scorer pipeline. Choice questions require an explicit exhaustive numeric mapping, score questions keep their numeric answer, and boolean questions use `P(true)` without applying a threshold. The selected typed answer and uncertainty evidence remain available in `analyzeStepResult`.
+
 ## Constructor parameters
 
 <PropertiesTable

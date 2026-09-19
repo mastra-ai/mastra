@@ -9,6 +9,8 @@ packages:
 
 Mastra provides a unified `createScorer` factory that allows you to define custom scorers for evaluating input/output pairs. You can use either native JavaScript functions or LLM-based prompt objects for each evaluation step. Custom scorers can be added to Agents and Workflow steps.
 
+To use a configured `Classifier` as the only model judge, use [`createClassifierScorer()`](/reference/evals/create-classifier-scorer). It projects one typed classifier answer to the required numeric score while retaining the answer and uncertainty evidence in `analyzeStepResult`.
+
 ## How to create a custom scorer
 
 Use the `createScorer` factory to define your scorer with a name, description, and optional judge configuration. Then chain step methods to build your evaluation pipeline. You must provide at least a `generateScore` step.
