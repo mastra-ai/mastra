@@ -1,12 +1,12 @@
 export const WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS = `# Persisted workflow authoring contract
 
-A persisted workflow is a JSON-safe static graph. The supported entry types are agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, declarative conditional, and declarative loop. Closure mappings, function predicates, callbacks, and arbitrary executable functions are unsupported.
+A persisted workflow is a JSON-safe static graph. The supported entry types are agent, tool, classifier, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, declarative conditional, and declarative loop. Closure mappings, function predicates, callbacks, and arbitrary executable functions are unsupported.
 
 Every adjacent step must compose exactly: the previous output shape must satisfy the next input schema. Agent inputs are always { prompt: string }. Insert a mapping step whenever shapes differ; never rely on implicit coercion. A mapping's output keys are the top-level keys of its JSON-encoded mapConfig. Persisted mappings only select, rename, template, or provide constant values; they cannot evaluate arithmetic or arbitrary expressions. Template placeholders must use inputData, initData, state, requestContext, or stepResults namespaces (for example \${stepResults.add-numbers.result}), never input, steps, or JavaScript expressions. Use a discovered tool or agent when computation is required.
 
-Mapping entries must be top-level linear steps. Parallel and conditional children, foreach bodies, and loop bodies may be agent, tool, or nested workflow entries; do not place mappings or nested containers inside them. Parallel and conditional children all receive the same preceding output. Foreach requires an array input and passes each array item directly to its body. Loop bodies must accept both the preceding output and their own output on later iterations. Use a nested workflow when a branch or foreach item needs its own input-shaping mapping. Conditional predicates align by index with their branch steps. Loop and conditional predicates must use the declarative predicate DSL.
+Mapping entries must be top-level linear steps. Parallel and conditional children, foreach bodies, and loop bodies may be agent, tool, classifier, or nested workflow entries; do not place mappings or nested containers inside them. Parallel and conditional children all receive the same preceding output. Foreach requires an array input and passes each array item directly to its body. Loop bodies must accept both the preceding output and their own output on later iterations. Use a nested workflow when a branch or foreach item needs its own input-shaping mapping. Conditional predicates align by index with their branch steps. Loop and conditional predicates must use the declarative predicate DSL.
 
-Nested workflow entries use \`workflowId\` to identify the discovered dependency and \`id\` as the local call-site identity. They may differ; downstream mappings reference the declared call-site \`id\`. Use dependency IDs returned by discovery. Never invent agent, tool, or workflow IDs. Keep workflow IDs, step IDs, schemas, mapping configs, options, predicates, and metadata JSON-safe.`;
+Nested workflow entries use \`workflowId\` to identify the discovered dependency and \`id\` as the local call-site identity. They may differ; downstream mappings reference the declared call-site \`id\`. Use dependency IDs returned by discovery. Never invent agent, tool, classifier, or workflow IDs. Keep workflow IDs, step IDs, schemas, mapping configs, options, predicates, and metadata JSON-safe.`;
 
 export const WORKFLOW_BUILDER_AUTHORING_PLAYBOOK = `${WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS}
 
@@ -14,11 +14,12 @@ export const WORKFLOW_BUILDER_AUTHORING_PLAYBOOK = `${WORKFLOW_BUILDER_AUTHORING
 
 A workflow takes one **input value** matching \`inputSchema\` and runs an ordered list of **steps**. Most steps exchange objects, but schemas may also describe arrays or scalars where the step contract permits them. Each step receives the previous step's output as its input and produces its own output. The workflow's final output is the last step's output, which must match \`outputSchema\`.
 
-There are ten step types. The COLUMNS in the table below are the contract you must respect.
+There are eleven step types. The COLUMNS in the table below are the contract you must respect.
 
 | Step type     | Input it receives | Output it produces |
 |---------------|-------------------|--------------------|
 | \`tool\`        | Previous step's output, validated against the tool's \`inputSchema\`. | The exact shape of the tool's \`outputSchema\`. |
+| \`classifier\`  | The complete previous output by default, or the value selected by \`state.path\`. The selected value must be a classifier state (string, JSON object, or JSON array). | \`{ values, answers, usage }\`. Use \`values.<question>\` for routing, \`answers.<question>\` for full distributions/evidence, and \`usage\` for token accounting. Boolean values are P(true), not thresholded booleans. |
 | \`agent\`       | STRICTLY \`{ prompt: string }\`. The engine does NOT coerce; it validates and throws "expected object, received …" if the previous step's output isn't exactly this shape. If your previous step doesn't already produce \`{ prompt: string }\`, you MUST insert a \`mapping\` step in between. | Default: \`{ text: string }\`. If the entry sets \`outputSchema\` (see "Structured agent output" below), the output IS that schema's shape. |
 | \`workflow\`    | Previous step's output, validated against the referenced workflow's \`inputSchema\`. The nested workflow is identified by \`workflowId\` (id of another workflow registered on the Mastra instance — either code-defined via \`createWorkflow\` or stored through the authoring surface). | The referenced workflow's \`outputSchema\`. |
 | \`mapping\`     | Nothing directly — mappings *project* from any prior step's results, the workflow input, etc. (See "Mappings" below.) | An object whose top-level keys are the keys of \`mapConfig\`. |
@@ -29,25 +30,26 @@ There are ten step types. The COLUMNS in the table below are the contract you mu
 | \`conditional\` | Previous step's output, forwarded to EVERY branch step. Each branch fires only if its declarative \`predicate\` evaluates truthy. | An object keyed by each branch step's \`id\`, whose value is that branch's output (or \`undefined\` for branches whose predicate was false). |
 | \`loop\`        | Previous step's output on iteration 1; the inner step's own previous output on subsequent iterations. \`dowhile\` re-runs while the predicate is TRUE; \`dountil\` re-runs until the predicate is TRUE. | The inner step's LAST-iteration output. |
 
-# Discovery — your three catalog tools
+# Discovery — your four catalog tools
 
-Every authoring surface gives you the same three discovery tools. All three take **no arguments** and return the **entire** catalog for their kind, so you call each one once, up front, and you are done discovering:
+Every authoring surface gives you the same four discovery tools. All four take **no arguments** and return the **entire** catalog for their kind, so you call each one once, up front, and you are done discovering:
 
 - \`list-available-agents\` → every agent you may put in \`{ type: "agent", agentId }\`. Each row carries the id to copy verbatim, a description to choose by, and the agent's output contract. Agent input is ALWAYS \`{ prompt: string }\`; the output contract describes the DEFAULT output (\`{ text: string }\`), which a step-level \`outputSchema\` overrides for that step only.
 - \`list-available-tools\` → every tool you may put in \`{ type: "tool", toolId }\`. Each row carries the id to copy verbatim, a description, and \`inputSchema\` / \`outputSchema\` as JSON Schema. READ THE SCHEMAS — they are your ground truth for every field name you interpolate. If a row has no \`outputSchema\`, that tool's output shape is unknown to you: you may only consume it through a mapping that builds the next input from scratch.
+- \`list-available-classifiers\` → every configured classifier you may put in \`{ type: "classifier", classifierId }\`. Each row carries the id and configured question metadata. Copy question keys and choice literals exactly. A classifier returns \`values.<question>\` for routine routing, \`answers.<question>\` for full evidence, and \`usage\` for token accounting. Use a following \`conditional\` entry to route on these paths; there is no classifier-specific switch entry.
 - \`list-available-workflows\` → every already-registered workflow you may put in \`{ type: "workflow", workflowId }\`, with its id, description, and both schemas. NEVER reference a workflow id that is not in this list. The one exception is a helper workflow you author in this same request, and only exactly as your surface policy allows.
 
 Do not skip a listing because you "already know" what exists, and do not compose from a name the user said out loud. A registry key that is not in these results does not exist.
 
-These three plus the completion tool named in your surface's execution protocol are ALL the tools you have. There is no other way to learn a schema and no lookup that returns one resource at a time — if something is not in these three catalogs, stop and say so rather than probing for it.
+These four plus the completion tool named in your surface's execution protocol are ALL the tools you have. There is no other way to learn a schema and no lookup that returns one resource at a time — if something is not in these four catalogs, stop and say so rather than probing for it.
 
 # Composition procedure
 
 Follow this sequence for every authoring request:
 
-1. **Discover authoritative resources.** Call \`list-available-agents\`, \`list-available-tools\`, and \`list-available-workflows\` before composing anything. Treat the returned ids and input/output schemas as ground truth. Never infer availability or fields from a name in the user's request.
+1. **Discover authoritative resources.** Call \`list-available-agents\`, \`list-available-tools\`, \`list-available-classifiers\`, and \`list-available-workflows\` before composing anything. Treat the returned ids, schemas, and classifier question metadata as ground truth. Never infer availability or fields from a name in the user's request.
 2. **Pick the smallest useful graph.** Decide the ordered steps needed to satisfy the request. Do not add speculative helpers or alternative graphs.
-3. **Classify every reference.** Agent, tool, and workflow IDs come from different registries. An agent entry needs an \`agentId\`, a tool entry needs a \`toolId\`, and a nested-workflow entry needs a \`workflowId\`. Copy the discovered registry key verbatim into the matching discriminant; a local step \`id\` is not a resource ID.
+3. **Classify every reference.** Agent, tool, classifier, and workflow IDs come from different registries. An agent entry needs an \`agentId\`, a tool entry needs a \`toolId\`, a classifier entry needs a \`classifierId\`, and a nested-workflow entry needs a \`workflowId\`. Copy the discovered registry key verbatim into the matching discriminant; a local step \`id\` is not a resource ID.
 4. **Wire every boundary.** For each step, compare the input shape it requires with the exact output shape it will receive from the workflow input or previous step. Insert a top-level mapping when object shapes differ. For containers, recursively verify every child against the common input or array item it receives.
 5. **Construct one complete definition.** Include a kebab-case workflow ID, concise non-empty description, schemas, and full graph. Do not emit incremental fragments or speculative alternatives.
 6. **Run the shared pre-action check.** Before using the surface-specific completion tool, verify that every resource reference came from authoritative discovery, every adjacent schema boundary composes, every mapping path exists on its declared source, container children receive the correct common input or array item, and the final step output satisfies the workflow output schema.
@@ -218,7 +220,7 @@ Pattern B requires those helper workflows to exist as registered workflows. Whet
 The rules:
 - The step IMMEDIATELY BEFORE a \`foreach\` MUST produce an ARRAY as its top-level output. Not an object with an array field — the array itself. Foreach iterates \`previous.output\`, not \`previous.output.<somekey>\`.
 - Because a \`mapping\` step always outputs an OBJECT (its top-level keys are \`mapConfig\`'s keys), a mapping CANNOT be the step before a \`foreach\` — a mapping's output is never a raw array.
-- The inner \`step\` is a SINGLE step-like entry: agent, tool, or nested workflow. No nested \`foreach\` / \`parallel\` / \`conditional\` / \`loop\` / \`mapping\`.
+- The inner \`step\` is a SINGLE step-like entry: agent, tool, classifier, or nested workflow. No nested \`foreach\` / \`parallel\` / \`conditional\` / \`loop\` / \`mapping\`.
 - The inner step's \`id\` MUST be distinct from every other step id in the workflow (including the surrounding steps). A duplicate id will collide with \`stepResults\` lookups.
 - The inner step receives ONE ELEMENT of the array at a time as its input, without coercion. An agent body therefore requires every array item to be exactly \`{ prompt: string }\`; a tool or nested-workflow body requires every item to satisfy its discovered input schema.
 - Output is an array of the inner step's outputs, order-preserved. Agent inner steps ⇒ \`{ text: string }[]\`. Tool inner steps ⇒ \`toolOutputSchema[]\`.

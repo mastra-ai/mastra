@@ -60,6 +60,7 @@ function serializeEntry(entry: StepFlowEntry): SerializedStepFlowEntry {
     case 'step':
     case 'agent':
     case 'tool':
+    case 'classifier':
     case 'mapping':
       return serializeSingleEntry(entry);
     case 'sleep':
@@ -151,6 +152,20 @@ function serializeSingleEntry(entry: SingleStepEntry): SerializedSingleStepEntry
       toolId: entry.toolId,
       description: entry.tool?.description,
       ...(options ? { options } : {}),
+    };
+  }
+  if (entry.type === 'classifier') {
+    if (typeof entry.state === 'function') {
+      throw new Error(
+        `Classifier step "${entry.id}" cannot be stored: the state selector function does not round-trip. Use a path mapping instead.`,
+      );
+    }
+    return {
+      type: 'classifier',
+      id: entry.id,
+      classifierId: entry.classifierId,
+      ...(entry.state ? { state: entry.state } : {}),
+      ...(entry.options ? { options: entry.options } : {}),
     };
   }
   if (entry.type === 'mapping') {

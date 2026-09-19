@@ -115,6 +115,7 @@ function applyGraphEntry(
   switch (entry.type) {
     case 'agent':
     case 'tool':
+    case 'classifier':
       wf.__pushStepFlowEntry(rehydrateSingleEntry(entry, mastra, schemaOpts), entry);
       return;
     case 'mapping': {
@@ -314,6 +315,24 @@ function rehydrateSingleEntry(
         );
       }
       return { type: 'tool', id: entry.id, toolId: entry.toolId, tool, options: rebuildToolOptions(entry) };
+    }
+    case 'classifier': {
+      let classifier;
+      try {
+        classifier = mastra.getClassifierById(entry.classifierId);
+      } catch {
+        throw new Error(
+          `Dynamic workflow references classifier "${entry.classifierId}" which is not registered on this Mastra instance.`,
+        );
+      }
+      return {
+        type: 'classifier',
+        id: entry.id,
+        classifierId: entry.classifierId,
+        classifier,
+        state: entry.state,
+        options: entry.options,
+      };
     }
     case 'step': {
       const { id } = entry.step;

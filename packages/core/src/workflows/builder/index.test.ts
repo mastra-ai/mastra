@@ -20,10 +20,11 @@ const fixtures = JSON.parse(
 ) as Array<{ name: string; input: unknown; expected: unknown }>;
 
 describe('workflow builder authoring contract', () => {
-  it('publishes all ten persisted graph families', () => {
+  it('publishes all eleven persisted graph families', () => {
     expect(WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES).toEqual([
       'agent',
       'tool',
+      'classifier',
       'mapping',
       'workflow',
       'parallel',
@@ -37,11 +38,15 @@ describe('workflow builder authoring contract', () => {
 
   it('keeps the shared JSON-safe authoring constraints available to every authoring frontend', () => {
     expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('JSON-safe static graph');
-    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('Never invent agent, tool, or workflow IDs');
+    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('Never invent agent, tool, classifier, or workflow IDs');
   });
 
   it('publishes the shared composition playbook without surface mutation semantics', () => {
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# How a workflow runs');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Discovery — your four catalog tools');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('list-available-classifiers');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('values.<question>');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('following `conditional` entry');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Composition procedure');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Run the shared pre-action check');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Shared summary rules');

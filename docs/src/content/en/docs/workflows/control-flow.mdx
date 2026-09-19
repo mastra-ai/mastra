@@ -290,6 +290,48 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
+### Route with a classifier
+
+A configured classifier can produce typed routing values before `.branch()`. The complete classifier evidence remains available under `answers`.
+
+```typescript title="src/mastra/workflows/ticket-triage.ts"
+import { Classifier } from '@mastra/core/classifier'
+import { createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
+
+const router = new Classifier({
+  id: 'ticket-router',
+  model,
+  questions: {
+    route: {
+      type: 'choice',
+      criteria: {
+        billing: 'Billing, invoices, refunds, and payments',
+        support: 'Account access and product help',
+        other: 'Anything else',
+      },
+    },
+  },
+})
+
+export const ticketTriage = createWorkflow({
+  id: 'ticket-triage',
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.any(),
+})
+  .classifier(router, {
+    state: ({ inputData }) => inputData.message,
+  })
+  .branch([
+    [async ({ inputData }) => inputData.values.route === 'billing', billingStep],
+    [async ({ inputData }) => inputData.values.route === 'support', supportStep],
+    [async ({ inputData }) => inputData.values.route === 'other', fallbackStep],
+  ])
+  .commit()
+```
+
+Choice values retain the configured criteria-key union, so `inputData.values.route` is typed as `'billing' | 'support' | 'other'`. Score values are numbers. Boolean values are `P(true)` probabilities and aren't automatically thresholded.
+
 ### Output structure
 
 When using conditional branching, only one branch executes based on which condition evaluates to `true` first. The output structure is similar to `.parallel()`, where the result is keyed by the executed step's `id`.

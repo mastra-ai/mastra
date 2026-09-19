@@ -3,6 +3,7 @@ import {
   normalizeWorkflowBuilderDefinition,
   WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION,
   workflowBuilderAgentEntrySchema,
+  workflowBuilderClassifierEntrySchema,
   workflowBuilderConditionalEntrySchema,
   workflowBuilderDefinitionInputSchema,
   workflowBuilderDefinitionSchema,
@@ -49,6 +50,8 @@ describe('shared workflow builder authoring schema', () => {
     expect(workflowBuilderAgentEntrySchema.description).toContain(
       'Default agents consume { prompt: string } and return { text: string }',
     );
+    expect(workflowBuilderClassifierEntrySchema.description).toContain('{ values, answers, usage }');
+    expect(workflowBuilderClassifierEntrySchema.description).toContain('following conditional entry');
     // The call-site id addresses the nested workflow's result; it is independent
     // of the referenced workflowId (registry keys and intrinsic ids can differ).
     expect(workflowBuilderNestedWorkflowEntrySchema.description).toContain('stepResults.<id>');
@@ -83,6 +86,35 @@ describe('shared workflow builder authoring schema', () => {
   describe('when a model submits the input dialect', () => {
     it('accepts object-form mapping configs before normalization', () => {
       expect(() => workflowBuilderDefinitionInputSchema.parse(authoringDefinition)).not.toThrow();
+    });
+
+    it('accepts classifier entries and their serializable state and options', () => {
+      const definition = {
+        ...authoringDefinition,
+        graph: [
+          {
+            type: 'classifier',
+            id: 'classify-ticket',
+            classifierId: 'ticket-router',
+            state: { path: 'inputData.email' },
+            options: { maxRetries: 1, retries: 2, metadata: { owner: 'support' } },
+          },
+        ],
+      };
+
+      expect(workflowBuilderDefinitionInputSchema.parse(definition).graph[0]).toEqual(definition.graph[0]);
+      expect(workflowBuilderDefinitionSchema.parse(normalizeWorkflowBuilderDefinition(definition)).graph[0]).toEqual(
+        definition.graph[0],
+      );
+    });
+
+    it('rejects malformed classifier entries', () => {
+      expect(
+        workflowBuilderDefinitionInputSchema.safeParse({
+          ...authoringDefinition,
+          graph: [{ type: 'classifier', id: 'classify-ticket', classifierId: '', state: { path: '' } }],
+        }).success,
+      ).toBe(false);
     });
 
     it('accepts the normalized form of the same definition through the strict schema', () => {
