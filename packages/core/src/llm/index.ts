@@ -210,12 +210,14 @@ export {
   ModelsDevGateway,
   AzureOpenAIGateway,
   MastraGateway,
+  GatewayManager,
 } from './model/gateways';
 export type {
   AzureAccessToken,
   AzureOpenAIGatewayConfig,
   AzureTokenCredential,
   MastraGatewayConfig,
+  GatewayModel,
 } from './model/gateways';
 export { GATEWAY_AUTH_HEADER } from './model/gateways/constants';
 export { resolveModelAuth, type ResolveModelAuthArgs } from './model/model-auth-resolver';

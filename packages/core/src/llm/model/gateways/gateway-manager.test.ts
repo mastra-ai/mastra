@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../../../error/index.js';
+import { GatewayManager } from '../../index';
 import type {
   GatewayAuthRequest,
   GatewayAuthResult,
@@ -9,7 +10,6 @@ import type {
   ProviderConfig,
 } from './base';
 import { defaultGateways } from './defaults';
-import { GatewayManager } from './gateway-manager';
 
 /**
  * Minimal in-memory gateway for exercising GatewayManager without real
@@ -57,6 +57,11 @@ function createFakeGateway(options?: {
 }
 
 describe('GatewayManager', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
   describe('constructor', () => {
     it('stores only the gateways passed in (no side-effect defaults)', () => {
       const gw = createFakeGateway({ id: 'my-gateway' });
@@ -333,6 +338,22 @@ describe('GatewayManager', () => {
       });
       const manager = new GatewayManager([gateway]);
       expect(await manager.hasAuth('test-gateway/acme/sonic-fast')).toBe(false);
+    });
+
+    it('reports missing auth for static Google aliases without discovery or generation', async () => {
+      vi.stubEnv('GOOGLE_API_KEY', '');
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+
+      const discoverySpies = defaultGateways.map(gateway => vi.spyOn(gateway, 'fetchProviders'));
+      const generationSpies = defaultGateways.map(gateway => vi.spyOn(gateway, 'resolveLanguageModel'));
+      const manager = new GatewayManager(defaultGateways);
+
+      await expect(
+        Promise.all([manager.hasAuth('google/gemini-2.5-flash'), manager.hasAuth('google/gemini-2.5-pro')]),
+      ).resolves.toEqual([false, false]);
+
+      expect(discoverySpies.every(spy => spy.mock.calls.length === 0)).toBe(true);
+      expect(generationSpies.every(spy => spy.mock.calls.length === 0)).toBe(true);
     });
 
     it('re-throws unexpected gateway failures (e.g. token exchange)', async () => {
