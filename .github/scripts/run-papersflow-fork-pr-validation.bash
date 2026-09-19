@@ -20,6 +20,7 @@ NODE
 readonly VALIDATOR_REPOSITORY_ROOT TYPESCRIPT_MODULE_PATH
 PACKED_DECLARATION_CHECK="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-packed-declaration-fixture.mjs"
 readonly PACKED_DECLARATION_CHECK
+readonly PG_PERFORMANCE_INDEX_UNIT_TEST='stores/pg/src/storage/performance-indexes/performance-indexes.test.ts'
 
 pf558_config() {
   PF558_PR_NUMBER="${PAPERSFLOW_PF558_PR_NUMBER:-266}"
@@ -4328,6 +4329,9 @@ run_validator_self_tests() {
     "$fixture_repo/stores/libsql/src/storage/domains/workflows" \
     "$fixture_repo/stores/libsql/src/storage" \
     "$fixture_repo/stores/pg/src/storage/domains/workflows" \
+    "$fixture_repo/stores/pg/src/storage/domains/memory" \
+    "$fixture_repo/stores/pg/src/storage/db" \
+    "$fixture_repo/stores/pg/src/storage/performance-indexes" \
     "$fixture_repo/workflows/inngest/src/__tests__/adapters" \
     "$fixture_repo/workflows/inngest/src/durable-agent" \
     "$fixture_repo/workflows/inngest/src" \
@@ -4587,10 +4591,16 @@ run_validator_self_tests() {
     printf '%s\n' "import { it } from 'vitest';" "it('libsql atomic resume', () => {});" \
       > stores/libsql/src/storage/domains/workflows/atomic-resume.test.ts
     printf '%s\n' '{}' > stores/pg/package.json
+    printf '%s\n' 'export default {};' > stores/pg/vitest.config.ts
+    printf '%s\n' 'export default {};' > stores/pg/vitest.perf.config.ts
     printf '%s\n' 'export const pgWorkflowStorage = true;' \
       > stores/pg/src/storage/domains/workflows/index.ts
     printf '%s\n' "import { it } from 'vitest';" "it('pg atomic resume', () => {});" \
       > stores/pg/src/storage/domains/workflows/atomic-resume.test.ts
+    printf '%s\n' "import { it } from 'vitest';" "it('pg performance index', () => {});" \
+      > stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    printf '%s\n' "import { it } from 'vitest';" "it('pg external schema', () => {});" \
+      > stores/pg/src/storage/db/external-schema.integration.test.ts
     printf '%s\n' \
       '{"scripts":{"test":"vitest run","test:workflow":"vitest run --no-isolate --retry=1 src/index.test.ts","test:docker":"docker-compose up -d && vitest run --no-isolate --retry=1 --exclude='\''src/__tests__/adapters/**'\'' && docker-compose down"},"devDependencies":{"@ai-sdk/openai":"^1.3.24","inngest-cli":"^1.26.0"}}' \
       > workflows/inngest/package.json
@@ -6495,6 +6505,67 @@ NODE
   assert_contains '--filter ./stores/pg --fail-if-no-match exec tsc --noEmit' "$command_log"
   assert_contains 'src/storage/domains/workflows/atomic-resume.test.ts' "$command_log"
   assert_contains 'postgres 127.0.0.1:5434' "$service_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' "it('pg performance index head', () => {});" \
+      >> stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    printf '%s\n' "it('pg external schema head', () => {});" \
+      >> stores/pg/src/storage/db/external-schema.integration.test.ts
+    git add .
+    git commit -q -m 'exercise PostgreSQL performance and external schema routes'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-performance-and-external-schema-success.log"
+  if ! run_fixture "$head_sha" "$output"; then
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains '--filter ./stores/pg --fail-if-no-match exec tsc --noEmit' "$command_log"
+  assert_contains '--filter ./stores/pg --fail-if-no-match build:lib' "$command_log"
+  assert_contains '--filter ./stores/pg --fail-if-no-match lint' "$command_log"
+  assert_line_matches \
+    '^--dir stores/pg exec vitest run --config vitest\.perf\.config\.ts --reporter=dot --reporter=json .*src/storage/performance-indexes/performance-indexes\.test\.ts$' \
+    "$command_log"
+  assert_line_matches \
+    '^--dir stores/pg exec vitest run --reporter=dot --reporter=json .*src/storage/db/external-schema\.integration\.test\.ts$' \
+    "$command_log"
+  assert_contains 'postgres 127.0.0.1:5434' "$service_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' "it('pg performance integration head', () => {});" \
+      > stores/pg/src/storage/performance-indexes/performance-indexes.integration.test.ts
+    printf '%s\n' "it('pg row-number performance head', () => {});" \
+      > stores/pg/src/storage/domains/memory/row-number-performance.test.ts
+    git add .
+    git commit -q -m 'reject unowned PostgreSQL performance suites'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unowned-performance-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'Unowned PostgreSQL performance fixture unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains 'stores/pg/src/storage/performance-indexes/performance-indexes.integration.test.ts' "$output"
+  assert_contains 'stores/pg/src/storage/domains/memory/row-number-performance.test.ts' "$output"
+  assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
+  if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
+    echo 'Unowned PostgreSQL performance fixture reached a test runner or service probe.' >&2
+    cat "$command_log" "$service_log" >&2
+    exit 1
+  fi
 
   head_sha="$(
     cd "$fixture_repo"
@@ -14292,6 +14363,8 @@ if (( ${#detected_tests[@]} > 0 )); then
     elif [[ "$file" == stores/* && "$file" != stores/_test-utils/* && \
       "$file" != stores/pg/* && "$file" != stores/redis/* ]]; then
       printf '%s\n' "$file" >> "$unsupported_tests"
+    elif [[ "$file" == "$PG_PERFORMANCE_INDEX_UNIT_TEST" ]]; then
+      printf '%s\n' "$file" >> "$changed_tests"
     elif [[ "$file" == stores/pg/* && \
       ( "$file" =~ \.pooler\.test\. || "$file" =~ \.performance\.test\. || \
         "$file" == */performance-indexes/* || "$file" == */row-number-performance.test.* ) ]]; then
@@ -14678,6 +14751,16 @@ while IFS= read -r file; do
     test_dir=""
   fi
 
+  vitest_config_args=()
+  if [[ "$file" == "$PG_PERFORMANCE_INDEX_UNIT_TEST" ]]; then
+    if [[ "$test_dir" != "stores/pg" || ! -f "$test_dir/vitest.perf.config.ts" ]]; then
+      echo "The exact PostgreSQL performance-index unit route requires stores/pg/vitest.perf.config.ts; failing closed." >&2
+      test_status=1
+      continue
+    fi
+    vitest_config_args=(--config vitest.perf.config.ts)
+  fi
+
   if [[ "$file" == packages/core/src/agent/__tests__/agent-signals.test.ts ]]; then
     selected_tests="$(mktemp)"
     set +e
@@ -14741,6 +14824,7 @@ while IFS= read -r file; do
       set +e
       timeout --kill-after=30s "${timeout_seconds}s" \
         "${vitest_environment[@]}" pnpm --dir "$test_dir" exec vitest run \
+          "${vitest_config_args[@]}" \
           --reporter=dot --reporter=json --outputFile.json="$test_result" \
           "$relative_file"
       status=$?
