@@ -285,13 +285,9 @@ This is the opposite of the fail-closed stance appropriate for [tool approval](/
 
 ## When routing is worth it
 
-The classifier reads only the latest user message, so its cost is roughly constant per request while the agent's input grows with the system prompt, retrieved context, and history. That makes **agent context size, not the gap between model prices, the main thing determining whether routing pays.**
+The classifier reads only the latest user message, so its cost per request is roughly constant while the agent's input grows with the system prompt, retrieved context, and history. Routing therefore pays most on agents with large context, where the classifier call is small next to the call it replaces, and least on short-prompt agents, where the two are comparable.
 
-On a small agent with a short prompt, the classifier round-trip can be comparable in size to the agent call it is optimizing, and routing can cost more than it saves. On an agent with a large system prompt or retrieved context, the same classifier call is negligible against the saving.
-
-Downgrading is not quality-neutral. A cheaper model tends to fail by omitting conditions and giving vaguer details rather than by being obviously wrong, which is harder to notice in review.
-
-Before enabling this broadly, answer a sample of your own traffic with both models, compare the subset that would be downgraded, and confirm the saving clears your classifier cost.
+Routing is only useful when the models you route between actually differ on your traffic. If the cheaper model answers your requests as accurately as the capable one, configure the cheaper model directly instead — routing would add a classifier call to reach the same answers. Check this before enabling: answer a sample of your traffic with each model and compare.
 
 ## Cost and behavior notes
 
