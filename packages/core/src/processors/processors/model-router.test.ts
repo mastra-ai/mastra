@@ -172,14 +172,28 @@ describe('ModelRouterProcessor', () => {
     });
   });
 
-  it('only swaps on step 0', async () => {
-    const { classifier } = stubClassifier({ complexity: { choice: 'trivial', probability: 0.9 } });
+  it('routes every step by default, because later steps carry most of the tokens', async () => {
+    const { classifier } = stubClassifier({ complexity: { choice: 'trivial' } });
     const processor = new ModelRouterProcessor({
       classifier,
       question: 'complexity',
       models: { trivial: 'openai/gpt-4o-mini', complex: 'openai/gpt-4o' },
     });
 
+    expect(await route(processor, 'what is 2+2', 0)).toEqual({ model: 'openai/gpt-4o-mini' });
+    expect(await route(processor, 'what is 2+2', 3)).toEqual({ model: 'openai/gpt-4o-mini' });
+  });
+
+  it("only swaps the opening call under scope 'first-step'", async () => {
+    const { classifier } = stubClassifier({ complexity: { choice: 'trivial' } });
+    const processor = new ModelRouterProcessor({
+      classifier,
+      question: 'complexity',
+      models: { trivial: 'openai/gpt-4o-mini', complex: 'openai/gpt-4o' },
+      scope: 'first-step',
+    });
+
+    expect(await route(processor, 'what is 2+2', 0)).toEqual({ model: 'openai/gpt-4o-mini' });
     expect(await route(processor, 'what is 2+2', 1)).toEqual({});
   });
 
