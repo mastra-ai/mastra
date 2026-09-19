@@ -159,11 +159,30 @@ Routing fails open. If the classifier errors, the classifier ID is not registere
 
 This is the opposite of the fail-closed stance appropriate for [tool approval](/docs/agents/human-in-the-loop), where uncertainty should escalate rather than pass through.
 
+## Measured behavior
+
+Routing was evaluated on a tool-using support agent over 26 requests, weighted toward underspecified phrasing rather than obviously easy or obviously hard questions. Each request was answered by both models so the two could be compared directly, and the downgraded subset was graded by a stronger model in both A/B orders, discarding any verdict that flipped when the order was swapped.
+
+| Measure | Result |
+| - | - |
+| Downgraded | 13 of 26 requests |
+| Clearly complex requests downgraded | 0 of 6 |
+| Cost saving on agent calls | \~39% |
+| Downgraded answers judged worse | 3 of 13 |
+
+Two results matter more than the headline saving.
+
+**The classifier call is not free relative to what it saves.** It used around 424 tokens per request, against roughly 436 input tokens for the agent call it was optimizing. The saving was about $0.0008 per request at the list prices above. Whether routing is net positive depends on your evaluation model's price and on the gap between your two agent models being wide enough to clear that cost. A narrow gap can make routing cost more than it saves.
+
+**Downgrading is not quality-neutral.** Three of thirteen downgraded answers were judged worse by a stronger model, consistently in both orders. The failures were omitted policy conditions and less precise details rather than outright wrong answers, and one occurred on a request that looked entirely routine. Treat some quality cost on downgraded traffic as expected, not as a bug to tune away.
+
+With 13 downgraded samples, one provider, one taxonomy, and one judge, the regression rate is directionally useful and not a precise figure. Run the comparison on your own traffic before enabling this broadly: answer the same requests with both models, compare the downgraded subset, and confirm the saving clears your classifier cost.
+
 ## Cost and behavior notes
 
 - The classifier runs **once per request**, in `processInput`, not once per step. The decision is stashed in per-request state and read at step 0.
 - Only downgrade. Keep the capable model as the agent's configured default and use the router to move down, so an incorrect routing decision costs quality on one step rather than removing the capable model from the run entirely.
-- The router adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on. This pays off when the price gap between the two models is larger than the cost of the classifier call.
+- The router adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on. As the measurements above show, this round-trip can be comparable in size to the agent call it is optimizing, so confirm the saving is real for your model pair rather than assuming it.
 
 ## Related
 
