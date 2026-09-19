@@ -16,7 +16,7 @@ import { readPositiveIntEnv } from '../utils';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
-import { createRecentRequestIds } from './recent-request-ids';
+import { createRecentRequests } from './recent-requests';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
@@ -237,6 +237,20 @@ type ThreadEventListenerRegistration = SubscribeAgentThreadEventsOptions & {
   lastCount: number;
 };
 
+/**
+ * What a claimed owner remembers about an idle signal once it has acted on it.
+ * A redelivery must not act on the signal again, but it may still have to
+ * deliver the caller's reply if the first attempt never reached the backend.
+ */
+type HandledIdleSignal = {
+  /** Where the caller is waiting for its reply. */
+  replyTopic: string;
+  /** The acceptance reply, kept so a repeat can re-send it verbatim. */
+  reply?: AgentThreadIdleSignalAcceptanceEvent;
+  /** Whether that reply reached the backend. Set once its publish resolves. */
+  replyPublished: boolean;
+};
+
 type AgentThreadRuntimeState = {
   threadRunsById: Map<string, AgentThreadRunRecord<any>>;
   threadRunsByStreamId: Map<string, AgentThreadRunRecord<any>>;
@@ -259,12 +273,13 @@ type AgentThreadRuntimeState = {
   pendingContinuationsByThread: Map<string, PendingContinuation<any>[]>;
   claimedThreadOwnerDiscoveries: Map<string, Promise<string | undefined>>;
   /**
-   * Ids of `idle-signal-enqueued` deliveries this process has already acted on.
-   * Backends deliver at least once, so a redelivery of a signal that already
-   * started or joined a run must not queue the signal again or start a second
-   * run — the wake path is not idempotent.
+   * Idle signals this process has already acted on, keyed by request id, with the
+   * reply it sent. Backends deliver at least once, so a redelivery of a signal
+   * that already started or joined a run must not queue it again or start a
+   * second run — the wake path is not idempotent — but it may still have to
+   * re-send a reply that never reached the caller.
    */
-  recentIdleSignalIds: ReturnType<typeof createRecentRequestIds>;
+  handledIdleSignals: ReturnType<typeof createRecentRequests<HandledIdleSignal>>;
   claimedThreadOwners: Map<string, ClaimedThreadOwner<any>>;
   advertisedThreadPeers: Map<string, AdvertisedThreadPeer>;
   watchedThreadStreamIds: Set<string>;
@@ -374,7 +389,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     drainingIdleSignalsByThread: new Map(),
     pendingContinuationsByThread: new Map(),
     claimedThreadOwnerDiscoveries: new Map(),
-    recentIdleSignalIds: createRecentRequestIds(),
+    handledIdleSignals: createRecentRequests<HandledIdleSignal>(),
     claimedThreadOwners: new Map(),
     advertisedThreadPeers: new Map(),
     watchedThreadStreamIds: new Set(),
@@ -799,22 +814,42 @@ export class AgentThreadStreamRuntime {
       }
       const owner = state.claimedThreadOwners.get(key);
       if (!owner) return;
-      // Backends deliver at least once. This handler starts a run or queues the
-      // signal onto one, and neither is idempotent, so a redelivery of a request
-      // already accepted has to be dropped — otherwise the second delivery
-      // queues the signal a second time or starts a second run on the same
-      // runId and publishes a second acceptance reply.
-      if (!state.recentIdleSignalIds.remember(data.requestId)) return;
+
+      const handled = state.handledIdleSignals.get(data.requestId);
+      if (handled) {
+        // Backends deliver at least once. This handler starts a run or queues the
+        // signal onto one, and neither is idempotent, so the repeat must not touch
+        // the signal again. What it still owes the caller is the reply: without
+        // it the caller waits out its acceptance timeout and reports that no
+        // owner accepted, when a run is in fact already in flight.
+        if (handled.reply && !handled.replyPublished) {
+          const reply = handled.reply;
+          await resolvedPubSub.publish(handled.replyTopic, {
+            type: reply.type,
+            runId: reply.runId,
+            data: reply,
+          });
+          handled.replyPublished = true;
+        }
+        return;
+      }
+      const handledSignal: HandledIdleSignal = { replyTopic: data.replyTopic, replyPublished: false };
+      state.handledIdleSignals.set(data.requestId, handledSignal);
 
       let replyAttempted = false;
       const reply = async (response: AgentThreadIdleSignalAcceptanceEvent) => {
         if (replyAttempted) return;
         replyAttempted = true;
-        await resolvedPubSub.publish(data.replyTopic, {
+        // Record the reply before the publish settles, so a repeat can re-send the
+        // same answer if this attempt never lands. A duplicate reply is harmless:
+        // the caller settles on the first one it sees.
+        handledSignal.reply = response;
+        await resolvedPubSub.publish(handledSignal.replyTopic, {
           type: response.type,
           runId: response.runId,
           data: response,
         });
+        handledSignal.replyPublished = true;
       };
 
       try {
@@ -855,15 +890,21 @@ export class AgentThreadStreamRuntime {
         }
       } catch (error) {
         if (!active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
-        if (!replyAttempted) {
-          await reply({
-            type: 'idle-signal-rejected',
-            requestId: data.requestId,
-            runId: data.runId,
-            sourceId,
-            error: getErrorFromUnknown(error).message,
-          });
+        if (replyAttempted) {
+          // The reply never reached the backend, so the caller cannot learn the
+          // signal was accepted. Let the rejection reach the nack path: the
+          // backend redelivers, and the repeat re-sends the remembered reply
+          // instead of acting on the signal again. Swallowing it here would leave
+          // the caller waiting on a timeout for a run that is already in flight.
+          throw error;
         }
+        await reply({
+          type: 'idle-signal-rejected',
+          requestId: data.requestId,
+          runId: data.runId,
+          sourceId,
+          error: getErrorFromUnknown(error).message,
+        });
       }
     });
 
@@ -1725,7 +1766,7 @@ export class AgentThreadStreamRuntime {
     state.pendingIdleSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
     state.claimedThreadOwnerDiscoveries.clear();
-    state.recentIdleSignalIds.clear();
+    state.handledIdleSignals.clear();
     for (const claim of [...state.claimedThreadOwners.values()]) {
       claim.unsubscribe();
     }

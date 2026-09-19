@@ -250,7 +250,7 @@ describe('redelivered idle signals', () => {
         targetSourceId,
         replyTopic,
         timeoutMs: 1_000,
-        signal: {},
+        signal: { type: 'user', contents: 'hello' },
       },
     });
 
@@ -299,5 +299,49 @@ describe('redelivered idle signals', () => {
 
     owner.unsubscribe();
     await nextTicks();
+  });
+
+  it('re-sends the reply on a redelivery when the first attempt never reached the backend', async () => {
+    const { runtime, pubsub } = setup();
+    // An agent that can start a run, so the handler reaches the acceptance reply
+    // rather than the rejection path.
+    let runs = 0;
+    (harness.agent as { stream?: unknown }).stream = async () => {
+      runs += 1;
+      return { text: Promise.resolve(''), runId: 'run-recovery' };
+    };
+    try {
+      const owner = await claim(runtime, pubsub);
+      const targetSourceId = await runtimeSourceId(pubsub);
+
+      const replyTopic = `${threadTopic}.reply-recovery`;
+      await pubsub.subscribe(replyTopic, () => {});
+
+      // The reply cannot reach the caller, so the delivery must not be
+      // acknowledged: the backend has to redeliver for the caller to ever learn
+      // that the signal was accepted.
+      pubsub.failPublish.add(replyTopic);
+      await expect(publishSignal(pubsub, 'recovery-1', targetSourceId, replyTopic)).rejects.toThrow(
+        `publish to ${replyTopic} failed`,
+      );
+      expect(deliveriesOn(pubsub, threadTopic).some(d => d.acked)).toBe(false);
+      expect(deliveriesOn(pubsub, replyTopic)).toHaveLength(0);
+
+      // The redelivery re-sends the reply without acting on the signal again —
+      // the caller gets its acceptance, and no second run starts.
+      pubsub.failPublish.delete(replyTopic);
+      await publishSignal(pubsub, 'recovery-1', targetSourceId, replyTopic);
+      await nextTicks();
+
+      const replies = deliveriesOn(pubsub, replyTopic);
+      expect(replies).toHaveLength(1);
+      expect(replies[0].event.data.type).toBe('idle-signal-accepted');
+      expect(runs).toBe(1);
+
+      owner.unsubscribe();
+      await nextTicks();
+    } finally {
+      delete (harness.agent as { stream?: unknown }).stream;
+    }
   });
 });
