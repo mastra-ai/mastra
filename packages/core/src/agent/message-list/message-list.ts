@@ -689,6 +689,8 @@ export class MessageList {
    * definition kept. `AIV5Adapter` only re-synthesizes a part from either field when no such
    * part survives, so there is nothing to resurrect today. If the merger is ever changed to
    * update them per step, as it does `content.content`, they will need the same treatment here.
+   * `content.metadata.structuredOutput` is invalidated for the same reason `content.content` is
+   * re-derived: it is written per step and a retry that emits no object never overwrites it.
    *
    * @param messageId - ID of the message to roll back
    * @param boundary - the marker returned by `openStepBoundary()` for the step being discarded
@@ -749,6 +751,18 @@ export class MessageList {
         if (part.type === 'text') lastText = part.text;
       }
       message.content.content = lastText;
+    }
+
+    // `content.metadata.structuredOutput` is written straight onto the merged message by the
+    // execution step, before output processors get a chance to reject the step, and nothing
+    // clears it when a retry emits no object of its own — so the rejected attempt's object would
+    // otherwise outlive the rollback, still readable on the message. Invalidate rather than
+    // restore: the write is in place, so an earlier accepted object is already overwritten
+    // whenever the rejected step produced one of its own, and there is nothing to roll back to
+    // when it did not. Other metadata is left alone; the keys
+    // that are step-derived, such as the model identity, are rewritten by the retry itself.
+    if (message.content.metadata) {
+      delete message.content.metadata.structuredOutput;
     }
 
     // Ensure the mutated message is persisted.

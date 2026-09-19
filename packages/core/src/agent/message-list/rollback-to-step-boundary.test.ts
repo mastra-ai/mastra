@@ -458,6 +458,39 @@ describe('MessageList#rollbackToStepBoundary', () => {
     const after = list.get.all.db().find(m => m.id === id)!;
     expect((after.content.toolInvocations ?? []).map(t => t.toolCallId)).toEqual(['call-kept']);
   });
+
+  it('drops the rejected step structured output while keeping message-scoped metadata', () => {
+    // llm-execution-step writes the buffered object onto the message before output processors
+    // get to reject it. A retry that emits no object of its own never overwrites the key, so the
+    // rejected attempt's object stays readable on the message unless the rollback clears it.
+    const { list, id } = listWith(assistant([text('accepted', 'msg_1')]));
+    const boundary = openBoundary(list);
+    partsOf(list, id)!.push(text('rejected', 'msg_2'));
+    const stored = list.get.all.db().find(m => m.id === id)!;
+    stored.content.metadata = { structuredOutput: { verdict: 'rejected' }, threadTag: 'keep-me' };
+
+    list.rollbackToStepBoundary(id, boundary);
+
+    const after = list.get.all.db().find(m => m.id === id)!;
+    expect('structuredOutput' in (after.content.metadata ?? {})).toBe(false);
+    expect(after.content.metadata?.threadTag).toBe('keep-me');
+  });
+
+  it('invalidates an accepted object the rejected step never overwrote', () => {
+    // The writer assigns onto the merged message in place, so there is no per-step history to
+    // roll back to. A rejected step that emitted no object of its own leaves the earlier value
+    // sitting there; this pins that the rollback clears it rather than keeping it.
+    const { list, id } = listWith(assistant([text('accepted', 'msg_1')]));
+    const boundary = openBoundary(list);
+    partsOf(list, id)!.push(text('rejected', 'msg_2'));
+    const stored = list.get.all.db().find(m => m.id === id)!;
+    stored.content.metadata = { structuredOutput: { verdict: 'accepted' } };
+
+    list.rollbackToStepBoundary(id, boundary);
+
+    const after = list.get.all.db().find(m => m.id === id)!;
+    expect(after.content.metadata?.structuredOutput).toBeUndefined();
+  });
 });
 
 describe('MessageList#openStepBoundary', () => {
