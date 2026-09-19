@@ -167,6 +167,26 @@ describe('request-scoped credentials', () => {
     expect(scoped.getStoredApiKey('openai-codex')).toBe('sk-other');
     expect(base.getStoredApiKey).toHaveBeenCalledWith('openai-codex');
   });
+
+  it('passes the selected account through to getApiKey so the provider slot cannot answer for it', async () => {
+    const base = {
+      reload: vi.fn(),
+      get: vi.fn(),
+      getStoredApiKey: vi.fn(),
+      getApiKey: vi.fn(async () => 'selected-token'),
+    } satisfies CredentialStore;
+    const requestContext = new RequestContext();
+    setRequestAccountSelection(requestContext, 'anthropic', 'anthropic:b');
+    const scoped = createRequestScopedCredentialStore(base, requestContext);
+
+    await expect(scoped.getApiKey('anthropic')).resolves.toBe('selected-token');
+    // The selection has to reach the store: with no account argument a provider
+    // slot holding an API key answers the call instead of the routed account.
+    expect(base.getApiKey).toHaveBeenCalledWith('anthropic', 'anthropic:b');
+    // An unrouted provider on the same request is not narrowed.
+    await scoped.getApiKey('openai-codex');
+    expect(base.getApiKey).toHaveBeenCalledWith('openai-codex', undefined);
+  });
 });
 
 describe('getDynamicModel error branches', () => {

@@ -909,7 +909,11 @@ export class AuthStorage {
   async getApiKey(providerId: string, accountInstanceId?: string): Promise<string | undefined> {
     this.reload();
     const cred = this.data[providerId];
-    if (cred?.type === 'api_key') return cred.key;
+    // A provider slot holding an API key belongs to the provider, not to any one
+    // subscription, so it is only the right credential for a request that did
+    // not select an account. A routed request must resolve the account it asked
+    // for — or nothing — rather than be served this key.
+    if (accountInstanceId === undefined && cred?.type === 'api_key') return cred.key;
 
     const oauth = await this.getOAuthCredential(providerId, accountInstanceId);
     const provider = oauth ? getOAuthProvider(providerId) : undefined;

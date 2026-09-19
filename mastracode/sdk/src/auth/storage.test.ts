@@ -465,6 +465,21 @@ describe('AuthStorage multi-account registry', () => {
     expect(storage.get(PROVIDER)).toMatchObject({ access: 'a1' });
   });
 
+  it('A12: a request pinned to an account is never served the provider slot API key', async () => {
+    // A provider slot holding an API key with no registry: the shape a
+    // legacy/hand-edited auth.json can leave behind. `migrate()` only rewrites
+    // the slot when the provider has a registered account, so this state
+    // survives load.
+    const { storage } = makeStorage({ [PROVIDER]: { type: 'api_key', key: 'sk-ant-provider-wide' } });
+
+    // Unpinned callers keep the legacy provider-slot behaviour.
+    await expect(storage.getApiKey(PROVIDER)).resolves.toBe('sk-ant-provider-wide');
+    // A request whose selected account no longer resolves (removed between
+    // routing and the credential read) fails closed instead of being handed
+    // the provider-wide key.
+    await expect(storage.getApiKey(PROVIDER, `${PROVIDER}:someone-else`)).resolves.toBeUndefined();
+  });
+
   it('dedupes concurrent refreshes per instance', async () => {
     const { storage } = makeStorage({ [PROVIDER]: oauthCred('r1', 'a1', PAST) }); // migrated: one active entry
 
