@@ -6,10 +6,11 @@ Added `logicalMessageIdentity` so callers can associate saved input and response
 
 ```ts
 // Existing call: native message IDs only.
-await session.message('Summarize the selected paper.');
+await session.message({ content: 'Summarize the selected paper.' });
 
 // Associate this input and every response segment with application message IDs.
-await session.message('Summarize the selected paper.', {
+await session.message({
+  content: 'Summarize the selected paper.',
   logicalMessageIdentity: {
     input: 'app-message-input-123',
     response: 'app-message-response-123',

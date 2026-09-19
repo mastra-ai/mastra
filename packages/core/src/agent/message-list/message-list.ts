@@ -2147,7 +2147,6 @@ export class MessageList {
       messageSource === 'response' &&
       messageV2.role === 'assistant' &&
       candidate !== undefined &&
-      this.memoryMessages.has(candidate) &&
       incomingLogicalMessageId !== undefined &&
       getLogicalMessageId(candidate.content.metadata) !== incomingLogicalMessageId;
     const shouldMerge =

@@ -179,6 +179,48 @@ describe('MessageList logical message identity', () => {
     ]);
   });
 
+  it('fences lineaged responses from context assistants unless the response identity matches', () => {
+    const contextAssistant = (id: string, text: string, logicalMessageId?: string): MastraDBMessage => {
+      const candidate = message(id, 'assistant', text);
+      return logicalMessageId === undefined
+        ? candidate
+        : {
+            ...candidate,
+            content: { ...candidate.content, metadata: { logicalMessageId } },
+          };
+    };
+
+    const differentIdentity = new MessageList({
+      logicalMessageIdentity: { input: 'input-current', response: 'response-current' },
+    });
+    differentIdentity.add(contextAssistant('context-old', 'old context answer', 'response-old'), 'context');
+    differentIdentity.add(message('response-new', 'assistant', 'new response answer'), 'response');
+    expect(differentIdentity.get.all.db().map(candidate => getLogicalMessageId(candidate.content.metadata))).toEqual([
+      'response-old',
+      'response-current',
+    ]);
+
+    const unlineagedContext = new MessageList({
+      logicalMessageIdentity: { input: 'input-current', response: 'response-current' },
+    });
+    unlineagedContext.add(contextAssistant('context-unlineaged', 'unlineaged context answer'), 'context');
+    unlineagedContext.add(message('response-new', 'assistant', 'new response answer'), 'response');
+    expect(unlineagedContext.get.all.db()).toHaveLength(2);
+    expect(getLogicalMessageId(unlineagedContext.get.all.db()[0]?.content.metadata)).toBeUndefined();
+
+    const sameIdentity = new MessageList({
+      logicalMessageIdentity: { input: 'input-current', response: 'response-current' },
+    });
+    sameIdentity.add(contextAssistant('context-current', 'current context answer', 'response-current'), 'context');
+    sameIdentity.add(message('response-new', 'assistant', 'new response answer'), 'response');
+    expect(sameIdentity.get.all.db()).toHaveLength(1);
+    expect(sameIdentity.get.all.db()[0]?.content.parts).toEqual([
+      expect.objectContaining({ type: 'text', text: 'current context answer' }),
+      expect.objectContaining({ type: 'text', text: 'new response answer' }),
+    ]);
+    expect(getLogicalMessageId(sameIdentity.get.all.db()[0]?.content.metadata)).toBe('response-current');
+  });
+
   it('does not merge a replacement response into a recalled assistant from another identity', () => {
     const list = new MessageList({
       threadId: 'thread-1',
