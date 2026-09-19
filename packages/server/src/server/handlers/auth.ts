@@ -549,11 +549,19 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
     try {
       const auth = getAuthProvider(mastra, isStudio);
 
-      if (!auth) {
-        return new Response(JSON.stringify({ success: true }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+      // Logout is only meaningful if the provider can actually end something:
+      // destroy a server-side session, clear the session cookie, or hand back an
+      // SSO logout URL. With none of those, reporting `success: true` would claim
+      // work that never happened, so report the route as unconfigured — the same
+      // contract POST /auth/refresh uses for a missing session capability.
+      const canLogout =
+        !!auth &&
+        (implementsInterface<ISessionProvider>(auth, 'destroySession') ||
+          implementsInterface<ISessionProvider>(auth, 'getClearSessionHeaders') ||
+          implementsInterface<ISSOProvider>(auth, 'getLogoutUrl'));
+
+      if (!canLogout) {
+        throw new HTTPException(404, { message: 'Logout not configured' });
       }
 
       // Get session ID and destroy it
