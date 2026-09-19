@@ -174,7 +174,9 @@ class RetainedAsyncCallbackPubSub extends PubSub {
     const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
     subscribers.add(cb);
     this.#subscribers.set(topic, subscribers);
-    for (const event of this.#history.get(topic) ?? []) cb(event);
+    for (const event of this.#history.get(topic) ?? []) {
+      void Promise.resolve(cb(event)).catch(error => this.subscriptionFailures.push(error));
+    }
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
