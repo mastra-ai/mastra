@@ -759,14 +759,31 @@ https://mastra.ai/en/docs/memory/overview`,
     const memoryStore = await this.storage.getStore('memory');
     const processors: InputProcessor[] = [];
 
-    if (memoryStore) {
-      processors.push(new MemoryInputFilter({ storage: memoryStore }));
-    }
-
     // Extract runtime memoryConfig from context if available
     const memoryContext = context?.get('MastraMemory') as MemoryRequestContext | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
+
+    const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory);
+
+    // Check if user already manually added MessageHistory
+    const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
+
+    // Check if ObservationalMemory is present (via processor or config) - it handles its own message loading and saving
+    const hasObservationalMemory =
+      configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
+      isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
+
+    // MemoryInputFilter trims the request down to the part that stored history does
+    // not already cover. That is only correct when a loader is about to pull stored
+    // history in underneath it: with no loader, the request is the entire context
+    // and trimming it deletes messages the caller meant the model to see.
+    // Semantic recall does not qualify - it adds recalled fragments, not the thread's history.
+    const loadsStoredHistory = hasMessageHistory || hasObservationalMemory || lastMessages.enabled;
+
+    if (memoryStore && loadsStoredHistory) {
+      processors.push(new MemoryInputFilter({ storage: memoryStore }));
+    }
 
     // Add working memory input processor if configured
     const isWorkingMemoryEnabled =
@@ -816,7 +833,6 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory);
     const messageTokenCounter =
       lastMessages.maxTokens === undefined
         ? undefined
@@ -829,14 +845,6 @@ https://mastra.ai/en/docs/memory/overview`,
           id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
           text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
         });
-
-      // Check if user already manually added MessageHistory
-      const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
-
-      // Check if ObservationalMemory is present (via processor or config) - it handles its own message loading and saving
-      const hasObservationalMemory =
-        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
-        isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
 
       // Skip MessageHistory input processor if ObservationalMemory handles message loading
       if (!hasMessageHistory && !hasObservationalMemory) {
