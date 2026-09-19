@@ -19,7 +19,12 @@ interface PlatformGitLabContext {
   api: GitLabApiClient;
   connection: IntegrationConnection;
   host: string;
+  repositoryAccessToken: () => Promise<string>;
 }
+
+type PlatformGitLabCredential =
+  | { type: 'oauth2'; accessToken: string; expiresAt: string | null }
+  | { type: 'api_key'; apiKey: string };
 
 const GITLAB_INTEGRATION_IDS = new Set(['gitlab', 'gitlab-group', 'gitlab-group-token']);
 
@@ -106,6 +111,24 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       connection: gitlabConnection(connection.id),
       // Platform does not currently expose the connected GitLab instance host.
       host: 'gitlab.com',
+      repositoryAccessToken: async () => {
+        // Fetch for each git operation so an expiring OAuth token is refreshed by Platform.
+        // Never persist or log the returned credential.
+        const credential = await this.#client.request<PlatformGitLabCredential>(
+          'GET',
+          `/v2/connections/${encodeURIComponent(connection.id)}/credentials`,
+        );
+        const token =
+          credential?.type === 'oauth2'
+            ? credential.accessToken
+            : credential?.type === 'api_key'
+              ? credential.apiKey
+              : undefined;
+        if (typeof token !== 'string' || !token.trim()) {
+          throw new GitLabApiError('GitLab connection did not provide a repository credential.', 502);
+        }
+        return token;
+      },
     };
   }
 }

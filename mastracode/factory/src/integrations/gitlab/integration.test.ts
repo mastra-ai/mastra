@@ -335,10 +335,15 @@ describe('PlatformGitLabIntegration', () => {
       webhookConfigured: false,
     });
   });
-  it('does not expose Platform connection credentials for repository cloning', async () => {
+  it.each([
+    { name: 'OAuth', credential: { type: 'oauth2', accessToken: 'oauth-clone-token', expiresAt: null }, token: 'oauth-clone-token' },
+    { name: 'group access token', credential: { type: 'api_key', apiKey: 'group-clone-token' }, token: 'group-clone-token' },
+  ])('fetches a fresh $name credential for each repository operation without persisting it', async ({ credential, token }) => {
+    let credentialResponse: unknown = credential;
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.endsWith('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.endsWith('/v2/connections/a1b_mastra/credentials')) return json(credentialResponse);
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -361,10 +366,18 @@ describe('PlatformGitLabIntegration', () => {
       repositories: [{ externalId: '10', slug: 'mastra/platform', defaultBranch: 'main' }],
     });
 
-    await expect(
-      gitlab.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository!.id }),
-    ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 501 });
-    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/credentials'))).toBe(false);
+    const input = { orgId: 'org-1', repositoryId: repository!.id };
+    await expect(gitlab.versionControl.getRepositoryAccess(input)).resolves.toEqual({
+      cloneUrl: 'https://gitlab.com/mastra/platform.git',
+      authorization: { scheme: 'bearer', token, username: 'oauth2' },
+    });
+    await gitlab.versionControl.getRepositoryAccess(input);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/credentials'))).toHaveLength(2);
+    expect(JSON.stringify({ installation, repository, diagnostics: gitlab.diagnostics() })).not.toContain(token);
+    credentialResponse = { type: 'oauth2', accessToken: '' };
+    await expect(gitlab.versionControl.getRepositoryAccess(input)).rejects.toMatchObject<Partial<GitLabApiError>>({
+      status: 502,
+    });
   });
 
   it('lists projects only from the explicitly configured Platform connection', async () => {
