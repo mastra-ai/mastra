@@ -247,7 +247,9 @@ The `mbenhamd/mastra` fork intentionally runs a small PR validation surface:
   suites other than the exact
   `stores/pg/src/storage/performance-indexes/performance-indexes.test.ts` unit
   file fail closed until a dedicated fork-safe workflow provides their required
-  setup. The admitted unit file runs through `stores/pg/vitest.perf.config.ts`.
+  setup. The admitted unit file runs through `stores/pg/vitest.perf.config.ts`;
+  changes to that native config enqueue exactly this unit and retain its local
+  runtime-dependency screening.
   The PF-2044 ownership map additionally admits only the exact Convex cache,
   LibSQL composite Harness wiring, LibSQL Harness/thread-state, Google Cloud
   PubSub group, Redis Streams PubSub, and Inngest regression files needed by

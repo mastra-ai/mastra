@@ -21,6 +21,7 @@ readonly VALIDATOR_REPOSITORY_ROOT TYPESCRIPT_MODULE_PATH
 PACKED_DECLARATION_CHECK="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-packed-declaration-fixture.mjs"
 readonly PACKED_DECLARATION_CHECK
 readonly PG_PERFORMANCE_INDEX_UNIT_TEST='stores/pg/src/storage/performance-indexes/performance-indexes.test.ts'
+readonly PG_PERFORMANCE_INDEX_UNIT_CONFIG='stores/pg/vitest.perf.config.ts'
 
 pf558_config() {
   PF558_PR_NUMBER="${PAPERSFLOW_PF558_PR_NUMBER:-266}"
@@ -6604,10 +6605,37 @@ NODE
   head_sha="$(
     cd "$fixture_repo"
     git reset -q --hard "$base_sha"
+    printf '%s\n' 'export default { test: { pool: "forks" } };' \
+      > stores/pg/vitest.perf.config.ts
+    git add stores/pg/vitest.perf.config.ts
+    git commit -q -m 'exercise PostgreSQL unit config selection'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-config-only-success.log"
+  if ! run_fixture "$head_sha" "$output"; then
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_line_matches \
+    '^--dir stores/pg exec vitest run --config vitest\.perf\.config\.ts --reporter=dot --reporter=json .*src/storage/performance-indexes/performance-indexes\.test\.ts$' \
+    "$command_log"
+  assert_line_match_count 1 \
+    '^--dir stores/pg exec vitest run --config vitest\.perf\.config\.ts --reporter=dot --reporter=json .*src/storage/performance-indexes/performance-indexes\.test\.ts$' \
+    "$command_log"
+  assert_line_match_count 0 'pooler|row-number-performance|performance-indexes\.integration' "$command_log"
+  assert_contains 'postgres 127.0.0.1:5434' "$service_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
     printf '%s\n' "it('pg performance integration head', () => {});" \
       > stores/pg/src/storage/performance-indexes/performance-indexes.integration.test.ts
     printf '%s\n' "it('pg row-number performance head', () => {});" \
       > stores/pg/src/storage/domains/memory/row-number-performance.test.ts
+    printf '%s\n' "it('pg pooler performance head', () => {});" \
+      > stores/pg/src/storage/pooler-init.pooler.test.ts
     git add .
     git commit -q -m 'reject unowned PostgreSQL performance suites'
     git rev-parse HEAD
@@ -6626,6 +6654,7 @@ NODE
   fi
   assert_contains 'stores/pg/src/storage/performance-indexes/performance-indexes.integration.test.ts' "$output"
   assert_contains 'stores/pg/src/storage/domains/memory/row-number-performance.test.ts' "$output"
+  assert_contains 'stores/pg/src/storage/pooler-init.pooler.test.ts' "$output"
   assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
   if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
     echo 'Unowned PostgreSQL performance fixture reached a test runner or service probe.' >&2
@@ -14315,6 +14344,18 @@ for explicit_test in \
     printf '%s\n' "$explicit_test" >> "$unsupported_tests"
   fi
 done
+
+# The native performance configuration is part of the exact unit's execution
+# contract, but it is not imported by the test file. A config-only change must
+# therefore enqueue this unit explicitly so the existing runtime-surface scan
+# still validates its local dependency closure before execution.
+if grep -Fxq "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" "$changed_files"; then
+  if git_regular_file_at_head "$PG_PERFORMANCE_INDEX_UNIT_TEST"; then
+    detected_tests+=("$PG_PERFORMANCE_INDEX_UNIT_TEST")
+  else
+    printf '%s\n' "$PG_PERFORMANCE_INDEX_UNIT_TEST" >> "$unsupported_tests"
+  fi
+fi
 
 if (( ${#detected_tests[@]} > 0 )); then
   mapfile -t detected_tests < <(printf '%s\n' "${detected_tests[@]}" | sort -u)
