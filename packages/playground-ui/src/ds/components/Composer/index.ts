@@ -21,3 +21,10 @@ export { useComposerCommands } from './commands/use-composer-commands';
 export type { UseComposerCommandsProps } from './commands/use-composer-commands';
 export { matchCommands, matchCommandOptions } from './commands/command-matches';
 export type { ComposerCommand, ComposerCommandOption } from './commands/command-matches';
+
+export {
+  ComposerSendButton,
+  ComposerStopButton,
+  ComposerAttachmentButton,
+  ComposerModelSettingsButton,
+} from './actions/composer-buttons';

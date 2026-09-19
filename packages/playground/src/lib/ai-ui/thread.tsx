@@ -6,6 +6,8 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
+  ComposerSendButton,
+  ComposerStopButton,
   ComposerActions,
   ComposerAttachments,
   ComposerBox,
@@ -24,7 +26,7 @@ import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useSpeechRecognition } from '@mastra/react';
 import type { MessageFactoryPart } from '@mastra/react/ui';
-import { ArrowUp, Mic } from 'lucide-react';
+import { Mic } from 'lucide-react';
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachFilePopover } from './attachments/attach-file-popover';
@@ -367,15 +369,10 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
     startTransition(() => onTranscript(transcript));
   }, [onTranscript, transcript]);
 
+  if (isListening) return <ComposerStopButton tooltip="Stop dictation" onClick={stop} />;
   return (
-    <Button
-      variant="default"
-      size="icon-md"
-      type="button"
-      tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
-      onClick={() => (isListening ? stop() : start())}
-    >
-      {isListening ? <CircleStopIcon /> : <Mic className="text-neutral3 hover:text-neutral6 h-5 w-5" />}
+    <Button variant="default" size="icon-md" type="button" tooltip="Start dictation" onClick={start}>
+      <Mic className="text-neutral3 hover:text-neutral6 size-5" />
     </Button>
   );
 };
@@ -420,86 +417,20 @@ const ComposerActionRow = ({
           {runOptionsSlot}
         </div>
       )}
-
       <div className="flex shrink-0 items-center gap-1.5">
         <ButtonsGroup spacing="close">
           {canExecute && <AttachFilePopover />}
           {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
           {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
         </ButtonsGroup>
-        <ComposerSendButton
-          canExecute={canExecute}
-          isEmpty={isEmpty}
-          isRunning={isRunning}
-          canSendWhileStreaming={canSendWhileStreaming}
-          onCancel={onCancel}
-        />
+        {(!isRunning || canSendWhileStreaming) && (
+          <ComposerSendButton
+            tooltip={canExecute ? 'Send' : 'No permission to execute'}
+            disabled={!canExecute || isEmpty}
+          />
+        )}
+        {isRunning && <ComposerStopButton tooltip="Cancel" onClick={onCancel} />}
       </div>
     </>
-  );
-};
-
-interface ComposerSendButtonProps {
-  canExecute?: boolean;
-  isEmpty: boolean;
-  isRunning: boolean;
-  canSendWhileStreaming: boolean;
-  onCancel: () => void;
-}
-
-const ComposerSendButton = ({
-  canExecute = true,
-  isEmpty,
-  isRunning,
-  canSendWhileStreaming,
-  onCancel,
-}: ComposerSendButtonProps) => {
-  // While streaming and not allowed to send mid-stream, the only action is cancel.
-  if (isRunning && !canSendWhileStreaming) {
-    return (
-      <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
-        <CircleStopIcon />
-      </Button>
-    );
-  }
-
-  return (
-    <>
-      <Button
-        type="submit"
-        variant="default"
-        size="icon-md"
-        tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        className="border-border1 bg-surface5 rounded-full border"
-        disabled={!canExecute || isEmpty}
-      >
-        <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
-      </Button>
-      {isRunning && (
-        <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
-          <CircleStopIcon />
-        </Button>
-      )}
-    </>
-  );
-};
-
-const CircleStopIcon = () => {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="text-neutral3 hover:text-neutral6"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <rect width="6" height="6" x="9" y="9" rx="1" />
-    </svg>
   );
 };

@@ -1,10 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ComposerAttachmentButton } from '@mastra/playground-ui/components/Composer';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { CloudUpload, Link, PlusIcon } from 'lucide-react';
+import { CloudUpload, Link } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useComposerAttachments } from './composer-attachments';
@@ -35,8 +36,8 @@ export const AttachFilePopover = () => {
     // `change` event runs (and reads `files`) before we remove the input.
     const onWindowFocus = () => setTimeout(cleanup, 0);
 
-    input.onchange = async e => {
-      const fileList = (e.target as HTMLInputElement).files;
+    input.onchange = async () => {
+      const fileList = input.files;
       if (fileList && fileList.length > 0) {
         const rejected = await addFiles(fileList);
         setError(
@@ -54,14 +55,14 @@ export const AttachFilePopover = () => {
     input.click();
   };
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     // The popover is portaled out of the composer form in the DOM, but React
     // still bubbles the submit event through the component tree; stop it so
     // adding a URL doesn't also send the chat message.
     e.stopPropagation();
 
-    const formData = new FormData(e.target as HTMLFormElement);
+    const formData = new FormData(e.currentTarget);
     const url = formData.get('url-attachment')?.toString().trim();
 
     if (!url) return;
@@ -82,11 +83,7 @@ export const AttachFilePopover = () => {
         setError('');
       }}
     >
-      <PopoverTrigger asChild>
-        <Button variant="default" size="icon-md" type="button" tooltip="Add attachment">
-          <PlusIcon className="text-neutral3 hover:text-neutral6 h-5 w-5" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger render={<ComposerAttachmentButton tooltip="Add attachment" />} />
       <PopoverContent align="start" className="w-80 p-4">
         {error && <p role="alert">{error}</p>}
         <form onSubmit={handleSubmit} className="flex flex-row items-end gap-2">
