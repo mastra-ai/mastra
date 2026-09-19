@@ -2073,10 +2073,25 @@ export class MessageList {
 
     const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
 
+    // Stored history loads as the base layer, underneath whatever this run already holds.
+    // When a stored row shares an id with a live message (client input, or a response part
+    // such as a tool result), the stored copy must not replace it wholesale - that would drop
+    // the client-supplied content from the prompt. Fold the stored copy into the live one and
+    // keep the live message's source so it stays visible to output processing.
+    const replacementTargetSource: MessageSource | undefined = !replacementTarget
+      ? undefined
+      : this.stateManager.isUserMessage(replacementTarget)
+        ? 'input'
+        : this.stateManager.isResponseMessage(replacementTarget)
+          ? 'response'
+          : this.stateManager.isContextMessage(replacementTarget)
+            ? 'context'
+            : undefined;
+
     if (
       messageSource === 'memory' &&
       replacementTarget &&
-      this.stateManager.isUserMessage(replacementTarget) &&
+      replacementTargetSource &&
       !MessageMerger.isSealed(messageV2)
     ) {
       const replacementIndex = this.messages.indexOf(replacementTarget);
@@ -2102,7 +2117,7 @@ export class MessageList {
       this.stateManager.removeMessage(replacementTarget);
       this.messages[replacementIndex] = messageV2;
       this.pushMessageToSource(messageV2, 'memory');
-      this.pushMessageToSource(messageV2, 'input');
+      this.pushMessageToSource(messageV2, replacementTargetSource);
       this.updateLastCreatedAt(messageV2);
       this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
       return this;
