@@ -1602,6 +1602,7 @@ export class AgentThreadStreamRuntime {
     onNoOwner?: () => void,
     onPreAdmissionFailure?: () => void,
     rejectFullLogicalMessageIdentity = false,
+    onIdleSignalDiscarded?: () => void,
   ): Promise<SendAgentSignalAccepted<OUTPUT>> {
     const claimedOwnerSourceId = await discovery;
     if (!claimedOwnerSourceId) {
@@ -1609,6 +1610,7 @@ export class AgentThreadStreamRuntime {
       throw new Error(`No claimed thread owner responded for ${key}`);
     }
     if (rejectFullLogicalMessageIdentity) {
+      onIdleSignalDiscarded?.();
       onPreAdmissionFailure?.();
       return { action: 'discard' as const };
     }
@@ -5951,6 +5953,7 @@ export class AgentThreadStreamRuntime {
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
     const idleBehavior = target.ifIdle?.behavior ?? 'wake';
+    const onIdleSignalDiscarded = getIdleSignalDiscardHandler(target.ifIdle);
 
     let activeRecord: AgentThreadRunRecord<any> | undefined;
     let finishingLeaseOwnerRunId: string | undefined;
@@ -6262,6 +6265,7 @@ export class AgentThreadStreamRuntime {
             () => this.#forgetSignalAdmission(state, discoveryKey, discoveredRunId, signal),
             () => this.#forgetSignalAdmission(state, discoveryKey, discoveredRunId, signal),
             hasFullLogicalMessageIdentity(target.ifIdle),
+            onIdleSignalDiscarded,
           );
           void accepted.catch(() => {});
           return acceptSignal({ signal, accepted, runId: discoveredRunId }, discoveredRunId);
@@ -6315,7 +6319,6 @@ export class AgentThreadStreamRuntime {
 
     runId ??= randomUUID();
     key ??= this.#threadKey(resourceId, threadId);
-    const onIdleSignalDiscarded = getIdleSignalDiscardHandler(target.ifIdle);
     if (idleBehavior === 'persist') {
       if (signal.transient) {
         return { signal, runId, accepted: Promise.resolve({ action: 'discard' as const }) };
@@ -6526,6 +6529,7 @@ export class AgentThreadStreamRuntime {
       const localClaimedOwner = state.claimedThreadOwners.get(reservedKey);
       const rejectClaimedOwnerLineage = hasFullLogicalMessageIdentity(target.ifIdle);
       if (localClaimedOwner && rejectClaimedOwnerLineage) {
+        onIdleSignalDiscarded?.();
         cleanupDefiniteClaimedOwnerFailure();
         return { action: 'discard' as const };
       }
@@ -6582,6 +6586,7 @@ export class AgentThreadStreamRuntime {
             cleanupDefiniteClaimedOwnerFailure,
             cleanupDefiniteClaimedOwnerFailure,
             rejectClaimedOwnerLineage,
+            onIdleSignalDiscarded,
           );
         } finally {
           if (state.claimedThreadOwnerDiscoveries.get(reservedKey) === discovery) {
@@ -6637,6 +6642,7 @@ export class AgentThreadStreamRuntime {
         // this distributed wake race. The caller can retry through its owned-turn path;
         // publishing here would lose the response identity at the winning process.
         if (activeBehavior === 'discard') {
+          onIdleSignalDiscarded?.();
           this.#forgetSignalAdmission(state, reservedKey, reservedRunId, signal);
           return { action: 'discard' as const };
         }

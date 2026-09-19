@@ -3106,6 +3106,7 @@ describe('Agent signals', () => {
       _waitUntilFinished: () => new Promise<void>(() => {}),
     }));
     const agent = { id: 'local-lineage-owner-agent', stream } as any;
+    let idleSignalDiscarded = false;
     const claim = await runtime.claimThreadOwnership(
       agent,
       {
@@ -3129,12 +3130,16 @@ describe('Agent signals', () => {
           ifIdle: {
             behavior: 'wake',
             streamOptions: { logicalMessageIdentity: { input: 'request-input', response: 'request-response' } },
+            _onThreadStreamSignalDiscarded: () => {
+              idleSignalDiscarded = true;
+            },
           },
         } as any,
         pubsub,
       );
 
       await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+      expect(idleSignalDiscarded).toBe(true);
       expect(stream).not.toHaveBeenCalled();
     } finally {
       claim.unsubscribe();
@@ -8852,6 +8857,7 @@ describe('Agent signals', () => {
     const key = `${target.resourceId}\u0000${target.threadId}`;
     const runId = 'lineage-lease-loser-run';
     const signal = { id: 'lineage-lease-signal', type: 'user-message' as const, contents: 'preserve response owner' };
+    let idleSignalDiscarded = false;
     const agent = {
       id: 'lineage-lease-agent',
       stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({
@@ -8861,7 +8867,7 @@ describe('Agent signals', () => {
         _waitUntilFinished: () => new Promise<void>(() => {}),
       })),
     } as any;
-    await pubsub.acquireLease(key, 'lineage-lease-winning-run', 15_000);
+    await pubsub.acquireLease(key, 'lineage-lease-winning-run');
 
     const result = runtime.sendSignal(
       agent,
@@ -8870,12 +8876,19 @@ describe('Agent signals', () => {
         ...target,
         runId,
         ifActive: { behavior: 'discard' },
-        ifIdle: { behavior: 'wake' },
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { logicalMessageIdentity: { input: 'lease-input', response: 'lease-response' } },
+          _onThreadStreamSignalDiscarded: () => {
+            idleSignalDiscarded = true;
+          },
+        },
       },
       pubsub,
     );
 
     await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+    expect(idleSignalDiscarded).toBe(true);
     expect(pubsub.publishedData.filter(event => event?.type === 'signal-enqueued')).toEqual([]);
     expect(agent.stream).not.toHaveBeenCalled();
   });
