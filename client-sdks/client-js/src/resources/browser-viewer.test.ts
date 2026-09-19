@@ -2,6 +2,56 @@ import { describe, it, expect, vi } from 'vitest';
 import { AgentControllerSession } from './agent-controller';
 
 describe('session browser client', () => {
+  it.each([
+    { x: 101 }, { y: 101 }, { modifiers: 2 }, { deltaY: -10 },
+    { deltaX: 10 }, { deltaY: 10000 }, { button: 'right' as const },
+  ])('keeps distinct scroll boundaries: %j', async change => {
+    const requests: any[] = [];
+    let unblock!: () => void;
+    const firstRequest = new Promise<void>(resolve => { unblock = resolve; });
+    const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
+      requests.push(JSON.parse(init.body as string));
+      if (requests.length === 1) await firstRequest;
+      return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+    });
+    const viewer = new AgentControllerSession({ baseUrl: 'https://test.invalid', fetch }, 'code', 'user:a', 'thread:t', 't').browser('launch');
+    const barrier = viewer.command({ type: 'text', text: 'a' });
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    const event = { type: 'mouseWheel' as const, x: 100, y: 100, deltaX: 0, deltaY: 10 };
+    const first = viewer.command({ type: 'mouse', event });
+    const second = viewer.command({ type: 'mouse', event: { ...event, ...change } });
+    unblock(); await Promise.all([barrier, first, second]);
+    expect(requests).toHaveLength(3);
+    expect(requests[1].event).toEqual(event);
+    expect(requests[2].event).toEqual({ ...event, ...change });
+    viewer.dispose();
+  });
+
+  it('combines a pending scroll burst without losing distance or delaying the next click', async () => {
+    const requests: any[] = [];
+    const release: Array<() => void> = [];
+    const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
+      requests.push(JSON.parse(init.body as string));
+      await new Promise<void>(resolve => release.push(resolve));
+      return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+    });
+    const viewer = new AgentControllerSession({ baseUrl: 'https://test.invalid', fetch }, 'code', 'user:a', 'thread:t', 't').browser('launch');
+    const scroll = () => viewer.command({ type: 'mouse', event: { type: 'mouseWheel', x: 100, y: 100, deltaX: 0, deltaY: 10 } });
+    const first = scroll();
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    const pending = Array.from({ length: 29 }, scroll);
+    const click = viewer.command({ type: 'mouse', event: { type: 'mousePressed', x: 100, y: 100, button: 'left' } });
+    release[0](); await first;
+    await vi.waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[1].event.deltaY).toBe(290);
+    release[1](); await Promise.all(pending);
+    await vi.waitFor(() => expect(requests).toHaveLength(3));
+    expect(requests[2].event.type).toBe('mousePressed');
+    release[2](); await click;
+    expect(requests.slice(0, 2).reduce((sum, request) => sum + request.event.deltaY, 0)).toBe(300);
+    viewer.dispose();
+  });
+
   it('uses auth headers and exact thread identity, parses split SSE and cancels', async () => {
     const cancel = vi.fn();
     let stream!: ReadableStreamDefaultController<Uint8Array>;

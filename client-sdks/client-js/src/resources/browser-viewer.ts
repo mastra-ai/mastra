@@ -24,6 +24,25 @@ export class SessionBrowserViewer extends BaseResource {
   async command(command: BrowserViewerCommand): Promise<void> {
     if (this.disposed) throw new Error('Browser viewer disposed');
     const last = this.commands.at(-1);
+    if (last?.command.type === 'mouse' && last.command.event.type === 'mouseWheel' &&
+      command.type === 'mouse' && command.event.type === 'mouseWheel') {
+      const previous = last.command.event;
+      const next = command.event;
+      const deltaX = (previous.deltaX ?? 0) + (next.deltaX ?? 0);
+      const deltaY = (previous.deltaY ?? 0) + (next.deltaY ?? 0);
+      // One pending gesture can carry the same total distance in one request.
+      // Keep target, modifier, direction and every intervening command boundary.
+      if (previous.x === next.x && previous.y === next.y &&
+        (previous.modifiers ?? 0) === (next.modifiers ?? 0) &&
+        previous.button === next.button && previous.clickCount === next.clickCount &&
+        Math.sign(previous.deltaX ?? 0) === Math.sign(next.deltaX ?? 0) &&
+        Math.sign(previous.deltaY ?? 0) === Math.sign(next.deltaY ?? 0) &&
+        Number.isFinite(deltaX) && Number.isFinite(deltaY) &&
+        Math.abs(deltaX) <= 10000 && Math.abs(deltaY) <= 10000) {
+        last.command = { type: 'mouse', event: { ...next, deltaX, deltaY } };
+        return last.promise;
+      }
+    }
     const replaceable = (value: BrowserViewerCommand) =>
       value.type === 'preferences' || (value.type === 'mouse' && value.event.type === 'mouseMoved');
     if (last && replaceable(last.command) && replaceable(command) && last.command.type === command.type) {
