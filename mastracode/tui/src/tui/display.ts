@@ -14,7 +14,7 @@ import { sendNotification } from './notify.js';
 import type { TUIState } from './state.js';
 import { theme } from './theme.js';
 
-class InfoMessageComponent extends Container {
+export class InfoMessageComponent extends Container {
   constructor(lines: Text[]) {
     super();
     for (const line of lines) {
