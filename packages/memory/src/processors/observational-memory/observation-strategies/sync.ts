@@ -256,6 +256,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
     await this.storage.updateActiveObservations({
       id: record.id,
+      expectedWriteEpoch: record.writeEpoch ?? 0,
       observations: processed.observations,
       tokenCount: processed.observationTokens,
       lastObservedAt: processed.lastObservedAt,

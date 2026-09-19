@@ -28,6 +28,37 @@ const POSTGRES_MAX_BIND_PARAMETERS = 65535;
 const MESSAGE_INSERT_BIND_PARAMETERS = 8;
 const MAX_MESSAGES_PER_INSERT = Math.floor(POSTGRES_MAX_BIND_PARAMETERS / MESSAGE_INSERT_BIND_PARAMETERS);
 
+function parseOMJson<T>(value: unknown): T | undefined {
+  if (value == null || value === '') return undefined;
+  return (typeof value === 'string' ? JSON.parse(value) : value) as T;
+}
+
+function parseObservationGroups(value: unknown): ObservationGroupMetadata[] | undefined {
+  return parseOMJson<Array<ObservationGroupMetadata & { observedAt?: { from: string | Date; to: string | Date } }>>(
+    value,
+  )?.map(group => ({
+    ...group,
+    observedAt: group.observedAt
+      ? { from: new Date(group.observedAt.from), to: new Date(group.observedAt.to) }
+      : undefined,
+  }));
+}
+
+function parseObservationArchive(value: unknown): ObservationArchiveMetadata | undefined {
+  const archive = parseOMJson<
+    Omit<ObservationArchiveMetadata, 'archivedAt' | 'groups'> & {
+      archivedAt: string | Date;
+      groups: Array<ArchivedObservationGroup & { observedAt?: { from: string | Date; to: string | Date } }>;
+    }
+  >(value);
+  if (!archive) return undefined;
+  return {
+    ...archive,
+    archivedAt: new Date(archive.archivedAt),
+    groups: (parseObservationGroups(archive.groups as unknown) as ArchivedObservationGroup[] | undefined) ?? [],
+  };
+}
+
 /**
  * Columns added to the OM table after its initial release.
  * Used in `alterTable({ ifNotExists })` so that databases created on older
@@ -53,6 +84,10 @@ export const OM_MIGRATION_COLUMNS: string[] = [
   'lastBufferedAtTokens',
   'lastBufferedAtTime',
   'metadata',
+  'recordState',
+  'writeEpoch',
+  'observationGroups',
+  'archive',
 ];
 
 /**
@@ -86,6 +121,18 @@ import type {
   UpdateBufferedReflectionInput,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  CreateObservationArchiveGenerationInput,
+  ListObservationArchivesInput,
+  ListObservationArchivesResult,
+  GetObservationArchiveInput,
+  GetObservationArchiveResult,
+  GetObservationArchivesByGroupIdsInput,
+  GetObservationArchivesByGroupIdsResult,
+  ObservationArchiveEntry,
+  ObservationGroupMetadata,
+  ObservationArchiveMetadata,
+  ArchivedObservationGroup,
+  ClearBufferedReflectionInput,
   UpdateObservationalMemoryConfigInput,
   PruneOptions,
   PruneResult,
@@ -2185,12 +2232,16 @@ export class MemoryPG extends MemoryStorage {
       scope: row.scope,
       threadId: row.threadId || null,
       resourceId: row.resourceId,
+      recordState: row.recordState || 'active',
+      writeEpoch: Number(row.writeEpoch || 0),
       createdAt: new Date(row.createdAtZ),
       updatedAt: new Date(row.updatedAtZ),
       lastObservedAt: row.lastObservedAtZ ? new Date(row.lastObservedAtZ) : undefined,
       originType: row.originType || 'initial',
       generationCount: Number(row.generationCount || 0),
       activeObservations: row.activeObservations || '',
+      observationGroups: parseObservationGroups(row.observationGroups),
+      archive: parseObservationArchive(row.archive),
       // Handle new chunk-based structure
       bufferedObservationChunks: row.bufferedObservationChunks
         ? typeof row.bufferedObservationChunks === 'string'
@@ -2232,6 +2283,65 @@ export class MemoryPG extends MemoryStorage {
     };
   }
 
+  private toObservationArchiveEntry(
+    record: ObservationalMemoryRecord,
+    input: Pick<ListObservationArchivesInput, 'scope' | 'resourceId' | 'threadId' | 'filterThreadId'>,
+  ): ObservationArchiveEntry | null {
+    const archive = record.archive;
+    if (!archive || record.resourceId !== input.resourceId) return null;
+    if (input.scope === 'thread' && record.scope === 'thread' && record.threadId !== input.threadId) return null;
+    const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
+    const groups = archive.groups.filter(group => {
+      if (!projectedThreadId) return true;
+      if (record.scope === 'thread') return record.threadId === projectedThreadId;
+      return group.sourceThreadId === projectedThreadId;
+    });
+    if (groups.length === 0) return null;
+    return {
+      archiveId: archive.archiveId,
+      recordId: record.id,
+      scope: record.scope,
+      threadId: record.threadId,
+      resourceId: record.resourceId,
+      archivedAt: archive.archivedAt,
+      generationCount: record.generationCount,
+      observationTokenCount: archive.observationTokenCount,
+      groups: groups.map(group => ({ ...group })),
+    };
+  }
+
+  private encodeObservationArchiveCursor(entry: ObservationArchiveEntry): string {
+    return Buffer.from(
+      JSON.stringify({
+        archivedAt: entry.archivedAt.toISOString(),
+        generationCount: entry.generationCount,
+        archiveId: entry.archiveId,
+      }),
+    ).toString('base64url');
+  }
+
+  private decodeObservationArchiveCursor(cursor: string): {
+    archivedAt: Date;
+    generationCount: number;
+    archiveId: string;
+  } {
+    try {
+      const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Record<string, unknown>;
+      const archivedAt = typeof value.archivedAt === 'string' ? new Date(value.archivedAt) : new Date(Number.NaN);
+      if (
+        !Number.isFinite(archivedAt.getTime()) ||
+        !Number.isInteger(value.generationCount) ||
+        typeof value.archiveId !== 'string' ||
+        !value.archiveId
+      ) {
+        throw new Error('invalid fields');
+      }
+      return { archivedAt, generationCount: value.generationCount as number, archiveId: value.archiveId };
+    } catch {
+      throw new Error('Invalid observation archive cursor');
+    }
+  }
+
   async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
@@ -2240,7 +2350,7 @@ export class MemoryPG extends MemoryStorage {
         schemaName: getSchemaName(this.#schema),
       });
       const result = await this.#db.readClient.oneOrNone(
-        `SELECT * FROM ${tableName} WHERE "lookupKey" = $1 ORDER BY "generationCount" DESC LIMIT 1`,
+        `SELECT * FROM ${tableName} WHERE "lookupKey" = $1 AND COALESCE("recordState", 'active') = 'active' ORDER BY "generationCount" DESC LIMIT 1`,
         [lookupKey],
       );
       if (!result) return null;
@@ -2322,6 +2432,8 @@ export class MemoryPG extends MemoryStorage {
         scope: input.scope,
         threadId: input.threadId,
         resourceId: input.resourceId,
+        recordState: 'active',
+        writeEpoch: 0,
         createdAt: now,
         updatedAt: now,
         lastObservedAt: undefined,
@@ -2421,8 +2533,9 @@ export class MemoryPG extends MemoryStorage {
           "reflectedObservationLineCount",
           "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection",
           "lastBufferedAtTokens", "lastBufferedAtTime",
-          "observedTimezone", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)`,
+          "observedTimezone", metadata, "recordState", "writeEpoch", "observationGroups", archive,
+          "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39)`,
         [
           record.id,
           lookupKey,
@@ -2455,6 +2568,10 @@ export class MemoryPG extends MemoryStorage {
           lastBufferedAtTimeStr,
           record.observedTimezone || null,
           record.metadata ? JSON.stringify(record.metadata) : null,
+          record.recordState ?? 'active',
+          record.writeEpoch ?? 0,
+          record.observationGroups ? JSON.stringify(record.observationGroups) : null,
+          record.archive ? JSON.stringify(record.archive) : null,
           record.createdAt.toISOString(),
           record.createdAt.toISOString(),
           record.updatedAt.toISOString(),
@@ -2495,8 +2612,10 @@ export class MemoryPG extends MemoryStorage {
           "totalTokensObserved" = "totalTokensObserved" + $5,
           "observedMessageIds" = $6,
           "updatedAt" = $7,
-          "updatedAtZ" = $8
-        WHERE id = $9`,
+          "updatedAtZ" = $8,
+          "observationGroups" = $9
+        WHERE id = $10 AND COALESCE("recordState", 'active') = 'active'
+          AND COALESCE("writeEpoch", 0) = $11`,
         [
           input.observations,
           lastObservedAtStr,
@@ -2506,7 +2625,9 @@ export class MemoryPG extends MemoryStorage {
           observedMessageIdsJson,
           nowStr,
           nowStr,
+          input.observationGroups ? JSON.stringify(input.observationGroups) : null,
           input.id,
+          input.expectedWriteEpoch ?? 0,
         ],
       );
 
@@ -2535,86 +2656,401 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  async createObservationArchiveGeneration(
+    input: CreateObservationArchiveGenerationInput,
+  ): Promise<ObservationalMemoryRecord> {
+    try {
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.#schema) });
+      return await this.#db.client.tx(async t => {
+        const priorRow = await t.oneOrNone(`SELECT * FROM ${tableName} WHERE archive->>'archiveId' = $1 FOR UPDATE`, [
+          input.archiveId,
+        ]);
+        if (priorRow) {
+          const prior = this.parseOMRow(priorRow);
+          const archive = prior.archive!;
+          const sameTransition =
+            archive.sourceRecordId === input.currentRecordId &&
+            archive.sourceGenerationCount === input.expectedGenerationCount &&
+            archive.sourceWriteEpoch === input.expectedWriteEpoch &&
+            archive.contentDigest === input.contentDigest &&
+            archive.groups.length === input.retiredGroups.length &&
+            archive.groups.every((group, index) => group.groupId === input.retiredGroups[index]?.groupId);
+          if (!sameTransition) {
+            throw new Error(`Archive ID ${input.archiveId} is already bound to a different transition`);
+          }
+          const successorRow = await t.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [
+            archive.successorRecordId,
+          ]);
+          if (!successorRow) throw new Error(`Archive successor not found: ${archive.successorRecordId}`);
+          return this.parseOMRow(successorRow);
+        }
+
+        const currentRow = await t.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1 FOR UPDATE`, [
+          input.currentRecordId,
+        ]);
+        if (!currentRow) throw new Error(`Observational memory record not found: ${input.currentRecordId}`);
+        const current = this.parseOMRow(currentRow);
+        if (
+          current.recordState !== 'active' ||
+          (current.writeEpoch ?? 0) !== input.expectedWriteEpoch ||
+          current.generationCount !== input.expectedGenerationCount
+        ) {
+          throw new Error(`Observational memory record is stale or sealed: ${input.currentRecordId}`);
+        }
+
+        const successorId = randomUUID();
+        const archive: ObservationArchiveMetadata = {
+          archiveId: input.archiveId,
+          archivedAt: input.archivedAt,
+          sourceRecordId: current.id,
+          successorRecordId: successorId,
+          generationCount: current.generationCount,
+          sourceGenerationCount: current.generationCount,
+          sourceWriteEpoch: current.writeEpoch ?? 0,
+          contentDigest: input.contentDigest,
+          observationTokenCount: input.retiredObservationTokenCount,
+          groups: input.retiredGroups,
+        };
+        const archivedAt = input.archivedAt.toISOString();
+        const sealed = await t.query(
+          `UPDATE ${tableName} SET
+            "recordState" = 'sealed',
+            "activeObservations" = $1,
+            "observationGroups" = $2,
+            archive = $3,
+            "observationTokenCount" = $4,
+            "pendingMessageTokens" = 0,
+            "bufferedObservationChunks" = NULL,
+            "bufferedReflection" = NULL,
+            "bufferedReflectionTokens" = NULL,
+            "bufferedReflectionInputTokens" = NULL,
+            "reflectedObservationLineCount" = NULL,
+            "isReflecting" = false,
+            "isObserving" = false,
+            "isBufferingObservation" = false,
+            "isBufferingReflection" = false,
+            "updatedAt" = $5::timestamp,
+            "updatedAtZ" = $5::timestamptz
+          WHERE id = $6 AND "generationCount" = $7
+            AND COALESCE("recordState", 'active') = 'active'
+            AND COALESCE("writeEpoch", 0) = $8`,
+          [
+            input.retiredObservations,
+            JSON.stringify(input.retiredGroups),
+            JSON.stringify(archive),
+            Math.round(input.retiredObservationTokenCount),
+            archivedAt,
+            input.currentRecordId,
+            input.expectedGenerationCount,
+            input.expectedWriteEpoch,
+          ],
+        );
+        if (sealed.rowCount !== 1) {
+          throw new Error(`Observational memory record is stale or sealed: ${input.currentRecordId}`);
+        }
+
+        const successorRow = await t.one(
+          `INSERT INTO ${tableName} (
+            id, "lookupKey", scope, "resourceId", "threadId",
+            "recordState", "writeEpoch", "activeObservations", "observationGroups", archive,
+            "activeObservationsPendingUpdate", "originType", config, "generationCount",
+            "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
+            "pendingMessageTokens", "totalTokensObserved", "observationTokenCount", "observedMessageIds",
+            "bufferedObservationChunks", "bufferedReflection", "bufferedReflectionTokens",
+            "bufferedReflectionInputTokens", "reflectedObservationLineCount",
+            "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection",
+            "lastBufferedAtTokens", "lastBufferedAtTime", "observedTimezone", metadata,
+            "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+          ) VALUES (
+            $1, $2, $3, $4, $5,
+            'active', 0, $6, $7, NULL,
+            NULL, 'archive', $8, $9,
+            $10::timestamp, $10::timestamptz, $11::timestamp, $11::timestamptz,
+            $12, $13, $14, $15,
+            $16, NULL, NULL,
+            NULL, NULL,
+            $17, false, $18, false,
+            $19, $20, $21, $22,
+            $23::timestamp, $23::timestamptz, $23::timestamp, $23::timestamptz
+          ) RETURNING *`,
+          [
+            successorId,
+            currentRow.lookupKey,
+            current.scope,
+            current.resourceId,
+            current.threadId,
+            input.retainedObservations,
+            JSON.stringify(input.retainedGroups),
+            JSON.stringify(current.config),
+            current.generationCount + 1,
+            current.lastObservedAt?.toISOString() ?? null,
+            currentRow.lastReflectionAtZ ?? currentRow.lastReflectionAt ?? null,
+            Math.round(current.pendingMessageTokens),
+            Math.round(current.totalTokensObserved),
+            Math.round(input.retainedObservationTokenCount),
+            current.observedMessageIds ? JSON.stringify(current.observedMessageIds) : null,
+            current.bufferedObservationChunks ? JSON.stringify(current.bufferedObservationChunks) : null,
+            current.isObserving,
+            current.isBufferingObservation,
+            Math.round(current.lastBufferedAtTokens ?? 0),
+            current.lastBufferedAtTime?.toISOString() ?? null,
+            current.observedTimezone ?? null,
+            current.metadata ? JSON.stringify(current.metadata) : null,
+            archivedAt,
+          ],
+        );
+        return this.parseOMRow(successorRow);
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'CREATE_OBSERVATION_ARCHIVE_GENERATION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { currentRecordId: input.currentRecordId, archiveId: input.archiveId },
+        },
+        error,
+      );
+    }
+  }
+
+  async listObservationArchives(input: ListObservationArchivesInput): Promise<ListObservationArchivesResult> {
+    if (input.scope === 'thread' && !input.threadId) {
+      throw new Error('threadId is required for thread-scoped observation archive access');
+    }
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 20);
+    const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.#schema) });
+    const conditions = [`"resourceId" = $1`, `archive IS NOT NULL`];
+    const params: unknown[] = [input.resourceId];
+    const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
+    const groupConditions: string[] = [];
+    if (projectedThreadId) {
+      params.push(projectedThreadId);
+      const threadParam = `$${params.length}`;
+      groupConditions.push(
+        `((scope = 'thread' AND "threadId" = ${threadParam}) OR (scope = 'resource' AND group_value->>'sourceThreadId' = ${threadParam}))`,
+      );
+    }
+    if (input.from) {
+      params.push(input.from.toISOString());
+      groupConditions.push(`(group_value->'observedAt'->>'to')::timestamptz >= $${params.length}::timestamptz`);
+    }
+    if (input.to) {
+      params.push(input.to.toISOString());
+      groupConditions.push(`(group_value->'observedAt'->>'from')::timestamptz <= $${params.length}::timestamptz`);
+    }
+    if (input.text) {
+      params.push(input.text.normalize('NFKC').toLowerCase());
+      groupConditions.push(`position($${params.length} in group_value->>'searchText') > 0`);
+    }
+    if (groupConditions.length > 0) {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(archive->'groups', '[]'::jsonb)) AS group_value WHERE ${groupConditions.join(' AND ')})`,
+      );
+    }
+    if (input.cursor) {
+      const cursor = this.decodeObservationArchiveCursor(input.cursor);
+      params.push(cursor.archivedAt.toISOString(), cursor.generationCount, cursor.archiveId);
+      const base = params.length - 2;
+      conditions.push(
+        `((archive->>'archivedAt')::timestamptz, "generationCount", archive->>'archiveId') < ($${base}::timestamptz, $${base + 1}, $${base + 2})`,
+      );
+    }
+    params.push(limit + 1);
+    const rows = await this.#db.readClient.manyOrNone(
+      `SELECT * FROM ${tableName}
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY (archive->>'archivedAt')::timestamptz DESC, "generationCount" DESC, archive->>'archiveId' DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+    const normalizedText = input.text?.normalize('NFKC').toLowerCase();
+    const entries = rows
+      .map(row => this.toObservationArchiveEntry(this.parseOMRow(row), input))
+      .filter((entry): entry is ObservationArchiveEntry => entry !== null)
+      .map(entry => ({
+        ...entry,
+        groups: entry.groups.filter(group => {
+          if (input.from && (!group.observedAt || group.observedAt.to < input.from)) return false;
+          if (input.to && (!group.observedAt || group.observedAt.from > input.to)) return false;
+          if (normalizedText && !group.searchText.includes(normalizedText)) return false;
+          return true;
+        }),
+      }))
+      .filter(entry => entry.groups.length > 0);
+    const hasMore = entries.length > limit;
+    const archives = hasMore ? entries.slice(0, limit) : entries;
+    return {
+      archives,
+      nextCursor: hasMore ? this.encodeObservationArchiveCursor(archives[archives.length - 1]!) : undefined,
+    };
+  }
+
+  async getObservationArchive(input: GetObservationArchiveInput): Promise<GetObservationArchiveResult | null> {
+    const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.#schema) });
+    const row = await this.#db.readClient.oneOrNone(
+      `SELECT * FROM ${tableName} WHERE "resourceId" = $1 AND archive->>'archiveId' = $2 LIMIT 1`,
+      [input.resourceId, input.archiveId],
+    );
+    if (!row) return null;
+    const record = this.parseOMRow(row);
+    const entry = this.toObservationArchiveEntry(record, input);
+    if (!entry) return null;
+    const groups = input.groupId ? entry.groups.filter(group => group.groupId === input.groupId) : entry.groups;
+    if (groups.length === 0) return null;
+    entry.groups = groups;
+    return {
+      archive: entry,
+      observations: groups.map(group => record.activeObservations.slice(group.textStart, group.textEnd)).join('\n\n'),
+    };
+  }
+
+  async getObservationArchivesByGroupIds(
+    input: GetObservationArchivesByGroupIdsInput,
+  ): Promise<GetObservationArchivesByGroupIdsResult> {
+    const groupIds = Array.from(new Set(input.groupIds));
+    if (groupIds.length > 20) throw new Error('Observation archive group lookup supports at most 20 group IDs');
+    if (groupIds.length === 0) return { matches: [] };
+    const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.#schema) });
+    const conditions = [`"resourceId" = $1`, `archive IS NOT NULL`];
+    const params: unknown[] = [input.resourceId, groupIds];
+    const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
+    if (projectedThreadId) {
+      params.push(projectedThreadId);
+      conditions.push(
+        `EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(archive->'groups', '[]'::jsonb)) AS group_value WHERE group_value->>'groupId' = ANY($2::text[]) AND ((scope = 'thread' AND "threadId" = $3) OR (scope = 'resource' AND group_value->>'sourceThreadId' = $3)))`,
+      );
+    } else {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(archive->'groups', '[]'::jsonb)) AS group_value WHERE group_value->>'groupId' = ANY($2::text[]))`,
+      );
+    }
+    const rows = await this.#db.readClient.manyOrNone(
+      `SELECT * FROM ${tableName}
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY (archive->>'archivedAt')::timestamptz DESC, "generationCount" DESC, archive->>'archiveId' DESC
+       LIMIT 400`,
+      params,
+    );
+    const requested = new Set(groupIds);
+    const matches = rows
+      .map(row => this.toObservationArchiveEntry(this.parseOMRow(row), input))
+      .filter((entry): entry is ObservationArchiveEntry => entry !== null)
+      .map(archive => {
+        const visible = archive.groups.filter(group => requested.has(group.groupId));
+        archive.groups = visible;
+        return { archive, groupIds: visible.map(group => group.groupId) };
+      })
+      .filter(match => match.groupIds.length > 0);
+    return { matches };
+  }
+
+  async clearBufferedReflection(input: ClearBufferedReflectionInput): Promise<ObservationalMemoryRecord> {
+    const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.#schema) });
+    const now = new Date().toISOString();
+    const row = await this.#db.client.oneOrNone(
+      `UPDATE ${tableName} SET
+        "bufferedReflection" = NULL,
+        "bufferedReflectionTokens" = NULL,
+        "bufferedReflectionInputTokens" = NULL,
+        "reflectedObservationLineCount" = NULL,
+        "isReflecting" = false,
+        "isBufferingReflection" = false,
+        "writeEpoch" = COALESCE("writeEpoch", 0) + 1,
+        "updatedAt" = $1::timestamp,
+        "updatedAtZ" = $1::timestamptz
+       WHERE id = $2 AND COALESCE("recordState", 'active') = 'active'
+         AND COALESCE("writeEpoch", 0) = $3
+       RETURNING *`,
+      [now, input.id, input.expectedWriteEpoch],
+    );
+    if (!row) throw new Error(`Observational memory record is stale or sealed: ${input.id}`);
+    return this.parseOMRow(row);
+  }
+
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = crypto.randomUUID();
-      const now = new Date();
-      const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.#schema) });
+      const expectedWriteEpoch = input.expectedWriteEpoch ?? input.currentRecord.writeEpoch ?? 0;
+      return await this.#db.client.tx(async t => {
+        const currentRow = await t.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1 FOR UPDATE`, [
+          input.currentRecord.id,
+        ]);
+        if (!currentRow) throw new Error(`Observational memory record not found: ${input.currentRecord.id}`);
+        const current = this.parseOMRow(currentRow);
+        if (
+          current.recordState !== 'active' ||
+          (current.writeEpoch ?? 0) !== expectedWriteEpoch ||
+          current.generationCount !== input.currentRecord.generationCount
+        ) {
+          throw new Error(`Observational memory record is stale or sealed: ${input.currentRecord.id}`);
+        }
 
-      const record: ObservationalMemoryRecord = {
-        id,
-        scope: input.currentRecord.scope,
-        threadId: input.currentRecord.threadId,
-        resourceId: input.currentRecord.resourceId,
-        createdAt: now,
-        updatedAt: now,
-        lastObservedAt: input.currentRecord.lastObservedAt,
-        originType: 'reflection',
-        generationCount: input.currentRecord.generationCount + 1,
-        activeObservations: input.reflection,
-        totalTokensObserved: input.currentRecord.totalTokensObserved,
-        observationTokenCount: input.tokenCount,
-        pendingMessageTokens: 0,
-        isReflecting: false,
-        isObserving: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        config: input.currentRecord.config,
-        metadata: input.currentRecord.metadata,
-        observedTimezone: input.currentRecord.observedTimezone,
-      };
+        const now = new Date();
+        const nowStr = now.toISOString();
+        const lastObservedAt = current.lastObservedAt ?? now;
+        const updated = await t.query(
+          `UPDATE ${tableName} SET
+            "bufferedReflection" = NULL,
+            "bufferedReflectionTokens" = NULL,
+            "bufferedReflectionInputTokens" = NULL,
+            "reflectedObservationLineCount" = NULL,
+            "isReflecting" = false,
+            "isBufferingReflection" = false,
+            "updatedAt" = $1::timestamp,
+            "updatedAtZ" = $1::timestamptz
+           WHERE id = $2 AND "generationCount" = $3
+             AND COALESCE("recordState", 'active') = 'active'
+             AND COALESCE("writeEpoch", 0) = $4`,
+          [nowStr, current.id, current.generationCount, expectedWriteEpoch],
+        );
+        if (updated.rowCount !== 1) {
+          throw new Error(`Observational memory record is stale or sealed: ${current.id}`);
+        }
 
-      const tableName = getTableName({
-        indexName: OM_TABLE,
-        schemaName: getSchemaName(this.#schema),
+        const row = await t.one(
+          `INSERT INTO ${tableName} (
+            id, "lookupKey", scope, "resourceId", "threadId",
+            "recordState", "writeEpoch", "activeObservations", "observationGroups", archive,
+            "activeObservationsPendingUpdate", "originType", config, "generationCount",
+            "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
+            "pendingMessageTokens", "totalTokensObserved", "observationTokenCount", "observedMessageIds",
+            "bufferedObservationChunks", "bufferedReflection", "bufferedReflectionTokens",
+            "bufferedReflectionInputTokens", "reflectedObservationLineCount",
+            "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection",
+            "lastBufferedAtTokens", "lastBufferedAtTime", "observedTimezone", metadata,
+            "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+          ) VALUES (
+            $1, $2, $3, $4, $5,
+            'active', 0, $6, NULL, NULL,
+            NULL, 'reflection', $7, $8,
+            $9::timestamp, $9::timestamptz, $10::timestamp, $10::timestamptz,
+            0, $11, $12, NULL,
+            NULL, NULL, NULL,
+            NULL, NULL,
+            false, false, false, false,
+            0, NULL, $13, $14,
+            $10::timestamp, $10::timestamptz, $10::timestamp, $10::timestamptz
+          ) RETURNING *`,
+          [
+            randomUUID(),
+            currentRow.lookupKey,
+            current.scope,
+            current.resourceId,
+            current.threadId,
+            input.reflection,
+            JSON.stringify(current.config),
+            current.generationCount + 1,
+            lastObservedAt.toISOString(),
+            nowStr,
+            Math.round(current.totalTokensObserved),
+            Math.round(input.tokenCount),
+            current.observedTimezone ?? null,
+            JSON.stringify({}),
+          ],
+        );
+        return this.parseOMRow(row);
       });
-      const nowStr = now.toISOString();
-      const lastObservedAtStr = record.lastObservedAt?.toISOString() || null;
-      await this.#db.client.none(
-        `INSERT INTO ${tableName} (
-          id, "lookupKey", scope, "resourceId", "threadId",
-          "activeObservations", "activeObservationsPendingUpdate",
-          "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
-          "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
-          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
-          "observedTimezone", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)`,
-        [
-          id,
-          lookupKey,
-          record.scope,
-          record.resourceId,
-          record.threadId || null,
-          input.reflection,
-          null,
-          'reflection',
-          JSON.stringify(record.config),
-          input.currentRecord.generationCount + 1,
-          lastObservedAtStr, // lastObservedAt
-          lastObservedAtStr, // lastObservedAtZ
-          nowStr, // lastReflectionAt
-          nowStr, // lastReflectionAtZ
-          record.pendingMessageTokens,
-          Math.round(record.totalTokensObserved),
-          Math.round(record.observationTokenCount),
-          false, // isObserving
-          false, // isReflecting
-          false, // isBufferingObservation
-          false, // isBufferingReflection
-          0, // lastBufferedAtTokens
-          null, // lastBufferedAtTime
-          record.observedTimezone || null,
-          record.metadata ? JSON.stringify(record.metadata) : null,
-          nowStr, // createdAt
-          nowStr, // createdAtZ
-          nowStr, // updatedAt
-          nowStr, // updatedAtZ
-        ],
-      );
-
-      return record;
     } catch (error) {
       throw new MastraError(
         {
@@ -2628,7 +3064,7 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
+  async setReflectingFlag(id: string, isReflecting: boolean, expectedWriteEpoch?: number): Promise<void> {
     try {
       const tableName = getTableName({
         indexName: OM_TABLE,
@@ -2636,8 +3072,10 @@ export class MemoryPG extends MemoryStorage {
       });
       const nowStr = new Date().toISOString();
       const result = await this.#db.client.query(
-        `UPDATE ${tableName} SET "isReflecting" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`,
-        [isReflecting, nowStr, nowStr, id],
+        `UPDATE ${tableName} SET "isReflecting" = $1, "updatedAt" = $2, "updatedAtZ" = $3
+         WHERE id = $4 AND COALESCE("recordState", 'active') = 'active'
+           AND COALESCE("writeEpoch", 0) = $5`,
+        [isReflecting, nowStr, nowStr, id, expectedWriteEpoch ?? 0],
       );
 
       if (result.rowCount === 0) {
@@ -2665,7 +3103,7 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
+  async setObservingFlag(id: string, isObserving: boolean, expectedWriteEpoch?: number): Promise<void> {
     try {
       const tableName = getTableName({
         indexName: OM_TABLE,
@@ -2673,8 +3111,10 @@ export class MemoryPG extends MemoryStorage {
       });
       const nowStr = new Date().toISOString();
       const result = await this.#db.client.query(
-        `UPDATE ${tableName} SET "isObserving" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`,
-        [isObserving, nowStr, nowStr, id],
+        `UPDATE ${tableName} SET "isObserving" = $1, "updatedAt" = $2, "updatedAtZ" = $3
+         WHERE id = $4 AND COALESCE("recordState", 'active') = 'active'
+           AND COALESCE("writeEpoch", 0) = $5`,
+        [isObserving, nowStr, nowStr, id, expectedWriteEpoch ?? 0],
       );
 
       if (result.rowCount === 0) {
@@ -2702,7 +3142,12 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
+  async setBufferingObservationFlag(
+    id: string,
+    isBuffering: boolean,
+    lastBufferedAtTokens?: number,
+    expectedWriteEpoch?: number,
+  ): Promise<void> {
     try {
       const tableName = getTableName({
         indexName: OM_TABLE,
@@ -2714,11 +3159,15 @@ export class MemoryPG extends MemoryStorage {
       let values: any[];
 
       if (lastBufferedAtTokens !== undefined) {
-        query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "lastBufferedAtTokens" = $2, "updatedAt" = $3, "updatedAtZ" = $4 WHERE id = $5`;
-        values = [isBuffering, Math.round(lastBufferedAtTokens), nowStr, nowStr, id];
+        query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "lastBufferedAtTokens" = $2, "updatedAt" = $3, "updatedAtZ" = $4
+          WHERE id = $5 AND COALESCE("recordState", 'active') = 'active'
+            AND COALESCE("writeEpoch", 0) = $6`;
+        values = [isBuffering, Math.round(lastBufferedAtTokens), nowStr, nowStr, id, expectedWriteEpoch ?? 0];
       } else {
-        query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`;
-        values = [isBuffering, nowStr, nowStr, id];
+        query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "updatedAt" = $2, "updatedAtZ" = $3
+          WHERE id = $4 AND COALESCE("recordState", 'active') = 'active'
+            AND COALESCE("writeEpoch", 0) = $5`;
+        values = [isBuffering, nowStr, nowStr, id, expectedWriteEpoch ?? 0];
       }
 
       const result = await this.#db.client.query(query, values);
@@ -2748,7 +3197,7 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean, expectedWriteEpoch?: number): Promise<void> {
     try {
       const tableName = getTableName({
         indexName: OM_TABLE,
@@ -2756,8 +3205,10 @@ export class MemoryPG extends MemoryStorage {
       });
       const nowStr = new Date().toISOString();
       const result = await this.#db.client.query(
-        `UPDATE ${tableName} SET "isBufferingReflection" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`,
-        [isBuffering, nowStr, nowStr, id],
+        `UPDATE ${tableName} SET "isBufferingReflection" = $1, "updatedAt" = $2, "updatedAtZ" = $3
+         WHERE id = $4 AND COALESCE("recordState", 'active') = 'active'
+           AND COALESCE("writeEpoch", 0) = $5`,
+        [isBuffering, nowStr, nowStr, id, expectedWriteEpoch ?? 0],
       );
 
       if (result.rowCount === 0) {
@@ -2806,7 +3257,7 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+  async setPendingMessageTokens(id: string, tokenCount: number, expectedWriteEpoch?: number): Promise<void> {
     try {
       const tableName = getTableName({
         indexName: OM_TABLE,
@@ -2818,8 +3269,9 @@ export class MemoryPG extends MemoryStorage {
           "pendingMessageTokens" = $1, 
           "updatedAt" = $2,
           "updatedAtZ" = $3
-        WHERE id = $4`,
-        [Math.round(tokenCount), nowStr, nowStr, id],
+        WHERE id = $4 AND COALESCE("recordState", 'active') = 'active'
+          AND COALESCE("writeEpoch", 0) = $5`,
+        [Math.round(tokenCount), nowStr, nowStr, id, expectedWriteEpoch ?? 0],
       );
 
       if (result.rowCount === 0) {
@@ -2849,41 +3301,32 @@ export class MemoryPG extends MemoryStorage {
 
   async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
     try {
-      const tableName = getTableName({
-        indexName: OM_TABLE,
-        schemaName: getSchemaName(this.#schema),
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.#schema) });
+      await this.#db.client.tx(async t => {
+        const row = await t.oneOrNone(
+          `SELECT config FROM ${tableName}
+           WHERE id = $1 AND COALESCE("recordState", 'active') = 'active'
+             AND COALESCE("writeEpoch", 0) = $2
+           FOR UPDATE`,
+          [input.id, input.expectedWriteEpoch ?? 0],
+        );
+        if (!row) throw new Error(`Observational memory record is stale or sealed: ${input.id}`);
+        const existing: Record<string, unknown> = row.config
+          ? typeof row.config === 'string'
+            ? JSON.parse(row.config)
+            : row.config
+          : {};
+        const merged = this.deepMergeConfig(existing, input.config);
+        const now = new Date().toISOString();
+        const result = await t.query(
+          `UPDATE ${tableName} SET config = $1, "updatedAt" = $2, "updatedAtZ" = $2
+           WHERE id = $3 AND COALESCE("recordState", 'active') = 'active'
+             AND COALESCE("writeEpoch", 0) = $4`,
+          [JSON.stringify(merged), now, input.id, input.expectedWriteEpoch ?? 0],
+        );
+        if (result.rowCount !== 1) throw new Error(`Observational memory record is stale or sealed: ${input.id}`);
       });
-
-      // Read current config
-      const selectResult = await this.#db.client.query(`SELECT config FROM ${tableName} WHERE id = $1`, [input.id]);
-
-      if (selectResult.rowCount === 0) {
-        throw new MastraError({
-          id: createStorageErrorId('PG', 'UPDATE_OM_CONFIG', 'NOT_FOUND'),
-          text: `Observational memory record not found: ${input.id}`,
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { id: input.id },
-        });
-      }
-
-      const row = selectResult.rows[0];
-      const existing: Record<string, unknown> = row.config
-        ? typeof row.config === 'string'
-          ? JSON.parse(row.config)
-          : row.config
-        : {};
-      const merged = this.deepMergeConfig(existing, input.config);
-      const nowStr = new Date().toISOString();
-
-      await this.#db.client.query(
-        `UPDATE ${tableName} SET config = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`,
-        [JSON.stringify(merged), nowStr, nowStr, input.id],
-      );
     } catch (error) {
-      if (error instanceof MastraError) {
-        throw error;
-      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'UPDATE_OM_CONFIG', 'FAILED'),
@@ -2913,6 +3356,7 @@ export class MemoryPG extends MemoryStorage {
         id: `ombuf-${randomUUID()}`,
         cycleId: input.chunk.cycleId,
         observations: input.chunk.observations,
+        observationGroups: input.chunk.observationGroups,
         tokenCount: Math.round(input.chunk.tokenCount),
         messageIds: input.chunk.messageIds,
         messageTokens: Math.round(input.chunk.messageTokens ?? 0),
@@ -2940,8 +3384,17 @@ export class MemoryPG extends MemoryStorage {
           "lastBufferedAtTime" = COALESCE($3, "lastBufferedAtTime"),
           "updatedAt" = $4,
           "updatedAtZ" = $5
-        WHERE id = $6`,
-        [JSON.stringify([newChunk]), input.chunk.cycleId, lastBufferedAtTime, nowStr, nowStr, input.id],
+        WHERE id = $6 AND COALESCE("recordState", 'active') = 'active'
+          AND COALESCE("writeEpoch", 0) = $7`,
+        [
+          JSON.stringify([newChunk]),
+          input.chunk.cycleId,
+          lastBufferedAtTime,
+          nowStr,
+          nowStr,
+          input.id,
+          input.expectedWriteEpoch ?? 0,
+        ],
       );
 
       if (result.rowCount === 0) {
@@ -2978,7 +3431,12 @@ export class MemoryPG extends MemoryStorage {
       const nowStr = new Date().toISOString();
 
       // Get current record
-      const record = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [input.id]);
+      const record = await this.#db.client.oneOrNone(
+        `SELECT * FROM ${tableName} WHERE id = $1
+         AND COALESCE("recordState", 'active') = 'active'
+         AND COALESCE("writeEpoch", 0) = $2`,
+        [input.id, input.expectedWriteEpoch ?? 0],
+      );
       if (!record) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'SWAP_BUFFERED_TO_ACTIVE', 'NOT_FOUND'),
@@ -3118,10 +3576,13 @@ export class MemoryPG extends MemoryStorage {
           "lastObservedAt" = $5,
           "lastObservedAtZ" = $6,
           "updatedAt" = $7,
-          "updatedAtZ" = $8
+          "updatedAtZ" = $8,
+          "observationGroups" = COALESCE("observationGroups", '[]'::jsonb) || $11::jsonb
         WHERE id = $9
           AND "bufferedObservationChunks" IS NOT NULL
-          AND "bufferedObservationChunks"::text != '[]'`,
+          AND "bufferedObservationChunks"::text != '[]'
+          AND COALESCE("recordState", 'active') = 'active'
+          AND COALESCE("writeEpoch", 0) = $12`,
         [
           activatedContent,
           activatedTokens,
@@ -3133,10 +3594,22 @@ export class MemoryPG extends MemoryStorage {
           nowStr,
           input.id,
           boundary,
+          JSON.stringify(activatedChunks.flatMap(chunk => chunk.observationGroups ?? [])),
+          input.expectedWriteEpoch ?? 0,
         ],
       );
 
       if (updateResult.rowCount === 0) {
+        const latest = await this.#db.readClient.oneOrNone(
+          `SELECT "recordState", "writeEpoch" FROM ${tableName} WHERE id = $1`,
+          [input.id],
+        );
+        if (
+          latest &&
+          (latest.recordState === 'sealed' || Number(latest.writeEpoch ?? 0) !== (input.expectedWriteEpoch ?? 0))
+        ) {
+          throw new Error(`Observational memory record is stale or sealed: ${input.id}`);
+        }
         return {
           chunksActivated: 0,
           messageTokensActivated: 0,
@@ -3205,7 +3678,8 @@ export class MemoryPG extends MemoryStorage {
           "reflectedObservationLineCount" = $4,
           "updatedAt" = $5,
           "updatedAtZ" = $6
-        WHERE id = $7`,
+        WHERE id = $7 AND COALESCE("recordState", 'active') = 'active'
+          AND COALESCE("writeEpoch", 0) = $8`,
         [
           input.reflection,
           Math.round(input.tokenCount),
@@ -3214,6 +3688,7 @@ export class MemoryPG extends MemoryStorage {
           nowStr,
           nowStr,
           input.id,
+          input.expectedWriteEpoch ?? 0,
         ],
       );
 
@@ -3250,9 +3725,13 @@ export class MemoryPG extends MemoryStorage {
       });
 
       // Get current record to calculate split
-      const record = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [
-        input.currentRecord.id,
-      ]);
+      const expectedWriteEpoch = input.expectedWriteEpoch ?? input.currentRecord.writeEpoch ?? 0;
+      const record = await this.#db.client.oneOrNone(
+        `SELECT * FROM ${tableName} WHERE id = $1
+         AND COALESCE("recordState", 'active') = 'active'
+         AND COALESCE("writeEpoch", 0) = $2`,
+        [input.currentRecord.id, expectedWriteEpoch],
+      );
       if (!record) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NOT_FOUND'),
@@ -3291,27 +3770,12 @@ export class MemoryPG extends MemoryStorage {
 
       // Create new generation with the merged content.
       // tokenCount is computed by the processor using its token counter on the combined content.
-      const newRecord = await this.createReflectionGeneration({
+      return this.createReflectionGeneration({
         currentRecord: input.currentRecord,
+        expectedWriteEpoch,
         reflection: newObservations,
         tokenCount: input.tokenCount,
       });
-
-      // Clear buffered state on old record
-      const nowStr = new Date().toISOString();
-      await this.#db.client.query(
-        `UPDATE ${tableName} SET
-          "bufferedReflection" = NULL,
-          "bufferedReflectionTokens" = NULL,
-          "bufferedReflectionInputTokens" = NULL,
-          "reflectedObservationLineCount" = NULL,
-          "updatedAt" = $1,
-          "updatedAtZ" = $2
-        WHERE id = $3`,
-        [nowStr, nowStr, input.currentRecord.id],
-      );
-
-      return newRecord;
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;

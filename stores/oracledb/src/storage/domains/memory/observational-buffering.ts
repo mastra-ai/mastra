@@ -26,10 +26,13 @@ import {
   OM_BUFFERED_REFLECTION_TOKENS,
   OM_LAST_BUFFERED_AT_TIME,
   OM_LAST_OBSERVED_AT,
+  OM_OBSERVATION_GROUPS,
   OM_OBSERVATION_TOKEN_COUNT,
   OM_PENDING_MESSAGE_TOKENS,
+  OM_RECORD_STATE,
   OM_REFLECTED_OBSERVATION_LINE_COUNT,
   OM_UPDATED_AT,
+  OM_WRITE_EPOCH,
 } from './schema';
 import { assertRowsAffected, numberOrZero, parseBufferedChunks, storageError, stringOrEmpty, table } from './utils';
 import type { MemoryContext } from './utils';
@@ -44,8 +47,9 @@ export async function updateBufferedObservations(
 ): Promise<void> {
   try {
     await ctx.db.tx(async (_client, connection) => {
-      const row = await lockOMRow(ctx, connection, input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
+      const row = await lockOMRow(ctx, connection, input.id, 'UPDATE_BUFFERED_OBSERVATIONS', input.expectedWriteEpoch);
       const existingChunks = parseBufferedChunks(row.bufferedObservationChunks);
+      if (existingChunks.some(chunk => chunk.cycleId === input.chunk.cycleId)) return;
       // Buffer chunks let long observation cycles append safely without
       // rewriting the active observation CLOB on every small update.
       const newChunk: BufferedObservationChunk = {
@@ -62,6 +66,7 @@ export async function updateBufferedObservations(
         threadTitle: input.chunk.threadTitle,
         extractedValues: input.chunk.extractedValues,
         extractionFailures: input.chunk.extractionFailures,
+        observationGroups: input.chunk.observationGroups,
       };
       const updatedChunks = [...existingChunks, newChunk];
       const lastBufferedAtTimeSql =
@@ -72,6 +77,7 @@ export async function updateBufferedObservations(
         id: input.id,
         bufferedObservationChunks: nullableJsonBind(updatedChunks),
         updatedAt: new Date(),
+        expectedWriteEpoch: input.expectedWriteEpoch ?? 0,
       };
       if (input.lastBufferedAtTime !== undefined && input.lastBufferedAtTime !== null) {
         binds.lastBufferedAtTime = toDate(input.lastBufferedAtTime);
@@ -81,7 +87,8 @@ export async function updateBufferedObservations(
         `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
            SET ${OM_BUFFERED_OBSERVATION_CHUNKS} = :bufferedObservationChunks,
                ${OM_UPDATED_AT} = :updatedAt${lastBufferedAtTimeSql}
-           WHERE id = :id`,
+           WHERE id = :id AND COALESCE(${OM_RECORD_STATE}, 'active') = 'active'
+             AND COALESCE(${OM_WRITE_EPOCH}, 0) = :expectedWriteEpoch`,
         asBindParameters(binds),
       );
       assertRowsAffected(result.rowsAffected, 'UPDATE_BUFFERED_OBSERVATIONS', input.id);
@@ -98,7 +105,7 @@ export async function swapBufferedToActive(
 ): Promise<SwapBufferedToActiveResult> {
   try {
     return await ctx.db.tx(async (_client, connection) => {
-      const row = await lockOMRow(ctx, connection, input.id, 'SWAP_BUFFERED_TO_ACTIVE');
+      const row = await lockOMRow(ctx, connection, input.id, 'SWAP_BUFFERED_TO_ACTIVE', input.expectedWriteEpoch);
       const chunks = input.bufferedChunks?.length
         ? input.bufferedChunks
         : parseBufferedChunks(row.bufferedObservationChunks);
@@ -120,19 +127,26 @@ export async function swapBufferedToActive(
         ? `${existingActive}${boundary}${activation.activatedContent}`
         : activation.activatedContent;
       const pendingTokens = Math.max(0, numberOrZero(row.pendingMessageTokens) - activation.activatedMessageTokens);
+      const existingGroups = parseOMRow(row).observationGroups ?? [];
+      const activatedGroups = activation.activatedChunks.flatMap(chunk => chunk.observationGroups ?? []);
+      const newGroups = [...existingGroups, ...activatedGroups];
 
       const result = await connection.execute(
         `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
            SET ${OM_ACTIVE_OBSERVATIONS} = :activeObservations,
+               ${OM_OBSERVATION_GROUPS} = :observationGroups,
                ${OM_OBSERVATION_TOKEN_COUNT} = COALESCE(${OM_OBSERVATION_TOKEN_COUNT}, 0) + :observationTokens,
                ${OM_PENDING_MESSAGE_TOKENS} = :pendingMessageTokens,
                ${OM_BUFFERED_OBSERVATION_CHUNKS} = :bufferedObservationChunks,
                ${OM_LAST_OBSERVED_AT} = :lastObservedAt,
                ${OM_UPDATED_AT} = :updatedAt
-           WHERE id = :id`,
+           WHERE id = :id AND COALESCE(${OM_RECORD_STATE}, 'active') = 'active'
+             AND COALESCE(${OM_WRITE_EPOCH}, 0) = :expectedWriteEpoch`,
         {
           id: input.id,
+          expectedWriteEpoch: input.expectedWriteEpoch ?? 0,
           activeObservations: nullableClobBind(newActive),
+          observationGroups: nullableJsonBind(newGroups),
           observationTokens: activation.activatedTokens,
           pendingMessageTokens: pendingTokens,
           bufferedObservationChunks: nullableJsonBind(
@@ -169,9 +183,11 @@ export async function updateBufferedReflection(
                ${OM_BUFFERED_REFLECTION_INPUT_TOKENS} = COALESCE(${OM_BUFFERED_REFLECTION_INPUT_TOKENS}, 0) + :inputTokenCount,
                ${OM_REFLECTED_OBSERVATION_LINE_COUNT} = :reflectedObservationLineCount,
                ${OM_UPDATED_AT} = :updatedAt
-           WHERE id = :id`,
+           WHERE id = :id AND COALESCE(${OM_RECORD_STATE}, 'active') = 'active'
+             AND COALESCE(${OM_WRITE_EPOCH}, 0) = :expectedWriteEpoch`,
         {
           id: input.id,
+          expectedWriteEpoch: input.expectedWriteEpoch ?? 0,
           reflection: nullableClobBind(input.reflection),
           tokenCount: Math.round(input.tokenCount),
           inputTokenCount: Math.round(input.inputTokenCount),
@@ -193,7 +209,13 @@ export async function swapBufferedReflectionToActive(
 ): Promise<ObservationalMemoryRecord> {
   try {
     return await ctx.db.tx(async (_client, connection) => {
-      const row = await lockOMRow(ctx, connection, input.currentRecord.id, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE');
+      const row = await lockOMRow(
+        ctx,
+        connection,
+        input.currentRecord.id,
+        'SWAP_BUFFERED_REFLECTION_TO_ACTIVE',
+        input.expectedWriteEpoch ?? input.currentRecord.writeEpoch,
+      );
       const bufferedReflection = stringOrEmpty(row.bufferedReflection);
       if (!bufferedReflection) {
         throw storageError(
@@ -223,6 +245,8 @@ export async function swapBufferedReflectionToActive(
         scope: lockedRecord.scope,
         threadId: lockedRecord.threadId,
         resourceId: lockedRecord.resourceId,
+        recordState: 'active',
+        writeEpoch: 0,
         createdAt: now,
         updatedAt: now,
         lastObservedAt: lockedRecord.lastObservedAt,
@@ -243,7 +267,6 @@ export async function swapBufferedReflectionToActive(
         observedTimezone: lockedRecord.observedTimezone,
       };
 
-      await insertOMRecord(ctx, connection, newRecord, now);
       const updateResult = await connection.execute(
         `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
            SET ${OM_BUFFERED_REFLECTION} = NULL,
@@ -251,10 +274,16 @@ export async function swapBufferedReflectionToActive(
                ${OM_BUFFERED_REFLECTION_INPUT_TOKENS} = NULL,
                ${OM_REFLECTED_OBSERVATION_LINE_COUNT} = NULL,
                ${OM_UPDATED_AT} = :updatedAt
-           WHERE id = :id`,
-        { id: input.currentRecord.id, updatedAt: now },
+           WHERE id = :id AND COALESCE(${OM_RECORD_STATE}, 'active') = 'active'
+             AND COALESCE(${OM_WRITE_EPOCH}, 0) = :expectedWriteEpoch`,
+        {
+          id: input.currentRecord.id,
+          expectedWriteEpoch: input.expectedWriteEpoch ?? input.currentRecord.writeEpoch ?? 0,
+          updatedAt: now,
+        },
       );
       assertRowsAffected(updateResult.rowsAffected, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', input.currentRecord.id);
+      await insertOMRecord(ctx, connection, newRecord, now);
 
       return newRecord;
     });
@@ -269,12 +298,15 @@ async function lockOMRow(
   connection: Connection,
   id: string,
   operation: string,
+  expectedWriteEpoch?: number,
 ): Promise<ObservationalMemoryRow> {
   // Observational memory updates are incremental and order-sensitive, so
   // mutating paths derive their next state from a locked row.
   const result = await connection.execute<ObjectRow>(
-    `${omSelect()} FROM ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)} WHERE id = :id FOR UPDATE`,
-    { id },
+    `${omSelect()} FROM ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
+     WHERE id = :id AND COALESCE(${OM_RECORD_STATE}, 'active') = 'active'
+       AND COALESCE(${OM_WRITE_EPOCH}, 0) = :expectedWriteEpoch FOR UPDATE`,
+    { id, expectedWriteEpoch: expectedWriteEpoch ?? 0 },
     executeOptions(),
   );
   const row = rows(result)[0] as ObservationalMemoryRow | undefined;

@@ -1113,9 +1113,70 @@ export interface StorageIndexStats extends IndexInfo {
 export type ObservationalMemoryScope = 'thread' | 'resource';
 
 /**
- * How the observational memory record was created
+ * How the observational memory record was created.
+ *
+ * Note: the server API schema (`observationalMemoryRecordSchema`) and the
+ * generated client type (`client-sdks/client-js/src/route-types.generated.ts`)
+ * accept one additional value, `'observation'`. It is unreachable legacy: the
+ * member was hand-written into the API schema when that schema was introduced
+ * (#12599), no framework version has ever persisted it, and this union has
+ * never contained it. It survives as output tolerance rather
+ * than by design, and because no persisted row can hold it, narrowing either
+ * side is safe. Current framework code emits only `'initial'`, `'reflection'`,
+ * and `'archive'`; this union is the narrower source of truth, and the
+ * generated client union (which carries the legacy `'observation'` alongside
+ * `'archive'`) is an additive superset for clients.
  */
-export type ObservationalMemoryOriginType = 'initial' | 'reflection';
+export type ObservationalMemoryOriginType = 'initial' | 'reflection' | 'archive';
+
+/**
+ * Lifecycle state for an observational-memory generation.
+ * Legacy records without this field are treated as active.
+ */
+export type ObservationalMemoryRecordState = 'active' | 'sealed';
+
+/**
+ * Durable metadata for one observation group.
+ */
+export interface ObservationGroupMetadata {
+  groupId: string;
+  /** Bounded one-sentence label used by the archive catalog. */
+  summary: string;
+  /** NFKC-normalized lowercase summary plus observation text used for storage-side filtering. */
+  searchText: string;
+  /** Raw-message range encoded by the observation-group tag. */
+  messageRange?: string;
+  /** True when the source message range cannot be reconstructed. */
+  sourceUnavailable?: boolean;
+  /** Thread that produced this group when the owning record uses resource scope. */
+  sourceThreadId?: string;
+  /** Inclusive date range covered by the observed source messages. */
+  observedAt?: { from: Date; to: Date };
+  tokenCount: number;
+}
+
+/** One retired group and its exact location in the archived observation text. */
+export interface ArchivedObservationGroup extends ObservationGroupMetadata {
+  /** UTF-16 code-unit offset into the archived record's activeObservations. */
+  textStart: number;
+  /** Exclusive UTF-16 code-unit offset into the archived record's activeObservations. */
+  textEnd: number;
+}
+
+/** Immutable archive metadata stored on a sealed observational-memory generation. */
+export interface ObservationArchiveMetadata {
+  archiveId: string;
+  archivedAt: Date;
+  sourceRecordId: string;
+  successorRecordId: string;
+  /** Sequence of the sealed archive generation. */
+  generationCount: number;
+  sourceGenerationCount: number;
+  sourceWriteEpoch: number;
+  contentDigest: string;
+  observationTokenCount: number;
+  groups: ArchivedObservationGroup[];
+}
 
 /**
  * A chunk of buffered observations from a single observation cycle.
@@ -1148,6 +1209,8 @@ export interface BufferedObservationChunk {
   extractedValues?: Record<string, unknown>;
   /** Extractor failures from this buffered observation cycle. */
   extractionFailures?: Array<{ slug: string; error: string }>;
+  /** Per-group metadata generated during this buffered observation cycle. */
+  observationGroups?: ObservationGroupMetadata[];
 }
 
 /**
@@ -1176,6 +1239,8 @@ export interface BufferedObservationChunkInput {
   extractedValues?: Record<string, unknown>;
   /** Extractor failures from this buffered observation cycle. */
   extractionFailures?: Array<{ slug: string; error: string }>;
+  /** Per-group metadata generated during this buffered observation cycle. */
+  observationGroups?: ObservationGroupMetadata[];
 }
 
 /**
@@ -1210,6 +1275,14 @@ export interface ObservationalMemoryRecord {
   threadId: string | null;
   /** Resource ID (always present) */
   resourceId: string;
+  /**
+   * Active generations accept writes; archive retirement seals immutable history.
+   * Reflection supersession preserves legacy writable-history behavior, while current
+   * reads still resolve the highest active generation. Defaults to active for legacy rows.
+   */
+  recordState?: ObservationalMemoryRecordState;
+  /** Compare-and-set epoch used to fence stale observational-memory writers. Defaults to 0 for legacy rows. */
+  writeEpoch?: number;
 
   // Timestamps (top-level for easy querying)
   /** When this record was created */
@@ -1235,6 +1308,10 @@ export interface ObservationalMemoryRecord {
    * For thread scope: Plain observation text.
    */
   activeObservations: string;
+  /** Durable metadata for the complete groups in activeObservations. */
+  observationGroups?: ObservationGroupMetadata[];
+  /** Present only on a sealed archive generation. */
+  archive?: ObservationArchiveMetadata;
   /**
    * Array of buffered observation chunks waiting to be activated.
    * Each chunk represents observations from a single observation cycle.
@@ -1341,8 +1418,12 @@ export interface CreateObservationalMemoryInput {
  */
 export interface UpdateActiveObservationsInput {
   id: string;
+  /** Expected active-row write epoch. Omitted legacy callers compare against epoch 0. */
+  expectedWriteEpoch?: number;
   observations: string;
   tokenCount: number;
+  /** Complete-group metadata for observations after the update. */
+  observationGroups?: ObservationGroupMetadata[];
   /** Timestamp when these observations were created (for cursor-based message loading) */
   lastObservedAt: Date;
   /**
@@ -1365,6 +1446,8 @@ export interface UpdateActiveObservationsInput {
  */
 export interface UpdateBufferedObservationsInput {
   id: string;
+  /** Expected active-row write epoch. Omitted legacy callers compare against epoch 0. */
+  expectedWriteEpoch?: number;
   /** The observation chunk to add to the buffer */
   chunk: BufferedObservationChunkInput;
   /** Timestamp cursor for the last buffered message boundary. Set to max message timestamp + 1ms. */
@@ -1377,6 +1460,8 @@ export interface UpdateBufferedObservationsInput {
  */
 export interface SwapBufferedToActiveInput {
   id: string;
+  /** Expected active-row write epoch. Omitted legacy callers compare against epoch 0. */
+  expectedWriteEpoch?: number;
   /**
    * Normalized ratio (0-1) controlling how much context to activate.
    * `1 - activationRatio` is the fraction of the threshold to keep as raw messages.
@@ -1455,6 +1540,8 @@ export interface SwapBufferedToActiveResult {
  */
 export interface UpdateBufferedReflectionInput {
   id: string;
+  /** Expected active-row write epoch. Omitted legacy callers compare against epoch 0. */
+  expectedWriteEpoch?: number;
   reflection: string;
   /** Token count of the buffered reflection (post-compression output) */
   tokenCount: number;
@@ -1475,6 +1562,8 @@ export interface UpdateBufferedReflectionInput {
  */
 export interface SwapBufferedReflectionToActiveInput {
   currentRecord: ObservationalMemoryRecord;
+  /** Expected active-row write epoch. Defaults to currentRecord.writeEpoch or 0. */
+  expectedWriteEpoch?: number;
   /**
    * Token count for the combined new activeObservations (bufferedReflection + unreflected).
    * Computed by the processor using its token counter before calling the adapter.
@@ -1487,8 +1576,97 @@ export interface SwapBufferedReflectionToActiveInput {
  */
 export interface CreateReflectionGenerationInput {
   currentRecord: ObservationalMemoryRecord;
+  /** Expected active-row write epoch. Defaults to currentRecord.writeEpoch or 0. */
+  expectedWriteEpoch?: number;
   reflection: string;
   tokenCount: number;
+}
+
+/** Atomic transition from one active generation to an immutable archive and retained-tail generation. */
+export interface CreateObservationArchiveGenerationInput {
+  currentRecordId: string;
+  expectedGenerationCount: number;
+  expectedWriteEpoch: number;
+  archiveId: string;
+  archivedAt: Date;
+  contentDigest: string;
+  retiredObservations: string;
+  retiredObservationTokenCount: number;
+  retiredGroups: ArchivedObservationGroup[];
+  retainedObservations: string;
+  retainedObservationTokenCount: number;
+  retainedGroups: ObservationGroupMetadata[];
+}
+
+/** Scope and projection constraints shared by archive queries. */
+export interface ObservationArchiveScopeInput {
+  scope: ObservationalMemoryScope;
+  resourceId: string;
+  /**
+   * Required for thread scope; omitted for resource scope. Thread-scoped archives
+   * resolve ownership from the record's thread ID and do not require groups to
+   * repeat it in `sourceThreadId`.
+   */
+  threadId?: string;
+  /**
+   * Optional thread projection within an authorized resource scope. Resource-scoped
+   * archive groups must carry `sourceThreadId`; thread-scoped records derive it from
+   * their owning record.
+   */
+  filterThreadId?: string;
+}
+
+export interface ObservationArchiveEntry {
+  archiveId: string;
+  recordId: string;
+  scope: ObservationalMemoryScope;
+  threadId: string | null;
+  resourceId: string;
+  archivedAt: Date;
+  generationCount: number;
+  observationTokenCount: number;
+  groups: ArchivedObservationGroup[];
+}
+
+export interface ListObservationArchivesInput extends ObservationArchiveScopeInput {
+  limit?: number;
+  cursor?: string;
+  from?: Date;
+  to?: Date;
+  text?: string;
+}
+
+export interface ListObservationArchivesResult {
+  archives: ObservationArchiveEntry[];
+  nextCursor?: string;
+}
+
+export interface GetObservationArchiveInput extends ObservationArchiveScopeInput {
+  archiveId: string;
+  groupId?: string;
+}
+
+export interface GetObservationArchiveResult {
+  archive: ObservationArchiveEntry;
+  observations: string;
+}
+
+export interface GetObservationArchivesByGroupIdsInput extends ObservationArchiveScopeInput {
+  groupIds: string[];
+}
+
+export interface ObservationArchiveGroupMatch {
+  archive: ObservationArchiveEntry;
+  groupIds: string[];
+}
+
+export interface GetObservationArchivesByGroupIdsResult {
+  matches: ObservationArchiveGroupMatch[];
+}
+
+export interface ClearBufferedReflectionInput {
+  id: string;
+  expectedWriteEpoch: number;
 }
 
 /**
@@ -1497,6 +1675,8 @@ export interface CreateReflectionGenerationInput {
  */
 export interface UpdateObservationalMemoryConfigInput {
   id: string;
+  /** Expected active-row write epoch. Omitted legacy callers compare against epoch 0. */
+  expectedWriteEpoch?: number;
   config: Record<string, unknown>;
 }
 

@@ -11,8 +11,16 @@ import {
   TABLE_THREADS,
 } from '@mastra/core/storage';
 import type {
+  ClearBufferedReflectionInput,
+  CreateObservationArchiveGenerationInput,
   CreateObservationalMemoryInput,
   CreateReflectionGenerationInput,
+  GetObservationArchiveInput,
+  GetObservationArchiveResult,
+  GetObservationArchivesByGroupIdsInput,
+  GetObservationArchivesByGroupIdsResult,
+  ListObservationArchivesInput,
+  ListObservationArchivesResult,
   ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
   StorageCloneThreadInput,
@@ -48,12 +56,17 @@ import {
   updateMessages,
 } from './messages';
 import {
+  clearBufferedReflection,
   clearObservationalMemory,
+  createObservationArchiveGeneration,
   createReflectionGeneration,
+  getObservationArchive,
+  getObservationArchivesByGroupIds,
   getObservationalMemory,
   getObservationalMemoryHistory,
   initializeObservationalMemory,
   insertObservationalMemoryRecord,
+  listObservationArchives,
   setBufferingObservationFlag,
   setBufferingReflectionFlag,
   setObservingFlag,
@@ -374,28 +387,57 @@ export class MemoryOracle extends MemoryStorage {
     return createReflectionGeneration(this.ctx, input);
   }
 
-  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
-    return setReflectingFlag(this.ctx, id, isReflecting);
+  async createObservationArchiveGeneration(
+    input: CreateObservationArchiveGenerationInput,
+  ): Promise<ObservationalMemoryRecord> {
+    return createObservationArchiveGeneration(this.ctx, input);
   }
 
-  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
-    return setObservingFlag(this.ctx, id, isObserving);
+  async listObservationArchives(input: ListObservationArchivesInput): Promise<ListObservationArchivesResult> {
+    return listObservationArchives(this.ctx, input);
   }
 
-  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
-    return setBufferingObservationFlag(this.ctx, id, isBuffering, lastBufferedAtTokens);
+  async getObservationArchive(input: GetObservationArchiveInput): Promise<GetObservationArchiveResult | null> {
+    return getObservationArchive(this.ctx, input);
   }
 
-  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
-    return setBufferingReflectionFlag(this.ctx, id, isBuffering);
+  async getObservationArchivesByGroupIds(
+    input: GetObservationArchivesByGroupIdsInput,
+  ): Promise<GetObservationArchivesByGroupIdsResult> {
+    return getObservationArchivesByGroupIds(this.ctx, input);
+  }
+
+  async clearBufferedReflection(input: ClearBufferedReflectionInput): Promise<ObservationalMemoryRecord> {
+    return clearBufferedReflection(this.ctx, input);
+  }
+
+  async setReflectingFlag(id: string, isReflecting: boolean, expectedWriteEpoch?: number): Promise<void> {
+    return setReflectingFlag(this.ctx, id, isReflecting, expectedWriteEpoch);
+  }
+
+  async setObservingFlag(id: string, isObserving: boolean, expectedWriteEpoch?: number): Promise<void> {
+    return setObservingFlag(this.ctx, id, isObserving, expectedWriteEpoch);
+  }
+
+  async setBufferingObservationFlag(
+    id: string,
+    isBuffering: boolean,
+    lastBufferedAtTokens?: number,
+    expectedWriteEpoch?: number,
+  ): Promise<void> {
+    return setBufferingObservationFlag(this.ctx, id, isBuffering, lastBufferedAtTokens, expectedWriteEpoch);
+  }
+
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean, expectedWriteEpoch?: number): Promise<void> {
+    return setBufferingReflectionFlag(this.ctx, id, isBuffering, expectedWriteEpoch);
   }
 
   async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
     return clearObservationalMemory(this.ctx, threadId, resourceId);
   }
 
-  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
-    return setPendingMessageTokens(this.ctx, id, tokenCount);
+  async setPendingMessageTokens(id: string, tokenCount: number, expectedWriteEpoch?: number): Promise<void> {
+    return setPendingMessageTokens(this.ctx, id, tokenCount, expectedWriteEpoch);
   }
 
   async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {

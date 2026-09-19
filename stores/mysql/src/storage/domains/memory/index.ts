@@ -16,10 +16,22 @@ import {
   createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
+  ArchivedObservationGroup,
   BufferedObservationChunk,
+  ClearBufferedReflectionInput,
   CreateIndexOptions,
+  CreateObservationArchiveGenerationInput,
   CreateObservationalMemoryInput,
   CreateReflectionGenerationInput,
+  GetObservationArchiveInput,
+  GetObservationArchiveResult,
+  GetObservationArchivesByGroupIdsInput,
+  GetObservationArchivesByGroupIdsResult,
+  ListObservationArchivesInput,
+  ListObservationArchivesResult,
+  ObservationArchiveEntry,
+  ObservationArchiveMetadata,
+  ObservationGroupMetadata,
   ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
   PaginationArgs,
@@ -41,6 +53,7 @@ import type {
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
   UpdateBufferedReflectionInput,
+  UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { indexKey } from '../../db/schema-snapshot';
@@ -103,10 +116,46 @@ function parseBufferedChunks(raw: unknown): BufferedObservationChunk[] {
   if (!raw) return [];
   try {
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(chunk => ({
+      ...chunk,
+      lastObservedAt: chunk.lastObservedAt ? new Date(chunk.lastObservedAt) : chunk.lastObservedAt,
+      createdAt: chunk.createdAt ? new Date(chunk.createdAt) : chunk.createdAt,
+      observationGroups: parseObservationGroups(chunk.observationGroups),
+    }));
   } catch {
     return [];
   }
+}
+
+function parseObservationGroups(value: unknown): ObservationGroupMetadata[] | undefined {
+  return parseJSONColumn<Array<ObservationGroupMetadata & { observedAt?: { from: string | Date; to: string | Date } }>>(
+    value,
+  )?.map(group => ({
+    ...group,
+    observedAt: group.observedAt
+      ? { from: new Date(group.observedAt.from), to: new Date(group.observedAt.to) }
+      : undefined,
+  }));
+}
+
+function parseObservationArchive(value: unknown): ObservationArchiveMetadata | undefined {
+  const archive = parseJSONColumn<
+    Omit<ObservationArchiveMetadata, 'archivedAt' | 'groups'> & {
+      archivedAt: string | Date;
+      groups: Array<ArchivedObservationGroup & { observedAt?: { from: string | Date; to: string | Date } }>;
+    }
+  >(value);
+  if (!archive) return undefined;
+  return {
+    ...archive,
+    archivedAt: new Date(archive.archivedAt),
+    groups: (parseObservationGroups(archive.groups as unknown) as ArchivedObservationGroup[] | undefined) ?? [],
+  };
+}
+
+function normalizeArchiveSearchText(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase();
 }
 
 interface ThreadRow {
@@ -237,6 +286,11 @@ export class MemoryMySQL extends MemoryStorage {
           'isBufferingReflection',
           'lastBufferedAtTokens',
           'lastBufferedAtTime',
+          'metadata',
+          'recordState',
+          'writeEpoch',
+          'observationGroups',
+          'archive',
         ],
       });
     }
@@ -1862,11 +1916,74 @@ export class MemoryMySQL extends MemoryStorage {
   // Observational Memory Methods
   // ============================================
 
+  private toObservationArchiveEntry(
+    record: ObservationalMemoryRecord,
+    input: Pick<ListObservationArchivesInput, 'scope' | 'resourceId' | 'threadId' | 'filterThreadId'>,
+  ): ObservationArchiveEntry | null {
+    const archive = record.archive;
+    if (!archive || record.resourceId !== input.resourceId) return null;
+    if (input.scope === 'thread' && record.scope === 'thread' && record.threadId !== input.threadId) return null;
+    const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
+    const groups = archive.groups.filter(group => {
+      if (!projectedThreadId) return true;
+      if (record.scope === 'thread') return record.threadId === projectedThreadId;
+      return group.sourceThreadId === projectedThreadId;
+    });
+    if (groups.length === 0) return null;
+    return {
+      archiveId: archive.archiveId,
+      recordId: record.id,
+      scope: record.scope,
+      threadId: record.threadId,
+      resourceId: record.resourceId,
+      archivedAt: archive.archivedAt,
+      generationCount: record.generationCount,
+      observationTokenCount: archive.observationTokenCount,
+      groups,
+    };
+  }
+
+  private encodeObservationArchiveCursor(entry: ObservationArchiveEntry): string {
+    return Buffer.from(
+      JSON.stringify({
+        archivedAt: entry.archivedAt.toISOString(),
+        generationCount: entry.generationCount,
+        archiveId: entry.archiveId,
+      }),
+    ).toString('base64url');
+  }
+
+  private decodeObservationArchiveCursor(cursor: string): {
+    archivedAt: string;
+    generationCount: number;
+    archiveId: string;
+  } {
+    try {
+      const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Record<string, unknown>;
+      if (
+        typeof value.archivedAt !== 'string' ||
+        !Number.isFinite(new Date(value.archivedAt).getTime()) ||
+        !Number.isInteger(value.generationCount) ||
+        typeof value.archiveId !== 'string' ||
+        !value.archiveId
+      ) {
+        throw new Error('invalid fields');
+      }
+      return {
+        archivedAt: value.archivedAt,
+        generationCount: value.generationCount as number,
+        archiveId: value.archiveId,
+      };
+    } catch {
+      throw new Error('Invalid observation archive cursor');
+    }
+  }
+
   async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('lookupKey')} = ? ORDER BY ${omCol('generationCount')} DESC LIMIT 1`,
+        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('lookupKey')} = ? AND COALESCE(${omCol('recordState')}, 'active') = 'active' ORDER BY ${omCol('generationCount')} DESC LIMIT 1`,
         [lookupKey],
       );
       if (!rows || rows.length === 0) return null;
@@ -1924,6 +2041,8 @@ export class MemoryMySQL extends MemoryStorage {
         scope: input.scope,
         threadId: input.threadId,
         resourceId: input.resourceId,
+        recordState: 'active',
+        writeEpoch: 0,
         createdAt: now,
         updatedAt: now,
         lastObservedAt: undefined,
@@ -1950,8 +2069,12 @@ export class MemoryMySQL extends MemoryStorage {
         'scope',
         'resourceId',
         'threadId',
+        'recordState',
+        'writeEpoch',
         'activeObservations',
         'activeObservationsPendingUpdate',
+        'observationGroups',
+        'archive',
         'originType',
         'config',
         'generationCount',
@@ -1972,7 +2095,7 @@ export class MemoryMySQL extends MemoryStorage {
       ]
         .map(omCol)
         .join(', ');
-      const placeholders = Array.from({ length: 24 }, () => '?').join(', ');
+      const placeholders = Array.from({ length: 28 }, () => '?').join(', ');
 
       await this.pool.execute(`INSERT INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`, [
         id,
@@ -1980,7 +2103,11 @@ export class MemoryMySQL extends MemoryStorage {
         input.scope,
         input.resourceId,
         input.threadId || null,
+        'active',
+        0,
         '',
+        null,
+        null,
         null,
         'initial',
         JSON.stringify(input.config),
@@ -2010,6 +2137,87 @@ export class MemoryMySQL extends MemoryStorage {
     }
   }
 
+  async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(record.threadId, record.resourceId);
+      const columns = [
+        'id',
+        'lookupKey',
+        'scope',
+        'resourceId',
+        'threadId',
+        'recordState',
+        'writeEpoch',
+        'activeObservations',
+        'observationGroups',
+        'archive',
+        'originType',
+        'config',
+        'generationCount',
+        'lastObservedAt',
+        'pendingMessageTokens',
+        'totalTokensObserved',
+        'observationTokenCount',
+        'observedMessageIds',
+        'bufferedObservationChunks',
+        'bufferedReflection',
+        'bufferedReflectionTokens',
+        'bufferedReflectionInputTokens',
+        'reflectedObservationLineCount',
+        'isObserving',
+        'isReflecting',
+        'isBufferingObservation',
+        'isBufferingReflection',
+        'lastBufferedAtTokens',
+        'lastBufferedAtTime',
+        'observedTimezone',
+        'metadata',
+        'createdAt',
+        'updatedAt',
+      ];
+      await this.pool.execute(
+        `INSERT INTO ${OM_TABLE_QUOTED} (${columns.map(omCol).join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+        [
+          record.id,
+          lookupKey,
+          record.scope,
+          record.resourceId,
+          record.threadId || null,
+          record.recordState ?? 'active',
+          record.writeEpoch ?? 0,
+          record.activeObservations || '',
+          record.observationGroups ? JSON.stringify(record.observationGroups) : null,
+          record.archive ? JSON.stringify(record.archive) : null,
+          record.originType || 'initial',
+          JSON.stringify(record.config ?? {}),
+          record.generationCount || 0,
+          record.lastObservedAt ? transformToSqlValue(record.lastObservedAt) : null,
+          record.pendingMessageTokens || 0,
+          record.totalTokensObserved || 0,
+          record.observationTokenCount || 0,
+          record.observedMessageIds ? JSON.stringify(record.observedMessageIds) : null,
+          record.bufferedObservationChunks ? JSON.stringify(record.bufferedObservationChunks) : null,
+          record.bufferedReflection || null,
+          record.bufferedReflectionTokens ?? null,
+          record.bufferedReflectionInputTokens ?? null,
+          record.reflectedObservationLineCount ?? null,
+          record.isObserving || false,
+          record.isReflecting || false,
+          record.isBufferingObservation || false,
+          record.isBufferingReflection || false,
+          record.lastBufferedAtTokens || 0,
+          record.lastBufferedAtTime ? transformToSqlValue(record.lastBufferedAtTime) : null,
+          record.observedTimezone || null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
+          transformToSqlValue(record.createdAt),
+          transformToSqlValue(record.updatedAt),
+        ],
+      );
+    } catch (error) {
+      rethrowOrWrapOM(error, record.id, 'INSERT_OBSERVATIONAL_MEMORY_RECORD');
+    }
+  }
+
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
     try {
       const now = new Date();
@@ -2018,21 +2226,26 @@ export class MemoryMySQL extends MemoryStorage {
       const [result] = await this.pool.execute(
         `UPDATE ${OM_TABLE_QUOTED} SET
           ${omCol('activeObservations')} = ?,
+          ${omCol('observationGroups')} = ?,
           ${omCol('lastObservedAt')} = ?,
           ${omCol('pendingMessageTokens')} = 0,
           ${omCol('observationTokenCount')} = ?,
           ${omCol('totalTokensObserved')} = ${omCol('totalTokensObserved')} + ?,
           ${omCol('observedMessageIds')} = ?,
           ${omCol('updatedAt')} = ?
-        WHERE ${omCol('id')} = ?`,
+        WHERE ${omCol('id')} = ?
+          AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+          AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
         [
           input.observations,
+          input.observationGroups ? JSON.stringify(input.observationGroups) : null,
           transformToSqlValue(input.lastObservedAt),
           input.tokenCount,
           input.tokenCount,
           observedMessageIdsJson,
           transformToSqlValue(now),
           input.id,
+          input.expectedWriteEpoch ?? 0,
         ],
       );
 
@@ -2045,16 +2258,41 @@ export class MemoryMySQL extends MemoryStorage {
   }
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    const connection = await this.pool.getConnection();
     try {
+      await connection.beginTransaction();
       const id = randomUUID();
       const now = new Date();
+      const nowSql = transformToSqlValue(now);
+      const expectedWriteEpoch = input.expectedWriteEpoch ?? input.currentRecord.writeEpoch ?? 0;
       const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
+
+      const [updated] = await connection.execute(
+        `UPDATE ${OM_TABLE_QUOTED} SET
+          ${omCol('bufferedReflection')} = NULL,
+          ${omCol('bufferedReflectionTokens')} = NULL,
+          ${omCol('bufferedReflectionInputTokens')} = NULL,
+          ${omCol('reflectedObservationLineCount')} = NULL,
+          ${omCol('isReflecting')} = FALSE,
+          ${omCol('isBufferingReflection')} = FALSE,
+          ${omCol('updatedAt')} = ?
+        WHERE ${omCol('id')} = ?
+          AND ${omCol('generationCount')} = ?
+          AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+          AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
+        [nowSql, input.currentRecord.id, input.currentRecord.generationCount, expectedWriteEpoch],
+      );
+      if ((updated as ResultSetHeader).affectedRows !== 1) {
+        throwOMNotFound(input.currentRecord.id, 'CREATE_REFLECTION_GENERATION');
+      }
 
       const record: ObservationalMemoryRecord = {
         id,
         scope: input.currentRecord.scope,
         threadId: input.currentRecord.threadId,
         resourceId: input.currentRecord.resourceId,
+        recordState: 'active',
+        writeEpoch: 0,
         createdAt: now,
         updatedAt: now,
         lastObservedAt: input.currentRecord.lastObservedAt,
@@ -2071,19 +2309,21 @@ export class MemoryMySQL extends MemoryStorage {
         lastBufferedAtTokens: 0,
         lastBufferedAtTime: null,
         config: input.currentRecord.config,
-        metadata: input.currentRecord.metadata,
+        metadata: {},
         observedTimezone: input.currentRecord.observedTimezone,
       };
 
-      const nowSql = transformToSqlValue(now);
-      const cols = [
+      const columns = [
         'id',
         'lookupKey',
         'scope',
         'resourceId',
         'threadId',
+        'recordState',
+        'writeEpoch',
         'activeObservations',
-        'activeObservationsPendingUpdate',
+        'observationGroups',
+        'archive',
         'originType',
         'config',
         'generationCount',
@@ -2099,57 +2339,446 @@ export class MemoryMySQL extends MemoryStorage {
         'lastBufferedAtTokens',
         'lastBufferedAtTime',
         'observedTimezone',
+        'metadata',
         'createdAt',
         'updatedAt',
-      ]
-        .map(omCol)
-        .join(', ');
-      const placeholders = Array.from({ length: 24 }, () => '?').join(', ');
-
-      await this.pool.execute(`INSERT INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`, [
-        id,
-        lookupKey,
-        record.scope,
-        record.resourceId,
-        record.threadId || null,
-        input.reflection,
-        null,
-        'reflection',
-        JSON.stringify(record.config),
-        input.currentRecord.generationCount + 1,
-        record.lastObservedAt ? transformToSqlValue(record.lastObservedAt) : null,
-        nowSql,
-        record.pendingMessageTokens,
-        record.totalTokensObserved,
-        record.observationTokenCount,
-        false,
-        false,
-        false,
-        false,
-        0,
-        null,
-        record.observedTimezone || null,
-        nowSql,
-        nowSql,
-      ]);
-
+      ];
+      await connection.execute(
+        `INSERT INTO ${OM_TABLE_QUOTED} (${columns.map(omCol).join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+        [
+          id,
+          lookupKey,
+          record.scope,
+          record.resourceId,
+          record.threadId || null,
+          'active',
+          0,
+          input.reflection,
+          null,
+          null,
+          'reflection',
+          JSON.stringify(record.config),
+          record.generationCount,
+          record.lastObservedAt ? transformToSqlValue(record.lastObservedAt) : null,
+          nowSql,
+          0,
+          record.totalTokensObserved,
+          record.observationTokenCount,
+          false,
+          false,
+          false,
+          false,
+          0,
+          null,
+          record.observedTimezone || null,
+          JSON.stringify({}),
+          nowSql,
+          nowSql,
+        ],
+      );
+      await connection.commit();
       return record;
     } catch (error) {
+      await connection.rollback();
       rethrowOrWrapOM(error, input.currentRecord.id, 'CREATE_REFLECTION_GENERATION', {
         currentRecordId: input.currentRecord.id,
       });
+    } finally {
+      connection.release();
     }
   }
 
-  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
-    await this.updateOMFlag(id, 'isReflecting', isReflecting, 'SET_REFLECTING_FLAG');
+  async createObservationArchiveGeneration(
+    input: CreateObservationArchiveGenerationInput,
+  ): Promise<ObservationalMemoryRecord> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [priorRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT * FROM ${OM_TABLE_QUOTED}
+         WHERE JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archiveId')) = ? LIMIT 1 FOR UPDATE`,
+        [input.archiveId],
+      );
+      const priorRow = priorRows[0];
+      if (priorRow) {
+        const prior = this.parseOMRow(priorRow);
+        const archive = prior.archive!;
+        const sameTransition =
+          archive.sourceRecordId === input.currentRecordId &&
+          archive.sourceGenerationCount === input.expectedGenerationCount &&
+          archive.sourceWriteEpoch === input.expectedWriteEpoch &&
+          archive.contentDigest === input.contentDigest &&
+          archive.groups.length === input.retiredGroups.length &&
+          archive.groups.every((group, index) => group.groupId === input.retiredGroups[index]?.groupId);
+        if (!sameTransition) {
+          throw new Error(`Archive ID ${input.archiveId} is already bound to a different transition`);
+        }
+        const [successorRows] = await connection.execute<RowDataPacket[]>(
+          `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ? LIMIT 1`,
+          [archive.successorRecordId],
+        );
+        if (!successorRows[0]) throw new Error(`Archive successor not found: ${archive.successorRecordId}`);
+        await connection.commit();
+        return this.parseOMRow(successorRows[0]);
+      }
+
+      const [currentRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ? LIMIT 1 FOR UPDATE`,
+        [input.currentRecordId],
+      );
+      if (!currentRows[0]) throw new Error(`Observational memory record not found: ${input.currentRecordId}`);
+      const current = this.parseOMRow(currentRows[0]);
+      if (
+        current.recordState !== 'active' ||
+        (current.writeEpoch ?? 0) !== input.expectedWriteEpoch ||
+        current.generationCount !== input.expectedGenerationCount
+      ) {
+        throw new Error(`Observational memory record is stale or sealed: ${input.currentRecordId}`);
+      }
+
+      const successorId = randomUUID();
+      const archive = {
+        archiveId: input.archiveId,
+        archivedAt: input.archivedAt,
+        sourceRecordId: current.id,
+        successorRecordId: successorId,
+        generationCount: current.generationCount,
+        sourceGenerationCount: current.generationCount,
+        sourceWriteEpoch: current.writeEpoch ?? 0,
+        contentDigest: input.contentDigest,
+        observationTokenCount: input.retiredObservationTokenCount,
+        groups: input.retiredGroups,
+      } satisfies ObservationArchiveMetadata;
+      const archivedAtSql = transformToSqlValue(input.archivedAt);
+      const [sealed] = await connection.execute(
+        `UPDATE ${OM_TABLE_QUOTED} SET
+          ${omCol('recordState')} = 'sealed', ${omCol('updatedAt')} = ?,
+          ${omCol('activeObservations')} = ?, ${omCol('observationGroups')} = ?, ${omCol('archive')} = ?,
+          ${omCol('observationTokenCount')} = ?, ${omCol('pendingMessageTokens')} = 0,
+          ${omCol('bufferedObservationChunks')} = NULL, ${omCol('bufferedReflection')} = NULL,
+          ${omCol('bufferedReflectionTokens')} = NULL, ${omCol('bufferedReflectionInputTokens')} = NULL,
+          ${omCol('reflectedObservationLineCount')} = NULL, ${omCol('isReflecting')} = FALSE,
+          ${omCol('isObserving')} = FALSE, ${omCol('isBufferingObservation')} = FALSE,
+          ${omCol('isBufferingReflection')} = FALSE
+        WHERE ${omCol('id')} = ? AND ${omCol('generationCount')} = ?
+          AND COALESCE(${omCol('writeEpoch')}, 0) = ?
+          AND COALESCE(${omCol('recordState')}, 'active') = 'active'`,
+        [
+          archivedAtSql,
+          input.retiredObservations,
+          JSON.stringify(input.retiredGroups),
+          JSON.stringify(archive),
+          input.retiredObservationTokenCount,
+          current.id,
+          input.expectedGenerationCount,
+          input.expectedWriteEpoch,
+        ],
+      );
+      if ((sealed as ResultSetHeader).affectedRows !== 1) {
+        throw new Error(`Observational memory record is stale or sealed: ${input.currentRecordId}`);
+      }
+
+      const successor: ObservationalMemoryRecord = {
+        ...current,
+        id: successorId,
+        recordState: 'active',
+        writeEpoch: 0,
+        createdAt: input.archivedAt,
+        updatedAt: input.archivedAt,
+        originType: 'archive',
+        generationCount: current.generationCount + 1,
+        activeObservations: input.retainedObservations,
+        observationGroups: input.retainedGroups,
+        archive: undefined,
+        observationTokenCount: input.retainedObservationTokenCount,
+        bufferedReflection: undefined,
+        bufferedReflectionTokens: undefined,
+        bufferedReflectionInputTokens: undefined,
+        reflectedObservationLineCount: undefined,
+        isReflecting: false,
+        isBufferingReflection: false,
+      };
+      const columns = [
+        'id',
+        'lookupKey',
+        'scope',
+        'resourceId',
+        'threadId',
+        'recordState',
+        'writeEpoch',
+        'activeObservations',
+        'observationGroups',
+        'archive',
+        'originType',
+        'config',
+        'generationCount',
+        'lastObservedAt',
+        'pendingMessageTokens',
+        'totalTokensObserved',
+        'observationTokenCount',
+        'observedMessageIds',
+        'bufferedObservationChunks',
+        'bufferedReflection',
+        'bufferedReflectionTokens',
+        'bufferedReflectionInputTokens',
+        'reflectedObservationLineCount',
+        'isObserving',
+        'isReflecting',
+        'isBufferingObservation',
+        'isBufferingReflection',
+        'lastBufferedAtTokens',
+        'lastBufferedAtTime',
+        'observedTimezone',
+        'metadata',
+        'createdAt',
+        'updatedAt',
+      ];
+      await connection.execute(
+        `INSERT INTO ${OM_TABLE_QUOTED} (${columns.map(omCol).join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+        [
+          successor.id,
+          this.getOMKey(successor.threadId, successor.resourceId),
+          successor.scope,
+          successor.resourceId,
+          successor.threadId,
+          'active',
+          0,
+          successor.activeObservations,
+          JSON.stringify(successor.observationGroups ?? []),
+          null,
+          'archive',
+          JSON.stringify(successor.config ?? {}),
+          successor.generationCount,
+          successor.lastObservedAt ? transformToSqlValue(successor.lastObservedAt) : null,
+          successor.pendingMessageTokens,
+          successor.totalTokensObserved,
+          successor.observationTokenCount,
+          successor.observedMessageIds ? JSON.stringify(successor.observedMessageIds) : null,
+          successor.bufferedObservationChunks ? JSON.stringify(successor.bufferedObservationChunks) : null,
+          null,
+          null,
+          null,
+          null,
+          successor.isObserving,
+          false,
+          successor.isBufferingObservation,
+          false,
+          successor.lastBufferedAtTokens,
+          successor.lastBufferedAtTime ? transformToSqlValue(successor.lastBufferedAtTime) : null,
+          successor.observedTimezone ?? null,
+          successor.metadata ? JSON.stringify(successor.metadata) : null,
+          archivedAtSql,
+          archivedAtSql,
+        ],
+      );
+      await connection.commit();
+      return successor;
+    } catch (error) {
+      await connection.rollback();
+      rethrowOrWrapOM(error, input.currentRecordId, 'CREATE_OBSERVATION_ARCHIVE_GENERATION');
+    } finally {
+      connection.release();
+    }
   }
 
-  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
-    await this.updateOMFlag(id, 'isObserving', isObserving, 'SET_OBSERVING_FLAG');
+  async listObservationArchives(input: ListObservationArchivesInput): Promise<ListObservationArchivesResult> {
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 20);
+    if (input.scope === 'thread' && !input.threadId) {
+      throw new Error('threadId is required for thread-scoped observation archive access');
+    }
+    const conditions = [`${omCol('archive')} IS NOT NULL`, `${omCol('resourceId')} = ?`];
+    const params: any[] = [input.resourceId];
+    const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
+    const groupConditions: string[] = [];
+    const groupParams: any[] = [];
+    if (input.from) {
+      groupConditions.push('group_row.observedTo >= ?');
+      groupParams.push(input.from.toISOString());
+    }
+    if (input.to) {
+      groupConditions.push('group_row.observedFrom <= ?');
+      groupParams.push(input.to.toISOString());
+    }
+    if (input.text) {
+      groupConditions.push('LOCATE(?, group_row.searchText) > 0');
+      groupParams.push(normalizeArchiveSearchText(input.text));
+    }
+    const groupExists = (extraCondition?: string) => `EXISTS (
+      SELECT 1 FROM JSON_TABLE(${omCol('archive')}, '$.groups[*]' COLUMNS(
+        sourceThreadId VARCHAR(255) PATH '$.sourceThreadId' NULL ON EMPTY,
+        searchText TEXT PATH '$.searchText' NULL ON EMPTY,
+        observedFrom VARCHAR(40) PATH '$.observedAt.from' NULL ON EMPTY,
+        observedTo VARCHAR(40) PATH '$.observedAt.to' NULL ON EMPTY
+      )) AS group_row WHERE ${[extraCondition, ...groupConditions].filter(Boolean).join(' AND ') || '1 = 1'}
+    )`;
+    if (projectedThreadId) {
+      conditions.push(`(
+        (${omCol('scope')} = 'thread' AND ${omCol('threadId')} = ? AND ${groupExists()}) OR
+        (${omCol('scope')} = 'resource' AND ${groupExists('group_row.sourceThreadId = ?')})
+      )`);
+      params.push(projectedThreadId, ...groupParams, projectedThreadId, ...groupParams);
+    } else if (groupConditions.length > 0) {
+      conditions.push(groupExists());
+      params.push(...groupParams);
+    }
+    if (input.cursor) {
+      const cursor = this.decodeObservationArchiveCursor(input.cursor);
+      conditions.push(`(
+        JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archivedAt')) < ? OR
+        (JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archivedAt')) = ? AND ${omCol('generationCount')} < ?) OR
+        (JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archivedAt')) = ? AND ${omCol('generationCount')} = ?
+          AND JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archiveId')) < ?)
+      )`);
+      params.push(
+        cursor.archivedAt,
+        cursor.archivedAt,
+        cursor.generationCount,
+        cursor.archivedAt,
+        cursor.generationCount,
+        cursor.archiveId,
+      );
+    }
+    params.push(limit + 1);
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${conditions.join(' AND ')}
+       ORDER BY JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archivedAt')) DESC,
+         ${omCol('generationCount')} DESC,
+         JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archiveId')) DESC LIMIT ?`,
+      params,
+    );
+    const normalizedText = input.text ? normalizeArchiveSearchText(input.text) : undefined;
+    const entries = rows
+      .map(row => this.toObservationArchiveEntry(this.parseOMRow(row), input))
+      .filter((entry): entry is ObservationArchiveEntry => entry !== null)
+      .map(entry => ({
+        ...entry,
+        groups: entry.groups.filter(group => {
+          if (input.from && (!group.observedAt || group.observedAt.to < input.from)) return false;
+          if (input.to && (!group.observedAt || group.observedAt.from > input.to)) return false;
+          if (normalizedText && !group.searchText.includes(normalizedText)) return false;
+          return true;
+        }),
+      }))
+      .filter(entry => entry.groups.length > 0);
+    const hasMore = entries.length > limit;
+    const archives = hasMore ? entries.slice(0, limit) : entries;
+    return {
+      archives,
+      nextCursor: hasMore ? this.encodeObservationArchiveCursor(archives[archives.length - 1]!) : undefined,
+    };
   }
 
-  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
+  async getObservationArchive(input: GetObservationArchiveInput): Promise<GetObservationArchiveResult | null> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('resourceId')} = ?
+       AND JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archiveId')) = ? LIMIT 1`,
+      [input.resourceId, input.archiveId],
+    );
+    if (!rows[0]) return null;
+    const record = this.parseOMRow(rows[0]);
+    const entry = this.toObservationArchiveEntry(record, input);
+    if (!entry) return null;
+    const groups = input.groupId ? entry.groups.filter(group => group.groupId === input.groupId) : entry.groups;
+    if (groups.length === 0) return null;
+    entry.groups = groups;
+    return {
+      archive: entry,
+      observations: groups.map(group => record.activeObservations.slice(group.textStart, group.textEnd)).join('\n\n'),
+    };
+  }
+
+  async getObservationArchivesByGroupIds(
+    input: GetObservationArchivesByGroupIdsInput,
+  ): Promise<GetObservationArchivesByGroupIdsResult> {
+    const groupIds = Array.from(new Set(input.groupIds));
+    if (groupIds.length > 20) throw new Error('Observation archive group lookup supports at most 20 group IDs');
+    if (groupIds.length === 0) return { matches: [] };
+    if (input.scope === 'thread' && !input.threadId) {
+      throw new Error('threadId is required for thread-scoped observation archive access');
+    }
+    const conditions = [
+      `${omCol('archive')} IS NOT NULL`,
+      `${omCol('resourceId')} = ?`,
+      `EXISTS (
+        SELECT 1 FROM JSON_TABLE(${omCol('archive')}, '$.groups[*]' COLUMNS(
+          groupId VARCHAR(255) PATH '$.groupId'
+        )) AS group_row WHERE group_row.groupId IN (${groupIds.map(() => '?').join(', ')})
+      )`,
+    ];
+    const params: any[] = [input.resourceId, ...groupIds];
+    if (input.scope === 'thread') {
+      conditions.push(
+        `(${omCol('scope')} = 'resource' OR (${omCol('scope')} = 'thread' AND ${omCol('threadId')} = ?))`,
+      );
+      params.push(input.threadId!);
+    }
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${conditions.join(' AND ')}
+       ORDER BY JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archivedAt')) DESC,
+         ${omCol('generationCount')} DESC,
+         JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archiveId')) DESC LIMIT 400`,
+      params,
+    );
+    const requested = new Set(groupIds);
+    const matches = rows
+      .map(row => this.toObservationArchiveEntry(this.parseOMRow(row), input))
+      .filter((entry): entry is ObservationArchiveEntry => entry !== null)
+      .map(archiveEntry => {
+        const groups = archiveEntry.groups.filter(group => requested.has(group.groupId));
+        archiveEntry.groups = groups;
+        return { archive: archiveEntry, groupIds: groups.map(group => group.groupId) };
+      })
+      .filter(match => match.groupIds.length > 0);
+    return { matches };
+  }
+
+  async clearBufferedReflection(input: ClearBufferedReflectionInput): Promise<ObservationalMemoryRecord> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.execute(
+        `UPDATE ${OM_TABLE_QUOTED} SET
+          ${omCol('bufferedReflection')} = NULL, ${omCol('bufferedReflectionTokens')} = NULL,
+          ${omCol('bufferedReflectionInputTokens')} = NULL, ${omCol('reflectedObservationLineCount')} = NULL,
+          ${omCol('isReflecting')} = FALSE, ${omCol('isBufferingReflection')} = FALSE,
+          ${omCol('writeEpoch')} = COALESCE(${omCol('writeEpoch')}, 0) + 1,
+          ${omCol('updatedAt')} = ?
+        WHERE ${omCol('id')} = ? AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+          AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
+        [transformToSqlValue(new Date()), input.id, input.expectedWriteEpoch],
+      );
+      if ((result as ResultSetHeader).affectedRows !== 1) {
+        throw new Error(`Observational memory record is stale or sealed: ${input.id}`);
+      }
+      const [rows] = await connection.execute<RowDataPacket[]>(
+        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ? LIMIT 1`,
+        [input.id],
+      );
+      await connection.commit();
+      if (!rows[0]) throw new Error(`Observational memory record not found: ${input.id}`);
+      return this.parseOMRow(rows[0]);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async setReflectingFlag(id: string, isReflecting: boolean, expectedWriteEpoch?: number): Promise<void> {
+    await this.updateOMFlag(id, 'isReflecting', isReflecting, 'SET_REFLECTING_FLAG', expectedWriteEpoch);
+  }
+
+  async setObservingFlag(id: string, isObserving: boolean, expectedWriteEpoch?: number): Promise<void> {
+    await this.updateOMFlag(id, 'isObserving', isObserving, 'SET_OBSERVING_FLAG', expectedWriteEpoch);
+  }
+
+  async setBufferingObservationFlag(
+    id: string,
+    isBuffering: boolean,
+    lastBufferedAtTokens?: number,
+    expectedWriteEpoch?: number,
+  ): Promise<void> {
     try {
       const nowSql = transformToSqlValue(new Date());
       const sets = [
@@ -2157,10 +2786,19 @@ export class MemoryMySQL extends MemoryStorage {
         ...(lastBufferedAtTokens !== undefined ? [`${omCol('lastBufferedAtTokens')} = ?`] : []),
         `${omCol('updatedAt')} = ?`,
       ].join(', ');
-      const params = [isBuffering, ...(lastBufferedAtTokens !== undefined ? [lastBufferedAtTokens] : []), nowSql, id];
+      const params = [
+        isBuffering,
+        ...(lastBufferedAtTokens !== undefined ? [lastBufferedAtTokens] : []),
+        nowSql,
+        id,
+        expectedWriteEpoch ?? 0,
+      ];
 
       const [result] = await this.pool.execute(
-        `UPDATE ${OM_TABLE_QUOTED} SET ${sets} WHERE ${omCol('id')} = ?`,
+        `UPDATE ${OM_TABLE_QUOTED} SET ${sets}
+         WHERE ${omCol('id')} = ?
+           AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+           AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
         params,
       );
 
@@ -2172,8 +2810,14 @@ export class MemoryMySQL extends MemoryStorage {
     }
   }
 
-  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
-    await this.updateOMFlag(id, 'isBufferingReflection', isBuffering, 'SET_BUFFERING_REFLECTION_FLAG');
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean, expectedWriteEpoch?: number): Promise<void> {
+    await this.updateOMFlag(
+      id,
+      'isBufferingReflection',
+      isBuffering,
+      'SET_BUFFERING_REFLECTION_FLAG',
+      expectedWriteEpoch,
+    );
   }
 
   async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
@@ -2185,14 +2829,16 @@ export class MemoryMySQL extends MemoryStorage {
     }
   }
 
-  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+  async setPendingMessageTokens(id: string, tokenCount: number, expectedWriteEpoch?: number): Promise<void> {
     try {
       const [result] = await this.pool.execute(
         `UPDATE ${OM_TABLE_QUOTED} SET
           ${omCol('pendingMessageTokens')} = ?,
           ${omCol('updatedAt')} = ?
-        WHERE ${omCol('id')} = ?`,
-        [tokenCount, transformToSqlValue(new Date()), id],
+        WHERE ${omCol('id')} = ?
+          AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+          AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
+        [tokenCount, transformToSqlValue(new Date()), id, expectedWriteEpoch ?? 0],
       );
 
       if ((result as ResultSetHeader).affectedRows === 0) {
@@ -2200,6 +2846,38 @@ export class MemoryMySQL extends MemoryStorage {
       }
     } catch (error) {
       rethrowOrWrapOM(error, id, 'SET_PENDING_MESSAGE_TOKENS');
+    }
+  }
+
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const expectedWriteEpoch = input.expectedWriteEpoch ?? 0;
+      const [rows] = await connection.execute<RowDataPacket[]>(
+        `SELECT ${omCol('config')} FROM ${OM_TABLE_QUOTED}
+         WHERE ${omCol('id')} = ? AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+           AND COALESCE(${omCol('writeEpoch')}, 0) = ? FOR UPDATE`,
+        [input.id, expectedWriteEpoch],
+      );
+      if (!rows[0]) throwOMNotFound(input.id, 'UPDATE_OBSERVATIONAL_MEMORY_CONFIG');
+      const existing = parseJSONColumn<Record<string, unknown>>(rows[0].config) ?? {};
+      const merged = this.deepMergeConfig(existing, input.config);
+      const [result] = await connection.execute(
+        `UPDATE ${OM_TABLE_QUOTED} SET ${omCol('config')} = ?, ${omCol('updatedAt')} = ?
+         WHERE ${omCol('id')} = ? AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+           AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
+        [JSON.stringify(merged), transformToSqlValue(new Date()), input.id, expectedWriteEpoch],
+      );
+      if ((result as ResultSetHeader).affectedRows !== 1) {
+        throwOMNotFound(input.id, 'UPDATE_OBSERVATIONAL_MEMORY_CONFIG');
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      rethrowOrWrapOM(error, input.id, 'UPDATE_OBSERVATIONAL_MEMORY_CONFIG');
+    } finally {
+      connection.release();
     }
   }
 
@@ -2212,8 +2890,11 @@ export class MemoryMySQL extends MemoryStorage {
         const nowSql = transformToSqlValue(new Date());
 
         const [currentRows] = await connection.execute<RowDataPacket[]>(
-          `SELECT ${omCol('bufferedObservationChunks')} FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ? FOR UPDATE`,
-          [input.id],
+          `SELECT ${omCol('bufferedObservationChunks')} FROM ${OM_TABLE_QUOTED}
+           WHERE ${omCol('id')} = ?
+             AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+             AND COALESCE(${omCol('writeEpoch')}, 0) = ? FOR UPDATE`,
+          [input.id, input.expectedWriteEpoch ?? 0],
         );
 
         if (!currentRows || currentRows.length === 0) {
@@ -2240,6 +2921,7 @@ export class MemoryMySQL extends MemoryStorage {
           threadTitle: input.chunk.threadTitle,
           extractedValues: input.chunk.extractedValues,
           extractionFailures: input.chunk.extractionFailures,
+          observationGroups: input.chunk.observationGroups,
         };
 
         const newChunks = [...existingChunks, newChunk];
@@ -2250,8 +2932,10 @@ export class MemoryMySQL extends MemoryStorage {
             ${omCol('bufferedObservationChunks')} = ?,
             ${omCol('lastBufferedAtTime')} = COALESCE(?, ${omCol('lastBufferedAtTime')}),
             ${omCol('updatedAt')} = ?
-          WHERE ${omCol('id')} = ?`,
-          [JSON.stringify(newChunks), lastBufferedAtTime, nowSql, input.id],
+          WHERE ${omCol('id')} = ?
+            AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+            AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
+          [JSON.stringify(newChunks), lastBufferedAtTime, nowSql, input.id, input.expectedWriteEpoch ?? 0],
         );
 
         if ((result as ResultSetHeader).affectedRows === 0) {
@@ -2278,8 +2962,11 @@ export class MemoryMySQL extends MemoryStorage {
       const nowSql = transformToSqlValue(new Date());
 
       const [currentRows] = await connection.execute<RowDataPacket[]>(
-        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ? FOR UPDATE`,
-        [input.id],
+        `SELECT * FROM ${OM_TABLE_QUOTED}
+         WHERE ${omCol('id')} = ?
+           AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+           AND COALESCE(${omCol('writeEpoch')}, 0) = ? FOR UPDATE`,
+        [input.id, input.expectedWriteEpoch ?? 0],
       );
 
       if (!currentRows || currentRows.length === 0) {
@@ -2287,7 +2974,8 @@ export class MemoryMySQL extends MemoryStorage {
       }
 
       const row = currentRows[0]!;
-      const chunks = parseBufferedChunks(row.bufferedObservationChunks);
+      const persistedChunks = parseBufferedChunks(row.bufferedObservationChunks);
+      const chunks = input.bufferedChunks ?? persistedChunks;
 
       if (chunks.length === 0) {
         await connection.commit();
@@ -2359,6 +3047,7 @@ export class MemoryMySQL extends MemoryStorage {
       const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
       const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((cid): cid is string => !!cid);
       const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
+      const activatedGroups = activatedChunks.flatMap(c => c.observationGroups ?? []);
 
       // Derive lastObservedAt from the latest activated chunk
       const latestChunk = activatedChunks[activatedChunks.length - 1];
@@ -2368,10 +3057,13 @@ export class MemoryMySQL extends MemoryStorage {
 
       // Get existing values
       const existingActive = (row.activeObservations as string) || '';
+      const existingGroups = parseObservationGroups(row.observationGroups) ?? [];
       const existingTokenCount = Number(row.observationTokenCount || 0);
 
       // Calculate new values
-      const newActive = existingActive ? `${existingActive}\n\n${activatedContent}` : activatedContent;
+      const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
+      const newActive = existingActive ? `${existingActive}${boundary}${activatedContent}` : activatedContent;
+      const newGroups = [...existingGroups, ...activatedGroups];
       const newTokenCount = existingTokenCount + activatedTokens;
 
       // Decrement pending message tokens (clamped to zero)
@@ -2381,20 +3073,25 @@ export class MemoryMySQL extends MemoryStorage {
       await connection.execute(
         `UPDATE ${OM_TABLE_QUOTED} SET
           ${omCol('activeObservations')} = ?,
+          ${omCol('observationGroups')} = ?,
           ${omCol('observationTokenCount')} = ?,
           ${omCol('pendingMessageTokens')} = ?,
           ${omCol('bufferedObservationChunks')} = ?,
           ${omCol('lastObservedAt')} = ?,
           ${omCol('updatedAt')} = ?
-        WHERE ${omCol('id')} = ?`,
+        WHERE ${omCol('id')} = ?
+          AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+          AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
         [
           newActive,
+          newGroups.length > 0 ? JSON.stringify(newGroups) : null,
           newTokenCount,
           newPending,
           remainingChunks.length > 0 ? JSON.stringify(remainingChunks) : null,
           lastObservedAtSql,
           nowSql,
           input.id,
+          input.expectedWriteEpoch ?? 0,
         ],
       );
 
@@ -2444,7 +3141,9 @@ export class MemoryMySQL extends MemoryStorage {
           ${omCol('bufferedReflectionInputTokens')} = COALESCE(${omCol('bufferedReflectionInputTokens')}, 0) + ?,
           ${omCol('reflectedObservationLineCount')} = ?,
           ${omCol('updatedAt')} = ?
-        WHERE ${omCol('id')} = ?`,
+        WHERE ${omCol('id')} = ?
+          AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+          AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
         [
           input.reflection,
           input.reflection,
@@ -2453,6 +3152,7 @@ export class MemoryMySQL extends MemoryStorage {
           input.reflectedObservationLineCount,
           nowSql,
           input.id,
+          input.expectedWriteEpoch ?? 0,
         ],
       );
 
@@ -2467,8 +3167,11 @@ export class MemoryMySQL extends MemoryStorage {
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
     try {
       const [currentRows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ?`,
-        [input.currentRecord.id],
+        `SELECT * FROM ${OM_TABLE_QUOTED}
+         WHERE ${omCol('id')} = ?
+           AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+           AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
+        [input.currentRecord.id, input.expectedWriteEpoch ?? input.currentRecord.writeEpoch ?? 0],
       );
 
       if (!currentRows || currentRows.length === 0) {
@@ -2496,35 +3199,31 @@ export class MemoryMySQL extends MemoryStorage {
         ? `${bufferedReflection}\n\n${unreflectedContent}`
         : bufferedReflection;
 
-      const newRecord = await this.createReflectionGeneration({
+      return await this.createReflectionGeneration({
         currentRecord: input.currentRecord,
+        expectedWriteEpoch: input.expectedWriteEpoch,
         reflection: newObservations,
         tokenCount: input.tokenCount,
       });
-
-      const nowSql = transformToSqlValue(new Date());
-      await this.pool.execute(
-        `UPDATE ${OM_TABLE_QUOTED} SET
-          ${omCol('bufferedReflection')} = NULL,
-          ${omCol('bufferedReflectionTokens')} = NULL,
-          ${omCol('bufferedReflectionInputTokens')} = NULL,
-          ${omCol('reflectedObservationLineCount')} = NULL,
-          ${omCol('updatedAt')} = ?
-        WHERE ${omCol('id')} = ?`,
-        [nowSql, input.currentRecord.id],
-      );
-
-      return newRecord;
     } catch (error) {
       rethrowOrWrapOM(error, input.currentRecord.id, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE');
     }
   }
 
-  private async updateOMFlag(id: string, column: string, value: boolean, operation: string): Promise<void> {
+  private async updateOMFlag(
+    id: string,
+    column: string,
+    value: boolean,
+    operation: string,
+    expectedWriteEpoch?: number,
+  ): Promise<void> {
     try {
       const [result] = await this.pool.execute(
-        `UPDATE ${OM_TABLE_QUOTED} SET ${omCol(column)} = ?, ${omCol('updatedAt')} = ? WHERE ${omCol('id')} = ?`,
-        [value, transformToSqlValue(new Date()), id],
+        `UPDATE ${OM_TABLE_QUOTED} SET ${omCol(column)} = ?, ${omCol('updatedAt')} = ?
+         WHERE ${omCol('id')} = ?
+           AND COALESCE(${omCol('recordState')}, 'active') = 'active'
+           AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
+        [value, transformToSqlValue(new Date()), id, expectedWriteEpoch ?? 0],
       );
 
       if ((result as ResultSetHeader).affectedRows === 0) {
@@ -2545,13 +3244,19 @@ export class MemoryMySQL extends MemoryStorage {
       scope: row.scope,
       threadId: row.threadId || null,
       resourceId: row.resourceId,
+      recordState: row.recordState || 'active',
+      writeEpoch: Number(row.writeEpoch || 0),
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
       lastObservedAt: row.lastObservedAt ? parseDateTime(row.lastObservedAt) : undefined,
       originType: row.originType || 'initial',
       generationCount: Number(row.generationCount || 0),
       activeObservations: row.activeObservations || '',
-      bufferedObservationChunks: parseJSONColumn<BufferedObservationChunk[]>(row.bufferedObservationChunks),
+      observationGroups: parseObservationGroups(row.observationGroups),
+      archive: parseObservationArchive(row.archive),
+      bufferedObservationChunks: row.bufferedObservationChunks
+        ? parseBufferedChunks(row.bufferedObservationChunks)
+        : undefined,
       bufferedObservations: row.activeObservationsPendingUpdate || undefined,
       bufferedObservationTokens: row.bufferedObservationTokens ? Number(row.bufferedObservationTokens) : undefined,
       bufferedMessageIds: undefined,

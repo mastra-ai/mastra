@@ -22,7 +22,9 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const TEST_CONFIG: MongoDBConfig = {
   id: 'mongodb-test-store',
-  uri: process.env.MONGODB_URL || 'mongodb://localhost:27017',
+  uri:
+    process.env.MONGODB_RS_URL ||
+    'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000',
   dbName: process.env.MONGODB_DB_NAME || 'mastra-test-db',
 };
 
@@ -83,9 +85,9 @@ const createMockConnectorHandler = (): ConnectorHandler => {
   };
 };
 
-// Run the shared test suite. The default test topology is standalone MongoDB,
-// where identity-aware item writes and permanent purge require transactions.
-createTestSuite(new MongoDBStore(TEST_CONFIG), { datasetItemIdentity: false, datasetItemPurge: false });
+// Run the shared suite against the replica-set topology so transactional storage
+// contracts, including observational-memory archive transitions, are exercised.
+createTestSuite(new MongoDBStore(TEST_CONFIG));
 
 // Configuration validation tests
 createConfigValidationTests({

@@ -708,7 +708,7 @@ const observationalMemoryRecordSchema = z.object({
   bufferedObservations: z.string().optional(),
   bufferedObservationChunks: z.array(bufferedObservationChunkSchema).optional(),
   bufferedReflection: z.string().optional(),
-  originType: z.enum(['initial', 'observation', 'reflection']),
+  originType: z.enum(['initial', 'observation', 'reflection', 'archive']),
   generationCount: z.number(),
   lastObservedAt: z.date().optional(),
   totalTokensObserved: z.number(),
