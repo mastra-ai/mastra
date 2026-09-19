@@ -1,0 +1,175 @@
+---
+title: 'Reference: createClassifierScorer | Evals'
+description: 'Create a Mastra scorer that projects one configured Classifier question into a numeric score while preserving typed evidence.'
+packages:
+  - '@mastra/core'
+---
+
+# createClassifierScorer
+
+`createClassifierScorer()` adapts one constructor-configured [`Classifier`](/reference/classifier/classifier) question to Mastra's scorer pipeline. It returns a normal `MastraScorer` with a numeric `score` and retains the selected answer, probabilities, usage, warnings, and safe response metadata in `analyzeStepResult`.
+
+The adapter evaluates exactly one question. It doesn't aggregate questions, apply boolean thresholds, infer choice ordering, clamp scores, or call a second judge model.
+
+## Example
+
+```typescript title="src/mastra/scorers/response-quality.ts"
+import { Classifier } from '@mastra/core/classifier'
+import { createClassifierScorer } from '@mastra/core/evals'
+
+const responseJudge = new Classifier({
+  id: 'response-judge',
+  model,
+  questions: {
+    quality: {
+      type: 'score',
+      instructions: 'How well does the response answer the request?',
+      criteria: ['Incorrect or irrelevant', 'Partially correct', 'Correct and complete'],
+    },
+  },
+})
+
+export const qualityScorer = createClassifierScorer({
+  id: 'response-quality',
+  description: 'Scores response quality with the configured classifier',
+  classifier: responseJudge,
+  question: 'quality',
+  type: 'agent',
+  state: ({ run }) => ({
+    input: run.input,
+    output: run.output,
+  }),
+})
+```
+
+For a score question, `result.score` is the numeric classifier answer. The adapter doesn't normalize or clamp the value.
+
+## Choice questions
+
+Choice questions require an exhaustive numeric mapping. Every configured choice must have a score; there is no implicit order or fallback.
+
+```typescript
+const routeScorer = createClassifierScorer({
+  id: 'route-score',
+  classifier: responseJudge,
+  question: 'route',
+  type: 'agent',
+  scores: {
+    correct: 1,
+    partiallyCorrect: 0.5,
+    incorrect: 0,
+  },
+})
+```
+
+The selected choice and its optional probability distribution remain available in `result.analyzeStepResult.answer`.
+
+## Boolean questions
+
+For a boolean question, `result.score` is the classifier's estimated `P(true)`. The adapter doesn't apply a threshold or convert the probability to `0` or `1`.
+
+```typescript
+const factualityScorer = createClassifierScorer({
+  id: 'factuality',
+  classifier: responseJudge,
+  question: 'factual',
+  type: 'agent',
+})
+```
+
+## Registered classifiers
+
+Pass a classifier ID to resolve it from Mastra when the scorer runs. Provide the configured classifier type as a generic because TypeScript can't infer question names from a string ID.
+
+```typescript
+const registeredScorer = createClassifierScorer<typeof responseJudge>({
+  id: 'registered-response-quality',
+  classifier: 'response-judge',
+  question: 'quality',
+  type: 'agent',
+})
+
+new Mastra({
+  classifiers: { responseJudge },
+  scorers: { registeredScorer },
+})
+```
+
+Running an ID-backed scorer before registering it with Mastra throws an error that identifies both the classifier and scorer IDs. You can avoid registry resolution by passing the configured classifier instance directly.
+
+## Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique scorer identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'classifier',
+    type: 'Classifier | string',
+    description: 'A classifier with constructor-configured questions, or its registered Mastra ID.',
+    isOptional: false,
+  },
+  {
+    name: 'question',
+    type: 'keyof classifier.questions',
+    description: 'The single configured question to evaluate and project.',
+    isOptional: false,
+  },
+  {
+    name: 'scores',
+    type: 'Record<ChoiceKey, number>',
+    description: 'Required exhaustive mapping for choice questions. Rejected for score and boolean questions.',
+    isOptional: true,
+  },
+  {
+    name: 'type',
+    type: "'agent' | 'trajectory' | { input: ZodSchema; output: ZodSchema }",
+    description: 'Scorer input and output typing. Matches createScorer().',
+    isOptional: true,
+  },
+  {
+    name: 'state',
+    type: '(context) => ClassifierState | Promise<ClassifierState>',
+    description: 'Selects classifier state from the scorer step context. Defaults to run.output.',
+    isOptional: true,
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    description: 'Classifier model retry count. This is separate from scorer or batch retry policy.',
+    isOptional: true,
+  },
+  {
+    name: 'providerOptions',
+    type: 'SharedV4ProviderOptions',
+    description: 'Provider-specific options passed to Classifier.evaluate().',
+    isOptional: true,
+  },
+  {
+    name: 'prepareRun',
+    type: '(run: ScorerRun) => ScorerRun | Promise<ScorerRun>',
+    description: 'Transforms scorer run data before the pipeline executes.',
+    isOptional: true,
+  },
+]}
+/>
+
+The factory also accepts `name` and `description` from `createScorer()`.
+
+## Result evidence
+
+`result.analyzeStepResult` contains:
+
+- `question`: The selected question key.
+- `answer`: The exact typed choice, score, or boolean answer, including optional probabilities.
+- `usage`: Normalized classifier token usage.
+- `warnings`, `rounding`, and `providerMetadata`: Evidence returned by the evaluation model.
+- `response`: Safe response identity with `id`, `timestamp`, and `modelId`.
+
+Raw provider response bodies and headers aren't copied into scorer results. Call `Classifier.evaluate()` directly when you need the full raw response.
+
+Classifier failures fail the scorer run. The scorer's abort signal is passed to `Classifier.evaluate()`, and classifier evaluation runs inside the scorer's active trace context.
