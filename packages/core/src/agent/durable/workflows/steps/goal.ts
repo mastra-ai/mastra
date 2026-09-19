@@ -15,6 +15,7 @@ import { createStep } from '../../../../workflows/workflow';
 import type { ResolvedGoalStore } from '../../../goal';
 import {
   createGoalScorer,
+  formatGoalBudgetPausedReason,
   GOAL_SCORE_WAITING,
   GOAL_SCORER_ID,
   readObjective,
@@ -200,7 +201,7 @@ export function createDurableGoalStep() {
       // another judge call or push runsUsed past the budget.
       const nextState: typeof state = { ...state };
       if (record.runsUsed >= effective.maxRuns) {
-        const pausedReason = `Ran out of evaluation budget (${effective.maxRuns} runs) before reaching the goal — raise maxRuns to resume.`;
+        const pausedReason = formatGoalBudgetPausedReason(effective.maxRuns);
         if (nextState.lastStepResult) {
           nextState.lastStepResult = {
             ...nextState.lastStepResult,
@@ -445,7 +446,7 @@ export function createDurableGoalStep() {
         status = 'done';
       } else if (maxRunsReached && !waiting) {
         status = 'paused';
-        pausedReason = `Ran out of evaluation budget (${effective.maxRuns} runs) before reaching the goal — raise maxRuns to resume.`;
+        pausedReason = formatGoalBudgetPausedReason(effective.maxRuns);
       }
 
       const updated: GoalObjectiveRecord = {

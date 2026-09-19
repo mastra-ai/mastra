@@ -46,9 +46,9 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
     await runtime.waitForScreenText(/First max-runs goal turn completed\./i, terminal, 15_000);
     await runtime.waitForScreenText(/Goal\s+◌\s+waiting\s+\(1\/1\)/i, terminal, 15_000);
 
-    // A normal chat turn after the budget is spent. The fixture resolves this
-    // turn whether the goal is still `active` when the request is built (it is
-    // parked during the turn) or was already parked on an earlier turn.
+    // A normal chat turn after the budget is spent. The goal is still `active`
+    // when this request is built — the budget guard parks it during the turn —
+    // so the FOLLOW_UP fixture matches on the message text it sends.
     terminal.submit(FOLLOW_UP);
     await runtime.waitForScreenText(/Follow-up turn after max runs completed\./i, terminal, 15_000);
 
