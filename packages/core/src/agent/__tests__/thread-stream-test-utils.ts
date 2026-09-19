@@ -21,10 +21,22 @@ export function nextTicks(count = 5) {
 export class LeasePubSub extends PubSub implements LeaseProvider {
   owners = new Map<string, string>();
   #subscribers = new Map<string, Set<EventCallback>>();
+  /** One entry per delivery, in publish order — enough to assert what was acked. */
+  deliveries: Array<{ topic: string; event: any; acked: boolean; nacked: boolean }> = [];
 
   async publish(topic: string, event: any): Promise<void> {
     for (const subscriber of [...(this.#subscribers.get(topic) ?? [])]) {
-      await subscriber({ ...event, id: 'evt', createdAt: new Date() }, async () => {});
+      const record = { topic, event, acked: false, nacked: false };
+      this.deliveries.push(record);
+      await subscriber(
+        { ...event, id: 'evt', createdAt: new Date() },
+        async () => {
+          record.acked = true;
+        },
+        async () => {
+          record.nacked = true;
+        },
+      );
     }
   }
   async flush(): Promise<void> {}
