@@ -1,5 +1,5 @@
 import { MastraClient } from '@mastra/client-js';
-import type { QueryTracesInput } from '@mastra/client-js';
+import type { QueryTracesKeysetInput } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, skipToken, useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -11,7 +11,7 @@ type TraceQueryResponse = Awaited<ReturnType<MastraClient['queryTraces']>>;
 type TraceQueryCursorResponse = Extract<TraceQueryResponse, { page: { next: string | null } }>;
 type TraceQueryTrace = TraceQueryResponse['traces'][number];
 
-export type TraceQueryArgs = Omit<QueryTracesInput, 'page' | 'pagination'>;
+export type TraceQueryArgs = Omit<QueryTracesKeysetInput, 'page' | 'pagination'>;
 
 export interface UseTraceQueryArgs {
   query: TraceQueryArgs | undefined;

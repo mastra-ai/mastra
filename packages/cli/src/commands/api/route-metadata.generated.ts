@@ -2002,7 +2002,10 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "after",
       "group",
+      "limit",
+      "mode",
       "orderBy",
       "page",
       "pagination",
