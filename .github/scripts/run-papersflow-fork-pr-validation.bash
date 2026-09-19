@@ -6630,6 +6630,38 @@ NODE
   head_sha="$(
     cd "$fixture_repo"
     git reset -q --hard "$base_sha"
+    printf '%s\n' "fetch('https://invalid.example/pf4243-config-hostile');" \
+      >> stores/pg/vitest.perf.config.ts
+    git add stores/pg/vitest.perf.config.ts
+    git commit -q -m 'reject hostile PostgreSQL unit config'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-config-hostile-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'Hostile PostgreSQL unit config fixture unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains \
+    'Unsupported fork-test runtime surface for stores/pg/vitest.perf.config.ts:' \
+    "$output"
+  assert_contains 'stores/pg/vitest.perf.config.ts: fetch()' "$output"
+  assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
+  if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
+    echo 'Hostile PostgreSQL unit config reached a test runner or service probe.' >&2
+    cat "$command_log" "$service_log" >&2
+    exit 1
+  fi
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
     printf '%s\n' "it('pg performance integration head', () => {});" \
       > stores/pg/src/storage/performance-indexes/performance-indexes.integration.test.ts
     printf '%s\n' "it('pg row-number performance head', () => {});" \
@@ -14054,6 +14086,7 @@ const bannedBuiltins = new Set([
 const nodeBuiltins = new Set(builtinModules.map(specifier => specifier.replace(/^node:/, '').split('/')[0]));
 const exactTestEntries = new Set([
   'stores/pg/src/storage/performance-indexes/performance-indexes.test.ts',
+  'stores/pg/vitest.perf.config.ts',
   'packages/core/src/agent/__tests__/supervisor-integration.test.ts',
   'packages/core/src/agent/__tests__/tool-approval.e2e.test.ts',
   'packages/core/src/agent/durable/__tests__/durable-agent-background-tasks.e2e.test.ts',
@@ -14097,6 +14130,7 @@ function approvedExactExternalSpecifier(specifier, importer, occurrences) {
   const bareSpecifier = specifier.startsWith('node:') ? specifier.slice('node:'.length) : specifier;
   return (
     specifier === 'vitest' ||
+    specifier === 'vitest/config' ||
     specifier === 'zod' ||
     specifier.startsWith('zod/') ||
     specifier === '@internal/ai-sdk-v5/test' ||
@@ -14347,10 +14381,13 @@ done
 
 # The native performance configuration is part of the exact unit's execution
 # contract, but it is not imported by the test file. A config-only change must
-# therefore enqueue this unit explicitly so the existing runtime-surface scan
-# still validates its local dependency closure before execution.
+# therefore scan that entrypoint and its local dependency closure before
+# enqueueing the unit through the existing runtime-surface policy.
 if grep -Fxq "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" "$changed_files"; then
-  if git_regular_file_at_head "$PG_PERFORMANCE_INDEX_UNIT_TEST"; then
+  if ! git_regular_file_at_head "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" ||
+    test_runtime_surface_has_unsupported_runtime "$PG_PERFORMANCE_INDEX_UNIT_CONFIG"; then
+    printf '%s\n' "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" >> "$unsupported_tests"
+  elif git_regular_file_at_head "$PG_PERFORMANCE_INDEX_UNIT_TEST"; then
     detected_tests+=("$PG_PERFORMANCE_INDEX_UNIT_TEST")
   else
     printf '%s\n' "$PG_PERFORMANCE_INDEX_UNIT_TEST" >> "$unsupported_tests"
