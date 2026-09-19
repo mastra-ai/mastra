@@ -142,13 +142,19 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   /**
    * Restore browser state (multiple tabs) to a browser manager.
    */
-  async restoreBrowserState(manager: BrowserManager, state: BrowserState, strict = false): Promise<void> {
+  async restoreBrowserState(
+    manager: BrowserManager,
+    state: BrowserState,
+    strict = false,
+    preparePage?: (page: Page) => Promise<void>,
+  ): Promise<void> {
     try {
       // Navigate first tab to first URL
       const firstTab = state.tabs[0];
       if (firstTab?.url) {
         const page = manager.getPage();
         if (page) {
+          await preparePage?.(page);
           await page.goto(firstTab.url, { waitUntil: 'domcontentloaded' });
         }
       }
@@ -161,6 +167,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
           await manager.newTab();
           const page = manager.getPage();
           if (page) {
+            await preparePage?.(page);
             await page.goto(tab.url, { waitUntil: 'domcontentloaded' });
           }
         }

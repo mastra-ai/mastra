@@ -17,6 +17,7 @@ export type {
   VerifyAgentCardSignatureOptions,
 } from './resources/a2a';
 export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
+export type { BrowserViewerCommand, BrowserViewerEvent, BrowserViewerPreferences } from '@mastra/core/browser';
 export type {
   MastraDBMessage,
   MastraMessageContentV2,

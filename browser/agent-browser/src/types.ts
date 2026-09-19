@@ -1,4 +1,8 @@
-import type { BrowserConfig as BaseBrowserConfig, BrowserRecordingOptions } from '@mastra/core/browser';
+import type {
+  BrowserConfig as BaseBrowserConfig,
+  BrowserRecordingOptions,
+  BrowserViewerPreferences,
+} from '@mastra/core/browser';
 import type { SavedBrowserTabsOptions } from './saved-tabs';
 import type { BrowserToolName } from './tools/constants';
 
@@ -6,6 +10,8 @@ import type { BrowserToolName } from './tools/constants';
  * AgentBrowser-specific configuration extensions.
  */
 export interface AgentBrowserConfigExtensions {
+  /** Initial shared viewer viewport and language, applied before restored tabs navigate. */
+  viewerPreferences?: BrowserViewerPreferences;
   /** Restore saved page URLs when a shared browser is relaunched. Does not restore forms or authentication. */
   restoreTabsOnLaunch?: boolean;
   /** Observe trusted page input from other CDP clients, including remote viewers. Chromium only. */

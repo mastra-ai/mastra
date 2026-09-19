@@ -3,6 +3,8 @@
 // ============================================================================
 
 export { MastraBrowser, DEFAULT_BROWSER_VIEWPORT, resolveViewportSize, resolveLaunchViewport } from './browser';
+export { BrowserViewer } from './viewer';
+export type { BrowserViewerPreferences, BrowserViewerCommand, BrowserViewerEvent } from './viewer';
 export type {
   BrowserStatus,
   BrowserActivityState,

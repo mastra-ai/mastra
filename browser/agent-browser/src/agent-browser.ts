@@ -16,6 +16,8 @@ import type {
   MouseEventParams,
   KeyboardEventParams,
   ThreadSession,
+  BrowserViewerCommand,
+  BrowserViewerPreferences,
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
 
@@ -24,6 +26,7 @@ import type { BrowserLaunchOptions } from 'agent-browser';
 import type { Page, Locator } from 'playwright-core';
 import { BrowserActivityObserver } from './activity-observer';
 import { SavedBrowserTabs } from './saved-tabs';
+import { ViewerPreferences } from './viewer-preferences';
 import type {
   GotoInput,
   SnapshotInput,
@@ -74,6 +77,8 @@ export class AgentBrowser extends MastraBrowser {
   private browserConfig: BrowserConfig;
   private activityObserver?: BrowserActivityObserver;
   private readonly savedTabs?: SavedBrowserTabs;
+  private readonly viewerPreferences = new WeakMap<BrowserManager, ViewerPreferences>();
+  private pendingViewerPreferences?: BrowserViewerPreferences;
 
   constructor(config: AgentBrowserConfig = {}) {
     super(config);
@@ -218,6 +223,7 @@ export class AgentBrowser extends MastraBrowser {
     }
 
     await this.sharedManager.launch(launchOptions);
+    await this.configureViewer(this.pendingViewerPreferences ?? this.browserConfig.viewerPreferences);
 
     // Register the shared manager with ThreadManager
     this.threadManager.setSharedManager(this.sharedManager);
@@ -227,7 +233,12 @@ export class AgentBrowser extends MastraBrowser {
     // browser we do not own — don't capture its PID (issue #23588).
     this.setupCloseListenerForSharedScope(this.sharedManager, Boolean(launchOptions.cdpUrl));
     if ((this.browserConfig.restoreTabsOnLaunch || this.savedTabs) && this.lastBrowserState?.tabs.length) {
-      await this.threadManager.restoreBrowserState(this.sharedManager, this.lastBrowserState, true);
+      await this.threadManager.restoreBrowserState(
+        this.sharedManager,
+        this.lastBrowserState,
+        true,
+        page => this.viewerPreferences.get(this.sharedManager!)?.apply(page) ?? Promise.resolve(),
+      );
     }
     if (this.browserConfig.observeUserActivity) {
       const context = this.sharedManager.getContext();
@@ -462,10 +473,90 @@ export class AgentBrowser extends MastraBrowser {
     const threadId = explicitThreadId ?? this.getCurrentThread();
     // For thread scope, always use threadManager.getPageForThread
     if (scope === 'thread') {
-      return this.threadManager.getPageForThread(threadId);
+      const page = await this.threadManager.getPageForThread(threadId);
+      const manager = this.threadManager.getExistingManagerForThread(threadId ?? DEFAULT_THREAD_ID);
+      if (manager) {
+        if (!this.viewerPreferences.has(manager))
+          await this.configureViewer(this.browserConfig.viewerPreferences, threadId);
+        await this.viewerPreferences.get(manager)?.apply(page);
+      }
+      return page;
     }
     if (!this.sharedManager) throw new Error('Browser not launched');
-    return this.sharedManager.getPage();
+    const page = this.sharedManager.getPage();
+    await this.viewerPreferences.get(this.sharedManager)?.apply(page);
+    return page;
+  }
+
+  /** Store preferences without launching; apply them to every existing page when connected. */
+  override getViewerViewport(threadId?: string) {
+    const manager = this.threadManager.getExistingManagerForThread(
+      threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID,
+    );
+    if (!manager || !manager.isLaunched()) return undefined;
+    const preferences = this.viewerPreferences.get(manager)?.get(manager.getPage());
+    return preferences ? { width: preferences.width, height: preferences.height } : undefined;
+  }
+
+  async configureViewer(preferences?: BrowserViewerPreferences, threadId?: string): Promise<void> {
+    if (!preferences) return;
+    this.pendingViewerPreferences = preferences;
+    const manager =
+      this.getScope() === 'shared'
+        ? this.sharedManager
+        : this.threadManager.getExistingManagerForThread(threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID);
+    const context = manager?.getContext();
+    if (!manager || !context) return;
+    let settings = this.viewerPreferences.get(manager);
+    if (!settings) {
+      settings = new ViewerPreferences(context);
+      this.viewerPreferences.set(manager, settings);
+    }
+    await settings.set(preferences);
+  }
+
+  override async executeViewerCommand(command: BrowserViewerCommand, threadId?: string): Promise<void> {
+    if (!this.isBrowserRunning(threadId)) throw new Error('Browser is not running');
+    if (command.type === 'preferences') {
+      await this.configureViewer(command.preferences, threadId);
+      return;
+    }
+    await this.runBrowserOperation(async () => {
+      const manager = await this.getManagerForThread(threadId);
+      if (command.type === 'mouse') return this.injectMouseEvent(command.event, threadId);
+      if (command.type === 'keyboard') return this.injectKeyboardEvent(command.event, threadId);
+      if (command.type === 'switch-tab') await manager.switchTo(command.index);
+      else if (command.type === 'close-tab') await manager.closeTab(command.index);
+      else if (command.type === 'new-tab') await manager.newTab();
+      const page = await this.getPage(threadId);
+      switch (command.type) {
+        case 'navigate': {
+          const url = new URL(command.url);
+          if (url.protocol !== 'https:' && url.protocol !== 'http:' && command.url !== 'about:blank') {
+            throw new Error('Unsupported navigation URL');
+          }
+          await page.goto(url.href, { waitUntil: 'commit' });
+          break;
+        }
+        case 'back':
+          await page.goBack({ waitUntil: 'commit' });
+          break;
+        case 'forward':
+          await page.goForward({ waitUntil: 'commit' });
+          break;
+        case 'reload':
+          await page.reload({ waitUntil: 'commit' });
+          break;
+        case 'text':
+          await page.keyboard.insertText(command.text);
+          break;
+      }
+      this.markActiveUrlChangeSource('user', page.url(), threadId);
+      this.updateSessionBrowserState(threadId);
+      if (command.type === 'switch-tab' || command.type === 'close-tab' || command.type === 'new-tab') {
+        await this.reconnectScreencastForThread(threadId, 'viewer tab command');
+      }
+    });
   }
 
   /**
@@ -705,7 +796,16 @@ export class AgentBrowser extends MastraBrowser {
     }
     try {
       const manager = await this.getManagerForThread(threadId);
-      return this.getBrowserStateForManager(manager, threadId);
+      const state = this.getBrowserStateForManager(manager, threadId);
+      if (!state) return null;
+      const pages = manager.getPages();
+      state.tabs = await Promise.all(
+        state.tabs.map(async (tab, index) => ({
+          ...tab,
+          title: (await pages[index]?.title().catch(() => '')) ?? '',
+        })),
+      );
+      return state;
     } catch {
       return null;
     }
@@ -1646,6 +1746,8 @@ export class AgentBrowser extends MastraBrowser {
         if (!currentPage) {
           throw new Error('No active page available');
         }
+        await this.viewerPreferences.get(browserManager)?.apply(currentPage);
+        await currentPage.bringToFront();
         const cdpSession = await currentPage.context().newCDPSession(currentPage);
         return cdpSession as unknown as CdpSessionLike;
       },
@@ -1674,6 +1776,7 @@ export class AgentBrowser extends MastraBrowser {
 
       // Track page close handlers so we can clean them up
       const pageCloseHandlers = new Map<Page, () => void>();
+      const pageLoadHandlers = new Map<Page, () => void>();
 
       // Track framenavigated handlers for URL updates
       const frameNavigatedHandlers = new Map<
@@ -1693,11 +1796,18 @@ export class AgentBrowser extends MastraBrowser {
           }
         };
         page.on('framenavigated', onFrameNavigated);
+        const onLoaded = () => {
+          stream.emitUrl(page.url());
+        };
+        page.on('domcontentloaded', onLoaded);
+        pageLoadHandlers.set(page, onLoaded);
         frameNavigatedHandlers.set(page, onFrameNavigated);
 
         // Close listener
         const onClose = () => {
           pageCloseHandlers.delete(page);
+          page.off('domcontentloaded', onLoaded);
+          pageLoadHandlers.delete(page);
           // Clean up framenavigated handler
           const navHandler = frameNavigatedHandlers.get(page);
           if (navHandler) {
@@ -1757,6 +1867,8 @@ export class AgentBrowser extends MastraBrowser {
           page.off('close', handler);
         }
         pageCloseHandlers.clear();
+        for (const [page, handler] of pageLoadHandlers) page.off('domcontentloaded', handler);
+        pageLoadHandlers.clear();
         // Remove framenavigated handlers from all pages
         for (const [page, handler] of frameNavigatedHandlers) {
           page.off('framenavigated', handler);

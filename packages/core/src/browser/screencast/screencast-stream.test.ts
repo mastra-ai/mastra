@@ -30,6 +30,26 @@ function createMockProvider(overrides?: {
 }
 
 describe('ScreencastStream', () => {
+  it('serializes tab reconnects and releases a capture stopped while reconnecting', async () => {
+    const first = createMockCdpSession({ detach: vi.fn(async () => {}) });
+    const second = createMockCdpSession({ detach: vi.fn(async () => {}) });
+    let connect!: (session: CdpSessionLike) => void;
+    const pending = new Promise<CdpSessionLike>(resolve => {
+      connect = resolve;
+    });
+    const getCdpSession = vi.fn().mockResolvedValueOnce(first).mockReturnValueOnce(pending);
+    const capture = new ScreencastStream({ getCdpSession, isBrowserRunning: () => true });
+    await capture.start();
+    const reconnect = capture.reconnect();
+    const again = capture.reconnect();
+    const stopped = capture.stop();
+    connect(second);
+    await Promise.all([reconnect, again, stopped]);
+    expect(getCdpSession).toHaveBeenCalledTimes(2);
+    expect(capture.isActive()).toBe(false);
+    expect(first.detach).toHaveBeenCalledTimes(1);
+    expect(second.detach).toHaveBeenCalledTimes(1);
+  });
   let provider: CdpSessionProvider;
   let stream: ScreencastStream;
 

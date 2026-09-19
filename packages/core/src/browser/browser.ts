@@ -36,6 +36,8 @@ import type { BrowserToolError, ErrorCode } from './errors';
 import { BrowserContextProcessor } from './processor';
 import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
 import { DEFAULT_THREAD_ID } from './thread-manager';
+import { BrowserViewer } from './viewer';
+import type { BrowserViewerCommand } from './viewer';
 import type { BrowserState, BrowserTabState, BrowserScope, ThreadManager } from './thread-manager';
 
 // Re-export screencast types from the screencast module
@@ -623,6 +625,31 @@ export abstract class MastraBrowser extends MastraBase {
 
   /** Active screencast streams per thread (for triggering reconnects on tab changes) */
   protected activeScreencastStreams = new Map<string, ScreencastStream>();
+  private readonly viewers = new Map<string, BrowserViewer>();
+
+  /** View the existing browser. Subscribing never launches a browser. */
+  getViewer(threadId?: string): BrowserViewer {
+    const key = this.getStreamKey(threadId);
+    let viewer = this.viewers.get(key);
+    if (!viewer) {
+      viewer = new BrowserViewer(this, threadId);
+      this.viewers.set(key, viewer);
+    }
+    return viewer;
+  }
+
+  getScreencastFormat(): 'jpeg' | 'png' {
+    return this.config.screencast?.format ?? 'jpeg';
+  }
+
+  /** CSS dimensions for viewer input; capture frames may contain more device pixels. */
+  getViewerViewport(_threadId?: string): BrowserViewportSize | undefined {
+    return undefined;
+  }
+
+  async executeViewerCommand(_command: BrowserViewerCommand, _threadId?: string): Promise<void> {
+    throw new Error('Browser viewer commands are not supported by this provider');
+  }
 
   // ---------------------------------------------------------------------------
   // Process ID Tracking (for orphaned process cleanup)

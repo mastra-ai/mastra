@@ -7,6 +7,7 @@ import type {
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { StorageListMessagesOutput } from '@mastra/core/storage';
+import { SessionBrowserViewer } from './browser-viewer';
 
 import type { QueryParams, RouteResponse } from '../route-types.generated.js';
 import type {
@@ -314,6 +315,14 @@ export interface AgentControllerSubscription {
  * request as a `sessionScope` query param.
  */
 export class AgentControllerSession extends BaseResource {
+  /** Bind a viewer to the current existing thread and browser launch, never to another agent's browser. */
+  browser(incarnation: string): SessionBrowserViewer {
+    if (!this.sessionThreadId) throw new Error('An exact sessionThreadId is required to view a browser');
+    return new SessionBrowserViewer(
+      this.options,
+      this.url(`${this.base()}/browser/stream?incarnation=${encodeURIComponent(incarnation)}`),
+    );
+  }
   constructor(
     options: ClientOptions,
     private readonly controllerId: string,
