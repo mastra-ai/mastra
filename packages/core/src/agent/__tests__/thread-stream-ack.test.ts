@@ -212,3 +212,92 @@ describe('claimed thread ownership acknowledges every delivery', () => {
     });
   });
 });
+
+/**
+ * Learns the runtime's own source id. An idle signal is only handled when it is
+ * addressed to that id, and the runtime never exposes it locally — the owner
+ * discovery reply is where it goes on the wire.
+ */
+async function runtimeSourceId(pubsub: LeasePubSub) {
+  const probeReplyTopic = `${OWNER_DISCOVERY_TOPIC}.source-probe`;
+  await pubsub.subscribe(probeReplyTopic, () => {});
+  await pubsub.publish(OWNER_DISCOVERY_TOPIC, {
+    type: 'thread-owner-request',
+    runId: 'source-probe',
+    data: {
+      type: 'thread-owner-request',
+      key,
+      requestId: 'source-probe',
+      replyTopic: probeReplyTopic,
+      sourceId: 'elsewhere',
+    },
+  });
+  await nextTicks();
+  const reply = deliveriesOn(pubsub, probeReplyTopic)[0];
+  return reply.event.data.sourceId as string;
+}
+
+describe('redelivered idle signals', () => {
+  const publishSignal = (pubsub: LeasePubSub, requestId: string, targetSourceId: string, replyTopic: string) =>
+    pubsub.publish(threadTopic, {
+      type: 'agent.thread-stream',
+      runId: `run-${requestId}`,
+      data: {
+        type: 'idle-signal-enqueued',
+        requestId,
+        runId: `run-${requestId}`,
+        sourceId: 'elsewhere',
+        targetSourceId,
+        replyTopic,
+        timeoutMs: 1_000,
+        signal: {},
+      },
+    });
+
+  it('acts on a redelivery of the same request only once', async () => {
+    const { runtime, pubsub } = setup();
+    const owner = await claim(runtime, pubsub);
+    const targetSourceId = await runtimeSourceId(pubsub);
+
+    const replyTopic = `${threadTopic}.dup-reply`;
+    // LeasePubSub only records a delivery when something is subscribed, so
+    // subscribe to the reply topic to observe the handler's response.
+    await pubsub.subscribe(replyTopic, () => {});
+
+    await publishSignal(pubsub, 'duplicate-1', targetSourceId, replyTopic);
+    await nextTicks();
+    expect(deliveriesOn(pubsub, replyTopic)).toHaveLength(1);
+
+    // The backend redelivers because the first acknowledgement never landed.
+    // Acting on it again would queue a second turn or start a second run under
+    // the same runId, and answer the caller a second time.
+    await publishSignal(pubsub, 'duplicate-1', targetSourceId, replyTopic);
+    await nextTicks();
+
+    expect(deliveriesOn(pubsub, replyTopic)).toHaveLength(1);
+    // The repeat is still acknowledged — dropping it must not strand it in the
+    // backend's pending set.
+    expect(deliveriesOn(pubsub, threadTopic).every(d => d.acked)).toBe(true);
+
+    owner.unsubscribe();
+    await nextTicks();
+  });
+
+  it('still acts on a distinct request', async () => {
+    const { runtime, pubsub } = setup();
+    const owner = await claim(runtime, pubsub);
+    const targetSourceId = await runtimeSourceId(pubsub);
+
+    const replyTopic = `${threadTopic}.distinct-reply`;
+    await pubsub.subscribe(replyTopic, () => {});
+
+    await publishSignal(pubsub, 'distinct-1', targetSourceId, replyTopic);
+    await publishSignal(pubsub, 'distinct-2', targetSourceId, replyTopic);
+    await nextTicks();
+
+    expect(deliveriesOn(pubsub, replyTopic)).toHaveLength(2);
+
+    owner.unsubscribe();
+    await nextTicks();
+  });
+});

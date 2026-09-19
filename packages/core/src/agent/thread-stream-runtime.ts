@@ -16,6 +16,7 @@ import { readPositiveIntEnv } from '../utils';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
+import { createRecentRequestIds } from './recent-request-ids';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
@@ -257,6 +258,13 @@ type AgentThreadRuntimeState = {
   drainingIdleSignalsByThread: Map<string, PendingIdleSignal<any>>;
   pendingContinuationsByThread: Map<string, PendingContinuation<any>[]>;
   claimedThreadOwnerDiscoveries: Map<string, Promise<string | undefined>>;
+  /**
+   * Ids of `idle-signal-enqueued` deliveries this process has already acted on.
+   * Backends deliver at least once, so a redelivery of a signal that already
+   * started or joined a run must not queue the signal again or start a second
+   * run — the wake path is not idempotent.
+   */
+  recentIdleSignalIds: ReturnType<typeof createRecentRequestIds>;
   claimedThreadOwners: Map<string, ClaimedThreadOwner<any>>;
   advertisedThreadPeers: Map<string, AdvertisedThreadPeer>;
   watchedThreadStreamIds: Set<string>;
@@ -366,6 +374,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     drainingIdleSignalsByThread: new Map(),
     pendingContinuationsByThread: new Map(),
     claimedThreadOwnerDiscoveries: new Map(),
+    recentIdleSignalIds: createRecentRequestIds(),
     claimedThreadOwners: new Map(),
     advertisedThreadPeers: new Map(),
     watchedThreadStreamIds: new Set(),
@@ -790,6 +799,12 @@ export class AgentThreadStreamRuntime {
       }
       const owner = state.claimedThreadOwners.get(key);
       if (!owner) return;
+      // Backends deliver at least once. This handler starts a run or queues the
+      // signal onto one, and neither is idempotent, so a redelivery of a request
+      // already accepted has to be dropped — otherwise the second delivery
+      // queues the signal a second time or starts a second run on the same
+      // runId and publishes a second acceptance reply.
+      if (!state.recentIdleSignalIds.remember(data.requestId)) return;
 
       let replyAttempted = false;
       const reply = async (response: AgentThreadIdleSignalAcceptanceEvent) => {
@@ -1710,6 +1725,7 @@ export class AgentThreadStreamRuntime {
     state.pendingIdleSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
     state.claimedThreadOwnerDiscoveries.clear();
+    state.recentIdleSignalIds.clear();
     for (const claim of [...state.claimedThreadOwners.values()]) {
       claim.unsubscribe();
     }
