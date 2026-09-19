@@ -530,6 +530,12 @@ function getIdleSignalDiscardHandler(ifIdle: unknown): (() => void) | undefined 
   return typeof handler === 'function' ? () => handler() : undefined;
 }
 
+function hasFullLogicalMessageIdentity(ifIdle: unknown): boolean {
+  const identity = (ifIdle as { streamOptions?: { logicalMessageIdentity?: unknown } } | undefined)?.streamOptions
+    ?.logicalMessageIdentity;
+  return typeof identity === 'object' && identity !== null && 'response' in identity;
+}
+
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
     threadRunsById: new Map(),
@@ -1595,11 +1601,16 @@ export class AgentThreadStreamRuntime {
     discovery: Promise<string | undefined>,
     onNoOwner?: () => void,
     onPreAdmissionFailure?: () => void,
+    rejectFullLogicalMessageIdentity = false,
   ): Promise<SendAgentSignalAccepted<OUTPUT>> {
     const claimedOwnerSourceId = await discovery;
     if (!claimedOwnerSourceId) {
       onNoOwner?.();
       throw new Error(`No claimed thread owner responded for ${key}`);
+    }
+    if (rejectFullLogicalMessageIdentity) {
+      onPreAdmissionFailure?.();
+      return { action: 'discard' as const };
     }
     let acceptedRunId: string;
     try {
@@ -2659,6 +2670,22 @@ export class AgentThreadStreamRuntime {
     }
     this.#scheduleSignalAdmissionCleanup(state);
     return { disposition: 'accepted', runId };
+  }
+
+  #findSignalPayloadForRun(
+    state: AgentThreadRuntimeState,
+    key: string,
+    signal: AgentSignal,
+  ): { disposition: 'duplicate' | 'conflict'; runId: string } | undefined {
+    const signalId = signal.id;
+    const payloadKey = callerSignalPayloadKey(signal);
+    if (signalId === undefined || payloadKey === undefined) return undefined;
+    const retained = state.signalAdmissionsByThread.get(key)?.get(signalId);
+    if (retained === undefined || retained.expiresAt <= Date.now()) return undefined;
+    return {
+      disposition: retained.payloadKey === payloadKey ? 'duplicate' : 'conflict',
+      runId: retained.runId,
+    };
   }
 
   #forgetSignalAdmission(state: AgentThreadRuntimeState, key: string, runId: string, signal: AgentSignal): void {
@@ -6056,6 +6083,25 @@ export class AgentThreadStreamRuntime {
       return result;
     };
 
+    const activeSignalDisposition =
+      isActiveTarget && activeBehavior !== 'deliver' && key !== undefined
+        ? this.#findSignalPayloadForRun(state, key, signal)
+        : undefined;
+    if (activeSignalDisposition?.disposition === 'conflict') {
+      throw new Error(`Agent signal id "${signal.id}" was already accepted with a different payload`);
+    }
+    if (activeSignalDisposition?.disposition === 'duplicate') {
+      return acceptSignal(
+        {
+          signal,
+          runId: activeSignalDisposition.runId,
+          accepted: Promise.resolve({ action: 'deliver' as const, runId: activeSignalDisposition.runId }),
+        },
+        activeSignalDisposition.runId,
+        false,
+      );
+    }
+
     if (isActiveTarget && activeBehavior !== 'deliver') {
       runId ??= randomUUID();
       if (activeBehavior === 'persist') {
@@ -6192,6 +6238,7 @@ export class AgentThreadStreamRuntime {
             claimedOwnerDiscovery,
             () => this.#forgetSignalAdmission(state, discoveryKey, discoveredRunId, signal),
             () => this.#forgetSignalAdmission(state, discoveryKey, discoveredRunId, signal),
+            hasFullLogicalMessageIdentity(target.ifIdle),
           );
           void accepted.catch(() => {});
           return acceptSignal({ signal, accepted, runId: discoveredRunId }, discoveredRunId);
@@ -6454,6 +6501,11 @@ export class AgentThreadStreamRuntime {
     // (the signal was queued onto the winning run, not run locally).
     const accepted: Promise<SendAgentSignalAccepted<OUTPUT>> = (async () => {
       const localClaimedOwner = state.claimedThreadOwners.get(reservedKey);
+      const rejectClaimedOwnerLineage = hasFullLogicalMessageIdentity(target.ifIdle);
+      if (localClaimedOwner && rejectClaimedOwnerLineage) {
+        cleanupDefiniteClaimedOwnerFailure();
+        return { action: 'discard' as const };
+      }
       if (localClaimedOwner) {
         if (
           state.inflightIdleThreadKeysByRunId.get(reservedRunId) === reservedKey &&
@@ -6506,6 +6558,7 @@ export class AgentThreadStreamRuntime {
             discovery,
             cleanupDefiniteClaimedOwnerFailure,
             cleanupDefiniteClaimedOwnerFailure,
+            rejectClaimedOwnerLineage,
           );
         } finally {
           if (state.claimedThreadOwnerDiscoveries.get(reservedKey) === discovery) {

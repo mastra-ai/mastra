@@ -3095,6 +3095,52 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('rejects a full logical message before local claimed-owner execution', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'local-lineage-owner-user', threadId: 'local-lineage-owner-thread' };
+    const stream = vi.fn(async () => ({
+      runId: 'should-not-start',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: () => new Promise<void>(() => {}),
+    }));
+    const agent = { id: 'local-lineage-owner-agent', stream } as any;
+    const claim = await runtime.claimThreadOwnership(
+      agent,
+      {
+        ...target,
+        streamOptions: { logicalMessageIdentity: { input: 'owner-input', response: 'owner-response' } },
+      } as any,
+      pubsub,
+    );
+
+    try {
+      const result = runtime.sendSignal(
+        agent,
+        {
+          id: 'local-lineage-owner-signal',
+          type: 'user-message',
+          contents: 'preserve response identity',
+          metadata: { logicalMessageId: 'request-input' },
+        } as any,
+        {
+          ...target,
+          ifIdle: {
+            behavior: 'wake',
+            streamOptions: { logicalMessageIdentity: { input: 'request-input', response: 'request-response' } },
+          },
+        } as any,
+        pubsub,
+      );
+
+      await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+      expect(stream).not.toHaveBeenCalled();
+    } finally {
+      claim.unsubscribe();
+    }
+  });
+
   it('runs a local claimed-owner wake through public request-context preflight', async () => {
     const pubsub = new EventEmitterPubSub();
     const requestContext = new RequestContext();
@@ -8834,7 +8880,7 @@ describe('Agent signals', () => {
     expect(agent.stream).not.toHaveBeenCalled();
   });
 
-  it('does not reuse a pending native acknowledgement for a newer durable admission attempt', async () => {
+  it('reuses an exact full logical signal on its pending run after a newer admission attempt', async () => {
     const pubsub = new EventEmitterPubSub();
     const runtime = new AgentThreadStreamRuntime();
     const target = { resourceId: 'attempt-retry-resource', threadId: 'attempt-retry-thread' };
@@ -8851,7 +8897,11 @@ describe('Agent signals', () => {
       {
         ...target,
         runId,
-        ifIdle: { behavior: 'wake' },
+        ifActive: { behavior: 'discard' },
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { logicalMessageIdentity: { input: 'attempt-input', response: 'attempt-response' } },
+        },
         _signalAdmissionAttemptId: 'attempt-a',
       } as any,
       pubsub,
@@ -8870,7 +8920,11 @@ describe('Agent signals', () => {
       {
         ...target,
         runId,
-        ifIdle: { behavior: 'wake' },
+        ifActive: { behavior: 'discard' },
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { logicalMessageIdentity: { input: 'attempt-input', response: 'attempt-response' } },
+        },
         _signalAdmissionAttemptId: 'attempt-b',
       } as any,
       pubsub,
