@@ -3419,3 +3419,32 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     expect(transport.close).toHaveBeenCalledOnce();
   });
 });
+
+describe('InternalMastraMCPClient - failed connect cleanup', () => {
+  it('removes exit hooks and signal handlers when connect fails', async () => {
+    // A server that accepts the request but never replies, so connect hits connectTimeout.
+    const httpServer = createServer(() => {});
+    const baseUrl = await listen(httpServer);
+    const sigTermBefore = process.listenerCount('SIGTERM');
+    const sigHupBefore = process.listenerCount('SIGHUP');
+
+    const client = new InternalMastraMCPClient({
+      name: 'never-replies',
+      server: { url: baseUrl, connectTimeout: 100 },
+    });
+
+    try {
+      await expect(client.connect()).rejects.toThrow();
+      expect(process.listenerCount('SIGTERM')).toBe(sigTermBefore);
+      expect(process.listenerCount('SIGHUP')).toBe(sigHupBefore);
+
+      // disconnect() after a failed connect must not leave anything behind either.
+      await client.disconnect();
+      expect(process.listenerCount('SIGTERM')).toBe(sigTermBefore);
+      expect(process.listenerCount('SIGHUP')).toBe(sigHupBefore);
+    } finally {
+      httpServer.closeAllConnections();
+      await new Promise<void>(resolve => httpServer.close(() => resolve()));
+    }
+  });
+});

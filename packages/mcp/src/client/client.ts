@@ -816,6 +816,9 @@ export class InternalMastraMCPClient extends MastraBase {
         this.isConnected = null;
         // A failed connect invalidates the cached verdict so a legacy verdict cannot stick.
         this.priorDiscovery = undefined;
+        // The hooks below were registered before this promise settled; without a
+        // transport, disconnect() would never reach them.
+        this.removeExitHooks();
         reject(e);
       }
     });
@@ -903,6 +906,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.closePendingAuthTransport();
     if (!this.transport) {
       await this.detachStaleClientTransport();
+      this.removeExitHooks();
       this.log('debug', 'Disconnect called but no transport was connected.');
       return;
     }
@@ -922,19 +926,22 @@ export class InternalMastraMCPClient extends MastraBase {
       this.transport = undefined;
       this.isConnected = null;
       this.serverInstructions = undefined;
+      this.removeExitHooks();
+    }
+  }
 
-      if (this.exitHookUnsubscribe) {
-        this.exitHookUnsubscribe();
-        this.exitHookUnsubscribe = undefined;
-      }
-      if (this.sigTermHandler) {
-        process.off('SIGTERM', this.sigTermHandler);
-        this.sigTermHandler = undefined;
-      }
-      if (this.sigHupHandler) {
-        process.off('SIGHUP', this.sigHupHandler);
-        this.sigHupHandler = undefined;
-      }
+  private removeExitHooks(): void {
+    if (this.exitHookUnsubscribe) {
+      this.exitHookUnsubscribe();
+      this.exitHookUnsubscribe = undefined;
+    }
+    if (this.sigTermHandler) {
+      process.off('SIGTERM', this.sigTermHandler);
+      this.sigTermHandler = undefined;
+    }
+    if (this.sigHupHandler) {
+      process.off('SIGHUP', this.sigHupHandler);
+      this.sigHupHandler = undefined;
     }
   }
 
