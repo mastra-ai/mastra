@@ -8,6 +8,7 @@ import type {
   ProcessorState,
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
+  LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../../../processors';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
@@ -52,8 +53,8 @@ export interface ResolvedRuntimeDependencies {
   workspace?: Workspace;
   /** Resolved input processors (rebuilt from the agent when the registry is empty) */
   inputProcessors?: InputProcessorOrWorkflow[];
-  /** Uncombined input processors for processLLMRequest */
-  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
+  /** Uncombined processors for processLLMRequest: input processors plus error-phase processors */
+  llmRequestInputProcessors?: LLMRequestProcessorOrWorkflow[];
   /** Resolved output processors */
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Resolved error processors */
@@ -203,7 +204,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let workspace: Workspace | undefined = globalEntry?.workspace;
   let memory: MastraMemory | undefined = globalEntry?.memory;
   let inputProcessors: InputProcessorOrWorkflow[] | undefined = globalEntry?.inputProcessors;
-  let llmRequestInputProcessors: InputProcessorOrWorkflow[] | undefined = globalEntry?.llmRequestInputProcessors;
+  let llmRequestInputProcessors: LLMRequestProcessorOrWorkflow[] | undefined = globalEntry?.llmRequestInputProcessors;
   let outputProcessors: OutputProcessorOrWorkflow[] | undefined = globalEntry?.outputProcessors;
   let errorProcessors: ErrorProcessorOrWorkflow[] | undefined = globalEntry?.errorProcessors;
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
