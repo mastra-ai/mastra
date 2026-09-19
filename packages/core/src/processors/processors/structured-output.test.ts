@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
@@ -39,8 +40,8 @@ describe('StructuredOutputProcessor', () => {
 
   // Helper to create a mock abort function
   function createMockAbort() {
-    return vi.fn((reason?: string) => {
-      throw new Error(reason || 'Aborted');
+    return vi.fn((reason?: string, options = {}) => {
+      throw new TripWire(reason || 'Aborted', options);
     }) as any;
   }
 
@@ -282,7 +283,16 @@ describe('StructuredOutputProcessor', () => {
       ).resolves.toBe(finishChunk);
       expect(abort).not.toHaveBeenCalled();
       expect(controller.enqueue).not.toHaveBeenCalled();
-      expect(() => processor.processOutputStep(outputStepArgs(state, abort))).toThrow(reason);
+      let tripwire: TripWire<{ error: Error }> | undefined;
+      try {
+        processor.processOutputStep(outputStepArgs(state, abort));
+      } catch (error) {
+        tripwire = error as TripWire<{ error: Error }>;
+      }
+      expect(tripwire).toBeInstanceOf(TripWire);
+      expect(tripwire?.message).toBe(reason);
+      expect(tripwire?.options).toEqual({ retry: true, metadata: { error: upstreamError } });
+      expect(tripwire?.options.metadata?.error).toBe(upstreamError);
       expect(abort).toHaveBeenCalledWith(reason, { retry: true, metadata: { error: upstreamError } });
       const stepArgs = outputStepArgs(state, abort);
       expect(processor.processOutputStep(stepArgs)).toBe(stepArgs.messages);
