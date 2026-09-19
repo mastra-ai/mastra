@@ -10074,6 +10074,7 @@ export class Session {
       const heartbeat = this._startSignalDispatchClaimHeartbeat(admission, dispatching);
       let heartbeatStopped = false;
       let claimOwned = true;
+      let idleSignalDiscarded = false;
       const stopHeartbeat = async () => {
         if (heartbeatStopped) return dispatching;
         heartbeatStopped = true;
@@ -10101,7 +10102,13 @@ export class Session {
             resourceId: this.resourceId,
             threadId: this.threadId,
             ...(responseLogicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
-            ifIdle: { behavior: 'discard', streamOptions: {} as never },
+            ifIdle: {
+              behavior: 'discard',
+              streamOptions: {} as never,
+              _onThreadStreamSignalDiscarded: () => {
+                idleSignalDiscarded = true;
+              },
+            },
             _signalAdmissionAttemptId: dispatching.attemptId,
           } as never,
         );
@@ -10114,6 +10121,12 @@ export class Session {
         const accepted = await this._awaitSignalNativeAcceptance(dispatched.accepted, opts.abortSignal);
         if (accepted.action === 'discard') {
           await stopHeartbeat();
+          if (idleSignalDiscarded) {
+            await releaseSignalDispatch(dispatching);
+            claimOwned = false;
+            signalAdmissionNativeDispatchStarted = false;
+            return undefined;
+          }
           if (responseLogicalMessageIdentity !== undefined) {
             const err = new HarnessConfigError(
               'signal().logicalMessageIdentity',

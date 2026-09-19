@@ -467,6 +467,7 @@ describe('Session.signal() admissionId', () => {
           accepted: (async () => {
             releaseActive();
             await active;
+            (target.ifIdle as { _onThreadStreamSignalDiscarded?: () => void })._onThreadStreamSignalDiscarded?.();
             return { action: 'discard' as const };
           })(),
         };
@@ -474,11 +475,24 @@ describe('Session.signal() admissionId', () => {
       return realSendSignal(signal, target);
     }) as typeof agent.sendSignal;
 
-    const handle = await session.signal({ content: 'reroute once', admissionId: 'active-discard-race' });
+    const handle = await session.signal({
+      content: 'reroute once',
+      admissionId: 'active-discard-race',
+      logicalMessageIdentity: { input: 'reroute-input', response: 'reroute-response' },
+    });
     expect(handle).toMatchObject({ willInterleave: false, accepted: true });
     expect(handle.runId).not.toBe('discarded-provisional-run');
     await expect(handle.result).resolves.toMatchObject({ text: 'rerouted owned terminal' });
     expect(agent.streamCalls).toHaveLength(2);
+    expect(agent.streamCalls[1]!.options.logicalMessageIdentity).toEqual({
+      input: 'reroute-input',
+      response: 'reroute-response',
+    });
+    const identity = (session as any)._signalAdmissionIdentity('active-discard-race') as { signalId: string };
+    await expect(session.lookupMessageResult(identity.signalId)).resolves.toMatchObject({
+      status: 'completed',
+      admissionId: 'active-discard-race',
+    });
   });
 
   it('rejects payload conflicts and non-hash-safe options before another dispatch', async () => {

@@ -525,6 +525,11 @@ function getIdleRunRejectedHandler(ifIdle: unknown): (() => void) | undefined {
   return typeof handler === 'function' ? () => handler() : undefined;
 }
 
+function getIdleSignalDiscardHandler(ifIdle: unknown): (() => void) | undefined {
+  const handler = (ifIdle as { _onThreadStreamSignalDiscarded?: unknown } | undefined)?._onThreadStreamSignalDiscarded;
+  return typeof handler === 'function' ? () => handler() : undefined;
+}
+
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
     threadRunsById: new Map(),
@@ -6240,6 +6245,7 @@ export class AgentThreadStreamRuntime {
 
     runId ??= randomUUID();
     key ??= this.#threadKey(resourceId, threadId);
+    const onIdleSignalDiscarded = getIdleSignalDiscardHandler(target.ifIdle);
     if (idleBehavior === 'persist') {
       if (signal.transient) {
         return { signal, runId, accepted: Promise.resolve({ action: 'discard' as const }) };
@@ -6272,6 +6278,7 @@ export class AgentThreadStreamRuntime {
       );
     }
     if (idleBehavior !== 'wake') {
+      if (idleBehavior === 'discard') onIdleSignalDiscarded?.();
       return acceptSignal(
         {
           signal,
@@ -6549,6 +6556,14 @@ export class AgentThreadStreamRuntime {
         // so we don't trip our own activeThreadRunIds check on a follow-up.
         rollbackLocalReservation(false);
         state.leaseOwnerTokensByRunId.delete(reservedRunId);
+
+        // A full logical message must never be forwarded into the active run that won
+        // this distributed wake race. The caller can retry through its owned-turn path;
+        // publishing here would lose the response identity at the winning process.
+        if (activeBehavior === 'discard') {
+          this.#forgetSignalAdmission(state, reservedKey, reservedRunId, signal);
+          return { action: 'discard' as const };
+        }
 
         // Forward the user signal to the winning runId so the message is not dropped.
         // Await the publish so that callers using `accepted` resolution as their

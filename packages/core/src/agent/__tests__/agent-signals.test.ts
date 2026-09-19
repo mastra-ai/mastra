@@ -8799,6 +8799,41 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('discards a full logical message when distributed idle wake loses to an active owner', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'lineage-lease-resource', threadId: 'lineage-lease-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const runId = 'lineage-lease-loser-run';
+    const signal = { id: 'lineage-lease-signal', type: 'user-message' as const, contents: 'preserve response owner' };
+    const agent = {
+      id: 'lineage-lease-agent',
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({
+        runId: options.runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      })),
+    } as any;
+    await pubsub.acquireLease(key, 'lineage-lease-winning-run', 15_000);
+
+    const result = runtime.sendSignal(
+      agent,
+      signal,
+      {
+        ...target,
+        runId,
+        ifActive: { behavior: 'discard' },
+        ifIdle: { behavior: 'wake' },
+      },
+      pubsub,
+    );
+
+    await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+    expect(pubsub.publishedData.filter(event => event?.type === 'signal-enqueued')).toEqual([]);
+    expect(agent.stream).not.toHaveBeenCalled();
+  });
+
   it('does not reuse a pending native acknowledgement for a newer durable admission attempt', async () => {
     const pubsub = new EventEmitterPubSub();
     const runtime = new AgentThreadStreamRuntime();
