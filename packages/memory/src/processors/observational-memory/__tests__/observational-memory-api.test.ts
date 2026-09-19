@@ -244,6 +244,10 @@ function createOM(
     reflectionExtract?: Extractor<any>[];
     observationContinuationHints?: ContinuationHintsConfig;
     reflectionContinuationHints?: ContinuationHintsConfig;
+    observationMaxRetries?: number;
+    observationFailurePolicy?: 'abort' | 'continue';
+    reflectionMaxRetries?: number;
+    reflectionFailurePolicy?: 'abort' | 'continue';
     activateAfterIdle?: number | string;
     hooks?: ObserveHooks;
     hookExecution?: 'non-blocking' | 'await';
@@ -261,12 +265,16 @@ function createOM(
       bufferTokens: opts?.bufferTokens ?? false,
       extract: opts?.observationExtract,
       continuationHints: opts?.observationContinuationHints,
+      maxRetries: opts?.observationMaxRetries,
+      failurePolicy: opts?.observationFailurePolicy,
     },
     reflection: {
       model: opts?.reflectorModel ?? createMockReflectorModel(),
       observationTokens: opts?.observationTokens ?? 50_000,
       extract: opts?.reflectionExtract,
       continuationHints: opts?.reflectionContinuationHints,
+      maxRetries: opts?.reflectionMaxRetries,
+      failurePolicy: opts?.reflectionFailurePolicy,
     },
   });
 }
@@ -664,6 +672,35 @@ name: Tyler
       // Observer failed before producing usage, so usage should be undefined and error should be present
       expect(hooks.onObservationEnd).toHaveBeenCalledWith({ usage: undefined, error: expect.any(Error) });
       expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
+    });
+
+    it('reports the swallowed failure to onObservationEnd under failurePolicy continue', async () => {
+      const failingModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          throw new TypeError('fetch failed');
+        },
+        doStream: async () => {
+          throw new TypeError('fetch failed');
+        },
+      });
+      const continueOm = createOM(storage, {
+        observerModel: failingModel,
+        observationMaxRetries: 0,
+        observationFailurePolicy: 'continue',
+      });
+
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      const result = await continueOm.observe({ threadId, messages: createBulkMessages(10, threadId), hooks });
+
+      expect(result.observed).toBe(false);
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      const endArgs = hooks.onObservationEnd.mock.calls[0]![0] as { error?: Error };
+      expect(endArgs.error).toBeInstanceOf(Error);
+      expect(endArgs.error?.message).toMatch(/fetch failed/);
     });
 
     it('gates reflection and pairs the end hook when an awaited reflection start hook fails', async () => {
@@ -2688,6 +2725,26 @@ describe('getResolvedConfig()', () => {
     expect(config.scope).toBe('thread');
     expect(config.observation).toBeTruthy();
     expect(config.reflection).toBeTruthy();
+    expect(config.observation.maxRetries).toBe(8);
+    expect(config.observation.failurePolicy).toBe('abort');
+    expect(config.reflection.maxRetries).toBe(8);
+    expect(config.reflection.failurePolicy).toBe('abort');
+  });
+
+  it('should resolve independent observation and reflection failure controls', async () => {
+    const storage = createInMemoryStorage();
+    const om = createOM(storage, {
+      observationMaxRetries: 0,
+      observationFailurePolicy: 'continue',
+      reflectionMaxRetries: 1,
+      reflectionFailurePolicy: 'continue',
+    });
+
+    const config = await om.getResolvedConfig();
+    expect(config.observation.maxRetries).toBe(0);
+    expect(config.observation.failurePolicy).toBe('continue');
+    expect(config.reflection.maxRetries).toBe(1);
+    expect(config.reflection.failurePolicy).toBe('continue');
   });
 
   it('should reflect resource scope when configured', async () => {

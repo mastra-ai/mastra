@@ -123,6 +123,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
+  onDebugEvent?: ObservationalMemoryConfig['onDebugEvent'];
   hooks?: ObservationalMemoryConfig['hooks'];
 };
 
@@ -2154,6 +2155,7 @@ ${workingMemory}`;
       model: omConfig.model,
       mastra: this._mastraInstance,
       onIndexObservations,
+      onDebugEvent: omConfig.onDebugEvent,
       hooks: omConfig.hooks,
       observation: omConfig.observation
         ? {
@@ -2171,12 +2173,16 @@ ${workingMemory}`;
             threadTitle: omConfig.observation.threadTitle,
             observeAttachments: omConfig.observation.observeAttachments,
             continuationHints: omConfig.observation.continuationHints,
+            maxRetries: omConfig.observation.maxRetries,
+            failurePolicy: omConfig.observation.failurePolicy,
             extract: omConfig.observation.extract,
           }
         : undefined,
       reflection: omConfig.reflection
         ? {
             model: omConfig.reflection.model,
+            maxRetries: omConfig.reflection.maxRetries,
+            failurePolicy: omConfig.reflection.failurePolicy,
             observationTokens: omConfig.reflection.observationTokens,
             modelSettings: omConfig.reflection.modelSettings,
             providerOptions: omConfig.reflection.providerOptions,

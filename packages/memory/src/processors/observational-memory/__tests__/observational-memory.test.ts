@@ -4920,9 +4920,13 @@ describe('ObservationalMemory Integration', () => {
         observation: {
           messageTokens: 500,
           previousObserverTokens: 2000,
+          maxRetries: 8,
+          failurePolicy: 'abort',
         },
         reflection: {
           observationTokens: 1000,
+          maxRetries: 8,
+          failurePolicy: 'abort',
         },
       });
     });
@@ -6572,6 +6576,61 @@ describe('Scenario: Cross-session memory (resource scope)', () => {
     expect(resourceRecord?.activeObservations).toContain('Alice');
     expect(resourceRecord?.activeObservations).toContain('TechCorp');
     expect(resourceRecord?.scope).toBe('resource');
+  });
+
+  it('retains resource-scoped input after a continued observation failure and processes it on recovery', async () => {
+    const storage = createInMemoryStorage();
+    const resourceId = 'resource-recovery';
+    let observerCalls = 0;
+    const model = createStreamCapableMockModel({
+      doGenerate: async () => {
+        observerCalls++;
+        if (observerCalls === 1) {
+          throw new TypeError('terminated');
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          content: [{ type: 'text' as const, text: '<observations>\n- Resource input recovered\n</observations>' }],
+          warnings: [],
+        };
+      },
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      observation: {
+        model,
+        messageTokens: 1,
+        maxRetries: 0,
+        failurePolicy: 'continue',
+      },
+      reflection: { observationTokens: 100_000 },
+    });
+    const messages = [
+      createTestMessage('Retain this resource-scoped input', 'user', 'resource-msg-1'),
+      createTestMessage('Acknowledged', 'assistant', 'resource-msg-2'),
+    ];
+
+    const failed = await om.observe({ threadId: 'thread-a', resourceId, messages });
+    const failedRecord = await storage.getObservationalMemory(null, resourceId);
+
+    expect(failed.observed).toBe(false);
+    expect(failedRecord?.threadId).toBeNull();
+    expect(failedRecord?.lastObservedAt).toBeUndefined();
+    expect(failedRecord?.observedMessageIds ?? []).toEqual([]);
+    expect((om as any).getUnobservedMessages(messages, failedRecord)).toHaveLength(2);
+
+    const recovered = await om.observe({ threadId: 'thread-a', resourceId, messages });
+    const recoveredRecord = await storage.getObservationalMemory(null, resourceId);
+
+    expect(observerCalls).toBe(2);
+    expect(recovered.observed).toBe(true);
+    expect(recoveredRecord?.lastObservedAt).toBeDefined();
+    expect(recoveredRecord?.observedMessageIds).toEqual(['resource-msg-1', 'resource-msg-2']);
+    expect((om as any).getUnobservedMessages(messages, recoveredRecord)).toHaveLength(0);
+    expect(recoveredRecord?.activeObservations).toContain('<thread id="thread-a">');
   });
 });
 
@@ -11109,6 +11168,10 @@ describe('Full Async Buffering Flow', () => {
     messageCount?: number;
     /** Optional fixed observer responses in call order */
     observerResponses?: string[];
+    /** Number of observer calls that fail before succeeding */
+    observerFailures?: number;
+    failurePolicy?: 'abort' | 'continue';
+    maxRetries?: number;
   }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
@@ -11154,7 +11217,10 @@ describe('Full Async Buffering Flow', () => {
         }
 
         // Observer call
-        observerCalls.push({ input: promptText.slice(0, 200) });
+        observerCalls.push({ input: promptText });
+        if (observerCalls.length <= (opts.observerFailures ?? 0)) {
+          throw new Error('observer failed');
+        }
         const observerResponse =
           opts.observerResponses?.[observerCalls.length - 1] ??
           `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n* User discussed topic ${observerCalls.length}\n</observations>`;
@@ -11183,6 +11249,8 @@ describe('Full Async Buffering Flow', () => {
         bufferTokens: opts.bufferTokens,
         bufferActivation: opts.bufferActivation,
         blockAfter: opts.blockAfter,
+        failurePolicy: opts.failurePolicy,
+        maxRetries: opts.maxRetries,
       },
       reflection: {
         observationTokens: opts.reflectionObservationTokens,
@@ -11317,6 +11385,95 @@ describe('Full Async Buffering Flow', () => {
 
     // Observer should have been called for buffering
     expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
+  it('retries messages from a failed continue-mode async observation', async () => {
+    const { storage, om, threadId, resourceId, step, waitForAsyncOps, observerCalls } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 10000,
+        bufferTokens: 1000,
+        bufferActivation: 0.7,
+        reflectionObservationTokens: 50000,
+        messageCount: 20,
+        observerFailures: 1,
+        failurePolicy: 'continue',
+      });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const bufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
+    expect(observerCalls).toHaveLength(1);
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(false);
+
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    await storage.saveMessages({
+      messages: Array.from({ length: 10 }, (_, index) => ({
+        id: `retry-msg-${index}`,
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: `Retry message ${index}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 10, index)),
+        threadId,
+        resourceId,
+      })),
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    expect(observerCalls).toHaveLength(2);
+    expect(observerCalls[1]?.input).toContain('The quick brown fox jumps over the lazy dog.');
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(true);
+  });
+
+  // Default (abort) policy: a failed async-buffer cycle must not advance the buffer
+  // cursor either, so the unobserved messages stay eligible for a later cycle
+  // instead of being silently skipped.
+  it('retains messages from a failed async observation under the default failure policy', async () => {
+    const { storage, om, threadId, resourceId, step, waitForAsyncOps, observerCalls } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 10000,
+        bufferTokens: 1000,
+        bufferActivation: 0.7,
+        reflectionObservationTokens: 50000,
+        messageCount: 20,
+        observerFailures: 1,
+        maxRetries: 0,
+      });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const bufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
+    expect(observerCalls).toHaveLength(1);
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(false);
+
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    await storage.saveMessages({
+      messages: Array.from({ length: 10 }, (_, index) => ({
+        id: `abort-retry-msg-${index}`,
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: `Retry message ${index}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 10, index)),
+        threadId,
+        resourceId,
+      })),
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    expect(observerCalls).toHaveLength(2);
+    expect(observerCalls[1]?.input).toContain('The quick brown fox jumps over the lazy dog.');
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(true);
   });
 
   it('should persist buffering markers on observed assistant messages instead of data-only DB messages', async () => {

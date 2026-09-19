@@ -103,6 +103,8 @@ export async function summarizeConversation(opts: SummarizeConversationOptions):
   const extractors = opts.extract ?? [];
   const observationConfig: ResolvedObservationConfig = {
     model: opts.model,
+    maxRetries: 8,
+    failurePolicy: 'abort',
     messageTokens: OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
     shareTokenBudget: false,
     modelSettings: { ...OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings },

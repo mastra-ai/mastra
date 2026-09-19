@@ -1099,8 +1099,15 @@ export class SessionRunEngine {
             });
           }
 
-          this.abortForOmFailure({ operationType, stage: 'run', error });
-          return { message: state.currentMessage };
+          if (
+            !Object.hasOwn(payload, 'failurePolicy') ||
+            !Object.hasOwn(payload, 'failureKind') ||
+            payload.failurePolicy !== 'continue' ||
+            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
+          ) {
+            this.abortForOmFailure({ operationType, stage: 'run', error });
+            return { message: state.currentMessage };
+          }
         }
         break;
       }
@@ -1146,8 +1153,15 @@ export class SessionRunEngine {
             error,
           });
 
-          this.abortForOmFailure({ operationType, stage: 'buffering', error });
-          return { message: state.currentMessage };
+          if (
+            !Object.hasOwn(payload, 'failurePolicy') ||
+            !Object.hasOwn(payload, 'failureKind') ||
+            payload.failurePolicy !== 'continue' ||
+            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
+          ) {
+            this.abortForOmFailure({ operationType, stage: 'buffering', error });
+            return { message: state.currentMessage };
+          }
         }
         break;
       }

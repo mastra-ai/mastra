@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
+import { isOmModelExecutionError } from '../error';
 import { filterObservedMessages, getObservableMessages } from '../message-utils';
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
@@ -475,19 +476,30 @@ export class ObservationStep {
 
     // Sync observation — we've waited for buffering and tried activation,
     // if we're still above threshold we must observe synchronously.
-    const obsResult = await om.observe({
-      threadId,
-      resourceId,
-      messages: observableMessages,
-      messageList,
-      trigger: 'turn-sync',
-      agent: this.turn.agent,
-      sendSignal: this.turn.sendSignal,
-      sendStateSignal: this.turn.sendStateSignal,
-      requestContext: this.turn.requestContext,
-      writer: this.turn.writer,
-      observabilityContext: this.turn.observabilityContext,
-    });
+    let obsResult;
+    try {
+      obsResult = await om.observe({
+        threadId,
+        resourceId,
+        messages: observableMessages,
+        messageList,
+        trigger: 'turn-sync',
+        agent: this.turn.agent,
+        sendSignal: this.turn.sendSignal,
+        sendStateSignal: this.turn.sendStateSignal,
+        requestContext: this.turn.requestContext,
+        writer: this.turn.writer,
+        observabilityContext: this.turn.observabilityContext,
+      });
+    } catch (error) {
+      if (
+        om.config.observation.failurePolicy !== 'continue' ||
+        !isOmModelExecutionError(error) ||
+        error.failureKind !== 'observer-model'
+      )
+        throw error;
+      return { succeeded: false, record: freshStatus.record };
+    }
 
     if (obsResult.observed) {
       const observedMessageIds = new Set(obsResult.record.observedMessageIds ?? []);

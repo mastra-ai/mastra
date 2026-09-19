@@ -1,5 +1,60 @@
+import { hasAbortInChain, isTransientLLMError } from './retry';
+
+const AI_API_CALL_ERROR_MARKER = Symbol.for('vercel.ai.error.AI_APICallError');
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+export function isOmModelExecutionFailure(error: unknown): boolean {
+  // Cancellation wins over every other signal, even when a wrapper's message
+  // looks transient ("request timeout") — an aborted turn must never be
+  // absorbed by `failurePolicy: 'continue'`.
+  if (hasAbortInChain(error)) return false;
+
+  if (isTransientLLMError(error)) return true;
+
+  const visited = new Set<object>();
+  let current: unknown = error;
+  while (isRecord(current) && !visited.has(current)) {
+    visited.add(current);
+
+    if (Object.prototype.hasOwnProperty.call(current, AI_API_CALL_ERROR_MARKER)) {
+      return Reflect.get(current, AI_API_CALL_ERROR_MARKER) === true;
+    }
+
+    current = current.cause ?? current.error;
+  }
+
+  return false;
+}
+
+export type OmFailurePolicy = 'abort' | 'continue';
+export type OmFailureKind = 'observer-model' | 'reflector-model';
+
+export class OmModelExecutionError extends Error {
+  constructor(
+    readonly failureKind: OmFailureKind,
+    cause: unknown,
+  ) {
+    super(formatOmError(cause), { cause });
+    this.name = 'OmModelExecutionError';
+  }
+}
+
+export function isOmModelExecutionError(error: unknown): error is OmModelExecutionError {
+  try {
+    return error instanceof OmModelExecutionError;
+  } catch {
+    return false;
+  }
+}
+
+export function getOmFailureMetadata(error: unknown, failurePolicy: OmFailurePolicy) {
+  return {
+    failurePolicy,
+    ...(isOmModelExecutionError(error) ? { failureKind: error.failureKind } : {}),
+  };
 }
 
 /** Keep provider diagnostics in streamed/persisted markers, not whole API request/response objects. */

@@ -3,8 +3,8 @@
  *
  * streamMarker should prefer the live MessageList (marker lands on the pending
  * assistant response message) and fall back to the storage scan when no list is
- * provided or the list contains no assistant message. Markers must never land
- * on a user message.
+ * provided or the list contains no assistant message. Reflection failure markers
+ * land on the latest user input because reflection precedes the assistant reply.
  */
 
 import { MessageList } from '@mastra/core/agent';
@@ -14,6 +14,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { ObservationStrategy } from '../observation-strategies/base';
 import type { StrategyDeps } from '../observation-strategies/base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from '../observation-strategies/types';
+import { ObservationalMemory } from '../observational-memory';
 
 const threadId = 'marker-thread';
 const resourceId = 'marker-resource';
@@ -162,6 +163,30 @@ describe('OM marker persistence plumbing', () => {
     // The live user message never received a marker part
     const liveUser = messageList.get.all.db().find(m => m.id === 'user-only-1');
     expect(liveUser?.content.parts.some((p: any) => p?.type === marker.type)).toBe(false);
+  });
+
+  it('persists a reflection failure marker on the latest user input instead of a prior assistant message', async () => {
+    const currentUser = makeUserMessage('current-user');
+    const priorAssistant = makeAssistantMessage('prior-assistant');
+    const reflectionMarker = {
+      type: 'data-om-observation-failed',
+      data: { cycleId: 'reflection-cycle', operationType: 'reflection', failureKind: 'reflector-model' },
+    };
+    const { persistMessages, listMessages } = createHarness({
+      storedMessages: [currentUser, priorAssistant],
+    });
+    const om = {
+      storage: { listMessages },
+      messageHistory: { persistMessages },
+    } as unknown as ObservationalMemory;
+
+    await ObservationalMemory.prototype.persistMarkerToStorage.call(om, reflectionMarker, threadId, resourceId);
+
+    expect(persistMessages).toHaveBeenCalledTimes(1);
+    const persisted = persistMessages.mock.calls[0]![0].messages[0] as MastraDBMessage;
+    expect(persisted.id).toBe('current-user');
+    expect(persisted.content.parts).toContainEqual(reflectionMarker);
+    expect(priorAssistant.content.parts).not.toContainEqual(reflectionMarker);
   });
 
   it('does not duplicate a marker with the same cycleId on the assistant message', async () => {
