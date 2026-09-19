@@ -1732,7 +1732,8 @@ export class MessageList {
     this.#rememberBoundaryFingerprint(lastMsg.id, lastMsg.content.parts, boundary);
 
     // Ensure the mutated message is persisted. The reused branch stamps too, so it needs this as
-    // much as the appended one does.
+    // much as the appended one does. When the reused marker was already stamped there is nothing
+    // to write, and re-sourcing then costs one redundant write of a message this run produced.
     if (!this.stateManager.isResponseMessage(lastMsg)) {
       this.stateManager.removeMessage(lastMsg);
       this.stateManager.addToSource(lastMsg, 'response');

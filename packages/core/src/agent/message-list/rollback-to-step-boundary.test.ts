@@ -414,7 +414,7 @@ describe('MessageList#rollbackToStepBoundary', () => {
     // Strip the stamp so the reused branch has something to write, then reuse the marker.
     const marker = partsOf(list, id)!.at(-1)!;
     expect(marker.type).toBe('step-start');
-    delete (marker as { createdAt?: Date }).createdAt;
+    delete (marker as { createdAt?: number }).createdAt;
 
     const reused = list.openStepBoundary();
     expect(reused.appended).toBe(false);
