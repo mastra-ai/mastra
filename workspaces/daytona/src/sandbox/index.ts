@@ -8,7 +8,7 @@
  * @see https://www.daytona.io/docs
  */
 
-import { Daytona, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
+import { Daytona, DaytonaGoneError, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
 import type {
   ComputerUse,
   CreateSandboxFromImageParams,
@@ -583,8 +583,10 @@ export class DaytonaSandbox extends MastraSandbox {
     if (this._sandbox && this._daytona) {
       try {
         await this._daytona.delete(this._sandbox);
-      } catch {
-        // Ignore errors during cleanup
+      } catch (error) {
+        if (!(error instanceof DaytonaNotFoundError) && !(error instanceof DaytonaGoneError)) {
+          throw error;
+        }
       }
     } else if (!this._sandbox) {
       // Not attached in this process — delete by identity without starting it.
