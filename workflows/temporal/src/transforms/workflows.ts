@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { builtinModules } from 'node:module';
 import { basename, join } from 'node:path';
 import { generate } from '@babel/generator';
 import { parse } from '@babel/parser';
@@ -571,12 +572,20 @@ function getCommittedWorkflowName(statement: t.Statement): string | null {
   return expression.callee.object.name;
 }
 
+const nodeBuiltinModules = new Set(builtinModules.flatMap(moduleName => [moduleName, `node:${moduleName}`]));
+const forbiddenModulePrefix = '\0mastra-temporal-forbidden:';
+
+function isNodeBuiltinModule(moduleId: string): boolean {
+  return nodeBuiltinModules.has(moduleId);
+}
+
 interface WorkflowTransformState {
   statements: t.Statement[];
   workflowNames: Set<string>;
   committedWorkflowNames: Set<string>;
   inlineExportedWorkflowNames: Set<string>;
   strippedNames: Set<string>;
+  forbiddenNames: Set<string>;
   stepBindings: Map<string, string>;
   workflowBindings: Map<string, string>;
   workflowExports: TemporalWorkflowExport[];
@@ -584,12 +593,22 @@ interface WorkflowTransformState {
 }
 
 function createWorkflowTransformState(program: t.Program, filePath: string): WorkflowTransformState {
+  const forbiddenNames = new Set<string>();
+  for (const statement of program.body) {
+    if (t.isImportDeclaration(statement) && isNodeBuiltinModule(statement.source.value)) {
+      for (const name of collectImportedNames(statement)) {
+        forbiddenNames.add(name);
+      }
+    }
+  }
+
   return {
     statements: [...createTemporalWorkflowHelperStatements()],
     workflowNames: new Set<string>(),
     committedWorkflowNames: new Set<string>(),
     inlineExportedWorkflowNames: new Set<string>(),
     strippedNames: new Set<string>(),
+    forbiddenNames,
     stepBindings: collectStepBindings(program),
     workflowBindings: collectWorkflowBindings(program, filePath),
     workflowExports: [],
@@ -651,6 +670,10 @@ function collectWorkflowTransformMetadata(program: t.Program, state: WorkflowTra
 }
 
 function rewriteWorkflowImportDeclaration(statement: t.ImportDeclaration, state: WorkflowTransformState): void {
+  if (isNodeBuiltinModule(statement.source.value)) {
+    return;
+  }
+
   if (statement.source.value === '@mastra/core/workflows') {
     const retainedSpecifiers = statement.specifiers.filter(
       specifier =>
@@ -796,6 +819,18 @@ function rewriteWorkflowStatement(statement: t.Statement, filePath: string, stat
     return;
   }
 
+  if (nodeReferencesName(statement, state.forbiddenNames)) {
+    const declaration = getVariableDeclarationFromStatement(statement);
+    const definesWorkflow = declaration?.declarations.some(item => item.init && parseWorkflowChain(item.init));
+    if (definesWorkflow) {
+      throw new Error(
+        `A Node.js builtin is required to configure a Temporal workflow in ${filePath}. ` +
+          'Temporal workflow configuration must be deterministic and cannot depend on Node.js builtins.',
+      );
+    }
+    return;
+  }
+
   if (getCommittedWorkflowName(statement)) {
     return;
   }
@@ -860,6 +895,24 @@ export async function buildTemporalWorkflowModule(
     plugins: [
       {
         name: 'temporal-workflow-transform',
+        resolveId(source) {
+          if (isNodeBuiltinModule(source)) {
+            return `${forbiddenModulePrefix}${source}`;
+          }
+          return null;
+        },
+        resolveDynamicImport(specifier) {
+          if (typeof specifier === 'string' && isNodeBuiltinModule(specifier)) {
+            return `${forbiddenModulePrefix}${specifier}`;
+          }
+          return null;
+        },
+        load(id) {
+          if (id.startsWith(forbiddenModulePrefix)) {
+            return 'export default {};';
+          }
+          return null;
+        },
         transform(code, id) {
           const ast = parseModule(id, code);
           const state = createWorkflowTransformState(ast.program, id);
