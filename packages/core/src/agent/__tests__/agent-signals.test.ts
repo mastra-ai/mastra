@@ -9068,6 +9068,74 @@ describe('Agent signals', () => {
     runtime.abortRun(runId, pubsub);
   });
 
+  it('allows a newer attempt to redispatch after a lost lease rolls back before forwarding', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'retry-after-forward-resource', threadId: 'retry-after-forward-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const signal = { id: 'retry-after-forward-signal', type: 'user-message' as const, contents: 'retry this signal' };
+    const agent = {
+      id: 'retry-after-forward-agent',
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({
+        runId: options.runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      })),
+    } as any;
+    let releaseForward!: () => void;
+    let markForwardStarted!: () => void;
+    const forwardGate = new Promise<void>(resolve => {
+      releaseForward = resolve;
+    });
+    const forwardStarted = new Promise<void>(resolve => {
+      markForwardStarted = resolve;
+    });
+    const realPublish = pubsub.publish.bind(pubsub);
+    let blockedForward = true;
+    pubsub.publish = async (topic, event) => {
+      if (blockedForward && event.data?.type === 'signal-enqueued') {
+        blockedForward = false;
+        markForwardStarted();
+        await forwardGate;
+      }
+      await realPublish(topic, event);
+    };
+    pubsub.owners.set(key, 'winner-run');
+
+    const first = runtime.sendSignal(
+      agent,
+      signal,
+      {
+        ...target,
+        ifIdle: { behavior: 'wake' },
+        _signalAdmissionAttemptId: 'attempt-a',
+      } as any,
+      pubsub,
+    );
+    await forwardStarted;
+
+    pubsub.owners.delete(key);
+    const retry = runtime.sendSignal(
+      agent,
+      signal,
+      {
+        ...target,
+        ifIdle: { behavior: 'wake' },
+        _signalAdmissionAttemptId: 'attempt-b',
+      } as any,
+      pubsub,
+    );
+
+    await expect(retry.accepted).resolves.toMatchObject({ action: 'wake', runId: retry.runId });
+    expect(retry.accepted).not.toBe(first.accepted);
+    expect(agent.stream).toHaveBeenCalledTimes(1);
+
+    releaseForward();
+    await expect(first.accepted).resolves.toMatchObject({ action: 'deliver', runId: 'winner-run' });
+    runtime.abortRun(retry.runId, pubsub);
+  });
+
   it('retains stable signal admission through the run-completed publication window', async () => {
     const pubsub = new BlockingRunCompletedPubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
