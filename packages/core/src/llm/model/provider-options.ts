@@ -12,6 +12,7 @@ import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google-v6';
 import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v6';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
+import type { SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
 import type { XaiProviderOptions } from '@ai-sdk/xai-v6';
 
 // Re-export the types
@@ -115,7 +116,9 @@ export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions
  * Map, etc.) are replaced wholesale. Within colliding leaf keys, `override`
  * wins.
  */
-export function mergeProviderOptions<T extends ProviderOptions | SharedV2ProviderOptions | SharedV3ProviderOptions>(
+export function mergeProviderOptions<
+  T extends ProviderOptions | SharedV2ProviderOptions | SharedV3ProviderOptions | SharedV4ProviderOptions,
+>(
   base: T | undefined,
   override: T | undefined,
 ): T | undefined {

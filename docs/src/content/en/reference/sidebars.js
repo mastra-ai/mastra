@@ -146,6 +146,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Classifier',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'classifier/classifier', label: 'Classifier' }],
+    },
+    {
+      type: 'category',
       label: 'CLI',
       collapsed: true,
       items: [

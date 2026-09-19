@@ -1,0 +1,239 @@
+---
+title: 'Reference: Classifier | Classifier'
+description: 'API reference for typed fixed-option evaluation with AI SDK EvaluationModelV4 models.'
+slug: '/classifier/classifier'
+packages:
+  - '@mastra/core'
+---
+
+# Classifier
+
+The `Classifier` evaluates named choice, score, and boolean questions against shared state. It returns typed answers and provider evidence without applying thresholds, blocking content, routing requests, or making other application decisions.
+
+Import it from `@mastra/core/classifier` and provide an AI SDK `EvaluationModelV4` implementation.
+
+## Configure questions in the constructor
+
+Use constructor-configured questions when every evaluation uses the same question set. Literal question and choice names are preserved in the result type.
+
+```typescript
+import { Classifier } from '@mastra/core/classifier'
+
+const classifier = new Classifier({
+  id: 'content-safety',
+  model,
+  questions: {
+    unsafe: {
+      type: 'boolean',
+      criteria: {
+        true: 'The content is unsafe',
+        false: 'The content is safe',
+      },
+    },
+  },
+})
+
+const result = await classifier.evaluate({
+  state: { content: 'A message to evaluate' },
+})
+
+result.answers.unsafe.probability // Estimated P(true), from 0 to 1
+```
+
+## Provide questions per call
+
+Omit `questions` from the constructor when the question set changes between evaluations. Each call to `evaluate()` must then include questions.
+
+```typescript
+import { Classifier } from '@mastra/core/classifier'
+
+const classifier = new Classifier({
+  id: 'request-router',
+  model,
+})
+
+const result = await classifier.evaluate({
+  state: { request: 'I need help with an invoice' },
+  questions: {
+    route: {
+      type: 'choice',
+      criteria: {
+        support: 'Customer support request',
+        sales: 'Sales request',
+      },
+    },
+  },
+})
+
+result.answers.route.choice // 'support' | 'sales'
+```
+
+Constructor-configured questions and per-call questions are mutually exclusive.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'A non-empty identifier for the classifier.',
+    isOptional: false,
+  },
+  {
+    name: 'model',
+    type: 'EvaluationModelV4',
+    description:
+      "An AI SDK evaluation model. The classifier checks each question against the model's supported question types before provider I/O.",
+    isOptional: false,
+  },
+  {
+    name: 'questions',
+    type: 'ClassifierQuestions',
+    description:
+      'A non-empty map of named questions. When omitted, every evaluate() call must provide questions instead.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Question types
+
+Each question can include `instructions`, a JSON-compatible value that tells the model what to evaluate. When omitted, the question name is used as its instructions.
+
+### Choice
+
+A choice question uses a non-empty map of option names to JSON-compatible descriptions. The answer contains the selected option and may include a complete probability distribution.
+
+```typescript
+const question = {
+  type: 'choice',
+  instructions: 'Select the request category',
+  criteria: {
+    support: 'A request for product help',
+    sales: 'A request about purchasing',
+  },
+} as const
+```
+
+### Score
+
+A score question uses an ordered array with at least two levels. Level indexes define the numeric range, so three criteria allow scores from `0` through `2`, including fractional values. The answer may include a complete probability distribution over level indexes.
+
+```typescript
+const question = {
+  type: 'score',
+  instructions: 'Score the response quality',
+  criteria: ['Poor', 'Acceptable', 'Excellent'],
+} as const
+```
+
+### Boolean
+
+A boolean question returns `probability`, the estimated probability that the answer is `true`. It isn't the confidence of whichever boolean outcome is more likely.
+
+```typescript
+const question = {
+  type: 'boolean',
+  criteria: {
+    true: 'The content is unsafe',
+    false: 'The content is safe',
+  },
+} as const
+```
+
+## `evaluate(options)`
+
+Evaluates all named questions against the same state. The classifier validates input before calling the provider and validates the complete provider response before returning it.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'state',
+    type: 'string | JsonObject | JsonArray',
+    description: 'The shared JSON-compatible state evaluated by every question.',
+    isOptional: false,
+  },
+  {
+    name: 'questions',
+    type: 'ClassifierQuestions',
+    description: 'The questions to evaluate. Required only when the classifier was constructed without questions.',
+    isOptional: true,
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    description:
+      'Cancels evaluation before an attempt, during provider execution, or after provider execution before a result is returned.',
+    isOptional: true,
+  },
+  {
+    name: 'providerOptions',
+    type: 'SharedV4ProviderOptions',
+    description: 'Provider-specific options forwarded to the evaluation model.',
+    isOptional: true,
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    description: 'Maximum retry count for retryable provider API errors. Must be a non-negative integer.',
+    isOptional: true,
+    defaultValue: '2',
+  },
+]}
+/>
+
+### Return value
+
+`evaluate()` returns a `Promise<ClassifierResult<QUESTIONS>>` with the following fields:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'answers',
+    type: 'ClassifierAnswers<QUESTIONS>',
+    description:
+      'One typed answer per question. Choice answers contain choice and optional probabilities. Score answers contain score and optional probabilities. Boolean answers contain probability as P(true).',
+    isOptional: false,
+  },
+  {
+    name: 'usage',
+    type: 'ClassifierUsage',
+    description: 'Token usage with optional inputTokens and outputTokens plus a normalized totalTokens value.',
+    isOptional: false,
+  },
+  {
+    name: 'warnings',
+    type: 'SharedV4Warning[]',
+    description: 'Warnings returned by the evaluation model.',
+    isOptional: false,
+  },
+  {
+    name: 'rounding',
+    type: '{ probabilityDecimals?: number; scoreDecimals?: number }',
+    description: 'Provider-declared precision used for probabilities and scores.',
+    isOptional: true,
+  },
+  {
+    name: 'providerMetadata',
+    type: 'SharedV4ProviderMetadata',
+    description: 'Provider-specific metadata returned by the evaluation model.',
+    isOptional: true,
+  },
+  {
+    name: 'response',
+    type: '{ id?: string; timestamp: Date; modelId: string; headers?: Record<string, string | undefined>; body?: unknown }',
+    description:
+      'Normalized response metadata. timestamp defaults to the current time and modelId defaults to the evaluation model ID when the provider omits them.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Validation and retries
+
+The classifier rejects malformed state, questions, and answers. Provider output must contain exactly one correctly typed answer per question. Probability distributions must be complete, valid, and consistent with selected choices or weighted scores.
+
+Unsupported question types fail before provider I/O. Only retryable AI SDK `APICallError` failures are retried. Other errors are returned immediately, and an exhausted retry sequence rejects the evaluation.
+
+The classifier records safe evaluation metadata in the active observability context when one exists. Raw state, criteria descriptions, answers, and provider-generated text aren't added to span attributes.

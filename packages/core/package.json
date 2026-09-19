@@ -181,6 +181,16 @@
         "default": "./dist/coding-agent/index.cjs"
       }
     },
+    "./classifier": {
+      "import": {
+        "types": "./dist/classifier/index.d.ts",
+        "default": "./dist/classifier/index.js"
+      },
+      "require": {
+        "types": "./dist/classifier/index.d.ts",
+        "default": "./dist/classifier/index.cjs"
+      }
+    },
     "./datasets": {
       "import": {
         "types": "./dist/datasets/index.d.ts",
@@ -884,10 +894,10 @@
     "@a2a-js/sdk-v0_3": "npm:@a2a-js/sdk@~0.3.14",
     "@a2a-js/sdk-v1": "npm:@a2a-js/sdk@~1.0.1",
     "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.40",
-    "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.13",
+    "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.45",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.3",
     "@ai-sdk/provider-v6": "npm:@ai-sdk/provider@3.0.14",
-    "@ai-sdk/provider-v7": "npm:@ai-sdk/provider@4.0.4",
+    "@ai-sdk/provider-v7": "npm:@ai-sdk/provider@4.0.17",
     "@isaacs/ttlcache": "^2.1.5",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
