@@ -46,6 +46,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   }
 
   validateModelTimeoutSettings(modelSettings?.timeout);
+  for (const model of models) {
+    validateModelTimeoutSettings(model.modelSettings?.timeout);
+  }
 
   const firstModel = models[0];
 

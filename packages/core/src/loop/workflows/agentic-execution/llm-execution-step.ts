@@ -1772,9 +1772,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             },
           }) as unknown as ReturnType<typeof execute>;
         } else if (isSupportedLanguageModel(currentStep.model)) {
-          const callTimeout = validateModelTimeoutSettings(currentStep.modelSettings?.timeout);
-          const modelTimeout = validateModelTimeoutSettings(modelConfig.modelSettings?.timeout);
-          const timeout = callTimeout || modelTimeout ? { ...callTimeout, ...modelTimeout } : undefined;
+          validateModelTimeoutSettings(currentStep.modelSettings?.timeout);
 
           // Apply request-side context to MODEL_INFERENCE using the post-processor
           // tool set + per-step settings, then open the inference span. Doing this
