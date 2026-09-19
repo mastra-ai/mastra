@@ -1167,8 +1167,9 @@ describe('StructuredOutputProcessor', () => {
   });
 
   describe('instruction generation', () => {
-    it('should generate instructions based on schema', () => {
-      const instructions = (processor as any).generateInstructions();
+    it('should install generated schema instructions on the structuring agent', async () => {
+      const agent = (processor as unknown as { structuringAgent: Agent }).structuringAgent;
+      const instructions = await agent.getInstructions();
 
       expect(instructions).toContain('data structuring specialist');
       expect(instructions).toContain('JSON format');
