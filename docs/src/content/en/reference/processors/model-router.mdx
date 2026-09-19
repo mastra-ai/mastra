@@ -116,26 +116,11 @@ export const agent = new Agent({
 
 A run's context accumulates: each step carries the conversation and every tool result so far. That makes the opening call the cheapest one, not the most expensive, so routing only that call captures very little.
 
-Measured over five four-step support runs:
-
-| | Share of input tokens | Saving captured |
-| - | - | - |
-| Opening call only | 14% | 9% |
-| Whole run | 100% | 100% |
+On a four-step run the opening call holds roughly 14% of the input tokens, so routing it alone captures under a tenth of the available saving.
 
 `scope: 'run'` is the default for this reason. Reach for `scope: 'first-step'` when you would rather a long run drift back to the capable model than commit to one decision, and accept that on multi-step runs it saves close to nothing.
 
 Single-step runs are unaffected, because the two scopes are identical when there is only one model call.
-
-## Multi-turn conversations
-
-Because only the latest message is classified, a terse follow-up like `"now apply that to the rest of them"` is routed on that sentence alone. On ten multi-turn support conversations with deliberately anaphoric final turns, that misrouted 4 of 5 turns whose difficulty appeared to carry over from earlier context. Adding the conversation to the classifier state fixed the routing at 1.14x the classifier tokens, and did not over-upgrade: the five genuinely easy follow-ups stayed on the cheap model either way.
-
-The routing difference did not show up in answer quality. Re-answering those four turns with both models and judging blind in both A/B orders produced **no stable regression** — three verdicts flipped when the order was swapped, and on the fourth the cheap model's answer was preferred.
-
-The likely reason is that in a multi-turn exchange the hard reasoning is usually already in the transcript. The assistant worked out the policy in the earlier turn, so the follow-up inherits a derived answer rather than the original difficulty, and applying an established rule is work a cheap model does well.
-
-Treat this as a reason to measure rather than a guarantee. The quality comparison is n=4 on one provider and a single-domain script, which is too small to conclude the effect is absent. If your follow-ups genuinely re-open the hard reasoning instead of applying its result, classify the conversation yourself and pass the model in through the `select` form.
 
 ## Routing on more than one dimension
 
@@ -192,44 +177,22 @@ Routing fails open. If the classifier errors, the classifier ID is not registere
 
 This is the opposite of the fail-closed stance appropriate for [tool approval](/docs/agents/human-in-the-loop), where uncertainty should escalate rather than pass through.
 
-## Measured behavior
+## When routing is worth it
 
-Routing was evaluated on a tool-using support agent over 26 requests, weighted toward underspecified phrasing rather than obviously easy or obviously hard questions. Each request was answered by both models so the two could be compared directly, and the downgraded subset was graded by a stronger model in both A/B orders, discarding any verdict that flipped when the order was swapped.
+The classifier reads only the latest user message, so its cost is roughly constant per request while the agent's input grows with the system prompt, retrieved context, and history. That makes **agent context size, not the gap between model prices, the main thing determining whether routing pays.**
 
-| Measure | Result |
-| - | - |
-| Downgraded | 13 of 26 requests |
-| Clearly complex requests downgraded | 0 of 6 |
-| Cost saving on agent calls | \~39% |
-| Downgraded answers judged worse | 3 of 13 |
+On a small agent with a short prompt, the classifier round-trip can be comparable in size to the agent call it is optimizing, and routing can cost more than it saves. On an agent with a large system prompt or retrieved context, the same classifier call is negligible against the saving.
 
-Two results matter more than the headline saving.
+Downgrading is not quality-neutral. On a support agent evaluated over 26 requests, routing downgraded half of them for roughly 39% less spend on agent calls, never downgraded a clearly complex request, and produced a worse answer on about a quarter of the downgraded ones. The failures were omitted conditions and vaguer details rather than wrong answers, which is a harder failure to notice.
 
-**The saving scales with context, but the classifier call does not.** The classifier reads only the latest user message, so its cost stays flat while the agent's input grows with system prompt, retrieved context, and history. Measured across four context sizes on the same requests:
-
-| Agent input | Saving per request | Max viable classifier price |
-| - | - | - |
-| \~330 tokens | $0.0014 | $3.41 per 1M tokens |
-| \~4,000 tokens | $0.0100 | $24.01 per 1M tokens |
-| \~15,000 tokens | $0.0355 | $85.02 per 1M tokens |
-| \~38,000 tokens | $0.0904 | $216.36 per 1M tokens |
-
-Agent input grew 114x across that range while classifier cost stayed at roughly 418 tokens. The last column is the most useful one: it is the most you can pay per million classifier tokens before the classifier eats the saving. On a small agent that headroom is thin enough that routing can genuinely cost more than it saves. On an agent with a large system prompt or retrieved context, the headroom is wide and routing is close to free.
-
-This makes agent context size, not the model price ratio, the main thing determining whether routing is worth enabling.
-
-**Downgrading is not quality-neutral.** Three of thirteen downgraded answers were judged worse by a stronger model, consistently in both orders. The failures were omitted policy conditions and less precise details rather than outright wrong answers, and one occurred on a request that looked entirely routine. Treat some quality cost on downgraded traffic as expected, not as a bug to tune away.
-
-With 13 downgraded samples, one provider, one taxonomy, and one judge, the regression rate is directionally useful and not a precise figure. Run the comparison on your own traffic before enabling this broadly: answer the same requests with both models, compare the downgraded subset, and confirm the saving clears your classifier cost.
-
-Whether that quality cost grows with context is **unresolved**. A repeat of the comparison at roughly 400 and 37,000 input tokens moved the regression rate from 10% to 20%, but that is a difference of one case out of ten per group, and the failing requests were not the same ones at each size, which points at judge variance rather than degradation. Treat quality under long context as something to measure on your own traffic rather than as a settled property in either direction.
+Before enabling this broadly, answer a sample of your own traffic with both models, compare the subset that would be downgraded, and confirm the saving clears your classifier cost.
 
 ## Cost and behavior notes
 
 - The classifier runs **once per request**, in `processInput`, not once per step. The decision is stashed in per-request state and read on each step.
-- Only the **latest user message** is classified. The system prompt, retrieved context, and earlier turns are not sent to the classifier. This keeps the routing call flat as context grows. See [Multi-turn conversations](#multi-turn-conversations) for what it costs.
+- Only the **latest user message** is classified. The system prompt, retrieved context, and earlier turns are not sent to the classifier, which keeps the routing call flat as context grows. A terse follow-up such as `"now apply that to the rest"` is therefore routed on that sentence alone. If your follow-ups re-open hard reasoning rather than applying an earlier result, classify the conversation yourself and pass the model in through the `select` form.
 - Only downgrade. Keep the capable model as the agent's configured default and use the router to move down, so an incorrect routing decision costs quality on one step rather than removing the capable model from the run entirely.
-- The router adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on. As the measurements above show, this round-trip can be comparable in size to the agent call it is optimizing, so confirm the saving is real for your model pair rather than assuming it.
+- The router adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on.
 
 ## Related
 
