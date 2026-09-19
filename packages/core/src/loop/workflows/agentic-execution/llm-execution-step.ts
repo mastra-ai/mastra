@@ -1173,7 +1173,14 @@ function executeStreamWithFallbackModels<T>(
 
         lastError = err;
 
-        logger?.error(`Error executing model ${modelConfig.model.modelId}`, err);
+        const nextModel = models[index]?.model;
+        if (nextModel) {
+          logger?.warn('Model failed; trying fallback model', {
+            error: err,
+            modelId: modelConfig.model.modelId,
+            nextModelId: nextModel.modelId,
+          });
+        }
       }
     }
     if (typeof finalResult === 'undefined') {
@@ -2025,9 +2032,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // before abort/error/fallback handling can return or throw.
           cleanupProviderToolSpans(true);
 
-          const provider = model?.provider;
-          const modelIdStr = model?.modelId;
-
           // Handle abort first — a client-disconnect mid-stream is the
           // expected exit path, not an error. Logging it at error level
           // pollutes monitoring (see #15844 for the production
@@ -2044,26 +2048,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
 
             return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
-          }
-
-          const isUpstreamError = APICallError.isInstance(error);
-
-          if (isUpstreamError) {
-            const providerInfo = provider ? ` from ${provider}` : '';
-            const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
-            logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
-              error,
-              runId,
-              ...(provider && { provider }),
-              ...(modelIdStr && { modelId: modelIdStr }),
-            });
-          } else {
-            logger?.error('Error in LLM execution', {
-              error,
-              runId,
-              ...(provider && { provider }),
-              ...(modelIdStr && { modelId: modelIdStr }),
-            });
           }
 
           if (isLastModel) {
@@ -2347,6 +2331,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const deferredError = getErrorFromUnknown(deferredChunk.payload.error, {
           fallbackMessage: 'Unknown error in agent stream',
         });
+        const failedModel = models[activeFallbackModelIndex]?.model;
+        const provider = failedModel?.provider;
+        const modelId = failedModel?.modelId;
+        const providerInfo = provider ? ` from ${provider}` : '';
+        const modelInfo = modelId ? ` (model: ${modelId})` : '';
+        logger?.error(
+          APICallError.isInstance(deferredError)
+            ? `Upstream LLM API error${providerInfo}${modelInfo}`
+            : 'Error in LLM execution',
+          {
+            error: deferredError,
+            runId,
+            terminal: true,
+            ...(provider && { provider }),
+            ...(modelId && { modelId }),
+          },
+        );
         let errorChunk = {
           ...deferredChunk,
           payload: { ...deferredChunk.payload, error: deferredError },
