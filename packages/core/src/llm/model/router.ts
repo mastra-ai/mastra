@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
@@ -45,6 +45,7 @@ function isLanguageModelV3(model: GatewayLanguageModel): model is LanguageModelV
 
 const OPENAI_WS_ALLOWLIST = new Set(['openai']);
 const OPENAI_API_HOST = 'api.openai.com';
+const CACHE_KEY_HMAC_SECRET = randomBytes(32);
 
 type GatewayModelCache = {
   modelInstances: Map<string, GatewayLanguageModel>;
@@ -509,7 +510,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     authScopeKey: string;
     api: 'chat' | 'responses';
   }): string {
-    return createHash('sha256')
+    return createHmac('sha256', CACHE_KEY_HMAC_SECRET)
       .update(
         JSON.stringify([
           gatewayId,
