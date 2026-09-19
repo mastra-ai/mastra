@@ -6513,7 +6513,7 @@ NODE
   head_sha="$(
     cd "$fixture_repo"
     git reset -q --hard "$base_sha"
-    printf '%s\n' "import '../domains/memory/row-number-performance.test';" \
+    printf '%s\n' "import '/src/storage/domains/memory/row-number-performance.test.ts';" \
       >> stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
     git add .
     git commit -q -m 'reject PostgreSQL unit imports of performance suite'
@@ -6535,7 +6535,7 @@ NODE
     'Unsupported fork-test runtime surface for stores/pg/src/storage/performance-indexes/performance-indexes.test.ts:' \
     "$output"
   assert_contains \
-    'stores/pg/src/storage/domains/memory/row-number-performance.test.ts: process.env' \
+    'unreviewed external module /src/storage/domains/memory/row-number-performance.test.ts' \
     "$output"
   assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
   if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
@@ -13996,6 +13996,7 @@ const bannedBuiltins = new Set([
 ]);
 const nodeBuiltins = new Set(builtinModules.map(specifier => specifier.replace(/^node:/, '').split('/')[0]));
 const exactTestEntries = new Set([
+  'stores/pg/src/storage/performance-indexes/performance-indexes.test.ts',
   'packages/core/src/agent/__tests__/supervisor-integration.test.ts',
   'packages/core/src/agent/__tests__/tool-approval.e2e.test.ts',
   'packages/core/src/agent/durable/__tests__/durable-agent-background-tasks.e2e.test.ts',
