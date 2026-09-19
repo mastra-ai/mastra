@@ -1,17 +1,14 @@
 import type { Plugin, PluginContext } from 'rollup';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 
 describe('subpathExternalsResolver', () => {
   let plugin: Plugin;
-  let resolve: ReturnType<typeof vi.fn>;
   let mockContext: PluginContext;
 
   beforeEach(async () => {
     const mod = await import('./subpath-externals-resolver');
-    resolve = vi.fn();
     mockContext = {
-      resolve,
       error(message) {
         throw new Error(String(message));
       },
@@ -21,30 +18,32 @@ describe('subpathExternalsResolver', () => {
       new Map([
         [
           '@inner/subpath-only',
-          { name: '@inner/subpath-only', location: '/workspace/packages/subpath-only' } as WorkspacePackageInfo,
+          {
+            location: '/workspace/packages/subpath-only',
+            exports: {
+              '.': './src/index.js',
+              './value': './src/value.js',
+            },
+          } as WorkspacePackageInfo,
         ],
       ]),
     );
   });
 
-  const resolveId = (id: string) => {
+  const resolveId = (id: string, importer = '/workspace/apps/custom/src/index.ts') => {
     const fn = plugin.resolveId as Function;
-    return fn.call(mockContext, id, '/workspace/apps/custom/src/index.ts', {});
+    return fn.call(mockContext, id, importer, {});
   };
 
-  it('externalizes valid workspace package subpaths', async () => {
-    resolve.mockResolvedValue({ id: '/workspace/packages/subpath-only/value.ts' });
-
-    await expect(resolveId('@inner/subpath-only/value')).resolves.toEqual({
+  it('externalizes exported workspace package subpaths independently of the importer', () => {
+    expect(resolveId('@inner/subpath-only/value', '/workspace/src/mastra/index.ts')).toEqual({
       id: '@inner/subpath-only/value',
       external: true,
     });
   });
 
-  it('rejects unresolved workspace package subpaths', async () => {
-    resolve.mockResolvedValue(null);
-
-    await expect(resolveId('@inner/subpath-only/missing')).rejects.toThrow(
+  it('rejects workspace package subpaths that are not exported', () => {
+    expect(() => resolveId('@inner/subpath-only/missing')).toThrow(
       'Could not resolve workspace package subpath "@inner/subpath-only/missing".',
     );
   });
@@ -53,10 +52,9 @@ describe('subpathExternalsResolver', () => {
     const mod = await import('./subpath-externals-resolver');
     plugin = mod.subpathExternalsResolver(['external-package']);
 
-    await expect(resolveId('external-package/subpath')).resolves.toEqual({
+    expect(resolveId('external-package/subpath')).toEqual({
       id: 'external-package/subpath',
       external: true,
     });
-    expect(resolve).not.toHaveBeenCalled();
   });
 });

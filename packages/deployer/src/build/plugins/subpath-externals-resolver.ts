@@ -1,3 +1,4 @@
+import * as resolve from 'resolve.exports';
 import type { Plugin } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { getPackageName, isDependencyPartOfPackage } from '../utils';
@@ -8,7 +9,7 @@ export function subpathExternalsResolver(
 ): Plugin {
   return {
     name: 'subpath-externals-resolver',
-    async resolveId(id, importer) {
+    resolveId(id) {
       if (id.startsWith('.') || id.startsWith('/')) {
         return null;
       }
@@ -19,9 +20,12 @@ export function subpathExternalsResolver(
       }
 
       const packageName = getPackageName(id);
-      if (packageName && workspaceMap.has(packageName) && id !== packageName) {
-        const resolved = await this.resolve(id, importer, { skipSelf: true });
-        if (!resolved) {
+      const workspacePackage = packageName ? workspaceMap.get(packageName) : undefined;
+      if (packageName && workspacePackage?.exports !== undefined && id !== packageName) {
+        const subpath = `.${id.slice(packageName.length)}`;
+        try {
+          resolve.exports({ name: packageName, exports: workspacePackage.exports }, subpath);
+        } catch {
           this.error(`Could not resolve workspace package subpath "${id}".`);
         }
       }
