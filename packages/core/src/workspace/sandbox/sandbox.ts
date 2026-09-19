@@ -342,6 +342,15 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   readonly provider: string;
 
   /**
+   * The provider's physical, reattachable sandbox id, resolved after the VM is
+   * started (connected or created). Distinct from `id`, which is the logical
+   * identity: persist this to reattach deterministically to the same VM on a
+   * later resume. Undefined until the sandbox has been started, or for
+   * providers with no separate physical id (e.g. local process sandboxes).
+   */
+  readonly sandboxId?: string;
+
+  /**
    * Capture the sandbox's current state as a checkpoint when the provider
    * supports it. Terminology: *snapshot* is the act of capturing; the named,
    * persisted artifact it writes is a *checkpoint*

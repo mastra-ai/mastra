@@ -407,7 +407,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // unmaterialized-source guard before the checkout existed, so rescan now.
       const publishStartSideEffects = () => {
         void storage.sessions
-          .setSandbox({ id: session.id, sandboxId: target.id, sandboxWorkdir: sessionEntry.workdir ?? '' })
+          .setSandbox({
+            id: session.id,
+            // Persist the provider's PHYSICAL, reattachable VM id so resume can
+            // reattach to the same VM. Providers with no separate physical id
+            // (e.g. local) fall back to the logical id, preserving prior behavior.
+            sandboxId: target.sandboxId ?? target.id,
+            sandboxWorkdir: sessionEntry.workdir ?? '',
+          })
           .catch(() => {});
         void constructedWorkspaces
           .get(workspaceId)
@@ -467,6 +474,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       getSessionSandbox(session.id, repoFullName, () => {
         const sandbox = createSessionSandboxInstance({
           sessionId: session.id,
+          // Physical VM id persisted from a prior start (undefined on first
+          // start). Providers that reattach by physical id use it to resume the
+          // original VM instead of provisioning a replacement.
+          sandboxId: session.sandboxId ?? undefined,
           repoFullName,
           // Stored nullable; the context speaks `undefined` for absent.
           setupCommand: projectRepository.setupCommand ?? undefined,
