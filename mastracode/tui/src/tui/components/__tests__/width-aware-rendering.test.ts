@@ -174,6 +174,11 @@ describe('width-aware custom component rendering', () => {
     expectReflow(component);
     expect(component.getChatSpacingKind()).toBe('quiet-shell-tool');
     expect(component.isComplete()).toBe(false);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    // Quiet mode hides output; the (syntax-highlighted) command footer still survives reflow.
+    const visible = component
+      .render(140)
+      .join('\n')
+      .replace(/\u001b\[[0-9;]*m/g, '');
+    expect(visible).toContain('unique-restored-tail');
   });
 });

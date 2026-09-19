@@ -1,4 +1,4 @@
-import { Container } from '@earendil-works/pi-tui';
+import { Container, visibleWidth } from '@earendil-works/pi-tui';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
@@ -18,6 +18,11 @@ import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
 import { addPendingUserMessage, addUserMessage, renderExistingMessages } from '../render-messages.js';
 import type { TUIState } from '../state.js';
+
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\u001b\[[0-9;]*m/g, '');
+}
 
 function createState(): TUIState {
   return {
@@ -410,6 +415,87 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(true);
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
+  });
+
+  it('truncates notifications in quiet mode to the tool preview line limit', () => {
+    const state = createState();
+    state.quietMode = true;
+    state.quietModeMaxToolPreviewLines = 2;
+    const longMessage = Array.from({ length: 6 }, (_, i) => `detail line ${i + 1}`).join('\n');
+
+    addUserMessage(
+      state,
+      createNotificationMessage(
+        { message: longMessage, source: 'github', kind: 'ci-status', priority: 'high', status: 'delivered' },
+        'notification-quiet',
+      ),
+    );
+    addUserMessage(
+      state,
+      createNotificationSummaryMessage(
+        {
+          message: '3 pending notifications',
+          pending: 3,
+          bySource: { github: 2, 'goal-judge': 1 },
+          byPriority: { high: 3 },
+          notificationIds: ['a', 'b', 'c'],
+        },
+        'notification-summary-quiet',
+      ),
+    );
+
+    const notification = state.messageComponentsById.get('notification-quiet') as NotificationComponent;
+    const rendered = notification.render(100).map(line => stripAnsi(line));
+    // Same bordered box: top, title, 2 message lines, bottom — no details row.
+    expect(rendered).toHaveLength(5);
+    expect(rendered[0]).toContain('╭');
+    expect(rendered[1]).toContain('notification from github');
+    expect(rendered.join('\n')).not.toContain('high · ci-status');
+    expect(rendered.join('\n')).toContain('detail line 2…');
+    expect(rendered.join('\n')).not.toContain('detail line 3');
+    expect(rendered[4]).toContain('╰');
+
+    const summary = state.messageComponentsById.get('notification-summary-quiet') as NotificationSummaryComponent;
+    const summaryLines = summary.render(100).map(line => stripAnsi(line));
+    expect(summaryLines).toHaveLength(2);
+    expect(summaryLines[0]).toContain('Notification summary: 3 pending');
+    expect(summaryLines[1]).toContain('github: 2, goal-judge: 1');
+    expect(summaryLines.join('\n')).not.toContain('notification_inbox');
+
+    // Turning quiet mode off restores the full rendering.
+    notification.setQuietModeDisplay('normal');
+    summary.setQuietModeDisplay('normal');
+    const full = stripAnsi(notification.render(100).join('\n'));
+    expect(full).toContain('high · ci-status · delivered');
+    expect(full).toContain('detail line 6');
+    expect(stripAnsi(summary.render(100).join('\n'))).toContain('notification_inbox');
+  });
+
+  it('keeps the quiet notification ellipsis inside the terminal width', () => {
+    const state = createState();
+    state.quietMode = true;
+    state.quietModeMaxToolPreviewLines = 1;
+    // A single long word wraps into lines that fill the content width exactly.
+    const longMessage = 'x'.repeat(200);
+
+    addUserMessage(
+      state,
+      createNotificationMessage(
+        { message: longMessage, source: 'github', kind: 'ci-status', priority: 'high', status: 'delivered' },
+        'notification-narrow',
+      ),
+    );
+
+    const width = 60;
+    const notification = state.messageComponentsById.get('notification-narrow') as NotificationComponent;
+    const rendered = notification.render(width).map(line => stripAnsi(line));
+    expect(rendered).toHaveLength(4);
+    expect(rendered[2]).toContain('…');
+    expect(rendered[2]).toContain('x'.repeat(55));
+    expect(rendered[2]).not.toContain('x'.repeat(56));
+    for (const line of rendered) {
+      expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+    }
   });
 
   it('renders one latest-position completion card for a stable background event id', () => {
