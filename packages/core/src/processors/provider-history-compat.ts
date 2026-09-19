@@ -2,6 +2,8 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart, MessageList } from '../agent/message-list';
+import { getResponseProviderItemIdFromPart } from '../agent/message-list';
+import { RESPONSE_ITEM_ID_PROVIDERS } from '../agent/message-list/utils/response-item-metadata';
 import type {
   Processor,
   ProcessAPIErrorArgs,
@@ -708,13 +710,8 @@ export const azureSystemReminderTransform: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
-// Built-in rule: OpenAI orphaned message itemId
+// Built-in rule: orphaned Responses message itemId (OpenAI / Azure)
 // ---------------------------------------------------------------------------
-
-function openaiItemId(part: MastraMessagePart): string | undefined {
-  const meta = (part as { providerMetadata?: { openai?: { itemId?: unknown } } }).providerMetadata?.openai;
-  return typeof meta?.itemId === 'string' ? meta.itemId : undefined;
-}
 
 function hasReasoningPart(message: MastraDBMessage): boolean {
   return (message.content?.parts ?? []).some(p => p.type === 'reasoning');
@@ -736,15 +733,36 @@ function isUnpairedReasoningRow(message: MastraDBMessage): boolean {
 }
 
 /**
- * Strips `itemId` from a part's OpenAI metadata, leaving every other field
- * (cache counts, reasoning-token counts, logprobs) intact. Mirrors the narrow
- * destructure in `client-sdks/ai-sdk/src/helpers.ts` (PR #23323).
+ * Strips `itemId` from every Responses namespace a part carries, in both
+ * metadata containers, leaving every other field (cache counts,
+ * reasoning-token counts, logprobs) intact. Mirrors the narrow destructure in
+ * `client-sdks/ai-sdk/src/helpers.ts` (PR #23323).
+ *
+ * Both `providerMetadata` and `providerOptions` are cleared because
+ * {@link getResponseProviderItemIdFromPart} reads an id from either, so
+ * leaving one behind would report a part as still item-bearing — and would
+ * leave the unsatisfiable reference in the prompt, which is the whole failure.
+ *
+ * Returns true when it removed an id.
  */
-function stripItemId(part: MastraMessagePart): void {
-  const meta = (part as { providerMetadata?: { openai?: Record<string, unknown> } }).providerMetadata;
-  if (!meta?.openai) return;
-  const { itemId: _itemId, ...rest } = meta.openai;
-  meta.openai = rest;
+function stripResponseItemIds(part: MastraMessagePart): boolean {
+  const containers = [
+    (part as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+    (part as { providerOptions?: Record<string, unknown> }).providerOptions,
+  ];
+
+  let stripped = false;
+  for (const container of containers) {
+    if (!container) continue;
+    for (const provider of RESPONSE_ITEM_ID_PROVIDERS) {
+      const namespace = container[provider] as Record<string, unknown> | undefined;
+      if (!namespace || !('itemId' in namespace)) continue;
+      const { itemId: _itemId, ...rest } = namespace;
+      container[provider] = rest;
+      stripped = true;
+    }
+  }
+  return stripped;
 }
 
 /**
@@ -775,8 +793,17 @@ function stripItemId(part: MastraMessagePart): void {
  *
  * Deliberately narrow:
  * - Matches only the `of type 'message'` phrasing. The sibling `function_call`
- *   (`fc_…`) variant is a different failure, addressed by PR #19408.
- * - Strips only `itemId`; all other `providerMetadata.openai` fields survive.
+ *   (`fc_…`) variant is a different failure, addressed by PR #19408. Matching
+ *   narrowly is not the same as repairing narrowly, though: once a message is
+ *   established as an orphan, every item reference it carries is unsatisfiable
+ *   for the same reason, so the repair covers all of them. A message whose
+ *   `msg_…` id was dropped while its `fc_…` id stayed would simply fail on the
+ *   next item in the list, spending the one available retry to arrive at the
+ *   same error.
+ * - Strips only `itemId`; all other fields in the namespace survive.
+ * - Reads and strips through the shared Responses helpers, so the `azure`
+ *   namespace is covered on the same footing as `openai` — the repo treats
+ *   them as one Responses family, and Azure raises this same 400.
  * - Skips a message whose reasoning lives on the immediately preceding
  *   assistant row, when that row has reasoning and no text of its own. Stored
  *   history can split one turn across adjacent assistant rows (adjacent rows
@@ -833,10 +860,8 @@ export const openaiOrphanItemId: CompatRule = {
       if (previous?.role === 'assistant' && isUnpairedReasoningRow(previous)) return;
 
       for (const part of parts) {
-        if (part.type !== 'text') continue;
-        if (!openaiItemId(part)) continue;
-        stripItemId(part);
-        mutated = true;
+        if (!getResponseProviderItemIdFromPart(part)) continue;
+        mutated = stripResponseItemIds(part) || mutated;
       }
     });
 
@@ -896,7 +921,8 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   provider different from the current target (preemptive). Turns emptied of
  *   all content by the drop are removed from the prompt. Unstamped history is
  *   left untouched.
- * - **openai-orphan-item-id** — drops the OpenAI `itemId` from an assistant
+ * - **openai-orphan-item-id** — drops the Responses `itemId` (`openai` and
+ *   `azure` namespaces alike) from every item-bearing part of an assistant
  *   message that carries one but has no `reasoning` part, so it replays by
  *   value instead of as an unsatisfiable `item_reference`. Reactive (matches
  *   the specific `of type 'message' … without its required 'reasoning' item`

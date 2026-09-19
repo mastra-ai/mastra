@@ -1749,4 +1749,134 @@ describe('openaiOrphanItemId', () => {
     expect(second).toBeUndefined();
     expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).not.toHaveProperty('itemId');
   });
+
+  // --- Every item reference on the orphan, not only the text one ------------
+
+  it('A14: strips the item id from a tool-invocation part on the same orphaned message', async () => {
+    // The error names the `msg_…` item, but the tool call beside it is orphaned for the same
+    // reason. Leaving its `fc_…` reference behind spends the one available retry to arrive at
+    // the same 400, one item further down the list.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-orphan-mixed',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: 'call-1',
+                    toolName: 'lookup',
+                    args: {},
+                    result: { population: 522969 },
+                  },
+                  providerMetadata: { openai: { itemId: 'fc_orphaned' } },
+                },
+                {
+                  type: 'text' as const,
+                  text: 'About 522,969.',
+                  providerMetadata: { openai: { itemId: 'msg_orphaned' } },
+                },
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+    const parts = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-mixed')!.content.parts;
+    const metadataOf = (type: string) =>
+      (parts.find(p => p.type === type) as { providerMetadata?: { openai?: Record<string, unknown> } })
+        .providerMetadata?.openai;
+
+    expect(result).toEqual({ retry: true });
+    expect(metadataOf('tool-invocation')).not.toHaveProperty('itemId');
+    expect(metadataOf('text')).not.toHaveProperty('itemId');
+  });
+
+  it('A15: repairs an Azure-namespaced orphan on the same footing as an OpenAI one', async () => {
+    // Azure serves the same Responses API and raises the same 400; the repo treats the two as
+    // one family (`RESPONSE_ITEM_ID_PROVIDERS`), so reading and stripping go through the shared
+    // helpers rather than a hard-coded `openai` key.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-orphan-azure',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'text' as const,
+                  text: 'About 522,969.',
+                  providerMetadata: { azure: { itemId: 'msg_azure', cachedPromptTokens: 1024 } },
+                },
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+    const part = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-azure')!.content.parts[0];
+    const azure = (part as { providerMetadata?: { azure?: Record<string, unknown> } }).providerMetadata?.azure;
+
+    expect(result).toEqual({ retry: true });
+    expect(azure).toEqual({ cachedPromptTokens: 1024 });
+  });
+
+  it('A16: strips an id carried on providerOptions as well as providerMetadata', async () => {
+    // The shared lookup reads an id from either container, so a part repaired in only one of
+    // them would still report as item-bearing — and would still send the reference that failed.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-orphan-options',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'text' as const,
+                  text: 'About 522,969.',
+                  providerOptions: { openai: { itemId: 'msg_via_options' } },
+                } as any,
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+    const part = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-options')!.content.parts[0];
+
+    expect(result).toEqual({ retry: true });
+    expect((part as { providerOptions?: { openai?: Record<string, unknown> } }).providerOptions?.openai).not.toHaveProperty(
+      'itemId',
+    );
+  });
 });
