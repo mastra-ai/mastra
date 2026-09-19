@@ -3235,7 +3235,7 @@ export class DurableAgent<
     registerGlobalRunRegistryEntry(runId, registryEntry);
     return {
       requestContext,
-      defaultOptions: resolvedDefaultOptions as AgentExecutionOptions<TOutput>,
+      defaultOptions: resolvedDefaultOptions as unknown as AgentExecutionOptions<TOutput>,
       resolvedMemory: { value: memory },
     };
   }

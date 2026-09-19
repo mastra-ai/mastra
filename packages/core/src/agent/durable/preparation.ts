@@ -25,10 +25,10 @@ import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tool
 import { boundedStringify } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
-import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import type { AgentDefaultOptions, AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import type { ResolvedAgentMemory } from '../execution-memory';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
-import { mergeAgentExecutionOptions } from '../merge-execution-options';
+import { mergeAgentExecutionOptions, omitLogicalMessageIdentity } from '../merge-execution-options';
 import { MessageList } from '../message-list';
 import type { MastraDBMessage, MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
@@ -267,7 +267,7 @@ function getInitialSignalEchoes(messageList: MessageList): CreatedAgentSignal[] 
 interface DurablePreparationAgent {
   id: string;
   name?: string;
-  getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
+  getDefaultOptions(opts: { requestContext: RequestContext }): AgentDefaultOptions | Promise<AgentDefaultOptions>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
   getModelList(requestContext: RequestContext): Promise<AgentModelManagerConfig[] | null>;
@@ -506,11 +506,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
   // Dynamic defaults resolve exactly once per run: the pre-resolved lane must
   // reuse the caller-provided snapshot and never re-invoke getDefaultOptions.
-  const defaultOptions = (
-    optionsAreResolved
-      ? options.resolvedDefaultOptions
-      : (options.resolvedDefaultOptions ?? (await typedAgent.getDefaultOptions({ requestContext })))
-  ) as AgentExecutionOptions<OUTPUT> | undefined;
+  const resolvedDefaultOptions = optionsAreResolved
+    ? options.resolvedDefaultOptions
+    : (options.resolvedDefaultOptions ?? (await typedAgent.getDefaultOptions({ requestContext })));
+  const defaultOptions = resolvedDefaultOptions
+    ? (omitLogicalMessageIdentity(resolvedDefaultOptions as Record<string, any>) as AgentExecutionOptions<OUTPUT>)
+    : undefined;
   const execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
     ? (rawExecOptions ?? ({} as AgentExecutionOptions<OUTPUT>))
     : (mergeAgentExecutionOptions(

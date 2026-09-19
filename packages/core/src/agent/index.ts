@@ -51,6 +51,7 @@ export * from './fs-routing';
 //   import { DurableAgent } from '@mastra/core/agent/durable';
 
 export type {
+  AgentDefaultOptions,
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
   InnerAgentExecutionOptions,

@@ -72,6 +72,18 @@ describe('MessageList logical message identity', () => {
     ]);
   });
 
+  it('clears constructor identity when a recovered snapshot omits lineage', () => {
+    const recovered = new MessageList({
+      logicalMessageIdentity: { input: 'constructor-input', response: 'constructor-response' },
+    }).deserialize(new MessageList().serialize());
+
+    const response = message('response-1', 'assistant', 'recovered response');
+    recovered.add(response, 'response');
+
+    expect(getLogicalMessageId(recovered.get.all.db()[0]?.content.metadata)).toBeUndefined();
+    expect(recovered.serialize()).not.toHaveProperty('logicalMessageIdentity');
+  });
+
   it('binds every signal in the initial input batch and keeps later unlineaged signals unowned after recovery', () => {
     const list = new MessageList({
       logicalMessageIdentity: { input: 'input-1', response: 'response-1' },

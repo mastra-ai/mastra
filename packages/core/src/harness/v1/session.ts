@@ -10668,6 +10668,7 @@ export class Session {
       let dispatched: ReturnType<typeof agent.sendSignal>;
       const lineagedWakeAbortController =
         responseLogicalMessageIdentity !== undefined ? new AbortController() : undefined;
+      let cleanupCallerAbortListener: (() => void) | undefined;
       try {
         this._assertOpenForTurn('signal()');
         const interleavedContents = await this._buildSignalContentsWithAttachments(opts.content, internal?.attachments);
@@ -10709,16 +10710,18 @@ export class Session {
               callerAbortSignal.addEventListener('abort', abortWake, { once: true });
             }
           }
+          cleanupCallerAbortListener = () => {
+            if (callerAbortListener !== undefined) {
+              callerAbortSignal?.removeEventListener('abort', callerAbortListener);
+              callerAbortListener = undefined;
+            }
+          };
           const accepted = await this._awaitSignalNativeAcceptance(
             dispatched.accepted,
             opts.abortSignal,
             undefined,
             'signal().logicalMessageIdentity',
-          ).finally(() => {
-            if (callerAbortListener !== undefined) {
-              callerAbortSignal?.removeEventListener('abort', callerAbortListener);
-            }
-          });
+          );
           if (accepted.action === 'discard') {
             throw lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
           }
@@ -10736,6 +10739,7 @@ export class Session {
           }
         }
       } catch (err) {
+        cleanupCallerAbortListener?.();
         if (err instanceof NativeSignalAcceptanceTimeoutError && lineagedWakeAbortController !== undefined) {
           // The interleaving signal can fall back to a fresh idle wake after
           // its observed active run ends. Abort that native stream when its
@@ -10752,7 +10756,18 @@ export class Session {
       }
       // Non-admitted signals intentionally preserve the optimistic first-tick
       // behavior: the native synchronous route/run id is the public receipt.
-      return returnInterleavedSignalResult(dispatched, dispatched.runId, responseLogicalMessageIdentity === undefined);
+      const result = await returnInterleavedSignalResult(
+        dispatched,
+        dispatched.runId,
+        responseLogicalMessageIdentity === undefined,
+      );
+      // A full logical wake owns the native stream after acceptance. Keep the
+      // caller's abort linked until that stream settles so cancellation after
+      // `signal()` returns still reaches the run it just admitted.
+      if (cleanupCallerAbortListener !== undefined) {
+        void result.result.then(cleanupCallerAbortListener, cleanupCallerAbortListener);
+      }
+      return result;
     }
 
     if (willInterleave) {

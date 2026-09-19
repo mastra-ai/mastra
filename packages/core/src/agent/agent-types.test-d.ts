@@ -35,6 +35,17 @@ describe('Agent Type Tests', () => {
   });
 
   describe('Issue #9657: defaultOptions.structuredOutput should accept Zod schemas', () => {
+    it('does not allow logical message identity in reusable Agent defaults', () => {
+      const config: Pick<AgentConfig<any, any>, 'defaultOptions'> = {
+        defaultOptions: {
+          // @ts-expect-error Logical message identity belongs to one execution.
+          logicalMessageIdentity: { input: 'input-1', response: 'response-1' },
+        },
+      };
+
+      void config;
+    });
+
     it('should allow Zod schema in AgentExecutionOptions.structuredOutput when OUTPUT is specified', () => {
       const mySchema = z.object({
         status: z.enum(['error', 'success', 'pending']),

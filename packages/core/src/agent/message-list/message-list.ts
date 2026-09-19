@@ -522,10 +522,11 @@ export class MessageList {
     if (state.logicalMessageIdentity !== undefined) {
       this.logicalMessageIdentity = normalizeLogicalMessageIdentity(state.logicalMessageIdentity);
       this.logicalMessageInputBatchPending = state.logicalMessageInputBatchPending ?? false;
-    } else if (this.logicalMessageIdentity !== undefined) {
-      // A pre-lineage snapshot has no reliable way to identify its original
-      // input batch. Keep subsequent recovered signals unowned rather than
-      // inferring ownership from source sets that OM may have trimmed.
+    } else {
+      // A snapshot without lineage is authoritative. A constructor identity
+      // belongs to the state that created the list and must not leak into a
+      // recovered snapshot that never established that ownership.
+      this.logicalMessageIdentity = undefined;
       this.logicalMessageInputBatchPending = false;
     }
     for (const message of this.messages) {

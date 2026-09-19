@@ -663,6 +663,72 @@ describe('Session.signal() admissionId', () => {
     expect(session.isRunning()).toBe(false);
   });
 
+  it('keeps caller cancellation connected after an interleaving full logical wake is accepted', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseActive!: () => void;
+    let releaseWake!: () => void;
+    let nativeAbortObserved!: () => void;
+    const nativeAbort = new Promise<void>(resolve => {
+      nativeAbortObserved = resolve;
+    });
+    agent.enqueueRuns([
+      {
+        holdUntil: new Promise<void>(resolve => {
+          releaseActive = resolve;
+        }),
+      },
+      {
+        holdUntil: new Promise<void>(resolve => {
+          releaseWake = resolve;
+        }),
+        onAbort: () => nativeAbortObserved(),
+      },
+    ]);
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const active = session.message({ content: 'active turn' });
+    await waitForStreamCalls(agent, 1);
+
+    const realBuildSignalContents = (session as any)._buildSignalContentsWithAttachments.bind(session);
+    let releaseSignalContents!: () => void;
+    let signalContentsStarted!: () => void;
+    const signalContentsStartedPromise = new Promise<void>(resolve => {
+      signalContentsStarted = resolve;
+    });
+    const signalContentsGate = new Promise<void>(resolve => {
+      releaseSignalContents = resolve;
+    });
+    (session as any)._buildSignalContentsWithAttachments = async (...args: any[]) => {
+      signalContentsStarted();
+      await signalContentsGate;
+      return realBuildSignalContents(...args);
+    };
+
+    const callerAbortController = new AbortController();
+    const pending = session.signal({
+      content: 'cancel accepted interleaving wake',
+      abortSignal: callerAbortController.signal,
+      logicalMessageIdentity: { input: 'interleave-after-accept-input', response: 'interleave-after-accept-response' },
+    });
+    await signalContentsStartedPromise;
+    releaseActive();
+    await active;
+    releaseSignalContents();
+
+    const handle = await pending;
+    await waitForStreamCalls(agent, 2);
+    const nativeAbortSignal = agent.streamCalls[1]?.options.abortSignal as AbortSignal | undefined;
+    expect(nativeAbortSignal?.aborted).toBe(false);
+
+    callerAbortController.abort(new Error('caller stopped after admission'));
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await expect(nativeAbort).resolves.toBeUndefined();
+    await expect(handle.result).resolves.toMatchObject({ finishReason: 'aborted' });
+
+    releaseWake();
+    expect(session.isRunning()).toBe(false);
+  });
+
   it('rejects payload conflicts and non-hash-safe options before another dispatch', async () => {
     const { harness, agent } = setupHarness();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

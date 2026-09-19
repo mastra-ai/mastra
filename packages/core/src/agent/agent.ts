@@ -151,6 +151,7 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
 import { AgentLegacyHandler } from './agent-legacy';
 import type {
+  AgentDefaultOptions,
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
   InnerAgentExecutionOptions,
@@ -198,7 +199,7 @@ import {
   mutateObjective,
 } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
-import { mergeAgentExecutionOptions } from './merge-execution-options';
+import { mergeAgentExecutionOptions, omitLogicalMessageIdentity } from './merge-execution-options';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import type { SerializedMessageListState } from './message-list/state';
@@ -748,7 +749,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions, TRequestContext>;
-  #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
+  #defaultOptions: DynamicArgument<AgentDefaultOptions<TOutput>, TRequestContext>;
   #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #hooks?: ToolHooks;
@@ -882,7 +883,12 @@ export class Agent<
 
     this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptionsLegacy || {};
     this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
-    this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput>);
+    this.#defaultOptions =
+      typeof config.defaultOptions === 'function'
+        ? config.defaultOptions
+        : (omitLogicalMessageIdentity(
+            (config.defaultOptions ?? {}) as Record<string, any>,
+          ) as AgentDefaultOptions<TOutput>);
     this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
     this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
       config.transform ?? (config as any).toolPayloadProjection,
@@ -3341,8 +3347,8 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentExecutionOptions<TOutput>
-    | Promise<AgentExecutionOptions<TOutput>> {
+    | AgentDefaultOptions<TOutput>
+    | Promise<AgentDefaultOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -3367,7 +3373,7 @@ export class Agent<
         throw mastraError;
       }
 
-      return options;
+      return omitLogicalMessageIdentity(options as Record<string, any>) as AgentDefaultOptions<TOutput>;
     });
   }
 

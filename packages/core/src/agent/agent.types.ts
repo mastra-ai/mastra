@@ -884,6 +884,12 @@ export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<
       ? { structuredOutput: StructuredOutputOptions<OUTPUT> }
       : { structuredOutput?: never });
 
+/**
+ * Options that may be reused as Agent defaults. Logical message identity is
+ * deliberately per execution and cannot be carried by a reusable default.
+ */
+export type AgentDefaultOptions<OUTPUT = unknown> = Omit<AgentExecutionOptions<OUTPUT>, 'logicalMessageIdentity'>;
+
 export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   outputWriter?: OutputWriter;
   messages: MessageListInput;
