@@ -97,6 +97,7 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
+import { defaultStabilityErrorProcessors } from '../processors/stability-defaults';
 import {
   RequestContext,
   MASTRA_INHERITED_MEMORY_KEY,
@@ -950,6 +951,12 @@ export class Agent<
       this.#outputProcessors = config.outputProcessors;
     }
 
+    // Deliberately no default for `#maxProcessorRetries`. The retry gate is
+    // `canRetry = maxProcessorRetries !== undefined && currentProcessorRetryCount < maxProcessorRetries`
+    // (llm-execution-step.ts), which covers input/output processor retries too. Defaulting it would
+    // silently convert `abort({ retry: true })` from abort into retry for every existing agent — the
+    // behavior asserted by `packages/core/src/agent/__tests__/structured-output.test.ts`. The default
+    // error processors bound themselves via their own retry budgets instead.
     if (config.maxProcessorRetries !== undefined) {
       this.#maxProcessorRetries = config.maxProcessorRetries;
     }
@@ -1772,8 +1779,7 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, SubAgent<string, TRequestContext>>
-    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
+    Record<string, SubAgent<string, TRequestContext>> | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
@@ -1810,6 +1816,46 @@ export class Agent<
   }
 
   /**
+   * Resolves the error processors for a generation.
+   *
+   * The caller's list is the base. Each shared stability default is added only when no configured
+   * processor already carries its id, so supplying your own instance means the default is not added
+   * alongside it. An explicitly empty array means no error processors.
+   *
+   * Pass `includeDefaults: false` to resolve only what the caller configured. `getConfiguredProcessorIds`
+   * uses that mode because its contract is the raw configured list — the editor clones it to storage, so
+   * framework defaults must not appear there.
+   */
+  async #resolveErrorProcessors({
+    requestContext,
+    overrides,
+    includeDefaults = true,
+  }: {
+    requestContext: RequestContext;
+    overrides?: ErrorProcessorOrWorkflow[];
+    includeDefaults?: boolean;
+  }): Promise<ErrorProcessorOrWorkflow[]> {
+    if (overrides) return overrides;
+
+    const configured = this.#errorProcessors
+      ? typeof this.#errorProcessors === 'function'
+        ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+        : this.#errorProcessors
+      : undefined;
+
+    if (!includeDefaults) return configured ?? [];
+    if (!configured) return defaultStabilityErrorProcessors();
+
+    // Explicit empty array means "no error processors".
+    if (configured.length === 0) return [];
+
+    const configuredIds = new Set(configured.map(processor => processor.id));
+    const missingDefaults = defaultStabilityErrorProcessors().filter(processor => !configuredIds.has(processor.id));
+
+    return [...configured, ...missingDefaults];
+  }
+
+  /**
    * Creates and returns a ProcessorRunner with resolved input/output processors.
    * @internal
    */
@@ -1829,13 +1875,10 @@ export class Agent<
     // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
     const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
     const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
-    const errorProcessors =
-      errorProcessorOverrides ??
-      (this.#errorProcessors
-        ? typeof this.#errorProcessors === 'function'
-          ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-          : this.#errorProcessors
-        : []);
+    const errorProcessors = await this.#resolveErrorProcessors({
+      requestContext,
+      overrides: errorProcessorOverrides,
+    });
 
     return new ProcessorRunner({
       inputProcessors,
@@ -2122,13 +2165,14 @@ export class Agent<
   }
 
   /**
-   * Returns the error processors for this agent, resolving function-based processors if necessary.
+   * Returns the error processors for this agent: your configured list plus whichever shared
+   * stability defaults it does not already name. A configured processor whose id matches a default
+   * means that default is not added again. `errorProcessors: []` means no error processors.
    */
   public async listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]> {
-    if (!this.#errorProcessors) return [];
-    return typeof this.#errorProcessors === 'function'
-      ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-      : this.#errorProcessors;
+    return this.#resolveErrorProcessors({
+      requestContext: requestContext as RequestContext,
+    });
   }
 
   /**
@@ -2256,14 +2300,8 @@ export class Agent<
       outputProcessorIds = processors.map(p => p.id).filter(Boolean);
     }
 
-    let errorProcessorIds: string[] = [];
-    if (this.#errorProcessors) {
-      const processors =
-        typeof this.#errorProcessors === 'function'
-          ? await this.#errorProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
-          : this.#errorProcessors;
-      errorProcessorIds = processors.map(p => p.id).filter(Boolean);
-    }
+    const errorProcessors = await this.#resolveErrorProcessors({ requestContext: ctx, includeDefaults: false });
+    const errorProcessorIds = errorProcessors.map(p => p.id).filter(Boolean);
 
     return { inputProcessorIds, outputProcessorIds, errorProcessorIds };
   }
@@ -2334,8 +2372,7 @@ export class Agent<
    */
   #inheritedMemory(requestContext?: RequestContext): DynamicArgument<MastraMemory, TRequestContext> | undefined {
     const inherited = requestContext?.getRaw(MASTRA_INHERITED_MEMORY_KEY) as
-      | { agentId: string; memory: DynamicArgument<MastraMemory, any> }
-      | undefined;
+      { agentId: string; memory: DynamicArgument<MastraMemory, any> } | undefined;
     return inherited?.agentId === this.id
       ? (inherited.memory as DynamicArgument<MastraMemory, TRequestContext>)
       : undefined;
@@ -2737,8 +2774,7 @@ export class Agent<
    * ```
    */
   public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentInstructions
-    | Promise<AgentInstructions> {
+    AgentInstructions | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
       const result = this.#instructions({
         requestContext: requestContext as RequestContext<TRequestContext>,
@@ -2875,9 +2911,7 @@ export class Agent<
    * ```
    */
   public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, unknown>
-    | undefined
-    | Promise<Record<string, unknown> | undefined> {
+    Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined> {
     if (this.#metadata === undefined) {
       return undefined;
     }
@@ -3021,8 +3055,7 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentExecutionOptions<TOutput>
-    | Promise<AgentExecutionOptions<TOutput>> {
+    AgentExecutionOptions<TOutput> | Promise<AgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -3065,8 +3098,7 @@ export class Agent<
    * ```
    */
   public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | NetworkOptions
-    | Promise<NetworkOptions> {
+    NetworkOptions | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -7656,8 +7688,7 @@ export class Agent<
       : undefined;
     const persistedTracingContext = isResume
       ? (resumeContext?.snapshot?.tracingContext as
-          | { traceId?: string; spanId?: string; parentSpanId?: string }
-          | undefined)
+          { traceId?: string; spanId?: string; parentSpanId?: string } | undefined)
       : undefined;
 
     // Only fall back to persisted traceId/parentSpanId when the caller didn't provide
@@ -7774,13 +7805,7 @@ export class Agent<
       }: {
         requestContext: RequestContext;
         overrides?: ErrorProcessorOrWorkflow[];
-      }) =>
-        overrides ??
-        (this.#errorProcessors
-          ? typeof this.#errorProcessors === 'function'
-            ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-            : this.#errorProcessors
-          : []),
+      }) => this.#resolveErrorProcessors({ requestContext, overrides }),
       llm,
     };
 
@@ -8549,8 +8574,7 @@ export class Agent<
     resourceId: string;
     threadId: string;
     streamOptions?:
-      | AgentExecutionOptions<OUTPUT>
-      | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
+      AgentExecutionOptions<OUTPUT> | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
     peer?: false | AgentClaimThreadPeerOptions;
     /**
      * Called when another process asks to claim this thread. Return `true` to
