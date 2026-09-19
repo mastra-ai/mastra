@@ -38,6 +38,8 @@ export enum SpanType {
   AGENT_RUN = 'agent_run',
   /** Scorer execution */
   SCORER_RUN = 'scorer_run',
+  /** Classifier evaluation */
+  CLASSIFIER_EVALUATION = 'classifier_evaluation',
   /** Individual scorer pipeline step */
   SCORER_STEP = 'scorer_step',
   /** Generic span for custom operations */
@@ -185,6 +187,25 @@ export interface ScorerRunAttributes extends AIBaseAttributes {
   targetScope?: ScorerTargetScope;
   targetEntityType?: EntityType;
   scorerDefinition?: DefinitionSource;
+}
+
+/**
+ * Classifier evaluation attributes
+ */
+export interface ClassifierEvaluationAttributes extends AIBaseAttributes {
+  classifierId?: string;
+  modelId?: string;
+  provider?: string;
+  questionCount?: number;
+  questionTypes?: string[];
+  maxRetries?: number;
+  attemptCount?: number;
+  retryCount?: number;
+  durationMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  errorType?: string;
 }
 
 /**
@@ -895,6 +916,7 @@ export interface GraphActionAttributes extends AIBaseAttributes {
 export interface SpanTypeMap {
   [SpanType.AGENT_RUN]: AgentRunAttributes;
   [SpanType.SCORER_RUN]: ScorerRunAttributes;
+  [SpanType.CLASSIFIER_EVALUATION]: ClassifierEvaluationAttributes;
   [SpanType.SCORER_STEP]: ScorerStepAttributes;
   [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [SpanType.MODEL_GENERATION]: ModelGenerationAttributes;
