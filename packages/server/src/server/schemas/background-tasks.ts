@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { paginationNumber } from './common';
 
 export const backgroundTaskStatusSchema = z.enum([
