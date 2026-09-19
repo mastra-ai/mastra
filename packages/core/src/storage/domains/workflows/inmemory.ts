@@ -1766,11 +1766,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const key = this.getWorkflowKey(workflowName, runId);
     const run = this.db.workflows.get(key);
+    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
 
     if (!run) {
       return {};
     }
-    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
 
     let snapshot: WorkflowRunState;
     if (!run.snapshot) {
@@ -1811,11 +1811,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }): Promise<WorkflowRunState | undefined> {
     const key = this.getWorkflowKey(workflowName, runId);
     const run = this.db.workflows.get(key);
+    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
 
     if (!run) {
       return;
     }
-    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
 
     let snapshot: WorkflowRunState;
     if (!run.snapshot) {
