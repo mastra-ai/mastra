@@ -248,9 +248,14 @@ describe('execute structured output prompt handling', () => {
       await readStream(stream);
 
       expect(capturedPrompt).not.toEqual(inputMessages);
-      const promptJson = JSON.stringify(capturedPrompt);
-      expect(promptJson).toContain('Your response will be processed by another agent to extract structured data');
-      expect(promptJson).toContain('suggestions');
+      expect(Array.isArray(capturedPrompt)).toBe(true);
+      const [systemMessage] = capturedPrompt as any[];
+      expect(systemMessage.role).toBe('system');
+      const systemMessageJson = JSON.stringify(systemMessage);
+      expect(systemMessageJson).toContain(
+        'Your response will be processed by another agent to extract structured data',
+      );
+      expect(systemMessageJson).toContain('suggestions');
     }
   });
 
