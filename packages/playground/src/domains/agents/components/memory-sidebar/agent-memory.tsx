@@ -3,6 +3,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
+import { AgentMemoryBranches } from './agent-memory-branches';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { getRecentMessagesSettings } from './lib/recent-messages';
@@ -119,6 +120,9 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
           </div>
         </div>
       )}
+
+      {/* Shared-history Branches Section */}
+      {threadId && <AgentMemoryBranches agentId={agentId} threadId={threadId} />}
 
       <div className="border-border1 border-b p-4">
         <h3 className="text-neutral5 text-ui-md font-medium">Recent Messages</h3>
