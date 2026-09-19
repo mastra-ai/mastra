@@ -202,7 +202,7 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
   /**
    * Validates a value against the schema using StandardSchemaWithJSON's validate method.
    */
-  protected async validateValue(value: unknown): Promise<ValidationResult<OUTPUT>> {
+  protected async validateValue(value: unknown, diagnosticValue: unknown = value): Promise<ValidationResult<OUTPUT>> {
     if (!this.schema) {
       return {
         success: true,
@@ -238,7 +238,7 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
               id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
               text: `Structured output validation failed: ${errorMessages}`,
               details: {
-                value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+                value: typeof diagnosticValue === 'object' ? JSON.stringify(diagnosticValue) : String(diagnosticValue),
               },
             },
             zodError,
@@ -275,7 +275,7 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
           id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
           text: `Structured output validation failed: ${errorMessages}`,
           details: {
-            value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+            value: typeof diagnosticValue === 'object' ? JSON.stringify(diagnosticValue) : String(diagnosticValue),
           },
         }),
       };
@@ -408,7 +408,7 @@ class ObjectFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> 
     const rawValue = this.preprocessText(finalRawValue);
     const { value } = await parsePartialJson(rawValue);
 
-    return this.validateValue(value);
+    return this.validateValue(value, value === undefined ? rawValue : value);
   }
 }
 

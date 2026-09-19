@@ -3,6 +3,7 @@ import { asSchema } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraError } from '../../error';
 import { ConsoleLogger } from '../../logger';
 import { convertArrayToReadableStream, convertAsyncIterableToArray } from '../../loop/test-utils/stream-helpers';
 import type { PublicSchema } from '../../schema';
@@ -156,6 +157,37 @@ describe('output-format-handlers', () => {
   });
 
   describe('schema validation', () => {
+    it('should preserve raw non-JSON text in validation error details', async () => {
+      const schema = z.object({ name: z.string() });
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema },
+      });
+      const rawText = 'Lo siento, no puedo ayudarte con eso.';
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: rawText },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1' },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+      const error = chunks.find(chunk => chunk?.type === 'error')?.payload?.error;
+
+      expect(error).toBeInstanceOf(MastraError);
+      expect((error as MastraError).id).toBe('STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED');
+      expect((error as MastraError).details).toEqual({ value: rawText });
+    });
+
     it('should validate against zod schema and provide detailed error messages', async () => {
       const schema = z.object({
         name: z.string().min(3),

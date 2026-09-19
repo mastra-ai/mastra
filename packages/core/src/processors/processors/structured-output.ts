@@ -22,7 +22,10 @@ export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
 
 type StructuredOutputRequestState = {
   isStructuringAgentStreamStarted: boolean;
-  structuredOutputError?: string;
+  structuredOutputError?: {
+    reason: string;
+    error: unknown;
+  };
   streamPartsStartIndex: number;
 };
 
@@ -143,11 +146,11 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
 
   processOutputStep({ state, abort, messages }: ProcessOutputStepArgs) {
     const requestState = this.requestStates.get(state);
-    if (typeof requestState?.structuredOutputError === 'string') {
-      const reason = requestState.structuredOutputError;
+    if (requestState?.structuredOutputError) {
+      const { reason, error } = requestState.structuredOutputError;
       delete requestState.structuredOutputError;
       requestState.isStructuringAgentStreamStarted = false;
-      abort(reason, { retry: true });
+      abort(reason, { retry: true, metadata: { error } });
     }
     return messages;
   }
@@ -410,7 +413,7 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
       case 'strict':
         this.logger?.error(message, error);
         // Only output-step tripwires participate in the processor retry loop.
-        requestState.structuredOutputError = message;
+        requestState.structuredOutputError = { reason: message, error };
         break;
       case 'warn':
         this.logger?.warn(message, error);

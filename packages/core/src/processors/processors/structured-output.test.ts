@@ -283,7 +283,7 @@ describe('StructuredOutputProcessor', () => {
       expect(abort).not.toHaveBeenCalled();
       expect(controller.enqueue).not.toHaveBeenCalled();
       expect(() => processor.processOutputStep(outputStepArgs(state, abort))).toThrow(reason);
-      expect(abort).toHaveBeenCalledWith(reason, { retry: true });
+      expect(abort).toHaveBeenCalledWith(reason, { retry: true, metadata: { error: upstreamError } });
       const stepArgs = outputStepArgs(state, abort);
       expect(processor.processOutputStep(stepArgs)).toBe(stepArgs.messages);
 
@@ -349,6 +349,10 @@ describe('StructuredOutputProcessor', () => {
       expect(abort).not.toHaveBeenCalled();
       expect(() => loggingProcessor.processOutputStep(outputStepArgs(state, abort))).toThrow(
         '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+      );
+      expect(abort).toHaveBeenCalledWith(
+        '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+        { retry: true, metadata: { error: upstreamError } },
       );
 
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -1006,11 +1010,12 @@ describe('StructuredOutputProcessor', () => {
           messages: { all: [], user: [], nonUser: [] },
         },
       };
+      const firstError = new Error('first processor failed');
       const errorChunk = {
         runId: 'test-run',
         from: ChunkFrom.AGENT,
         type: 'error',
-        payload: { error: new Error('first processor failed') },
+        payload: { error: firstError },
       };
       const objectChunk = {
         runId: 'test-run',
@@ -1049,7 +1054,7 @@ describe('StructuredOutputProcessor', () => {
 
       const firstReason = '[StructuredOutputProcessor] Structuring failed: first processor failed';
       expect(() => firstProcessor.processOutputStep(outputStepArgs(state, firstAbort))).toThrow(firstReason);
-      expect(firstAbort).toHaveBeenCalledWith(firstReason, { retry: true });
+      expect(firstAbort).toHaveBeenCalledWith(firstReason, { retry: true, metadata: { error: firstError } });
 
       await firstProcessor.processOutputStream({
         part: finishChunk,
