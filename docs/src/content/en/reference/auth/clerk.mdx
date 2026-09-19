@@ -8,7 +8,7 @@ packages:
 
 # MastraAuthClerk class
 
-The `MastraAuthClerk` class provides authentication for Mastra applications using Clerk. It verifies incoming requests with Clerk-issued JWT tokens and integrates with the Mastra server using the `auth` option.
+The `MastraAuthClerk` class verifies Clerk-issued JWT tokens and supports Studio single sign-on (SSO) through OAuth with encrypted session cookies. Use `server.auth` for API authentication or `studio.auth` for separate Studio authentication. See [Clerk Studio SSO](/integrations/auth/clerk#studio-sso) for setup instructions.
 
 ## Usage example
 
@@ -49,6 +49,8 @@ export const mastra = new Mastra({
 
 ## Constructor parameters
 
+`publishableKey`, `secretKey`, and `jwksUri` must each be supplied either as a constructor option or through the corresponding environment variable. They're optional as arguments, not as credentials. Construction throws if any of the three is missing. Studio SSO additionally requires both `oauthClientId` and `oauthClientSecret`.
+
 <PropertiesTable
   content={[
   {
@@ -71,6 +73,77 @@ export const mastra = new Mastra({
     description: 'The JWKS URI from your Clerk application. Used to verify JWT signatures.',
     isOptional: true,
     defaultValue: 'process.env.CLERK_JWKS_URI',
+  },
+  {
+    name: 'oauthClientId',
+    type: 'string',
+    description: 'Clerk OAuth application client ID. Required together with oauthClientSecret to enable Studio SSO.',
+    isOptional: true,
+    defaultValue: 'process.env.CLERK_OAUTH_CLIENT_ID',
+  },
+  {
+    name: 'oauthClientSecret',
+    type: 'string',
+    description: 'Clerk OAuth application client secret. Required together with oauthClientId to enable Studio SSO.',
+    isOptional: true,
+    defaultValue: 'process.env.CLERK_OAUTH_CLIENT_SECRET',
+  },
+  {
+    name: 'redirectUri',
+    type: 'string',
+    description:
+      'Fallback OAuth callback URI when getLoginUrl is called without a redirect URI. The Mastra SSO route supplies its callback URI, which must be registered with Clerk.',
+    isOptional: true,
+    defaultValue: 'process.env.CLERK_OAUTH_REDIRECT_URI',
+  },
+  {
+    name: 'scopes',
+    type: 'string[]',
+    description: 'OAuth scopes requested during SSO login.',
+    isOptional: true,
+    defaultValue: "['openid', 'profile', 'email']",
+  },
+  {
+    name: 'session',
+    type: 'MastraAuthClerkSessionOptions',
+    description: 'Encrypted session cookie configuration for Studio SSO.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'MastraAuthClerkSessionOptions',
+        parameters: [
+          {
+            name: 'cookieName',
+            type: 'string',
+            description: 'Name of the session cookie.',
+            isOptional: true,
+            defaultValue: "'clerk_session'",
+          },
+          {
+            name: 'cookieMaxAge',
+            type: 'number',
+            description: 'Session cookie lifetime in seconds.',
+            isOptional: true,
+            defaultValue: '86400 (24 hours)',
+          },
+          {
+            name: 'cookiePassword',
+            type: 'string',
+            description:
+              'Password for encrypting sessions and signing OAuth state. Must be at least 32 characters when SSO is enabled. If omitted, a generated password is used and sessions do not survive restarts. Use the same password across replicas.',
+            isOptional: true,
+            defaultValue: 'process.env.CLERK_COOKIE_PASSWORD',
+          },
+          {
+            name: 'secureCookies',
+            type: 'boolean',
+            description: 'Set the Secure flag on session cookies.',
+            isOptional: true,
+            defaultValue: 'true in production, false otherwise',
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'organizationId',

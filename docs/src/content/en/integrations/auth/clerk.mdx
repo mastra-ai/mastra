@@ -1,6 +1,6 @@
 ---
 title: "Clerk | Auth"
-description: "Authenticate Mastra server requests with Clerk, configure the @mastra/auth-clerk provider, retrieve access tokens, and connect MastraClient securely."
+description: "Authenticate Mastra APIs and Studio with Clerk using JWT verification, OAuth single sign-on, encrypted sessions, and separate Studio authentication."
 packages:
   - "@mastra/auth-clerk"
   - "@mastra/client-js"
@@ -12,7 +12,7 @@ import TabItem from "@theme/TabItem";
 
 # Clerk
 
-The `@mastra/auth-clerk` package provides authentication for Mastra using Clerk. It verifies incoming requests using Clerk's authentication system and integrates with the Mastra server using the `auth` option.
+The `@mastra/auth-clerk` package verifies Clerk-issued tokens for API requests and supports [Studio authentication](/docs/studio/auth) through OAuth single sign-on (SSO) with encrypted session cookies. Configure it under `server.auth` for API authentication or under `studio.auth` for separate Studio authentication.
 
 ## Prerequisites
 
@@ -57,15 +57,61 @@ export const mastra = new Mastra({
 
 :::note
 
-The default `authorizeUser` method allows all authenticated users. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
+The default `authorizeUser` method allows all authenticated users unless `organizationId` or `organizationSlug` restricts access to members of one organization. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
 Visit [MastraAuthClerk](/reference/auth/clerk) for all available configuration options.
 
 :::
 
+## Studio SSO
+
+Clerk can act as the OAuth identity provider for Studio. The publishable key, secret key, and JWKS URI used for API authentication don't enable the Studio SSO flow on their own. You also need an OAuth client ID and secret.
+
+1. In the Clerk Dashboard, create an OAuth application and obtain its client ID and client secret. You can leave **Require PKCE** enabled: Mastra sends an S256 challenge and the matching verifier automatically.
+1. Register your Mastra server's SSO callback URL with the OAuth application. For a local server with the default API prefix, use `http://localhost:4111/api/auth/sso/callback`. In production, use the server's public HTTPS origin and configured API prefix.
+1. Add the following environment variables alongside the Clerk credentials from [Prerequisites](#prerequisites):
+
+```env title=".env"
+CLERK_OAUTH_CLIENT_ID=your-oauth-client-id
+CLERK_OAUTH_CLIENT_SECRET=your-oauth-client-secret
+CLERK_COOKIE_PASSWORD=replace-with-a-random-secret-at-least-32-characters-long
+```
+
+Use a stable, random cookie password of at least 32 characters. If omitted, Mastra generates a password, so sessions won't survive restarts. Share the same password across replicas and keep it server-side.
+
+Configure Clerk under `studio.auth` to require sign-in for Studio without adding authentication to ordinary API requests:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
+
+export const mastra = new Mastra({
+  studio: {
+    auth: new MastraAuthClerk({
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+      jwksUri: process.env.CLERK_JWKS_URI,
+      oauthClientId: process.env.CLERK_OAUTH_CLIENT_ID,
+      oauthClientSecret: process.env.CLERK_OAUTH_CLIENT_SECRET,
+      session: {
+        cookiePassword: process.env.CLERK_COOKIE_PASSWORD,
+      },
+    }),
+  },
+})
+```
+
+Open Studio in a signed-out browser session and select **Sign in with Clerk**. After signing in, confirm that Clerk redirects to the Mastra callback and that Mastra sets an encrypted session cookie before returning you to Studio. You don't need to manually pass an API token for this login flow. Follow [Verify authentication](/docs/studio/auth#verify-authentication) to check signed-out requests and direct API access too.
+
+:::warning
+This example leaves ordinary API requests unauthenticated. A Studio login screen doesn't prevent callers from accessing those endpoints directly. Configure `server.auth` too if your API needs protection. See [Separate Studio and API authentication](/docs/studio/auth#separate-studio-and-api-authentication).
+:::
+
+To use Clerk for both Studio and API authentication, move this provider configuration to `server.auth` and leave `studio.auth` unset. For production Studio SSO, see the [EE licensing requirements](/docs/studio/auth#ee-licensing).
+
 ## Client-side setup
 
-When using Clerk auth, you'll need to retrieve the access token from Clerk on the client side and pass it to your Mastra requests.
+For direct API requests protected by `server.auth`, retrieve the access token from Clerk on the client side and pass it to your Mastra requests.
 
 ### Retrieving the access token
 
@@ -90,7 +136,7 @@ Refer to the [Clerk documentation](https://clerk.com/docs) for more information.
 
 ## Configuring `MastraClient`
 
-When `auth` is enabled, all requests made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
+When Clerk is configured under `server.auth`, requests to protected API routes made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts"
 import { MastraClient } from '@mastra/client-js'

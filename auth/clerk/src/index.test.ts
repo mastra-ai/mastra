@@ -542,6 +542,48 @@ describe('MastraAuthClerk', () => {
     });
   });
 
+  describe('SSO - PKCE', () => {
+    it('keeps concurrent login verifiers isolated across provider instances', async () => {
+      const auth = new MastraAuthClerk(mockSSOOptions) as any;
+      const callbackAuth = new MastraAuthClerk(mockSSOOptions) as any;
+      const redirectUri = 'http://localhost:4111/api/auth/sso/callback';
+      const urls = await Promise.all([
+        auth.getLoginUrl(redirectUri, 'same-caller-state'),
+        auth.getLoginUrl(redirectUri, 'same-caller-state'),
+      ]);
+      const params = urls.map(url => new URL(url).searchParams);
+      expect(params[0].get('state')).not.toBe(params[1].get('state'));
+      expect(params[0].get('code_challenge')).not.toBe(params[1].get('code_challenge'));
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: 'at', id_token: 'it', expires_in: 3600 }),
+      });
+      vi.mocked(verifyJwks).mockResolvedValue({ sub: 'user_123' });
+
+      for (const login of [...params].reverse()) {
+        expect(login.get('code_challenge_method')).toBe('S256');
+        await callbackAuth.handleCallback('code', login.get('state'));
+        const body = new URLSearchParams(mockFetch.mock.lastCall![1].body);
+        const verifier = body.get('code_verifier')!;
+        expect(verifier).toMatch(/^[A-Za-z0-9_-]{43,128}$/);
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+        expect(Buffer.from(digest).toString('base64url')).toBe(login.get('code_challenge'));
+        expect(login.get('state')).not.toContain(verifier);
+        expect(body.get('redirect_uri')).toBe(redirectUri);
+        expect(mockFetch.mock.lastCall![1].headers.Authorization).toMatch(/^Basic /);
+      }
+    });
+
+    it('rejects tampered state before exchanging the code', async () => {
+      const auth = new MastraAuthClerk(mockSSOOptions) as any;
+      const url = await auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state');
+      const state = new URL(url).searchParams.get('state')!;
+      await expect(auth.handleCallback('code', `${state}x`)).rejects.toThrow('Invalid state token signature');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
   describe('SSO - getLoginButtonConfig', () => {
     it('should return Clerk SSO config', () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;

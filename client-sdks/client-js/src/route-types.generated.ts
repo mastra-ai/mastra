@@ -6426,8 +6426,10 @@ export interface GetAuthSsoLogin_RouteContract {
 // Route: GET /auth/sso/callback
 // ============================================================================
 export type GetAuthSsoCallback_QueryParams = {
-  code: string;
+  code?: string | undefined;
   state?: string | undefined;
+  error?: string | undefined;
+  error_description?: string | undefined;
 };
 
 export type GetAuthSsoCallback_Request = Simplify<
