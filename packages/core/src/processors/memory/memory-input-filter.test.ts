@@ -19,16 +19,17 @@ function message(
   };
 }
 
-function setup(storedMessages: MastraDBMessage[]) {
+function setup(storedMessages: MastraDBMessage[], retainFullInput = false) {
   const listMessages = vi.fn(async () => ({ messages: storedMessages }));
   const listMessagesById = vi.fn(async ({ messageIds }: { messageIds: string[] }) => ({
     messages: storedMessages.filter(message => messageIds.includes(message.id)),
   }));
   const processor = new MemoryInputFilter({
     storage: { listMessages, listMessagesById } as unknown as MemoryStorage,
+    retainFullInput,
   });
   const messageList = new MessageList({ threadId: 'thread', resourceId: 'resource' });
-  return { listMessages, messageList, processor };
+  return { listMessages, listMessagesById, messageList, processor };
 }
 
 async function process(processor: MemoryInputFilter, messageList: MessageList) {
@@ -150,5 +151,48 @@ describe('MemoryInputFilter', () => {
 
     expect(messageList.get.input.db().map(item => item.id)).toEqual(['signal']);
     expect(listMessages).not.toHaveBeenCalled();
+  });
+
+  it('keeps the whole input when retainFullInput is set, even with stored history', async () => {
+    const { listMessages, listMessagesById, messageList, processor } = setup(
+      [message('stored', 'assistant', [{ type: 'text', text: 'stored' }])],
+      true,
+    );
+    // The replay shape a caller assembles itself: stored conversation plus the live turn.
+    // Without the flag this trims back to ['u2'].
+    messageList.add(
+      [
+        message('u1', 'user', [{ type: 'text', text: 'old' }]),
+        message('a1', 'assistant', [{ type: 'text', text: 'answer' }]),
+        message('u2', 'user', [{ type: 'text', text: 'new' }]),
+      ],
+      'input',
+    );
+
+    await process(processor, messageList);
+
+    expect(messageList.get.input.db().map(item => item.id)).toEqual(['u1', 'a1', 'u2']);
+    expect(listMessages).not.toHaveBeenCalled();
+    expect(listMessagesById).not.toHaveBeenCalled();
+  });
+
+  it('keeps the whole input when retainFullInput is set, without stripping provider metadata', async () => {
+    const { messageList, processor } = setup([], true);
+    messageList.add(
+      [
+        message('u1', 'user', [{ type: 'text', text: 'question' }]),
+        message('a1', 'assistant', [
+          { type: 'reasoning', text: 'thought', providerMetadata: { openai: { itemId: 'rs_1' } } },
+          { type: 'text', text: 'answer', providerMetadata: { openai: { itemId: 'msg_1' } } },
+        ]),
+      ],
+      'input',
+    );
+
+    await process(processor, messageList);
+
+    const parts = messageList.get.input.db()[1]?.content.parts ?? [];
+    expect(parts[0]).toHaveProperty('providerMetadata', { openai: { itemId: 'rs_1' } });
+    expect(parts[1]).toHaveProperty('providerMetadata', { openai: { itemId: 'msg_1' } });
   });
 });

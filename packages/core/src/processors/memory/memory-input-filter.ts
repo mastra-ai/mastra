@@ -53,6 +53,11 @@
  * is exactly the orphaned-reference shape from #24052. Tool results keep their metadata: that
  * data came from the client.
  *
+ * A caller that assembled the input itself can opt out of all of the above with
+ * `retainFullInput`. The input is then processed exactly as supplied — no trim, no seed strip —
+ * which is what the nested `useAgent` structuring pass needs so its replayed request keeps the
+ * same shape as the parent run and provider prompt caching still hits.
+ *
  * ## What happens after this runs
  *
  * Loaders add stored rows as `memory`. `MessageList.add` treats a memory-sourced message that
@@ -69,6 +74,13 @@ import type { MemoryStorage } from '../../storage';
 
 export interface MemoryInputFilterOptions {
   storage: MemoryStorage;
+  /**
+   * When true, the request input is left exactly as supplied and no trimming or seeding is
+   * performed. Used by callers that assemble the input themselves and need the message
+   * sequence preserved (for example the nested `useAgent` structuring pass, which replays
+   * the parent request so prompt caching still hits).
+   */
+  retainFullInput?: boolean;
 }
 
 function stripAssistantProviderMetadata(message: MastraDBMessage): MastraDBMessage {
@@ -96,9 +108,12 @@ export class MemoryInputFilter implements Processor {
   readonly name = 'MemoryInputFilter';
 
   private storage: MemoryStorage;
+  /** Whether the request input is processed verbatim. Public so callers and tests can introspect it. */
+  readonly retainFullInput: boolean;
 
   constructor(options: MemoryInputFilterOptions) {
     this.storage = options.storage;
+    this.retainFullInput = options.retainFullInput === true;
   }
 
   async processInput({
@@ -112,6 +127,11 @@ export class MemoryInputFilter implements Processor {
   }): Promise<MessageList> {
     const input = messageList.get.input.db();
     if (input.length === 0) return messageList;
+
+    // The caller assembled this input itself and needs it processed verbatim: skip the trim
+    // against stored history. Loaders still add stored rows underneath, and the same-id
+    // layering in MessageList.add still applies.
+    if (this.retainFullInput) return messageList;
 
     const context = parseMemoryRequestContext(requestContext);
     const threadId = context?.thread?.id ?? messageList.serialize().memoryInfo?.threadId;
@@ -152,9 +172,9 @@ export class MemoryInputFilter implements Processor {
       return messageList;
     }
 
-    const retainsFullInput =
+    const inputUnchanged =
       retainedInput.length === input.length && retainedInput.every((message, index) => message === input[index]);
-    if (retainsFullInput) return messageList;
+    if (inputUnchanged) return messageList;
 
     const stored = await this.storage.listMessages({
       threadId,

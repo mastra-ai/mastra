@@ -94,6 +94,14 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
             defaultValue: 'false',
           },
           {
+            name: 'retainFullInput',
+            type: 'boolean',
+            description:
+              'When true, the request input is processed exactly as supplied instead of being filtered against stored history. Use this when you assemble the input yourself and need the message sequence preserved. Stored history is still loaded underneath, and messages are still saved. Can be set per call on `memory.options` or agent-wide in the memory constructor options.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
             name: 'semanticRecall',
             type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
             description:

@@ -103,7 +103,9 @@ See [configuration options](/reference/memory/observational-memory) for full API
 :::warning
 When you use OM with a client application, send **only the new message** from the client instead of the full conversation history.
 
-Observational memory still relies on stored conversation history. Sending the full history is redundant and can cause message ordering bugs when client-side timestamps conflict with stored timestamps.
+Observational memory still relies on stored conversation history. Sending the full history is redundant and can cause message ordering bugs when client-side timestamps conflict with stored timestamps. Mastra filters client-echoed history before loading stored messages and uses the stored copy as the base when message IDs match, preserving stored timestamps and provider metadata while retaining new tool results.
+
+If you assemble the request input yourself and need it processed exactly as sent, set `retainFullInput: true` on `memory.options` for that call, or in the memory constructor options to apply it agent-wide. This disables that filtering; history still loads underneath.
 
 For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk-ui#using-mastra-memory).
 :::

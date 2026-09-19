@@ -782,7 +782,15 @@ https://mastra.ai/en/docs/memory/overview`,
     const loadsStoredHistory = hasMessageHistory || hasObservationalMemory || lastMessages.enabled;
 
     if (memoryStore && loadsStoredHistory) {
-      processors.push(new MemoryInputFilter({ storage: memoryStore }));
+      processors.push(
+        new MemoryInputFilter({
+          storage: memoryStore,
+          // Resolved from the merged config so the flag can be set agent-wide (Memory options)
+          // or per call (memory.options on the request), matching how the other memory options
+          // are resolved. The filter reads config nowhere else.
+          retainFullInput: effectiveConfig.retainFullInput === true,
+        }),
+      );
     }
 
     // Add working memory input processor if configured

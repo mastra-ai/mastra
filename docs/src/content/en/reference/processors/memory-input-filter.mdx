@@ -1,0 +1,103 @@
+---
+title: "Reference: MemoryInputFilter | Processors"
+description: "The MemoryInputFilter is an input processor that filters client-echoed conversation history before memory loads stored messages."
+packages:
+  - "@mastra/core"
+---
+
+# MemoryInputFilter
+
+The `MemoryInputFilter` is an **input processor** that filters the request input against stored history before any memory loader reads it. It is added automatically by `Memory` ahead of `MessageHistory`, `WorkingMemory`, `SemanticRecall`, and Observational Memory, so you only construct it yourself when you manage memory processors manually.
+
+## Usage example
+
+```typescript
+import { MemoryInputFilter } from '@mastra/core/processors'
+
+const processor = new MemoryInputFilter({
+  storage: memoryStorage,
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'MemoryInputFilterOptions',
+    description: 'Configuration options for the memory input filter processor',
+    isOptional: false,
+    properties: [
+      {
+        type: 'MemoryInputFilterOptions',
+        parameters: [
+          {
+            name: 'storage',
+            type: 'MemoryStorage',
+            description: 'Storage instance for checking whether the thread already has stored messages',
+            isOptional: false,
+          },
+          {
+            name: 'retainFullInput',
+            type: 'boolean',
+            description:
+              'When true, the request input is processed exactly as supplied and is not filtered against stored history. Stored history is still loaded underneath. Set this when you assemble the input yourself and need the message sequence preserved.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: "Processor identifier set to 'memory-input-filter'",
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Processor display name set to 'MemoryInputFilter'",
+    isOptional: false,
+  },
+  {
+    name: 'processInput',
+    type: '(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList>',
+    description: 'Filters the request input down to what stored history does not already cover, or seeds a thread that has no stored messages',
+    isOptional: false,
+  },
+]}
+/>
+
+## Behavior
+
+### Input processing
+
+For a thread that already has stored messages, the input is reduced based on what its last message is:
+
+- **Ends with one or more user messages**: those messages are kept and everything back to the last assistant message is dropped. Several consecutive user messages are all kept because they are all new.
+- **Ends with an assistant message**: only its trailing run of `state: 'result'` tool invocations is kept, which is the client-side tool flow where a stored assistant turn contains a pending call and the client returns the result.
+- **Ends with an assistant message with no new tool results**: the message is dropped only if it exists in storage. Assistant messages that were never persisted, such as internal instruction messages, are left in place.
+- **Contains nothing new**: the input is cleared and the run continues on stored history alone.
+
+For a thread with no stored messages, the entire input seeds the conversation. Provider metadata is stripped from assistant messages so that item references to server-side items from another conversation are not replayed.
+
+Trailing user messages are treated as new messages and kept as sent; when they carry no ID the server assigns one. Echoed copies of already-stored messages never replace the stored row, so the stored timestamps and provider metadata stay authoritative for that message.
+
+### Stored messages as the base layer
+
+Loaders add stored messages with a `memory` source. When a stored message and an input message share an ID, the stored copy takes the slot with its reasoning, provider metadata, and `createdAt`, and the input's parts are layered on top. That preserves the original assistant turn while still persisting new contributions such as tool results.
+
+## Related
+
+- [Message history](/docs/memory/message-history)
+- [Processors](/docs/agents/processors)
