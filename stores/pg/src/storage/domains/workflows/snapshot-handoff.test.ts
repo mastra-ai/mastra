@@ -41,6 +41,7 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     const input = {
       workflowName,
       runId,
+      expectedCanonical: { kind: 'absent' },
       resourceId: 'resource-1',
       snapshot: pending,
       mutationFence: 'opaque-owner',
@@ -86,9 +87,30 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     const runId = randomUUID();
     const terminal = snapshot(runId, 'success', { native: true });
     await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: terminal });
+    const nativeFirstWorkflow = `native-first-${randomUUID()}`;
+    const nativeFirstRun = randomUUID();
+    const nativeFirst = snapshot(nativeFirstRun, 'success', { native: true });
+    await workflows.persistWorkflowSnapshot({
+      workflowName: nativeFirstWorkflow,
+      runId: nativeFirstRun,
+      snapshot: nativeFirst,
+    });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: nativeFirstWorkflow,
+        runId: nativeFirstRun,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(nativeFirstRun, 'waiting'),
+        mutationFence: 'native-first-owner',
+      }),
+    ).resolves.toMatchObject({
+      status: 'conflict',
+      observedCanonical: { kind: 'present', snapshot: { status: 'success' } },
+    });
     await workflows.claimWorkflowSnapshotHandoff({
       workflowName,
       runId,
+      expectedCanonical: { kind: 'present', snapshot: terminal },
       mutationFence: 'opaque-owner',
       snapshot: snapshot(runId, 'waiting', { product: true }),
     });
@@ -120,6 +142,7 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     await workflows.claimWorkflowSnapshotHandoff({
       workflowName,
       runId,
+      expectedCanonical: { kind: 'absent' },
       mutationFence: 'opaque-owner',
       snapshot: snapshot(runId, 'waiting'),
     });

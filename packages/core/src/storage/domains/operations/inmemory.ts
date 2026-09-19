@@ -13,6 +13,7 @@ export class StoreOperationsInMemory extends StoreOperations {
     super();
     this.data = {
       mastra_workflow_snapshot: new Map(),
+      mastra_workflow_snapshot_handoffs: new Map(),
       mastra_messages: new Map(),
       mastra_threads: new Map(),
       mastra_traces: new Map(),

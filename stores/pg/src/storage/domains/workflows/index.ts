@@ -68,6 +68,7 @@ import {
   WorkflowSnapshotHandoffFenceError,
   validateWorkflowSnapshotHandoffFence,
   validateWorkflowSnapshotHandoffLimit,
+  workflowSnapshotHandoffCanonicalStatesEqual,
   workflowSnapshotHandoffSnapshotsEqual,
 } from '@mastra/core/storage';
 import type {
@@ -126,6 +127,7 @@ import type {
   WorkflowTerminalizationCapabilities,
   WorkflowResumeCapabilities,
   WorkflowSnapshotHandoffCapabilities,
+  WorkflowSnapshotHandoffCanonicalState,
   WorkflowSnapshotHandoffRecord,
   ClaimWorkflowSnapshotHandoffInput,
   ClaimWorkflowSnapshotHandoffResult,
@@ -667,12 +669,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     workflowName: string,
     runId: string,
     created: boolean,
+    generation = 0,
   ): Promise<void> {
     if (!created) return;
     const result = await t.query(
       `DELETE FROM ${this.workflowParentRevisionTableName()}
-       WHERE workflow_name = $1 AND run_id = $2 AND generation = 0 AND terminal_status IS NULL`,
-      [workflowName, runId],
+       WHERE workflow_name = $1 AND run_id = $2 AND generation = $3 AND terminal_status IS NULL`,
+      [workflowName, runId, generation],
     );
     if ((result.rowCount ?? 0) !== 1) {
       throw new TypeError('Provisional workflow parent revision could not be rolled back');
@@ -747,17 +750,40 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  private async lockWorkflowSnapshotHandoffCanonicalState(
+    t: TxClient,
+    workflowName: string,
+    runId: string,
+  ): Promise<WorkflowSnapshotHandoffCanonicalState> {
+    const row = await t.oneOrNone<{ snapshot: WorkflowRunState | string; resourceId?: string | null }>(
+      `SELECT snapshot, "resourceId" FROM ${this.workflowSnapshotTableName()}
+       WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+      [workflowName, runId],
+    );
+    if (!row) return { kind: 'absent' };
+    const snapshot = typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot;
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      throw new TypeError('Workflow snapshot handoff canonical snapshot is invalid');
+    }
+    return {
+      kind: 'present',
+      ...(row.resourceId === null || row.resourceId === undefined ? {} : { resourceId: row.resourceId }),
+      snapshot: snapshot as WorkflowRunState,
+    };
+  }
+
   /** Serializes a handoff claim with both existing and first native snapshot writers. */
   private async lockWorkflowParentRevisionForSnapshotHandoff(
     t: TxClient,
     workflowName: string,
     runId: string,
-  ): Promise<WorkflowParentRevisionLock> {
-    await t.none(
+  ): Promise<WorkflowParentRevisionCreationLock> {
+    const inserted = await t.oneOrNone<{ generation: number | string }>(
       `INSERT INTO ${this.workflowParentRevisionTableName()}
        (workflow_name, run_id, generation, updated_at)
        VALUES ($1, $2, 1, floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint)
-       ON CONFLICT (workflow_name, run_id) DO NOTHING`,
+       ON CONFLICT (workflow_name, run_id) DO NOTHING
+       RETURNING generation`,
       [workflowName, runId],
     );
     const row = await t.one<{ generation: number | string; terminal_status: string | null }>(
@@ -765,7 +791,7 @@ export class WorkflowsPG extends WorkflowsStorage {
        WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
       [workflowName, runId],
     );
-    return this.decodeWorkflowParentRevision(row, 1);
+    return { ...this.decodeWorkflowParentRevision(row, 1), created: inserted !== null };
   }
 
   private async bumpWorkflowParentRevision(
@@ -4915,7 +4941,16 @@ export class WorkflowsPG extends WorkflowsStorage {
     validateWorkflowSnapshotHandoffFence(input.mutationFence);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(input.snapshot));
     return this.#db.client.tx(async t => {
-      await this.lockWorkflowParentRevisionForSnapshotHandoff(t, input.workflowName, input.runId);
+      const revision = await this.lockWorkflowParentRevisionForSnapshotHandoff(t, input.workflowName, input.runId);
+      const observedCanonical = await this.lockWorkflowSnapshotHandoffCanonicalState(
+        t,
+        input.workflowName,
+        input.runId,
+      );
+      if (!workflowSnapshotHandoffCanonicalStatesEqual(input.expectedCanonical, observedCanonical)) {
+        await this.deleteProvisionalWorkflowParentRevision(t, input.workflowName, input.runId, revision.created, 1);
+        return { status: 'conflict', observedCanonical };
+      }
       const existing = await this.lockWorkflowSnapshotHandoff(t, input.workflowName, input.runId);
       if (existing) {
         const same =

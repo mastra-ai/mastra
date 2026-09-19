@@ -104,9 +104,15 @@ export interface WorkflowSnapshotHandoffCapabilities {
   recoveryVersion?: 1;
 }
 
+/** The canonical native snapshot state a handoff claim must compare under the parent lock. */
+export type WorkflowSnapshotHandoffCanonicalState =
+  | { kind: 'absent' }
+  | { kind: 'present'; resourceId?: string; snapshot: WorkflowRunState };
+
 export interface ClaimWorkflowSnapshotHandoffInput {
   workflowName: string;
   runId: string;
+  expectedCanonical: WorkflowSnapshotHandoffCanonicalState;
   resourceId?: string;
   snapshot: WorkflowRunState;
   mutationFence: string;
@@ -114,7 +120,11 @@ export interface ClaimWorkflowSnapshotHandoffInput {
 
 export type ClaimWorkflowSnapshotHandoffResult =
   | { status: 'created' | 'existing' | 'completed'; record: WorkflowSnapshotHandoffRecord }
-  | { status: 'conflict'; record: WorkflowSnapshotHandoffRecord }
+  | {
+      status: 'conflict';
+      record?: WorkflowSnapshotHandoffRecord;
+      observedCanonical?: WorkflowSnapshotHandoffCanonicalState;
+    }
   | { status: 'unsupported' };
 
 export interface TransitionWorkflowSnapshotHandoffInput {
@@ -153,21 +163,19 @@ export interface ListWorkflowSnapshotHandoffsInput {
   workflowName?: string;
   status?: WorkflowSnapshotHandoffStatus;
   limit?: number;
-  after?: {
-    updatedAt: number;
-    workflowName: string;
-    runId: string;
-  };
+  after?: WorkflowSnapshotHandoffCursor;
+}
+
+export interface WorkflowSnapshotHandoffCursor {
+  updatedAt: number;
+  workflowName: string;
+  runId: string;
 }
 
 export interface ListWorkflowSnapshotHandoffsResult {
   records: WorkflowSnapshotHandoffRecord[];
   hasMore: boolean;
-  nextCursor?: {
-    updatedAt: number;
-    workflowName: string;
-    runId: string;
-  };
+  nextCursor?: WorkflowSnapshotHandoffCursor;
 }
 
 /**

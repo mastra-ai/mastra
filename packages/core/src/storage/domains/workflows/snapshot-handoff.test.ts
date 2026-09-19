@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { WorkflowRunState } from '../../../workflows';
 import { InMemoryStore } from '../../mock';
 
@@ -24,6 +24,7 @@ describe('workflow snapshot handoff', () => {
     const input = {
       workflowName: 'handoff-workflow',
       runId: 'handoff-run',
+      expectedCanonical: { kind: 'absent' as const },
       resourceId: 'resource-1',
       mutationFence: 'opaque-owner',
       snapshot: snapshot('handoff-run', 'waiting', { phase: 'claimed' }),
@@ -63,6 +64,34 @@ describe('workflow snapshot handoff', () => {
       hasMore: false,
       records: [{ workflowName: 'handoff-workflow', runId: 'handoff-run', status: 'completed' }],
     });
+
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    try {
+      await workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'a',
+        runId: 'ordered-run',
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot('ordered-run', 'waiting'),
+        mutationFence: 'a-owner',
+      });
+      await workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'B',
+        runId: 'ordered-run',
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot('ordered-run', 'waiting'),
+        mutationFence: 'B-owner',
+      });
+    } finally {
+      clock.mockRestore();
+    }
+    const firstPage = await workflows.listWorkflowSnapshotHandoffs({ status: 'pending', limit: 1 });
+    expect(firstPage.records.map(record => record.workflowName)).toEqual(['B']);
+    const secondPage = await workflows.listWorkflowSnapshotHandoffs({
+      status: 'pending',
+      limit: 1,
+      after: firstPage.nextCursor,
+    });
+    expect(secondPage.records.map(record => record.workflowName)).toEqual(['a']);
   });
 
   it('fences native writes while a handoff exists and keeps terminal execution status', async () => {
@@ -72,9 +101,29 @@ describe('workflow snapshot handoff', () => {
     const runId = 'fenced-run';
     const terminal = snapshot(runId, 'success', { native: true });
     await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: terminal });
+    const nativeFirstWorkflow = 'native-first-workflow';
+    const nativeFirstRun = 'native-first-run';
+    const nativeFirst = snapshot(nativeFirstRun, 'success', { native: true });
+    await workflows.persistWorkflowSnapshot({
+      workflowName: nativeFirstWorkflow,
+      runId: nativeFirstRun,
+      snapshot: nativeFirst,
+    });
+    const competingClaim = await workflows.claimWorkflowSnapshotHandoff({
+      workflowName: nativeFirstWorkflow,
+      runId: nativeFirstRun,
+      expectedCanonical: { kind: 'absent' },
+      snapshot: snapshot(nativeFirstRun, 'waiting'),
+      mutationFence: 'native-first-owner',
+    });
+    expect(competingClaim).toMatchObject({
+      status: 'conflict',
+      observedCanonical: { kind: 'present', snapshot: { status: 'success' } },
+    });
     await workflows.claimWorkflowSnapshotHandoff({
       workflowName,
       runId,
+      expectedCanonical: { kind: 'present', snapshot: terminal },
       mutationFence: 'opaque-owner',
       snapshot: snapshot(runId, 'waiting', { product: true }),
     });

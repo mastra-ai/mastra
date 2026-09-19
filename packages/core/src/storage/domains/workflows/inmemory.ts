@@ -72,6 +72,7 @@ import type {
   WorkflowTerminalizationCapabilities,
   WorkflowResumeCapabilities,
   WorkflowSnapshotHandoffCapabilities,
+  WorkflowSnapshotHandoffCanonicalState,
   WorkflowSnapshotHandoffRecord,
   ClaimWorkflowSnapshotHandoffInput,
   ClaimWorkflowSnapshotHandoffResult,
@@ -91,8 +92,10 @@ import {
 } from '../../workflow-snapshot';
 import {
   WorkflowSnapshotHandoffFenceError,
+  compareWorkflowSnapshotHandoffCursors,
   validateWorkflowSnapshotHandoffFence,
   validateWorkflowSnapshotHandoffLimit,
+  workflowSnapshotHandoffCanonicalStatesEqual,
   workflowSnapshotHandoffSnapshotsEqual,
 } from '../../workflow-snapshot-handoff';
 import type { InMemoryDB, WorkflowTerminalParentRevisionState } from '../inmemory-db';
@@ -392,6 +395,23 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
   private copyWorkflowSnapshotHandoff(record: WorkflowSnapshotHandoffRecord): WorkflowSnapshotHandoffRecord {
     return cloneRunData(record);
+  }
+
+  private getWorkflowSnapshotHandoffCanonicalState(
+    workflowName: string,
+    runId: string,
+  ): WorkflowSnapshotHandoffCanonicalState {
+    const run = this.db.workflows.get(this.getWorkflowKey(workflowName, runId));
+    if (!run) return { kind: 'absent' };
+    const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      throw new TypeError('Workflow snapshot handoff canonical snapshot is invalid');
+    }
+    return {
+      kind: 'present',
+      ...(run.resourceId === undefined ? {} : { resourceId: run.resourceId }),
+      snapshot: cloneRunData(snapshot),
+    };
   }
 
   private applyWorkflowResumeMutation(
@@ -1399,6 +1419,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   ): Promise<ClaimWorkflowSnapshotHandoffResult> {
     validateWorkflowSnapshotHandoffFence(input.mutationFence);
     const key = this.getWorkflowKey(input.workflowName, input.runId);
+    const observedCanonical = this.getWorkflowSnapshotHandoffCanonicalState(input.workflowName, input.runId);
+    if (!workflowSnapshotHandoffCanonicalStatesEqual(input.expectedCanonical, observedCanonical)) {
+      return { status: 'conflict', observedCanonical };
+    }
     const existing = this.db.workflowSnapshotHandoffs.get(key);
     if (existing) {
       const same =
@@ -1501,20 +1525,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
           (input.workflowName === undefined || record.workflowName === input.workflowName) &&
           (input.status === undefined || record.status === input.status),
       )
-      .sort(
-        (left, right) =>
-          left.updatedAt - right.updatedAt ||
-          left.workflowName.localeCompare(right.workflowName) ||
-          left.runId.localeCompare(right.runId),
-      )
-      .filter(
-        record =>
-          !after ||
-          record.updatedAt > after.updatedAt ||
-          (record.updatedAt === after.updatedAt &&
-            (record.workflowName > after.workflowName ||
-              (record.workflowName === after.workflowName && record.runId > after.runId))),
-      );
+      .sort(compareWorkflowSnapshotHandoffCursors)
+      .filter(record => !after || compareWorkflowSnapshotHandoffCursors(record, after) > 0);
     const page = records.slice(0, limit);
     const hasMore = records.length > limit;
     const last = page.at(-1);

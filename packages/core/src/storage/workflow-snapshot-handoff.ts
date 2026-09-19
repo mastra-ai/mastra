@@ -1,4 +1,5 @@
 import type { WorkflowRunState } from '../workflows';
+import type { WorkflowSnapshotHandoffCanonicalState, WorkflowSnapshotHandoffCursor } from './types';
 
 /** Raised when an ordinary native writer attempts to mutate a fenced run. */
 export class WorkflowSnapshotHandoffFenceError extends TypeError {
@@ -43,6 +44,31 @@ export function workflowSnapshotHandoffSnapshotsEqual(left: WorkflowRunState, ri
   } catch {
     return false;
   }
+}
+
+export function workflowSnapshotHandoffCanonicalStatesEqual(
+  left: WorkflowSnapshotHandoffCanonicalState,
+  right: WorkflowSnapshotHandoffCanonicalState,
+): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === 'absent' || right.kind === 'absent') return true;
+  return left.resourceId === right.resourceId && workflowSnapshotHandoffSnapshotsEqual(left.snapshot, right.snapshot);
+}
+
+function compareWorkflowSnapshotHandoffText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** Uses the same code-point tuple ordering for in-memory sort and cursor filtering. */
+export function compareWorkflowSnapshotHandoffCursors(
+  left: WorkflowSnapshotHandoffCursor,
+  right: WorkflowSnapshotHandoffCursor,
+): number {
+  return (
+    left.updatedAt - right.updatedAt ||
+    compareWorkflowSnapshotHandoffText(left.workflowName, right.workflowName) ||
+    compareWorkflowSnapshotHandoffText(left.runId, right.runId)
+  );
 }
 
 export function validateWorkflowSnapshotHandoffFence(mutationFence: string): void {
