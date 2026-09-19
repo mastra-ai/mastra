@@ -112,7 +112,8 @@ console.log('Server running on http://localhost:3000')
     name: 'mcpOptions',
     type: 'MCPOptions',
     typeDescription: '{ serverless?: boolean, sessionIdGenerator?: () => string }',
-    description: 'MCP transport options. Set `serverless: true` for stateless environments like Vercel Edge.',
+    description:
+      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`.',
     isOptional: true,
   },
 ]}
@@ -226,7 +227,7 @@ Call `clearMastraOpenAPICache(server)` if you need to regenerate the cached docu
 
 ## MCP support
 
-The Elysia adapter supports both MCP HTTP and MCP SSE transports.
+The Elysia adapter serves each registered MCP server over Streamable HTTP at `/api/mcp/:serverId/mcp`.
 
 ## Manual initialization
 

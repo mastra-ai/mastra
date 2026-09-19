@@ -441,7 +441,7 @@ These options are passed directly to the adapter constructor and aren't read fro
 | `bodyLimitOptions` | Body size limit with custom error handler |
 | `streamOptions` | Stream redaction settings |
 | `customRouteAuthConfig` | Per-route auth overrides |
-| `mcpOptions` | MCP transport options (e.g., `serverless: true` for stateless environments) |
+| `mcpOptions` | MCP transport options (e.g., `setRequestAuth` to control `context.mcp.extra.authInfo`) |
 
 ### Not used by adapters
 
@@ -460,19 +460,17 @@ When using adapters, configure these features directly with your framework. For 
 
 Server adapters register MCP (Model Context Protocol) routes during `registerRoutes()` when MCP servers are configured in your Mastra instance. MCP allows external tools and services to connect to your Mastra server and interact with your agents.
 
-Most adapters register routes for both HTTP and SSE (Server-Sent Events) transports, enabling different client connection patterns. The Elysia adapter currently supports MCP HTTP transport only.
+Each server is exposed at `/api/mcp/:serverId/mcp` over Streamable HTTP. Every request is self-contained, so the routes work unchanged in serverless environments like Cloudflare Workers or Vercel Edge.
 
-### Serverless mode
-
-For serverless environments like Cloudflare Workers or Vercel Edge, enable stateless mode via `mcpOptions`.
-
-When using the Mastra deployer (the standard `mastra dev` / `mastra build` path), set `mcpOptions` in your server config:
+Pass `mcpOptions` to control how the authenticated principal reaches tools. When using the Mastra deployer (the standard `mastra dev` / `mastra build` path), set it in your server config:
 
 ```typescript
 const mastra = new Mastra({
   server: {
     mcpOptions: {
-      serverless: true,
+      setRequestAuth: (req, requestContext) => {
+        req.auth = requestContext.get('mcpAuth')
+      },
     },
   },
 })
@@ -485,12 +483,12 @@ const server = new MastraServer({
   app,
   mastra,
   mcpOptions: {
-    serverless: true,
+    setRequestAuth: (req, requestContext) => {
+      req.auth = requestContext.get('mcpAuth')
+    },
   },
 })
 ```
-
-When `serverless: true`, MCP HTTP requests run without session management, making them compatible with stateless execution environments.
 
 See [MCP](/docs/connections/mcp) for configuration details and how to set up MCP servers.
 
