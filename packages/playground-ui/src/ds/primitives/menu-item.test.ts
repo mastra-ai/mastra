@@ -27,8 +27,8 @@ describe('menuItemClass', () => {
   });
 
   it('exposes a destructive variant', () => {
-    expect(menuItemDestructiveClass).toContain('text-accent2');
-    expect(menuItemDestructiveClass).toContain('data-highlighted:bg-accent2/10');
+    expect(menuItemDestructiveClass).toContain('text-destructive');
+    expect(menuItemDestructiveClass).toContain('data-highlighted:bg-destructive/20');
     expect(menuItemDestructiveClass).toContain('rounded-lg');
   });
 });

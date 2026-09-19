@@ -670,31 +670,14 @@ export class MessageList {
             for (let i = 0; i < modelMsg.content.length; i++) {
               const part = modelMsg.content[i]!;
               if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
-                const replacement = {
+                // The stored modelOutput is substituted into `output` here. The
+                // internal `mastra.modelOutput` marker stays on the part: input
+                // processors read it to tell a toModelOutput-mapped result apart
+                // from a raw fallback (see ToolCallFilter).
+                modelMsg.content[i] = {
                   ...part,
                   output: storedModelOutputs.get(part.toolCallId) as any,
                 };
-                // The stored modelOutput was substituted into `output` above — don't
-                // also leak the internal `mastra.modelOutput` copy to the provider.
-                // Stored DB messages keep it; this only strips at prompt-assembly time.
-                const providerOptions = replacement.providerOptions as Record<string, unknown> | undefined;
-                const mastraOptions = providerOptions?.mastra as Record<string, unknown> | undefined;
-                if (mastraOptions && typeof mastraOptions === 'object' && 'modelOutput' in mastraOptions) {
-                  const restMastra = { ...mastraOptions };
-                  delete restMastra.modelOutput;
-                  const restOptions = { ...providerOptions };
-                  if (Object.keys(restMastra).length > 0) {
-                    restOptions.mastra = restMastra;
-                  } else {
-                    delete restOptions.mastra;
-                  }
-                  if (Object.keys(restOptions).length > 0) {
-                    replacement.providerOptions = restOptions as typeof replacement.providerOptions;
-                  } else {
-                    delete replacement.providerOptions;
-                  }
-                }
-                modelMsg.content[i] = replacement;
               }
             }
           }

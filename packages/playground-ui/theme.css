@@ -387,10 +387,11 @@ html.light {
   --height-icon-default: 16px;
   --height-icon-lg: 20px;
   --height-icon-sm: 12px;
+  --height-icon-smd: 14px;
   --spacing-form-xs: 1.25rem;
   --spacing-form-sm: 1.5rem;
   --spacing-form-md: 1.75rem;
-  --spacing-form-lg: 1.75rem;
+  --spacing-form-lg: 2rem;
   --height-header-default: 40px;
   --height-table-header: 28px;
   --height-table-row: 40px;
@@ -404,6 +405,7 @@ html.light {
   --max-height-icon-default: 16px;
   --max-height-icon-lg: 20px;
   --max-height-icon-sm: 12px;
+  --max-height-icon-smd: 14px;
   --max-height-header-default: 40px;
   --max-height-table-header: 28px;
   --max-height-table-row: 40px;
@@ -419,6 +421,7 @@ html.light {
   --width-icon-default: 16px;
   --width-icon-lg: 20px;
   --width-icon-sm: 12px;
+  --width-icon-smd: 14px;
   /* Using --spacing-form-* for both height and width */
   --width-header-default: 40px;
   --width-table-header: 28px;
