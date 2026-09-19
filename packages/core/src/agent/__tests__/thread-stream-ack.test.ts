@@ -150,5 +150,65 @@ describe('claimed thread ownership acknowledges every delivery', () => {
       owner.unsubscribe();
       await nextTicks();
     });
+
+    it('leaves an owner discovery request unacked when its reply publish fails', async () => {
+      const { runtime, pubsub } = setup();
+      const owner = await claim(runtime, pubsub);
+
+      // A reply that never reaches the backend must not ack the request: the caller's
+      // discovery would time out with nothing to redeliver against. The rejection also
+      // has to surface, so a backend can nack and redeliver the request.
+      const replyTopic = `${OWNER_DISCOVERY_TOPIC}.request-fail`;
+      pubsub.failPublish.add(replyTopic);
+
+      await expect(
+        pubsub.publish(OWNER_DISCOVERY_TOPIC, {
+          type: 'thread-owner-request',
+          runId: 'request-fail',
+          data: {
+            type: 'thread-owner-request',
+            key,
+            requestId: 'request-fail',
+            replyTopic,
+            sourceId: 'elsewhere',
+          },
+        }),
+      ).rejects.toThrow(`publish to ${replyTopic} failed`);
+
+      const deliveries = deliveriesOn(pubsub, OWNER_DISCOVERY_TOPIC);
+      expect(deliveries.length).toBeGreaterThan(0);
+      expect(deliveries.some(d => d.acked)).toBe(false);
+
+      owner.unsubscribe();
+      await nextTicks();
+    });
+
+    it('leaves a peer discovery request unacked when its reply publish fails', async () => {
+      const { runtime, pubsub } = setup();
+      const owner = await claim(runtime, pubsub, true);
+
+      const replyTopic = `${PEER_DISCOVERY_TOPIC}.request-fail`;
+      pubsub.failPublish.add(replyTopic);
+
+      await expect(
+        pubsub.publish(PEER_DISCOVERY_TOPIC, {
+          type: 'thread-peer-request',
+          runId: 'request-fail',
+          data: {
+            type: 'thread-peer-request',
+            requestId: 'request-fail',
+            replyTopic,
+            sourceId: 'elsewhere',
+          },
+        }),
+      ).rejects.toThrow(`publish to ${replyTopic} failed`);
+
+      const deliveries = deliveriesOn(pubsub, PEER_DISCOVERY_TOPIC);
+      expect(deliveries.length).toBeGreaterThan(0);
+      expect(deliveries.some(d => d.acked)).toBe(false);
+
+      owner.unsubscribe();
+      await nextTicks();
+    });
   });
 });

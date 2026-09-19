@@ -23,8 +23,11 @@ export class LeasePubSub extends PubSub implements LeaseProvider {
   #subscribers = new Map<string, Set<EventCallback>>();
   /** One entry per delivery, in publish order — enough to assert what was acked. */
   deliveries: Array<{ topic: string; event: any; acked: boolean; nacked: boolean }> = [];
+  /** Topics whose publishes reject, to model a reply that never reaches the backend. */
+  failPublish = new Set<string>();
 
   async publish(topic: string, event: any): Promise<void> {
+    if (this.failPublish.has(topic)) throw new Error(`publish to ${topic} failed`);
     for (const subscriber of [...(this.#subscribers.get(topic) ?? [])]) {
       const record = { topic, event, acked: false, nacked: false };
       this.deliveries.push(record);

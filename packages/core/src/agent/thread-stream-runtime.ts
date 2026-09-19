@@ -852,22 +852,27 @@ export class AgentThreadStreamRuntime {
       }
     });
 
-    const onOwnerDiscovery: EventCallback = withAck(event => {
+    // Both discovery handlers await their reply before returning, so the request is only
+    // acked once the reply publish has settled. Acking first would let a failed publish lose
+    // the request — the backend sees it as handled and cannot redeliver, leaving the caller's
+    // `#deliverAfterClaimedOwnerDiscovery` to throw with no response. Awaiting keeps the ack
+    // behind the publish and lets a rejection reach the nack path, matching `onEvent`.
+    const onOwnerDiscovery: EventCallback = withAck(async event => {
       if (!active) return;
       const data = event.data as AgentThreadOwnerDiscoveryEvent | undefined;
       if (data?.type !== 'thread-owner-request' || data.key !== key || data.sourceId === sourceId) return;
-      void resolvedPubSub.publish(data.replyTopic, {
+      await resolvedPubSub.publish(data.replyTopic, {
         type: 'thread-owner-response',
         runId: data.requestId,
         data: { type: 'thread-owner-response', key, requestId: data.requestId, sourceId },
       });
     });
 
-    const onPeerDiscovery: EventCallback = withAck(event => {
+    const onPeerDiscovery: EventCallback = withAck(async event => {
       if (!active || !peer) return;
       const data = event.data as AgentThreadPeerDiscoveryEvent | undefined;
       if (data?.type !== 'thread-peer-request' || data.sourceId === sourceId) return;
-      void resolvedPubSub.publish(data.replyTopic, {
+      await resolvedPubSub.publish(data.replyTopic, {
         type: 'thread-peer-response',
         runId: data.requestId,
         data: { type: 'thread-peer-response', requestId: data.requestId, peer: toPublicThreadPeer(peer), sourceId },
