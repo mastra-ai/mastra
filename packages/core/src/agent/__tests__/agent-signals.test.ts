@@ -103,6 +103,8 @@ class AsyncCallbackPubSub extends PubSub {
   #subscribers = new Map<string, Set<EventCallback>>();
   #index = 0;
   #pending = new Set<Promise<void>>();
+  /** Callback rejections, which a real backend turns into a nack and redelivery. */
+  subscriptionFailures: unknown[] = [];
 
   async publish(topic: string, event: any, _options?: { localOnly?: boolean }): Promise<void> {
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
@@ -115,7 +117,9 @@ class AsyncCallbackPubSub extends PubSub {
     const pending = new Promise<void>(resolve => {
       setTimeout(() => {
         try {
-          for (const subscriber of subscribers) subscriber(envelope);
+          for (const subscriber of subscribers) {
+            void Promise.resolve(subscriber(envelope)).catch(error => this.subscriptionFailures.push(error));
+          }
         } finally {
           resolve();
         }
@@ -145,6 +149,8 @@ class RetainedAsyncCallbackPubSub extends PubSub {
   #history = new Map<string, any[]>();
   #pending = new Set<Promise<void>>();
   #index = 0;
+  /** Callback rejections, which a real backend turns into a nack and redelivery. */
+  subscriptionFailures: unknown[] = [];
 
   async publish(topic: string, event: any): Promise<void> {
     const envelope = { ...event, id: `retained-${this.#index}`, createdAt: new Date(), index: this.#index++ };
@@ -154,7 +160,9 @@ class RetainedAsyncCallbackPubSub extends PubSub {
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
     const pending = new Promise<void>(resolve => {
       setTimeout(() => {
-        for (const subscriber of subscribers) subscriber(envelope);
+        for (const subscriber of subscribers) {
+          void Promise.resolve(subscriber(envelope)).catch(error => this.subscriptionFailures.push(error));
+        }
         resolve();
       }, 0);
     });
