@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 1.68.0-alpha.9
+
+### Patch Changes
+
+- Fixed structured output to reject responses truncated by token limits or content filters. ([#24464](https://github.com/mastra-ai/mastra/pull/24464))
+
+- Bound the output that the `execute_command` tool retains while a foreground command streams. Previously the tool kept its own unbounded copy of stdout and stderr, which was only read on the error path but could exhaust memory or kill the process with `RangeError: Invalid string length` on very large command output. ([#24486](https://github.com/mastra-ai/mastra/pull/24486))
+
+- Improved `Agent.listSuspendedRuns()` performance when filtering by `threadId`. The thread filter is now passed down to the storage query, so supporting storage adapters narrow results inside the database instead of loading and parsing every suspended snapshot for the resource. Fixes https://github.com/mastra-ai/mastra/issues/22627 ([#24376](https://github.com/mastra-ai/mastra/pull/24376))
+
+  ```ts
+  await agent.listSuspendedRuns({ threadId: 'thread-123' });
+  ```
+
 ## 1.68.0-alpha.8
 
 ### Minor Changes
