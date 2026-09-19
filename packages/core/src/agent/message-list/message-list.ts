@@ -1444,7 +1444,7 @@ export class MessageList {
       }
     }
 
-    this.logger?.warn(`updateToolInvocation: no matching tool call found for toolCallId=${toolCallId}`);
+    this.logger?.debug(`updateToolInvocation: no matching tool call found for toolCallId=${toolCallId}`);
     return false;
   }
 

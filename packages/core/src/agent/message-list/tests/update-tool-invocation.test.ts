@@ -348,9 +348,10 @@ describe('MessageList.updateToolInvocation', () => {
     expect(unsaved).toHaveLength(1);
   });
 
-  it('should return false and warn when no matching toolCallId exists', () => {
+  it('should return false and log at debug level when no matching toolCallId exists', () => {
+    const debugFn = vi.fn();
     const warnFn = vi.fn();
-    const messageList = new MessageList({ logger: { warn: warnFn } as any });
+    const messageList = new MessageList({ logger: { debug: debugFn, warn: warnFn } as any });
 
     const msg = makeAssistantMessage([
       {
@@ -377,7 +378,8 @@ describe('MessageList.updateToolInvocation', () => {
     });
 
     expect(result).toBe(false);
-    expect(warnFn).toHaveBeenCalledWith(expect.stringContaining('tc-nonexistent'));
+    expect(debugFn).toHaveBeenCalledWith(expect.stringContaining('tc-nonexistent'));
+    expect(warnFn).not.toHaveBeenCalled();
   });
 
   it('should find tool invocation in an earlier message when multiple messages exist', () => {
