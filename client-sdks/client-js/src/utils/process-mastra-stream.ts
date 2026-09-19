@@ -12,6 +12,7 @@ async function sharedProcessMastraStream({
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let trailingCR = false;
   const abort = () => void reader.cancel();
   if (signal?.aborted) abort();
   else signal?.addEventListener('abort', abort, { once: true });
@@ -22,30 +23,44 @@ async function sharedProcessMastraStream({
 
       if (done) break;
 
-      // Decode the chunk and add to buffer
-      buffer += decoder.decode(value, { stream: true });
+      let text = decoder.decode(value, { stream: true });
+      if (text.length === 0) continue;
+      // Normalize SSE line endings, including CRLF split across transport chunks.
+      const endsWithCR = text.endsWith('\r');
+      if (trailingCR && text.startsWith('\n')) text = text.slice(1);
+      trailingCR = endsWithCR;
+      buffer += text.replace(/\r\n|\r/g, '\n');
 
       // Process complete SSE messages
-      const lines = buffer.split('\n\n');
-      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+      const frames = buffer.split('\n\n');
+      buffer = frames.pop() || ''; // Keep incomplete frame in buffer
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6); // Remove 'data: '
+      for (const frame of frames) {
+        // An SSE frame may carry other fields (`id:`, `event:`, `retry:`) and comment
+        // lines alongside its `data:` lines, so scan the frame line by line rather than
+        // assuming it starts with `data:` — otherwise the whole chunk is silently dropped.
+        const dataLines: string[] = [];
+        for (const line of frame.split(/\r\n|\n|\r/)) {
+          if (!line.startsWith('data:')) continue;
+          const value = line.slice('data:'.length);
+          dataLines.push(value.startsWith(' ') ? value.slice(1) : value);
+        }
 
-          if (data === '[DONE]') {
-            return;
-          }
-          let json;
-          try {
-            json = JSON.parse(data);
-          } catch (error) {
-            console.error('❌ JSON parse error:', error, 'Data:', data);
-            continue;
-          }
-          if (json) {
-            await onChunk(json);
-          }
+        if (dataLines.length === 0) continue;
+
+        const data = dataLines.join('\n');
+        if (data === '[DONE]') {
+          return;
+        }
+        let json;
+        try {
+          json = JSON.parse(data);
+        } catch (error) {
+          console.error('❌ JSON parse error:', error, 'Data:', data);
+          continue;
+        }
+        if (json) {
+          await onChunk(json);
         }
       }
     }
