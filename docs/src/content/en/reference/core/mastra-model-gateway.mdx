@@ -234,6 +234,28 @@ Returns the gateway's unique identifier.
 
 **Returns:** `string` - The gateway's `id` property
 
+### `GatewayManager.hasAuth()`
+
+Use `GatewayManager` from `@mastra/core/llm` to run the existing gateway auth
+chain for a model router ID without creating a language model. Pass custom
+gateways before `defaultGateways` when custom routing should take precedence.
+The built-in static `ModelsDevGateway` path checks configured credentials without
+provider discovery or model generation. A custom gateway's `resolveAuth()` hook
+may perform its own I/O, and `true` only means that configuration or credentials
+were found; it does not verify that the provider will accept them. Expected
+missing-auth states return `false`, while unexpected gateway failures propagate.
+
+```typescript
+import { GatewayManager, defaultGateways } from '@mastra/core/llm'
+
+const manager = new GatewayManager([
+  ...Object.values(mastra.listGateways() ?? {}),
+  ...defaultGateways,
+])
+
+const hasAuth = await manager.hasAuth('__GATEWAY_GOOGLE_MODEL__')
+```
+
 ## Model ID format
 
 For true gateways, the gateway ID is used as a prefix and models are accessed using this format:
