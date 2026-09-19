@@ -65,7 +65,11 @@ describe('Classifier', () => {
         body: { ok: true },
       },
     }));
-    const classifier = new Classifier({ id: 'safety', model: createModel({ doEvaluate }), questions: booleanQuestions });
+    const classifier = new Classifier({
+      id: 'safety',
+      model: createModel({ doEvaluate }),
+      questions: booleanQuestions,
+    });
 
     const result = await classifier.evaluate({
       state: { content: 'hello' },
@@ -150,9 +154,7 @@ describe('Classifier', () => {
     await expect(classifier.evaluate({ state: Number.NaN as never, questions: booleanQuestions })).rejects.toThrow(
       /JSON-compatible/,
     );
-    await expect(
-      classifier.evaluate({ state: 'ok', questions: {} as never }),
-    ).rejects.toThrow(/non-empty object/);
+    await expect(classifier.evaluate({ state: 'ok', questions: {} as never })).rejects.toThrow(/non-empty object/);
     await expect(
       classifier.evaluate({
         state: 'ok',
@@ -215,7 +217,11 @@ describe('Classifier', () => {
   it('does not retry non-retryable failures and exhausts retryable failures', async () => {
     const permanent = new Error('permanent');
     const noRetry = vi.fn<EvaluationModelV4['doEvaluate']>().mockRejectedValue(permanent);
-    const classifier = new Classifier({ id: 'no-retry', model: createModel({ doEvaluate: noRetry }), questions: booleanQuestions });
+    const classifier = new Classifier({
+      id: 'no-retry',
+      model: createModel({ doEvaluate: noRetry }),
+      questions: booleanQuestions,
+    });
     await expect(classifier.evaluate({ state: 'content' })).rejects.toBe(permanent);
     expect(noRetry).toHaveBeenCalledTimes(1);
 
@@ -252,7 +258,9 @@ describe('Classifier', () => {
       id: 'during',
       model: createModel({
         doEvaluate: ({ abortSignal }) =>
-          new Promise((_, reject) => abortSignal?.addEventListener('abort', () => reject(abortSignal.reason), { once: true })),
+          new Promise((_, reject) =>
+            abortSignal?.addEventListener('abort', () => reject(abortSignal.reason), { once: true }),
+          ),
       }),
       questions: booleanQuestions,
     });

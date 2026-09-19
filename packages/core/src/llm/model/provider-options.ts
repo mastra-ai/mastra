@@ -118,10 +118,7 @@ export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions
  */
 export function mergeProviderOptions<
   T extends ProviderOptions | SharedV2ProviderOptions | SharedV3ProviderOptions | SharedV4ProviderOptions,
->(
-  base: T | undefined,
-  override: T | undefined,
-): T | undefined {
+>(base: T | undefined, override: T | undefined): T | undefined {
   if (!base) return override;
   if (!override) return base;
   return deepMerge(base, override) as T;

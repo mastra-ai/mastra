@@ -16,13 +16,19 @@ import { resolveCurrentSpan } from '../observability/utils';
 
 export type ClassifierState = EvaluationModelV4Input;
 
-export type ChoiceQuestion<CRITERIA extends Readonly<Record<string, EvaluationModelV4Input | null>> = Readonly<Record<string, EvaluationModelV4Input | null>>> = {
+export type ChoiceQuestion<
+  CRITERIA extends Readonly<Record<string, EvaluationModelV4Input | null>> = Readonly<
+    Record<string, EvaluationModelV4Input | null>
+  >,
+> = {
   readonly type: 'choice';
   readonly instructions?: EvaluationModelV4Input;
   readonly criteria: CRITERIA;
 };
 
-export type ScoreQuestion<CRITERIA extends readonly (EvaluationModelV4Input | null)[] = readonly (EvaluationModelV4Input | null)[]> = {
+export type ScoreQuestion<
+  CRITERIA extends readonly (EvaluationModelV4Input | null)[] = readonly (EvaluationModelV4Input | null)[],
+> = {
   readonly type: 'score';
   readonly instructions?: EvaluationModelV4Input;
   readonly criteria: CRITERIA;
@@ -147,12 +153,8 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
   }
 
   async evaluate(
-    options: CONFIGURED_QUESTIONS extends ClassifierQuestions
-      ? ConfiguredClassifierEvaluateOptions
-      : never,
-  ): Promise<
-    CONFIGURED_QUESTIONS extends ClassifierQuestions ? ClassifierResult<CONFIGURED_QUESTIONS> : never
-  >;
+    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierEvaluateOptions : never,
+  ): Promise<CONFIGURED_QUESTIONS extends ClassifierQuestions ? ClassifierResult<CONFIGURED_QUESTIONS> : never>;
   async evaluate<const QUESTIONS extends ClassifierQuestions>(
     options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierEvaluateOptions<QUESTIONS> : never,
   ): Promise<ClassifierResult<QUESTIONS>>;
@@ -328,7 +330,8 @@ function validateQuestions(questions: ClassifierQuestions, model: EvaluationMode
         if (choice.length === 0) {
           throw new TypeError(`Choice question '${questionId}' option names must be non-empty.`);
         }
-        if (description !== null) validateJsonValue(description, `Choice question '${questionId}' criterion '${choice}'`);
+        if (description !== null)
+          validateJsonValue(description, `Choice question '${questionId}' criterion '${choice}'`);
       }
     } else if (question.type === 'score') {
       if (!Array.isArray(question.criteria) || question.criteria.length < 2) {
@@ -401,7 +404,8 @@ function validateProviderResult(
   }
 
   validateRounding(rounding);
-  const probabilityTolerance = rounding?.probabilityDecimals === undefined ? 1e-6 : 0.5 * 10 ** -rounding.probabilityDecimals;
+  const probabilityTolerance =
+    rounding?.probabilityDecimals === undefined ? 1e-6 : 0.5 * 10 ** -rounding.probabilityDecimals;
   const scoreTolerance = rounding?.scoreDecimals === undefined ? 1e-6 : 0.5 * 10 ** -rounding.scoreDecimals;
 
   for (const questionId of questionIds) {
