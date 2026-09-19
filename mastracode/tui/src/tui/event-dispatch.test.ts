@@ -87,6 +87,21 @@ describe('dispatchEvent thread lifecycle', () => {
     ectx = createMockEctx();
   });
 
+  it.each(['thread_changed', 'thread_created'] as const)('clears tool contexts on %s', async type => {
+    state.backgroundToolContexts = new Map([
+      ['old-tool', { toolName: 'view', threadId: 'old-thread', resourceId: 'resource', createdAt: 0 }],
+    ]);
+    const event =
+      type === 'thread_changed'
+        ? { type, threadId: 'current-thread', previousThreadId: 'old-thread' }
+        : {
+            type,
+            thread: { id: 'current-thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
+          };
+    await dispatchEvent(event, ectx, state);
+    expect(state.backgroundToolContexts.size).toBe(0);
+  });
+
   it('ignores live messages targeted at a different thread', async () => {
     await dispatchEvent(
       {
@@ -144,6 +159,32 @@ describe('dispatchEvent thread lifecycle', () => {
     );
 
     expect(ectx.addUserMessage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { type: 'tool_start', toolCallId: 'late-call', toolName: 'view', args: { path: 'old.ts' } },
+    { type: 'tool_input_start', toolCallId: 'late-call', toolName: 'view' },
+    { type: 'tool_update', toolCallId: 'late-call', partialResult: 'old progress' },
+    { type: 'shell_output', toolCallId: 'late-call', output: 'old output', stream: 'stdout' },
+    {
+      type: 'tool_end',
+      toolCallId: 'late-call',
+      result: 'old result',
+      isError: false,
+      providerMetadata: { mastra: { backgroundTask: { taskId: 'old-task', status: 'running' } } },
+    },
+  ] as const)('ignores late $type from another thread', async event => {
+    state.options.backgroundToolsEnabled = true;
+    state.backgroundToolContexts = new Map();
+    state.backgroundActivities = new Map();
+    state.pendingTools = new Map();
+    state.pendingSubagents = new Map();
+    await dispatchEvent({ ...event, threadId: 'origin-thread' }, ectx, state);
+    expect(state.backgroundToolContexts.size).toBe(0);
+    expect(state.backgroundActivities.size).toBe(0);
+    expect(state.pendingTools.size).toBe(0);
+    expect(state.pendingSubagents.size).toBe(0);
+    expect(state.agentRunLastStreamPartAt).toBeUndefined();
   });
 
   it('updates the active and terminal titles when a generated title arrives', async () => {

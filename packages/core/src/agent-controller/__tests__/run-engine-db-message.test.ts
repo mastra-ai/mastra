@@ -43,7 +43,7 @@ function createHarness() {
     saveSystemReminder: vi.fn(async () => null),
   };
 
-  return { engine: new SessionRunEngine(session, machinery), events };
+  return { engine: new SessionRunEngine(session, machinery), events, session };
 }
 
 function chunk(value: StreamChunk): StreamChunk {
@@ -58,6 +58,43 @@ function assistantStarts(events: AgentControllerEvent[]) {
 }
 
 describe('SessionRunEngine compact message lifecycle', () => {
+  it('keeps delayed tool events and rotated messages on their originating thread', async () => {
+    const { engine, events, session } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+    session.thread.set({ threadId: 'thread-2' });
+
+    const toolCallId = 'late-call';
+    const toolName = 'view';
+    const chunks: StreamChunk[] = [
+      { type: 'tool-call-input-streaming-start', payload: { toolCallId, toolName } },
+      { type: 'tool-call-delta', payload: { toolCallId, argsTextDelta: '{}' } },
+      { type: 'tool-call-input-streaming-end', payload: { toolCallId } },
+      { type: 'tool-call', payload: { toolCallId, toolName, args: {} } },
+      { type: 'data-mastracode-tool-progress', data: { toolCallId, progress: 'late progress' } },
+      { type: 'tool-result', payload: { toolCallId, toolName, result: 'late result' } },
+      { type: 'data-user-message', data: { id: 'user-next' } },
+      { type: 'text-start', payload: { id: 'text-next' } },
+      { type: 'text-delta', payload: { id: 'text-next', text: 'still the original thread' } },
+    ];
+    for (const item of chunks) await engine.processStreamChunk(state, item, context);
+
+    const toolEvents = events.filter(event => 'toolCallId' in event);
+    expect(toolEvents.map(event => event.type)).toEqual([
+      'tool_input_start',
+      'tool_input_delta',
+      'tool_input_end',
+      'tool_start',
+      'tool_update',
+      'shell_output',
+      'tool_end',
+    ]);
+    for (const event of toolEvents) expect(event).toMatchObject({ threadId: 'thread-1' });
+    const starts = assistantStarts(events);
+    expect(starts).toHaveLength(2);
+    for (const event of starts) expect(event.message.threadId).toBe('thread-1');
+  });
+
   it('emits one start, ordered text deltas, and one end when assistant text completes', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();

@@ -15,7 +15,10 @@ import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
-import { backgroundPlaceholderOptOutScenario } from './background-placeholder-opt-out.js';
+import {
+  backgroundPlaceholderOptInScenario,
+  backgroundPlaceholderOptOutScenario,
+} from './background-placeholder-opt-out.js';
 import { backgroundSubagentsScenario } from './background-subagents.js';
 import { backgroundToolsSettingsScenario } from './background-tools-settings.js';
 import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
@@ -221,6 +224,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
   'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
+  'background-placeholder-opt-in': backgroundPlaceholderOptInScenario,
   'background-placeholder-opt-out': backgroundPlaceholderOptOutScenario,
   'background-subagents': backgroundSubagentsScenario,
   'background-tools-settings': backgroundToolsSettingsScenario,
