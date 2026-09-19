@@ -92,14 +92,24 @@ function hasIsRetryableFlag(value: unknown): boolean {
  *
  * @internal
  */
-export function isTransientLLMError(error: unknown): boolean {
-  const abortSeen = new Set<object>();
-  let abortCandidate: unknown = error;
-  while (isRecord(abortCandidate) && !abortSeen.has(abortCandidate)) {
-    if (isAbortError(abortCandidate)) return false;
-    abortSeen.add(abortCandidate);
-    abortCandidate = abortCandidate.cause ?? abortCandidate.error;
+export function hasAbortInChain(error: unknown): boolean {
+  const seen = new Set<object>();
+
+  function visit(candidate: unknown): boolean {
+    if (isAbortError(candidate)) return true;
+    if (!isRecord(candidate)) return false;
+    if (seen.has(candidate)) return false;
+    seen.add(candidate);
+    // Both wrapper shapes are traversed: some libraries nest under `cause`,
+    // others under `error`, and an error can carry both.
+    return visit(candidate.cause) || visit(candidate.error);
   }
+
+  return visit(error);
+}
+
+export function isTransientLLMError(error: unknown): boolean {
+  if (hasAbortInChain(error)) return false;
 
   const visited = new WeakSet<object>();
 

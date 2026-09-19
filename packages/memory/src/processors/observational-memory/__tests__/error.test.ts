@@ -41,6 +41,10 @@ describe('isOmModelExecutionFailure', () => {
     expect(isOmModelExecutionFailure({ error: { cause: abort } })).toBe(false);
     expect(isOmModelExecutionFailure(new Error('wrapper', { cause: domStyleAbort }))).toBe(false);
     expect(isOmModelExecutionFailure(branded)).toBe(false);
+    // Both wrapper branches are traversed, not just `cause`.
+    expect(
+      isOmModelExecutionFailure({ message: 'request timeout', cause: new Error('transport wrapper'), error: abort }),
+    ).toBe(false);
   });
 
   it('ignores inherited brands and arbitrary sibling properties', () => {

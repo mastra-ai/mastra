@@ -21,6 +21,7 @@ import {
   stripExtractorSections,
   validateExtractorList,
 } from '../extractor';
+import { RETRY_CONFIG } from '../retry';
 import { WorkingMemoryExtractor } from '../working-memory-extractor';
 
 describe('Extractor', () => {
@@ -385,6 +386,10 @@ describe('Extractor', () => {
   });
 
   it('retries transient provider failures on the OM retry ladder', async () => {
+    const originalRetryConfig = { ...RETRY_CONFIG };
+    RETRY_CONFIG.initialDelayMs = 1;
+    RETRY_CONFIG.maxDelayMs = 4;
+    RETRY_CONFIG.jitter = 0;
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const stream = vi
       .fn()
@@ -404,6 +409,7 @@ describe('Extractor', () => {
     // Retried in the same (native) output mode rather than falling through to
     // the json-prompt-injection fallback.
     expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBeUndefined();
+    Object.assign(RETRY_CONFIG, originalRetryConfig);
   });
 
   it('uses streaming for structured extraction', async () => {
@@ -515,9 +521,13 @@ describe('Extractor', () => {
     expect(stream).toHaveBeenCalledTimes(0);
   });
 
-  it('rethrows mid-flight abort errors without retrying structured extraction', async () => {
+  it.each([
+    ['plain', () => new DOMException('aborted', 'AbortError')],
+    ['wrapped', () => new Error('request timeout', { cause: new DOMException('aborted', 'AbortError') })],
+    ['code-only', () => Object.assign(new Error('aborted'), { code: 'ABORT_ERR' })],
+  ])('rethrows %s mid-flight abort errors without retrying structured extraction', async (_label, createError) => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
-    const stream = vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError'));
+    const stream = vi.fn().mockRejectedValue(createError());
 
     await expect(
       extractStructuredValues({
@@ -526,7 +536,7 @@ describe('Extractor', () => {
         extractors: [priority],
         abortSignal: new AbortController().signal,
       }),
-    ).rejects.toThrow(/aborted/);
+    ).rejects.toThrow();
 
     expect(stream).toHaveBeenCalledTimes(1);
   });

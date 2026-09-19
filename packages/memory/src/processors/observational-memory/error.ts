@@ -1,27 +1,9 @@
-import { isTransientLLMError } from './retry';
+import { hasAbortInChain, isTransientLLMError } from './retry';
 
 const AI_API_CALL_ERROR_MARKER = Symbol.for('vercel.ai.error.AI_APICallError');
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
-}
-
-function isAbortError(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  if (value.name === 'AbortError') return true;
-  return typeof value.code === 'string' && value.code === 'ABORT_ERR';
-}
-
-/** True when an abort appears anywhere in the `cause`/`error` wrapper chain. */
-function hasAbortInChain(error: unknown): boolean {
-  const seen = new Set<object>();
-  let current: unknown = error;
-  while (isRecord(current) && !seen.has(current)) {
-    if (isAbortError(current)) return true;
-    seen.add(current);
-    current = current.cause ?? current.error;
-  }
-  return false;
 }
 
 export function isOmModelExecutionFailure(error: unknown): boolean {

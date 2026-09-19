@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import type { Extractor, ExtractorSource } from './extractor';
 import { buildExtractorPriorLines } from './extractor';
-import { withRetry } from './retry';
+import { hasAbortInChain, withRetry } from './retry';
 
 export interface StructuredExtractionResult {
   values: Record<string, unknown>;
@@ -14,11 +14,9 @@ export interface StructuredExtractionResult {
 }
 
 function isAbortError(error: unknown, abortSignal?: AbortSignal): boolean {
-  return (
-    abortSignal?.aborted === true ||
-    (error instanceof DOMException && error.name === 'AbortError') ||
-    (error instanceof Error && error.name === 'AbortError')
-  );
+  // Chain-aware so a cancellation wrapped by the provider SDK still rethrows
+  // instead of degrading into the json-prompt-injection fallback.
+  return abortSignal?.aborted === true || hasAbortInChain(error);
 }
 
 function shouldRetryEmptyStructuredObject(
