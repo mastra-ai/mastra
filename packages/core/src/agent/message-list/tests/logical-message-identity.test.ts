@@ -201,6 +201,12 @@ describe('MessageList logical message identity', () => {
     expect(replacement?.content.parts).toHaveLength(1);
     expect(replacement?.content.parts[0]).toMatchObject({ type: 'text', text: 'new answer' });
     expect(getLogicalMessageId(replacement?.content.metadata)).toBe('response-current');
+
+    const serialized = list.serialize();
+    expect(serialized.memoryMessages).toEqual([]);
+    expect(serialized.memoryMessagesPersisted).toEqual([]);
+    expect(serialized.newResponseMessages).toEqual(['recalled-assistant']);
+    expect(serialized.newResponseMessagesPersisted).toEqual(['recalled-assistant']);
   });
 
   it('rejects malformed identity values instead of admitting an untracked turn', () => {

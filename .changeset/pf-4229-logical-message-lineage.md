@@ -17,4 +17,4 @@ await session.message('Summarize the selected paper.', {
 });
 ```
 
-The full input/response pair starts a new response and rejects an active-run steer. Input-only signals preserve the active response identity. Recalled memory rows retain their existing ownership.
+The full input/response pair starts a new response and discards an active-run steer. Input-only signals preserve the active response identity. Recalled memory rows retain their existing ownership.

@@ -162,6 +162,16 @@ export class MessageStateManager {
     this.userContextMessages.delete(message);
   }
 
+  /** Replace a tracked object while keeping source membership unique by message ID. */
+  replaceMessage(message: MastraDBMessage, replacement: MastraDBMessage, source: MessageSource): void {
+    this.removeMessage(message);
+    this.memoryMessagesPersisted.delete(message);
+    this.newUserMessagesPersisted.delete(message);
+    this.newResponseMessagesPersisted.delete(message);
+    this.userContextMessagesPersisted.delete(message);
+    this.addToSource(replacement, source);
+  }
+
   /**
    * Clear all user messages
    */

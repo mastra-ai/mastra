@@ -2257,6 +2257,9 @@ export class MessageList {
             this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
             return this;
           }
+          if (crossesLogicalResponseBoundary(existingMessage)) {
+            this.stateManager.replaceMessage(existingMessage, messageV2, messageSource);
+          }
           this.messages[existingIndex] = messageV2;
         }
       } else if (!exists) {

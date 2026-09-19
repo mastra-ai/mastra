@@ -564,6 +564,54 @@ describe('Session.signal() admissionId', () => {
     releaseRun();
   });
 
+  it('aborts an unresolved interleaving full logical wake after the active run releases', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseActive!: () => void;
+    let nativeAbortObserved!: () => void;
+    const nativeAbort = new Promise<void>(resolve => {
+      nativeAbortObserved = resolve;
+    });
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseActive = resolve;
+      }),
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const active = session.message({ content: 'active turn' });
+    await waitForStreamCalls(agent, 1);
+
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal as AbortSignal | undefined;
+      nativeAbortSignal?.addEventListener('abort', () => nativeAbortObserved(), { once: true });
+      releaseActive();
+      return {
+        signal: createSignal({ ...signal, acceptedAt: new Date() }),
+        runId: 'interleaving-wake',
+        accepted: new Promise<never>(() => {}),
+      };
+    }) as typeof agent.sendSignal;
+
+    vi.useFakeTimers();
+    try {
+      const pending = session.signal({
+        content: 'wait for interleaving wake acceptance',
+        logicalMessageIdentity: { input: 'interleave-timeout-input', response: 'interleave-timeout-response' },
+      });
+      const rejection = expect(pending).rejects.toMatchObject({ name: 'HarnessValidationError' });
+      await vi.advanceTimersByTimeAsync(30_001);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await active;
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await expect(nativeAbort).resolves.toBeUndefined();
+    expect(session.isRunning()).toBe(false);
+  });
+
   it('rejects payload conflicts and non-hash-safe options before another dispatch', async () => {
     const { harness, agent } = setupHarness();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

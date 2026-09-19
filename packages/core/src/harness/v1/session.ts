@@ -10660,6 +10660,8 @@ export class Session {
 
     if (willInterleave && signalAdmission === undefined) {
       let dispatched: ReturnType<typeof agent.sendSignal>;
+      const lineagedWakeAbortController =
+        responseLogicalMessageIdentity !== undefined ? new AbortController() : undefined;
       try {
         this._assertOpenForTurn('signal()');
         const interleavedContents = await this._buildSignalContentsWithAttachments(opts.content, internal?.attachments);
@@ -10683,6 +10685,7 @@ export class Session {
               streamOptions: {
                 maxSteps: HARNESS_SESSION_MAX_STEPS,
                 ...this._createEmptySynthesisOptions(),
+                ...(lineagedWakeAbortController ? { abortSignal: lineagedWakeAbortController.signal } : {}),
                 ...(responseLogicalMessageIdentity ? { logicalMessageIdentity: responseLogicalMessageIdentity } : {}),
               } as never,
             },
@@ -10706,6 +10709,12 @@ export class Session {
           }
         }
       } catch (err) {
+        if (err instanceof NativeSignalAcceptanceTimeoutError && lineagedWakeAbortController !== undefined) {
+          // The interleaving signal can fall back to a fresh idle wake after
+          // its observed active run ends. Abort that native stream when its
+          // full-pair acceptance acknowledgement times out.
+          lineagedWakeAbortController.abort(err);
+        }
         let thrown = err;
         try {
           await failSignalAdmissionBeforeDispatch(err);
