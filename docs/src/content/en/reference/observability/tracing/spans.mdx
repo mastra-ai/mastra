@@ -56,7 +56,7 @@ interface BaseSpan<TType extends SpanType> {
 
   /** Snapshot of the RequestContext */
   requestContext?: Record<string, any>
-  /** Is an event span? (occurs at startTime, has no endTime) */
+  /** Is an event span? (point-in-time: endTime equals startTime) */
   isEvent: boolean
 }
 ```
@@ -254,7 +254,7 @@ createEventSpan<TChildType extends SpanType>(
 ): Span<TChildType>
 ```
 
-Creates an event span under this span. Event spans represent point-in-time occurrences with no duration.
+Creates an event span under this span. Event spans represent point-in-time occurrences with no duration: they are exported immediately on creation with `isEvent: true` and an `endTime` equal to their `startTime`, so exporters never treat them as still running.
 
 <PropertiesTable
   props={[

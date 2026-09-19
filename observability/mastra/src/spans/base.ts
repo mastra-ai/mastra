@@ -221,6 +221,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
+    if (this.isEvent) {
+      // Event spans are point-in-time and are never end()ed; give them a
+      // zero-duration end so exporters don't persist them as still-open.
+      this.endTime = this.startTime;
+    }
     this.tracingPolicy = options.tracingPolicy;
     this.traceState = options.traceState;
     const parent = options.parent;
