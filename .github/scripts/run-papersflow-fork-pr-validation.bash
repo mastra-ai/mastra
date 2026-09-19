@@ -4599,6 +4599,10 @@ run_validator_self_tests() {
       > stores/pg/src/storage/domains/workflows/atomic-resume.test.ts
     printf '%s\n' "import { it } from 'vitest';" "it('pg performance index', () => {});" \
       > stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    printf '%s\n' "import { it } from 'vitest';" \
+      "const connectionString = process.env.DB_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5435/mastra';" \
+      "it('pg row-number performance', () => connectionString);" \
+      > stores/pg/src/storage/domains/memory/row-number-performance.test.ts
     printf '%s\n' "import { it } from 'vitest';" "it('pg external schema', () => {});" \
       > stores/pg/src/storage/db/external-schema.integration.test.ts
     printf '%s\n' \
@@ -6505,6 +6509,40 @@ NODE
   assert_contains '--filter ./stores/pg --fail-if-no-match exec tsc --noEmit' "$command_log"
   assert_contains 'src/storage/domains/workflows/atomic-resume.test.ts' "$command_log"
   assert_contains 'postgres 127.0.0.1:5434' "$service_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' "import '../domains/memory/row-number-performance.test';" \
+      >> stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    git add .
+    git commit -q -m 'reject PostgreSQL unit imports of performance suite'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-hostile-import-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'Hostile PostgreSQL unit import fixture unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains \
+    'Unsupported fork-test runtime surface for stores/pg/src/storage/performance-indexes/performance-indexes.test.ts:' \
+    "$output"
+  assert_contains \
+    'stores/pg/src/storage/domains/memory/row-number-performance.test.ts: process.env' \
+    "$output"
+  assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
+  if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
+    echo 'Hostile PostgreSQL unit import reached a test runner or service probe.' >&2
+    cat "$command_log" "$service_log" >&2
+    exit 1
+  fi
 
   head_sha="$(
     cd "$fixture_repo"
@@ -13715,6 +13753,7 @@ fi
 
 is_explicit_fork_safe_test() {
   case "$1" in
+    "$PG_PERFORMANCE_INDEX_UNIT_TEST" | \
     packages/core/src/agent/durable/__tests__/durable-agent-background-tasks.e2e.test.ts | \
       packages/core/src/harness/v1/session.permission-gate.e2e.test.ts | \
       packages/core/src/harness/v1/session.plan-task.e2e.test.ts | \

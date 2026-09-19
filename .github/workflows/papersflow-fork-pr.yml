@@ -341,10 +341,20 @@ jobs:
           VALIDATION_LANE: ${{ steps.install-policy.outputs.lane }}
         run: |
           script_path=".github/scripts/run-papersflow-fork-pr-validation.bash"
+          workflow_path=".github/workflows/papersflow-fork-pr.yml"
           # This exact same-repository policy PR is the sole bootstrap for this
           # incremental validator update. Every other PR uses the protected
           # base copy, including any later reuse of this branch name.
+          # The literal placeholder is deliberately fail-closed: until the
+          # draft PR exists and its numeric ID replaces this token, selecting
+          # the protected base would hide the new validator self-tests.
           if [[ "${HEAD_REPOSITORY}" == "${GITHUB_REPOSITORY}" && \
+            "${HEAD_REF}" == 'codex/pf-4243-pg-index-unit-validation' && \
+            "${BASE_REF}" == 'main' ]] && \
+            grep -Fq -- '__PF4243_POLICY_PR_NUMBER__' "$workflow_path"; then
+            echo 'PF-4243 policy branch still contains its unbound PR-number placeholder; failing closed before protected-base fallback.' >&2
+            exit 1
+          elif [[ "${HEAD_REPOSITORY}" == "${GITHUB_REPOSITORY}" && \
             "${PR_NUMBER}" == '__PF4243_POLICY_PR_NUMBER__' && \
             "${HEAD_REF}" == 'codex/pf-4243-pg-index-unit-validation' && \
             "${BASE_REF}" == 'main' ]]; then
