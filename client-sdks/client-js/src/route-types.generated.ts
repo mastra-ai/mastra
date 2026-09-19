@@ -4890,17 +4890,6 @@ type Shared_Type_102 =
   | {
       kind: 'custom';
       provider: string;
-      modelId?: string | undefined;
-    }
-  | {
-      provider: string;
-      modelId?: string | undefined;
-    };
-
-type Shared_Type_91 =
-  | {
-      kind: 'custom';
-      provider: string;
       modelId: string;
     }
   | {
@@ -13752,108 +13741,56 @@ export interface GetKnowledgeKnowledgeKeyEvents_RouteContract {
 // ============================================================================
 export type GetWellKnownAgentIdAgentCardJson_PathParams = GetAgentsAgentId_PathParams;
 
-export type GetWellKnownAgentIdAgentCardJson_Response =
-  | {
-      additionalInterfaces?: unknown[] | undefined;
-      name: string;
-      description: string;
-      url: string;
-      protocolVersion: string;
-      provider?:
-        | {
-            organization: string;
-            url: string;
-          }
-        | undefined;
-      security?:
-        | {
-            [key: string]: string[];
-          }[]
-        | undefined;
-      securitySchemes?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-      version: string;
-      capabilities: {
-        extensions?: unknown[] | undefined;
-        streaming?: boolean | undefined;
-        pushNotifications?: boolean | undefined;
-        stateTransitionHistory?: boolean | undefined;
-      };
-      defaultInputModes: string[];
-      defaultOutputModes: string[];
-      supportsAuthenticatedExtendedCard?: boolean | undefined;
-      signatures?:
-        | {
-            protected: string;
-            signature: string;
-            header?:
-              | {
-                  [key: string]: unknown;
-                }
-              | undefined;
-          }[]
-        | undefined;
-      skills: {
-        id: string;
-        name: string;
-        description: string;
-        tags?: string[] | undefined;
-      }[];
-    }
-  | {
-      name: string;
-      description?: string | undefined;
-      provider?:
-        | {
-            organization: string;
-            url: string;
-          }
-        | undefined;
-      securitySchemes?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-      version: string;
-      capabilities: {
-        streaming?: boolean | undefined;
-        pushNotifications?: boolean | undefined;
-        extendedAgentCard?: boolean | undefined;
-        extensions?: unknown[] | undefined;
-      };
-      defaultInputModes?: string[] | undefined;
-      defaultOutputModes?: string[] | undefined;
-      signatures?:
-        | {
-            protected: string;
-            signature: string;
-            header?:
-              | {
-                  [key: string]: unknown;
-                }
-              | undefined;
-          }[]
-        | undefined;
-      skills?:
-        | {
-            id: string;
-            name: string;
-            description?: string | undefined;
-            tags?: string[] | undefined;
-            examples?: string[] | undefined;
-            inputModes?: string[] | undefined;
-            outputModes?: string[] | undefined;
-          }[]
-        | undefined;
-      supportedInterfaces: {
+export type GetWellKnownAgentIdAgentCardJson_Response = {
+  additionalInterfaces?: unknown[] | undefined;
+  name: string;
+  description: string;
+  url: string;
+  protocolVersion: string;
+  provider?:
+    | {
+        organization: string;
         url: string;
-        protocolBinding: 'JSONRPC';
-        protocolVersion: '0.3' | '1.0';
-      }[];
-    };
+      }
+    | undefined;
+  security?:
+    | {
+        [key: string]: string[];
+      }[]
+    | undefined;
+  securitySchemes?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  version: string;
+  capabilities: {
+    extensions?: unknown[] | undefined;
+    streaming?: boolean | undefined;
+    pushNotifications?: boolean | undefined;
+    stateTransitionHistory?: boolean | undefined;
+  };
+  defaultInputModes: string[];
+  defaultOutputModes: string[];
+  supportsAuthenticatedExtendedCard?: boolean | undefined;
+  signatures?:
+    | {
+        protected: string;
+        signature: string;
+        header?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }[]
+    | undefined;
+  skills: {
+    id: string;
+    name: string;
+    description: string;
+    tags?: string[] | undefined;
+  }[];
+};
 
 export type GetWellKnownAgentIdAgentCardJson_Request = Simplify<
   (GetWellKnownAgentIdAgentCardJson_PathParams extends never
@@ -13869,7 +13806,7 @@ export interface GetWellKnownAgentIdAgentCardJson_RouteContract {
   body: never;
   request: GetWellKnownAgentIdAgentCardJson_Request;
   response: GetWellKnownAgentIdAgentCardJson_Response;
-  responseType: 'datastream-response';
+  responseType: 'json';
 }
 
 // ============================================================================
@@ -13893,7 +13830,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/get' | 'GetTask';
+      method: 'tasks/get';
       params: {
         /** Task id */
         id: string;
@@ -13909,7 +13846,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/list' | 'ListTasks';
+      method: 'tasks/list';
       params: {
         tenant?: string | undefined;
         contextId?: string | undefined;
@@ -13924,7 +13861,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/cancel' | 'CancelTask';
+      method: 'tasks/cancel';
       params: {
         /** Task id */
         id: string;
@@ -13938,7 +13875,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/resubscribe' | 'SubscribeToTask';
+      method: 'tasks/resubscribe';
       params: {
         /** Task id */
         id: string;
@@ -13979,23 +13916,6 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'CreateTaskPushNotificationConfig';
-      params: {
-        /** URL for sending the push notifications */
-        url: string;
-        /** Push Notification ID - created by server to support multiple callbacks */
-        id?: string | undefined;
-        /** Token unique to this task/session */
-        token?: string | undefined;
-        authentication?: InputShared_Type_27 | undefined;
-        /** Task id */
-        taskId: string;
-        tenant?: string | undefined;
-      };
-    }
-  | {
-      jsonrpc: '2.0';
-      id: string | number;
       method: 'tasks/pushNotificationConfig/get';
       params: {
         /** Task id */
@@ -14012,16 +13932,6 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'GetTaskPushNotificationConfig';
-      params: {
-        tenant?: string | undefined;
-        taskId: string;
-        id: string;
-      };
-    }
-  | {
-      jsonrpc: '2.0';
-      id: string | number;
       method: 'tasks/pushNotificationConfig/list';
       params: {
         /** Task id */
@@ -14031,17 +13941,6 @@ export type PostA2aAgentId_Body =
               [key: string]: unknown;
             }
           | undefined;
-      };
-    }
-  | {
-      jsonrpc: '2.0';
-      id: string | number;
-      method: 'ListTaskPushNotificationConfigs';
-      params: {
-        tenant?: string | undefined;
-        taskId: string;
-        pageSize?: number | undefined;
-        pageToken?: string | undefined;
       };
     }
   | {
@@ -14063,17 +13962,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'DeleteTaskPushNotificationConfig';
-      params: {
-        tenant?: string | undefined;
-        taskId: string;
-        id: string;
-      };
-    }
-  | {
-      jsonrpc: '2.0';
-      id: string | number;
-      method: 'agent/getAuthenticatedExtendedCard' | 'GetExtendedAgentCard';
+      method: 'agent/getAuthenticatedExtendedCard';
     };
 
 export type PostA2aAgentId_Response = PostAgentsAgentIdGenerate_Response;
@@ -26801,12 +26690,6 @@ export interface Client {
   };
   '/observability/traces/query': {
     POST: PostObservabilityTracesQuery_RouteContract;
-  };
-  '/observability/traces/query/fields': {
-    POST: PostObservabilityTracesQueryFields_RouteContract;
-  };
-  '/observability/traces/query/values': {
-    POST: PostObservabilityTracesQueryValues_RouteContract;
   };
   '/observability/traces/score': {
     POST: PostObservabilityTracesScore_RouteContract;
