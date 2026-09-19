@@ -10,7 +10,9 @@ export type AgentControllerMessageUpdate = Extract<AgentControllerEvent, { type:
  * Returns a new message (the input is never mutated), or `undefined` when the
  * delta does not apply — no message, a string `content` (no parts to fold), a
  * reasoning delta whose index is not a reasoning part, or a part update whose
- * index is outside the message's parts. There is deliberately no `role` guard:
+ * index is past the append boundary. A part update at `parts.length` applies by
+ * appending; only indices greater than that do not. There is deliberately no
+ * `role` guard:
  * role checks belong to callers. Callers address the message by id:
  * `applyUpdate(messages.get(event.id), event.event)`.
  */
