@@ -1147,18 +1147,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // Cast needed because chunk.payload.response is typed with default OUTPUT=undefined
                   (chunk.payload as { response?: LLMStepResult<OUTPUT>['response'] }).response = response;
                 } else if (!self.#options.isLLMExecutionStep || self.#options.resolveFinalPromises) {
-                  // No processor runner, not in LLM execution step - resolve ordinary
-                  // tool-driven multi-step runs with the last step's text so narration before
-                  // tool calls is excluded. Suspended/resumed tool approval flows keep the
-                  // aggregate stream text because pre-approval text is part of the resumed run.
-                  // Durable agents set resolveFinalPromises to force resolution even when
-                  // isLLMExecutionStep is true (single MastraModelOutput for the entire run).
-                  const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
-                  const hasToolStep = self.#bufferedSteps.some(
-                    step => step.toolCalls.length > 0 || step.toolResults.length > 0,
-                  );
+                  // No processor runner, not in LLM execution step - resolve with the text
+                  // this run produced (see `#producedText`). Durable agents set
+                  // resolveFinalPromises to force resolution even when isLLMExecutionStep
+                  // is true (single MastraModelOutput for the entire run).
                   this.resolvePromises({
-                    text: hasToolStep && !self.#wasSuspended && lastStep ? lastStep.text : self.#bufferedText.join(''),
+                    text: self.#producedText(),
                     finishReason: self.#finishReason,
                   });
                 }
@@ -1172,9 +1166,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     metadata: error.options?.metadata,
                     processorId: error.processorId,
                   };
+                  // A tripwire rejects the output; it does not erase what the model
+                  // already produced. Resolve `text` from the same source every other
+                  // accessor reads (`steps[].text`, `response.messages`,
+                  // `getFullOutput().text`) so a caller that logs, redacts or reviews
+                  // the rejected answer can still see it, and read the rejection off
+                  // `tripwire`. This matches the `processOutputStream` tripwire path.
                   self.resolvePromises({
                     finishReason: 'other',
-                    text: '',
+                    text: self.#producedText(),
                   });
                 } else {
                   self.#error = getErrorFromUnknown(error, {
@@ -1727,8 +1727,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     // This ensures rejected responses are excluded from the final text output
     const textFromSteps = steps.map((step: any) => step.text || '').join('');
 
+    // A tripwire raised from `processOutputStream` terminates the stream before any
+    // step finishes, so there is no step to read the text from. Fall back to the
+    // resolved `text` promise so `getFullOutput().text` never contradicts `.text`.
+    const text = steps.length > 0 ? textFromSteps : await this.text;
+
     const fullOutput: FullOutput<OUTPUT> = {
-      text: textFromSteps,
+      text,
       usage: await this.usage,
       steps,
       finishReason: await this.finishReason,
@@ -2050,6 +2055,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #emitChunk(chunk: ChunkType<OUTPUT>) {
     this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
     this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
+  }
+
+  /**
+   * The text this run produced, as the ordinary finish path reports it: the last
+   * step's text for tool-driven multi-step runs, so narration before a tool call is
+   * excluded, and the aggregate stream text otherwise. Suspended/resumed tool
+   * approval flows keep the aggregate text because pre-approval text is part of the
+   * resumed run.
+   */
+  #producedText(): string {
+    const lastStep = this.#bufferedSteps[this.#bufferedSteps.length - 1];
+    const hasToolStep = this.#bufferedSteps.some(step => step.toolCalls.length > 0 || step.toolResults.length > 0);
+    return hasToolStep && !this.#wasSuspended && lastStep ? lastStep.text : this.#bufferedText.join('');
   }
 
   /**

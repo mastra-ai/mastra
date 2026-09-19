@@ -1667,6 +1667,92 @@ describe('New Processor Features', () => {
         confidence: 0.95,
       });
     });
+
+    // Regression coverage for the rejected-output disclosure contract (issue #24443).
+    // A tripwire must not silently erase prose the model already produced: the
+    // rejection travels on `result.tripwire`, and every text accessor that exists
+    // on the result has to agree with `result.text`.
+    describe('rejected output disclosure contract', () => {
+      const ANSWER = 'We deliver on Friday. Card or bank transfer.';
+
+      const makeAnswerModel = () =>
+        new MockLanguageModelV2({
+          doGenerate: async () => ({
+            content: [{ type: 'text' as const, text: ANSWER }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 4, outputTokens: 10, totalTokens: 14 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: ANSWER },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 4, outputTokens: 10, totalTokens: 14 } },
+            ]),
+          }),
+        });
+
+      const makeAgent = (hook: 'processOutputResult' | 'processOutputStep' | 'processOutputStream') => {
+        const processor: Processor = { id: `tripwire-via-${hook}` };
+        if (hook === 'processOutputStream') {
+          processor.processOutputStream = async ({ part, abort }) => {
+            if (part.type === 'finish') abort(`rejected at ${hook}`);
+            return part;
+          };
+        } else {
+          processor[hook] = async ({ abort, messages }) => {
+            abort(`rejected at ${hook}`);
+            return messages;
+          };
+        }
+
+        return new Agent({
+          id: `disclosure-${hook}`,
+          name: `Disclosure ${hook}`,
+          instructions: 'Answer briefly.',
+          model: makeAnswerModel(),
+          outputProcessors: [processor],
+        });
+      };
+
+      for (const hook of ['processOutputResult', 'processOutputStep', 'processOutputStream'] as const) {
+        it(`keeps the produced text on every accessor when ${hook} trips the wire`, async () => {
+          const stream = await makeAgent(hook).stream('Do you deliver here?');
+          for await (const _ of stream.fullStream) {
+            // drain so finalization runs before the resolved promises are read
+          }
+
+          const text = await stream.text;
+          const steps = await stream.steps;
+          const response = await stream.response;
+          const fullOutput = await stream.getFullOutput();
+
+          // The rejection is reported, and only through `tripwire`.
+          expect(stream.tripwire).toBeDefined();
+          expect(stream.tripwire?.reason).toBe(`rejected at ${hook}`);
+          expect(stream.tripwire?.processorId).toBe(`tripwire-via-${hook}`);
+          // The run stopped for the processor, not because the model finished.
+          // (The exact value still differs per hook: 'other' for the result and
+          // stream hooks, 'tripwire' for the step hook.)
+          expect(['other', 'tripwire']).toContain(await stream.finishReason);
+
+          // The prose the model produced survives on the headline accessor...
+          expect(text).toBe(ANSWER);
+          // ...and every other accessor agrees with it.
+          expect(fullOutput.text).toBe(text);
+          for (const step of steps ?? []) {
+            expect(step.text).toBe(text);
+          }
+          if (response?.messages?.length) {
+            expect(JSON.stringify(response.messages)).toContain(ANSWER);
+          }
+        });
+      }
+    });
   });
 
   describe('retryCount passed to processors', () => {
