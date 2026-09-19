@@ -106,10 +106,15 @@ Queue a follow-up with `harness.followUp({ content })`. To redirect the agent mi
 
 ## Native logical message identity
 
-Trusted native Session callers can associate an input and its response segments with application message IDs. Pass a full pair to `message()` or `queue()` when the turn owns both sides:
+Trusted native Session callers can associate an input and its response segments with application message IDs. After constructing a v1 `Harness` from `@mastra/core/harness/v1`, resolve a Session for the thread:
 
 ```typescript
-await harness.session.message({
+const session = await harness.session({
+  resourceId: 'researcher',
+  threadId: { fresh: true },
+})
+
+await session.message({
   content: 'Summarize the selected paper.',
   logicalMessageIdentity: {
     input: 'app-message-input-123',
@@ -117,7 +122,7 @@ await harness.session.message({
   },
 })
 
-await harness.session.queue({
+await session.queue({
   content: 'Continue the summary.',
   logicalMessageIdentity: {
     input: 'app-message-input-124',
@@ -129,7 +134,7 @@ await harness.session.queue({
 Use an input-only identity with `signal()` for an active steer. It keeps the active response owner instead of assigning a new response identity. A full pair on an active signal uses discard admission for the competing response, so the active response keeps ownership when it wins the race:
 
 ```typescript
-await harness.session.signal({
+await session.signal({
   content: 'Use the second source.',
   logicalMessageIdentity: { input: 'app-message-input-125' },
 })
