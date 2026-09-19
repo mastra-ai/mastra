@@ -9,11 +9,11 @@ packages:
 
 `StreamErrorRetryProcessor` is an **error processor** that retries transient LLM API and stream failures. It includes built-in matching for OpenAI Responses stream errors and supports additional matchers for other provider-specific error shapes.
 
-Mastra adds this processor to every agent's `errorProcessors` by default, last — after the `ProviderHistoryCompat` and `PrefillErrorHandler` defaults, so the processors that repair a request get their chance before this one retries it unchanged. The default instance uses `maxRetries: 2` with a bad-request matcher and a connection-reset matcher. Supply your own instance in `errorProcessors` to change its policy — because a default is only added when its `id` is missing from your list, your instance is used and the default is not added alongside it.
+Mastra adds this processor to every agent's `errorProcessors` by default, last, after the `ProviderHistoryCompat` and `PrefillErrorHandler` defaults, so the processors that repair a request get their chance before this one retries it unchanged. The default instance uses `maxRetries: 2` with a bad-request matcher and a connection-reset matcher. Supply your own instance in `errorProcessors` to change its policy. Because a default is only added when its `id` is missing from your list, your instance is used and the default isn't added alongside it.
 
 ## Usage example
 
-Configure `StreamErrorRetryProcessor` — supplying the same `id` means the default is not added:
+Configure `StreamErrorRetryProcessor`. Supplying the same `id` means the default isn't added:
 
 ```typescript title="src/mastra/agents/openai-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -28,7 +28,7 @@ export const agent = new Agent({
 })
 ```
 
-To run with no error processors at all, pass `errorProcessors: []` — an explicitly empty list means the agent adds none of the defaults. Supplying your own processor for all three default ids has the same effect while keeping your own implementations.
+To run with no error processors at all, pass `errorProcessors: []`. An explicitly empty list means the agent adds none of the defaults. Supplying your own processor for all three default ids has the same effect while keeping your own implementations.
 
 ## How it works
 
