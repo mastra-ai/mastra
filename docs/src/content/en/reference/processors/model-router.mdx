@@ -289,7 +289,7 @@ The classifier reads only the latest user message, so its cost is roughly consta
 
 On a small agent with a short prompt, the classifier round-trip can be comparable in size to the agent call it is optimizing, and routing can cost more than it saves. On an agent with a large system prompt or retrieved context, the same classifier call is negligible against the saving.
 
-Downgrading is not quality-neutral. On a support agent evaluated over 26 requests, routing downgraded half of them for roughly 39% less spend on agent calls, never downgraded a clearly complex request, and produced a worse answer on about a quarter of the downgraded ones. The failures were omitted conditions and vaguer details rather than wrong answers, which is a harder failure to notice.
+Downgrading is not quality-neutral. A cheaper model tends to fail by omitting conditions and giving vaguer details rather than by being obviously wrong, which is harder to notice in review.
 
 Before enabling this broadly, answer a sample of your own traffic with both models, compare the subset that would be downgraded, and confirm the saving clears your classifier cost.
 
