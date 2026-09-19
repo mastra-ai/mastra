@@ -24,8 +24,10 @@ describe('Agent Type Tests', () => {
       const options: DurableAgentResumeOptions = {
         toolCallId: 'call-123',
         memory: { thread: 'thread-123', resource: 'resource-123' },
+        logicalMessageIdentity: { input: 'input-123', response: 'response-123' },
       };
       expectTypeOf(options.toolCallId).toEqualTypeOf<string | undefined>();
+      expectTypeOf(options.logicalMessageIdentity).toEqualTypeOf<{ input: string; response: string } | undefined>();
 
       const durableAgent = undefined as unknown as DurableAgent;
       void durableAgent.resumeStream({}, { runId: 'run-123', toolCallId: 'call-123' });
