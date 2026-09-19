@@ -29,6 +29,7 @@ describe('useFeedbackInboxCount polling', () => {
       const { result, unmount, queryClient } = renderHookWithProviders(() => useFeedbackInboxCount({ enabled: true }));
       await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 2000 });
       const requestsAfterFailure = onRequest.mock.calls.length;
+      expect(requestsAfterFailure).toBeGreaterThan(0);
 
       await act(() => vi.advanceTimersByTimeAsync(10_000));
 
