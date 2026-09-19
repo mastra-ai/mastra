@@ -20,6 +20,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { createSignal } from '../../agent/signals';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryStore } from '../../storage/mock';
@@ -236,6 +237,30 @@ describe('Session.queue() — admission', () => {
     expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
       metadata: { logicalMessageId: 'input-queued' },
     });
+    await session.close();
+  });
+
+  it('aborts the owned wake stream when a lineaged queue item is accepted by another run', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal;
+      return {
+        signal: createSignal({ ...signal, acceptedAt: new Date() }),
+        runId: 'reserved-run',
+        accepted: Promise.resolve({ action: 'wake' as const, runId: 'foreign-run' }),
+      };
+    }) as typeof agent.sendSignal;
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await expect(
+      session.queue({
+        content: 'mismatched queued wake',
+        logicalMessageIdentity: { input: 'queue-mismatch-input', response: 'queue-mismatch-response' },
+      }),
+    ).rejects.toBeInstanceOf(HarnessConfigError);
+    expect(nativeAbortSignal?.aborted).toBe(true);
     await session.close();
   });
 

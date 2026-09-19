@@ -523,6 +523,30 @@ describe('Session.signal() admissionId', () => {
     },
   );
 
+  it('aborts the owned wake stream when a lineaged signal is accepted by another run', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal;
+      return {
+        signal: createSignal({ ...signal, acceptedAt: new Date() }),
+        runId: 'reserved-run',
+        accepted: Promise.resolve({ action: 'wake' as const, runId: 'foreign-run' }),
+      };
+    }) as typeof agent.sendSignal;
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await expect(
+      session.signal({
+        content: 'mismatched native wake',
+        logicalMessageIdentity: { input: 'mismatch-input', response: 'mismatch-response' },
+      }),
+    ).rejects.toBeInstanceOf(HarnessConfigError);
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await session.close();
+  });
+
   it('aborts an unresolved native acceptance for a non-admitted full logical signal', async () => {
     const agent = new MockAgent({ id: 'default' });
     let releaseRun!: () => void;

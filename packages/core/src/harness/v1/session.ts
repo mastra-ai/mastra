@@ -10301,7 +10301,13 @@ export class Session {
               throw lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
             }
             if (accepted.runId !== dispatched.runId) {
-              throw lineagedSignalRunMismatchError('signal().logicalMessageIdentity', dispatched.runId, accepted.runId);
+              const mismatch = lineagedSignalRunMismatchError(
+                'signal().logicalMessageIdentity',
+                dispatched.runId,
+                accepted.runId,
+              );
+              turnAbortController.abort(mismatch);
+              throw mismatch;
             }
           }
           // Preserve the historical optimistic boundary for ordinary signals:
@@ -15690,6 +15696,7 @@ export class Session {
         }
         if (accepted.runId !== identity.runId) {
           const err = lineagedSignalRunMismatchError('queue().logicalMessageIdentity', identity.runId, accepted.runId);
+          turnAbortController.abort(err);
           await this._writeQueueSignalResultEvidence({
             status: 'failed',
             signalId: identity.signalId,
