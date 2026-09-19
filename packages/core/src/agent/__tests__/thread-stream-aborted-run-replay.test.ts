@@ -144,6 +144,45 @@ describe('replacement subscription after an aborted run', () => {
     await pubsub.close();
   });
 
+  it('does not enqueue the aborted run when a retained backend replays its run-registered', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+
+    // Capture the run's `run-registered` event so it can be replayed the way a
+    // retained backend (Redis Streams) replays a topic backlog to a fresh
+    // subscriber.
+    const key = [resourceId, threadId].join('\u0000');
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+    let registration: Record<string, unknown> | undefined;
+    await pubsub.subscribe(topic, async event => {
+      const data = (event as { data?: Record<string, unknown> }).data;
+      if (data?.type === 'run-registered') registration = data;
+    });
+
+    const run = await startRun(runtime, pubsub, 'hung-run');
+    const first = await runtime.subscribeToThread(agent, target, pubsub);
+    const firstConsumer = collect(first);
+    run.push({ type: 'start', payload: {} });
+    await nextTicks();
+    expect(registration).toBeDefined();
+
+    first.abort();
+    first.unsubscribe();
+    await firstConsumer.consumed;
+    await nextTicks();
+
+    const replacement = await runtime.subscribeToThread(agent, target, pubsub);
+    const replacementConsumer = collect(replacement);
+    await pubsub.publish(topic, { type: 'agent.thread-stream', runId: 'hung-run', data: registration });
+    await nextTicks();
+
+    expect(replacementConsumer.parts).toEqual([]);
+
+    replacement.unsubscribe();
+    await replacementConsumer.consumed;
+    await pubsub.close();
+  });
+
   it('still seeds a replacement subscription from a live run that was never aborted', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new EventEmitterPubSub();
