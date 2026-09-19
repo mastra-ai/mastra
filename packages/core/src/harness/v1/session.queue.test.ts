@@ -272,11 +272,11 @@ describe('Session.queue() — admission', () => {
     await contentsStartedPromise;
     const queuedItemId = session.getRecord().pendingQueue?.[0]?.id;
     expect(queuedItemId).toBeDefined();
-    agent.enqueueRun({ text: 'queued run must not start' });
 
     await agent.stream('foreign active run', {
       memory: { thread: session.threadId, resource: session.resourceId },
     });
+    agent.enqueueRun({ text: 'queued run must not start' });
     const subscription = await agent.subscribeToThread({
       resourceId: session.resourceId,
       threadId: session.threadId,

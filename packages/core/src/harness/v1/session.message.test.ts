@@ -518,6 +518,7 @@ describe('Session.message() — default path', () => {
 
     releaseActive();
     await active;
+    nativeSubscription.unsubscribe();
     await expect(
       session.message({
         content: 'wake with a response owner',

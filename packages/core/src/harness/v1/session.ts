@@ -7905,7 +7905,13 @@ export class Session {
         }
         if (accepted.runId !== signal.runId) {
           nativeRejected = true;
-          throw lineagedSignalRunMismatchError('message().logicalMessageIdentity', signal.runId, accepted.runId);
+          const mismatch = lineagedSignalRunMismatchError(
+            'message().logicalMessageIdentity',
+            signal.runId,
+            accepted.runId,
+          );
+          turnAbortController.abort(mismatch);
+          throw mismatch;
         }
         nativeAccepted = true;
       }
@@ -10720,7 +10726,13 @@ export class Session {
             throw lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
           }
           if (accepted.runId !== dispatched.runId) {
-            throw lineagedSignalRunMismatchError('signal().logicalMessageIdentity', dispatched.runId, accepted.runId);
+            const mismatch = lineagedSignalRunMismatchError(
+              'signal().logicalMessageIdentity',
+              dispatched.runId,
+              accepted.runId,
+            );
+            lineagedWakeAbortController?.abort(mismatch);
+            throw mismatch;
           }
         }
       } catch (err) {

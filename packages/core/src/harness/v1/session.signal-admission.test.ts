@@ -409,6 +409,7 @@ describe('Session.signal() admissionId', () => {
     expect(duplicate).toMatchObject({ accepted: true, willInterleave: true });
     await expect(duplicate.result).rejects.toMatchObject({ name: 'HarnessExecutionError' });
     expect(agent.streamCalls).toHaveLength(1);
+    nativeSubscription.unsubscribe();
   });
 
   it('uses the native accepted run id for an admitted active delivery', async () => {
