@@ -10,6 +10,7 @@ import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surf
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { AgentMemoryBranches } from './agent-memory-branches';
 import {
   useMemoryConfig,
   useMemorySearch,
@@ -130,7 +131,10 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
     <div className="flex min-w-0 flex-col">
       {threadId && <CloneThreadControl isCloning={isCloning} onClone={handleCloneThread} />}
 
-      <div className="border-b border-border p-4">
+      {/* Shared-history Branches Section */}
+      {threadId && <AgentMemoryBranches agentId={agentId} threadId={threadId} />}
+
+      <div className="border-border border-b p-4">
         <Txt as="h3" variant="subheading" tone="ink">
           Recent Messages
         </Txt>

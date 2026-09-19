@@ -1,4 +1,5 @@
 /* oxlint-disable react/only-export-components -- provider and its hooks intentionally share this module */
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { createContext, useContext, useMemo, useState } from 'react';
 import type { ComponentType, Dispatch, ReactNode, SetStateAction } from 'react';
 import type { ComposerAttachment } from './attachments/composer-attachments';
@@ -50,6 +51,10 @@ export interface AgentChatSlots {
   speechInput?: (props: { agentId?: string; onTranscript: (text: string) => void }) => ReactNode;
   voiceCallPanel?: ReactNode;
   voiceCallButton?: ReactNode;
+  /** Rendered inside a message row, under its actions (a per-message action such as branching). */
+  messageFooter?: (message: MastraDBMessage) => ReactNode;
+  /** Rendered right after a message row inside its turn (e.g. an inline fork marker). */
+  afterMessage?: (message: MastraDBMessage) => ReactNode;
 }
 
 export interface AgentChatObservationalMemory {

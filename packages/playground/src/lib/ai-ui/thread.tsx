@@ -5,10 +5,16 @@ import { ChatMessagesLoadingSkeleton } from '@mastra/playground-ui/domains/agent
 import { Thread as BaseThread } from '@mastra/playground-ui/domains/agents/chat/thread';
 import type { ThreadProps } from '@mastra/playground-ui/domains/agents/chat/thread';
 import { useChatMessages } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { BranchForkMarker } from '@mastra/playground-ui/domains/chat/messages/branch-fork-marker';
+import { BranchFromMessageAction } from '@mastra/playground-ui/domains/chat/messages/branch-from-message-action';
+import { buildBranchForkMarkers } from '@mastra/playground-ui/domains/chat/messages/build-branch-fork-markers';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useSpeechRecognition } from '@mastra/react';
+import { useBranchThread, useThreadBranches } from '@mastra/react/hooks/memory';
 import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useReadAloud } from '@mastra/react/hooks/voice';
 import { toast } from 'sonner';
@@ -62,6 +68,52 @@ function StudioThreadFeatures({
     onCallStarted: props.refreshThreadList,
   });
 
+  // Shared-history branching: fork from any message, and mark the fork points both ways.
+  const { paths, navigate } = useLinkComponent();
+  const { data: branchLineage } = useThreadBranches({
+    threadId: props.threadId,
+    agentId: props.agentId,
+    requestContext,
+  });
+  const { mutateAsync: branchThread, isPending: isBranching } = useBranchThread({ requestContext });
+  const canBranch = Boolean(
+    props.agentId && props.threadId && props.threadId !== 'new' && branchLineage?.isSupported,
+  );
+  const branchMarkers = buildBranchForkMarkers(branchLineage);
+
+  const handleBranchFromMessage = async (messageId: string) => {
+    if (!props.agentId || !props.threadId) return;
+    const result = await branchThread({
+      threadId: props.threadId,
+      agentId: props.agentId,
+      branchPointMessageId: messageId,
+    });
+    if (result?.thread?.id) {
+      navigate(paths.agentThreadLink(props.agentId, result.thread.id));
+    }
+  };
+
+  const renderMessageFooter = (message: MastraDBMessage) =>
+    canBranch ? (
+      <BranchFromMessageAction
+        disabled={isBranching}
+        onBranch={() => void handleBranchFromMessage(message.id)}
+      />
+    ) : null;
+
+  const renderAfterMessage = (message: MastraDBMessage) => {
+    if (!props.agentId) return null;
+    const markers = branchMarkers.get(message.id);
+    if (!markers?.length) return null;
+    return markers.map(marker => (
+      <BranchForkMarker
+        key={`${marker.kind}-${marker.targetThreadId}`}
+        marker={marker}
+        agentId={props.agentId!}
+      />
+    ));
+  };
+
   return (
     <AgentChatFeaturesProvider
       value={{
@@ -77,6 +129,8 @@ function StudioThreadFeatures({
           modelWarning: <ComposerModelWarning />,
           modelSwitcher: <ComposerModelSwitcher />,
           modelSettings: agentId => <ComposerModelSettings agentId={agentId} />,
+          messageFooter: renderMessageFooter,
+          afterMessage: renderAfterMessage,
           speechInput: speechProps => <SpeechInput {...speechProps} />,
           voiceCallPanel: <VoiceCallPanel voiceCall={voiceCall} />,
           voiceCallButton: <VoiceCallButton voiceCall={voiceCall} />,
