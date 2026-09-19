@@ -15,6 +15,7 @@ export type ScenarioName =
   | 'account-rotation'
   | 'account-routing-targeted'
   | 'branch-context-long-name'
+  | 'branch-commands'
   | 'active-signal-followup'
   | 'agent-connections-cross-project'
   | 'agent-connections-expected-reply-watchdog'

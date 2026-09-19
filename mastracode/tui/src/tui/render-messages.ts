@@ -13,6 +13,7 @@ import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import { disposeAssistantRenderState, finalizeStreamingAssistant } from './assistant-render-registry.js';
+import { loadBranchForkMarkers } from './branch-markers.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -53,7 +54,13 @@ import {
   isSignalMessage,
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
-import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
+import { InfoMessageComponent } from './display.js';
+import {
+  formatToolResult,
+  getBackgroundToolTaskId,
+  isBackgroundToolPlaceholder,
+  isTaskMutationTool,
+} from './handlers/tool.js';
 import { pruneChatContainer } from './prune-chat.js';
 import { clearPendingTools } from './state.js';
 import type { TUIState } from './state.js';
@@ -964,6 +971,10 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
     }
   }
 
+  // Branch lineage markers annotate fork points on both source and branch
+  // views. Loaded once per render; empty when branching is unsupported.
+  const branchForkMarkers = await loadBranchForkMarkers(state);
+
   // Local accumulator for detecting task clears during visible history reconstruction.
   // Startup only replays task state from the bounded message window. If no task
   // snapshot exists in that window, keep the existing display-state snapshot.
@@ -1295,6 +1306,13 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
 
       // Render any remaining text after the last tool call
       flushAccumulated(true);
+    }
+
+    const forkMarkerLines = branchForkMarkers.get(message.id);
+    if (forkMarkerLines) {
+      for (const line of forkMarkerLines) {
+        state.chatContainer.addChild(new InfoMessageComponent([new Text(theme.fg('muted', line), 1, 0)]));
+      }
     }
   }
 
