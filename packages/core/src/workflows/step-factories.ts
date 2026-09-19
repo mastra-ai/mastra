@@ -4,13 +4,22 @@ import type { AgentExecutionOptions } from '../agent/agent.types';
 import type { SubAgent } from '../agent/subagent';
 import type { AgentStreamOptions } from '../agent/types';
 import type { ActorSignal } from '../auth/ee';
+import type { Classifier, ClassifierQuestions, ClassifierState } from '../classifier';
 import type { MastraScorers } from '../evals';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { DynamicArgument } from '../types';
-import { runAgentEntry, runMappingEntry, runToolEntry } from './entry-executors';
-import type { ExecuteFunction, Step } from './step';
-import type { DefaultEngineType, MappingConfig, StepMetadata, ToolStep } from './types';
+import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from './entry-executors';
+import type { ClassifierStepOutput } from './entry-executors';
+import type { ExecuteFunction, ExecuteFunctionParams, Step } from './step';
+import type {
+  ClassifierStateMapping,
+  DefaultEngineType,
+  MappingConfig,
+  SerializableClassifierStepOptions,
+  StepMetadata,
+  ToolStep,
+} from './types';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -79,6 +88,59 @@ export function createStepFromAgent<TStepId extends string, TStepOutput>(
     __agentRef: params,
     __agentOptions: agentOrToolOptions,
   } as Step<TStepId, unknown, any, TStepOutput, unknown, unknown, DefaultEngineType>;
+}
+
+export type ClassifierStepOptions<TStepInput = unknown> = SerializableClassifierStepOptions & {
+  id?: string;
+  state?:
+    | ClassifierStateMapping
+    | ((context: ExecuteFunctionParams<any, TStepInput, any, any, any, DefaultEngineType>) =>
+        | ClassifierState
+        | Promise<ClassifierState>);
+};
+
+export function createStepFromClassifier<QUESTIONS extends ClassifierQuestions, TStepInput = unknown>(
+  classifier: Classifier<QUESTIONS>,
+  options: ClassifierStepOptions<TStepInput> = {},
+): Step<
+  string,
+  unknown,
+  TStepInput,
+  ClassifierStepOutput<QUESTIONS>,
+  unknown,
+  unknown,
+  DefaultEngineType
+> {
+  if (!classifier.questions) {
+    throw new TypeError(
+      `Classifier '${classifier.id}' must be configured with questions before it can be used as a workflow step.`,
+    );
+  }
+
+  const id = options.id ?? classifier.id;
+  return {
+    id,
+    inputSchema: toStandardSchema(z.any()),
+    outputSchema: toStandardSchema(z.any()),
+    retries: options.retries,
+    metadata: options.metadata,
+    execute: async ctx => {
+      return runClassifierEntry<QUESTIONS>(
+        {
+          type: 'classifier',
+          id,
+          classifierId: classifier.id,
+          classifier,
+          state: options.state as any,
+          options,
+        },
+        ctx,
+      );
+    },
+    component: 'CLASSIFIER',
+    __classifierRef: classifier,
+    __classifierOptions: options,
+  } as Step<string, unknown, TStepInput, ClassifierStepOutput<QUESTIONS>, unknown, unknown, DefaultEngineType>;
 }
 
 export function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(

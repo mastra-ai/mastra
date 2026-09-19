@@ -69,6 +69,15 @@ export interface WorkflowRegistrySchemas {
   outputSchema?: JsonSchema;
 }
 
+export interface ClassifierRegistrySchemas extends WorkflowRegistrySchemas {
+  questions?: Record<
+    string,
+    | { type: 'choice'; choices: string[] }
+    | { type: 'score'; min: number; max: number }
+    | { type: 'boolean' }
+  >;
+}
+
 /**
  * What the validator knows about the surrounding registries. Presence of a
  * top-level key means "this kind was indexed, check references against it";
@@ -81,6 +90,7 @@ export interface WorkflowRegistrySchemas {
 export interface WorkflowRegistryIndex {
   agents?: Record<string, WorkflowRegistrySchemas>;
   tools?: Record<string, WorkflowRegistrySchemas>;
+  classifiers?: Record<string, ClassifierRegistrySchemas>;
   workflows?: Record<string, WorkflowRegistrySchemas>;
 }
 

@@ -340,7 +340,9 @@ export async function executeEntry(
           ? await engine.executeAgent({ ...singleStepParams, entry })
           : entry.type === 'tool'
             ? await engine.executeTool({ ...singleStepParams, entry })
-            : await engine.executeMapping({ ...singleStepParams, entry });
+            : entry.type === 'classifier'
+              ? await engine.executeClassifier({ ...singleStepParams, entry })
+              : await engine.executeMapping({ ...singleStepParams, entry });
 
     // Extract result and apply context changes
     execResults = stepExecResult.result;

@@ -653,10 +653,28 @@ export type StepFlowEntryOptions = {
  * (`any`) because the public type-safety for these entries is enforced by the
  * `Workflow` builder method overloads, not by this internal union.
  */
+export type ClassifierStateMapping = { path: string };
+export type ClassifierStateSelector = (context: any) => any | Promise<any>;
+
+export type SerializableClassifierStepOptions = {
+  maxRetries?: number;
+  providerOptions?: Record<string, Record<string, unknown>>;
+  retries?: number;
+  metadata?: StepMetadata;
+};
+
 export type SingleStepEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
   | { type: 'agent'; id: string; agentId: string; agent?: any; options?: any }
   | { type: 'tool'; id: string; toolId: string; tool?: any; options?: any }
+  | {
+      type: 'classifier';
+      id: string;
+      classifierId: string;
+      classifier?: any;
+      state?: ClassifierStateMapping | ClassifierStateSelector;
+      options?: SerializableClassifierStepOptions;
+    }
   | {
       type: 'mapping';
       id: string;
@@ -671,6 +689,8 @@ export type StepEntry = Extract<SingleStepEntry, { type: 'step' }>;
 export type AgentStepEntry = Extract<SingleStepEntry, { type: 'agent' }>;
 /** The `{ type: 'tool' }` variant of {@link SingleStepEntry}. */
 export type ToolStepEntry = Extract<SingleStepEntry, { type: 'tool' }>;
+/** The `{ type: 'classifier' }` variant of {@link SingleStepEntry}. */
+export type ClassifierStepEntry = Extract<SingleStepEntry, { type: 'classifier' }>;
 /** The `{ type: 'mapping' }` variant of {@link SingleStepEntry}. */
 export type MappingStepEntry<TEngineType = DefaultEngineType> = Extract<
   SingleStepEntry<TEngineType>,
@@ -822,6 +842,13 @@ export type SerializedSingleStepEntry =
       // No outputSchema: a tool's output shape lives on the tool itself and is
       // looked up from the live Mastra instance at rehydration time.
       options?: SerializedStepOptions;
+    }
+  | {
+      type: 'classifier';
+      id: string;
+      classifierId: string;
+      state?: ClassifierStateMapping;
+      options?: SerializableClassifierStepOptions;
     }
   | { type: 'mapping'; id: string; description?: string; metadata?: StepMetadata; mapConfig: string }
   /**

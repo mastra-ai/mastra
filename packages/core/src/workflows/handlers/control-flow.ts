@@ -100,6 +100,8 @@ function executeChildEntry(
       return engine.executeAgent({ ...params, entry: child });
     case 'tool':
       return engine.executeTool({ ...params, entry: child });
+    case 'classifier':
+      return engine.executeClassifier({ ...params, entry: child });
     case 'mapping':
       return engine.executeMapping({ ...params, entry: child });
   }

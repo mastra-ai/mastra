@@ -25,6 +25,7 @@ export type WorkflowBuilderSingleStepEntry = Exclude<SerializedSingleStepEntry, 
 
 export type WorkflowBuilderAgentEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'agent' }>;
 export type WorkflowBuilderToolEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'tool' }>;
+export type WorkflowBuilderClassifierEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'classifier' }>;
 export type WorkflowBuilderMappingEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'mapping' }>;
 export type WorkflowBuilderWorkflowEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'workflow' }>;
 
@@ -130,6 +131,7 @@ export type WorkflowBuilderTypeAssertions = [
 export const WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES = [
   'agent',
   'tool',
+  'classifier',
   'mapping',
   'workflow',
   'parallel',
