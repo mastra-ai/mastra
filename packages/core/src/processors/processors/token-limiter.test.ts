@@ -1505,6 +1505,142 @@ describe('TokenLimiterProcessor', () => {
       expect(messageList.get.all.db()).toHaveLength(1);
     });
 
+    describe('current run protection', () => {
+      const bigToolResult = {
+        rules: Array.from({ length: 200 }, (_, index) => `Rule number ${index} for the living room`),
+      };
+
+      function addCurrentRunToolCall(messageList: MessageList, id = 'response-1') {
+        messageList.add(
+          {
+            id,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call-1',
+                    toolName: 'listRules',
+                    args: {},
+                    result: bigToolResult,
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:10Z'),
+          },
+          'response',
+        );
+      }
+
+      function runStep(processor: TokenLimiterProcessor, messageList: MessageList) {
+        return processor.processInputStep({
+          messageList,
+          stepNumber: 1,
+          model: createMockModel(),
+          steps: [],
+          systemMessages: [],
+          state: {},
+          retryCount: 0,
+          abort: mockAbort,
+        });
+      }
+
+      it('should keep the current run tool call when it exceeds the budget on its own', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 500 });
+        const messageList = new MessageList();
+
+        messageList.add(createTestMessage('An old remembered message', 'user', 'memory-1'), 'memory');
+        messageList.add(createTestMessage('How many rules do I have?', 'user', 'input-1'), 'input');
+        addCurrentRunToolCall(messageList);
+
+        await runStep(processor, messageList);
+
+        expect(messageList.get.all.db().map(message => message.id)).toEqual(['response-1']);
+      });
+
+      it('should keep the current run tool call after the save queue drains the live response set', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 500 });
+        const messageList = new MessageList();
+
+        messageList.add(createTestMessage('How many rules do I have?', 'user', 'input-1'), 'input');
+        addCurrentRunToolCall(messageList);
+        messageList.drainUnsavedMessages();
+
+        await runStep(processor, messageList);
+
+        expect(messageList.get.all.db().map(message => message.id)).toContain('response-1');
+      });
+
+      it('should keep a mixed text and tool call message from the current run', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 500 });
+        const messageList = new MessageList();
+
+        messageList.add(createTestMessage('How many rules do I have?', 'user', 'input-1'), 'input');
+        messageList.add(
+          {
+            id: 'response-mixed',
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'x'.repeat(8000) },
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call-2',
+                    toolName: 'listRules',
+                    args: {},
+                    result: bigToolResult,
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:10Z'),
+          },
+          'response',
+        );
+
+        await runStep(processor, messageList);
+
+        expect(messageList.get.all.db().map(message => message.id)).toContain('response-mixed');
+      });
+
+      it('should keep the current run tool call and trim history that does not fit', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 4000 });
+        const messageList = new MessageList();
+
+        messageList.add(createTestMessage('x'.repeat(40000), 'assistant', 'memory-1'), 'memory');
+        messageList.add(createTestMessage('How many rules do I have?', 'user', 'input-1'), 'input');
+        addCurrentRunToolCall(messageList);
+
+        await runStep(processor, messageList);
+
+        const keptIds = messageList.get.all.db().map(message => message.id);
+        expect(keptIds).toContain('response-1');
+        expect(keptIds).toContain('input-1');
+        expect(keptIds).not.toContain('memory-1');
+      });
+
+      it('should still trim history newest first when the current run fits', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 4000 });
+        const messageList = new MessageList();
+
+        messageList.add(createTestMessage('x'.repeat(40000), 'assistant', 'memory-old'), 'memory');
+        messageList.add(createTestMessage('A short remembered message', 'assistant', 'memory-recent'), 'memory');
+        messageList.add(createTestMessage('How many rules do I have?', 'user', 'input-1'), 'input');
+
+        await runStep(processor, messageList);
+
+        const keptIds = messageList.get.all.db().map(message => message.id);
+        expect(keptIds).toEqual(['memory-recent', 'input-1']);
+      });
+    });
+
     it('should handle tool call messages in token counting', async () => {
       const processor = new TokenLimiterProcessor({ limit: 100 });
 
