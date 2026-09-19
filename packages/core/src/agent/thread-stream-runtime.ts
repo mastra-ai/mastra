@@ -19,6 +19,7 @@ import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import type {
+  AgentAbortThreadOptions,
   AgentClaimThreadPeerOptions,
   AgentSignal,
   AgentSubscribeToThreadOptions,
@@ -1650,12 +1651,12 @@ export class AgentThreadStreamRuntime {
     return started;
   }
 
-  abortThread(options: AgentSubscribeToThreadOptions, pubsub?: PubSub): boolean {
+  abortThread(options: AgentAbortThreadOptions, pubsub?: PubSub): boolean {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const state = this.#getState(resolvedPubSub);
     const key = this.#threadKey(options.resourceId, options.threadId);
     const runId = this.getActiveThreadRunId(options, resolvedPubSub);
-    if (!runId) return false;
+    if (!runId || (options.expectedRunId !== undefined && options.expectedRunId !== runId)) return false;
     if (state.preparedRunsById.has(runId)) return this.abortRun(runId, resolvedPubSub);
     if (state.threadKeysByRunId.get(runId) === key) {
       // Reserved locally (a sendSignal wake that has not prepared its run yet):

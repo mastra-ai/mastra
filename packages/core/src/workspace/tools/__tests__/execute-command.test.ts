@@ -67,6 +67,36 @@ describe('executeCommandTool data chunks', () => {
     });
   });
 
+  describe('exit metadata', () => {
+    it('preserves provider termination flags', async () => {
+      const { context, writerCustom } = createMockContext({
+        toolCallId: 'call-terminated',
+        executeCommand: async () => ({
+          success: false,
+          exitCode: 137,
+          stdout: '',
+          stderr: '',
+          executionTimeMs: 50,
+          killed: true,
+          timedOut: true,
+        }),
+      });
+
+      await execute({ command: 'sleep', args: ['999'], timeout: null, cwd: null }, context);
+
+      const exitChunks = getChunks(writerCustom, 'data-sandbox-exit');
+      expect(exitChunks).toHaveLength(1);
+      expect(exitChunks[0].data).toEqual({
+        exitCode: 137,
+        success: false,
+        executionTimeMs: 50,
+        killed: true,
+        timedOut: true,
+        toolCallId: 'call-terminated',
+      });
+    });
+  });
+
   describe('toolCallId in chunks', () => {
     it('includes toolCallId in stdout chunks', async () => {
       const { context, writerCustom } = createMockContext({

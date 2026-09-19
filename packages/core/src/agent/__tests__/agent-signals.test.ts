@@ -7193,6 +7193,37 @@ describe('Agent signals', () => {
     });
   });
 
+  it('does not abort a successor run when the expected run has completed', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const resourceId = 'conditional-abort-resource';
+    const threadId = 'conditional-abort-thread';
+    const successorRunId = 'run-b';
+    const options = runtime.prepareRunOptions(
+      { runId: successorRunId, memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+
+    runtime.registerRun(
+      { id: 'conditional-abort-agent' } as Agent<any, any, any, any>,
+      {
+        runId: successorRunId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      options,
+      pubsub,
+    );
+
+    expect(runtime.abortThread({ resourceId, threadId, expectedRunId: 'run-a' }, pubsub)).toBe(false);
+    expect(options.abortSignal?.aborted).toBe(false);
+    expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(successorRunId);
+
+    expect(runtime.abortThread({ resourceId, threadId, expectedRunId: successorRunId }, pubsub)).toBe(true);
+    expect(options.abortSignal?.aborted).toBe(true);
+  });
+
   it('routes remote abort requests to only the live lease owner', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
@@ -7229,7 +7260,24 @@ describe('Agent signals', () => {
     );
     await pubsub.flush();
     await waitForCondition(() => followerSubscription.activeRunId() === runId);
-    expect(followerSubscription.abort()).toBe(true);
+    const publishedBeforeMismatch = pubsub.publishedData.length;
+    expect(
+      followerRuntime.abortThread(
+        {
+          resourceId: 'remote-abort-resource',
+          threadId: 'remote-abort-thread',
+          expectedRunId: 'completed-run',
+        },
+        pubsub,
+      ),
+    ).toBe(false);
+    expect(pubsub.publishedData).toHaveLength(publishedBeforeMismatch);
+    expect(
+      followerRuntime.abortThread(
+        { resourceId: 'remote-abort-resource', threadId: 'remote-abort-thread', expectedRunId: runId },
+        pubsub,
+      ),
+    ).toBe(true);
     expect(options.abortSignal?.aborted).toBe(false);
     await pubsub.flush();
     await waitForCondition(() => options.abortSignal?.aborted === true);

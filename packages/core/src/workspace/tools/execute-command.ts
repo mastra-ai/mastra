@@ -254,6 +254,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
         exitCode: result.exitCode,
         success: result.success,
         executionTimeMs: result.executionTimeMs,
+        killed: result.killed,
+        timedOut: result.timedOut,
         toolCallId,
       },
     });

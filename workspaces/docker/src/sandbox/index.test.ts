@@ -1283,7 +1283,8 @@ describe('DockerSandbox', () => {
       const pgidFile = spawnCmd[4];
 
       // Capture the kill exec call
-      const killStart = vi.fn().mockResolvedValue(undefined);
+      const killStream = { destroy: vi.fn() };
+      const killStart = vi.fn().mockResolvedValue(killStream);
       mockContainer.exec.mockResolvedValueOnce({
         id: 'kill-exec',
         start: killStart,
@@ -1292,6 +1293,7 @@ describe('DockerSandbox', () => {
 
       const killed = await handle.kill();
       expect(killed).toBe(true);
+      expect(killStream.destroy).toHaveBeenCalledOnce();
 
       const killCall = mockContainer.exec.mock.calls[1]?.[0];
       expect(killCall.Cmd[0]).toBe('sh');
@@ -1320,16 +1322,18 @@ describe('DockerSandbox', () => {
       const handle = await sandbox.processes!.spawn('sleep 100');
 
       // The kill helper exec runs but exits non-zero (unrecorded/empty PGID).
+      const killStream = { destroy: vi.fn() };
       mockContainer.exec.mockResolvedValueOnce({
         id: 'kill-exec',
-        start: vi.fn().mockResolvedValue(undefined),
+        start: vi.fn().mockResolvedValue(killStream),
         inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
       });
 
       const killed = await handle.kill();
       expect(killed).toBe(false);
+      expect(killStream.destroy).toHaveBeenCalledOnce();
 
-      // Stream was not destroyed, so wait() has not been resolved by kill().
+      // The process stream was not destroyed, so wait() has not been resolved by kill().
       expect(mockStream.destroy).not.toHaveBeenCalled();
     });
 

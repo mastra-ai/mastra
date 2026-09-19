@@ -102,7 +102,7 @@ export async function getInputOptions(
     external: externals,
     plugins: [
       protocolExternalResolver(),
-      subpathExternalsResolver(externals),
+      subpathExternalsResolver(externals, analyzedBundleInfo.workspaceMap),
       {
         name: 'alias-optimized-deps',
         resolveId(id: string) {
