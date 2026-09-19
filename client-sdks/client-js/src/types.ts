@@ -555,11 +555,30 @@ export type UpdateMemoryThreadParams = Omit<
     agentId?: string;
   };
 
-export type ListMemoryThreadMessagesParams = GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/messages'>>;
+export type ListMemoryThreadMessagesParams = Omit<
+  GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/messages'>>,
+  'perPage'
+> &
+  RequestContextOptions & {
+    /** Number of messages per page, or `false` for an unpaged result. */
+    perPage?: number | false;
+    /** Optional agent ID. When provided, uses the agent's memory endpoint. */
+    agentId?: string;
+    /** Optional network ID. When provided, uses the network memory endpoint. */
+    networkId?: string;
+  };
 
 /** The route schema intentionally keeps persisted message payloads opaque. */
 export type ListMemoryThreadMessagesResponse = GeneratedResponse<'GET /memory/threads/:threadId/messages'> & {
   messages: MastraDBMessage[];
+  /** Total number of messages in the thread (server-side). Present on local-memory paths; absent on gateway. */
+  total?: number;
+  /** 0-based page index that was returned. */
+  page?: number;
+  /** Number of messages per page, or `false` for an unpaged result. */
+  perPage?: number | false;
+  /** Whether there are older messages on a subsequent page. */
+  hasMore?: boolean;
 };
 
 export type CloneMemoryThreadParams = Omit<
