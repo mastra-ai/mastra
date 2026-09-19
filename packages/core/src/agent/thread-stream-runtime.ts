@@ -174,6 +174,13 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   streamId: string;
   streamSeq: number;
   lifecycle: AgentThreadRunLifecycle;
+  /**
+   * Set when {@link AgentThreadStreamRuntime.abortRun} stopped this segment. The
+   * run stays in `activeThreadRunIds` until it terminalizes, so the flag is what
+   * keeps a later subscriber from picking the stopped segment up as a new run.
+   * A resumed segment registers its own record and is never marked.
+   */
+  aborted?: boolean;
   suspensions?: Map<string | undefined, AgentThreadRunSuspension>;
   /** When the record was parked as suspended (ms epoch); drives the TTL sweep. */
   suspendedAt?: number;
@@ -1515,6 +1522,12 @@ export class AgentThreadStreamRuntime {
     const key = state.threadKeysByRunId.get(runId);
     if (key) {
       const streamId = state.activeThreadRunIds.get(key) === runId ? state.activeThreadStreamIds.get(key) : undefined;
+      // Mark the stopped segment. `run-aborted` only reaches subscribers that
+      // exist when it is published, and the run keeps its `activeThreadRunIds`
+      // entry until it terminalizes, so without this a subscription opened
+      // afterwards would adopt the stopped segment as a live run.
+      const record = streamId ? state.threadRunsByStreamId.get(streamId) : undefined;
+      if (record) record.aborted = true;
       this.#releaseThreadLease(pubsub, key, runId);
       this.#publish(pubsub, key, { type: 'run-aborted', runId, streamId });
     }
@@ -2966,6 +2979,19 @@ export class AgentThreadStreamRuntime {
 
     const enqueueRun = (record: AgentThreadRunRecord<any>) => {
       if (done || seenStreamIds.has(record.streamId)) return;
+      // An aborted segment holds its `activeThreadRunIds` entry until the run
+      // terminalizes, and its `run-aborted` event was published before this
+      // subscription existed (a consumer that aborts and tears down in the same
+      // tick leaves nobody to observe it). Handing it over would replay the
+      // stopped run's buffered parts as a brand-new run — a phantom
+      // `agent_start` and terminal lifecycle after the abort was already
+      // reported — and park this subscriber on a stream that never ends, so the
+      // follow-up that opened the subscription would never be delivered. This
+      // covers every door into the queue: the initial seed, and a retained
+      // backend replaying the segment's `run-registered` or its chunks. Later
+      // runs, and resumed segments of this same run, register their own records
+      // and are untouched.
+      if (record.aborted) return;
       seenStreamIds.add(record.streamId);
       pendingRuns.push(record);
       wake();
@@ -3396,6 +3422,7 @@ export class AgentThreadStreamRuntime {
     const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
     if (currentRecord) {
       localStreamIds.add(currentRecord.streamId);
+      // `enqueueRun` drops the record when its segment was aborted.
       enqueueRun(currentRecord);
     }
 
