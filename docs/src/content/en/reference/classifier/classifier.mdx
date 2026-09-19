@@ -237,3 +237,37 @@ The classifier rejects malformed state, questions, and answers. Provider output 
 Unsupported question types fail before provider I/O. Only retryable AI SDK `APICallError` failures are retried. Other errors are returned immediately, and an exhausted retry sequence rejects the evaluation.
 
 The classifier records safe evaluation metadata in the active observability context when one exists. Raw state, criteria descriptions, answers, and provider-generated text aren't added to span attributes.
+
+## Registering classifiers
+
+Register classifiers on the `Mastra` instance to share them across agents and processors. Registration wires the classifier to Mastra's logger and observability, and makes it resolvable by key or ID.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Classifier } from '@mastra/core/classifier'
+
+export const mastra = new Mastra({
+  classifiers: {
+    safety: new Classifier({
+      id: 'safety',
+      model,
+      questions: {
+        unsafe: { type: 'boolean' },
+      },
+    }),
+  },
+})
+
+mastra.getClassifier('safety')
+mastra.getClassifierById('safety')
+mastra.listClassifiers()
+```
+
+A registered classifier can be referenced by string in [`ClassifierProcessor`](/reference/processors/classifier-processor).
+
+## Related
+
+- [ClassifierProcessor](/reference/processors/classifier-processor)
+- [getClassifier()](/reference/core/getClassifier)
+- [getClassifierById()](/reference/core/getClassifierById)
+- [listClassifiers()](/reference/core/listClassifiers)

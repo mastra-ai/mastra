@@ -6,6 +6,14 @@ export {
   type ModerationCategoryScores,
 } from './moderation';
 export {
+  ClassifierProcessor,
+  type ClassifierProcessorOptions,
+  type ClassifierProcessorInstanceOptions,
+  type ClassifierProcessorRegisteredOptions,
+  type ClassifierOnResult,
+  type ClassifierResultContext,
+} from './classifier';
+export {
   PromptInjectionDetector,
   type PromptInjectionOptions,
   type PromptInjectionResult,

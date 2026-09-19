@@ -1,0 +1,254 @@
+---
+title: 'Reference: ClassifierProcessor | Processors'
+description: 'Use ClassifierProcessor to run a typed Classifier over agent input, output, or stream chunks and abort or filter content based on the answers.'
+packages:
+  - '@mastra/core'
+---
+
+# ClassifierProcessor
+
+The `ClassifierProcessor` is a hybrid processor that runs a [`Classifier`](/reference/classifier/classifier) over message text and passes the typed answers to `onResult`. In `onResult`, call `abort(reason)` to stop the request with a tripwire, call `filter()` to drop the content and continue, or do nothing to let it through. The classifier provides evidence such as probabilities, choices, and scores. `onResult` owns application policy.
+
+Abort reasons are always the string supplied by the caller. Provider-generated text is never included in the abort message.
+
+## Usage example
+
+```typescript
+import { Classifier } from '@mastra/core/classifier'
+import { ClassifierProcessor } from '@mastra/core/processors'
+
+const safety = new Classifier({
+  id: 'safety',
+  model,
+  questions: {
+    unsafe: {
+      type: 'boolean',
+      criteria: { true: 'The message is unsafe', false: 'The message is safe' },
+    },
+  },
+})
+
+const processor = new ClassifierProcessor({
+  classifier: safety,
+  onResult: (answers, { abort }) => {
+    if (answers.unsafe.probability > 0.8) abort('Message rejected by safety policy')
+  },
+  lastMessageOnly: true,
+})
+```
+
+Several conditions can share one `onResult`, or use separate processors when they need different classifiers:
+
+```typescript
+inputProcessors: [
+  new ClassifierProcessor({
+    classifier: safety,
+    onResult: (a, { abort }) => {
+      if (a.unsafe.probability > 0.8) abort('Rejected by safety policy')
+    },
+  }),
+  new ClassifierProcessor({
+    classifier: topic,
+    onResult: (a, { abort }) => {
+      if (a.topic.choice === 'other') abort('Support questions only')
+    },
+  }),
+]
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ClassifierProcessorOptions',
+    description: 'Configuration for the processor',
+    isOptional: false,
+    properties: [
+      {
+        type: 'ClassifierProcessorOptions',
+        parameters: [
+          {
+            name: 'classifier',
+            type: 'Classifier | string',
+            description:
+              'A Classifier instance with configured questions, or the key or ID of a classifier registered on the Mastra instance. Registered classifiers are resolved lazily through mastra.getClassifierById() on first use.',
+            isOptional: false,
+          },
+          {
+            name: 'onResult',
+            type: '(answers, context) => void | Promise<void>',
+            description:
+              'Called after each classification. answers is typed from the classifier questions. context provides abort(reason) to stop the request with a tripwire, filter() to drop the message or chunk, phase, and the full ClassifierResult including usage and provider metadata.',
+            isOptional: false,
+          },
+          {
+            name: 'id',
+            type: 'string',
+            description: 'Processor identifier',
+            isOptional: true,
+            default: "'classifier'",
+          },
+          {
+            name: 'errorStrategy',
+            type: "'warn' | 'strict'",
+            description:
+              "How to handle classifier failures. 'warn' is fail-open: it logs the failure and lets the content through. 'strict' is fail-closed: it aborts the request. In the stream phase a failed evaluation always emits the chunk.",
+            isOptional: true,
+            default: "'warn'",
+          },
+          {
+            name: 'lastMessageOnly',
+            type: 'boolean',
+            description: 'When true, only the last message is classified in the input and output phases.',
+            isOptional: true,
+            default: 'false',
+          },
+          {
+            name: 'chunkWindow',
+            type: 'number',
+            description:
+              'Number of preceding stream chunks to include as context when classifying a text-delta chunk. Each text chunk triggers a classifier call, so larger windows increase cost.',
+            isOptional: true,
+            default: '0',
+          },
+          {
+            name: 'maxInputLength',
+            type: 'number',
+            description: 'Truncate the text sent to the classifier to this many characters.',
+            isOptional: true,
+          },
+          {
+            name: 'providerOptions',
+            type: 'SharedV4ProviderOptions',
+            description: 'Provider-specific options forwarded to the evaluation model.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Behavior by phase
+
+| Phase | no call | `abort(reason)` | `filter()` |
+| - | - | - | - |
+| Input (`inputProcessors`) | message passes | abort before the LLM | message removed from context |
+| Output result (`outputProcessors`) | message passes | abort the response | message removed from the response |
+| Stream (`outputProcessors`) | chunk emitted | abort the stream | chunk not emitted |
+
+Messages with no text content are passed through without calling the classifier.
+
+## Extended usage examples
+
+### Topic scoping
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Classifier } from '@mastra/core/classifier'
+import { ClassifierProcessor } from '@mastra/core/processors'
+
+const topic = new Classifier({
+  id: 'topic',
+  model,
+  questions: {
+    topic: {
+      type: 'choice',
+      criteria: {
+        billing: 'Questions about invoices or payments',
+        account: 'Questions about account settings',
+        other: 'Anything else',
+      },
+    },
+  },
+})
+
+export const agent = new Agent({
+  id: 'support-agent',
+  name: 'support-agent',
+  instructions: 'You help customers with billing and account questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  inputProcessors: [
+    new ClassifierProcessor({
+      classifier: topic,
+      lastMessageOnly: true,
+      onResult: (answers, { abort }) => {
+        if (answers.topic.choice === 'other') {
+          abort('This assistant only handles billing and account questions')
+        }
+      },
+    }),
+  ],
+})
+```
+
+### Output quality gate
+
+```typescript title="src/mastra/agents/quality-gated-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Classifier } from '@mastra/core/classifier'
+import { ClassifierProcessor } from '@mastra/core/processors'
+
+const quality = new Classifier({
+  id: 'quality',
+  model,
+  questions: {
+    quality: {
+      type: 'score',
+      instructions: 'Rate how well the response answers the user',
+      criteria: ['Off-topic', 'Partial', 'Complete'],
+    },
+  },
+})
+
+export const agent = new Agent({
+  id: 'quality-gated-agent',
+  name: 'quality-gated-agent',
+  instructions: 'You are a helpful assistant',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  outputProcessors: [
+    new ClassifierProcessor({
+      classifier: quality,
+      onResult: (answers, { filter }) => {
+        if (answers.quality.score < 1) filter()
+      },
+    }),
+  ],
+})
+```
+
+### Registered classifier
+
+Register the classifier on the `Mastra` instance and reference it by key or ID. The processor resolves it on first use.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Classifier } from '@mastra/core/classifier'
+
+export const mastra = new Mastra({
+  classifiers: {
+    safety: new Classifier({ id: 'safety', model, questions: {/* ... */} }),
+  },
+})
+```
+
+```typescript
+import { ClassifierProcessor } from '@mastra/core/processors'
+
+const processor = new ClassifierProcessor({
+  classifier: 'safety',
+  onResult: (answers, { abort }) => {
+    if (answers.unsafe.probability > 0.8) abort('Message rejected by safety policy')
+  },
+})
+```
+
+When using a registered classifier by string, answer types are not inferred from the instance. Pass the question map as a type argument to narrow them: `new ClassifierProcessor<typeof safety.questions>({ ... })`.
+
+## Related
+
+- [Classifier](/reference/classifier/classifier)
+- [Guardrails](/docs/agents/guardrails)
