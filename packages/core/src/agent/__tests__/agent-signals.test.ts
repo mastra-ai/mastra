@@ -8875,7 +8875,6 @@ describe('Agent signals', () => {
       {
         ...target,
         runId,
-        ifActive: { behavior: 'discard' },
         ifIdle: {
           behavior: 'wake',
           streamOptions: { logicalMessageIdentity: { input: 'lease-input', response: 'lease-response' } },

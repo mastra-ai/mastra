@@ -5954,6 +5954,7 @@ export class AgentThreadStreamRuntime {
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
     const idleBehavior = target.ifIdle?.behavior ?? 'wake';
     const onIdleSignalDiscarded = getIdleSignalDiscardHandler(target.ifIdle);
+    const fullLogicalMessageIdentity = hasFullLogicalMessageIdentity(target.ifIdle);
 
     let activeRecord: AgentThreadRunRecord<any> | undefined;
     let finishingLeaseOwnerRunId: string | undefined;
@@ -6264,7 +6265,7 @@ export class AgentThreadStreamRuntime {
             claimedOwnerDiscovery,
             () => this.#forgetSignalAdmission(state, discoveryKey, discoveredRunId, signal),
             () => this.#forgetSignalAdmission(state, discoveryKey, discoveredRunId, signal),
-            hasFullLogicalMessageIdentity(target.ifIdle),
+            fullLogicalMessageIdentity,
             onIdleSignalDiscarded,
           );
           void accepted.catch(() => {});
@@ -6527,7 +6528,7 @@ export class AgentThreadStreamRuntime {
     // (the signal was queued onto the winning run, not run locally).
     const accepted: Promise<SendAgentSignalAccepted<OUTPUT>> = (async () => {
       const localClaimedOwner = state.claimedThreadOwners.get(reservedKey);
-      const rejectClaimedOwnerLineage = hasFullLogicalMessageIdentity(target.ifIdle);
+      const rejectClaimedOwnerLineage = fullLogicalMessageIdentity;
       if (localClaimedOwner && rejectClaimedOwnerLineage) {
         onIdleSignalDiscarded?.();
         cleanupDefiniteClaimedOwnerFailure();
@@ -6641,7 +6642,7 @@ export class AgentThreadStreamRuntime {
         // A full logical message must never be forwarded into the active run that won
         // this distributed wake race. The caller can retry through its owned-turn path;
         // publishing here would lose the response identity at the winning process.
-        if (activeBehavior === 'discard') {
+        if (activeBehavior === 'discard' || fullLogicalMessageIdentity) {
           onIdleSignalDiscarded?.();
           this.#forgetSignalAdmission(state, reservedKey, reservedRunId, signal);
           return { action: 'discard' as const };

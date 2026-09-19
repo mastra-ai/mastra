@@ -179,6 +179,30 @@ describe('MessageList logical message identity', () => {
     ]);
   });
 
+  it('does not merge a replacement response into a recalled assistant from another identity', () => {
+    const list = new MessageList({
+      threadId: 'thread-1',
+      logicalMessageIdentity: { input: 'input-current', response: 'response-current' },
+    });
+
+    list.add(
+      {
+        ...message('recalled-assistant', 'assistant', 'old answer'),
+        content: {
+          ...message('recalled-assistant', 'assistant', 'old answer').content,
+          metadata: { logicalMessageId: 'response-old' },
+        },
+      },
+      'memory',
+    );
+    list.add(message('recalled-assistant', 'assistant', 'new answer'), 'response');
+
+    const replacement = list.get.all.db().find(candidate => candidate.id === 'recalled-assistant');
+    expect(replacement?.content.parts).toHaveLength(1);
+    expect(replacement?.content.parts[0]).toMatchObject({ type: 'text', text: 'new answer' });
+    expect(getLogicalMessageId(replacement?.content.metadata)).toBe('response-current');
+  });
+
   it('rejects malformed identity values instead of admitting an untracked turn', () => {
     expect(
       () =>

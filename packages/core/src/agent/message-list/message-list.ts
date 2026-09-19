@@ -2143,18 +2143,18 @@ export class MessageList {
     // shouldMerge() only decides whether to append to the latest assistant message,
     // but replace-by-id can target an older sealed message elsewhere in the list.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
-    const latestLogicalMessageId = getLogicalMessageId(latestMessage?.content.metadata);
-    const crossesLogicalResponseBoundary =
+    const crossesLogicalResponseBoundary = (candidate: MastraDBMessage | undefined): boolean =>
       messageSource === 'response' &&
       messageV2.role === 'assistant' &&
-      isLatestFromMemory &&
+      candidate !== undefined &&
+      this.memoryMessages.has(candidate) &&
       incomingLogicalMessageId !== undefined &&
-      latestLogicalMessageId !== incomingLogicalMessageId;
+      getLogicalMessageId(candidate.content.metadata) !== incomingLogicalMessageId;
     const shouldMerge =
       options.merge !== false &&
       latestMessageIsAfterSealedBoundary &&
       !hasSealedReplacementTarget &&
-      !crossesLogicalResponseBoundary &&
+      !crossesLogicalResponseBoundary(latestMessage) &&
       MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
 
     if (shouldMerge && latestMessage) {
@@ -2241,6 +2241,7 @@ export class MessageList {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
           const shouldMergeIntoExisting =
             options.merge !== false &&
+            !crossesLogicalResponseBoundary(existingMessage) &&
             MessageMerger.shouldMerge(
               existingMessage,
               messageV2,
