@@ -149,7 +149,9 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
     prepareSendMessagesRequest({ messages }) {
       return {
         body: {
-          messages,
+          // With memory configured, send only the new message. Mastra loads the
+          // rest of the conversation from storage.
+          messages: [messages[messages.length - 1]],
           // Pass memory config
           memory: {
             thread: 'user-1',
@@ -161,3 +163,5 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
   }),
 })
 ```
+
+Without memory, send the full `messages` array as the chat route uses it as the request context.

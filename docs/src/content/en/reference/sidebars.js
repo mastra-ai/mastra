@@ -681,6 +681,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/agents-md-injector', label: 'AgentsMDInjector' },
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
+        { type: 'doc', id: 'processors/memory-input-filter', label: 'MemoryInputFilter' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },
         { type: 'doc', id: 'processors/pii-detector', label: 'PIIDetector' },
