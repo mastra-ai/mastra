@@ -13,7 +13,7 @@ import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
 import { AgentChannels } from '../channels';
 import type { ChannelProvider } from '../channels';
-import type { Classifier } from '../classifier';
+import type { Classifier, ClassifierQuestions } from '../classifier';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -5210,6 +5210,46 @@ export class Mastra<
       tools[key] = schemas;
       tools[tool.id] = schemas;
     }
+    const classifiers: NonNullable<WorkflowRegistryIndex['classifiers']> = {};
+    for (const [key, classifier] of Object.entries(this.listClassifiers() ?? {})) {
+      const questions = classifier.questions
+        ? Object.fromEntries(
+            Object.entries(classifier.questions as ClassifierQuestions).map(([questionId, question]) => [
+              questionId,
+              question.type === 'choice'
+                ? { type: 'choice' as const, choices: Object.keys(question.criteria) }
+                : question.type === 'score'
+                  ? { type: 'score' as const, min: 0, max: question.criteria.length - 1 }
+                  : { type: 'boolean' as const },
+            ]),
+          )
+        : undefined;
+      const valueProperties = questions
+        ? Object.fromEntries(
+            Object.entries(questions).map(([questionId, question]) => [
+              questionId,
+              question.type === 'choice'
+                ? { type: 'string', enum: question.choices }
+                : { type: 'number', ...(question.type === 'score' ? { minimum: question.min, maximum: question.max } : {}) },
+            ]),
+          )
+        : {};
+      const schemas = {
+        inputSchema: {},
+        outputSchema: {
+          type: 'object',
+          properties: {
+            values: { type: 'object', properties: valueProperties, required: Object.keys(valueProperties) },
+            answers: { type: 'object' },
+            usage: { type: 'object' },
+          },
+          required: ['values', 'answers', 'usage'],
+        },
+        questions,
+      };
+      classifiers[key] = schemas;
+      classifiers[classifier.id] = schemas;
+    }
     const workflows: Record<string, WorkflowRegistrySchemas> = {};
     for (const [key, workflow] of Object.entries(this.#workflows as Record<string, AnyWorkflow>)) {
       const schemas: WorkflowRegistrySchemas = {
@@ -5219,7 +5259,7 @@ export class Mastra<
       workflows[key] = schemas;
       workflows[workflow.id] = schemas;
     }
-    return { agents, tools, workflows };
+    return { agents, tools, classifiers, workflows };
   }
 
   /**

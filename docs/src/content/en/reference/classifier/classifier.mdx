@@ -263,10 +263,30 @@ mastra.getClassifierById('safety')
 mastra.listClassifiers()
 ```
 
-A registered classifier can be referenced by string in [`ClassifierProcessor`](/reference/processors/classifier-processor).
+A registered classifier can be referenced by string in [`ClassifierProcessor`](/reference/processors/classifier-processor) or a workflow.
+
+## Using classifiers in workflows
+
+A classifier with constructor-configured questions can be added to a workflow with [`createStep(classifier)`](/reference/workflows/step) or [`.classifier()`](/reference/workflows/workflow-methods/classifier). Workflow output contains a routing-oriented `values` map, complete `answers`, and normalized `usage`.
+
+```typescript
+const workflow = createWorkflow({
+  id: 'ticket-triage',
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.any(),
+})
+  .classifier('safety', {
+    state: { path: 'inputData.message' },
+  })
+  .commit()
+```
+
+The workflow adapter doesn't include warnings, raw provider responses, headers, or provider metadata in step output. Use direct `evaluate()` calls or classifier observability when you need that provider-level detail.
 
 ## Related
 
+- [Workflow.classifier()](/reference/workflows/workflow-methods/classifier)
+- [Step class](/reference/workflows/step)
 - [ClassifierProcessor](/reference/processors/classifier-processor)
 - [getClassifier()](/reference/core/getClassifier)
 - [getClassifierById()](/reference/core/getClassifierById)

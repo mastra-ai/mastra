@@ -48,12 +48,24 @@ const agentTextOutputSchema: JsonSchema = {
   required: ['text'],
 };
 
+const classifierOutputSchema: JsonSchema = {
+  type: 'object',
+  properties: {
+    values: { type: 'object', additionalProperties: true },
+    answers: { type: 'object', additionalProperties: true },
+    usage: { type: 'object', additionalProperties: true },
+  },
+  required: ['values', 'answers', 'usage'],
+};
+
 function inputSchemaOf(entry: SerializedSingleStepEntry, index: WorkflowRegistryIndex): JsonSchema | undefined {
   switch (entry.type) {
     case 'agent':
       return index.agents?.[entry.agentId]?.inputSchema ?? agentInputSchema;
     case 'tool':
       return index.tools?.[entry.toolId]?.inputSchema;
+    case 'classifier':
+      return undefined;
     case 'workflow':
       return index.workflows?.[entry.workflowId]?.inputSchema;
     case 'mapping':
@@ -68,6 +80,8 @@ function outputSchemaOf(entry: SerializedSingleStepEntry, index: WorkflowRegistr
       return entry.outputSchema ?? index.agents?.[entry.agentId]?.outputSchema ?? agentTextOutputSchema;
     case 'tool':
       return index.tools?.[entry.toolId]?.outputSchema;
+    case 'classifier':
+      return index.classifiers?.[entry.classifierId]?.outputSchema ?? classifierOutputSchema;
     case 'workflow':
       return index.workflows?.[entry.workflowId]?.outputSchema;
     case 'mapping':
@@ -211,6 +225,7 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
       case 'step':
       case 'agent':
       case 'tool':
+      case 'classifier':
       case 'mapping':
       case 'workflow':
         current = evalLeaf(entry, path, current, false);

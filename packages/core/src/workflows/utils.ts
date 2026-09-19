@@ -292,11 +292,11 @@ export function createDeprecationProxy<T extends Record<string, any>>(
   });
 }
 
-const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'mapping'] as const;
+const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'classifier', 'mapping'] as const;
 
 /**
  * Whether an entry is a "single step-like" entry: a plain user step or one of the
- * declarative variants (agent / tool / mapping) that resolve to exactly one step.
+ * declarative variants (agent / tool / classifier / mapping) that resolve to exactly one step.
  */
 export function isSingleStepEntry(entry: StepFlowEntry): entry is SingleStepEntry {
   return (SINGLE_STEP_TYPES as readonly string[]).includes(entry.type);

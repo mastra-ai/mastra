@@ -1,0 +1,115 @@
+---
+title: "Reference: Workflow.classifier() | Workflows"
+description: "Use Workflow.classifier() to evaluate workflow data with a configured classifier and return typed routing values, complete answers, and token usage."
+packages:
+  - "@mastra/core"
+---
+
+# Workflow\.classifier()
+
+The `.classifier()` method adds a configured [`Classifier`](/reference/classifier/classifier) as a declarative workflow step. It returns a JSON-safe `{ values, answers, usage }` object that can be consumed by later steps and existing control-flow methods such as [`.branch()`](/reference/workflows/workflow-methods/branch).
+
+## Usage example
+
+```typescript filename="src/mastra/workflows/ticket-triage.ts"
+const workflow = createWorkflow({
+  id: 'ticket-triage',
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.any(),
+})
+  .classifier(router, {
+    state: ({ inputData }) => inputData.message,
+  })
+  .branch([
+    [async ({ inputData }) => inputData.values.route === 'billing', billingStep],
+    [async ({ inputData }) => inputData.values.route === 'support', supportStep],
+    [async () => true, fallbackStep],
+  ])
+  .commit()
+```
+
+When a classifier instance is passed, question keys and choice literals are inferred in downstream steps. The classifier must contain constructor-configured questions.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'classifierOrId',
+    type: 'Classifier<QUESTIONS> | string',
+    description:
+      'A configured classifier instance, or the ID of a classifier registered on the Mastra instance. String references are resolved at execution time.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'ClassifierStepOptions',
+    description:
+      'Classifier and step options, including state selection, model-call maxRetries, providerOptions, workflow retries, metadata, and an optional id.',
+    isOptional: true,
+  },
+  {
+    name: 'stepOptions',
+    type: '{ id?: string }',
+    description:
+      "The step's call-site ID within the workflow. Defaults to the classifier ID. This value takes precedence over options.id.",
+    isOptional: true,
+  },
+]}
+/>
+
+## State selection
+
+If `state` is omitted, the classifier evaluates the complete `inputData`. A live workflow can select state with a function:
+
+```typescript
+workflow.classifier(router, {
+  state: ({ inputData }) => inputData.message,
+})
+```
+
+For a workflow that must be serialized, use a path mapping:
+
+```typescript
+workflow.classifier('ticket-router', {
+  state: { path: 'inputData.message' },
+})
+```
+
+Serializable paths can start with `inputData`, `initData`, `state`, or `stepResults`. A function selector can't be persisted and causes serialization to fail rather than changing the workflow's behavior.
+
+## Output
+
+- `values.<question>` provides the routing-oriented value: a selected choice literal, numeric score, or boolean `P(true)` probability.
+- `answers.<question>` preserves the complete classifier evidence, including distributions when provided.
+- `usage` contains normalized token usage.
+
+Boolean values aren't thresholded. Apply application policy explicitly in a later step or branch condition.
+
+## Retries and errors
+
+`maxRetries` controls retries of the classifier's model call. `retries` controls retries of the workflow step. The workflow abort signal is forwarded to the classifier. Classifier errors fail the step; `.classifier()` doesn't apply fail-open behavior.
+
+## Referencing a classifier by ID
+
+Register the classifier on the same `Mastra` instance that runs the workflow:
+
+```typescript filename="src/mastra/index.ts"
+export const mastra = new Mastra({
+  classifiers: { router },
+  workflows: { workflow },
+})
+```
+
+For a typed string reference, supply the configured question type explicitly:
+
+```typescript
+workflow.classifier<typeof router.questions>('router')
+```
+
+## Related
+
+- [Classifier](/reference/classifier/classifier)
+- [Step class](/reference/workflows/step)
+- [Workflow.branch()](/reference/workflows/workflow-methods/branch)
+- [Dynamic workflow definition](/reference/workflows/dynamic-workflow-definition)

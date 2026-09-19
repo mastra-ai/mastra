@@ -4,6 +4,8 @@ import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent/agent';
+import { Classifier } from '../classifier';
+import type { ClassifierQuestions } from '../classifier';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { isAgentCompatible } from '../agent/subagent';
@@ -80,8 +82,9 @@ import type {
   Step,
   SuspendOptions,
 } from './step';
-import { createMappingStep, createStepFromAgent, createStepFromTool } from './step-factories';
-import type { AgentStepOptions } from './step-factories';
+import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
+import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
+import type { ClassifierStepOutput } from './entry-executors';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -129,8 +132,9 @@ import {
 // Re-exported so the public `@mastra/core/workflows` surface (and existing
 // `./workflow` imports) are unchanged; the factories live in `step-factories.ts`
 // so the execution engines can use them without importing this module.
-export { createMappingStep, createStepFromAgent, createStepFromTool } from './step-factories';
-export type { AgentStepOptions } from './step-factories';
+export { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
+export type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
+export type { ClassifierStepOutput, ClassifierStepValues } from './entry-executors';
 
 /**
  * Extract the JSON-safe subset of an agent-step options bag for the in-process
@@ -397,6 +401,12 @@ export function createStep<
   },
 ): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
+/** Creates a workflow step from a configured Classifier. */
+export function createStep<const QUESTIONS extends ClassifierQuestions, TStepInput = unknown>(
+  classifier: Classifier<QUESTIONS>,
+  options?: ClassifierStepOptions<TStepInput>,
+): Step<string, unknown, TStepInput, ClassifierStepOutput<QUESTIONS>, unknown, unknown, DefaultEngineType>;
+
 /**
  * Creates a step from a Processor - wraps a Processor as a workflow step
  * Note: We require at least one processor method to distinguish from StepParams
@@ -462,6 +472,10 @@ export function createStep<
 export function createStep(params: any, agentOrToolOptions?: any): Step<any, any, any, any, any, any, any> {
   // Type assertions are needed because each branch returns a different Step type,
   // but the overloads ensure type safety for consumers
+  if (params instanceof Classifier) {
+    return createStepFromClassifier(params, agentOrToolOptions);
+  }
+
   if (isAgentCompatible(params)) {
     return createStepFromAgent(params, agentOrToolOptions);
   }
@@ -568,6 +582,8 @@ type StepWithRefMetadata = Step<string, any, any, any, any, any, any, any> & {
   __agentOptions?: unknown;
   __toolRef?: { id: string };
   __toolOptions?: unknown;
+  __classifierRef?: Classifier<any>;
+  __classifierOptions?: ClassifierStepOptions<any>;
 };
 
 /**
@@ -588,6 +604,16 @@ function toSingleStepEntry(step: StepWithRefMetadata): SingleStepEntry {
   }
   if (step?.component === 'TOOL' && step.__toolRef) {
     return { type: 'tool', id: step.id, toolId: step.__toolRef.id, tool: step.__toolRef, options: step.__toolOptions };
+  }
+  if (step?.component === 'CLASSIFIER' && step.__classifierRef) {
+    return {
+      type: 'classifier',
+      id: step.id,
+      classifierId: step.__classifierRef.id,
+      classifier: step.__classifierRef,
+      state: step.__classifierOptions?.state,
+      options: step.__classifierOptions,
+    };
   }
   return { type: 'step', step: step as unknown as Step };
 }
@@ -611,6 +637,15 @@ function toSerializedSingleStepEntry(step: StepWithRefMetadata): SerializedSingl
       description: step.description,
       ...serializeToolStepFields(step.__toolOptions),
     };
+  }
+  if (step?.component === 'CLASSIFIER' && step.__classifierRef) {
+    return {
+      type: 'classifier',
+      id: step.id,
+      classifierId: step.__classifierRef.id,
+      state: step.__classifierOptions?.state,
+      options: step.__classifierOptions,
+    } as SerializedSingleStepEntry;
   }
   if ((step as any)?.component === 'WORKFLOW') {
     // Prefer the public getter; fall back to the protected field / legacy
@@ -1892,6 +1927,9 @@ export class Workflow<
         case 'tool':
           this.steps[entry.id] = { id: entry.id, component: 'TOOL' } as any;
           return;
+        case 'classifier':
+          this.steps[entry.id] = { id: entry.id, component: 'CLASSIFIER' } as any;
+          return;
         case 'mapping':
           this.steps[entry.id] = createMappingStep(entry.id, entry.mapConfig as MappingConfig) as any;
           return;
@@ -1909,6 +1947,7 @@ export class Workflow<
       case 'step':
       case 'agent':
       case 'tool':
+      case 'classifier':
       case 'mapping':
         register(live);
         return;
@@ -1966,6 +2005,55 @@ export class Workflow<
       TSchemaOut,
       TRequestContext
     >;
+  }
+
+  /** Adds a configured classifier as a declarative workflow step. */
+  classifier<const QUESTIONS extends ClassifierQuestions>(
+    classifier: Classifier<QUESTIONS>,
+    options?: ClassifierStepOptions<TPrevSchema>,
+    stepOptions?: { id?: string },
+  ): Workflow<
+    TEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    ClassifierStepOutput<QUESTIONS>,
+    TRequestContext
+  >;
+  classifier<const QUESTIONS extends ClassifierQuestions = ClassifierQuestions>(
+    classifierId: string,
+    options?: ClassifierStepOptions<TPrevSchema>,
+    stepOptions?: { id?: string },
+  ): Workflow<
+    TEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    ClassifierStepOutput<QUESTIONS>,
+    TRequestContext
+  >;
+  classifier(classifierOrId: Classifier<any> | string, options?: ClassifierStepOptions<any>, stepOptions?: { id?: string }): any {
+    const isId = typeof classifierOrId === 'string';
+    const classifierId = isId ? classifierOrId : classifierOrId.id;
+    const id = stepOptions?.id ?? options?.id ?? classifierId;
+    const entry = {
+      type: 'classifier' as const,
+      id,
+      classifierId,
+      classifier: isId ? undefined : classifierOrId,
+      state: options?.state,
+      options,
+    };
+    this.stepFlow.push(entry as any);
+    this.serializedStepFlow.push({ type: 'classifier', id, classifierId, state: options?.state, options } as any);
+    this.steps[id] = isId
+      ? ({ id, component: 'CLASSIFIER' } as any)
+      : ({ ...createStepFromClassifier(classifierOrId, { ...options, id }), id } as any);
+    return this as any;
   }
 
   /**

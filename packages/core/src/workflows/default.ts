@@ -31,7 +31,7 @@ import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepU
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
-import { createMappingStep, createStepFromAgent, createStepFromTool } from './step-factories';
+import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type {
   FormattedWorkflowResult,
   DefaultEngineType,
@@ -63,6 +63,9 @@ export type ExecuteAgentParams = Omit<ExecuteStepParams, 'step'> & {
   entry: Extract<SingleStepEntry, { type: 'agent' }>;
 };
 export type ExecuteToolParams = Omit<ExecuteStepParams, 'step'> & { entry: Extract<SingleStepEntry, { type: 'tool' }> };
+export type ExecuteClassifierParams = Omit<ExecuteStepParams, 'step'> & {
+  entry: Extract<SingleStepEntry, { type: 'classifier' }>;
+};
 export type ExecuteMappingParams = Omit<ExecuteStepParams, 'step'> & {
   entry: Extract<SingleStepEntry, { type: 'mapping' }>;
 };
@@ -1134,7 +1137,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return stepResults.input;
     } else if (step.type === 'step') {
       return stepResults[step.step.id]?.output;
-    } else if (step.type === 'agent' || step.type === 'tool' || step.type === 'mapping') {
+    } else if (
+      step.type === 'agent' ||
+      step.type === 'tool' ||
+      step.type === 'classifier' ||
+      step.type === 'mapping'
+    ) {
       return stepResults[step.id]?.output;
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       return stepResults[step.id]?.output;
@@ -1196,6 +1204,33 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       );
     }
     return this.executeStep({ ...rest, step: { ...createStepFromTool(tool as any, entry.options), id: entry.id } });
+  }
+
+  async executeClassifier(params: ExecuteClassifierParams): Promise<StepExecutionResult> {
+    const { entry, ...rest } = params;
+    let classifier = entry.classifier;
+    if (!classifier) {
+      try {
+        classifier = this.mastra?.getClassifierById(entry.classifierId);
+      } catch {
+        throw new Error(
+          `Classifier '${entry.classifierId}' not found for workflow step '${entry.id}'. Register it with Mastra or pass the classifier instance directly.`,
+        );
+      }
+    }
+    if (!classifier) {
+      throw new Error(
+        `Classifier '${entry.classifierId}' not found for workflow step '${entry.id}'. Register it with Mastra or pass the classifier instance directly.`,
+      );
+    }
+    return this.executeStep({
+      ...rest,
+      step: createStepFromClassifier(classifier as any, {
+        ...entry.options,
+        id: entry.id,
+        state: entry.state as any,
+      }),
+    });
   }
 
   /**
