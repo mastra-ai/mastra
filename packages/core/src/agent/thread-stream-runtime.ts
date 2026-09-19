@@ -6403,6 +6403,23 @@ export class AgentThreadStreamRuntime {
         };
       }
 
+      // A full logical message owns a response stream and cannot wait behind
+      // a foreign reservation: this branch would otherwise report `deliver`
+      // while the queued idle signal later starts with its original response
+      // identity after the active owner finishes.
+      if (fullLogicalMessageIdentity) {
+        onIdleSignalDiscarded?.();
+        return acceptSignal(
+          {
+            signal,
+            runId,
+            accepted: Promise.resolve({ action: 'discard' as const }),
+          },
+          runId,
+          false,
+        );
+      }
+
       const disposition = this.#rememberSignalPayloadForRun(state, key, runId, signal);
       if (disposition.disposition === 'conflict') {
         throw new Error(`Agent signal id "${signal.id}" was already accepted with a different payload`);

@@ -20,6 +20,7 @@ import { InMemoryDB } from '../../storage/domains/inmemory-db';
 
 import { buildFakeOutput, extractSignalContents } from './__test-utils__/fake-output';
 import { MockAgent } from './__test-utils__/mock-agent';
+import { setupHarness } from './__test-utils__/setup';
 import {
   HarnessAbortedError,
   HarnessAdmissionConflictError,
@@ -380,6 +381,51 @@ describe('Session.message() — default path', () => {
       }),
     ).rejects.toBeInstanceOf(HarnessAdmissionConflictError);
     expect(agent.calls).toHaveLength(1);
+  });
+
+  it('aborts an unresolved native logical-message dispatch without failing its admission', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseRun!: () => void;
+    let nativeAbortObserved!: () => void;
+    const nativeAbort = new Promise<void>(resolve => {
+      nativeAbortObserved = resolve;
+    });
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseRun = resolve;
+      }),
+      onAbort: () => nativeAbortObserved(),
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const realSendSignal = agent.sendSignal.bind(agent);
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal;
+      const dispatched = realSendSignal(signal, target);
+      return { ...dispatched, accepted: new Promise<never>(() => {}) };
+    }) as typeof agent.sendSignal;
+
+    vi.useFakeTimers();
+    try {
+      const pending = session.message({
+        content: 'wait for native acceptance',
+        admissionId: 'message-native-timeout',
+        logicalMessageIdentity: { input: 'timeout-input', response: 'timeout-response' },
+      });
+      const rejection = expect(pending).rejects.toMatchObject({ name: 'HarnessValidationError' });
+      await vi.advanceTimersByTimeAsync(30_001);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await expect(nativeAbort).resolves.toBeUndefined();
+    const identity = (session as any)._messageAdmissionIdentity('message-native-timeout') as { signalId: string };
+    await expect(session.lookupMessageResult(identity.signalId)).resolves.toMatchObject({ status: 'pending' });
+    expect(session.isRunning()).toBe(false);
+    releaseRun();
   });
 
   it('keeps an omitted logical identity out of direct dispatch after caller mutation', async () => {

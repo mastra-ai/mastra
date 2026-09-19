@@ -7912,6 +7912,18 @@ export class Session {
     } catch (err) {
       let thrown = err;
       if (
+        err instanceof NativeSignalAcceptanceTimeoutError &&
+        nativeDispatchStarted &&
+        !nativeAccepted &&
+        !nativeRejected
+      ) {
+        // `sendSignal()` may already have started the native stream when its
+        // acceptance acknowledgement times out. Abort that stream before
+        // dropping this caller's ownership, but leave the durable admission
+        // pending so a later retry can recover the ambiguous dispatch.
+        turnAbortController.abort(err);
+      }
+      if (
         admissionIdentity !== undefined &&
         admissionHash !== undefined &&
         (!nativeDispatchStarted || nativeAccepted || nativeRejected)

@@ -8892,6 +8892,49 @@ describe('Agent signals', () => {
     expect(agent.stream).not.toHaveBeenCalled();
   });
 
+  it('discards a full logical message behind a foreign reservation instead of queueing it', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'foreign-reservation-lineage-user', threadId: 'foreign-reservation-lineage-thread' };
+    const release = runtime.reserveRun(
+      {
+        runId: 'foreign-reservation-lineage-run',
+        memory: { resource: target.resourceId, thread: target.threadId },
+      } as any,
+      pubsub,
+      'foreign-owner-agent',
+    );
+    const stream = vi.fn();
+    let idleSignalDiscarded = false;
+    const sender = { id: 'lineage-sender-agent', stream } as any;
+
+    try {
+      const result = runtime.sendSignal(
+        sender,
+        { id: 'foreign-reservation-lineage-signal', type: 'user-message', contents: 'preserve response identity' },
+        {
+          ...target,
+          ifActive: { behavior: 'discard' },
+          ifIdle: {
+            behavior: 'wake',
+            streamOptions: { logicalMessageIdentity: { input: 'foreign-input', response: 'foreign-response' } },
+            _onThreadStreamSignalDiscarded: () => {
+              idleSignalDiscarded = true;
+            },
+          },
+        } as any,
+        pubsub,
+      );
+
+      await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+      expect(idleSignalDiscarded).toBe(true);
+      expect(stream).not.toHaveBeenCalled();
+      expect(runtime.drainPendingSignals('foreign-reservation-lineage-run', pubsub)).toEqual([]);
+    } finally {
+      release?.();
+    }
+  });
+
   it('reuses an exact full logical signal on its pending run after a newer admission attempt', async () => {
     const pubsub = new EventEmitterPubSub();
     const runtime = new AgentThreadStreamRuntime();
