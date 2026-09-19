@@ -19,6 +19,9 @@ export {
   type ModelRouterMapOptions,
   type ModelRouterSelectOptions,
   type ModelRouterSelect,
+  type ModelRouterChoicesOptions,
+  type ModelChoice,
+  type ModelRouteDecision,
   type RoutableModel,
 } from './model-router';
 export {

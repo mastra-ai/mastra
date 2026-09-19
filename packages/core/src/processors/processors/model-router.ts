@@ -1,6 +1,7 @@
 import type { SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
 import type { MastraDBMessage } from '../../agent/message-list';
-import type { Classifier, ClassifierAnswers, ClassifierQuestions, ClassifierResult } from '../../classifier';
+import { Classifier } from '../../classifier';
+import type { ClassifierAnswers, ClassifierQuestions, ClassifierResult } from '../../classifier';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
 import { resolveObservabilityContext } from '../../observability';
@@ -21,11 +22,42 @@ export type ModelRouterSelect<Q extends ClassifierQuestions> = (
   context: { result: ClassifierResult<Q> },
 ) => RoutableModel | undefined | Promise<RoutableModel | undefined>;
 
-interface ModelRouterBaseOptions {
+/** One routable model, declared together with the criteria that should select it. */
+export interface ModelChoice {
+  /** The model to use when this choice is selected. */
+  model: RoutableModel;
+  /** What kind of request this model should handle. This is the text the classifier judges against. */
+  criteria: string;
+  /**
+   * Name for this choice in traces and in {@link ModelRouterBaseOptions.onRoute}.
+   * Defaults to the model id, so it only needs setting when the same model appears twice.
+   */
+  name?: string;
+}
+
+/** The decision the router reached for a request. */
+export interface ModelRouteDecision {
+  /** The model that will be used, or `undefined` when the router abstained. */
+  model?: RoutableModel;
+  /** The selected choice name, or `undefined` when the router abstained. */
+  choice?: string;
+  /** Confidence in the selected choice, when the evaluation model returned a distribution. */
+  probability?: number;
+  /** Why the router abstained, when it did. */
+  abstained?: 'below-threshold' | 'no-text' | 'error' | 'no-model-for-choice';
+}
+
+interface ModelRouterCommonOptions {
   /** Identifier used in errors and logs. Defaults to `model-router`. */
   id?: string;
-  /** A configured Classifier, or the id of one registered with Mastra. */
-  classifier: Classifier<any> | string;
+  /**
+   * Called once per request with the decision, including when the router abstains.
+   *
+   * The router is otherwise silent, so this is how a routing decision becomes visible to
+   * logs and metrics. It must not throw; errors from it are swallowed so that logging
+   * cannot fail a request.
+   */
+  onRoute?: (decision: ModelRouteDecision) => void | Promise<void>;
   /** Provider options forwarded to `Classifier.evaluate()`. */
   providerOptions?: SharedV4ProviderOptions;
   /**
@@ -43,6 +75,55 @@ interface ModelRouterBaseOptions {
    * steps to escape a wrong decision, and accept that it saves comparatively little.
    */
   scope?: 'run' | 'first-step';
+}
+
+interface ModelRouterBaseOptions extends ModelRouterCommonOptions {
+  /** A configured Classifier, or the id of one registered with Mastra. */
+  classifier: Classifier<any> | string;
+}
+
+/**
+ * The default objective given to the classifier built by the `choices` form.
+ *
+ * Criteria describe what each model is for, but without an objective the classifier has no
+ * instruction to prefer a cheaper one, so this states the economic goal explicitly.
+ */
+const DEFAULT_ROUTING_INSTRUCTIONS =
+  'Choose the least capable model that can handle this request correctly and safely. ' +
+  'Prefer a cheaper model when the request is straightforward, and only choose a more ' +
+  'capable model when the request genuinely requires it.';
+
+/**
+ * Declare each model together with the requests it should handle, and let the processor
+ * build the classifier for you.
+ *
+ * This is the form to reach for first. The `classifier` forms exist for when you want to
+ * reuse one registered classifier across several places, or route on more than one question.
+ */
+export interface ModelRouterChoicesOptions extends ModelRouterCommonOptions {
+  /** The evaluation model used to make the routing decision. */
+  model: ConstructorParameters<typeof Classifier>[0]['model'];
+  /**
+   * The models to route between, each with the criteria that should select it.
+   *
+   * Order is not significant, and there is no implicit ranking: the classifier chooses
+   * purely on the criteria text, so make each one describe a distinguishable kind of request.
+   */
+  choices: ModelChoice[];
+  /** Overrides the default objective given to the classifier. */
+  instructions?: string;
+  /**
+   * Minimum confidence in the selected choice before its model is applied.
+   *
+   * Omit this to route on the selected choice alone. Set it and the router abstains when
+   * confidence is below the threshold, and also when the evaluation model returns no
+   * distribution at all, because a threshold that cannot be evaluated must not silently pass.
+   */
+  minProbability?: number;
+  classifier?: never;
+  question?: never;
+  models?: never;
+  select?: never;
 }
 
 /**
@@ -80,8 +161,21 @@ export interface ModelRouterSelectOptions<Q extends ClassifierQuestions> extends
 }
 
 export type ModelRouterProcessorOptions<Q extends ClassifierQuestions = ClassifierQuestions> =
+  | ModelRouterChoicesOptions
   | ModelRouterMapOptions<Q>
   | ModelRouterSelectOptions<Q>;
+
+/** The question name used by the classifier built from `choices`. */
+const CHOICES_QUESTION = 'model';
+
+function isChoicesForm(options: ModelRouterProcessorOptions<any>): options is ModelRouterChoicesOptions {
+  return Array.isArray((options as ModelRouterChoicesOptions).choices);
+}
+
+function modelLabel(model: RoutableModel): string {
+  if (typeof model === 'string') return model;
+  return (model as any)?.modelId ?? 'model';
+}
 
 const STATE_KEY = '__modelRouter';
 
@@ -106,7 +200,8 @@ export class ModelRouterProcessor<Q extends ClassifierQuestions = ClassifierQues
   readonly name = 'model-router';
 
   readonly id: string;
-  private classifierOrId: Classifier<any> | string;
+  private classifierOrId!: Classifier<any> | string;
+  private onRoute?: (decision: ModelRouteDecision) => void | Promise<void>;
   private resolvedClassifier?: Classifier<any>;
   private providerOptions?: SharedV4ProviderOptions;
   private question?: string;
@@ -118,9 +213,20 @@ export class ModelRouterProcessor<Q extends ClassifierQuestions = ClassifierQues
 
   constructor(options: ModelRouterProcessorOptions<Q>) {
     this.id = options.id ?? 'model-router';
-    this.classifierOrId = options.classifier;
     this.providerOptions = options.providerOptions;
     this.scope = options.scope ?? 'run';
+    this.onRoute = options.onRoute;
+
+    if (isChoicesForm(options)) {
+      const { classifier, models } = this.buildFromChoices(options);
+      this.classifierOrId = classifier;
+      this.question = CHOICES_QUESTION;
+      this.models = models;
+      this.minProbability = options.minProbability;
+      return;
+    }
+
+    this.classifierOrId = options.classifier;
 
     if (options.select) {
       this.select = options.select;
@@ -158,6 +264,79 @@ export class ModelRouterProcessor<Q extends ClassifierQuestions = ClassifierQues
     this.mastra = mastra;
   }
 
+  /**
+   * Turns co-located choices into the classifier and criterion-to-model map that the
+   * rest of the processor already works in terms of.
+   */
+  private buildFromChoices(options: ModelRouterChoicesOptions): {
+    classifier: Classifier<any>;
+    models: Record<string, RoutableModel>;
+  } {
+    if (!options.choices || options.choices.length < 2) {
+      throw new MastraError({
+        id: 'MODEL_ROUTER_INSUFFICIENT_CHOICES',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `ModelRouterProcessor '${this.id}' needs at least two choices to route between, got ${options.choices?.length ?? 0}.`,
+      });
+    }
+
+    const criteria: Record<string, string> = {};
+    const models: Record<string, RoutableModel> = {};
+
+    for (const choice of options.choices) {
+      const name = choice.name ?? modelLabel(choice.model);
+
+      if (models[name]) {
+        throw new MastraError({
+          id: 'MODEL_ROUTER_DUPLICATE_CHOICE',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `ModelRouterProcessor '${this.id}' has two choices named '${name}'. Choices are named after their model, so give one of them an explicit 'name' to tell them apart.`,
+        });
+      }
+
+      if (!choice.criteria?.trim()) {
+        throw new MastraError({
+          id: 'MODEL_ROUTER_MISSING_CRITERIA',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `ModelRouterProcessor '${this.id}' choice '${name}' has no criteria. The classifier selects purely on this text, so it cannot be empty.`,
+        });
+      }
+
+      criteria[name] = choice.criteria;
+      models[name] = choice.model;
+    }
+
+    const classifier = new Classifier({
+      id: `${this.id}-classifier`,
+      model: options.model,
+      questions: {
+        [CHOICES_QUESTION]: {
+          type: 'choice',
+          instructions: options.instructions ?? DEFAULT_ROUTING_INSTRUCTIONS,
+          criteria,
+        },
+      },
+    });
+
+    return { classifier, models };
+  }
+
+  /** Reports the decision without letting a logging failure break the request. */
+  private async report(decision: ModelRouteDecision): Promise<void> {
+    if (!this.onRoute) return;
+    try {
+      await this.onRoute(decision);
+    } catch (error) {
+      console.warn(
+        `[ModelRouterProcessor:${this.id}] onRoute callback threw, ignoring:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
   async processInput(args: ProcessInputArgs): Promise<MastraDBMessage[]> {
     const { messages, state, ...rest } = args;
     const routerState = (state[STATE_KEY] ??= { decided: false }) as RouterState;
@@ -170,6 +349,7 @@ export class ModelRouterProcessor<Q extends ClassifierQuestions = ClassifierQues
 
     const text = latestUserText(messages);
     if (!text) {
+      await this.report({ abstained: 'no-text' });
       return messages;
     }
 
@@ -183,7 +363,9 @@ export class ModelRouterProcessor<Q extends ClassifierQuestions = ClassifierQues
         fn: () => classifier.evaluate({ state: { request: text }, providerOptions: this.providerOptions }),
       })) as ClassifierResult<Q>;
 
-      routerState.model = await this.decide(result);
+      const decision = await this.decide(result);
+      routerState.model = decision.model;
+      await this.report(decision);
     } catch (error) {
       // Fail open: routing is an optimisation, so a router failure must not fail the request.
       // The agent's configured model is used instead.
@@ -191,6 +373,7 @@ export class ModelRouterProcessor<Q extends ClassifierQuestions = ClassifierQues
         `[ModelRouterProcessor:${this.id}] Classifier evaluation failed, using the configured model:`,
         error instanceof Error ? error.message : error,
       );
+      await this.report({ abstained: 'error' });
     }
 
     return messages;
@@ -212,25 +395,34 @@ export class ModelRouterProcessor<Q extends ClassifierQuestions = ClassifierQues
     return { model: routerState.model };
   }
 
-  private async decide(result: ClassifierResult<Q>): Promise<RoutableModel | undefined> {
+  private async decide(result: ClassifierResult<Q>): Promise<ModelRouteDecision> {
     if (this.select) {
-      return await this.select(result.answers, { result });
+      return { model: await this.select(result.answers, { result }) };
     }
 
     const answer = (result.answers as Record<string, any>)[this.question!];
     if (!answer || typeof answer.choice !== 'string') {
-      return undefined;
+      return { abstained: 'error' };
     }
+
+    // A choice answer carries a distribution over the criteria, so the confidence in
+    // this decision is the mass on the criterion that was actually selected.
+    const probability = answer.probabilities?.[answer.choice];
 
     if (this.minProbability !== undefined) {
       // Fail closed. A threshold that cannot be evaluated, because the model returned
-      // no probability, must abstain rather than quietly route on no evidence.
-      if (typeof answer.probability !== 'number' || answer.probability < this.minProbability) {
-        return undefined;
+      // no distribution, must abstain rather than quietly route on no evidence.
+      if (typeof probability !== 'number' || probability < this.minProbability) {
+        return { choice: answer.choice, probability, abstained: 'below-threshold' };
       }
     }
 
-    return this.models![answer.choice];
+    const model = this.models![answer.choice];
+    if (!model) {
+      return { choice: answer.choice, probability, abstained: 'no-model-for-choice' };
+    }
+
+    return { model, choice: answer.choice, probability };
   }
 
   private resolveClassifier(): Classifier<any> {

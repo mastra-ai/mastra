@@ -7,30 +7,13 @@ packages:
 
 # ModelRouterProcessor
 
-`ModelRouterProcessor` classifies the incoming request once, then overrides the model for the agent's first step. It is intended for cost routing: keep a capable model as the agent's configured default and let the router downgrade to a cheaper model when a [Classifier](/reference/classifier/classifier) is confident the request is simple.
+`ModelRouterProcessor` classifies the incoming request once, then overrides which model serves the run. It is intended for cost routing: keep a capable model as the agent's configured default and let the router downgrade to a cheaper model when an evaluation model is confident the request is simple.
 
-By default the decision applies to every step of the run. Set `scope: 'first-step'` to route only the opening call and leave later steps on the agent's configured model, which lets a run that turns out harder than its first message suggested escape the decision. That sounds safer but saves much less, for the reason given under [Routing scope](#routing-scope).
+Describe each model alongside the kind of request it should handle. The processor builds the [Classifier](/reference/classifier/classifier) for you:
 
 ```typescript
-import { Classifier } from '@mastra/core/classifier'
 import { Agent } from '@mastra/core/agent'
 import { ModelRouterProcessor } from '@mastra/core/processors'
-
-const triage = new Classifier({
-  id: 'triage',
-  model,
-  questions: {
-    complexity: {
-      type: 'choice',
-      criteria: {
-        trivial:
-          'Answerable in one or two sentences from general knowledge, with no reasoning steps',
-        complex:
-          'Requires multi-step reasoning, planning, weighing trade-offs, or careful judgment',
-      },
-    },
-  },
-})
 
 export const agent = new Agent({
   name: 'support-agent',
@@ -38,34 +21,75 @@ export const agent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [
     new ModelRouterProcessor({
-      classifier: triage,
-      question: 'complexity',
-      models: {
-        trivial: '__GATEWAY_OPENAI_MODEL_MINI__',
-        complex: '__GATEWAY_OPENAI_MODEL__',
-      },
+      model,
+      choices: [
+        {
+          model: '__GATEWAY_OPENAI_MODEL_MINI__',
+          criteria:
+            'Answerable in one or two sentences from general knowledge, with no reasoning steps',
+        },
+        {
+          model: '__GATEWAY_OPENAI_MODEL__',
+          criteria:
+            'Requires multi-step reasoning, planning, weighing trade-offs, or careful judgment',
+        },
+      ],
     }),
   ],
 })
 ```
 
+Each choice names a model and the requests it should take. Every request is classified against those descriptions and served by the model that wins.
+
+By default the decision applies to every step of the run. Set `scope: 'first-step'` to route only the opening call and leave later steps on the agent's configured model, which lets a run that turns out harder than its first message suggested escape the decision. That sounds safer but saves much less, for the reason given under [Routing scope](#routing-scope).
+
 ## Constructor parameters
+
+`choices` and `classifier` are alternative ways to describe the same decision. Use `choices` unless you need a classifier you already own.
 
 <PropertiesTable
   content={[
   {
+    name: 'choices',
+    type: 'ModelChoice[]',
+    required: false,
+    description:
+      'Two or more { model, criteria } pairs. The processor builds a classifier from them, using each criteria string to describe when that model should be chosen. Mutually exclusive with classifier.',
+  },
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    required: false,
+    description:
+      'The evaluation model used to make the routing decision. Required with choices, and unrelated to the models being routed to.',
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    required: false,
+    description:
+      'The objective the router optimizes for, used with choices. Defaults to choosing the least capable model that can handle the request correctly. Set it to state a different objective, such as favoring accuracy over cost.',
+  },
+  {
+    name: 'onRoute',
+    type: '(decision: ModelRouteDecision) => void | Promise<void>',
+    required: false,
+    description:
+      'Called once per request with the routing decision, including abstentions. See Observing the decision. Errors thrown here are logged and do not fail the request.',
+  },
+  {
     name: 'classifier',
     type: 'Classifier | string',
-    required: true,
+    required: false,
     description:
-      'A configured Classifier instance, or the ID of a classifier registered with Mastra. String IDs resolve at request time through mastra.getClassifierById().',
+      'A configured Classifier instance, or the ID of a classifier registered with Mastra. String IDs resolve at request time through mastra.getClassifierById(). Mutually exclusive with choices.',
   },
   {
     name: 'question',
     type: 'string',
     required: false,
     description:
-      'The name of a choice question on the classifier. Required with models, and mutually exclusive with select.',
+      'The name of a choice question on the classifier. Used with classifier and models, and mutually exclusive with select.',
   },
   {
     name: 'models',
@@ -111,6 +135,88 @@ export const agent = new Agent({
   },
 ]}
 />
+
+## Observing the decision
+
+`onRoute` fires once per request with the decision, including when the router abstains. Use it to log which model served a request and how confident the choice was:
+
+```typescript
+new ModelRouterProcessor({
+  model,
+  choices: [
+    { model: '__GATEWAY_OPENAI_MODEL_MINI__', criteria: 'Simple lookups' },
+    { model: '__GATEWAY_OPENAI_MODEL__', criteria: 'Multi-step reasoning' },
+  ],
+  onRoute: decision => {
+    logger.info('model routing', decision)
+  },
+})
+```
+
+The decision carries the model that was applied, the criterion that was chosen, the confidence in that choice, and, when no model was applied, why:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    required: false,
+    description: 'The model the run was routed to. Absent when the router abstained.',
+  },
+  {
+    name: 'choice',
+    type: 'string',
+    required: false,
+    description: 'The criterion the classifier selected. Absent when the classifier failed.',
+  },
+  {
+    name: 'probability',
+    type: 'number',
+    required: false,
+    description:
+      'Confidence in the selected choice, taken from the answer distribution. Absent when the evaluation model returns no distribution.',
+  },
+  {
+    name: 'abstained',
+    type: "'below-threshold' | 'no-model-for-choice' | 'no-text' | 'error'",
+    required: false,
+    description: 'Why no model was applied, when the router abstained. Absent on a successful routing decision.',
+  },
+]}
+/>
+
+## Using a classifier you already own
+
+Pass `classifier` instead of `choices` to route on a [Classifier](/reference/classifier/classifier) you configured yourself, which is useful when the same classifier also backs a scorer or another processor. Map each criterion of a choice question to a model:
+
+```typescript
+import { Classifier } from '@mastra/core/classifier'
+
+const triage = new Classifier({
+  id: 'triage',
+  model,
+  questions: {
+    complexity: {
+      type: 'choice',
+      criteria: {
+        trivial: 'Answerable in one or two sentences with no reasoning steps',
+        complex: 'Requires multi-step reasoning or careful judgment',
+      },
+    },
+  },
+})
+
+new ModelRouterProcessor({
+  classifier: triage,
+  question: 'complexity',
+  models: {
+    trivial: '__GATEWAY_OPENAI_MODEL_MINI__',
+    complex: '__GATEWAY_OPENAI_MODEL__',
+  },
+})
+```
+
+`models` is validated exhaustively at construction, so a missing or unknown criterion throws rather than silently abstaining at request time.
 
 ## Routing scope
 
@@ -162,14 +268,14 @@ Returning `undefined` abstains, and the agent's configured model is used.
 
 ## Probabilities and `minProbability`
 
-Not every evaluation model returns a probability distribution for choice questions. Boolean questions report `P(true)`, but a choice answer may carry only the selected criterion.
+A choice answer carries a distribution over the criteria, and the confidence in a routing decision is the mass on the criterion that was actually selected. Not every evaluation model reports that distribution.
 
 This is why `minProbability` has no default. The two modes are explicit:
 
 - **Omitted**: route on the selected choice. The classifier's answer is the decision.
-- **Set**: require a probability at or above the threshold. If the model returns no probability at all, the router **abstains**, because a threshold that cannot be evaluated must not quietly pass.
+- **Set**: require a probability at or above the threshold. If the model returns no distribution at all, the router **abstains**, because a threshold that cannot be evaluated must not quietly pass.
 
-Verify that your evaluation model returns choice probabilities before setting `minProbability`, otherwise the router will abstain on every request and the option will look broken. If you want calibrated abstention and your model only reports probabilities for booleans, express the decision as a boolean question and use `select`.
+If your evaluation model does not report choice distributions, the router abstains on every request once `minProbability` is set. Log `onRoute` to check: an `abstained` value of `below-threshold` with no `probability` means the distribution is missing rather than the confidence being low.
 
 ## Failure behavior
 
@@ -193,6 +299,7 @@ Before enabling this broadly, answer a sample of your own traffic with both mode
 - Only the **latest user message** is classified. The system prompt, retrieved context, and earlier turns are not sent to the classifier, which keeps the routing call flat as context grows. A terse follow-up such as `"now apply that to the rest"` is therefore routed on that sentence alone. If your follow-ups re-open hard reasoning rather than applying an earlier result, classify the conversation yourself and pass the model in through the `select` form.
 - Only downgrade. Keep the capable model as the agent's configured default and use the router to move down, so an incorrect routing decision costs quality on one step rather than removing the capable model from the run entirely.
 - The router adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on.
+- With `choices`, each criterion is named after its model, so `onRoute` reports the chosen model as the `choice`.
 
 ## Related
 

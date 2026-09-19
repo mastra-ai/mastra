@@ -110,7 +110,7 @@ describe('ModelRouterProcessor', () => {
       expect(await route(processor, 'what is 2+2')).toEqual({ model: 'openai/gpt-4o-mini' });
     });
 
-    it('abstains when a threshold is set but the model returned no probability', async () => {
+    it('abstains when a threshold is set but the model returned no distribution', async () => {
       // Fail closed: an unevaluatable threshold must not silently pass.
       const { classifier } = stubClassifier({ complexity: { choice: 'trivial' } });
       const processor = new ModelRouterProcessor({
@@ -124,7 +124,9 @@ describe('ModelRouterProcessor', () => {
     });
 
     it('abstains below the probability threshold, leaving the configured model', async () => {
-      const { classifier } = stubClassifier({ complexity: { choice: 'trivial', probability: 0.4 } });
+      const { classifier } = stubClassifier({
+        complexity: { choice: 'trivial', probabilities: { trivial: 0.4, complex: 0.6 } },
+      });
       const processor = new ModelRouterProcessor({
         classifier,
         question: 'complexity',
@@ -136,7 +138,9 @@ describe('ModelRouterProcessor', () => {
     });
 
     it('honours a custom threshold', async () => {
-      const { classifier } = stubClassifier({ complexity: { choice: 'trivial', probability: 0.4 } });
+      const { classifier } = stubClassifier({
+        complexity: { choice: 'trivial', probabilities: { trivial: 0.4, complex: 0.6 } },
+      });
       const processor = new ModelRouterProcessor({
         classifier,
         question: 'complexity',
@@ -181,6 +185,175 @@ describe('ModelRouterProcessor', () => {
 
       expect(await route(processor, 'what time is it')).toEqual({ model: 'openai/gpt-4o-mini' });
     });
+  });
+
+  describe('choices form', () => {
+    function choicesRouter(overrides: Record<string, unknown> = {}) {
+      return new ModelRouterProcessor({
+        model: mockEvaluationModel,
+        choices: [
+          { model: 'openai/gpt-4o-mini', criteria: 'Greetings and simple lookups' },
+          { model: 'openai/gpt-4o', criteria: 'Multi-step reasoning' },
+        ],
+        ...overrides,
+      } as any);
+    }
+
+    /** Swap in a stubbed evaluate() on the classifier the processor built for itself. */
+    function stubBuiltClassifier(processor: ModelRouterProcessor<any>, answers: Record<string, unknown>) {
+      const built = (processor as any).classifierOrId as Classifier<any>;
+      const evaluate = vi.fn().mockResolvedValue({
+        answers,
+        usage: { totalTokens: 10 },
+        warnings: [],
+        response: { modelId: 'stub', timestamp: new Date() },
+      });
+      (built as any).evaluate = evaluate;
+      return evaluate;
+    }
+
+    it('builds a classifier from co-located choices and routes on it', async () => {
+      const processor = choicesRouter();
+      stubBuiltClassifier(processor, { model: { choice: 'openai/gpt-4o-mini', probabilities: { 'openai/gpt-4o-mini': 0.9 } } });
+
+      expect(await route(processor, 'hi')).toEqual({ model: 'openai/gpt-4o-mini' });
+    });
+
+    it('names choices after their model, and derives criteria from each choice', () => {
+      const processor = choicesRouter();
+      const built = (processor as any).classifierOrId as Classifier<any>;
+      const question = (built.questions as any).model;
+
+      expect(question.type).toBe('choice');
+      expect(Object.keys(question.criteria)).toEqual(['openai/gpt-4o-mini', 'openai/gpt-4o']);
+      expect(question.criteria['openai/gpt-4o']).toBe('Multi-step reasoning');
+    });
+
+    it('gives the classifier a default objective to prefer the cheaper model', () => {
+      const built = (choicesRouter() as any).classifierOrId as Classifier<any>;
+      expect((built.questions as any).model.instructions).toMatch(/least capable model/i);
+    });
+
+    it('accepts an explicit objective', () => {
+      const built = (choicesRouter({ instructions: 'Always prefer accuracy over cost.' }) as any)
+        .classifierOrId as Classifier<any>;
+      expect((built.questions as any).model.instructions).toBe('Always prefer accuracy over cost.');
+    });
+
+    it('rejects fewer than two choices', () => {
+      expect(() =>
+        new ModelRouterProcessor({
+          model: mockEvaluationModel,
+          choices: [{ model: 'openai/gpt-4o', criteria: 'everything' }],
+        } as any),
+      ).toThrow(/at least two choices/i);
+    });
+
+    it('rejects two choices that would share a name', () => {
+      expect(() =>
+        new ModelRouterProcessor({
+          model: mockEvaluationModel,
+          choices: [
+            { model: 'openai/gpt-4o', criteria: 'hard things' },
+            { model: 'openai/gpt-4o', criteria: 'other hard things' },
+          ],
+        } as any),
+      ).toThrow(/two choices named/i);
+    });
+
+    it('rejects a choice with empty criteria', () => {
+      expect(() =>
+        new ModelRouterProcessor({
+          model: mockEvaluationModel,
+          choices: [
+            { model: 'openai/gpt-4o-mini', criteria: '   ' },
+            { model: 'openai/gpt-4o', criteria: 'hard things' },
+          ],
+        } as any),
+      ).toThrow(/no criteria/i);
+    });
+  });
+
+  describe('onRoute', () => {
+    it('reports the selected model, choice and confidence', async () => {
+      const seen: any[] = [];
+      const { classifier } = stubClassifier({
+        complexity: { choice: 'trivial', probabilities: { trivial: 0.91, complex: 0.09 } },
+      });
+      const processor = new ModelRouterProcessor({
+        classifier,
+        question: 'complexity',
+        models: { trivial: 'openai/gpt-4o-mini', complex: 'openai/gpt-4o' },
+        onRoute: d => void seen.push(d),
+      });
+
+      await route(processor, 'hi');
+      expect(seen).toEqual([{ model: 'openai/gpt-4o-mini', choice: 'trivial', probability: 0.91 }]);
+    });
+
+    it('reports abstention below the threshold, with the confidence that failed it', async () => {
+      const seen: any[] = [];
+      const { classifier } = stubClassifier({
+        complexity: { choice: 'trivial', probabilities: { trivial: 0.4, complex: 0.6 } },
+      });
+      const processor = new ModelRouterProcessor({
+        classifier,
+        question: 'complexity',
+        models: { trivial: 'openai/gpt-4o-mini', complex: 'openai/gpt-4o' },
+        minProbability: 0.8,
+        onRoute: d => void seen.push(d),
+      });
+
+      expect(await route(processor, 'hi')).toEqual({});
+      expect(seen).toEqual([{ choice: 'trivial', probability: 0.4, abstained: 'below-threshold' }]);
+    });
+
+    it('reports abstention when the classifier fails', async () => {
+      const seen: any[] = [];
+      const { classifier } = stubClassifier({});
+      (classifier as any).evaluate = vi.fn().mockRejectedValue(new Error('judge down'));
+      const processor = new ModelRouterProcessor({
+        classifier,
+        question: 'complexity',
+        models: { trivial: 'openai/gpt-4o-mini', complex: 'openai/gpt-4o' },
+        onRoute: d => void seen.push(d),
+      });
+
+      expect(await route(processor, 'hi')).toEqual({});
+      expect(seen).toEqual([{ abstained: 'error' }]);
+    });
+
+    it('does not let a throwing callback fail the request', async () => {
+      const { classifier } = stubClassifier({
+        complexity: { choice: 'trivial', probabilities: { trivial: 1 } },
+      });
+      const processor = new ModelRouterProcessor({
+        classifier,
+        question: 'complexity',
+        models: { trivial: 'openai/gpt-4o-mini', complex: 'openai/gpt-4o' },
+        onRoute: () => {
+          throw new Error('logging blew up');
+        },
+      });
+
+      expect(await route(processor, 'hi')).toEqual({ model: 'openai/gpt-4o-mini' });
+    });
+  });
+
+  it('reads confidence from the choice distribution, not a probability field', async () => {
+    // A ChoiceAnswer carries `probabilities`, never a scalar `probability`. Reading the
+    // wrong field made minProbability abstain on every request.
+    const { classifier } = stubClassifier({
+      complexity: { choice: 'trivial', probabilities: { trivial: 0.95, complex: 0.05 } },
+    });
+    const processor = new ModelRouterProcessor({
+      classifier,
+      question: 'complexity',
+      models: { trivial: 'openai/gpt-4o-mini', complex: 'openai/gpt-4o' },
+      minProbability: 0.9,
+    });
+
+    expect(await route(processor, 'hi')).toEqual({ model: 'openai/gpt-4o-mini' });
   });
 
   it('classifies the latest user message, not the whole history', async () => {
