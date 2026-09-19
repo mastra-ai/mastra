@@ -306,7 +306,13 @@ export class AgentControllerChannels extends AgentChannels {
         ...(Object.keys(signalMetadata).length > 0 ? { metadata: signalMetadata } : {}),
         providerOptions,
       },
-      { requestContext },
+      // Await the agent's real acceptance decision. Stream setup (workspace,
+      // instructions, tools, model resolution) runs before the run span opens
+      // and before the user message is persisted; without this, a throw there
+      // rejects after the next tick and the message vanishes with no trace,
+      // no log, and no reply. Rejecting here reaches handleChatMessage's
+      // error boundary, which tells the sender.
+      { requestContext, requireDelivery: true },
     );
     await result.accepted;
   }
