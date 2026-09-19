@@ -119,13 +119,17 @@ const agent = new Agent({
 
 ### Error processors are enabled by default
 
-Every agent starts from your `errorProcessors` list and adds whichever of these three it does not already contain:
+Every agent adds whichever of these three your `errorProcessors` list does not already contain:
 
 1. `ProviderHistoryCompat` — repairs provider-specific history incompatibilities in the outbound prompt
-1. `StreamErrorRetryProcessor` — retries transient API and stream failures within its own `maxRetries` budget
 1. `PrefillErrorHandler` — recovers from assistant-response prefill rejections
+1. `StreamErrorRetryProcessor` — retries transient API and stream failures within its own `maxRetries` budget
 
-A default is only added when nothing in your list carries its `id`, so your own instance always wins and is never duplicated. Your processors keep their positions at the front of the list, ahead of the added defaults — error processors stop at the first one that returns `{ retry: true }`, so a processor you supply is always reached before the framework's retry.
+A default is only added when nothing in your list carries its `id`, so your own instance always wins and is never duplicated. An added default is placed at the position its `id` gives it among the defaults, so naming only a later one does not invert the pair — supplying just your own `StreamErrorRetryProcessor` still resolves with `ProviderHistoryCompat` and `PrefillErrorHandler` ahead of it.
+
+Error processors stop at the first one that returns `{ retry: true }`, so that relative order decides which repair runs. The two repairing processors come first and the retrying one comes last, because `StreamErrorRetryProcessor`'s bad-request matcher matches any `400`: placed earlier it would claim a request the repairs could have fixed and resend it unchanged.
+
+Your processors are never reordered relative to each other. A processor with an `id` that matches a default takes part in that ordering; one with an `id` of your own keeps its position in your list.
 
 To customize one without losing the rest, pass a processor with the same `id`:
 
@@ -142,7 +146,7 @@ const agent = new Agent({
 })
 ```
 
-The `StreamErrorRetryProcessor` above is the only stream-retry processor on the agent; the default `ProviderHistoryCompat` and `PrefillErrorHandler` are still added because your list does not name them. Pass all three ids to run a completely custom set.
+The `StreamErrorRetryProcessor` above is the only stream-retry processor on the agent, and it resolves in its usual position — last, behind the `ProviderHistoryCompat` and `PrefillErrorHandler` defaults your list never names. Pass all three ids to run a completely custom set.
 
 To run with no error processors at all, pass an explicitly empty array:
 

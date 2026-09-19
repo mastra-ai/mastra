@@ -384,7 +384,8 @@ export type SendAgentStateSignalOptions<OUTPUT = unknown> = SendAgentSignalOptio
  * @experimental Agent state signal APIs are experimental and may change in a future release.
  */
 export type SendAgentStateSignalResult<OUTPUT = unknown> =
-  (SendAgentSignalResult<OUTPUT> & { skipped?: false }) | { skipped: true; reason: 'unchanged'; signal?: undefined };
+  | (SendAgentSignalResult<OUTPUT> & { skipped?: false })
+  | { skipped: true; reason: 'unchanged'; signal?: undefined };
 
 /**
  * @experimental Agent notification signal APIs are experimental and may change in a future release.
@@ -500,7 +501,8 @@ export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
 type FallbackFields<OUTPUT = undefined> =
-  { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never } | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
+  | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
+  | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
 export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
@@ -1004,9 +1006,10 @@ interface AgentConfigBase<
    * Error processors that handle LLM API rejections.
    * These implement `processAPIError` and can inspect the error, modify messages, and signal a retry.
    * Defaults to the shared stability processors — `ProviderHistoryCompat`,
-   * `StreamErrorRetryProcessor`, and `PrefillErrorHandler`, in that order. Each default is added only
-   * when no processor in your list carries its `id`, and your processors keep their positions ahead of
-   * the added defaults.
+   * `PrefillErrorHandler`, and `StreamErrorRetryProcessor`, in that order. Each default is added only
+   * when no processor in your list carries its `id`. An added default is placed at the position its
+   * `id` gives it, so naming a later default does not invert the order; your processors are never
+   * reordered relative to each other.
    * Error processors can also be placed in `inputProcessors` or `outputProcessors`.
    */
   errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;

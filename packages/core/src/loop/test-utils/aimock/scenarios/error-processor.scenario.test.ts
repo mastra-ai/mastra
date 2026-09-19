@@ -1,11 +1,7 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import type { ErrorProcessor } from '../../../../processors';
-import {
-  PrefillErrorHandler,
-  ProviderHistoryCompat,
-  StreamErrorRetryProcessor,
-} from '../../../../processors';
+import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '../../../../processors';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**

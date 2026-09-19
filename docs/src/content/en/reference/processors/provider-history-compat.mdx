@@ -13,7 +13,7 @@ Use it when an agent may switch between model providers or reuse message history
 
 ## Usage example
 
-Mastra adds this processor to every agent's `errorProcessors` by default when your list does not already contain that `id`. Among the added defaults it comes first, so its outbound prompt rules run before the retry processors. Supply your own instance to add custom rules or position it yourself:
+Mastra adds this processor to every agent's `errorProcessors` by default when your list does not already contain that `id`. Among the added defaults it comes first, so its outbound prompt rules run before the other defaults — including the retry processor's blind resend. Supply your own instance to add custom rules or position it yourself:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from '@mastra/core/agent'
