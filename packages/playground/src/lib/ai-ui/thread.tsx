@@ -15,6 +15,7 @@ import {
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
+import { ModelPickerGroup } from '@mastra/playground-ui/components/ModelPicker';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
 import {
   buildThreadRailTurns,
@@ -408,9 +409,9 @@ const ComposerActionRow = ({
         <div className="flex max-w-full shrink-0 items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
-              <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
+              <ModelPickerGroup>
                 <ComposerModelSwitcher />
-              </div>
+              </ModelPickerGroup>
               <ComposerModelSettings agentId={agentId} />
             </>
           )}

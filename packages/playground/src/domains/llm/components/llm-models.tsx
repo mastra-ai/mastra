@@ -1,5 +1,5 @@
-import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { ModelPickerCombobox } from '@mastra/playground-ui/components/ModelPicker';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useMemo } from 'react';
 import { useAllModels, useFilteredModels } from '../hooks/use-filtered-models';
@@ -13,6 +13,7 @@ export interface LLMModelsProps {
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
   className?: string;
+  segment?: 'model';
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
@@ -26,6 +27,7 @@ export const LLMModels = ({
   variant,
   size = 'md',
   className,
+  segment,
   open,
   onOpenChange,
   container,
@@ -34,15 +36,12 @@ export const LLMModels = ({
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const providers = dataProviders?.providers || [];
 
-  // Get all models flattened, then drop any disallowed by admin policy
   const policy = useBuilderModelPolicy();
   const allModels = useAllModels(providers);
   const policyAllowedModels = useBuilderFilteredModels(allModels, policy);
 
-  // Filter models by provider
   const filteredModels = useFilteredModels(policyAllowedModels, llmId, '', false);
 
-  // Create model options
   const modelOptions: ComboboxOption[] = useMemo(() => {
     return filteredModels.map(m => ({
       label: m.model,
@@ -55,7 +54,8 @@ export const LLMModels = ({
   }
 
   return (
-    <Combobox
+    <ModelPickerCombobox
+      segment={segment}
       options={modelOptions}
       value={value}
       onValueChange={onValueChange}

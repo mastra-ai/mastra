@@ -1,19 +1,14 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Lock, TriangleAlert } from 'lucide-react';
+import {
+  ModelPickerDivider,
+  ModelPickerLocked,
+  ModelPickerWarning,
+  ModelPickerWarnings,
+} from '@mastra/playground-ui/components/ModelPicker';
 import { useState } from 'react';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
-
-// Triggers stay transparent; the wrapper owns the shared pill border/background.
-const COMPOSER_TRIGGER_CLASS = [
-  'w-auto min-w-0 px-3 gap-1',
-  'border-0 bg-transparent',
-  'hover:bg-surface5 active:bg-surface6',
-  'data-[popup-open]:bg-surface5',
-  'transition-colors duration-normal',
-].join(' ');
 
 export const ComposerModelSwitcher = () => {
   const selection = usePlaygroundModelOptional();
@@ -29,7 +24,6 @@ export const ComposerModelSwitcher = () => {
 
   const currentModelProvider = cleanProviderId(selectedProvider);
 
-  // Resolve the full provider ID (handles gateway prefix, e.g., 'custom' -> 'acme/custom')
   const resolvedProvider = findProviderById(providers, currentModelProvider);
   const fullProviderId = resolvedProvider?.id || currentModelProvider;
 
@@ -37,45 +31,21 @@ export const ComposerModelSwitcher = () => {
     if (modelId && fullProviderId) setModel(fullProviderId, modelId);
   };
 
-  // Handle provider selection
   const handleProviderSelect = (providerId: string) => {
     const cleanedId = cleanProviderId(providerId);
-    // Only clear model selection and open model combobox when switching to a different provider
     if (cleanedId !== currentModelProvider) {
       setProvider(cleanedId);
       setModelOpen(true);
     }
   };
 
-  // Admin locked the picker — surface a non-interactive chip instead.
-  if (policy.active && policy.pickerVisible === false) {
-    const lockedLabel = selectedProvider && selectedModel ? `${selectedProvider}/${selectedModel}` : 'Locked by admin';
-    return (
-      <div
-        className="border-border1 bg-surface3 text-ui-xs text-neutral6 flex items-center gap-1.5 rounded-md border px-2 py-1"
-        data-testid="composer-model-locked"
-      >
-        <Lock className="text-neutral3 h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">{lockedLabel}</span>
-      </div>
-    );
-  }
+  const modelLabel = selectedProvider && selectedModel ? `${selectedProvider}/${selectedModel}` : 'Locked by admin';
+  if (policy.active && policy.pickerVisible === false) return <ModelPickerLocked label={modelLabel} />;
 
   return (
     <div className="inline-flex max-w-full items-stretch">
-      <LLMProviders
-        value={currentModelProvider}
-        onValueChange={handleProviderSelect}
-        size="md"
-        className={cn(
-          COMPOSER_TRIGGER_CLASS,
-          'shrink-0',
-          'rounded-none! rounded-tl-full! rounded-bl-full!',
-          // Collapse provider to icon-only in narrow containers.
-          '@max-md:px-2 @max-md:[&>span>span]:hidden @max-md:[&>svg]:hidden',
-        )}
-      />
-      <div className="bg-border1 w-px self-stretch" aria-hidden />
+      <LLMProviders value={currentModelProvider} onValueChange={handleProviderSelect} size="md" segment="provider" />
+      <ModelPickerDivider />
       <LLMModels
         llmId={currentModelProvider}
         value={selectedModel}
@@ -83,7 +53,7 @@ export const ComposerModelSwitcher = () => {
         open={modelOpen}
         onOpenChange={setModelOpen}
         size="md"
-        className={cn(COMPOSER_TRIGGER_CLASS, 'rounded-none! rounded-tr-full! rounded-br-full!', 'max-w-[10rem]')}
+        segment="model"
       />
     </div>
   );
@@ -119,41 +89,49 @@ export const ComposerModelWarning = () => {
 
   if (!modelWarning && !stale && !showProviderWarning) return null;
 
-  const envVar =
-    currentProvider && Array.isArray(currentProvider.envVar)
-      ? currentProvider.envVar.join(', ')
-      : currentProvider?.envVar;
+  const providerEnvironmentVariables = currentProvider?.envVar;
+  const environmentVariable = Array.isArray(providerEnvironmentVariables)
+    ? providerEnvironmentVariables.join(', ')
+    : providerEnvironmentVariables;
 
   return (
-    <div className="flex flex-col gap-1 px-3 pb-1.5">
-      {(modelWarning || stale) && (
-        <div
-          className="text-accent6 text-ui-sm flex max-w-full min-w-0 items-start gap-1"
-          data-testid="composer-model-stale-warning"
-          role="alert"
-        >
-          <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
-          <span className="min-w-0 break-words">
-            {modelWarning || (
-              <>
-                <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">
-                  {provider}/{selectedModel}
-                </code>{' '}
-                is no longer allowed by admin policy. Pick a different model.
-              </>
-            )}
-          </span>
-        </div>
-      )}
-      {showProviderWarning && (
-        <div className="text-accent6 text-ui-sm flex max-w-full min-w-0 items-start gap-1">
-          <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
-          <span className="min-w-0 break-words">
-            Set <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">{envVar}</code> to use this
-            provider
-          </span>
-        </div>
-      )}
-    </div>
+    <ComposerModelWarnings
+      warning={modelWarning}
+      staleModel={stale ? `${provider}/${selectedModel}` : undefined}
+      environmentVariable={showProviderWarning ? environmentVariable : undefined}
+    />
   );
 };
+
+function ComposerModelWarnings({
+  warning,
+  staleModel,
+  environmentVariable,
+}: {
+  warning?: string | string[];
+  staleModel?: string;
+  environmentVariable?: string;
+}) {
+  const warningText = Array.isArray(warning) ? warning.filter(Boolean).join(' ') : warning;
+  if (!warningText && !staleModel && !environmentVariable) return null;
+  return (
+    <ModelPickerWarnings>
+      {(warningText || staleModel) && (
+        <ModelPickerWarning role="alert" data-testid="composer-model-stale-warning">
+          {warningText || (
+            <>
+              <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">{staleModel}</code> is no
+              longer allowed by admin policy. Pick a different model.
+            </>
+          )}
+        </ModelPickerWarning>
+      )}
+      {environmentVariable && (
+        <ModelPickerWarning>
+          Set <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">{environmentVariable}</code>{' '}
+          to use this provider
+        </ModelPickerWarning>
+      )}
+    </ModelPickerWarnings>
+  );
+}

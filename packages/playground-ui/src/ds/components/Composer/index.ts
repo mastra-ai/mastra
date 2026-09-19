@@ -28,3 +28,6 @@ export {
   ComposerAttachmentButton,
   ComposerModelSettingsButton,
 } from './actions/composer-buttons';
+export { ComposerStatusLine } from './actions/composer-status';
+export { ComposerModeSelect } from './actions/composer-mode-select';
+export type { ComposerModeOption, ComposerModeSelectProps } from './actions/composer-mode-select';
