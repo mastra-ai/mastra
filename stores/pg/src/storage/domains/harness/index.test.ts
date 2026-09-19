@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { createSampleSessionRecord } from '@internal/storage-test-utils';
 import {
+  InMemoryHarnessAttachmentByteOwner,
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentUnavailableError,
   HarnessStorageChannelBindingConflictError,
@@ -12,6 +13,7 @@ import {
   HarnessStorageSessionNotFoundError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
+  TABLE_HARNESS_ATTACHMENT_OPERATIONS,
   TABLE_HARNESS_PLAN_TASKS,
   TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS,
   TABLE_HARNESS_SESSION_EVENTS,
@@ -33,9 +35,19 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 describe('HarnessPG', () => {
   const store = new PostgresStore({ ...TEST_CONFIG, id: 'pg-harness-test-store' });
+  const attachmentSchemaName = `pf4267_attachment_${randomUUID().replaceAll('-', '_')}`;
+  const attachmentStore = new PostgresStore({
+    ...TEST_CONFIG,
+    id: 'pg-harness-attachment-test-store',
+    schemaName: attachmentSchemaName,
+    enabledDomains: ['harness'],
+    sessionRecordProjection: { enabled: true, maxAttempts: 1, maxPendingIntents: 20 },
+    attachmentByteOwner: new InMemoryHarnessAttachmentByteOwner({ providerId: 'pg-test' }),
+  });
 
   beforeAll(async () => {
     await store.init();
+    await attachmentStore.init();
   });
 
   beforeEach(async () => {
@@ -44,7 +56,9 @@ describe('HarnessPG', () => {
 
   afterAll(async () => {
     await store.stores.harness?.dangerouslyClearAll().catch(() => {});
+    await attachmentStore.db.none(`DROP SCHEMA IF EXISTS "${attachmentSchemaName}" CASCADE`).catch(() => {});
     await store.close();
+    await attachmentStore.close();
   });
 
   it('exports harness tables and creates live default indexes', async () => {
@@ -52,6 +66,7 @@ describe('HarnessPG', () => {
 
     expect(ddl).toContain('mastra_harness_sessions');
     expect(ddl).toContain('mastra_harness_attachments');
+    expect(ddl).toContain(TABLE_HARNESS_ATTACHMENT_OPERATIONS);
     expect(ddl).toContain('mastra_harness_channel_inbox');
     expect(ddl).toContain('mastra_harness_wakeups');
     expect(ddl).toContain(TABLE_HARNESS_SESSION_EVENTS);
@@ -203,8 +218,12 @@ describe('HarnessPG', () => {
   });
 
   it('persists primitive and element attachment metadata including object pointers', async () => {
-    const harness = store.stores.harness;
+    const harness = attachmentStore.stores.harness;
     expect(harness).toBeDefined();
+    await harness!.dangerouslyClearAll();
+    await harness!.createOrLoadActiveSession(createSampleSessionRecord(), {
+      initialLease: { ownerId: 'attachment-test', ttlMs: 60_000 },
+    });
 
     await harness!.saveAttachment({
       sessionId: 'session-1',
@@ -904,10 +923,13 @@ describe('HarnessPG', () => {
   });
 
   it('keeps §15 attachment-reference admission atomic and delete-guarded', async () => {
-    const harness = store.stores.harness;
+    const harness = attachmentStore.stores.harness;
     expect(harness).toBeDefined();
 
-    await harness!.saveSession(createSampleSessionRecord(), { ownerId: 'h', ifVersion: 0 });
+    await harness!.dangerouslyClearAll();
+    await harness!.createOrLoadActiveSession(createSampleSessionRecord(), {
+      initialLease: { ownerId: 'h', ttlMs: 60_000 },
+    });
     const initial = await harness!.loadSession({ sessionId: 'session-1' });
     if (!initial) throw new Error('expected session');
 
