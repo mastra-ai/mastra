@@ -35,8 +35,14 @@ type FluidMenuContextValue = {
 const FluidMenuContext = React.createContext<FluidMenuContextValue | null>(null);
 
 // Base UI sets a bare `data-disabled`; cmdk sets `data-disabled="true" | "false"`.
+// `data-fluid-hover-skip` marks an action stacked on a row, which stays a menu item for
+// keyboard navigation but must not size the highlight to itself.
 function isMenuItemDisabled(element: HTMLElement) {
-  return isAttrActive(element, 'data-disabled') || element.getAttribute('aria-disabled') === 'true';
+  return (
+    element.hasAttribute('data-fluid-hover-skip') ||
+    isAttrActive(element, 'data-disabled') ||
+    element.getAttribute('aria-disabled') === 'true'
+  );
 }
 
 function isAttrActive(element: HTMLElement, attr: string) {
@@ -160,6 +166,7 @@ export function useFluidMenuItemRef<T extends HTMLElement>(forwardedRef: React.F
       if (!element) return;
 
       const sync = () => {
+        if (isMenuItemDisabled(element)) return;
         if (isAttrActive(element, activeAttr)) setActiveIndex(index);
       };
       sync();

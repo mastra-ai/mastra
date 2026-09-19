@@ -20,7 +20,7 @@
   min-width: 0;
   padding: 4px 4px 0;
   border-radius: var(--tab-frame-radius) var(--tab-frame-radius) 0 0;
-  background: var(--surface4);
+  background: var(--tab-frame-surface);
   opacity: 1;
   transform: translateY(0);
   transition:
@@ -50,7 +50,7 @@
   background: radial-gradient(
     circle at top left,
     transparent var(--tab-frame-radius),
-    var(--surface4) calc(var(--tab-frame-radius) + 0.5px)
+    var(--tab-frame-surface) calc(var(--tab-frame-radius) + 0.5px)
   );
 }
 
@@ -60,13 +60,13 @@
   min-width: 0;
   align-items: center;
   overflow: clip;
-  border: 1px solid var(--border1);
+  border: 1px solid var(--border);
   border-radius: var(--tab-inner-radius);
-  background: var(--surface4);
+  background: var(--tab-frame-surface);
 }
 
 [data-slot='tabbed-container-query']:focus-within {
-  border-color: color-mix(in oklab, var(--neutral5) 50%, transparent);
+  border-color: var(--ring);
 }
 
 [data-slot='tabs'].tabbed-container
@@ -77,7 +77,7 @@
 }
 
 .tabbed-container-data-list .grid.content-start {
-  background: var(--border1);
+  background: var(--border);
 }
 
 .tabbed-container-data-list .grid.content-start .data-list-row,
@@ -86,15 +86,15 @@
 }
 
 .tabbed-container-data-list .data-list-top {
-  background: var(--surface2);
+  background: var(--tab-panel-surface);
 }
 
 .tabbed-container-data-list .text-neutral2 {
-  color: var(--neutral3);
+  color: var(--muted-foreground);
 }
 
 .tabbed-container-data-list .data-list-top .text-neutral2 {
-  color: var(--neutral5);
+  color: var(--foreground);
 }
 
 [data-slot='tabbed-container-search'] {
@@ -125,12 +125,12 @@
   height: 12px;
   translate: -50% -50%;
   pointer-events: none;
-  color: var(--neutral3);
+  color: var(--muted-foreground);
 }
 
 [data-slot='tabbed-container-filter'][data-active] > svg {
   left: 9px;
-  color: var(--neutral5);
+  color: var(--foreground);
 }
 
 [data-slot='tabbed-container-filter-count'] {
@@ -140,7 +140,7 @@
   z-index: 1;
   translate: 0 -50%;
   pointer-events: none;
-  color: var(--neutral4);
+  color: var(--foreground);
   font-variant-numeric: tabular-nums;
 }
 
@@ -202,7 +202,7 @@
     margin: 0;
     padding: var(--tab-inset);
     border-radius: 0 var(--tab-frame-radius) 0 0;
-    background: var(--surface4);
+    background: var(--tab-frame-surface);
   }
 
   [data-slot='tabbed-container-controls']::before {

@@ -1,11 +1,19 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
-import { useContext, useEffect, useRef } from 'react';
+import { isValidElement, useContext, useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
+
+const toPlainText = (node: ReactNode): string => {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(toPlainText).filter(Boolean).join(' ');
+  if (isValidElement<{ children?: ReactNode }>(node)) return toPlainText(node.props.children);
+  return '';
+};
 
 export type TabProps = {
   children: React.ReactNode;
@@ -40,6 +48,7 @@ export const Tab = ({
       register({
         value,
         label: children,
+        name: toPlainText(children),
         disabled: disabled ?? false,
         width: element.getBoundingClientRect().width,
         element,
@@ -61,7 +70,7 @@ export const Tab = ({
       ? cn(
           buttonVariants({ variant: 'ghost', size }),
           'relative z-10 whitespace-nowrap',
-          'data-[active]:text-neutral6',
+          'data-[active]:text-foreground',
           'aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
           'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50',
           className,
@@ -69,16 +78,16 @@ export const Tab = ({
       : cn(
           // `sm` mirrors the `sm` button box so tabs sit level with sibling `size="sm"` controls.
           size === 'sm' ? controlSizeClasses.sm : 'text-ui-smd',
-          'font-normal text-neutral3',
+          'font-normal text-muted-foreground',
           attention && 'relative',
           'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
           transitions.colors,
           focusRing.visible,
-          'hover:text-neutral4',
-          'data-[active]:text-neutral5',
-          'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
-          'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-neutral3',
-          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
+          'hover:text-foreground/90',
+          'data-[active]:text-foreground',
+          'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground',
+          'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-muted-foreground',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-muted-foreground',
           className,
         );
   const tab = (

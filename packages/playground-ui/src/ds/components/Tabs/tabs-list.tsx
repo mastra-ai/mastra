@@ -13,8 +13,8 @@ import { cn } from '@/lib/utils';
 const tabListVariants = cva('relative flex items-center text-ui-md', {
   variants: {
     variant: {
-      line: 'w-max min-w-full border-b border-border1',
-      pill: 'w-fit gap-1 rounded-full bg-surface2 p-1',
+      line: 'w-max min-w-full border-b border-border',
+      pill: 'w-fit gap-1 rounded-full bg-muted p-1',
       'pill-ghost': 'w-fit gap-0.5 rounded-full',
     },
   },
@@ -184,7 +184,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
         <div
           ref={scrollRef}
           data-slot="tabs-list-scroll"
-          className={cn('relative w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-surface2')}
+          className={cn('relative w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-background')}
         >
           <BaseTabs.List
             data-slot="tabs-list"
@@ -198,7 +198,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
             {resolvedVariant === 'line' && (
               <BaseTabs.Indicator
                 className={cn(
-                  'absolute bottom-0 left-0 bg-[var(--tab-indicator-color,var(--neutral3))]',
+                  'absolute bottom-0 left-0 bg-[var(--tab-indicator-color,var(--muted-foreground))]',
                   'h-0.5 w-[var(--active-tab-width)]',
                   'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
                 )}
@@ -209,7 +209,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
             {(resolvedVariant === 'pill' || resolvedVariant === 'pill-ghost') && (
               <BaseTabs.Indicator
                 className={cn(
-                  'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--surface4))]',
+                  'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--selected))]',
                   resolvedVariant === 'pill' ? 'h-[calc(100%-0.5rem)]' : 'h-full',
                   'w-[var(--active-tab-width)]',
                   'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
@@ -238,14 +238,14 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                         tabIndex={tabs?.value === tab.value ? 0 : -1}
                         data-slot="tab-close"
                         onClick={tab.onClose}
-                        className={cn('rounded p-0.5 hover:bg-surface4 hover:text-accent2', transitions.colors)}
+                        className={cn('rounded p-0.5 hover:bg-foreground/10 hover:text-accent2', transitions.colors)}
                       />
                     }
                   >
-                    <span className="sr-only">Close {tab.label}</span>
+                    <span className="sr-only">Close {tab.name}</span>
                     <X aria-hidden="true" className="size-3" />
                   </TooltipTrigger>
-                  <TooltipContent>Close {tab.label}</TooltipContent>
+                  <TooltipContent>Close {tab.name}</TooltipContent>
                 </Tooltip>
               </div>
             ))}
@@ -282,22 +282,16 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                         {tab.label}
                       </DropdownMenu.Item>
                       {tab.onClose ? (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <DropdownMenu.Item
-                                data-slot="tabs-overflow-close"
-                                className="hover:text-accent2 data-[highlighted]:text-accent2 pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0"
-                                style={{ gridArea: `${index + 1} / 1` }}
-                                onClick={tab.onClose}
-                              />
-                            }
-                          >
-                            <span className="sr-only">Close {tab.label}</span>
-                            <X aria-hidden="true" className="size-3" />
-                          </TooltipTrigger>
-                          <TooltipContent side="right">Close {tab.label}</TooltipContent>
-                        </Tooltip>
+                        <DropdownMenu.Item
+                          data-slot="tabs-overflow-close"
+                          data-fluid-hover-skip=""
+                          className="hover:text-accent2 not-disabled:hover:bg-foreground/18 not-disabled:active:bg-foreground/30 data-[highlighted]:bg-foreground/18 data-[highlighted]:text-accent2 pointer-events-none z-10 me-2 size-6 items-center justify-center self-center justify-self-end p-0 opacity-0"
+                          style={{ gridArea: `${index + 1} / 1` }}
+                          onClick={tab.onClose}
+                        >
+                          <span className="sr-only">Close {tab.name}</span>
+                          <X aria-hidden="true" className="size-3" />
+                        </DropdownMenu.Item>
                       ) : null}
                     </Fragment>
                   ))}

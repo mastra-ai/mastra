@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 export type TabMeasurement = {
   value: string;
   label: ReactNode;
+  name: string;
   disabled: boolean;
   width: number;
   element: HTMLElement;

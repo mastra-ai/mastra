@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { TabsContext } from './tabs-context';
 import './tabs.css';
+import '../../../../new-theme.css';
 import { cn } from '@/lib/utils';
 
 export type TabsRootProps<T extends string> = Omit<
@@ -43,7 +44,11 @@ export const Tabs = <T extends string>({
         data-slot="tabs"
         data-appearance={appearance}
         data-frame={frame}
-        className={cn('group/tabs', appearance === 'default' ? 'overflow-y-auto' : 'w-full min-w-0', className)}
+        className={cn(
+          'new-theme group/tabs',
+          appearance === 'default' ? 'overflow-y-auto' : 'w-full min-w-0',
+          className,
+        )}
         {...props}
       >
         {children}
