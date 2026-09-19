@@ -49,6 +49,7 @@ const FULL_CATALOG = [
   { kind: 'turso', name: 'Turso', status: 'available' },
   { kind: 'neon', name: 'Postgres', status: 'available' },
   { kind: 'redis', name: 'Redis', status: 'available' },
+  { kind: 'postgres', name: 'Postgres (Railway)', status: 'available' },
   { kind: 'mongodb', name: 'MongoDB', status: 'coming_soon' },
 ];
 
@@ -94,6 +95,17 @@ function redisIssue(overrides: Partial<PreflightIssue> = {}): PreflightIssue {
     message: 'RedisStreamsPubSub cannot connect at runtime because REDIS_URL is not set',
     fix: 'mastra env db create --kind redis',
     autofix: { kind: 'create-managed-database', provider: 'redis', envVarName: 'REDIS_URL' },
+    ...overrides,
+  };
+}
+
+function postgresIssue(overrides: Partial<PreflightIssue> = {}): PreflightIssue {
+  return {
+    code: 'MISSING_ENV_VAR',
+    severity: 'warning',
+    message: 'Build references POSTGRES_URL but the env file being deployed does not provide it.',
+    fix: 'mastra env db create --kind postgres',
+    autofix: { kind: 'create-managed-database', provider: 'postgres', envVarName: 'POSTGRES_URL' },
     ...overrides,
   };
 }
@@ -208,6 +220,104 @@ describe('maybeAutoProvisionDatabases', () => {
     expect(result.issues).toEqual([]);
     expect(result.provisioned).toHaveLength(1);
     expect(result.newlyManagedEnvVarNames).toEqual(['REDIS_URL']);
+  });
+
+  it('provisions a managed Postgres env-scoped when the user confirms and reports POSTGRES_URL as newly managed', async () => {
+    confirmMock.mockResolvedValue(true);
+    attachDatabaseMock.mockResolvedValue({ id: 'db-pg-1', name: 'my-app-postgres', kind: 'postgres' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-pg-1', name: 'my-app-postgres', kind: 'postgres' });
+
+    const issues = [postgresIssue()];
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
+
+    // `-postgres` suffix (not Neon's `-pg`), scoped to the deploy environment,
+    // and no regionId — the environment's Railway region is authoritative.
+    expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', {
+      kind: 'postgres',
+      name: 'my-app-postgres',
+      environmentId: 'env-prod',
+    });
+    expect(pollDatabaseUntilReadyMock).toHaveBeenCalled();
+    expect(result.issues).toEqual([]);
+    expect(result.provisioned).toHaveLength(1);
+    expect(result.newlyManagedEnvVarNames).toEqual(['POSTGRES_URL']);
+  });
+
+  it('deduplicates multiple POSTGRES_URL findings into one prompt and one attach', async () => {
+    confirmMock.mockResolvedValue(true);
+    attachDatabaseMock.mockResolvedValue({ id: 'db-pg-1', name: 'my-app-postgres', kind: 'postgres' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-pg-1', name: 'my-app-postgres', kind: 'postgres' });
+
+    // e.g. a MISSING_ENV_VAR finding plus a guarded LOCAL_STORAGE_PATH
+    // finding for the same variable.
+    const issues = [postgresIssue(), postgresIssue({ code: 'LOCAL_STORAGE_PATH', severity: 'error' })];
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
+
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(attachDatabaseMock).toHaveBeenCalledTimes(1);
+    expect(result.issues).toEqual([]);
+  });
+
+  it('skips postgres when the platform catalog does not offer it (fail-closed flag gate), never substituting Neon', async () => {
+    fetchDatabaseCatalogMock.mockResolvedValue(FULL_CATALOG.filter(entry => entry.kind !== 'postgres'));
+    confirmMock.mockResolvedValue(true);
+
+    const issues = [postgresIssue()];
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
+
+    expect(confirmMock).not.toHaveBeenCalled();
+    expect(attachDatabaseMock).not.toHaveBeenCalled();
+    // The postgres issue survives untouched for the normal issue printer.
+    expect(result.issues).toBe(issues);
+    expect(result.newlyManagedEnvVarNames).toEqual([]);
+  });
+
+  it('provisions redis and postgres independently when both are missing', async () => {
+    confirmMock.mockResolvedValue(true);
+    attachDatabaseMock
+      .mockResolvedValueOnce({ id: 'db-redis-1', name: 'my-app-redis', kind: 'redis' })
+      .mockResolvedValueOnce({ id: 'db-pg-1', name: 'my-app-postgres', kind: 'postgres' });
+    pollDatabaseUntilReadyMock
+      .mockResolvedValueOnce({ id: 'db-redis-1', name: 'my-app-redis', kind: 'redis' })
+      .mockResolvedValueOnce({ id: 'db-pg-1', name: 'my-app-postgres', kind: 'postgres' });
+
+    const result = await maybeAutoProvisionDatabases([redisIssue(), postgresIssue()], makeCtx());
+
+    expect(confirmMock).toHaveBeenCalledTimes(2);
+    expect(result.provisioned.map(d => d.kind)).toEqual(['redis', 'postgres']);
+    expect(result.newlyManagedEnvVarNames).toEqual(['REDIS_URL', 'POSTGRES_URL']);
+    expect(result.issues).toEqual([]);
+  });
+
+  it('derives an env-suffixed postgres name for non-production environments', async () => {
+    confirmMock.mockResolvedValue(true);
+    attachDatabaseMock.mockResolvedValue({ id: 'db-pg-1', name: 'my-app-eu-postgres', kind: 'postgres' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-pg-1', name: 'my-app-eu-postgres', kind: 'postgres' });
+
+    await maybeAutoProvisionDatabases(
+      [postgresIssue()],
+      makeCtx({ environment: { id: 'env-eu', slug: 'my-app--eu', name: 'eu', type: 'preview' } }),
+    );
+
+    expect(attachDatabaseMock).toHaveBeenCalledWith(
+      't',
+      'org-1',
+      'proj-1',
+      expect.objectContaining({ name: 'my-app-eu-postgres', environmentId: 'env-eu' }),
+    );
+  });
+
+  it('surfaces postgres provisioning failures as log.error and leaves the issue in place', async () => {
+    confirmMock.mockResolvedValue(true);
+    attachDatabaseMock.mockRejectedValue(new Error('railway capacity'));
+
+    const issues = [postgresIssue()];
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
+
+    expect(String(logErrorMock.mock.calls[0]![0])).toContain('railway capacity');
+    expect(result.issues).toBe(issues);
+    expect(result.provisioned).toEqual([]);
+    expect(result.newlyManagedEnvVarNames).toEqual([]);
   });
 
   it('leaves the issue in place when the user declines', async () => {

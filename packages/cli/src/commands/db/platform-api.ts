@@ -1,7 +1,7 @@
 import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, extractApiErrorDetail, platformFetch, throwApiError } from '../auth/client.js';
 
-export type DatabaseKind = 'turso' | 'neon' | 'mongodb' | 'redis';
+export type DatabaseKind = 'turso' | 'neon' | 'mongodb' | 'redis' | 'postgres';
 export type DatabaseStatus = 'provisioning' | 'ready' | 'failed' | 'deleting' | 'deleted';
 
 export interface ProjectDatabase {
@@ -49,6 +49,7 @@ export const DB_ENV_VAR_NAMES: Record<DatabaseKind, string[]> = {
   neon: ['DATABASE_URL'],
   mongodb: [],
   redis: ['REDIS_URL'],
+  postgres: ['POSTGRES_URL'],
 };
 
 const ADMIN_REQUIRED_MESSAGE = 'You need the admin role in this organization to manage databases.';
