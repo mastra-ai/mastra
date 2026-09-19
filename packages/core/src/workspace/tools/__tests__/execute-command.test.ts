@@ -406,6 +406,25 @@ describe('executeCommandTool data chunks', () => {
       expect(streamedOutput).toBe(result);
     });
 
+    it('bounds retained output so huge streams cannot overflow the accumulator', async () => {
+      const chunk = 'x'.repeat(1024 * 1024);
+      const { context } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          for (let i = 0; i < 8; i++) {
+            await opts?.onStdout?.(`${chunk}\n`);
+            await opts?.onStderr?.(`${chunk}\n`);
+          }
+          throw new Error('boom');
+        },
+      });
+
+      const result = await execute({ command: 'flood', args: [], timeout: null, cwd: null, tail: 0 }, context);
+
+      expect(result.endsWith('Error: boom')).toBe(true);
+      // 1 MiB cap per stream, so the 16 MiB streamed stays far out of the result.
+      expect(result.length).toBeLessThan(4 * 1024 * 1024);
+    });
+
     it('streamed chunks + error match return value when command throws after streaming', async () => {
       const { context, writerCustom } = createMockContext({
         executeCommand: async (_cmd, _args, opts) => {
