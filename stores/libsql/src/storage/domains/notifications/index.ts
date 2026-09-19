@@ -26,6 +26,14 @@ import { runPrune, resolveTargets } from '../../retention';
 /** Ids per UPDATE statement — keeps bind parameters well under SQLite's per-statement limit. */
 const BULK_ID_BATCH_SIZE = 500;
 
+// Kept inline so this adapter also builds against a core that predates the type export.
+type MarkNotificationDeliveredInput = {
+  id: string;
+  threadId: string;
+  deliveredSignalId: string;
+  lastDeliveryAttemptAt: Date;
+};
+
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
   if (status === 'delivered') return { deliveredAt: now };
   if (status === 'seen') return { seenAt: now };
@@ -375,6 +383,38 @@ export class NotificationsLibSQL extends NotificationsStorage {
       }
     }
     return updated;
+  }
+
+  async markNotificationDelivered(input: MarkNotificationDeliveredInput): Promise<NotificationRecord | null> {
+    const now = new Date().toISOString();
+    // Single conditional write: only a still-pending row is promoted to delivered,
+    // so a concurrent seen/dismissed/archived write is never downgraded.
+    const result = await this.#db.executeWriteOperationWithRetry(
+      () =>
+        withClientWriteLock(this.#client, () =>
+          this.#client.execute({
+            sql: `UPDATE "${TABLE_NOTIFICATIONS}"
+              SET "status" = CASE WHEN "status" = 'pending' THEN 'delivered' ELSE "status" END,
+                  "deliveredAt" = CASE WHEN "status" = 'pending' THEN ? ELSE "deliveredAt" END,
+                  "deliveredSignalId" = ?,
+                  "lastDeliveryAttemptAt" = ?,
+                  "updatedAt" = ?
+              WHERE "threadId" = ? AND "id" = ?
+              RETURNING ${buildSelectColumns(TABLE_NOTIFICATIONS)}`,
+            args: [
+              now,
+              input.deliveredSignalId,
+              input.lastDeliveryAttemptAt.toISOString(),
+              now,
+              input.threadId,
+              input.id,
+            ],
+          }),
+        ),
+      `mark notification ${input.id} delivered`,
+    );
+    const row = result.rows?.[0];
+    return row ? rowToNotification(row as Record<string, unknown>) : null;
   }
 
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {
