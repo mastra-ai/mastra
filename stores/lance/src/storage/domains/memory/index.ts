@@ -172,6 +172,77 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const current = await this.getThreadById({ threadId: id, resourceId });
+        if (!current) return { supported: true, thread: null, boundary: undefined };
+
+        const metadata = typeof current.metadata === 'string' ? JSON.parse(current.metadata) : (current.metadata ?? {});
+        const previous = this.getMemoryTokenBoundary({ metadata });
+        const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+        if (JSON.stringify(previous) === JSON.stringify(boundary)) {
+          return { supported: true, thread: { ...current, metadata }, boundary };
+        }
+
+        // Compare-and-swap on the exact prior metadata so a stale writer can
+        // never overwrite a newer boundary: Lance mergeInsert is
+        // last-write-wins and cannot express a conditional update.
+        const priorSerialized =
+          current.metadata == null
+            ? null
+            : typeof current.metadata === 'string'
+              ? current.metadata
+              : JSON.stringify(current.metadata);
+        const nextSerialized = JSON.stringify({ ...metadata, memoryTokenLimiter: boundary });
+        const updatedAt = new Date();
+        const conditions = [`id = '${this.escapeSql(id)}'`];
+        if (resourceId !== undefined) conditions.push(`resourceId = '${this.escapeSql(resourceId)}'`);
+        conditions.push(
+          priorSerialized === null ? 'metadata IS NULL' : `metadata = '${this.escapeSql(priorSerialized)}'`,
+        );
+
+        const table = await this.client.openTable(TABLE_THREADS);
+        const result = await table.update({
+          where: conditions.join(' AND '),
+          values: { metadata: nextSerialized, updatedAt: updatedAt.getTime() },
+        });
+        if (result.rowsUpdated === 0) {
+          // CAS miss: another writer changed this row first; reread and
+          // re-apply the monotonic merge on the next attempt.
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 10));
+          continue;
+        }
+        return {
+          supported: true,
+          thread: { ...current, metadata: { ...metadata, memoryTokenLimiter: boundary }, updatedAt },
+          boundary,
+        };
+      } catch (error: any) {
+        if (error.message?.includes('Commit conflict') && attempt < 4) {
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 10));
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new Error(`Failed to advance memory token boundary for thread ${id} after 5 attempts`);
+  }
+
   async updateThread({
     id,
     title,

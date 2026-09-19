@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import {
   createTestSuite,
   createClientAcceptanceTests,
   createDomainDirectTests,
   createSampleMessageV2,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import { connect } from '@lancedb/lancedb';
 import { TABLE_RESOURCES } from '@mastra/core/storage';
@@ -37,6 +39,22 @@ createDomainDirectTests({
   createMemoryDomain: () => new StoreMemoryLance({ client: testClient }),
   createWorkflowsDomain: () => new StoreWorkflowsLance({ client: testClient }),
   createScoresDomain: () => new StoreScoresLance({ client: testClient }),
+});
+
+createMemoryTokenBoundaryConformanceTest({
+  repetitions: 20,
+  createStores: async () => {
+    const path = `/tmp/mastra-lance-boundary-${randomUUID()}`;
+    const first = new StoreMemoryLance({ client: await connect(path) });
+    const second = new StoreMemoryLance({ client: await connect(path) });
+    await first.init();
+    await second.init();
+    return {
+      first,
+      second,
+      cleanup: () => fs.rm(path, { recursive: true, force: true }),
+    };
+  },
 });
 
 describe('StoreMemoryLance error propagation (no empty-on-error)', () => {

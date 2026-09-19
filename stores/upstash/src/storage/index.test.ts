@@ -4,6 +4,7 @@ import {
   createConfigValidationTests,
   createClientAcceptanceTests,
   createDomainDirectTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -28,6 +29,14 @@ const createTestClient = () =>
     url: TEST_CONFIG.url,
     token: TEST_CONFIG.token,
   });
+
+createMemoryTokenBoundaryConformanceTest({
+  repetitions: 20,
+  createStores: () => ({
+    first: new StoreMemoryUpstash({ client: createTestClient() }),
+    second: new StoreMemoryUpstash({ client: createTestClient() }),
+  }),
+});
 
 const createThread = (resourceId = `resource-${randomUUID()}`): StorageThreadType => ({
   id: `thread-${randomUUID()}`,

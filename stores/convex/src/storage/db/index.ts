@@ -185,6 +185,41 @@ export class ConvexDB extends MastraBase {
     });
   }
 
+  /**
+   * Internal transport layer for `advanceMemoryTokenBoundary`. Unlike the core
+   * storage contract input (`{ id, resourceId, candidate }`), this method also
+   * takes `updatedAt`; the memory domain generates it before calling, and it is
+   * only written as part of the mutation payload — it is not caller-visible.
+   */
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+    updatedAt,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+    updatedAt: Date;
+  }): Promise<{
+    thread: (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | null;
+    boundary?: typeof candidate;
+  }> {
+    return this.client.callStorage({
+      op: 'advanceMemoryTokenBoundary',
+      tableName: TABLE_THREADS,
+      id,
+      resourceId,
+      candidate,
+      updatedAt: updatedAt.toISOString(),
+    });
+  }
+
   async updateResource({
     resourceId,
     workingMemory,

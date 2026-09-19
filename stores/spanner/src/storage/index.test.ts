@@ -9,6 +9,7 @@ import {
   createTestSuite,
   createConfigValidationTests,
   createDomainDirectTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import { TABLE_AGENTS, TraceStatus } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -124,6 +125,25 @@ if (ENABLE_TESTS) {
   };
 
   createTestSuite(new SpannerStore(sharedConfig));
+
+  createMemoryTokenBoundaryConformanceTest({
+    createStores: async () => {
+      const firstClient = makeClient();
+      const secondClient = makeClient();
+      const first = new MemorySpanner({ database: firstClient.instance(INSTANCE_ID).database(sharedDbId) });
+      const second = new MemorySpanner({ database: secondClient.instance(INSTANCE_ID).database(sharedDbId) });
+      await first.init();
+      await second.init();
+      return {
+        first,
+        second,
+        cleanup: () => {
+          firstClient.close();
+          secondClient.close();
+        },
+      };
+    },
+  });
 
   describe('retention', () => {
     it('prunes expired observability spans and metrics', async () => {

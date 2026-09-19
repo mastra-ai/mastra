@@ -94,6 +94,12 @@ export class DODB extends MastraBase {
     }
   }
 
+  async executeUpdate({ sql, params = [] }: SqlQueryOptions): Promise<number> {
+    const cursor = this.sql.exec(sql, ...this.formatSqlParams(params));
+    cursor.toArray();
+    return cursor.rowsWritten;
+  }
+
   private async getTableColumns(tableName: string): Promise<{ name: string; type: string }[]> {
     // Validate table name to prevent SQL injection
     const identifierPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;

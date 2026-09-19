@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import type { D1Database } from '@cloudflare/workers-types';
 import {
   createTestSuite,
   createClientAcceptanceTests,
   createDomainDirectTests,
   createConfigValidationTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
@@ -49,6 +51,17 @@ createTestSuite(
   }),
   { deterministicScorePagination: true },
 );
+
+createMemoryTokenBoundaryConformanceTest({
+  createStores: async () => {
+    const tablePrefix = `boundary_${randomUUID().replaceAll('-', '')}_`;
+    const first = new MemoryStorageD1({ binding: d1Database, tablePrefix });
+    const second = new MemoryStorageD1({ binding: d1Database, tablePrefix });
+    await first.init();
+    await second.init();
+    return { first, second, cleanup: () => first.dangerouslyClearAll() };
+  },
+});
 
 // Pre-configured client acceptance tests (using binding)
 createClientAcceptanceTests({

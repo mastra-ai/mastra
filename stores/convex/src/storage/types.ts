@@ -94,6 +94,19 @@ export type StorageRequest =
       updatedAt: string;
     }
   | {
+      op: 'advanceMemoryTokenBoundary';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      resourceId?: string;
+      candidate: {
+        createdAt: string;
+        messageIds: string[];
+        maxTokens: number;
+        atMaxRemoveTokens: number;
+      };
+      updatedAt: string;
+    }
+  | {
       op: 'updateResource';
       tableName: TABLE_NAMES | string;
       resourceId: string;
