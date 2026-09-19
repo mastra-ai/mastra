@@ -1,0 +1,163 @@
+---
+title: 'Reference: connect() | Connect'
+description: "API reference for connect() in @mastra/connect: a live toolset resolver over a project's platform connections that picks up new connections without a restart."
+packages:
+  - '@mastra/connect'
+---
+
+# connect()
+
+Returns a live toolset resolver over the connections available to a Mastra platform project. Pass it to an agent's dynamic `tools` argument and Mastra calls it on every generate/stream. The resolver serves a cached snapshot of one toolset per connected provider and revalidates from the platform every `ttlMs`, so connections attached after startup are picked up without a restart.
+
+```typescript title="src/agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { connect } from '@mastra/connect'
+
+const agent = new Agent({
+  name: 'ops',
+  model: 'openai/gpt-5-mini',
+  tools: connect(),
+})
+```
+
+Returns: `ConnectTools`, a resolver producing `Record<string, ToolsInput>` keyed by the generated integration IDs shipped in the installed package version. See [The resolver](#the-resolver).
+
+See [Integrations](/docs/mastra-platform/integrations) for the concept overview.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ConnectOptions',
+    description: 'Optional discovery and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ConnectOptions',
+        parameters: [
+          {
+            name: 'projectId',
+            type: 'string',
+            description: 'Project to list connections for. Falls back to MASTRA_PROJECT_ID.',
+            isOptional: true,
+          },
+          {
+            name: 'integrations',
+            type: 'Record<string, ConnectIntegrationOptions>',
+            description: 'Provider allowlist and per-provider overrides. See Integrations allowlist below.',
+            isOptional: true,
+          },
+          {
+            name: 'ttlMs',
+            type: 'number',
+            description:
+              'How long a resolved snapshot stays fresh, in milliseconds. Default 30000. 0 revalidates on every resolution.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description: 'Platform client overrides. See ConnectClientOptions below.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### ConnectClientOptions
+
+Every field falls back to an environment variable, so a fully env-configured app can pass nothing.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'accessToken',
+    type: 'string',
+    description: 'Platform access token. Falls back to MASTRA_PLATFORM_ACCESS_TOKEN, then MASTRA_PLATFORM_SECRET_KEY.',
+    isOptional: true,
+  },
+  {
+    name: 'orgId',
+    type: 'string',
+    description: 'Organization id. Falls back to MASTRA_ORG_ID; sent as the x-organization-id header when present.',
+    isOptional: true,
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description:
+      'Integrations service base URL. Falls back to MASTRA_INTEGRATIONS_API_URL, then the regional default from MASTRA_PLATFORM_REGION (us or eu), then https://integrations.mastra.ai.',
+    isOptional: true,
+  },
+  {
+    name: 'fetch',
+    type: 'typeof globalThis.fetch',
+    description: 'Fetch implementation, for testing or custom transports. Defaults to globalThis.fetch.',
+    isOptional: true,
+  },
+]}
+/>
+
+## The resolver
+
+The returned `ConnectTools` resolver caches its toolset snapshot. Within `ttlMs` of the last fetch, resolutions return the cached snapshot. After that, the cached snapshot is served immediately while a background refresh runs (stale-while-revalidate). Connections attached to the project after startup become available within the TTL, and detached connections are dropped, with no restart or redeploy required.
+
+Call the resolver directly when you need a plain toolsets record, for example for an agent's `toolsets` option at generate time:
+
+```typescript title="src/generate.ts"
+import { connect } from '@mastra/connect'
+
+const tools = connect()
+
+const toolsets = await tools()
+
+const response = await agent.generate('Summarize my open issues.', { toolsets })
+```
+
+The resolver also exposes two methods for manual control:
+
+- `invalidate()` drops the cached snapshot so the next resolution fetches fresh.
+- `refresh()` fetches from the platform immediately, then updates the cache and returns the toolsets.
+
+Failure handling is tuned for long-running servers:
+
+- Configuration errors (missing project id or token, unknown `integrations` keys, invalid `ttlMs`) throw eagerly at `connect()` call time.
+- If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
+
+## Integrations allowlist
+
+When `integrations` is provided, only listed providers are returned. Each value is an options object:
+
+- `connectionId` picks a specific connection.
+- `allowTools` restricts the toolset by tool key.
+- `disabled: true` excludes the provider.
+
+A listed provider with no connection in the project yet is skipped with a one-time warning and is included automatically once a connection is attached. Without `integrations`, every connected provider with a shipped toolset is included.
+
+## Connection resolution
+
+For each provider present in the project's connections:
+
+1. An explicit `connectionId` (option or the provider's `MASTRA_<PROVIDER>_CONNECTION_ID` env var) wins.
+1. Otherwise, a single active connection is used automatically.
+1. Otherwise the provider is ambiguous and is skipped with a `console.warn` listing the candidates.
+
+Connections in `needs_reauth` status are never silently mapped: they're skipped with a warning until reconnected on the platform. Connections whose integration has no toolset in this package are also skipped with a warning. Every per-provider failure during resolution is downgraded to a warning so a single bad integration never fails the whole resolution.
+
+## Errors
+
+Throws `MastraConnectError` with a `code` property:
+
+| Code | When |
+| - | - |
+| `missing_access_token` | No platform token configured |
+| `missing_project_id` | No `projectId` option or `MASTRA_PROJECT_ID` |
+| `invalid_options` | Invalid `ttlMs` |
+| `connection_not_found` | An unknown key in `integrations`, or a directed connection id 404s at tool execution |
+| `unauthorized` | The platform rejected the token (401/403) |
+| `platform_error` | Any other platform request failure |
