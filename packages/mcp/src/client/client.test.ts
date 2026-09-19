@@ -560,11 +560,15 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
       tools: [{ name: 'mixed_tool', inputSchema: inputSchema as any }],
     });
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
 
     const tools = await client.tools();
-    const storedSchema = tools.mixed_tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
-    expect(storedSchema).toMatchObject(original);
-    expect(storedSchema).not.toHaveProperty('required');
+    // Only string arrays are hoisted, so a mixed-type `properties.required`
+    // stays a schema-shape violation. Under the #23731 contract the malformed
+    // tool is skipped instead of being handed to providers that reject the
+    // whole request.
+    expect(tools.mixed_tool).toBeUndefined();
+    expect(warnSpy.mock.calls.map(call => call[0]).join('\n')).toContain('mixed_tool');
     expect(inputSchema).toEqual(original);
   });
 
@@ -585,6 +589,60 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
       type: 'object',
       properties: { coin: { type: 'string' }, required: ['coin'] },
     });
+  });
+
+  it('should skip a tool with an unrepairable input schema and keep valid siblings usable', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'get_candles',
+          inputSchema: { type: 'object' as const, properties: { coin: { type: 'string' as const } } } as any,
+        },
+        {
+          // Unrepairable: a property value is an array where a schema object is
+          // required — the exact shape strict providers reject the whole
+          // request for.
+          name: 'get_l2_book',
+          inputSchema: { type: 'object' as const, properties: { coin: ['not-a-schema'] } } as any,
+        },
+      ],
+    });
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
+
+    const tools = await client.tools();
+
+    expect(Object.keys(tools)).toEqual(['get_candles']);
+    const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
+    expect(warnMessages).toContain('get_l2_book');
+    expect(warnMessages).toContain('invalid input schema');
+    expect(warnMessages).toContain('output-schema-test-client');
+  });
+
+  it('should skip a hydrated tool with an invalid input schema instead of building it', () => {
+    const definition = {
+      name: 'broken_tool',
+      inputSchema: { type: 'object' as const, properties: { coin: ['not-a-schema'] } } as any,
+      server: { name: 'hydration-isolation-server' },
+    };
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
+
+    expect(() => client.toolFromDefinition({ definition })).toThrow(/broken_tool/);
+    const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
+    expect(warnMessages).toContain('broken_tool');
+    expect(warnMessages).toContain('invalid input schema');
+  });
+
+  it('should accept an input schema with a property named required and no type', async () => {
+    // Exotic but structurally sound schemas must not be dropped: the validator
+    // only rejects shapes strict providers would reject.
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'exotic_tool', inputSchema: { properties: {}, anyOf: [{ type: 'object' as const }] } as any }],
+    });
+
+    const tools = await client.tools();
+    expect(tools.exotic_tool).toBeDefined();
   });
 
   it('should preserve recursive $ref input schemas when creating tools', async () => {

@@ -1208,17 +1208,16 @@ export class InternalMastraMCPClient extends MastraBase {
     return this.jsonSchemaValidator;
   }
 
-  private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
-    const rawSchema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
-
-    // Fix common schema malformation: `required` nested inside `properties`
-    // instead of at the object level. Example of the bug:
-    //   { "properties": { "coin": { "type": "string" }, "required": ["coin"] } }
-    // Should be:
-    //   { "properties": { "coin": { "type": "string" } }, "required": ["coin"] }
-    // Only string arrays are hoisted, so a valid property literally named
-    // `required` is preserved; an existing top-level list wins; nothing is mutated.
-    let schema = rawSchema;
+  /**
+   * Repairs the common `required`-inside-`properties` malformation without
+   * mutating the server-supplied object. Example of the bug:
+   *   { "properties": { "coin": { "type": "string" }, "required": ["coin"] } }
+   * Should be:
+   *   { "properties": { "coin": { "type": "string" } }, "required": ["coin"] }
+   * Only string arrays are hoisted, so a valid property literally named
+   * `required` is preserved; an existing top-level list wins.
+   */
+  private normalizeMisplacedRequired(schema: JSONSchema7): JSONSchema7 {
     if (schema && typeof schema === 'object' && 'properties' in schema) {
       const props = schema.properties;
       const required: unknown = props?.required;
@@ -1226,9 +1225,71 @@ export class InternalMastraMCPClient extends MastraBase {
         this.log('debug', 'Normalizing misplaced required list in MCP tool input schema');
         const properties = { ...props };
         delete properties.required;
-        schema = { ...schema, properties, required: schema.required ?? required };
+        return { ...schema, properties, required: schema.required ?? required };
       }
     }
+    return schema;
+  }
+
+  /**
+   * Structural check for the schema shapes strict function-calling providers
+   * reject up front. Providers validate the whole `tools` array before running
+   * anything, so one malformed schema would fail every request. Returns a
+   * short reason when the schema is invalid, null when it is acceptable.
+   */
+  private getInputSchemaShapeError(schema: unknown, depth = 0): string | null {
+    if (depth > 8) return null; // bounded: pathological nesting is not worth walking
+    if (typeof schema === 'boolean') return null; // `true`/`false` are valid JSON Schema (2020-12)
+    if (schema === null || typeof schema !== 'object' || Array.isArray(schema)) {
+      return 'expected a schema object';
+    }
+    const node = schema as Record<string, unknown>;
+
+    if (node.type !== undefined && typeof node.type !== 'string' && !Array.isArray(node.type)) {
+      return '"type" must be a string or string array';
+    }
+    if (node.enum !== undefined && !Array.isArray(node.enum)) {
+      return '"enum" must be an array';
+    }
+    if (node.required !== undefined) {
+      if (!Array.isArray(node.required) || node.required.some((entry: unknown) => typeof entry !== 'string')) {
+        return '"required" must be an array of strings';
+      }
+    }
+    if (node.items !== undefined) {
+      const itemsError = this.getInputSchemaShapeError(node.items, depth + 1);
+      if (itemsError) return `"items" ${itemsError}`;
+    }
+    for (const combinator of ['anyOf', 'oneOf', 'allOf'] as const) {
+      const branches = node[combinator];
+      if (branches !== undefined) {
+        if (!Array.isArray(branches)) {
+          return `"${combinator}" must be an array`;
+        }
+        for (const branch of branches) {
+          const branchError = this.getInputSchemaShapeError(branch, depth + 1);
+          if (branchError) return `"${combinator}" entry ${branchError}`;
+        }
+      }
+    }
+    if (node.properties !== undefined) {
+      if (node.properties === null || typeof node.properties !== 'object' || Array.isArray(node.properties)) {
+        return '"properties" must be an object';
+      }
+      for (const [propertyName, propertySchema] of Object.entries(node.properties)) {
+        const propertyError = this.getInputSchemaShapeError(propertySchema, depth + 1);
+        if (propertyError) {
+          return `property "${propertyName}" ${propertyError}`;
+        }
+      }
+    }
+    return null;
+  }
+
+  private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
+    const rawSchema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+
+    const schema = this.normalizeMisplacedRequired(rawSchema);
 
     const dialectSchema = withDefaultDialect(schema);
     const standardSchema = toStandardSchema(dialectSchema);
@@ -1357,6 +1418,16 @@ export class InternalMastraMCPClient extends MastraBase {
     serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
   ): Tool<any, any, any, any> | undefined {
     try {
+      // Validate before building so one malformed schema cannot poison the
+      // whole tools array at the provider. The malformed tool is skipped with
+      // a warning naming the server and the tool; valid siblings stay usable.
+      const rawInputSchema = ('jsonSchema' in tool.inputSchema ? tool.inputSchema.jsonSchema : tool.inputSchema) as JSONSchema7;
+      const inputSchemaShapeError = this.getInputSchemaShapeError(this.normalizeMisplacedRequired(rawInputSchema));
+      if (inputSchemaShapeError) {
+        this.log('warning', `Skipping MCP tool "${tool.name}" from server "${this.name}": invalid input schema (${inputSchemaShapeError})`);
+        return undefined;
+      }
+
       let requireApproval: boolean | undefined;
       let needsApprovalFn: NeedsApprovalFn | undefined;
 
