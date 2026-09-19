@@ -1,0 +1,116 @@
+---
+title: "Cua | Sandbox"
+description: "Use Cua Fleet Linux desktops with Mastra computer tools for screenshots, mouse actions, keyboard input, and scrolling."
+packages:
+  - "@mastra/cua"
+---
+
+# Cua
+
+`CuaFleetSandbox` connects Mastra agents to a Linux desktop in [Cua Fleet](https://run.cua.ai). It implements the [WorkspaceSandbox interface](/reference/workspace/sandbox) and provides screenshot, mouse, and keyboard controls through Mastra's [computer capability](/docs/sandbox/computer).
+
+The provider acquires a claim from an existing pool. Your application owns the pool, its capacity, and its cleanup policy. This integration supports graphical desktop actions only: it doesn't provide shell execution, file operations, processes, storage mounts, or live viewing.
+
+## Package setup
+
+`@mastra/cua` is a proposed package and hasn't been published to npm. The examples on this page assume you've built and installed the package locally from the integration source.
+
+Before starting a session, configure:
+
+- An existing Linux pool with a compatible desktop image and computer-server exposed as the `server` service
+- Fleet client credentials in the `CUA_CLIENT_ID` and `CUA_CLIENT_SECRET` environment variables
+- The model provider API key required by your Mastra agent
+
+Keep Fleet credentials on the server. Pass them through `clientId` and `clientSecret`; the provider doesn't read environment variables automatically. It uses the Fleet OAuth endpoint and API at `run.cua.ai` and doesn't provision pools or install software.
+
+## Usage
+
+Pass a concrete sandbox instance to a workspace to register the `mastra_workspace_computer_*` tools. Use a separate sandbox and workspace for each concurrent application session:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { CuaFleetSandbox } from '@mastra/cua'
+
+const sandbox = new CuaFleetSandbox({
+  id: 'desktop-session',
+  poolName: 'existing-linux-pool',
+  clientId: process.env.CUA_CLIENT_ID!,
+  clientSecret: process.env.CUA_CLIENT_SECRET!,
+})
+
+const agent = new Agent({
+  id: 'desktop-agent',
+  name: 'Desktop Agent',
+  instructions: 'Use the computer tools to complete the requested task.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  workspace: new Workspace({ sandbox }),
+})
+
+try {
+  const response = await agent.generate('Take a screenshot and describe the desktop.', {
+    maxSteps: 10,
+  })
+  console.log(response.text)
+} finally {
+  await sandbox.destroy()
+}
+```
+
+The first computer operation starts the session. The agent can take screenshots, click, move the mouse, drag, type, press keys, scroll, and inspect the display and cursor position. Sharing one provider instance shares its desktop. Use a concrete `Workspace({ sandbox })` rather than a dynamic sandbox resolver so Mastra discovers the computer tools.
+
+### Direct desktop control
+
+Call the computer capability without an agent to verify that the pool supplies a working desktop. With a newly constructed sandbox, this example prints the screen dimensions and PNG byte count:
+
+```typescript
+import { CuaFleetSandbox } from '@mastra/cua'
+
+const sandbox = new CuaFleetSandbox({
+  id: 'direct-desktop-session',
+  poolName: 'existing-linux-pool',
+  clientId: process.env.CUA_CLIENT_ID!,
+  clientSecret: process.env.CUA_CLIENT_SECRET!,
+})
+
+try {
+  await sandbox.start()
+  const size = await sandbox.computer.getScreenSize()
+  const { data, mediaType } = await sandbox.computer.screenshot()
+  console.log({ size, mediaType, bytes: data.length })
+} finally {
+  await sandbox.destroy()
+}
+```
+
+Coordinates are integer display pixels measured from the top-left corner. Scrolling uses positive integer wheel ticks. Key input accepts names such as `Enter` and `ArrowDown`, or chords such as `['Control', 's']`. Single characters preserve case; unsupported named keys are rejected. Actions within one provider instance run in sequence, so screenshots, chords, and dragging don't overlap.
+
+## Constructor parameters
+
+| Parameter | Type | Description |
+| - | - | - |
+| `id` | `string` | Required application session identity. Reusing it doesn't reconnect to an existing claim. |
+| `poolName` | `string` | Required name of an existing compatible Linux pool. |
+| `clientId` | `string` | Required Fleet OAuth client ID. |
+| `clientSecret` | `string` | Required Fleet OAuth client secret. |
+| `claimTtlSeconds` | `number` | Claim time to live (TTL), measured from creation. Defaults to `3600`; maximum `86400`. |
+| `startupTimeoutMs` | `number` | Total acquisition and readiness timeout. Defaults to `900000`; maximum `3600000`. |
+| `requestTimeoutMs` | `number` | Per-request HTTP timeout. Defaults to `60000`; maximum `300000`. |
+
+Timeouts and TTL must be positive integers. The claim TTL must exceed the startup timeout after converting both to the same unit. Startup time counts toward the TTL; the claim doesn't renew automatically. The pool's own expiry can also end a session. TTL isn't a spending cap.
+
+## Lifecycle and cleanup
+
+Construction makes no network requests. `start()` or the first computer operation acquires a claim; concurrent starts on the same instance share one acquisition. Each new instance acquires an independent claim, even if it has the same `id`.
+
+Always call `destroy()` when the session ends. It rejects new actions, waits for active work, releases its owned claim, and verifies that the claim is absent. It leaves the application-owned pool intact. If cleanup fails, retain the instance and retry `destroy()`; the provider keeps the state needed for cleanup.
+
+`stop()` is not implemented. Calling `Workspace.stop()` leaves the claim active; call `destroy()` to release it. Pause/resume, reconnection, cloning, and checkpoints aren't supported. `supportsCheckpoints` is `false`, and `snapshot()` is a no-op compatibility hook. Create a new sandbox instance to start another desktop session after destruction.
+
+Requests have bounded timeouts and refuse redirects. The provider doesn't automatically replay graphical commands after ambiguous failures, because replaying a click or text entry can duplicate an action.
+
+## Related
+
+- [Computer-use tools](/docs/sandbox/computer#computer-tools)
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [Sandbox overview](/docs/sandbox/overview)
