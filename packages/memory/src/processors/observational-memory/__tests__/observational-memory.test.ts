@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent } from '@mastra/core/agent';
-import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { Agent, MessageList, type MastraDBMessage, type MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '@mastra/core/memory';
@@ -191,6 +190,91 @@ function createInMemoryStorage(): InMemoryMemory {
   const db = new InMemoryDB();
   return new InMemoryMemory({ db });
 }
+
+describe('ObservationalMemory client input persistence', () => {
+  it('does not rewrite a stored sealed user message from an edited client echo', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'sealed-echo-thread';
+    const resourceId = 'sealed-echo-resource';
+    const createdAt = new Date('2026-01-01T00:00:00Z');
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Sealed echo regression',
+        createdAt,
+        updatedAt: createdAt,
+        metadata: {},
+      },
+    });
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'sealed-user-1',
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Canonical sealed question' }],
+            metadata: { mastra: { sealed: true } },
+          },
+          threadId,
+          resourceId,
+          createdAt,
+        } as MastraDBMessage,
+      ],
+    });
+
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        content: [{ type: 'text' as const, text: 'unused' }],
+        warnings: [],
+      }),
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: model as any,
+      observation: { messageTokens: 1, bufferTokens: false },
+      reflection: { observationTokens: 1 },
+    });
+    const persistSpy = vi.spyOn(om, 'persistMessages');
+
+    await om.persistClientInputMessages(
+      [
+        {
+          id: 'sealed-user-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Edited client echo' }] },
+          threadId,
+          resourceId,
+          createdAt,
+        } as MastraDBMessage,
+      ],
+      [],
+      threadId,
+      resourceId,
+    );
+
+    // Assert the reconciled batch, not only the final storage state. Before the
+    // sealed-echo guard, persistMessages received the edited message and then
+    // silently filtered it because it was already sealed.
+    expect(persistSpy).toHaveBeenCalledWith([], threadId, resourceId);
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      resourceId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.content.parts).toEqual([{ type: 'text', text: 'Canonical sealed question' }]);
+    expect((messages[0]?.content.metadata as { mastra?: { sealed?: boolean } })?.mastra?.sealed).toBe(true);
+  });
+});
 
 describe('ObservationalMemoryProcessor read-only mode', () => {
   it('loads stored context without starting observation side effects', async () => {
@@ -397,6 +481,123 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
     expect(messageList.get.all.db().map(m => m.id)).not.toContain('om-continuation');
     expect(messageList.getSystemMessages('observational-memory')).toEqual([]);
     expect(memoryProvider.persistMessages).not.toHaveBeenCalled();
+  });
+});
+
+describe('ObservationalMemoryProcessor client echo reconciliation', () => {
+  it('reconciles client input on a resumed output without a live turn', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'resume-echo-thread';
+    const resourceId = 'resume-echo-resource';
+    const stored = {
+      id: 'assistant-echo',
+      role: 'assistant',
+      content: {
+        format: 2,
+        content: 'Server transformed text',
+        parts: [
+          { type: 'text', text: 'Server transformed text' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'call-1',
+              toolName: 'search',
+              args: { query: 'canonical' },
+            },
+          },
+        ],
+        metadata: { serverOwned: true },
+      },
+      threadId,
+      resourceId,
+      createdAt: new Date('2025-01-01T09:00:00Z'),
+    } as MastraDBMessage;
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Resume echo',
+        metadata: {},
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+      },
+    });
+    await storage.saveMessages({ messages: [stored] });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 100000 },
+      reflection: { observationTokens: 200000 },
+    });
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    const lookupSpy = vi.spyOn(storage, 'listMessagesById');
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    const echoWithResult = {
+      ...stored,
+      content: {
+        format: 2,
+        content: 'Lossy client text',
+        parts: [
+          { type: 'text', text: 'Lossy client text' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'call-1',
+              toolName: 'client-name',
+              args: { query: 'changed', injected: true },
+              result: 'client result',
+            },
+          },
+        ],
+        metadata: { clientOwned: true },
+      },
+    } as MastraDBMessage;
+    const messageList = new MessageList({ threadId, resourceId }).add([echoWithResult], 'input');
+
+    await processor.processOutputResult({
+      messageList,
+      messages: [],
+      requestContext,
+      state: {},
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+      result: {} as any,
+      retryCount: 0,
+    });
+
+    const { messages } = await storage.listMessages({ threadId, resourceId, perPage: false });
+    const saved = messages.find(message => message.id === stored.id)!;
+    expect(lookupSpy).toHaveBeenCalledTimes(1);
+    expect(saved.content.content).toBe('Server transformed text');
+    expect(saved.content.metadata).toEqual({ serverOwned: true });
+    expect(saved.content.parts).toEqual([
+      { type: 'text', text: 'Server transformed text' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call-1',
+          toolName: 'search',
+          args: { query: 'canonical' },
+          result: 'client result',
+        },
+      },
+    ]);
   });
 });
 
