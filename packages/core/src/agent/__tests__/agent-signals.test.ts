@@ -1,3 +1,4 @@
+import { fork } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6279,6 +6280,34 @@ describe('Agent signals', () => {
     } finally {
       subscription.unsubscribe();
     }
+  });
+
+  it('allows a run immediately after persisting an idle signal', async () => {
+    const fixture = new URL('./fixtures/persisted-signal-immediate-run.ts', import.meta.url);
+    const child = fork(fixture, {
+      execArgv: ['--import', 'tsx'],
+      silent: true,
+    });
+    const stderr: Buffer[] = [];
+    child.stderr?.on('data', chunk => stderr.push(chunk));
+
+    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      const timeout = setTimeout(() => child.kill('SIGKILL'), 5_000);
+      child.once('error', error => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      child.once('close', (code, signal) => {
+        clearTimeout(timeout);
+        resolve({ code, signal });
+      });
+    });
+
+    expect({ ...result, stderr: Buffer.concat(stderr).toString() }).toEqual({
+      code: 0,
+      signal: null,
+      stderr: '',
+    });
   });
 
   it.each(['reactive', 'system-reminder'] as const)(
