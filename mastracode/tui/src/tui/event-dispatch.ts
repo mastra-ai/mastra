@@ -125,6 +125,10 @@ export async function dispatchEvent(
       const message = state.streamingMessage;
       if (!message || message.id !== event.id || !isMessageForCurrentThread(message, state)) break;
 
+      // `applyUpdate` folds by id for any role, so the assistant-only check
+      // lives here: this is what keeps user and system text out of tokens/sec.
+      if (message.role !== 'assistant') break;
+
       const updated = applyUpdate(message, event.event);
       if (!updated) break;
 
