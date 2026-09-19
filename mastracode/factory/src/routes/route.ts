@@ -29,6 +29,8 @@ export interface RouteAuth {
   tenant(c: Context): { orgId?: string; userId: string } | undefined;
   /** Fail-closed check that the caller administers the given organization. */
   isOrganizationAdmin(c: Context, organizationId: string): Promise<boolean>;
+  /** Explicit deployment-wide authority. Omitted capabilities deny authenticated writes. */
+  isDeploymentOperator?(c: Context): Promise<boolean>;
 }
 
 /** Dependencies shared by every factory route module. */
