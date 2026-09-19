@@ -486,6 +486,9 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           instructions: 'test',
           model: createPartialThenErrorModel('stream broke'),
           memory: mockMemory,
+          // Terminal-error persistence is the subject; no processor-level retry layer, which would
+          // start another step before the error part is appended.
+          errorProcessors: [],
         });
 
         const result = await agent.stream('tell me something', {
@@ -2618,6 +2621,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       name: 'Test Raw Finish Reason',
       model: finishReasonErrorModelV3({ unified: 'error', raw: 'MALFORMED_FUNCTION_CALL' }),
       instructions: 'You are a helpful assistant.',
+      // The provider's raw finish reason is the subject; opt out of processor-level retry.
+      errorProcessors: [],
     });
 
     const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });

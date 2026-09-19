@@ -7,6 +7,9 @@ import { Memory } from '../../../../memory/src';
 import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, Processor } from '../../processors';
+import { PrefillErrorHandler } from '../../processors/prefill-error-handler';
+import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
+import { StreamErrorRetryProcessor } from '../../processors/stream-error-retry-processor';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../durable/create-durable-agent';
@@ -94,7 +97,17 @@ describe('attachment download recovery', () => {
       model: (models ?? [model]).map(model => ({ model, maxRetries: 0 })),
       memory,
       inputProcessors: inputProcessor ? [inputProcessor] : [],
-      errorProcessors: errorProcessor ? [errorProcessor] : [],
+      // The agent adds the shared stability defaults unless their ids are present. These cases assert
+      // what happens when the caller's processor is the only one deciding, so the list names all three
+      // ids with neutral instances (no retry budget).
+      errorProcessors: errorProcessor
+        ? [
+            errorProcessor,
+            new ProviderHistoryCompat(),
+            new StreamErrorRetryProcessor({ maxRetries: 0 }),
+            new PrefillErrorHandler(),
+          ]
+        : [],
     });
     const pubsub = new EventEmitterPubSub();
     pubsubs.push(pubsub);
