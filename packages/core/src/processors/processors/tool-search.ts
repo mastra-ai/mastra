@@ -1,5 +1,11 @@
+import type { SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
 import { z } from 'zod/v4';
+import type { Classifier, ClassifierQuestion, ClassifierQuestions } from '../../classifier';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import type { Mastra } from '../../mastra';
 import { parseMemoryRequestContext } from '../../memory/types';
+import { resolveObservabilityContext } from '../../observability';
+import { executeWithContext } from '../../observability/utils';
 import { MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
@@ -131,6 +137,64 @@ export interface ToolSearchProcessorOptions {
    * Return false to hide or block a tool for the current request.
    */
   filter?: (args: ToolSearchFilterArgs) => boolean | Promise<boolean>;
+
+  /**
+   * Seed the loaded-tool set from a classifier before the model's first turn,
+   * removing the discovery round-trip when the classifier is confident.
+   *
+   * Discovery is normally model-driven: the model calls `search_tools` /
+   * `load_tool`, and because activation happens inside those tool executions it
+   * only takes effect on the following turn. Preselection runs inside the
+   * processor instead, before the step's loaded-tool snapshot is taken, so the
+   * chosen tools are available on the very first turn.
+   *
+   * This is an **additive prior, not a routing decision**. It only ever adds
+   * tools; nothing is hidden and the catalog is never narrowed, so a wrong
+   * prediction costs a few unused tools rather than making a tool unreachable.
+   * `search_tools` / `load_tool` stay exposed as the correction path.
+   *
+   * It runs once per user message — not once per step — so a multi-step turn
+   * reuses one decision, and a follow-up that changes the subject gets a fresh
+   * one rather than being stuck with the previous message's tools.
+   * Classifier failures fail open and leave the normal flow untouched.
+   *
+   * The classifier must have configured questions and `question` must name a
+   * choice question: stable criteria are what make the probabilities
+   * comparable across requests and the threshold meaningful. Include a
+   * criterion for "no tools needed" and map it to `[]`.
+   */
+  preselect?: ToolSearchPreselectOptions;
+}
+
+/** Classifier-backed seeding of the loaded-tool set. See `ToolSearchProcessorOptions.preselect`. */
+export interface ToolSearchPreselectOptions {
+  /** A classifier with configured questions, or the id of one registered on Mastra. */
+  classifier: Classifier<ClassifierQuestions> | string;
+
+  /** Which configured choice question selects the tool group. */
+  question: string;
+
+  /**
+   * Maps every choice of `question` to the tools to load for it. The mapping is
+   * explicit and exhaustive — there is no implicit ordering or name matching
+   * between criteria and tools. Map the "no tools needed" criterion to `[]`.
+   */
+  tools: Record<string, string[]>;
+
+  /**
+   * Minimum probability the selected choice needs before its tools are loaded.
+   * Below it the classifier abstains and the normal model-driven flow runs
+   * unchanged — deciding *whether* to decide is the point of the threshold.
+   *
+   * Only applies when the evaluation model returns a probability distribution.
+   * When it does not, the selected choice is used as-is.
+   *
+   * @default 0.6
+   */
+  minProbability?: number;
+
+  /** Provider-specific options forwarded to the evaluation model. */
+  providerOptions?: SharedV4ProviderOptions;
 }
 
 /**
@@ -238,6 +302,12 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   private injectCatalog: boolean;
   private searchConfig: Required<NonNullable<ToolSearchProcessorOptions['search']>>;
   private filter?: ToolSearchProcessorOptions['filter'];
+  private preselect?: ToolSearchPreselectOptions;
+  private preselectMinProbability: number;
+  private resolvedPreselectClassifier?: Classifier<ClassifierQuestions>;
+  /** Last user message preselection ran for, per thread. Keeps it to one call per user turn. */
+  private preselectedFor = new Map<string, string>();
+  private mastra?: Mastra;
 
   /** Pluggable backend for loaded-tool state. */
   private store: LoadedToolStore;
@@ -249,6 +319,14 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     this.includeResolvedTools = options.includeResolvedTools ?? false;
     this.injectCatalog = options.injectCatalog ?? false;
     this.filter = options.filter;
+    this.preselect = options.preselect;
+    this.preselectMinProbability = options.preselect?.minProbability ?? 0.6;
+    if (options.preselect && typeof options.preselect.classifier !== 'string') {
+      this.resolvedPreselectClassifier = this.validatePreselectClassifier(
+        options.preselect.classifier,
+        options.preselect,
+      );
+    }
     this.searchConfig = {
       topK: options.search?.topK ?? 5,
       minScore: options.search?.minScore ?? 0,
@@ -554,6 +632,131 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     });
   }
 
+  __registerMastra(mastra: Mastra): void {
+    this.mastra = mastra;
+  }
+
+  /** Checks the question exists, is a choice question, and every criterion is mapped. */
+  private validatePreselectClassifier(
+    classifier: Classifier<ClassifierQuestions>,
+    preselect: ToolSearchPreselectOptions,
+    classifierId?: string,
+  ): Classifier<ClassifierQuestions> {
+    const label = classifierId ? `classifier '${classifierId}'` : 'the provided classifier';
+    const fail = (id: Uppercase<string>, text: string): never => {
+      throw new MastraError({ id, domain: ErrorDomain.MASTRA, category: ErrorCategory.USER, text });
+    };
+
+    const questions = classifier.questions;
+    if (questions === undefined) {
+      fail(
+        'TOOL_SEARCH_PRESELECT_QUESTIONS_REQUIRED',
+        `ToolSearchProcessor preselect requires ${label} to have configured questions. Per-call questions cannot be used because the criteria must be stable for the probability threshold to be meaningful.`,
+      );
+    }
+
+    const question = questions![preselect.question];
+    if (!question) {
+      fail(
+        'TOOL_SEARCH_PRESELECT_QUESTION_NOT_FOUND',
+        `ToolSearchProcessor preselect references question '${preselect.question}', which is not configured on ${label}. Configured questions: ${Object.keys(questions!).join(', ') || '(none)'}.`,
+      );
+    }
+
+    if (question!.type !== 'choice') {
+      fail(
+        'TOOL_SEARCH_PRESELECT_QUESTION_NOT_CHOICE',
+        `ToolSearchProcessor preselect requires question '${preselect.question}' to be a choice question, but it is a '${question!.type}' question.`,
+      );
+    }
+
+    const criteria = Object.keys((question as Extract<ClassifierQuestion, { type: 'choice' }>).criteria);
+    const missing = criteria.filter(choice => !(choice in preselect.tools));
+    if (missing.length > 0) {
+      fail(
+        'TOOL_SEARCH_PRESELECT_MAPPING_INCOMPLETE',
+        `ToolSearchProcessor preselect must map every choice of '${preselect.question}' to tools. Missing: ${missing.join(', ')}. Map a choice to an empty array when it needs no tools.`,
+      );
+    }
+
+    const unknown = Object.keys(preselect.tools).filter(choice => !criteria.includes(choice));
+    if (unknown.length > 0) {
+      fail(
+        'TOOL_SEARCH_PRESELECT_MAPPING_UNKNOWN_CHOICE',
+        `ToolSearchProcessor preselect maps choices that '${preselect.question}' cannot return: ${unknown.join(', ')}. Valid choices: ${criteria.join(', ')}.`,
+      );
+    }
+
+    return classifier;
+  }
+
+  private resolvePreselectClassifier(preselect: ToolSearchPreselectOptions): Classifier<ClassifierQuestions> {
+    if (this.resolvedPreselectClassifier) {
+      return this.resolvedPreselectClassifier;
+    }
+
+    const id = preselect.classifier as string;
+    if (!this.mastra) {
+      throw new MastraError({
+        id: 'TOOL_SEARCH_PRESELECT_MASTRA_NOT_REGISTERED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `ToolSearchProcessor preselect references classifier '${id}' by id, but the processor is not attached to a Mastra instance. Pass a Classifier instance or register the classifier with Mastra.`,
+      });
+    }
+
+    const resolved = this.validatePreselectClassifier(this.mastra.getClassifierById(id), preselect, id);
+    this.resolvedPreselectClassifier = resolved;
+    return resolved;
+  }
+
+  /**
+   * Runs the preselect classifier and returns the tool names to seed. Returns an
+   * empty array whenever the classifier abstains, errors, or maps the selected
+   * choice to no tools — preselection never blocks or narrows the normal flow.
+   */
+  private async preselectToolNames(
+    preselect: ToolSearchPreselectOptions,
+    catalog: ToolCatalog,
+    args: ProcessInputStepArgs,
+    state: string,
+  ): Promise<string[]> {
+    let answer: { choice: string; probabilities?: Record<string, number> };
+    try {
+      const classifier = this.resolvePreselectClassifier(preselect);
+      const result = await executeWithContext({
+        span: resolveObservabilityContext(args).tracing.currentSpan,
+        fn: () => classifier.evaluate({ state, providerOptions: preselect.providerOptions }),
+      });
+      answer = (result as { answers: Record<string, any> }).answers[preselect.question];
+    } catch (error) {
+      // Fail open: preselection is an optimisation, never a gate.
+      console.warn('[ToolSearchProcessor] preselect classifier failed, falling back to model-driven search:', error);
+      return [];
+    }
+
+    if (!answer) {
+      return [];
+    }
+
+    // Abstain when the model is not confident enough. Providers that return no
+    // distribution give no uncertainty signal, so the choice is taken as-is.
+    const probability = answer.probabilities?.[answer.choice];
+    if (probability !== undefined && probability < this.preselectMinProbability) {
+      return [];
+    }
+
+    const candidates = preselect.tools[answer.choice] ?? [];
+    const allowed: string[] = [];
+    for (const name of candidates) {
+      const tool = this.findToolForDynamicName(catalog, name);
+      if (!tool) continue;
+      if (!(await this.isToolAllowed(tool, args.requestContext, 'load'))) continue;
+      allowed.push(name);
+    }
+    return allowed;
+  }
+
   async processInputStep(args: ProcessInputStepArgs) {
     const { tools, messageList } = args;
     const catalog = this.catalogForStep(tools);
@@ -561,6 +764,31 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // Snapshot of names already loaded as of this step. Newly activated tools are
     // recorded via the store and become available on the model's next turn.
     const loadedToolNames = await this.store.getLoadedNames(storeContext);
+
+    // Seed the loaded set before the model's first turn. Runs only while the set
+    // is empty, so it costs at most one classifier call per conversation and
+    // stops once the model has loaded tools itself. Because this happens before
+    // the set is consumed below, seeded tools are available on this turn rather
+    // than the next one — unlike activation via `search_tools` / `load_tool`.
+    let preselectedNames: string[] = [];
+    if (this.preselect) {
+      const userText = messageList.getLatestUserContent() ?? '';
+      const threadKey = storeContext.threadId ?? 'default';
+      // Once per user message, not once per step and not once per conversation.
+      // A new user message is a new routing decision: the tools loaded for the
+      // previous message may be the wrong ones for this one. Steps within a
+      // single turn share the same message and reuse the first decision.
+      if (userText.trim() && this.preselectedFor.get(threadKey) !== userText) {
+        this.preselectedFor.set(threadKey, userText);
+        preselectedNames = await this.preselectToolNames(this.preselect, catalog, args, userText);
+        // Seeding is additive — previously loaded tools are never removed.
+        const fresh = preselectedNames.filter(name => !loadedToolNames.has(name));
+        if (fresh.length > 0) {
+          await this.store.addLoaded(fresh, storeContext);
+          for (const name of fresh) loadedToolNames.add(name);
+        }
+      }
+    }
 
     const autoLoad = this.searchConfig.autoLoad;
 
@@ -574,6 +802,18 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
             'To add one or more tools to the conversation, call load_tool with a toolName or toolNames array. ' +
             'Tools must be loaded before they can be used.',
     );
+
+    // Seeding tools is not enough on its own: the instruction above tells the
+    // model to discover tools before using them, and it will follow that even
+    // when the tool it needs is already in its tool list. Say so explicitly,
+    // otherwise preselection buys availability but not the saved round-trip.
+    if (preselectedNames.length > 0) {
+      messageList.addSystem(
+        `These tools are already loaded and ready to use right now: ${preselectedNames.join(', ')}. ` +
+          'Call them directly — do not call search_tools or load_tool for them. ' +
+          'Use search_tools only if you need a different tool that is not in that list.',
+      );
+    }
 
     // Optionally inject the catalog so the model can skip the search step and
     // load tools directly. `search_tools` stays available as a keyword fallback.
