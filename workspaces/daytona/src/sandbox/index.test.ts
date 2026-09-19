@@ -26,144 +26,146 @@ import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vites
 
 import { DaytonaSandbox } from './index';
 
-// Use vi.hoisted to define mocks before vi.mock is hoisted
-const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaGoneError, DaytonaNotFoundError } =
-  vi.hoisted(() => {
-    const mockSandbox = {
-      id: 'mock-sandbox-id',
-      state: 'started',
-      cpu: 1,
-      memory: 1,
-      disk: 3,
-      target: 'us',
-      process: {
-        codeRun: vi.fn().mockResolvedValue({ exitCode: 0, result: '', artifacts: { stdout: '' } }),
-        executeCommand: vi.fn().mockResolvedValue({ exitCode: 0, result: '' }),
-        createSession: vi.fn().mockResolvedValue(undefined),
-        executeSessionCommand: vi.fn().mockResolvedValue({ cmdId: 'cmd-123' }),
-        getSessionCommandLogs: vi
-          .fn()
-          .mockImplementation(async (_sessionId: string, _cmdId: string, onStdout: (chunk: string) => void) => {
-            onStdout('');
-          }),
-        getSessionCommand: vi.fn().mockResolvedValue({ id: 'cmd-123', command: '', exitCode: 0 }),
-        deleteSession: vi.fn().mockResolvedValue(undefined),
-      },
-      fs: {
-        uploadFile: vi.fn().mockResolvedValue(undefined),
-        uploadFiles: vi.fn().mockResolvedValue(undefined),
-        downloadFile: vi.fn().mockResolvedValue(Buffer.from('')),
-      },
-      getPreviewLink: vi.fn().mockResolvedValue({ url: 'https://4111-mock-sandbox-id.proxy.daytona.work', token: 't' }),
-      computerUse: {
-        start: vi.fn().mockResolvedValue({ message: 'started' }),
-        stop: vi.fn().mockResolvedValue({ message: 'stopped' }),
-        getStatus: vi.fn().mockResolvedValue({ status: 'running' }),
-        mouse: {
-          getPosition: vi.fn().mockResolvedValue({ x: 100, y: 200 }),
-          move: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
-          click: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
-          drag: vi.fn().mockResolvedValue({}),
-          scroll: vi.fn().mockResolvedValue(true),
-        },
-        keyboard: {
-          type: vi.fn().mockResolvedValue(undefined),
-          press: vi.fn().mockResolvedValue(undefined),
-          hotkey: vi.fn().mockResolvedValue(undefined),
-        },
-        screenshot: {
-          takeFullScreen: vi.fn().mockResolvedValue({ screenshot: Buffer.from('fake-png-bytes').toString('base64') }),
-        },
-        display: {
-          getInfo: vi
-            .fn()
-            .mockResolvedValue({ displays: [{ id: 0, x: 0, y: 0, width: 1920, height: 1080, isActive: true }] }),
-          getWindows: vi.fn().mockResolvedValue({ windows: [] }),
-        },
-      },
-      start: vi.fn().mockResolvedValue(undefined),
-      stop: vi.fn().mockResolvedValue(undefined),
-      delete: vi.fn().mockResolvedValue(undefined),
-    };
-
-    const mockDaytona = {
-      create: vi.fn().mockResolvedValue(mockSandbox),
-      get: vi.fn().mockRejectedValue(new Error('No sandbox found')),
-      delete: vi.fn().mockResolvedValue(undefined),
-      stop: vi.fn().mockResolvedValue(undefined),
-      start: vi.fn().mockResolvedValue(undefined),
-    };
-
-    const resetMockDefaults = () => {
-      mockDaytona.create.mockResolvedValue(mockSandbox);
-      mockDaytona.get.mockRejectedValue(new DaytonaNotFoundError('No sandbox found'));
-      mockDaytona.delete.mockResolvedValue(undefined);
-      mockDaytona.stop.mockResolvedValue(undefined);
-      mockDaytona.start.mockResolvedValue(undefined);
-      mockSandbox.process.executeCommand.mockResolvedValue({ exitCode: 0, result: '' });
-      mockSandbox.process.createSession.mockResolvedValue(undefined);
-      mockSandbox.process.executeSessionCommand.mockResolvedValue({ cmdId: 'cmd-123' });
-      mockSandbox.process.getSessionCommandLogs.mockImplementation(
-        async (_sessionId: string, _cmdId: string, onStdout: (chunk: string) => void) => {
-          onStdout('');
-        },
-      );
-      mockSandbox.process.getSessionCommand.mockResolvedValue({ id: 'cmd-123', command: '', exitCode: 0 });
-      mockSandbox.process.deleteSession.mockResolvedValue(undefined);
-      mockSandbox.fs.uploadFiles.mockResolvedValue(undefined);
-      mockSandbox.getPreviewLink.mockResolvedValue({
-        url: 'https://4111-mock-sandbox-id.proxy.daytona.work',
-        token: 't',
-      });
-      mockSandbox.computerUse.start.mockResolvedValue({ message: 'started' });
-      mockSandbox.computerUse.stop.mockResolvedValue({ message: 'stopped' });
-      mockSandbox.computerUse.getStatus.mockResolvedValue({ status: 'running' });
-      mockSandbox.computerUse.mouse.getPosition.mockResolvedValue({ x: 100, y: 200 });
-      mockSandbox.computerUse.mouse.move.mockResolvedValue({ x: 0, y: 0 });
-      mockSandbox.computerUse.mouse.click.mockResolvedValue({ x: 0, y: 0 });
-      mockSandbox.computerUse.mouse.drag.mockResolvedValue({});
-      mockSandbox.computerUse.mouse.scroll.mockResolvedValue(true);
-      mockSandbox.computerUse.keyboard.type.mockResolvedValue(undefined);
-      mockSandbox.computerUse.keyboard.press.mockResolvedValue(undefined);
-      mockSandbox.computerUse.keyboard.hotkey.mockResolvedValue(undefined);
-      mockSandbox.computerUse.screenshot.takeFullScreen.mockResolvedValue({
-        screenshot: Buffer.from('fake-png-bytes').toString('base64'),
-      });
-      mockSandbox.computerUse.display.getInfo.mockResolvedValue({
-        displays: [{ id: 0, x: 0, y: 0, width: 1920, height: 1080, isActive: true }],
-      });
-      mockSandbox.computerUse.display.getWindows.mockResolvedValue({ windows: [] });
-      mockSandbox.state = 'started';
-      mockSandbox.start.mockResolvedValue(undefined);
-      mockSandbox.stop.mockResolvedValue(undefined);
-      mockSandbox.delete.mockResolvedValue(undefined);
-    };
-
-    class DaytonaError extends Error {
-      statusCode?: number;
-      constructor(message?: string, statusCode?: number) {
-        super(message ?? 'Error');
-        this.name = 'DaytonaError';
-        this.statusCode = statusCode;
-      }
-    }
-
-    class DaytonaNotFoundError extends DaytonaError {
+const DaytonaGoneError = vi.hoisted(
+  () =>
+    class DaytonaGoneError extends Error {
       constructor(message?: string) {
-        super(message ?? 'Not found', 404);
-        this.name = 'DaytonaNotFoundError';
-      }
-    }
-
-    class DaytonaGoneError extends DaytonaError {
-      constructor(message?: string) {
-        super(message ?? 'Gone', 410);
+        super(message ?? 'Gone');
         this.name = 'DaytonaGoneError';
       }
-    }
+    },
+);
 
-    return { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaGoneError, DaytonaNotFoundError };
-  });
+// Use vi.hoisted to define mocks before vi.mock is hoisted
+const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFoundError } = vi.hoisted(() => {
+  const mockSandbox = {
+    id: 'mock-sandbox-id',
+    state: 'started',
+    cpu: 1,
+    memory: 1,
+    disk: 3,
+    target: 'us',
+    process: {
+      codeRun: vi.fn().mockResolvedValue({ exitCode: 0, result: '', artifacts: { stdout: '' } }),
+      executeCommand: vi.fn().mockResolvedValue({ exitCode: 0, result: '' }),
+      createSession: vi.fn().mockResolvedValue(undefined),
+      executeSessionCommand: vi.fn().mockResolvedValue({ cmdId: 'cmd-123' }),
+      getSessionCommandLogs: vi
+        .fn()
+        .mockImplementation(async (_sessionId: string, _cmdId: string, onStdout: (chunk: string) => void) => {
+          onStdout('');
+        }),
+      getSessionCommand: vi.fn().mockResolvedValue({ id: 'cmd-123', command: '', exitCode: 0 }),
+      deleteSession: vi.fn().mockResolvedValue(undefined),
+    },
+    fs: {
+      uploadFile: vi.fn().mockResolvedValue(undefined),
+      uploadFiles: vi.fn().mockResolvedValue(undefined),
+      downloadFile: vi.fn().mockResolvedValue(Buffer.from('')),
+    },
+    getPreviewLink: vi.fn().mockResolvedValue({ url: 'https://4111-mock-sandbox-id.proxy.daytona.work', token: 't' }),
+    computerUse: {
+      start: vi.fn().mockResolvedValue({ message: 'started' }),
+      stop: vi.fn().mockResolvedValue({ message: 'stopped' }),
+      getStatus: vi.fn().mockResolvedValue({ status: 'running' }),
+      mouse: {
+        getPosition: vi.fn().mockResolvedValue({ x: 100, y: 200 }),
+        move: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+        click: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+        drag: vi.fn().mockResolvedValue({}),
+        scroll: vi.fn().mockResolvedValue(true),
+      },
+      keyboard: {
+        type: vi.fn().mockResolvedValue(undefined),
+        press: vi.fn().mockResolvedValue(undefined),
+        hotkey: vi.fn().mockResolvedValue(undefined),
+      },
+      screenshot: {
+        takeFullScreen: vi.fn().mockResolvedValue({ screenshot: Buffer.from('fake-png-bytes').toString('base64') }),
+      },
+      display: {
+        getInfo: vi
+          .fn()
+          .mockResolvedValue({ displays: [{ id: 0, x: 0, y: 0, width: 1920, height: 1080, isActive: true }] }),
+        getWindows: vi.fn().mockResolvedValue({ windows: [] }),
+      },
+    },
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+  };
+
+  const mockDaytona = {
+    create: vi.fn().mockResolvedValue(mockSandbox),
+    get: vi.fn().mockRejectedValue(new Error('No sandbox found')),
+    delete: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn().mockResolvedValue(undefined),
+    start: vi.fn().mockResolvedValue(undefined),
+  };
+
+  const resetMockDefaults = () => {
+    mockDaytona.create.mockResolvedValue(mockSandbox);
+    mockDaytona.get.mockRejectedValue(new DaytonaNotFoundError('No sandbox found'));
+    mockDaytona.delete.mockResolvedValue(undefined);
+    mockDaytona.stop.mockResolvedValue(undefined);
+    mockDaytona.start.mockResolvedValue(undefined);
+    mockSandbox.process.executeCommand.mockResolvedValue({ exitCode: 0, result: '' });
+    mockSandbox.process.createSession.mockResolvedValue(undefined);
+    mockSandbox.process.executeSessionCommand.mockResolvedValue({ cmdId: 'cmd-123' });
+    mockSandbox.process.getSessionCommandLogs.mockImplementation(
+      async (_sessionId: string, _cmdId: string, onStdout: (chunk: string) => void) => {
+        onStdout('');
+      },
+    );
+    mockSandbox.process.getSessionCommand.mockResolvedValue({ id: 'cmd-123', command: '', exitCode: 0 });
+    mockSandbox.process.deleteSession.mockResolvedValue(undefined);
+    mockSandbox.fs.uploadFiles.mockResolvedValue(undefined);
+    mockSandbox.getPreviewLink.mockResolvedValue({
+      url: 'https://4111-mock-sandbox-id.proxy.daytona.work',
+      token: 't',
+    });
+    mockSandbox.computerUse.start.mockResolvedValue({ message: 'started' });
+    mockSandbox.computerUse.stop.mockResolvedValue({ message: 'stopped' });
+    mockSandbox.computerUse.getStatus.mockResolvedValue({ status: 'running' });
+    mockSandbox.computerUse.mouse.getPosition.mockResolvedValue({ x: 100, y: 200 });
+    mockSandbox.computerUse.mouse.move.mockResolvedValue({ x: 0, y: 0 });
+    mockSandbox.computerUse.mouse.click.mockResolvedValue({ x: 0, y: 0 });
+    mockSandbox.computerUse.mouse.drag.mockResolvedValue({});
+    mockSandbox.computerUse.mouse.scroll.mockResolvedValue(true);
+    mockSandbox.computerUse.keyboard.type.mockResolvedValue(undefined);
+    mockSandbox.computerUse.keyboard.press.mockResolvedValue(undefined);
+    mockSandbox.computerUse.keyboard.hotkey.mockResolvedValue(undefined);
+    mockSandbox.computerUse.screenshot.takeFullScreen.mockResolvedValue({
+      screenshot: Buffer.from('fake-png-bytes').toString('base64'),
+    });
+    mockSandbox.computerUse.display.getInfo.mockResolvedValue({
+      displays: [{ id: 0, x: 0, y: 0, width: 1920, height: 1080, isActive: true }],
+    });
+    mockSandbox.computerUse.display.getWindows.mockResolvedValue({ windows: [] });
+    mockSandbox.state = 'started';
+    mockSandbox.start.mockResolvedValue(undefined);
+    mockSandbox.stop.mockResolvedValue(undefined);
+    mockSandbox.delete.mockResolvedValue(undefined);
+  };
+
+  class DaytonaError extends Error {
+    statusCode?: number;
+    constructor(message?: string, statusCode?: number) {
+      super(message ?? 'Error');
+      this.name = 'DaytonaError';
+      this.statusCode = statusCode;
+    }
+  }
+
+  class DaytonaNotFoundError extends DaytonaError {
+    constructor(message?: string) {
+      super(message ?? 'Not found', 404);
+      this.name = 'DaytonaNotFoundError';
+    }
+  }
+
+  return { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFoundError };
+});
 
 // Mock the Daytona SDK — must use `function` (not arrow) so `new Daytona()` works
 vi.mock('@daytonaio/sdk', () => ({
