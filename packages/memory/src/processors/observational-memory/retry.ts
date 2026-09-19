@@ -82,12 +82,6 @@ function hasIsRetryableFlag(value: unknown): boolean {
 }
 
 /**
- * Returns true when a user-initiated abort appears anywhere in the error's
- * `cause`/`error` wrapper chain.
- *
- * @internal
- */
-/**
  * Returns true when a user-initiated cancellation appears anywhere in the
  * error's `cause`/`error` wrapper chain, so a wrapped abort can never be
  * mistaken for a retryable or survivable provider failure.
