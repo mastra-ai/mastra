@@ -495,6 +495,33 @@ describe('Session.signal() admissionId', () => {
     });
   });
 
+  it.each([
+    { action: 'blocked', accepted: { action: 'blocked', reason: 'thread-blocked', runId: 'blocked-run' } },
+    { action: 'persist', accepted: { action: 'persist' } },
+    { action: 'deliver', accepted: { action: 'deliver', runId: 'active-run' } },
+  ] as const)(
+    'rejects an unexpected native $action result for a non-admitted full logical pair',
+    async ({ accepted }) => {
+      const agent = new MockAgent({ id: 'default' });
+      const { harness } = setupHarness({ agents: { default: agent } });
+      const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+      agent.sendSignal = ((signal: any) => ({
+        signal: createSignal({ ...signal, acceptedAt: new Date() }),
+        runId: 'unexpected-native-run',
+        accepted: Promise.resolve(accepted),
+      })) as typeof agent.sendSignal;
+
+      await expect(
+        session.signal({
+          content: 'unexpected native action',
+          logicalMessageIdentity: { input: `input-${accepted.action}`, response: `response-${accepted.action}` },
+        }),
+      ).rejects.toBeInstanceOf(HarnessConfigError);
+      expect(agent.streamCalls).toHaveLength(0);
+    },
+  );
+
   it('rejects payload conflicts and non-hash-safe options before another dispatch', async () => {
     const { harness, agent } = setupHarness();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

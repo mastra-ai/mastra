@@ -7897,13 +7897,15 @@ export class Session {
           signal.accepted,
           turnAbortSignal,
           activeTurnWaiter.promise,
+          'message().logicalMessageIdentity',
         );
-        if (accepted.action === 'discard') {
+        if (accepted.action !== 'wake') {
           nativeRejected = true;
-          throw new HarnessConfigError(
-            'message().logicalMessageIdentity',
-            'a full logical message identity cannot be delivered into an active run',
-          );
+          throw lineagedSignalAcceptanceError('message().logicalMessageIdentity', accepted.action);
+        }
+        if (accepted.runId !== signal.runId) {
+          nativeRejected = true;
+          throw lineagedSignalRunMismatchError('message().logicalMessageIdentity', signal.runId, accepted.runId);
         }
         nativeAccepted = true;
       }
@@ -9294,8 +9296,9 @@ export class Session {
     accepted: Promise<T>,
     abortSignal?: AbortSignal,
     interrupted?: Promise<never>,
+    validationPath = 'signal().admissionId',
   ): Promise<T> {
-    throwIfAborted(abortSignal, 'signal().admissionId');
+    throwIfAborted(abortSignal, validationPath);
     return new Promise<T>((resolve, reject) => {
       let settled = false;
       const finish = (callback: () => void) => {
@@ -9308,7 +9311,7 @@ export class Session {
       const onAbort = () =>
         finish(() => reject(abortSignal?.reason ?? new HarnessValidationError('signal()', 'operation aborted')));
       const timer = setTimeout(() => {
-        finish(() => reject(new NativeSignalAcceptanceTimeoutError()));
+        finish(() => reject(new NativeSignalAcceptanceTimeoutError(validationPath)));
       }, SIGNAL_NATIVE_ACCEPT_TIMEOUT_MS);
       timer.unref?.();
       abortSignal?.addEventListener('abort', onAbort, { once: true });
@@ -10118,7 +10121,12 @@ export class Session {
         // only a synchronous pre-send throw or an explicit non-acceptance action
         // below proves it is safe to release.
         signalAdmissionNativeDispatchStarted = true;
-        const accepted = await this._awaitSignalNativeAcceptance(dispatched.accepted, opts.abortSignal);
+        const accepted = await this._awaitSignalNativeAcceptance(
+          dispatched.accepted,
+          opts.abortSignal,
+          undefined,
+          'signal().admissionId',
+        );
         if (accepted.action === 'discard') {
           await stopHeartbeat();
           if (idleSignalDiscarded) {
@@ -10146,6 +10154,13 @@ export class Session {
           claimOwned = false;
           signalAdmissionNativeDispatchStarted = false;
           throw new HarnessConfigError('signal()', 'signal delivery was blocked by a suspended thread');
+        }
+        if (accepted.action === 'deliver' && responseLogicalMessageIdentity !== undefined) {
+          await stopHeartbeat();
+          const err = lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
+          await settleLineagedSignalDispatchRejection(dispatching.runId, err);
+          claimOwned = false;
+          throw err;
         }
         if (accepted.action !== 'deliver') {
           throw new HarnessConfigError('signal()', `active signal delivery was not accepted (${accepted.action})`);
@@ -10260,12 +10275,13 @@ export class Session {
               dispatched.accepted,
               turnAbortSignal,
               activeTurnWaiter.promise,
+              'signal().logicalMessageIdentity',
             );
-            if (accepted.action === 'discard') {
-              throw new HarnessConfigError(
-                'signal().logicalMessageIdentity',
-                'a full logical message identity cannot be delivered into an active run',
-              );
+            if (accepted.action !== 'wake') {
+              throw lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
+            }
+            if (accepted.runId !== dispatched.runId) {
+              throw lineagedSignalRunMismatchError('signal().logicalMessageIdentity', dispatched.runId, accepted.runId);
             }
           }
           // Preserve the historical optimistic boundary for ordinary signals:
@@ -10350,6 +10366,7 @@ export class Session {
                 dispatched.accepted,
                 turnAbortSignal,
                 activeTurnWaiter.promise,
+                'signal().admissionId',
               );
               if (accepted.action === 'blocked' || accepted.action === 'discard' || accepted.action === 'persist') {
                 await stopHeartbeat();
@@ -10646,12 +10663,20 @@ export class Session {
           },
         );
         if (responseLogicalMessageIdentity !== undefined) {
-          const accepted = await this._awaitSignalNativeAcceptance(dispatched.accepted, opts.abortSignal);
+          const accepted = await this._awaitSignalNativeAcceptance(
+            dispatched.accepted,
+            opts.abortSignal,
+            undefined,
+            'signal().logicalMessageIdentity',
+          );
           if (accepted.action === 'discard') {
-            throw new HarnessConfigError(
-              'signal().logicalMessageIdentity',
-              'a full logical message identity cannot be delivered into an active run',
-            );
+            throw lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
+          }
+          if (accepted.action !== 'wake') {
+            throw lineagedSignalAcceptanceError('signal().logicalMessageIdentity', accepted.action);
+          }
+          if (accepted.runId !== dispatched.runId) {
+            throw lineagedSignalRunMismatchError('signal().logicalMessageIdentity', dispatched.runId, accepted.runId);
           }
         }
       } catch (err) {
@@ -15558,6 +15583,7 @@ export class Session {
             signal.accepted,
             turnAbortController.signal,
             activeTurnWaiter.promise,
+            'queue().logicalMessageIdentity',
           );
         } catch (err) {
           if (err instanceof NativeSignalAcceptanceTimeoutError) {
@@ -15575,11 +15601,18 @@ export class Session {
           }
           throw err;
         }
-        if (accepted.action === 'discard') {
-          const err = new HarnessConfigError(
-            'queue().logicalMessageIdentity',
-            'a full logical message identity cannot be delivered into an active run',
-          );
+        if (accepted.action === 'discard' || accepted.action === 'blocked' || accepted.action === 'persist') {
+          const err = lineagedSignalAcceptanceError('queue().logicalMessageIdentity', accepted.action);
+          await this._writeQueueSignalResultEvidence({
+            status: 'failed',
+            signalId: identity.signalId,
+            runId: identity.runId,
+            error: projectHarnessPublicError(err),
+          });
+          throw err;
+        }
+        if (accepted.runId !== identity.runId) {
+          const err = lineagedSignalRunMismatchError('queue().logicalMessageIdentity', identity.runId, accepted.runId);
           await this._writeQueueSignalResultEvidence({
             status: 'failed',
             signalId: identity.signalId,
@@ -18900,6 +18933,23 @@ function clonePersistedRequestContext(input: PersistedRequestContextInput): Pers
   return JSON.parse(JSON.stringify(input)) as PersistedRequestContextInput;
 }
 
+function lineagedSignalAcceptanceError(path: string, action: string): HarnessConfigError {
+  if (action === 'discard' || action === 'deliver') {
+    return new HarnessConfigError(path, 'a full logical message identity cannot be delivered into an active run');
+  }
+  if (action === 'blocked') {
+    return new HarnessConfigError(path, 'a full logical message identity was blocked by a suspended thread');
+  }
+  return new HarnessConfigError(path, `a full logical message identity was not accepted (${action})`);
+}
+
+function lineagedSignalRunMismatchError(path: string, expectedRunId: string, actualRunId: string): HarnessConfigError {
+  return new HarnessConfigError(
+    path,
+    `a full logical message identity was accepted by run "${actualRunId}" instead of its reserved run "${expectedRunId}"`,
+  );
+}
+
 class QueueRecoveryPendingError extends HarnessError {
   readonly code = 'harness.queue_recovery_pending';
   readonly retryAt: number;
@@ -18912,8 +18962,8 @@ class QueueRecoveryPendingError extends HarnessError {
 }
 
 class NativeSignalAcceptanceTimeoutError extends HarnessValidationError {
-  constructor() {
-    super('signal().admissionId', `native signal acceptance timed out after ${SIGNAL_NATIVE_ACCEPT_TIMEOUT_MS}ms`);
+  constructor(validationPath: string) {
+    super(validationPath, `native signal acceptance timed out after ${SIGNAL_NATIVE_ACCEPT_TIMEOUT_MS}ms`);
   }
 }
 
