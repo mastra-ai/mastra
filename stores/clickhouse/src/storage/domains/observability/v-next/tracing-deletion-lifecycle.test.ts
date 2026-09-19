@@ -39,7 +39,7 @@ describe('batchDeleteTraces deletion requests', () => {
       resourceId: 'resource-1',
     });
 
-    expect(insert).toHaveBeenCalledTimes(1);
+    expect(insert).toHaveBeenCalledTimes(2);
     expect(insert.mock.calls[0]?.[0]).toMatchObject({
       table: TABLE_DELETION_REQUESTS,
       format: 'JSONEachRow',
@@ -55,6 +55,14 @@ describe('batchDeleteTraces deletion requests', () => {
         }),
       ],
     });
+
+    const pending = insert.mock.calls[0]?.[0].values[0];
+    const applied = insert.mock.calls[1]?.[0].values[0];
+    expect(pending.lastAppliedAt).toBe('1970-01-01T00:00:00.000Z');
+    expect(applied).toMatchObject({ ...pending, lastAppliedAt: expect.any(String), updatedAt: expect.any(String) });
+    expect(applied.lastAppliedAt).not.toBe('1970-01-01T00:00:00.000Z');
+    expect(applied.updatedAt).toBe(applied.lastAppliedAt);
+    expect(insert.mock.invocationCallOrder[1]).toBeGreaterThan(Math.max(...command.mock.invocationCallOrder));
 
     expect(command).toHaveBeenCalledTimes(8);
     const calls = command.mock.calls.map(
@@ -90,7 +98,11 @@ describe('batchDeleteTraces deletion requests', () => {
     await batchDeleteTraces(client, { traceIds: ['trace-1'] }, { cluster: 'test_cluster' });
 
     expect(insert.mock.calls[0]?.[0]).toMatchObject({
-      clickhouse_settings: expect.objectContaining({ insert_quorum: 'auto', insert_quorum_parallel: 1 }),
+      clickhouse_settings: expect.objectContaining({
+        insert_quorum: 'auto',
+        insert_quorum_parallel: 0,
+        async_insert: 0,
+      }),
     });
     const queries = command.mock.calls.map(([call]) => (call as { query: string }).query);
     expect(queries.every(query => query.startsWith('DELETE FROM'))).toBe(true);
@@ -102,6 +114,7 @@ describe('batchDeleteTraces deletion requests', () => {
     await expect(batchDeleteTraces(client, { traceIds: ['trace-1'] })).rejects.toThrow('delete failed');
 
     expect(insert).toHaveBeenCalledTimes(1);
+    expect(insert.mock.calls[0]?.[0].values[0].lastAppliedAt).toBe('1970-01-01T00:00:00.000Z');
     expect(command).toHaveBeenCalledTimes(8);
   });
 });
