@@ -22,6 +22,7 @@ import type {
   StorageWorkflowRun,
   WorkflowTerminalContinuationPlanRecord,
   WorkflowTerminalRecoveryAncestryRecord,
+  WorkflowSnapshotHandoffRecord,
   ObservationalMemoryRecord,
   DatasetRecord,
   DatasetItemRow,
@@ -197,6 +198,8 @@ export class InMemoryDB {
   readonly workflowTerminalContinuationPlans = new Map<string, WorkflowTerminalContinuationPlanRecord>();
   /** Opaque monotonic revisions plus an immutable terminal-status latch for parent recovery. */
   readonly workflowTerminalParentRevisions = new Map<string, WorkflowTerminalParentRevisionState>();
+  /** Framework-owned product snapshot handoff records and mutation fences. */
+  readonly workflowSnapshotHandoffs = new Map<string, WorkflowSnapshotHandoffRecord>();
   readonly workflowDefinitions = new Map<string, WorkflowDefinition>();
   readonly scores = new Map<string, ScoreRowData>();
   readonly traces = new Map<string, TraceEntry>();
@@ -312,6 +315,7 @@ export class InMemoryDB {
     this.workflowTerminalDestinationReceipts.clear();
     this.workflowTerminalContinuationPlans.clear();
     this.workflowTerminalParentRevisions.clear();
+    this.workflowSnapshotHandoffs.clear();
     this.workflowDefinitions.clear();
     this.scores.clear();
     this.traces.clear();

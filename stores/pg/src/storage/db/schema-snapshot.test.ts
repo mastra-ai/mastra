@@ -75,6 +75,7 @@ const INDEX_PROBE = /FROM pg_indexes\b[\s\S]*indexname\s*=/i;
 const CREATE_INDEX = /CREATE (UNIQUE )?INDEX/i;
 const CONSTRAINT_PROBE = /FROM pg_constraint\b[\s\S]*conname\s*=/i;
 const WORKFLOW_BOOTSTRAP_TABLES = [
+  'mastra_workflow_snapshot_handoffs',
   'mastra_workflow_terminalizations',
   'mastra_workflow_terminal_effects_v2',
   'mastra_workflow_terminal_snapshots_v2',
@@ -351,7 +352,7 @@ describe('init catalog snapshot', () => {
     expect(count(statements, /pg_catalog\.pg_tables/i)).toBe(1);
 
     // The extra objects neither reintroduce probes nor provoke DDL beyond the
-    // six workflow bootstrap statements that PF-3554 owns.
+    // seven workflow bootstrap statements that PF-3554 and native handoff own.
     expect(count(statements, INFORMATION_SCHEMA_COLUMN_PROBE)).toBe(0);
     expect(count(statements, INDEX_PROBE)).toBe(0);
     expect(createdTableNames(statements).sort()).toEqual([...WORKFLOW_BOOTSTRAP_TABLES].sort());

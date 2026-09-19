@@ -77,6 +77,100 @@ export interface WorkflowResumeCapabilities {
 }
 
 /**
+ * A framework-owned handoff record for an application/product snapshot.
+ *
+ * The record is deliberately separate from the canonical execution snapshot:
+ * a product may hand off a terminal execution without changing the native
+ * terminal status or its parent-revision latch. `mutationFence` is opaque to
+ * storage and must only be compared for exact equality.
+ */
+export type WorkflowSnapshotHandoffStatus = 'pending' | 'completed';
+
+export interface WorkflowSnapshotHandoffRecord {
+  version: 1;
+  workflowName: string;
+  runId: string;
+  status: WorkflowSnapshotHandoffStatus;
+  resourceId?: string;
+  snapshot: WorkflowRunState;
+  mutationFence: string;
+  createdAt: number;
+  updatedAt: number;
+  completedAt?: number;
+}
+
+export interface WorkflowSnapshotHandoffCapabilities {
+  handoffVersion?: 1;
+  recoveryVersion?: 1;
+}
+
+export interface ClaimWorkflowSnapshotHandoffInput {
+  workflowName: string;
+  runId: string;
+  resourceId?: string;
+  snapshot: WorkflowRunState;
+  mutationFence: string;
+}
+
+export type ClaimWorkflowSnapshotHandoffResult =
+  | { status: 'created' | 'existing' | 'completed'; record: WorkflowSnapshotHandoffRecord }
+  | { status: 'conflict'; record: WorkflowSnapshotHandoffRecord }
+  | { status: 'unsupported' };
+
+export interface TransitionWorkflowSnapshotHandoffInput {
+  workflowName: string;
+  runId: string;
+  expectedResourceId?: string;
+  expectedSnapshot: WorkflowRunState;
+  resourceId?: string;
+  snapshot: WorkflowRunState;
+  mutationFence: string;
+}
+
+export type TransitionWorkflowSnapshotHandoffResult =
+  | { status: 'transitioned' | 'existing' | 'completed'; record: WorkflowSnapshotHandoffRecord }
+  | { status: 'missing' }
+  | { status: 'conflict'; record: WorkflowSnapshotHandoffRecord }
+  | { status: 'unsupported' };
+
+export interface CompleteWorkflowSnapshotHandoffInput {
+  workflowName: string;
+  runId: string;
+  expectedResourceId?: string;
+  expectedSnapshot: WorkflowRunState;
+  resourceId?: string;
+  snapshot: WorkflowRunState;
+  mutationFence: string;
+}
+
+export type CompleteWorkflowSnapshotHandoffResult =
+  | { status: 'completed' | 'already_completed'; record: WorkflowSnapshotHandoffRecord }
+  | { status: 'missing' }
+  | { status: 'conflict'; record: WorkflowSnapshotHandoffRecord }
+  | { status: 'unsupported' };
+
+export interface ListWorkflowSnapshotHandoffsInput {
+  workflowName?: string;
+  status?: WorkflowSnapshotHandoffStatus;
+  limit?: number;
+  after?: {
+    updatedAt: number;
+    workflowName: string;
+    runId: string;
+  };
+}
+
+export interface ListWorkflowSnapshotHandoffsResult {
+  records: WorkflowSnapshotHandoffRecord[];
+  hasMore: boolean;
+  nextCursor?: {
+    updatedAt: number;
+    workflowName: string;
+    runId: string;
+  };
+}
+
+/**
  * Compact workflow execution state used by lifecycle authority checks.
  *
  * Unlike a full workflow snapshot, this projection excludes step results and

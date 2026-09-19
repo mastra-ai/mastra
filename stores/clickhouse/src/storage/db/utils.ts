@@ -6,6 +6,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_WORKFLOW_SNAPSHOT_HANDOFF,
   safelyParseJSON,
   TABLE_SPANS,
   TABLE_AGENT_VERSIONS,
@@ -66,6 +67,7 @@ import type { ClickhouseReplicationConfig } from './replication';
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
   [TABLE_WORKFLOW_SNAPSHOT]: `ReplacingMergeTree()`,
+  [TABLE_WORKFLOW_SNAPSHOT_HANDOFF]: `ReplacingMergeTree(updated_at)`,
   [TABLE_TRACES]: `MergeTree()`,
   [TABLE_THREADS]: `ReplacingMergeTree()`,
   [TABLE_SCORERS]: `MergeTree()`,

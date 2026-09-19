@@ -71,6 +71,16 @@ import type {
   WorkflowTerminalContinuationPlanRecord,
   WorkflowTerminalizationCapabilities,
   WorkflowResumeCapabilities,
+  WorkflowSnapshotHandoffCapabilities,
+  WorkflowSnapshotHandoffRecord,
+  ClaimWorkflowSnapshotHandoffInput,
+  ClaimWorkflowSnapshotHandoffResult,
+  TransitionWorkflowSnapshotHandoffInput,
+  TransitionWorkflowSnapshotHandoffResult,
+  CompleteWorkflowSnapshotHandoffInput,
+  CompleteWorkflowSnapshotHandoffResult,
+  ListWorkflowSnapshotHandoffsInput,
+  ListWorkflowSnapshotHandoffsResult,
   WorkflowExecutionState,
 } from '../../types';
 import { matchesExpectedWorkflowState } from '../../types';
@@ -79,6 +89,12 @@ import {
   mergeWorkflowStepResult,
   validateWorkflowSnapshotTimestampForFinalState,
 } from '../../workflow-snapshot';
+import {
+  WorkflowSnapshotHandoffFenceError,
+  validateWorkflowSnapshotHandoffFence,
+  validateWorkflowSnapshotHandoffLimit,
+  workflowSnapshotHandoffSnapshotsEqual,
+} from '../../workflow-snapshot-handoff';
 import type { InMemoryDB, WorkflowTerminalParentRevisionState } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
 import {
@@ -355,6 +371,29 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return { atomicResumeVersion: 1, fencedStepUpdateVersion: 1 };
   }
 
+  getWorkflowSnapshotHandoffCapabilities(): WorkflowSnapshotHandoffCapabilities {
+    return { handoffVersion: 1, recoveryVersion: 1 };
+  }
+
+  private getWorkflowSnapshotHandoff(workflowName: string, runId: string): WorkflowSnapshotHandoffRecord | undefined {
+    return this.db.workflowSnapshotHandoffs.get(this.getWorkflowKey(workflowName, runId));
+  }
+
+  private assertWorkflowSnapshotHandoffAvailable(workflowName: string, runId: string): void {
+    const handoff = this.getWorkflowSnapshotHandoff(workflowName, runId);
+    if (handoff) {
+      throw new WorkflowSnapshotHandoffFenceError({
+        workflowName,
+        runId,
+        handoffStatus: handoff.status,
+      });
+    }
+  }
+
+  private copyWorkflowSnapshotHandoff(record: WorkflowSnapshotHandoffRecord): WorkflowSnapshotHandoffRecord {
+    return cloneRunData(record);
+  }
+
   private applyWorkflowResumeMutation(
     workflowName: string,
     runId: string,
@@ -363,6 +402,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   ) {
     const key = this.getWorkflowKey(workflowName, runId);
     const existing = this.db.workflows.get(key);
+    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
     const existingSnapshot = existing?.snapshot
       ? cloneRunData(typeof existing.snapshot === 'string' ? JSON.parse(existing.snapshot) : existing.snapshot)
       : undefined;
@@ -407,6 +447,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   async persistWorkflowStepUpdate(input: PersistWorkflowStepUpdateInput): Promise<PersistWorkflowStepUpdateResult> {
     const key = this.getWorkflowKey(input.workflowName, input.runId);
     const existing = this.db.workflows.get(key);
+    this.assertWorkflowSnapshotHandoffAvailable(input.workflowName, input.runId);
     const existingSnapshot = existing?.snapshot
       ? cloneRunData(typeof existing.snapshot === 'string' ? JSON.parse(existing.snapshot) : existing.snapshot)
       : undefined;
@@ -883,6 +924,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     );
     if (result.status === 'advanced') {
       if (!existingRun) return { status: 'missing_run' };
+      this.assertWorkflowSnapshotHandoffAvailable(operation.workflowName, operation.runId);
       const resourceId = operation.resourceId ?? existingRun.resourceId;
       if (resourceId !== undefined) {
         validateWorkflowTerminalizationIdentity(resourceId, 'resourceId', 512);
@@ -1331,6 +1373,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       storageTimestamp,
     );
     if (finalized.status === 'applied' && finalized.plan.contract.patch.kind !== 'none') {
+      this.assertWorkflowSnapshotHandoffAvailable(effect.parentWorkflowName, effect.parentRunId);
       this.db.workflows.set(parentKey, {
         ...parentRun,
         snapshot: patchedParent,
@@ -1351,6 +1394,139 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return { status: finalized.status, plan: copyWorkflowTerminalContinuationPlanRecord(finalized.plan) };
   }
 
+  async claimWorkflowSnapshotHandoff(
+    input: ClaimWorkflowSnapshotHandoffInput,
+  ): Promise<ClaimWorkflowSnapshotHandoffResult> {
+    validateWorkflowSnapshotHandoffFence(input.mutationFence);
+    const key = this.getWorkflowKey(input.workflowName, input.runId);
+    const existing = this.db.workflowSnapshotHandoffs.get(key);
+    if (existing) {
+      const same =
+        existing.mutationFence === input.mutationFence &&
+        existing.resourceId === input.resourceId &&
+        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.snapshot);
+      if (existing.status === 'completed' && existing.mutationFence !== input.mutationFence) {
+        return { status: 'conflict', record: this.copyWorkflowSnapshotHandoff(existing) };
+      }
+      return {
+        status: existing.status === 'completed' ? 'completed' : same ? 'existing' : 'conflict',
+        record: this.copyWorkflowSnapshotHandoff(existing),
+      };
+    }
+    const now = Date.now();
+    const record: WorkflowSnapshotHandoffRecord = {
+      version: 1,
+      workflowName: input.workflowName,
+      runId: input.runId,
+      status: 'pending',
+      ...(input.resourceId === undefined ? {} : { resourceId: input.resourceId }),
+      snapshot: cloneRunData(input.snapshot),
+      mutationFence: input.mutationFence,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.db.workflowSnapshotHandoffs.set(key, record);
+    return { status: 'created', record: this.copyWorkflowSnapshotHandoff(record) };
+  }
+
+  async transitionWorkflowSnapshotHandoff(
+    input: TransitionWorkflowSnapshotHandoffInput,
+  ): Promise<TransitionWorkflowSnapshotHandoffResult> {
+    validateWorkflowSnapshotHandoffFence(input.mutationFence);
+    const key = this.getWorkflowKey(input.workflowName, input.runId);
+    const existing = this.db.workflowSnapshotHandoffs.get(key);
+    if (!existing) return { status: 'missing' };
+    if (existing.status === 'completed') {
+      return existing.mutationFence === input.mutationFence
+        ? { status: 'completed', record: this.copyWorkflowSnapshotHandoff(existing) }
+        : { status: 'conflict', record: this.copyWorkflowSnapshotHandoff(existing) };
+    }
+    const expectedMatches =
+      existing.mutationFence === input.mutationFence &&
+      existing.resourceId === input.expectedResourceId &&
+      workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.expectedSnapshot);
+    if (!expectedMatches) return { status: 'conflict', record: this.copyWorkflowSnapshotHandoff(existing) };
+    const sameReplacement =
+      existing.resourceId === input.resourceId &&
+      workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.snapshot);
+    if (sameReplacement) return { status: 'existing', record: this.copyWorkflowSnapshotHandoff(existing) };
+    const updated: WorkflowSnapshotHandoffRecord = {
+      ...existing,
+      ...(input.resourceId === undefined ? { resourceId: undefined } : { resourceId: input.resourceId }),
+      snapshot: cloneRunData(input.snapshot),
+      updatedAt: Date.now(),
+    };
+    this.db.workflowSnapshotHandoffs.set(key, updated);
+    return { status: 'transitioned', record: this.copyWorkflowSnapshotHandoff(updated) };
+  }
+
+  async completeWorkflowSnapshotHandoff(
+    input: CompleteWorkflowSnapshotHandoffInput,
+  ): Promise<CompleteWorkflowSnapshotHandoffResult> {
+    validateWorkflowSnapshotHandoffFence(input.mutationFence);
+    const key = this.getWorkflowKey(input.workflowName, input.runId);
+    const existing = this.db.workflowSnapshotHandoffs.get(key);
+    if (!existing) return { status: 'missing' };
+    if (existing.status === 'completed') {
+      return existing.mutationFence === input.mutationFence
+        ? { status: 'already_completed', record: this.copyWorkflowSnapshotHandoff(existing) }
+        : { status: 'conflict', record: this.copyWorkflowSnapshotHandoff(existing) };
+    }
+    const expectedMatches =
+      existing.mutationFence === input.mutationFence &&
+      existing.resourceId === input.expectedResourceId &&
+      workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.expectedSnapshot);
+    if (!expectedMatches) return { status: 'conflict', record: this.copyWorkflowSnapshotHandoff(existing) };
+    const now = Date.now();
+    const completed: WorkflowSnapshotHandoffRecord = {
+      ...existing,
+      status: 'completed',
+      ...(input.resourceId === undefined ? { resourceId: undefined } : { resourceId: input.resourceId }),
+      snapshot: cloneRunData(input.snapshot),
+      updatedAt: now,
+      completedAt: now,
+    };
+    this.db.workflowSnapshotHandoffs.set(key, completed);
+    return { status: 'completed', record: this.copyWorkflowSnapshotHandoff(completed) };
+  }
+
+  async listWorkflowSnapshotHandoffs(
+    input: ListWorkflowSnapshotHandoffsInput = {},
+  ): Promise<ListWorkflowSnapshotHandoffsResult> {
+    const limit = validateWorkflowSnapshotHandoffLimit(input.limit);
+    const after = input.after;
+    const records = [...this.db.workflowSnapshotHandoffs.values()]
+      .filter(
+        record =>
+          (input.workflowName === undefined || record.workflowName === input.workflowName) &&
+          (input.status === undefined || record.status === input.status),
+      )
+      .sort(
+        (left, right) =>
+          left.updatedAt - right.updatedAt ||
+          left.workflowName.localeCompare(right.workflowName) ||
+          left.runId.localeCompare(right.runId),
+      )
+      .filter(
+        record =>
+          !after ||
+          record.updatedAt > after.updatedAt ||
+          (record.updatedAt === after.updatedAt &&
+            (record.workflowName > after.workflowName ||
+              (record.workflowName === after.workflowName && record.runId > after.runId))),
+      );
+    const page = records.slice(0, limit);
+    const hasMore = records.length > limit;
+    const last = page.at(-1);
+    return {
+      records: page.map(record => this.copyWorkflowSnapshotHandoff(record)),
+      hasMore,
+      ...(hasMore && last
+        ? { nextCursor: { updatedAt: last.updatedAt, workflowName: last.workflowName, runId: last.runId } }
+        : {}),
+    };
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.db.workflows.clear();
     this.db.workflowTerminalizations.clear();
@@ -1360,6 +1536,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     this.db.workflowTerminalDestinationReceipts.clear();
     this.db.workflowTerminalContinuationPlans.clear();
     this.db.workflowTerminalParentRevisions.clear();
+    this.db.workflowSnapshotHandoffs.clear();
   }
 
   private getWorkflowKey(workflowName: string, runId: string): string {
@@ -1382,6 +1559,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     };
     validateWorkflowNestedRunOwnershipInput(operation);
     const key = this.getWorkflowKey(operation.workflowName, operation.runId);
+    this.assertWorkflowSnapshotHandoffAvailable(operation.workflowName, operation.runId);
     const run = this.db.workflows.get(key);
     if (!run?.snapshot) return { status: 'missing_run' };
     const snapshot = cloneRunData(typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot);
@@ -1423,6 +1601,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     validateWorkflowTerminalizationIdentity(operation.nestedWorkflowName, 'nestedWorkflowName', 512);
 
     const parentKey = this.getWorkflowKey(operation.workflowName, operation.runId);
+    this.assertWorkflowSnapshotHandoffAvailable(operation.workflowName, operation.runId);
     const run = this.db.workflows.get(parentKey);
     if (!run?.snapshot) return { status: 'missing_run' };
     const parentRevision = this.db.workflowTerminalParentRevisions.get(parentKey);
@@ -1471,6 +1650,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     if (expectedTailHash !== retainedTailHash) return { status: 'ancestry_conflict' };
 
     const childKey = this.getWorkflowKey(operation.nestedWorkflowName, operation.nestedRunId);
+    this.assertWorkflowSnapshotHandoffAvailable(operation.nestedWorkflowName, operation.nestedRunId);
     const childRevision = this.db.workflowTerminalParentRevisions.get(childKey);
     if (childRevision?.terminalStatus) return { status: 'child_terminal' };
     const existingChild = this.db.workflows.get(childKey);
@@ -1578,6 +1758,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     if (!run) {
       return {};
     }
+    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
 
     let snapshot: WorkflowRunState;
     if (!run.snapshot) {
@@ -1622,6 +1803,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     if (!run) {
       return;
     }
+    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
 
     let snapshot: WorkflowRunState;
     if (!run.snapshot) {
@@ -1693,6 +1875,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }): Promise<void> {
     const key = this.getWorkflowKey(workflowName, runId);
     const now = new Date();
+    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
     const existing = this.db.workflows.get(key);
     const data: StorageWorkflowRun = {
       workflow_name: workflowName,
@@ -1869,6 +2052,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
     const key = this.getWorkflowKey(workflowName, runId);
+    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
     if (this.db.workflows.delete(key)) {
       // Keep the tombstone revision so deleting and recreating the same logical
       // run cannot make an older parent context current again (ABA).

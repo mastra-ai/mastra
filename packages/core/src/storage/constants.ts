@@ -3,6 +3,7 @@ import { buildStorageSchema } from './types';
 import type { StorageColumn, StorageTableConfig } from './types';
 
 export const TABLE_WORKFLOW_SNAPSHOT = 'mastra_workflow_snapshot';
+export const TABLE_WORKFLOW_SNAPSHOT_HANDOFF = 'mastra_workflow_snapshot_handoffs';
 export const TABLE_MESSAGES = 'mastra_messages';
 export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_TRACES = 'mastra_traces';
@@ -89,6 +90,7 @@ export const TABLE_KNOWLEDGE_SEMANTIC_OUTBOX = 'mastra_knowledge_semantic_outbox
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
+  | typeof TABLE_WORKFLOW_SNAPSHOT_HANDOFF
   | typeof TABLE_MESSAGES
   | typeof TABLE_THREADS
   | typeof TABLE_TRACES
@@ -793,6 +795,18 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: {
       type: 'timestamp',
     },
+  },
+  [TABLE_WORKFLOW_SNAPSHOT_HANDOFF]: {
+    workflow_name: { type: 'text' },
+    run_id: { type: 'text' },
+    version: { type: 'integer' },
+    status: { type: 'text' },
+    resource_id: { type: 'text', nullable: true },
+    snapshot: { type: 'jsonb' },
+    mutation_fence: { type: 'text' },
+    created_at: { type: 'bigint' },
+    updated_at: { type: 'bigint' },
+    completed_at: { type: 'bigint', nullable: true },
   },
   [TABLE_SCORERS]: SCORERS_SCHEMA,
   [TABLE_THREADS]: {

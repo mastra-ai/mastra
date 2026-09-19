@@ -186,8 +186,8 @@ describe('PostgresStore Domain Performance Indexes', () => {
 
       const indexes = workflows.getDefaultIndexDefinitions();
 
-      // 1 snapshot index + 6 terminalization recovery/retention indexes.
-      expect(indexes.length).toBe(7);
+      // 1 snapshot index + 1 handoff recovery index + 6 terminalization recovery/retention indexes.
+      expect(indexes.length).toBe(8);
       expect(indexes).toContainEqual({
         name: 'test_schema_mastra_workflow_snapshot_name_createdat_idx',
         table: 'mastra_workflow_snapshot',
