@@ -683,16 +683,15 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         }
       }
 
-      // Resolve the final object before passing through the terminal finish chunk so
-      // downstream consumers can buffer it before settling their final output promises.
+      // Always pass through the original chunk for downstream processing
+      controller.enqueue(chunk);
+
+      // Wait for the terminal finish reason before resolving the final object.
       // Providers that omit finish are handled by the flush fallback below.
       if (chunk.type === 'finish') {
         finishReason = chunk.payload.stepResult.reason;
         await finalize(controller);
       }
-
-      // Always pass through the original chunk for downstream processing
-      controller.enqueue(chunk);
     },
 
     async flush(controller) {

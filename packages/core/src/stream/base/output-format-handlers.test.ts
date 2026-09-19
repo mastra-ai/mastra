@@ -197,13 +197,13 @@ describe('output-format-handlers', () => {
       expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([]);
     });
 
-    it('finalizes normal stop output once before the finish chunk', async () => {
+    it('finalizes normal stop output once after the finish chunk', async () => {
       const chunks = await transform('{"name":"Ana","items":[]}', { structuredOutput: { schema } }, [
         finishChunk('stop') as ChunkType<z.infer<typeof schema>>,
       ]);
 
       expect(chunks.filter(chunk => chunk.type === 'object-result')).toHaveLength(1);
-      expect(chunks.map(chunk => chunk.type)).toEqual(['object', 'text-delta', 'text-end', 'object-result', 'finish']);
+      expect(chunks.map(chunk => chunk.type)).toEqual(['object', 'text-delta', 'text-end', 'finish', 'object-result']);
     });
 
     it('finalizes on finish without text-end', async () => {
