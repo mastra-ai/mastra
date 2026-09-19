@@ -1950,6 +1950,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
           }
 
+          // Route streamed failures through the same recovery path as thrown failures.
+          if (
+            !isLastModel &&
+            !options?.abortSignal?.aborted &&
+            runState.state.hasErrored &&
+            runState.state.deferredErrorChunk
+          ) {
+            throw runState.state.deferredErrorChunk.payload.error;
+          }
+
           // Build messages from the full chunk sequence and add to messageList.
           // This replaces the old inline flush approach — all parts are built in
           // correct stream order with proper providerMetadata attribution.

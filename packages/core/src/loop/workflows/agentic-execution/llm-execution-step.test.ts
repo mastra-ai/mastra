@@ -1621,13 +1621,17 @@ describe('createLLMExecutionStep gateway provider tools', () => {
   });
 
   it.each([
-    { upstreamError: false, fallbackFails: false },
-    { upstreamError: true, fallbackFails: false },
-    { upstreamError: false, fallbackFails: true },
-    { upstreamError: true, fallbackFails: true },
+    { upstreamError: false, fallbackFails: false, streamedError: false },
+    { upstreamError: true, fallbackFails: false, streamedError: false },
+    { upstreamError: false, fallbackFails: true, streamedError: false },
+    { upstreamError: true, fallbackFails: true, streamedError: false },
+    { upstreamError: false, fallbackFails: false, streamedError: true },
+    { upstreamError: true, fallbackFails: false, streamedError: true },
+    { upstreamError: false, fallbackFails: true, streamedError: true },
+    { upstreamError: true, fallbackFails: true, streamedError: true },
   ])(
-    'logs model failover once (upstreamError=$upstreamError, fallbackFails=$fallbackFails)',
-    async ({ upstreamError, fallbackFails }) => {
+    'logs model failover once (upstreamError=$upstreamError, fallbackFails=$fallbackFails, streamedError=$streamedError)',
+    async ({ upstreamError, fallbackFails, streamedError }) => {
       const primaryError = upstreamError
         ? new APICallError({
             message: 'primary unavailable',
@@ -1646,22 +1650,35 @@ describe('createLLMExecutionStep gateway provider tools', () => {
             isRetryable: false,
           })
         : new Error('fallback unavailable');
-      const primaryStream = vi.fn().mockRejectedValue(primaryError);
-      const fallbackStream = vi.fn(async () => {
-        if (fallbackFails) throw finalError;
+      const primaryStream = vi.fn(async () => {
+        if (!streamedError) throw primaryError;
         return {
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'Recovered answer' },
-            { type: 'text-end', id: 'text-1' },
-            { type: 'finish', finishReason: 'stop', usage: testUsage },
-          ]),
+          stream: convertArrayToReadableStream([{ type: 'error', error: primaryError }]),
+          request: {},
+          response: { headers: undefined },
+          warnings: [],
+        };
+      });
+      const fallbackStream = vi.fn(async () => {
+        if (fallbackFails && !streamedError) throw finalError;
+        return {
+          stream: convertArrayToReadableStream(
+            fallbackFails
+              ? [{ type: 'error', error: finalError }]
+              : [
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Recovered answer' },
+                  { type: 'text-end', id: 'text-1' },
+                  { type: 'finish', finishReason: 'stop', usage: testUsage },
+                ],
+          ),
           request: {},
           response: { headers: undefined },
           warnings: [],
         };
       });
       const logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+      const processAPIError = vi.fn(async () => ({ retry: false }));
       const llmExecutionStep = createLLMExecutionStep({
         agentId: 'test-agent',
         messageId: 'msg-0',
@@ -1671,6 +1688,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         controller,
         outputWriter: vi.fn(),
         messageList,
+        errorProcessors: [{ id: 'observe-model-error', processAPIError }],
         models: [primaryStream, fallbackStream].map((doStream, index) => ({
           id: index === 0 ? 'primary' : 'fallback',
           maxRetries: 0,
@@ -1693,6 +1711,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
 
       expect(primaryStream).toHaveBeenCalledTimes(1);
       expect(fallbackStream).toHaveBeenCalledTimes(1);
+      expect(processAPIError).toHaveBeenCalledWith(expect.objectContaining({ error: primaryError }));
+      expect(processAPIError).toHaveBeenCalledTimes(fallbackFails ? 2 : 1);
       expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
         'Model failed; trying fallback model',
         expect.objectContaining({
