@@ -16,7 +16,7 @@ import type { MountResult } from '../filesystem/mount';
 import type { ProviderStatus, SandboxStartResult } from '../lifecycle';
 
 import { MastraSandbox } from './mastra-sandbox';
-import type { MastraSandboxOptions } from './mastra-sandbox';
+import type { MastraSandboxOptions, SandboxStartOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { SpawnProcessOptions } from './process-manager';
@@ -804,14 +804,16 @@ class LifecycleSandbox extends MastraSandbox {
   startError: Error | undefined;
   startGate: Promise<void> | undefined;
   statusDuringImpl: ProviderStatus | undefined;
+  startOptions: SandboxStartOptions | undefined;
 
   constructor(options?: MastraSandboxOptions) {
     super({ ...options, name: 'LifecycleSandbox' });
   }
 
-  async start(): Promise<{ outcome: 'created' | 'connected' } | void> {
+  async start(options?: SandboxStartOptions): Promise<{ outcome: 'created' | 'connected' } | void> {
     this.implCalls += 1;
     this.statusDuringImpl = this.status;
+    this.startOptions = options;
     if (this.startGate) await this.startGate;
     if (this.startError) throw this.startError;
     return this.startResult;
@@ -838,6 +840,15 @@ describe('MastraSandbox start lifecycle wrap', () => {
     expect(sandbox.implCalls).toBe(1);
     expect(sandbox.statusDuringImpl).toBe('starting');
     expect(sandbox.status).toBe('running');
+  });
+
+  it('forwards start options to the provider implementation', async () => {
+    const sandbox = new LifecycleSandbox();
+    const controller = new AbortController();
+
+    await sandbox.start({ abortSignal: controller.signal });
+
+    expect(sandbox.startOptions).toEqual({ abortSignal: controller.signal });
   });
 
   it('coalesces concurrent direct start() and _start() calls onto one attempt', async () => {

@@ -58,6 +58,11 @@ export type SandboxStartHook = (args: {
   outcome?: SandboxStartOutcome;
 }) => void | Promise<void>;
 
+/** Options forwarded to a provider's sandbox start implementation. */
+export interface SandboxStartOptions {
+  abortSignal?: AbortSignal;
+}
+
 /**
  * Options for the MastraSandbox base class constructor.
  * Providers extend this to add their own options while inheriting lifecycle hooks.
@@ -241,7 +246,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
   protected _startPromise?: Promise<SandboxStartResult | void>;
 
   /** The subclass's `start()`, captured before the constructor shadows it. */
-  private readonly _implStart: () => void | Promise<SandboxStartResult | void>;
+  private readonly _implStart: (options?: SandboxStartOptions) => void | Promise<SandboxStartResult | void>;
 
   /** Whether acquisition runs through {@link find}/{@link connect}/{@link create}. */
   private readonly _useAcquisitionPrimitives: boolean;
@@ -288,7 +293,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     // status handling, and onStart hook as `_start()`/`ensureRunning()`.
     const hasStartOverride = this.start !== MastraSandbox.prototype.start;
     this._implStart = this.start.bind(this);
-    this.start = () => this._start();
+    this.start = options => this._start(options);
     // Rung selection: a subclass `start()` override wins; otherwise the
     // primitives drive acquisition when `create()` is implemented. Anything
     // declared as a class field is invisible here and lands on the base
@@ -438,7 +443,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    *
    * Subclasses override `start()` to provide their startup logic.
    */
-  async _start(): Promise<SandboxStartResult | void> {
+  async _start(options?: SandboxStartOptions): Promise<SandboxStartResult | void> {
     // Already running — definitionally not a fresh create. Reporting
     // 'connected' (rather than nothing) keeps every path through the wrapper
     // result-bearing for providers whose `start()` always reports one.
@@ -464,7 +469,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     }
 
     // Create and store the start promise
-    this._startPromise = this._executeStart();
+    this._startPromise = this._executeStart(options);
 
     try {
       return await this._startPromise;
@@ -477,12 +482,12 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * Internal start execution - handles status, the onStart hook, and mount
    * processing.
    */
-  private async _executeStart(): Promise<SandboxStartResult | void> {
+  private async _executeStart(options?: SandboxStartOptions): Promise<SandboxStartResult | void> {
     this.status = 'starting';
 
     let result: SandboxStartResult | void;
     try {
-      result = this._useAcquisitionPrimitives ? await this._acquire() : await this._implStart();
+      result = this._useAcquisitionPrimitives ? await this._acquire() : await this._implStart(options);
       // Status must flip to 'running' BEFORE the onStart hook: hooks run
       // commands, which reach `ensureRunning()` and would otherwise join the
       // in-flight `_startPromise` and deadlock awaiting their own start.
@@ -591,7 +596,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * resolves that id on start — reconnect/resume when the provider finds an
    * existing VM for it, create otherwise.
    */
-  async start(): Promise<SandboxStartResult | void> {
+  async start(_options?: SandboxStartOptions): Promise<SandboxStartResult | void> {
     // Also where a misspelled override and a class-FIELD `start`/`create` land,
     // since field initializers run too late for the constructor to see them.
     throw new Error(

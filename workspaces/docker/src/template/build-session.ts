@@ -15,6 +15,7 @@
 import { randomUUID } from 'node:crypto';
 import { Server, ServerCredentials, type ServiceDefinition, type UntypedServiceImplementation } from '@grpc/grpc-js';
 import type Docker from 'dockerode';
+import { normalizeAbortError, throwIfAborted } from '../abort';
 
 export const SECRETS_GET_METHOD = '/moby.buildkit.secrets.v1.Secrets/GetSecret';
 const AUTH_CREDENTIALS_METHOD = '/moby.filesync.v1.Auth/Credentials';
@@ -28,9 +29,21 @@ export interface BuildSession {
  * Open a session that answers `GetSecret` from `secrets`. The returned id must
  * be sent as the `session` query parameter of the build request.
  */
-export function openBuildSession(docker: Docker, secrets: Record<string, string>): Promise<BuildSession> {
+export function openBuildSession(
+  docker: Docker,
+  secrets: Record<string, string>,
+  abortSignal?: AbortSignal,
+): Promise<BuildSession> {
+  throwIfAborted(abortSignal, 'build Docker template');
   const id = randomUUID();
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const abort = () => {
+      if (settled) return;
+      settled = true;
+      reject(normalizeAbortError(abortSignal?.reason, 'build Docker template'));
+    };
+    abortSignal?.addEventListener('abort', abort, { once: true });
     docker.modem.dial(
       {
         method: 'POST',
@@ -46,8 +59,14 @@ export function openBuildSession(docker: Docker, secrets: Record<string, string>
         statusCodes: { 200: true, 500: 'server error' },
       },
       (err: Error | null, socket: unknown) => {
+        if (settled) {
+          (socket as { end?(): void } | undefined)?.end?.();
+          return;
+        }
+        settled = true;
+        abortSignal?.removeEventListener('abort', abort);
         if (err) {
-          reject(err);
+          reject(abortSignal?.aborted ? normalizeAbortError(err, 'build Docker template') : err);
           return;
         }
         const server = new Server();

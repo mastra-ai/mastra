@@ -107,6 +107,29 @@ describe('createDockerRepoTemplate', () => {
     await expect(resolver()).rejects.toThrow(/Invalid cloneUrl/);
   });
 
+  it('propagates cancellation through repository access and build environment resolution', async () => {
+    const controller = new AbortController();
+    const getRepositoryAccess = async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
+      expect(abortSignal).toBe(controller.signal);
+      controller.abort();
+      return { cloneUrl };
+    };
+    const buildEnv = ({ abortSignal }: { abortSignal?: AbortSignal }) => {
+      expect(abortSignal).toBe(controller.signal);
+      return {};
+    };
+    const resolver = createDockerRepoTemplate({ getRepositoryAccess, buildEnv, ref: sha })!;
+    await expect(resolver({ abortSignal: controller.signal })).rejects.toMatchObject({ code: 'ABORTED' });
+  });
+
+  it('rejects pre-aborted resolution before requesting repository access', async () => {
+    const getRepositoryAccess = async () => ({ cloneUrl });
+    const resolver = createDockerRepoTemplate({ getRepositoryAccess, ref: sha })!;
+    const controller = new AbortController();
+    controller.abort();
+    await expect(resolver({ abortSignal: controller.signal })).rejects.toMatchObject({ code: 'ABORTED' });
+  });
+
   it('propagates getRepositoryAccess failures instead of masking them', async () => {
     const resolver = createDockerRepoTemplate({
       getRepositoryAccess: async () => {
