@@ -3,13 +3,14 @@ import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPale
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { GitBranch, Settings2 } from 'lucide-react';
+import { Settings2 } from 'lucide-react';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../../hooks/useGitLabData';
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
-import { gitLabProjectRepository } from '../../../factory/services/gitlab';
+import { GitLabIcon } from '../../../../ui/icons';
+import { gitLabProjectRepository, openMastraPlatformIntegrations } from '../../../factory/services/gitlab';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
 import type { GithubRepo, GithubStatus, SourceControlRepository } from '../../services/github';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
@@ -25,7 +26,7 @@ export interface CreateFactoryRepositoryRowsProps {
 function connectionMessage(status: GithubStatus | undefined): string {
   switch (status?.reason) {
     case 'missing_config':
-      return 'GitHub is not configured for this deployment.';
+      return 'Connect your GitHub account through Mastra Platform.';
     case 'organization_required':
       return 'Join an organization to connect GitHub repositories.';
     case 'auth_required':
@@ -54,26 +55,17 @@ export function CreateFactoryRepositoryRows({
 
   const githubRows = !connected ? (
     (() => {
-      const unavailable =
-        githubStatus.data?.reason === 'missing_config' || githubStatus.data?.reason === 'organization_required';
-      const missingEnvVars =
-        githubStatus.data?.reason === 'missing_config'
-          ? (githubStatus.data.diagnostics?.missingGithubAppEnvVars ?? [])
-          : [];
+      const unavailable = githubStatus.data?.reason === 'organization_required';
 
       return (
         <CommandGroup heading="GitHub">
           <CommandPaletteItem
             icon={githubRedirecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : <GithubIcon />}
             title={unavailable ? 'GitHub unavailable' : 'Connect GitHub'}
-            subtitle={
-              missingEnvVars.length > 0
-                ? `Set ${missingEnvVars.join(', ')} on the server and restart.`
-                : connectionMessage(githubStatus.data)
-            }
+            subtitle={connectionMessage(githubStatus.data)}
             value="connect-github"
             disabled={unavailable || githubRedirecting}
-            onSelect={onConnect}
+            onSelect={githubStatus.data?.enabled ? onConnect : openMastraPlatformIntegrations}
           />
         </CommandGroup>
       );
@@ -110,15 +102,16 @@ export function CreateFactoryRepositoryRows({
       ) : (
         <CommandGroup heading="GitLab">
           <CommandPaletteItem
-            icon={<GitBranch />}
-            title="GitLab unavailable"
+            icon={<GitLabIcon />}
+            title={gitlabStatus.data?.reason === 'organization_required' ? 'GitLab unavailable' : 'Connect GitLab'}
             subtitle={
               gitlabStatus.data?.reason === 'organization_required'
                 ? 'Join an organization to connect GitLab repositories.'
-                : 'Connect GitLab through Mastra Platform or configure a GitLab access token on the server.'
+                : 'Connect your GitLab account through Mastra Platform.'
             }
-            value="gitlab-unavailable"
-            disabled
+            value="connect-gitlab"
+            disabled={gitlabStatus.data?.reason === 'organization_required'}
+            onSelect={openMastraPlatformIntegrations}
           />
         </CommandGroup>
       )}
@@ -182,7 +175,7 @@ function GitLabRepositoryResults({
         matches.map(repo => (
           <CommandPaletteItem
             key={repo.id}
-            icon={<GitBranch />}
+            icon={<GitLabIcon />}
             title={repo.fullName}
             subtitle={`GitLab · ${repo.defaultBranch}`}
             value={`gitlab-repo-${repo.id}`}

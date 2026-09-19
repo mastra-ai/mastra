@@ -360,7 +360,7 @@ describe('Create Factory wizard', () => {
     expect(await screen.findByRole('option', { name: /Connect GitHub/ })).toHaveAttribute('aria-disabled', 'false');
   });
 
-  it('says so instead of offering a dead end when GitHub is not configured on the server', async () => {
+  it('offers Platform connection when GitHub App is not configured on the server', async () => {
     seedDraft('vcs');
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
@@ -376,9 +376,10 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    const row = await screen.findByRole('option', { name: /GitHub unavailable/ });
-    expect(row).toHaveAttribute('aria-disabled', 'true');
-    expect(row).toHaveTextContent('Set GITHUB_APP_ID on the server and restart.');
+    const row = await screen.findByRole('option', { name: /Connect GitHub/ });
+    expect(row).toHaveAttribute('aria-disabled', 'false');
+    expect(row).toHaveTextContent('Connect your GitHub account through Mastra Platform.');
+    expect(row).not.toHaveTextContent('GITHUB_APP_ID');
   });
 
   it('lets a GitLab-only deployment choose a GitLab repository', async () => {
