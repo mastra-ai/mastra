@@ -348,10 +348,11 @@ jobs:
           # The literal placeholder is deliberately fail-closed: until the
           # draft PR exists and its numeric ID replaces this token, selecting
           # the protected base would hide the new validator self-tests.
+          policy_pr_placeholder='__PF4243_POLICY_PR_NUMBER''__'
           if [[ "${HEAD_REPOSITORY}" == "${GITHUB_REPOSITORY}" && \
             "${HEAD_REF}" == 'codex/pf-4243-pg-index-unit-validation' && \
             "${BASE_REF}" == 'main' ]] && \
-            grep -Fq -- '__PF4243_POLICY_PR_NUMBER__' "$workflow_path"; then
+            grep -Fq -- "$policy_pr_placeholder" "$workflow_path"; then
             echo 'PF-4243 policy branch still contains its unbound PR-number placeholder; failing closed before protected-base fallback.' >&2
             exit 1
           elif [[ "${HEAD_REPOSITORY}" == "${GITHUB_REPOSITORY}" && \

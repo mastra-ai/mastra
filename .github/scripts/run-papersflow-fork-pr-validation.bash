@@ -4593,11 +4593,15 @@ run_validator_self_tests() {
     printf '%s\n' '{}' > stores/pg/package.json
     printf '%s\n' 'export default {};' > stores/pg/vitest.config.ts
     printf '%s\n' 'export default {};' > stores/pg/vitest.perf.config.ts
+    printf '%s\n' 'export const pgConstraintHelper = "base";' \
+      > stores/pg/src/storage/db/constraint-utils.ts
     printf '%s\n' 'export const pgWorkflowStorage = true;' \
       > stores/pg/src/storage/domains/workflows/index.ts
     printf '%s\n' "import { it } from 'vitest';" "it('pg atomic resume', () => {});" \
       > stores/pg/src/storage/domains/workflows/atomic-resume.test.ts
-    printf '%s\n' "import { it } from 'vitest';" "it('pg performance index', () => {});" \
+    printf '%s\n' \
+      "import { pgConstraintHelper } from '../db/constraint-utils';" \
+      "import { it } from 'vitest';" "it('pg performance index', () => pgConstraintHelper);" \
       > stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
     printf '%s\n' "import { it } from 'vitest';" \
       "const connectionString = process.env.DB_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5435/mastra';" \
@@ -6570,6 +6574,30 @@ NODE
     "$command_log"
   assert_line_matches \
     '^--dir stores/pg exec vitest run --reporter=dot --reporter=json .*src/storage/db/external-schema\.integration\.test\.ts$' \
+    "$command_log"
+  assert_contains 'postgres 127.0.0.1:5434' "$service_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' 'export const pgConstraintHelper = "head";' \
+      > stores/pg/src/storage/db/constraint-utils.ts
+    git add .
+    git commit -q -m 'exercise PostgreSQL unit dependency admission'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-helper-dependency-success.log"
+  if ! run_fixture "$head_sha" "$output"; then
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains '--filter ./stores/pg --fail-if-no-match exec tsc --noEmit' "$command_log"
+  assert_contains '--filter ./stores/pg --fail-if-no-match build:lib' "$command_log"
+  assert_contains '--filter ./stores/pg --fail-if-no-match lint' "$command_log"
+  assert_line_matches \
+    '^--dir stores/pg exec vitest run --config vitest\.perf\.config\.ts --reporter=dot --reporter=json .*src/storage/performance-indexes/performance-indexes\.test\.ts$' \
     "$command_log"
   assert_contains 'postgres 127.0.0.1:5434' "$service_log"
 
@@ -14268,6 +14296,7 @@ mapfile -t detected_tests < <(
 # tool-approval.e2e.test.ts remains an exact changed-file exception, but is not
 # dependency-triggered until its committed replay baseline is repaired.
 for explicit_test in \
+  stores/pg/src/storage/performance-indexes/performance-indexes.test.ts \
   packages/core/src/agent/__tests__/supervisor-integration.test.ts \
   packages/core/src/agent/durable/__tests__/durable-agent-background-tasks.e2e.test.ts \
   packages/core/src/harness/v1/session.permission-gate.e2e.test.ts \
