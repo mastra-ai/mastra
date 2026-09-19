@@ -1114,3 +1114,13 @@ The agent's `id`, `name`, and `model` always come from code and can't be overrid
   },
 ]}
 />
+
+## Request-scoped browser
+
+The `browser` option accepts a `MastraBrowser` instance or a synchronous or asynchronous function receiving `{ requestContext, mastra }`. Return the browser owned by that request, or `undefined` to disable browser tools for it. Mastra resolves the function when preparing tools, processors, and browser context. Keep the resolver free of provider-launch side effects.
+
+### `getBrowser({ requestContext }?)`
+
+Returns: `Promise<MastraBrowser | undefined>`
+
+Resolve the configured browser for the supplied `RequestContext`. Omitting the context uses an empty context. The synchronous `agent.browser` property returns only a statically configured browser and returns `undefined` for a resolver. Resolution errors propagate to the caller. The durable agent forwards this method to its backing agent.

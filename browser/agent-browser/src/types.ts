@@ -1,10 +1,19 @@
 import type { BrowserConfig as BaseBrowserConfig, BrowserRecordingOptions } from '@mastra/core/browser';
+import type { SavedBrowserTabsOptions } from './saved-tabs';
 import type { BrowserToolName } from './tools/constants';
 
 /**
  * AgentBrowser-specific configuration extensions.
  */
 export interface AgentBrowserConfigExtensions {
+  /** Restore saved page URLs when a shared browser is relaunched. Does not restore forms or authentication. */
+  restoreTabsOnLaunch?: boolean;
+  /** Observe trusted page input from other CDP clients, including remote viewers. Chromium only. */
+  observeUserActivity?: boolean;
+  /** Close after this much idle time. Requires observeUserActivity; long browser operations remain protected. */
+  idleTimeoutMs?: number;
+  /** Persist saved web page URLs in the existing native thread for restoration after restart. */
+  savedTabs?: SavedBrowserTabsOptions;
   /**
    * Headers passed to chromium.connectOverCDP when using `cdpUrl`.
    * Required for providers like Cloudflare Browser Rendering (Authorization bearer token).

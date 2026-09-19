@@ -45,3 +45,41 @@ See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/browse
 ## Support
 
 We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
+
+## Remote browser inactivity and saved tabs
+
+An opt-in remote browser can observe trusted page input from another Chrome
+connection, such as an interactive viewer. `idleTimeoutMs` closes an inactive
+browser on the Mastra server. Agent browser operations, including long waits,
+remain protected until they finish. Reading `getActivityState()` does not renew
+activity. Its `idleDeadlineAt` lets a client display a countdown; explicit
+Continue commands call `recordActivity()` on the existing authenticated browser.
+
+```typescript
+const browser = new AgentBrowser({
+  scope: 'shared',
+  cdpUrl: createRemoteBrowser,
+  observeUserActivity: true,
+  idleTimeoutMs: 120_000,
+  savedTabs: { storage, resourceId: userId, threadId },
+});
+```
+
+`savedTabs` stores web page URLs and the selected tab in the existing native
+thread. Relaunch restores those pages, including when a new browser object reads
+the same persistent storage. It does not save forms, cookies or login state.
+`restoreTabsOnLaunch: true` enables restoration only within the same browser
+object when persistent storage is not configured. State reads and status polling
+do not launch another browser.
+
+Input observation uses a private Chrome execution world and does not collect key
+values or page text. Script-generated events and passive traffic do not refresh
+activity. This observes page content, including embedded frames; external viewer
+chrome still needs an explicit activity command for actions that produce no page
+input. Enable only after the viewer's complete input path is verified.
+
+The in-process idle deadline cannot survive a stopped server by itself. Remote
+providers still require native scheduled cleanup with persisted provider and
+billing references. `closeIfIdle(incarnation, timeoutMs)` refuses stale browser
+instances and running operations, and allows retry of a failed close. A local
+test does not prove provider deletion or financial settlement.

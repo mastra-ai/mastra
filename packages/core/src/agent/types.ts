@@ -906,7 +906,7 @@ interface AgentConfigBase<
    * When configured, browser tools are automatically injected into the agent.
    * Accessible via agent.browser for server-side features like screencast.
    */
-  browser?: MastraBrowser;
+  browser?: DynamicArgument<MastraBrowser | undefined, TRequestContext>;
   /**
    * Voice settings for speech input and output. Can be provided statically or resolved dynamically per request.
    *

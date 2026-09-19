@@ -5,6 +5,7 @@
 export { MastraBrowser, DEFAULT_BROWSER_VIEWPORT, resolveViewportSize, resolveLaunchViewport } from './browser';
 export type {
   BrowserStatus,
+  BrowserActivityState,
   BrowserLifecycleHook,
   BrowserConfig,
   BrowserConfigBase,

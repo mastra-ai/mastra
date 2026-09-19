@@ -21,6 +21,8 @@
  * Both extend this base class and implement `getTools()` to return their tools.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
 import { existsSync, unlinkSync, lstatSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -151,6 +153,15 @@ export function killProcessGroup(
  * Browser provider status.
  */
 export type BrowserStatus = 'pending' | 'launching' | 'ready' | 'error' | 'closing' | 'closed';
+
+/** Activity belongs to a single launch, never to a replacement browser. */
+export interface BrowserActivityState {
+  incarnation: string;
+  lastActivityAt: number;
+  activeOperations: number;
+  idleDeadlineAt: number | null;
+  status: BrowserStatus;
+}
 
 /**
  * Lifecycle hook that fires during browser state transitions.
@@ -498,6 +509,89 @@ export abstract class MastraBrowser extends MastraBase {
   /** Last known browser state before browser was closed (for restore on relaunch) */
   protected lastBrowserState?: BrowserState;
 
+  private activityIncarnation = randomUUID();
+  private lastActivityAt = Date.now();
+  private activeBrowserOperations = 0;
+  private readonly lifecycleHook = new AsyncLocalStorage<'launch' | 'close'>();
+  private closeRequested = false;
+  private idleTimeoutMs?: number;
+  private idleTimer?: ReturnType<typeof setTimeout>;
+
+  /** Providers enable this only after implementing trusted input and whole-operation observation. */
+  protected configureIdleTimeout(timeoutMs: number): void {
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2147483647) {
+      throw new Error('Invalid browser idle timeout');
+    }
+    this.idleTimeoutMs = timeoutMs;
+  }
+
+  private scheduleIdleClose(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = undefined;
+    if (!this.idleTimeoutMs || this.status !== 'ready' || this.activeBrowserOperations || this.closeRequested) return;
+    const incarnation = this.activityIncarnation;
+    const timeoutMs = this.idleTimeoutMs;
+    this.idleTimer = setTimeout(
+      () => {
+        this.idleTimer = undefined;
+        void this.closeIfIdle(incarnation, timeoutMs).catch(error => {
+          this.logger.error('Browser idle closure failed; cleanup remains pending', { error });
+        });
+      },
+      Math.max(0, this.lastActivityAt + timeoutMs - Date.now()),
+    );
+    this.idleTimer.unref?.();
+  }
+
+  /** @khayalek-known-mastra-violation KV-BR-001 */
+  getActivityState(): BrowserActivityState {
+    return {
+      incarnation: this.activityIncarnation,
+      lastActivityAt: this.lastActivityAt,
+      activeOperations: this.activeBrowserOperations,
+      idleDeadlineAt:
+        this.idleTimeoutMs && this.status === 'ready' && !this.activeBrowserOperations && !this.closeRequested
+          ? this.lastActivityAt + this.idleTimeoutMs
+          : null,
+      status: this._closePromise ? 'closing' : this.status,
+    };
+  }
+
+  /** Explicit user intent or provider-observed input; polling must never call this. */
+  recordActivity(): void {
+    if (this.status === 'ready' && !this._closePromise) {
+      this.lastActivityAt = Date.now();
+      this.scheduleIdleClose();
+    }
+  }
+
+  /** Protect the entire operation, including launch, waits, failure and cancellation. */
+  async runBrowserOperation<T>(operation: () => Promise<T>): Promise<T> {
+    this.activeBrowserOperations++;
+    this.recordActivity();
+    try {
+      if (this._closePromise && !this.lifecycleHook.getStore()) await this._closePromise;
+      return await operation();
+    } finally {
+      this.activeBrowserOperations--;
+      this.recordActivity();
+    }
+  }
+
+  /** Atomically claim closure before another operation can start. Timing belongs to the caller's native scheduler. */
+  async closeIfIdle(incarnation: string, idleTimeoutMs: number): Promise<boolean> {
+    if (!Number.isFinite(idleTimeoutMs) || idleTimeoutMs <= 0) throw new Error('Invalid browser idle timeout');
+    if (
+      (this.status !== 'ready' && !this.closeRequested) ||
+      this._closePromise ||
+      incarnation !== this.activityIncarnation ||
+      (!this.closeRequested && (this.activeBrowserOperations !== 0 || Date.now() - this.lastActivityAt < idleTimeoutMs))
+    )
+      return false;
+    await this.close();
+    return true;
+  }
+
   /**
    * Shared manager instance for 'shared' scope mode.
    * Type varies by provider (e.g., BrowserManager for agent-browser, Stagehand for stagehand).
@@ -727,10 +821,13 @@ export abstract class MastraBrowser extends MastraBase {
       try {
         await this.doLaunch();
         this.status = 'ready';
+        this.activityIncarnation = randomUUID();
+        this.lastActivityAt = Date.now();
+        this.scheduleIdleClose();
 
         // Fire onLaunch hook
         if (this.config.onLaunch) {
-          await this.config.onLaunch({ browser: this });
+          await this.lifecycleHook.run('launch', () => this.config.onLaunch!({ browser: this }));
         }
 
         // Notify onBrowserReady callbacks
@@ -752,46 +849,44 @@ export abstract class MastraBrowser extends MastraBase {
    * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
    */
   async close(): Promise<void> {
+    if (this.lifecycleHook.getStore() === 'close') return;
+    // An external close may already be awaiting this launch hook's caller.
+    if (this.lifecycleHook.getStore() === 'launch' && this._closePromise) return;
     // Already closed
     if (this.status === 'closed') {
       return;
     }
 
     // Already closing - wait for existing promise
-    if (this.status === 'closing' && this._closePromise) {
+    if (this._closePromise) {
       return this._closePromise;
     }
 
-    // Wait for in-flight launch to complete before closing
-    // This prevents race conditions where close() executes against a half-initialized provider
-    if (this.status === 'launching' && this._launchPromise) {
+    const pendingLaunch = this.status === 'launching' ? this._launchPromise : undefined;
+    const wasReady = this.status === 'ready';
+    // Publish the claim and promise before hooks or state capture can yield.
+    this.closeRequested = true;
+    this.scheduleIdleClose();
+    let providerCloseStarted = false;
+    this._closePromise = Promise.resolve().then(async () => {
       try {
-        await this._launchPromise;
-      } catch {
-        // Launch failed - status is now 'error', nothing to close
-        // Ensure we're in a clean closed state and return early
-        this.status = 'closed';
-        return;
-      }
-    }
-
-    // Fire onClose hook before closing
-    if (this.config.onClose && this.status === 'ready') {
-      await this.config.onClose({ browser: this });
-    }
-
-    // Save browser state before closing for potential restore on relaunch
-    const currentState = await this.getBrowserState();
-    if (currentState && currentState.tabs.length > 0) {
-      this.lastBrowserState = currentState;
-    }
-
-    this.status = 'closing';
-
-    this._closePromise = (async () => {
-      try {
+        if (pendingLaunch) {
+          try {
+            await pendingLaunch;
+          } catch {
+            /* Still release partially launched resources. */
+          }
+        }
+        if (this.config.onClose && (wasReady || pendingLaunch)) {
+          await this.lifecycleHook.run('close', () => this.config.onClose!({ browser: this }));
+        }
+        const currentState = await this.getBrowserState();
+        if (currentState && currentState.tabs.length > 0) this.lastBrowserState = currentState;
+        this.status = 'closing';
+        providerCloseStarted = true;
         await this.doClose();
         this.status = 'closed';
+        this.closeRequested = false;
         this.notifyBrowserClosed();
         // Clean up stale lock files only after confirmed shutdown.
         // Removing them from a live profile (if doClose threw) could cause corruption.
@@ -805,14 +900,16 @@ export abstract class MastraBrowser extends MastraBase {
       } finally {
         this._closePromise = undefined;
         // Kill orphaned child processes (GPU, renderer, crashpad, etc.)
-        killProcessGroup(this.sharedBrowserPid, this.logger);
-        this.sharedBrowserPid = undefined;
-        for (const [, pid] of this.threadBrowserPids) {
-          killProcessGroup(pid, this.logger);
+        if (providerCloseStarted) {
+          killProcessGroup(this.sharedBrowserPid, this.logger);
+          this.sharedBrowserPid = undefined;
+          for (const [, pid] of this.threadBrowserPids) {
+            killProcessGroup(pid, this.logger);
+          }
+          this.threadBrowserPids.clear();
         }
-        this.threadBrowserPids.clear();
       }
-    })();
+    });
 
     return this._closePromise;
   }
@@ -839,6 +936,9 @@ export abstract class MastraBrowser extends MastraBase {
    * If browser was previously closed, it will be re-launched.
    */
   async ensureReady(): Promise<void> {
+    if (this.lifecycleHook.getStore() && this.status === 'ready') return;
+    if (this._closePromise) await this._closePromise;
+    if (this.closeRequested) await this.close();
     if (this.status === 'ready') {
       // Check if browser is still alive (handles external closure)
       // checkBrowserAlive() should save lastBrowserState internally if it detects closure

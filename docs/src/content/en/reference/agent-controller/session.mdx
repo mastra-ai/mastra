@@ -119,7 +119,7 @@ The session is organized into sub-objects, each owning one domain of per-convers
     name: 'browser',
     type: 'MastraBrowser | undefined',
     description:
-      'The browser automation instance for this session. Set at creation via createSession, or from the AgentController config default. Undefined when no browser is configured.',
+      'The browser automation instance for this session. Set at creation via createSession, or from the AgentController config default. Undefined when no browser is configured or a factory-owned browser no longer matches the current resource and thread.',
   },
 ]}
 />
