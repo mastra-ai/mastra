@@ -5,6 +5,7 @@ import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
 import {
   anthropicStripEmptySignedReasoningContent,
+  anthropicToolIdFormat,
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
@@ -2156,5 +2157,164 @@ describe('anthropicOrphanedThinkingStep', () => {
 
     expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
     expect(JSON.stringify(args.messageList.get.all.db())).toContain('SIG_A');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// anthropicToolIdFormat — preemptive (prompt-scoped) tool-ID repair
+// ---------------------------------------------------------------------------
+
+describe('anthropicToolIdFormat.applyToPrompt', () => {
+  const ANTHROPIC_MODEL = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' };
+
+  function promptWithToolPair(ids: { call: string; result?: string }): LanguageModelV2Prompt {
+    return [
+      { role: 'user', content: [{ type: 'text', text: 'search for this' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Searching.' },
+          { type: 'tool-call', toolCallId: ids.call, toolName: 'search', input: { query: 'Mastra' } },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: ids.result ?? ids.call,
+            toolName: 'search',
+            output: { type: 'text', value: 'result' },
+          },
+        ],
+      },
+    ];
+  }
+
+  const idsIn = (prompt: LanguageModelV2Prompt) =>
+    prompt
+      .flatMap(message => (message.content as any[]).map(part => (part as { toolCallId?: string }).toolCallId))
+      .filter((id): id is string => typeof id === 'string');
+
+  it('rewrites an invalid tool-call id for an Anthropic model and leaves valid ids alone', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call.abc:1' }),
+      model: ANTHROPIC_MODEL,
+    });
+
+    expect(result).toBeDefined();
+    expect(idsIn(result!)).toEqual(['call_abc_1', 'call_abc_1']);
+  });
+
+  it('preserves call/result pairing when rewriting', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call.abc:1' }),
+      model: ANTHROPIC_MODEL,
+    });
+
+    const [callId, resultId] = idsIn(result!);
+    expect(callId).toBe(resultId);
+    expect(callId).toMatch(/^[a-zA-Z0-9_-]+$/);
+  });
+
+  it('returns undefined for a non-Anthropic model', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call.abc:1' }),
+      model: 'openai/gpt-5',
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined when every id is already valid', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call_abc_1' }),
+      model: ANTHROPIC_MODEL,
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('does not mutate the prompt it receives', () => {
+    const prompt = promptWithToolPair({ call: 'call.abc:1' });
+    const before = structuredClone(prompt);
+
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+
+    expect(result).not.toBe(prompt);
+    expect(prompt).toEqual(before);
+  });
+
+  it('resolves collisions against ids already present, deterministically', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'a.b', toolName: 'one', input: {} },
+          { type: 'tool-call', toolCallId: 'a_b', toolName: 'two', input: {} },
+        ],
+      },
+    ];
+
+    const first = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+    const second = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+
+    const ids = idsIn(first!);
+    // `a.b` sanitizes to `a_b`, which the prompt already claims, so it gets a suffix.
+    expect(ids).toEqual(['a_b_2', 'a_b']);
+    expect(new Set(ids).size).toBe(2);
+    for (const id of ids) expect(id).toMatch(/^[a-zA-Z0-9_-]+$/);
+    // Same input, same output — no dependence on Set/Map iteration timing.
+    expect(idsIn(second!)).toEqual(ids);
+  });
+
+  it('is reached through ProviderHistoryCompat.processLLMRequest', async () => {
+    const handler = new ProviderHistoryCompat();
+
+    const result = await handler.processLLMRequest(
+      makeRequestArgs(promptWithToolPair({ call: 'call.abc:1' }), ANTHROPIC_MODEL),
+    );
+
+    expect(result).toEqual({ prompt: expect.any(Array) });
+    expect(idsIn((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual(['call_abc_1', 'call_abc_1']);
+  });
+
+  it('keeps the deprecated reactive fix working for direct callers', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([createAssistantMessageWithToolCall('call:abc.123', 'searchTool', { query: 'test' })], 'response');
+
+    const changed = anthropicToolIdFormat.fix!(messageList.get.all.db());
+
+    expect(changed).toBe(true);
+    const ids = messageList.get.all
+      .db()
+      .flatMap(message => message.content?.parts ?? [])
+      .filter(part => part.type === 'tool-invocation')
+      .map(part => (part as any).toolInvocation.toolCallId);
+    expect(ids).toEqual(['call_abc_123']);
+  });
+});
+
+describe('anthropicToolIdFormat is prompt-scoped, not persisted', () => {
+  it('leaves the ids in the message list untouched', async () => {
+    const handler = new ProviderHistoryCompat();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([createUserMessage('search for this')], 'input');
+    messageList.add([createAssistantMessageWithToolCall('call.abc:1', 'search', { query: 'Mastra' })], 'response');
+    messageList.add([createUserMessage('thanks')], 'input');
+
+    const result = await handler.processLLMRequest({
+      ...makeRequestArgs(messageList.get.all.aiV5.prompt(), { provider: 'anthropic.messages' }),
+      messageList,
+    });
+
+    expect(result).toEqual({ prompt: expect.any(Array) });
+
+    const persistedIds = messageList.get.all
+      .db()
+      .flatMap(message => message.content?.parts ?? [])
+      .filter(part => part.type === 'tool-invocation')
+      .map(part => (part as any).toolInvocation.toolCallId);
+    expect(persistedIds).toEqual(['call.abc:1']);
   });
 });

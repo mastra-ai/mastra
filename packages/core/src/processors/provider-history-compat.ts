@@ -157,18 +157,117 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
 }
 
 /**
+ * Rewrites invalid tool-call IDs in the outbound prompt, keeping call↔result
+ * pairing intact. Nothing is persisted — the prompt is rebuilt, and the
+ * original ids stay in the message list.
+ *
+ * Replacements are assigned in encounter order and never collide with an id
+ * the prompt already carries: a sanitized id that is already claimed — by
+ * another original id or by a valid id elsewhere in the prompt — gets `_2`,
+ * `_3`, … appended until it is unique. Anthropic rejects duplicate
+ * `tool_use.id` values, so uniqueness is what keeps call/result pairing
+ * resolvable.
+ */
+function rewritePromptToolIds(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt | undefined {
+  const rename = new Map<string, string>();
+  const claimed = new Set<string>();
+
+  // Every id the prompt carries is unavailable as a replacement target.
+  for (const message of prompt) {
+    if (message.role === 'assistant' && Array.isArray(message.content)) {
+      for (const part of message.content) {
+        if (part.type === 'tool-call') claimed.add(part.toolCallId);
+      }
+      continue;
+    }
+    if (message.role === 'tool') {
+      for (const part of message.content) claimed.add(part.toolCallId);
+    }
+  }
+
+  // Assign replacements to invalid ids in encounter order.
+  for (const message of prompt) {
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) continue;
+    for (const part of message.content) {
+      if (part.type !== 'tool-call') continue;
+      const id = part.toolCallId;
+      if (VALID_TOOL_ID_PATTERN.test(id) || rename.has(id)) continue;
+
+      const sanitized = sanitizeToolId(id);
+      let candidate = sanitized;
+      for (let suffix = 2; claimed.has(candidate); suffix++) {
+        candidate = `${sanitized}_${suffix}`;
+      }
+      claimed.add(candidate);
+      rename.set(id, candidate);
+    }
+  }
+
+  if (rename.size === 0) return undefined;
+
+  const rewritten: LanguageModelV2Prompt = prompt.map(message => {
+    if (message.role === 'assistant' && Array.isArray(message.content)) {
+      let changed = false;
+      const content = message.content.map(part => {
+        if (part.type !== 'tool-call') return part;
+        const replacement = rename.get(part.toolCallId);
+        if (!replacement) return part;
+        changed = true;
+        return { ...part, toolCallId: replacement };
+      });
+      return changed ? { ...message, content } : message;
+    }
+
+    if (message.role === 'tool') {
+      let changed = false;
+      const content = message.content.map(part => {
+        const replacement = rename.get(part.toolCallId);
+        if (!replacement) return part;
+        changed = true;
+        return { ...part, toolCallId: replacement };
+      });
+      return changed ? { ...message, content } : message;
+    }
+
+    return message;
+  });
+
+  return rewritten;
+}
+
+/**
  * Anthropic enforces `^[a-zA-Z0-9_-]+$` on tool_use.id values.
  * Tool-call IDs from other providers (e.g. containing `.`, `:`) will be
- * rejected. This rule rewrites offending characters to `_`.
+ * rejected. This rule rewrites offending characters to `_` in the outbound
+ * prompt, so the rejection never happens and persisted history keeps its
+ * original IDs.
  */
 export const anthropicToolIdFormat: CompatRule = {
   name: 'anthropic-tool-id-format',
+  /**
+   * @deprecated The preemptive `applyToPrompt` hook repairs the outbound
+   * prompt, so Anthropic no longer rejects these ids and this pattern normally
+   * never matches. Retained as a dormant fallback for placements where the
+   * prompt lane cannot see the request (for example compat configured outside
+   * the agent's prompt path). Will be removed in a future major release.
+   */
   errorPatterns: [/tool_use\.id:.*should match pattern/i, /tool_call_id.*invalid/i],
+  /**
+   * @deprecated The preemptive `applyToPrompt` hook repairs the outbound
+   * prompt, so this reactive repair is dormant. Retained as a fallback for
+   * placements where the prompt lane cannot see the request, and because it is
+   * the only repair available once an API call has already been rejected. Will
+   * be removed in a future major release.
+   */
   fix(messages) {
     const idMap = buildToolIdMap(messages);
     if (idMap.size === 0) return false;
     rewriteToolIds(messages, idMap);
     return true;
+  },
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAnthropic(model)) return undefined;
+    return rewritePromptToolIds(prompt);
   },
 };
 
@@ -977,8 +1076,12 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  * Built-in rules:
  * - **anthropic-tool-id-format** — rewrites tool-call IDs that contain
  *   characters outside `[a-zA-Z0-9_-]` (e.g. `.` or `:` from other
- *   providers). Reactive (matches a 400 response body, retries with
- *   sanitized IDs).
+ *   providers). Preemptive; runs in `processLLMRequest` so the persisted
+ *   message list keeps its original IDs. Both the call and its paired result
+ *   are rewritten together, and a sanitized ID that would collide with an ID
+ *   already in the prompt gets a `_2`/`_3`… suffix. The reactive fallback
+ *   (matching a 400 response body and retrying with sanitized IDs) is
+ *   deprecated.
  * - **cerebras-strip-reasoning-content** — strips `reasoning` parts from
  *   assistant messages in the outbound prompt when the resolved model is
  *   Cerebras, to avoid the `@ai-sdk/openai-compatible@>=1.0.32` regression
