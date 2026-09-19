@@ -9,11 +9,11 @@ packages:
 
 `StreamErrorRetryProcessor` is an **error processor** that retries transient LLM API and stream failures. It includes built-in matching for OpenAI Responses stream errors and supports additional matchers for other provider-specific error shapes.
 
-The processor isn't enabled by default in core. Add it to `errorProcessors` for agents that need bounded retry handling.
+Mastra adds this processor to every agent's `errorProcessors` by default, after `ProviderHistoryCompat`. The default instance uses `maxRetries: 2` with a bad-request matcher and a connection-reset matcher. Supply your own instance in `errorProcessors` to change its policy — because a default is only added when its `id` is missing from your list, your instance is used and the default is not added alongside it.
 
 ## Usage example
 
-Add `StreamErrorRetryProcessor` to `errorProcessors`:
+Configure `StreamErrorRetryProcessor` — supplying the same `id` means the default is not added:
 
 ```typescript title="src/mastra/agents/openai-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -24,9 +24,11 @@ export const agent = new Agent({
   name: 'openai-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
-  errorProcessors: [new StreamErrorRetryProcessor()],
+  errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })],
 })
 ```
+
+To run with no error processors at all, pass `errorProcessors: []` — an explicitly empty list means the agent adds none of the defaults. Supplying your own processor for all three default ids has the same effect while keeping your own implementations.
 
 ## How it works
 
