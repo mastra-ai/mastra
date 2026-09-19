@@ -10223,6 +10223,7 @@ export class Session {
         activeTurnWaiter.cleanup();
         this._endTurn(turnAbortController);
       };
+      let nativeLineagedDispatchStarted = false;
       const assertOwnedSignalTurnNotDeleted = () => {
         if (this._state === 'deleted') {
           throw new HarnessSessionDeletedError(this.id, this._record.resourceId, this._record.threadId);
@@ -10283,6 +10284,7 @@ export class Session {
             },
           );
           if (responseLogicalMessageIdentity !== undefined) {
+            nativeLineagedDispatchStarted = true;
             const accepted = await this._awaitSignalNativeAcceptance(
               dispatched.accepted,
               turnAbortSignal,
@@ -10374,6 +10376,7 @@ export class Session {
                 } as never,
               );
               signalAdmissionNativeDispatchStarted = true;
+              nativeLineagedDispatchStarted = responseLogicalMessageIdentity !== undefined;
               const accepted = await this._awaitSignalNativeAcceptance(
                 dispatched.accepted,
                 turnAbortSignal,
@@ -10431,6 +10434,17 @@ export class Session {
           }
         }
       } catch (err) {
+        if (
+          err instanceof NativeSignalAcceptanceTimeoutError &&
+          nativeLineagedDispatchStarted &&
+          signalAdmission === undefined
+        ) {
+          // `sendSignal()` may already have started the native stream while
+          // its full-pair acknowledgement is unresolved. Abort that stream
+          // before releasing the owned turn; there is no durable admission
+          // record to recover this non-admitted dispatch.
+          turnAbortController.abort(err);
+        }
         finishOwnedSignalTurn();
         let thrown = err;
         if ((signalAdmissionNativeAccepted || signalAdmissionNativeDispatchStarted) && signalAdmission !== undefined) {

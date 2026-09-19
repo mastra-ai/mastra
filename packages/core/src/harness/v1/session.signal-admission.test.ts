@@ -522,6 +522,48 @@ describe('Session.signal() admissionId', () => {
     },
   );
 
+  it('aborts an unresolved native acceptance for a non-admitted full logical signal', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseRun!: () => void;
+    let nativeAbortObserved!: () => void;
+    const nativeAbort = new Promise<void>(resolve => {
+      nativeAbortObserved = resolve;
+    });
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseRun = resolve;
+      }),
+      onAbort: () => nativeAbortObserved(),
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const realSendSignal = agent.sendSignal.bind(agent);
+    let nativeAbortSignal: AbortSignal | undefined;
+    agent.sendSignal = ((signal: any, target: any) => {
+      nativeAbortSignal = target.ifIdle?.streamOptions?.abortSignal;
+      const dispatched = realSendSignal(signal, target);
+      return { ...dispatched, accepted: new Promise<never>(() => {}) };
+    }) as typeof agent.sendSignal;
+
+    vi.useFakeTimers();
+    try {
+      const pending = session.signal({
+        content: 'wait for native signal acceptance',
+        logicalMessageIdentity: { input: 'signal-timeout-input', response: 'signal-timeout-response' },
+      });
+      const rejection = expect(pending).rejects.toMatchObject({ name: 'HarnessValidationError' });
+      await vi.advanceTimersByTimeAsync(30_001);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(nativeAbortSignal?.aborted).toBe(true);
+    await expect(nativeAbort).resolves.toBeUndefined();
+    expect(session.isRunning()).toBe(false);
+    releaseRun();
+  });
+
   it('rejects payload conflicts and non-hash-safe options before another dispatch', async () => {
     const { harness, agent } = setupHarness();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
