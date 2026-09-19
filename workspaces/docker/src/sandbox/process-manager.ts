@@ -21,6 +21,9 @@ import type { Container, Exec, ExecInspectInfo } from 'dockerode';
  */
 const PROC_DIR = '/tmp/.mastra-proc';
 
+/** Maximum time to wait for the Docker kill helper and its inspect calls to complete. */
+const KILL_OPERATION_TIMEOUT_MS = 10_000;
+
 /**
  * Wrapper (run as the exec command) that places the user command in its own
  * process group and records the group's PGID so kill() can signal the whole
@@ -206,6 +209,40 @@ class DockerProcessHandle extends ProcessHandle {
     resolve?.(result);
   }
 
+  private async _awaitKillStep<T>(
+    promise: Promise<T>,
+    deadline: number,
+    onLateResolve?: (value: T) => void,
+  ): Promise<T> {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      if (onLateResolve) {
+        void promise.then(onLateResolve).catch(() => {});
+      }
+      throw new Error('kill helper confirmation timed out');
+    }
+
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (onLateResolve) {
+          void promise.then(onLateResolve).catch(() => {});
+        }
+        reject(new Error('kill helper confirmation timed out'));
+      }, remaining);
+
+      promise.then(
+        value => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        error => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
+  }
+
   /** @internal Settle after the main exec stream ends, waiting for any kill confirmation first */
   async _settleAfterStreamEnd(exitCode: number): Promise<void> {
     if (this._settled) return;
@@ -242,9 +279,22 @@ class DockerProcessHandle extends ProcessHandle {
     this._settle(this._buildResult(137, { killed: true, timedOut: this._timedOut }));
   }
 
-  /** @internal Settle a stream error without bypassing the single settlement path */
-  _settleStreamError(): void {
+  /** @internal Settle a stream error after any pending termination has resolved */
+  async _settleStreamError(): Promise<void> {
     if (this._settled) return;
+
+    const termination = this._terminationPromise;
+    if (termination) {
+      await termination;
+    }
+    if (this._settled) return;
+
+    if (this._killed) {
+      this._setExitCode(137);
+      this._settle(this._buildResult(137, { killed: true, timedOut: this._timedOut }));
+      return;
+    }
+
     this._setExitCode(1);
     this._settle({
       ...this._buildResult(1),
@@ -286,30 +336,35 @@ class DockerProcessHandle extends ProcessHandle {
   }
 
   private async _killProcessGroup(): Promise<boolean> {
+    const deadline = Date.now() + KILL_OPERATION_TIMEOUT_MS;
     try {
       // Kill the process group inside the *container's* PID namespace. We must
       // not use exec.inspect().Pid here: that is the host/daemon-namespace PID
       // and does not correspond to PIDs an in-container `kill` can address. The
       // recorded PGID targets a kernel-owned group, so descendants that were
       // re-parented to PID 1 are still caught.
-      const killExec = await this._container.exec({
-        // Static script; the pgid file path is passed as $1 (sh sets $0='sh',
-        // $1=path) so no runtime value is ever interpolated into the command.
-        Cmd: ['sh', '-c', KILL_SCRIPT, 'sh', this._pgidFile],
-        AttachStdout: false,
-        AttachStderr: false,
-      });
-      const killStream = await killExec.start({});
+      const killExec = await this._awaitKillStep(
+        this._container.exec({
+          // Static script; the pgid file path is passed as $1 (sh sets $0='sh',
+          // $1=path) so no runtime value is ever interpolated into the command.
+          Cmd: ['sh', '-c', KILL_SCRIPT, 'sh', this._pgidFile],
+          AttachStdout: false,
+          AttachStderr: false,
+        }),
+        deadline,
+      );
+      let killStream: NodeJS.ReadWriteStream | null = null;
 
       try {
+        killStream = await this._awaitKillStep(killExec.start({}), deadline, stream => stream.destroy());
         // Exec.start() resolves when the exec stream is opened, not when the
         // helper script exits. Poll inspect() until it finishes so we only report
         // success once the process tree has actually been killed — otherwise
         // wait() could resolve with exit 137 while targets are still running.
-        let killInfo = await killExec.inspect();
+        let killInfo = await this._awaitKillStep(killExec.inspect(), deadline);
         while (killInfo.Running) {
-          await new Promise(resolve => setTimeout(resolve, 10));
-          killInfo = await killExec.inspect();
+          await this._awaitKillStep(new Promise(resolve => setTimeout(resolve, 10)), deadline);
+          killInfo = await this._awaitKillStep(killExec.inspect(), deadline);
         }
         if (killInfo.ExitCode !== 0) {
           throw new Error(`kill helper exited with code ${killInfo.ExitCode}`);
@@ -325,7 +380,7 @@ class DockerProcessHandle extends ProcessHandle {
         this._destroyStream();
         return true;
       } finally {
-        killStream.destroy();
+        killStream?.destroy();
       }
     } catch (error: unknown) {
       // ESRCH / "no such process" is expected if the process exited between inspect and kill
@@ -508,7 +563,7 @@ export class DockerProcessManager extends SandboxProcessManager {
       });
 
       stream.on('error', () => {
-        handle._settleStreamError();
+        void handle._settleStreamError();
       });
     });
 
