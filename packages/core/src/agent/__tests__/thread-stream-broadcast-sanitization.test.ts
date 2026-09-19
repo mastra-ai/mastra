@@ -122,6 +122,73 @@ describe('thread-stream broadcast sanitization', () => {
     expect(finishPart.payload.messages.all[0]!.content).toBe(MARKER);
   });
 
+  it('recursively sanitizes delegated agent parts wrapped in tool-output chunks', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new CapturePubSub();
+
+    const childFinish = {
+      type: 'finish',
+      runId: 'child-run',
+      from: 'AGENT',
+      payload: {
+        stepResult: { reason: 'stop' },
+        output: { text: 'child answer', steps: [{ request: { body: MARKER } }] },
+        metadata: { request: { body: MARKER }, providerMetadata: { test: { keep: true } } },
+        messages: { all: [{ role: 'tool', content: MARKER }], user: [], nonUser: [] },
+      },
+    };
+    const childDelegation = {
+      type: 'tool-output',
+      runId: 'child-run',
+      from: 'AGENT',
+      payload: {
+        toolCallId: 'child-delegate-call',
+        toolName: 'agent-researcher',
+        output: childFinish,
+      },
+    };
+    const delegatedPart = {
+      type: 'tool-output',
+      runId: 'parent-run',
+      from: 'AGENT',
+      payload: {
+        toolCallId: 'parent-delegate-call',
+        toolName: 'agent-coordinator',
+        output: childDelegation,
+      },
+    };
+
+    const output = fakeOutput('parent-run', [delegatedPart]);
+    await runtime.registerRun(
+      agent,
+      output,
+      { memory: { thread: 'delegation-thread', resource: 'sanitize-user' } },
+      pubsub,
+    );
+
+    const deadline = Date.now() + 2000;
+    while (pubsub.events.filter(({ event }) => (event.data as { type?: string })?.type === 'stream-part').length < 1) {
+      if (Date.now() >= deadline) break;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+
+    const broadcast = pubsub.events
+      .map(({ event }) => event.data as { type?: string; part?: unknown })
+      .find(data => data.type === 'stream-part')!.part as typeof delegatedPart;
+    const broadcastChildDelegation = broadcast.payload.output;
+    const broadcastChildFinish = broadcastChildDelegation.payload.output;
+
+    expect(broadcastChildFinish.payload.output).toEqual({ text: 'child answer' });
+    expect(broadcastChildFinish.payload.metadata).toEqual({ providerMetadata: { test: { keep: true } } });
+    expect('messages' in broadcastChildFinish.payload).toBe(false);
+    expect(JSON.stringify(broadcast)).not.toContain(MARKER);
+
+    // Only the broadcast copy is rewritten.
+    expect(childFinish.payload.output.steps[0]!.request.body).toBe(MARKER);
+    expect(childFinish.payload.metadata.request.body).toBe(MARKER);
+    expect(childFinish.payload.messages.all[0]!.content).toBe(MARKER);
+  });
+
   it('keeps multi-step broadcast size bounded (no compounding steps[] duplication)', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new CapturePubSub();
