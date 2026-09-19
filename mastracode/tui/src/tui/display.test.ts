@@ -32,6 +32,17 @@ describe('showFormattedError', () => {
     expect(renderedText(state)).not.toContain('retry in 5s');
   });
 
+  it('explains a bare "Not Found" provider outage and hints at switching providers', () => {
+    const state = createState();
+
+    showFormattedError(state, Object.assign(new Error('Not Found'), { statusCode: 404 }));
+
+    const text = renderedText(state);
+    expect(text).toContain('Model provider unavailable. The provider may be down or unreachable right now.');
+    expect(text).toContain('(HTTP 404: Not Found)');
+    expect(text).toContain("Hint: Check the provider's status page, or use /model to switch to a different provider");
+  });
+
   it('shows retry timing when the event explicitly schedules a retry', () => {
     const state = createState();
 
