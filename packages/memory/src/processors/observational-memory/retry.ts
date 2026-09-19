@@ -93,7 +93,13 @@ function hasIsRetryableFlag(value: unknown): boolean {
  * @internal
  */
 export function isTransientLLMError(error: unknown): boolean {
-  if (isAbortError(error)) return false;
+  const abortSeen = new Set<object>();
+  let abortCandidate: unknown = error;
+  while (isRecord(abortCandidate) && !abortSeen.has(abortCandidate)) {
+    if (isAbortError(abortCandidate)) return false;
+    abortSeen.add(abortCandidate);
+    abortCandidate = abortCandidate.cause ?? abortCandidate.error;
+  }
 
   const visited = new WeakSet<object>();
 

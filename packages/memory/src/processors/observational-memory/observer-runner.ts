@@ -416,6 +416,7 @@ export class ObserverRunner {
       requestContext: internalRequestContext,
       observabilityContext: options?.observabilityContext,
       abortSignal,
+      maxRetries: this.observationConfig.maxRetries,
     });
     const extractedValues = mergeExtractedValues(parsed.extractedValues, structuredExtraction.values);
     const extractionFailures = mergeExtractionFailures(parsed.extractionFailures, structuredExtraction.failures);
@@ -611,6 +612,15 @@ export class ObserverRunner {
           totalUsage.totalTokens += threadResult.usage.totalTokens ?? 0;
         }
       }
+      // Same contract as the single-call branch below: mark only after every
+      // per-thread observer call succeeded, so a failure leaves the messages
+      // eligible for a later cycle.
+      for (const msgs of messagesByThread.values()) {
+        for (const msg of msgs) {
+          this.observedMessageIds.add(msg.id);
+        }
+      }
+
       return { results, usage: totalUsage };
     }
 

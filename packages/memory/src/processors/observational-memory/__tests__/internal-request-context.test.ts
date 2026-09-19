@@ -374,6 +374,71 @@ describe('multi-thread observer failure state', () => {
   });
 });
 
+describe('multi-thread structured-extractor branch', () => {
+  it('marks observed messages after a successful per-thread observer pass', async () => {
+    const observedMessageIds = new Set<string>();
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model: 'mock/model',
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: false,
+        maxRetries: 0,
+        extractors: [
+          new Extractor({ name: 'Support profile', instructions: 'Extract the profile.', schema: z.string() }),
+        ],
+      } as any,
+      observedMessageIds,
+      resolveModel: () => ({ model: 'mock/model' as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+
+    const callObserver = vi
+      .spyOn(observer as any, 'callObserver')
+      .mockResolvedValue({ observations: '- observed', extractedValues: {}, extractionFailures: [] });
+
+    const messagesByThread = new Map([
+      ['thread-1', [createMessage('message-1', 'thread-1')]],
+      ['thread-2', [createMessage('message-2', 'thread-2')]],
+    ]);
+
+    await (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']);
+
+    expect(callObserver).toHaveBeenCalledTimes(2);
+    expect([...observedMessageIds].sort()).toEqual(['message-1', 'message-2']);
+  });
+
+  it('leaves messages eligible when a per-thread observer pass fails', async () => {
+    const observedMessageIds = new Set<string>();
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model: 'mock/model',
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: false,
+        maxRetries: 0,
+        extractors: [
+          new Extractor({ name: 'Support profile', instructions: 'Extract the profile.', schema: z.string() }),
+        ],
+      } as any,
+      observedMessageIds,
+      resolveModel: () => ({ model: 'mock/model' as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+
+    vi.spyOn(observer as any, 'callObserver').mockRejectedValue(new TypeError('fetch failed'));
+
+    const messagesByThread = new Map([['thread-1', [createMessage('message-1', 'thread-1')]]]);
+
+    await expect(
+      (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1']),
+    ).rejects.toThrow();
+    expect([...observedMessageIds]).toEqual([]);
+  });
+});
+
 describe('schema-backed extraction does not leak the temporary observer identity', () => {
   function createStructuredExtractor() {
     return new Extractor({

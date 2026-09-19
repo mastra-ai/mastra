@@ -674,6 +674,35 @@ name: Tyler
       expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
     });
 
+    it('reports the swallowed failure to onObservationEnd under failurePolicy continue', async () => {
+      const failingModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          throw new TypeError('fetch failed');
+        },
+        doStream: async () => {
+          throw new TypeError('fetch failed');
+        },
+      });
+      const continueOm = createOM(storage, {
+        observerModel: failingModel,
+        observationMaxRetries: 0,
+        observationFailurePolicy: 'continue',
+      });
+
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      const result = await continueOm.observe({ threadId, messages: createBulkMessages(10, threadId), hooks });
+
+      expect(result.observed).toBe(false);
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      const endArgs = hooks.onObservationEnd.mock.calls[0]![0] as { error?: Error };
+      expect(endArgs.error).toBeInstanceOf(Error);
+      expect(endArgs.error?.message).toMatch(/fetch failed/);
+    });
+
     it('gates reflection and pairs the end hook when an awaited reflection start hook fails', async () => {
       const reflectorModel = createMockReflectorModel();
       const doGenerate = vi.spyOn(reflectorModel, 'doGenerate');

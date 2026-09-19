@@ -31,6 +31,18 @@ describe('isOmModelExecutionFailure', () => {
     expect(isOmModelExecutionFailure({ error: branded })).toBe(true);
   });
 
+  it('never classifies a wrapped abort as a survivable model failure', () => {
+    const abort = Object.assign(new Error('The operation was aborted due to timeout'), { name: 'AbortError' });
+    const domStyleAbort = Object.assign(new Error('aborted'), { code: 'ABORT_ERR' });
+    const branded = Object.assign(new Error('provider rejection'), { [apiCallErrorBrand]: true, name: 'AbortError' });
+
+    expect(isOmModelExecutionFailure(abort)).toBe(false);
+    expect(isOmModelExecutionFailure(new Error('request timeout', { cause: abort }))).toBe(false);
+    expect(isOmModelExecutionFailure({ error: { cause: abort } })).toBe(false);
+    expect(isOmModelExecutionFailure(new Error('wrapper', { cause: domStyleAbort }))).toBe(false);
+    expect(isOmModelExecutionFailure(branded)).toBe(false);
+  });
+
   it('ignores inherited brands and arbitrary sibling properties', () => {
     const inheritedBrand = Object.create({ [apiCallErrorBrand]: true });
     inheritedBrand.message = 'provider rejection';

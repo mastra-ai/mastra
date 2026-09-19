@@ -7,16 +7,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isAbortError(value: unknown): boolean {
-  return isRecord(value) && value.name === 'AbortError';
+  if (!isRecord(value)) return false;
+  if (value.name === 'AbortError') return true;
+  return typeof value.code === 'string' && value.code === 'ABORT_ERR';
+}
+
+/** True when an abort appears anywhere in the `cause`/`error` wrapper chain. */
+function hasAbortInChain(error: unknown): boolean {
+  const seen = new Set<object>();
+  let current: unknown = error;
+  while (isRecord(current) && !seen.has(current)) {
+    if (isAbortError(current)) return true;
+    seen.add(current);
+    current = current.cause ?? current.error;
+  }
+  return false;
 }
 
 export function isOmModelExecutionFailure(error: unknown): boolean {
+  // Cancellation wins over every other signal, even when a wrapper's message
+  // looks transient ("request timeout") — an aborted turn must never be
+  // absorbed by `failurePolicy: 'continue'`.
+  if (hasAbortInChain(error)) return false;
+
   if (isTransientLLMError(error)) return true;
 
   const visited = new Set<object>();
   let current: unknown = error;
   while (isRecord(current) && !visited.has(current)) {
-    if (isAbortError(current)) return false;
     visited.add(current);
 
     if (Object.prototype.hasOwnProperty.call(current, AI_API_CALL_ERROR_MARKER)) {

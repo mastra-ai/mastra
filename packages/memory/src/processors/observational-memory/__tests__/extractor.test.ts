@@ -384,6 +384,28 @@ describe('Extractor', () => {
     expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
+  it('retries transient provider failures on the OM retry ladder', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const stream = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error('rate limited'), { statusCode: 429 }))
+      .mockResolvedValueOnce({ object: Promise.resolve({ priority: 'high' }) });
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [priority],
+      maxRetries: 1,
+    });
+
+    expect(result.values).toEqual({ priority: 'high' });
+    expect(result.failures).toEqual([]);
+    expect(stream).toHaveBeenCalledTimes(2);
+    // Retried in the same (native) output mode rather than falling through to
+    // the json-prompt-injection fallback.
+    expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBeUndefined();
+  });
+
   it('uses streaming for structured extraction', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const generate = vi.fn();
@@ -485,6 +507,24 @@ describe('Extractor', () => {
         source: 'observer',
         extractors: [priority],
         abortSignal,
+      }),
+    ).rejects.toThrow(/aborted/);
+
+    // Already-aborted signal short-circuits on the OM retry ladder, so no
+    // provider call is issued at all.
+    expect(stream).toHaveBeenCalledTimes(0);
+  });
+
+  it('rethrows mid-flight abort errors without retrying structured extraction', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const stream = vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError'));
+
+    await expect(
+      extractStructuredValues({
+        agent: { stream } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+        abortSignal: new AbortController().signal,
       }),
     ).rejects.toThrow(/aborted/);
 
