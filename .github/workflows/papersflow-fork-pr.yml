@@ -356,7 +356,7 @@ jobs:
             echo 'PF-4243 policy branch still contains its unbound PR-number placeholder; failing closed before protected-base fallback.' >&2
             exit 1
           elif [[ "${HEAD_REPOSITORY}" == "${GITHUB_REPOSITORY}" && \
-            "${PR_NUMBER}" == '__PF4243_POLICY_PR_NUMBER__' && \
+            "${PR_NUMBER}" == '416' && \
             "${HEAD_REF}" == 'codex/pf-4243-pg-index-unit-validation' && \
             "${BASE_REF}" == 'main' ]]; then
             echo 'Bootstrapping the validator from the exact PF-4243 PostgreSQL performance-unit policy PR placeholder.'
