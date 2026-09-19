@@ -4,6 +4,7 @@ import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { StreamInternal } from '../../../loop/types';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
+import { MemoryRunState } from '../../../memory/run-state';
 import type {
   ProcessorState,
   ErrorProcessorOrWorkflow,
@@ -250,6 +251,23 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
 
       memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
       workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
+
+      if (memory && input.state.threadId && input.state.resourceId) {
+        // Live accessors do not cross workflow snapshots. Rebuild empty read
+        // state on a cold worker; never trust a serialized thread as validated.
+        const memoryRunState = new MemoryRunState({
+          memory,
+          threadId: input.state.threadId,
+          resourceId: input.state.resourceId,
+        });
+        const memoryContext = resolveRequestContext.get('MastraMemory') as Record<string, unknown> | undefined;
+        resolveRequestContext.set('MastraMemory', {
+          ...memoryContext,
+          resourceId: input.state.resourceId,
+          memoryConfig: input.state.memoryConfig,
+          runState: () => memoryRunState,
+        });
+      }
 
       // Rebuild the per-request processor pipeline. `listInputProcessors` /
       // `listOutputProcessors` already inject the SkillsProcessor and
