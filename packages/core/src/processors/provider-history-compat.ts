@@ -205,6 +205,19 @@ function matchesProviderPrefix(model: unknown, providerPrefix: string): boolean 
   return false;
 }
 
+export function isMaybeBedrockMantleGptOss(model: unknown): boolean {
+  if (model == null || typeof model === 'string' || typeof model === 'function') return false;
+
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeBedrockMantleGptOss((entry as { model?: unknown } | null)?.model ?? entry));
+  }
+
+  if (typeof model !== 'object') return false;
+  const { provider, modelId } = model as { provider?: unknown; modelId?: unknown };
+  // Keep the exact Chat route and case-sensitive model prefix; Responses is out of scope.
+  return provider === 'bedrock-mantle.chat' && typeof modelId === 'string' && modelId.startsWith('openai.gpt-oss-');
+}
+
 /**
  * Extract the exact provider id from a resolved model — the same value
  * `buildResponseModelMetadata` stamps onto each persisted assistant turn.
@@ -707,6 +720,16 @@ export const azureSystemReminderTransform: CompatRule = {
   },
 };
 
+export const bedrockMantleGptOssStripReasoningContent: CompatRule = {
+  name: 'bedrock-mantle-gpt-oss-strip-reasoning-content',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeBedrockMantleGptOss(model)) return undefined;
+    const strippedPrompt = stripReasoningFromPrompt(prompt);
+    // Mantle rejects empty content, so drop only messages rewritten to become empty.
+    return strippedPrompt?.filter((message, index) => message === prompt[index] || message.content.length > 0);
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
@@ -723,7 +746,39 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicStripForeignReasoningContent,
   anthropicStripForeignSignedReasoning,
   azureSystemReminderTransform,
+  bedrockMantleGptOssStripReasoningContent,
 ];
+
+function applyPromptCompatRules(
+  rules: CompatRule[],
+  prompt: LanguageModelV2Prompt,
+  model: unknown,
+  messageList?: ProcessLLMRequestArgs['messageList'],
+): LanguageModelV2Prompt | undefined {
+  let current = prompt;
+  let mutated = false;
+  for (const rule of rules) {
+    if (!rule.applyToPrompt) continue;
+    const next = rule.applyToPrompt({ prompt: current, model, messageList });
+    if (next) {
+      current = next;
+      mutated = true;
+    }
+  }
+  return mutated ? current : undefined;
+}
+
+class ProviderBoundaryCompat implements Processor<'provider-boundary-compat'> {
+  readonly id = 'provider-boundary-compat' as const;
+  readonly name = 'Provider Boundary Compat';
+
+  processLLMRequest({ prompt, model }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
+    const next = applyPromptCompatRules([bedrockMantleGptOssStripReasoningContent], prompt, model);
+    return next ? { prompt: next } : undefined;
+  }
+}
+
+export const providerBoundaryCompat = new ProviderBoundaryCompat();
 
 // ---------------------------------------------------------------------------
 // Processor
@@ -753,6 +808,10 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
+ * - **bedrock-mantle-gpt-oss-strip-reasoning-content** — strips assistant
+ *   `reasoning` parts for Bedrock Mantle Chat GPT-OSS models in the outbound
+ *   prompt. Turns emptied by the removal are dropped. Mantle Responses is not
+ *   matched.
  * - **anthropic-strip-foreign-signed-reasoning** — drops signed thinking
  *   blocks from the outbound prompt when their origin turn was stamped with a
  *   provider different from the current target (preemptive). Turns emptied of
@@ -777,17 +836,8 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
   }
 
   processLLMRequest({ prompt, model, messageList }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
-    let current = prompt;
-    let mutated = false;
-    for (const rule of this.rules) {
-      if (!rule.applyToPrompt) continue;
-      const next = rule.applyToPrompt({ prompt: current, model, messageList });
-      if (next) {
-        current = next;
-        mutated = true;
-      }
-    }
-    return mutated ? { prompt: current } : undefined;
+    const next = applyPromptCompatRules(this.rules, prompt, model, messageList);
+    return next ? { prompt: next } : undefined;
   }
 
   async processAPIError({
