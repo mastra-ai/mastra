@@ -340,7 +340,7 @@ describe('GatewayManager', () => {
       expect(await manager.hasAuth('test-gateway/acme/sonic-fast')).toBe(false);
     });
 
-    it('reports missing auth for static Google aliases without discovery or generation', async () => {
+    it('checks static Google aliases without discovery or generation', async () => {
       vi.stubEnv('GOOGLE_API_KEY', '');
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
 
@@ -351,6 +351,12 @@ describe('GatewayManager', () => {
       await expect(
         Promise.all([manager.hasAuth('google/gemini-2.5-flash'), manager.hasAuth('google/gemini-2.5-pro')]),
       ).resolves.toEqual([false, false]);
+
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'configured-google-key');
+
+      await expect(
+        Promise.all([manager.hasAuth('google/gemini-2.5-flash'), manager.hasAuth('google/gemini-2.5-pro')]),
+      ).resolves.toEqual([true, true]);
 
       expect(discoverySpies.every(spy => spy.mock.calls.length === 0)).toBe(true);
       expect(generationSpies.every(spy => spy.mock.calls.length === 0)).toBe(true);
