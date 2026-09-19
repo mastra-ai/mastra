@@ -273,6 +273,8 @@ Changes returned from `processLLMRequest()` are transient. They don't persist ba
 
 The method receives `prompt`, `model`, `stepNumber`, `steps`, `state`, and the shared processor context. Calling `abort()` from `processLLMRequest()` emits the normal tripwire response and stops the call.
 
+Error processors run in this lane too. A processor placed in `errorProcessors` that implements `processLLMRequest()` gets the hook, which is what lets the default `ProviderHistoryCompat` repair the outbound prompt rather than waiting for the provider to reject it. Processors whose only hook is `processAPIError()` — `StreamErrorRetryProcessor` and `PrefillErrorHandler` — don't implement this method and are inert here. A processor listed in both `inputProcessors` and `errorProcessors` runs once, in its `inputProcessors` position.
+
 See the [`Processor` reference](/reference/processors/processor-interface#processllmrequest) for all available arguments and return types.
 
 ### Act on the LLM response after the provider call

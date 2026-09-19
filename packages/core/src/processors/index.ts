@@ -969,6 +969,16 @@ export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
  */
 export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> = ErrorProcessor<TTripwireMetadata>;
 
+/**
+ * Processor config accepted by the provider-boundary LLM request lane.
+ *
+ * The lane carries input processors plus error processors, so an error-lane processor that implements
+ * `processLLMRequest` still gets its hook. Entries without that method are inert there.
+ */
+export type LLMRequestProcessorOrWorkflow<TTripwireMetadata = unknown> =
+  | InputProcessorOrWorkflow<TTripwireMetadata>
+  | ErrorProcessorOrWorkflow<TTripwireMetadata>;
+
 export { isProcessorWorkflow } from './is-processor-workflow';
 
 export {

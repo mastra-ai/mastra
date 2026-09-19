@@ -209,6 +209,8 @@ describe('DurableAgent Model Fallback', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
+        // Model-list retry and fallback semantics: no processor-level retry layer in these assertions.
+        errorProcessors: [],
         memory: mockMemory,
         model: [
           { id: 'primary', model: failingModel as LanguageModelV2, maxRetries: 0 },
@@ -251,6 +253,8 @@ describe('DurableAgent Model Fallback', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
+        // Model-list retry and fallback semantics: no processor-level retry layer in these assertions.
+        errorProcessors: [],
         model: [
           { id: 'primary', model: flakyModel as LanguageModelV2, maxRetries: 2 },
           { id: 'fallback', model: fallbackModel as LanguageModelV2, maxRetries: 0 },
@@ -289,6 +293,8 @@ describe('DurableAgent Model Fallback', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
+        // Model-list retry and fallback semantics: no processor-level retry layer in these assertions.
+        errorProcessors: [],
         model: [
           { id: 'disabled', model: disabledModel as LanguageModelV2, enabled: false },
           { id: 'enabled', model: enabledModel as LanguageModelV2, enabled: true },
@@ -321,6 +327,8 @@ describe('DurableAgent Model Fallback', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
+        // Model-list retry and fallback semantics: no processor-level retry layer in these assertions.
+        errorProcessors: [],
         model: [
           { id: 'model1', model: failingModel1 as LanguageModelV2, maxRetries: 0 },
           { id: 'model2', model: failingModel2 as LanguageModelV2, maxRetries: 0 },
@@ -352,6 +360,8 @@ describe('DurableAgent Model Fallback', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
+        // Model-list retry and fallback semantics: no processor-level retry layer in these assertions.
+        errorProcessors: [],
         model: [
           { id: 'primary', model: flakyModel as LanguageModelV2, maxRetries: 2 }, // Will fail after 3 attempts
           { id: 'fallback', model: fallbackModel as LanguageModelV2, maxRetries: 0 },
