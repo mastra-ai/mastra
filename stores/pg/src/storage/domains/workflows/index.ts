@@ -115,6 +115,7 @@ import type {
   StorageListWorkflowRunsInput,
   WorkflowRun,
   WorkflowRuns,
+  WorkflowExecutionState,
   CreateIndexOptions,
   WorkflowTerminalContinuationPlanRecord,
   WorkflowTerminalizationCapabilities,
@@ -5011,6 +5012,61 @@ export class WorkflowsPG extends WorkflowsStorage {
           id: createStorageErrorId('PG', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async getWorkflowExecutionState({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowExecutionState | null> {
+    try {
+      const snapshotColumnType = await this.resolveWorkflowSnapshotColumnType(this.#db.client);
+      if (snapshotColumnType !== 'jsonb') {
+        return super.getWorkflowExecutionState({ workflowName, runId });
+      }
+      const row = await this.#db.client.oneOrNone<{
+        snapshot_type: string | null;
+        status_json: string | null;
+        status_present: boolean;
+        execution_generation_json: string | null;
+        execution_generation_present: boolean;
+      }>(
+        `SELECT jsonb_typeof(snapshot.snapshot) AS snapshot_type,
+                CASE WHEN jsonb_typeof(snapshot.snapshot) = 'object' AND snapshot.snapshot ? 'status'
+                  THEN (snapshot.snapshot->'status')::text END AS status_json,
+                jsonb_typeof(snapshot.snapshot) = 'object' AND snapshot.snapshot ? 'status' AS status_present,
+                CASE WHEN jsonb_typeof(snapshot.snapshot) = 'object' AND snapshot.snapshot ? 'executionGeneration'
+                  THEN (snapshot.snapshot->'executionGeneration')::text END AS execution_generation_json,
+                jsonb_typeof(snapshot.snapshot) = 'object' AND snapshot.snapshot ? 'executionGeneration' AS execution_generation_present
+         FROM ${this.workflowSnapshotTableName()} AS snapshot
+         WHERE workflow_name = $1 AND run_id = $2`,
+        [workflowName, runId],
+      );
+      if (!row) return null;
+      if (row.snapshot_type !== 'object') {
+        return super.getWorkflowExecutionState({ workflowName, runId });
+      }
+
+      const parseProjectedJson = (value: string | null): unknown => (value === null ? null : JSON.parse(value));
+      return {
+        status: row.status_present ? parseProjectedJson(row.status_json) : undefined,
+        ...(row.execution_generation_present
+          ? { executionGeneration: parseProjectedJson(row.execution_generation_json) }
+          : {}),
+      } as WorkflowExecutionState;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_WORKFLOW_EXECUTION_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
         },
         error,
       );
