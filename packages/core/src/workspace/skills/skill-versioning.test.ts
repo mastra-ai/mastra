@@ -331,7 +331,7 @@ describe('publishSkillFromSource', () => {
     const skillMdHash = result.tree.entries['SKILL.md']!.blobHash;
     const storedSkillMd = await blobStore.get(skillMdHash);
     expect(storedSkillMd).not.toBeNull();
-    expect(storedSkillMd!.content).toBe(skillMd);
+    expect(storedSkillMd!.content).toBe(Buffer.from(skillMd).toString('base64'));
   });
 
   it('should deduplicate blobs across publishes', async () => {
@@ -356,7 +356,7 @@ describe('publishSkillFromSource', () => {
     const hash = sha256(skillMd);
     const stored = await blobStore.get(hash);
     expect(stored).not.toBeNull();
-    expect(stored!.content).toBe(skillMd);
+    expect(stored!.content).toBe(Buffer.from(skillMd).toString('base64'));
   });
 });
 
@@ -1012,13 +1012,19 @@ describe('Binary asset support', () => {
 
       const result = await collectSkillForPublish(source, skillPath);
 
-      // Binary files should have encoding: 'base64'
-      expect(result.tree.entries['assets/logo.png']!.encoding).toBe('base64');
-      expect(result.tree.entries['assets/photo.jpg']!.encoding).toBe('base64');
-
-      // Text files should not have encoding set (defaults to utf-8)
-      expect(result.tree.entries['SKILL.md']!.encoding).toBeUndefined();
-      expect(result.tree.entries['references/doc.md']!.encoding).toBeUndefined();
+      expect(result.tree.entries['assets/logo.png']).toMatchObject({
+        encoding: 'base64',
+        sourceEncoding: 'base64',
+      });
+      expect(result.tree.entries['assets/photo.jpg']).toMatchObject({
+        encoding: 'base64',
+        sourceEncoding: 'base64',
+      });
+      expect(result.tree.entries['SKILL.md']).toMatchObject({ encoding: 'base64', sourceEncoding: 'utf-8' });
+      expect(result.tree.entries['references/doc.md']).toMatchObject({
+        encoding: 'base64',
+        sourceEncoding: 'utf-8',
+      });
     });
 
     it('should store base64-encoded content for binary blobs', async () => {
@@ -1144,6 +1150,97 @@ describe('Binary asset support', () => {
 
       expect(typeof content).toBe('string');
       expect(content).toBe(textContent);
+    });
+
+    it('decodes canonical Base64 rows referenced by legacy text trees', async () => {
+      const blobStore = new InMemoryBlobStore();
+      const textContent = '# Legacy version';
+      const blobHash = sha256(textContent);
+
+      await blobStore.put({
+        hash: blobHash,
+        content: Buffer.from(textContent, 'utf-8').toString('base64'),
+        size: Buffer.byteLength(textContent, 'utf-8'),
+        mimeType: 'text/markdown',
+        createdAt: new Date(),
+      });
+
+      const tree: SkillVersionTree = {
+        entries: {
+          'SKILL.md': {
+            blobHash,
+            size: Buffer.byteLength(textContent, 'utf-8'),
+            mimeType: 'text/markdown',
+            encoding: 'utf-8',
+          },
+        },
+      };
+
+      const source = new VersionedSkillSource(tree, blobStore, new Date());
+
+      await expect(source.readFile('SKILL.md')).resolves.toBe(textContent);
+    });
+
+    it('rejects legacy tree rows whose content does not match the expected hash', async () => {
+      const blobStore = new InMemoryBlobStore();
+      const expectedHash = sha256('expected content');
+
+      await blobStore.put({
+        hash: expectedHash,
+        content: Buffer.from('different content', 'utf-8').toString('base64'),
+        size: Buffer.byteLength('different content', 'utf-8'),
+        mimeType: 'text/markdown',
+        createdAt: new Date(),
+      });
+
+      const tree: SkillVersionTree = {
+        entries: {
+          'SKILL.md': {
+            blobHash: expectedHash,
+            size: Buffer.byteLength('expected content', 'utf-8'),
+            mimeType: 'text/markdown',
+            encoding: 'utf-8',
+          },
+        },
+      };
+
+      const source = new VersionedSkillSource(tree, blobStore, new Date());
+
+      await expect(source.readFile('SKILL.md')).rejects.toThrow(`Blob content does not match hash ${expectedHash}`);
+    });
+
+    it.each([
+      ['canonical Base64', 'YWJj'],
+      ['legacy UTF-8', 'abc'],
+    ])("returns each file's logical type when a new tree reuses %s blob content", async (_name, blobContent) => {
+      const blobStore = new InMemoryBlobStore();
+      const blobHash = sha256('abc');
+      await blobStore.put({ hash: blobHash, content: blobContent, size: 3, createdAt: new Date() });
+
+      const tree: SkillVersionTree = {
+        entries: {
+          'text.txt': {
+            blobHash,
+            size: 3,
+            mimeType: 'text/plain',
+            encoding: 'base64',
+            sourceEncoding: 'utf-8',
+          },
+          'binary.bin': {
+            blobHash,
+            size: 3,
+            mimeType: 'application/octet-stream',
+            encoding: 'base64',
+            sourceEncoding: 'base64',
+          },
+        },
+      };
+      const source = new VersionedSkillSource(tree, blobStore, new Date());
+
+      expect(await source.stat('text.txt')).toMatchObject({ encoding: 'utf-8' });
+      expect(await source.stat('binary.bin')).toMatchObject({ encoding: 'base64' });
+      expect(await source.readFile('text.txt')).toBe('abc');
+      expect(await source.readFile('binary.bin')).toEqual(Buffer.from('abc'));
     });
   });
 

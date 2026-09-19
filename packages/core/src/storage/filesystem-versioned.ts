@@ -528,7 +528,12 @@ export class FilesystemVersionedHelpers<
     const wasPublished = existing.status === 'published';
     const isPublished = updatedEntity.status === 'published' && updatedEntity.activeVersionId;
     if (isPublished || (wasPublished && updates['status'] !== undefined)) {
-      this.persistToDisk();
+      try {
+        this.persistToDisk();
+      } catch (error) {
+        this.entities.set(id, structuredClone(existing));
+        throw error;
+      }
     }
 
     return structuredClone(updatedEntity);

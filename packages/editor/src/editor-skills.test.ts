@@ -562,7 +562,7 @@ describe('editor.skill — publish flow', () => {
     const treeEntry = published.tree!.entries['SKILL.md']!;
     const blob = await blobStore!.get(treeEntry.blobHash);
     expect(blob).toBeDefined();
-    expect(blob!.content).toBe(skillMd);
+    expect(blob!.content).toBe(Buffer.from(skillMd, 'utf8').toString('base64'));
   });
 
   it('should publish skill with references and assets', async () => {
@@ -625,7 +625,7 @@ describe('editor.skill — publish flow', () => {
     const blobStore = await storage.getStore('blobs');
     const blob = await blobStore!.get(hash1);
     expect(blob).toBeDefined();
-    expect(blob!.content).toBe(skillMd);
+    expect(blob!.content).toBe(Buffer.from(skillMd, 'utf8').toString('base64'));
   });
 
   it('should update activeVersionId on publish', async () => {

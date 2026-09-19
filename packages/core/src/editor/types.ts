@@ -393,6 +393,8 @@ export interface IEditorSkillNamespace {
   delete(id: string): Promise<void>;
   list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput>;
   listResolved(args?: StorageListSkillsInput): Promise<StorageListSkillsResolvedOutput>;
+  /** Publish a selected stored version. Optional for custom editor implementations. */
+  publishFromVersion?(skillId: string, versionId: string): Promise<StorageResolvedSkillType>;
   clearCache(id?: string): void;
 }
 

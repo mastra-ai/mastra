@@ -25,6 +25,8 @@ export interface SkillSourceStat {
   modifiedAt: Date;
   /** MIME type (for files) */
   mimeType?: string;
+  /** Explicit content encoding when the source needs to override MIME-based binary detection. */
+  encoding?: 'utf-8' | 'base64';
 }
 
 /**
