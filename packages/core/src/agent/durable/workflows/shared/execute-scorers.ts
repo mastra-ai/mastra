@@ -111,7 +111,13 @@ export function executeDurableAgentScorers({
         entityType: 'AGENT',
         threadId: initData.state?.threadId,
         resourceId: initData.state?.resourceId,
-        ...createObservabilityContext(tracingContext),
+        // runScorer bails when `currentSpan.isValid === false`. In the durable
+        // workflow the agent span is ended in map-final-output before this step
+        // runs (and a cross-process worker may deserialize the context as a
+        // NoOpSpan), so forwarding an invalid span silently dropped every score
+        // when observability was configured (#24298). Drop the invalid span and
+        // score without trace correlation; a live span is still forwarded.
+        ...createObservabilityContext(tracingContext?.currentSpan?.isValid === false ? undefined : tracingContext),
       });
     } catch (error) {
       // Scoring is observability, not execution: never fail a run over it.

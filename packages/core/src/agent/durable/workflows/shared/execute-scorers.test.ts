@@ -97,6 +97,29 @@ describe('executeDurableAgentScorers', () => {
       });
     });
 
+    it('runs the scorer even when the tracing context holds an ended span', async () => {
+      const mastra = new Mastra({ scorers: { myScorer: buildScorer() }, logger: false });
+
+      // Mirrors the durable workflow: the agent span is ended in
+      // map-final-output before execute-scorers runs, so the forwarded span
+      // reports isValid === false. runScorer must still score (#24298).
+      const endedSpan = {
+        isValid: false,
+        observabilityInstance: { getLoggerContext: () => ({}), getMetricsContext: () => ({}) },
+      } as any;
+
+      executeDurableAgentScorers({
+        initData: buildInitData(),
+        finalOutput: buildFinalOutput(),
+        mastra,
+        tracingContext: { currentSpan: endedSpan },
+      });
+      await waitForPayloads(1);
+
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0]).toMatchObject({ runId: 'run-1', entityType: 'AGENT', source: 'LIVE' });
+    });
+
     it('scores the assistant response, not the user input', async () => {
       const mastra = new Mastra({ scorers: { myScorer: buildScorer() }, logger: false });
 
