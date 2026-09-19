@@ -597,8 +597,10 @@ export class DaytonaSandbox extends MastraSandbox {
         if (orphan) {
           await this._daytona!.delete(orphan);
         }
-      } catch {
-        // Best-effort — orphan may not exist or may already be gone
+      } catch (error) {
+        if (!(error instanceof DaytonaNotFoundError) && !(error instanceof DaytonaGoneError)) {
+          throw error;
+        }
       }
     }
 

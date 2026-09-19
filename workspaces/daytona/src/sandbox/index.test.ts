@@ -1393,6 +1393,29 @@ describe('DaytonaSandbox', () => {
       expect(mockDaytona.start).not.toHaveBeenCalled();
       expect(mockSandbox.start).not.toHaveBeenCalled();
     });
+
+    it('destroy propagates detached sandbox deletion errors and retains identity for retry', async () => {
+      const detached = { ...mockSandbox, state: 'stopped' };
+      const deleteError = new DaytonaError('Service unavailable', 503);
+      mockDaytona.get.mockResolvedValue(detached);
+      mockDaytona.delete.mockRejectedValueOnce(deleteError).mockResolvedValueOnce(undefined);
+
+      const sandbox = new DaytonaSandbox({ id: 'my-preview' });
+      sandbox.status = 'stopped';
+
+      await expect(sandbox._destroy()).rejects.toBe(deleteError);
+      expect(sandbox.status).toBe('error');
+      expect((sandbox as any).sandboxName).toBe('my-preview');
+      expect((sandbox as any)._daytona).toBe(mockDaytona);
+
+      await sandbox._destroy();
+
+      expect(mockDaytona.get).toHaveBeenCalledTimes(2);
+      expect(mockDaytona.delete).toHaveBeenCalledTimes(2);
+      expect(sandbox.status).toBe('destroyed');
+      expect((sandbox as any)._daytonaSandboxId).toBeUndefined();
+      expect((sandbox as any)._daytona).toBeNull();
+    });
   });
 
   describe('Networking & writeFiles', () => {
