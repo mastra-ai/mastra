@@ -1,5 +1,40 @@
 # @mastra/code-sdk
 
+## 1.8.0-alpha.6
+
+### Minor Changes
+
+- Zero-config MCP OAuth now identifies Mastra Code with its Client ID Metadata Document (`https://code.mastra.ai/.well-known/oauth-client/mastracode.json`) instead of dynamic client registration, which `@mastra/mcp` 2.x no longer performs. Servers whose authorization server accepts URL-based client IDs keep working with a bare `url` entry; servers that require a registered client need `oauth.clientId` in `mcp.json`. ([#23876](https://github.com/mastra-ai/mastra/pull/23876))
+
+  ```json
+  {
+    "mcpServers": {
+      "notes": {
+        "url": "https://notes.example.com/mcp"
+      },
+      "billing": {
+        "url": "https://billing.example.com/mcp",
+        "oauth": {
+          "clientId": "mastra-code-billing",
+          "scopes": ["invoices:read"]
+        }
+      }
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Fixed the goal box appearing twice in the transcript. ([#24342](https://github.com/mastra-ai/mastra/pull/24342))
+
+  Starting or resuming a goal drew the goal box locally and the agent also echoed the same reminder back into the live transcript, so the goal was shown twice in a row. The box is now rendered once, from the echoed reminder.
+
+  The reminder keeps the goal's attempt budget and judge model, so the box shows both instead of dropping the attempt count. The same reminder is also deduplicated, so a repeated signal cannot render the box a second time.
+
+- Updated dependencies [[`6ef8186`](https://github.com/mastra-ai/mastra/commit/6ef8186ade9c8ca69269deed07fd47a942ecf70d), [`2ea44c1`](https://github.com/mastra-ai/mastra/commit/2ea44c1b578d8116507160ac32c7824faa07158e), [`34e4d21`](https://github.com/mastra-ai/mastra/commit/34e4d21e62c61e11e52aa7d6c39748b1120fbb93), [`8702f39`](https://github.com/mastra-ai/mastra/commit/8702f39331322ef0296fd3d68c0bd0997079faaa), [`e6072cb`](https://github.com/mastra-ai/mastra/commit/e6072cbbd3482e37027e53e4d62da7aad6a36c41), [`8d808d8`](https://github.com/mastra-ai/mastra/commit/8d808d8452b8acd5eda4f8cfe014331a8c0f1e92)]:
+  - @mastra/core@1.68.0-alpha.6
+  - @mastra/mcp@2.0.0-alpha.4
+
 ## 1.8.0-alpha.5
 
 ### Minor Changes

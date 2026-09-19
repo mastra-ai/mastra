@@ -19886,6 +19886,12 @@ export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Response 
     score: number | null;
     reason: string | null;
     error: string | null;
+    notScorable?:
+      | {
+          step: string;
+          reason?: string | undefined;
+        }
+      | undefined;
     failedStep?: string | undefined;
     completedSteps?: string[] | undefined;
     targetScope?: ('span' | 'trajectory') | undefined;

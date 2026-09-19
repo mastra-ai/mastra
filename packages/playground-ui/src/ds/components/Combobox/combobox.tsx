@@ -201,7 +201,7 @@ export function Combobox(props: ComboboxProps) {
               </FluidMenuItems>
             </div>
             {selectedValues.length > 0 && clearLabel ? (
-              <div className={cn('border-t', 'border-border1', 'p-1')}>
+              <div className={cn('border-t', 'border-border', 'p-1')}>
                 <Button
                   type="button"
                   variant="destructive-ghost"

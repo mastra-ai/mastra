@@ -22,8 +22,10 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(presets.tagName).toBe('BUTTON');
     expect(presets.getAttribute('data-variant')).toBe('ghost');
     expect(presets.className).toContain('bg-transparent');
-    expect(presets.className).toContain('text-neutral4');
-    expect(presets.className).not.toContain('pointer-events-none');
+    expect(presets.className).toContain('text-muted-foreground');
+    // Unprefixed only: the recipe carries aria-disabled:pointer-events-none, which a
+    // substring match would catch even though it never applies to an enabled control.
+    expect(presets.className).not.toMatch(/(^|\s)pointer-events-none(\s|$)/);
   });
 
   it('returns to the fallback preset when Presets is clicked', () => {

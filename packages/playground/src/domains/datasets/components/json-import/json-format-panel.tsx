@@ -67,10 +67,8 @@ export function JSONFormatPanel() {
 
       <Button
         variant="ghost"
-        as="a"
-        href={DOCS_URL}
-        target="_blank"
-        rel="noopener noreferrer"
+        render={<a href={DOCS_URL} target="_blank" rel="noopener noreferrer" />}
+
         className="self-start"
         icon={<ExternalLinkIcon />}
       >

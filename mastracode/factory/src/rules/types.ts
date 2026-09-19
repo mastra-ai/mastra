@@ -1,6 +1,6 @@
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 
-export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
+export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'jira-issue' | 'manual';
 
 /** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
@@ -25,8 +25,9 @@ export function needsApproval(item: {
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'linear') return 'linear-issue';
-  // Only GitHub and Linear have provider-specific rules; anything else (a Slack
-  // thread, say) is a plain work item, not a mislabeled GitHub issue.
+  if (source.integrationId === 'jira') return 'jira-issue';
+  // Only GitHub, Linear, and Jira have provider-specific rules; anything else
+  // (a Slack thread, say) is a plain work item, not a mislabeled GitHub issue.
   if (source.integrationId !== 'github') return 'manual';
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
@@ -115,7 +116,7 @@ export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
 export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number] | (string & {});
 
-export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'manual'] as const;
+export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'jiraIssue', 'manual'] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
 
 export const FACTORY_GITHUB_EVENTS = [
@@ -137,6 +138,9 @@ export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
 export const FACTORY_LINEAR_EVENTS = ['issueObserved', 'issueClosed'] as const;
 export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
+
+export const FACTORY_JIRA_EVENTS = ['issueObserved', 'issueClosed'] as const;
+export type FactoryJiraEventName = (typeof FACTORY_JIRA_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
   | null
@@ -166,7 +170,7 @@ export type FactoryRuleActor =
   | { type: 'system'; id: string };
 
 export interface FactoryRuleIngressIdentity {
-  type: 'human' | 'agent' | 'toolResult' | 'github' | 'linear' | 'rule';
+  type: 'human' | 'agent' | 'toolResult' | 'github' | 'linear' | 'jira' | 'rule';
   id: string;
 }
 
@@ -294,6 +298,32 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
     assignee: string | null;
     creator: string | null;
     team: string | null;
+    labels: readonly string[];
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
+export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  /** Bound board for the source this issue came from, when one is configured and installed. */
+  intake?: FactoryRuleIntakeTarget;
+  event: FactoryJiraEventName;
+  issue: {
+    /** Stable issue reference — the direct integration's Jira id or the Platform-encoded issue reference. */
+    id: string;
+    identifier: string;
+    title: string;
+    url: string;
+    state: string;
+    stateType: string;
+    priorityLabel: string;
+    assignee: string | null;
+    author: string | null;
+    project: string | null;
+    site: string | null;
     labels: readonly string[];
     createdAt: string;
     updatedAt: string;
@@ -452,6 +482,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'pullRequest';
     case 'linear-issue':
       return 'linearIssue';
+    case 'jira-issue':
+      return 'jiraIssue';
     case 'manual':
       return 'manual';
   }

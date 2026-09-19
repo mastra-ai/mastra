@@ -529,7 +529,6 @@ export type ProviderModelsMap = {
     'mistralai/ministral-3b-2512',
     'mistralai/ministral-8b-2512',
     'mistralai/mistral-large',
-    'mistralai/mistral-large-3-675b-instruct-2512',
     'mistralai/mistral-medium-3',
     'mistralai/mistral-medium-3.1',
     'mistralai/mistral-medium-3.5',
@@ -631,6 +630,7 @@ export type ProviderModelsMap = {
     'pokee-isaac',
     'poolside/laguna-s-2.1',
     'poolside/laguna-s-2.1:thinking',
+    'prism-ml/ternary-bonsai-2-27b',
     'qvq-max',
     'qwen/qwen-2.5-72b-instruct',
     'qwen/qwen-long',
@@ -878,6 +878,8 @@ export type ProviderModelsMap = {
   readonly vivgrid: readonly [
     'claude-fable-5',
     'claude-fable-5-1',
+    'claude-opus-5',
+    'claude-sonnet-5',
     'deepseek-v3.2',
     'deepseek-v4-flash',
     'deepseek-v4-pro',
@@ -902,6 +904,7 @@ export type ProviderModelsMap = {
     'gpt-5.6-sol',
     'gpt-5.6-terra',
     'gpt-6-astra',
+    'jev',
     'kimi-k3',
   ];
   readonly auriko: readonly [
@@ -1999,6 +2002,7 @@ export type ProviderModelsMap = {
     'deepseek-v3-2-exp',
     'deepseek-v4-flash',
     'deepseek-v4-pro',
+    'deepseek-v4.1-flash',
     'glm-5',
     'glm-5.1',
     'glm-5.2',
@@ -3286,7 +3290,6 @@ export type ProviderModelsMap = {
     'mistral-nemo-instruct-2407',
     'mistral-small-3.2-24b-instruct-2506',
     'qwen2.5-vl-72b-instruct',
-    'qwen3-32b',
     'qwen3-coder-30b-a3b-instruct',
     'qwen3.5-397b-a17b',
     'qwen3.5-9b',
@@ -3501,13 +3504,9 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v4-pro-0813',
     'deepseek/deepseek-v4.1-flash',
     'fish-audio/s1',
-    'fish-audio/s1-free',
     'fish-audio/s2-pro',
-    'fish-audio/s2-pro-free',
     'fish-audio/s2.1-pro',
-    'fish-audio/s2.1-pro-free',
     'fish-audio/transcribe-1',
-    'fish-audio/transcribe-1-free',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-flash-image',
     'google/gemini-2.5-flash-lite',
@@ -3767,6 +3766,7 @@ export type ProviderModelsMap = {
     'zai/glm-5.3',
     'zai/glm-5.3-fast',
     'zai/glm-5.3-flash',
+    'zai/glm-5.3-flashx',
     'zai/glm-5v-turbo',
   ];
   readonly wandb: readonly [
@@ -4412,6 +4412,7 @@ export type ProviderModelsMap = {
     'MiniMax-M2.7-highspeed',
     'MiniMax-M3',
   ];
+  readonly 'kimi-code-plan-global': readonly ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'];
   readonly inferx: readonly [
     'Agents-A1',
     'Devstral-2-123B-Instruct-2512-int4-AutoRound',
@@ -4815,6 +4816,7 @@ export type ProviderModelsMap = {
     'poolside/laguna-s-2.1:free',
     'poolside/laguna-xs-2.1',
     'poolside/laguna-xs-2.1:free',
+    'prism-ml/ternary-bonsai-2-27b',
     'qwen/qwen-2.5-72b-instruct',
     'qwen/qwen-2.5-7b-instruct',
     'qwen/qwen-2.5-coder-32b-instruct',
@@ -5171,6 +5173,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-flash-vision-exp',
     'deepseek-v4-pro',
   ];
+  readonly 'kimi-code-plan-cn': readonly ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'];
   readonly abacus: readonly [
     'MiniMaxAI/MiniMax-M2.7',
     'MiniMaxAI/MiniMax-M3',
@@ -5670,6 +5673,7 @@ export type ProviderModelsMap = {
     'poolside/laguna-s-2.1:free',
     'poolside/laguna-xs-2.1',
     'poolside/laguna-xs-2.1:free',
+    'prism-ml/ternary-bonsai-2-27b',
     'qwen/qwen-2.5-72b-instruct',
     'qwen/qwen-2.5-7b-instruct',
     'qwen/qwen-2.5-coder-32b-instruct',
@@ -6894,7 +6898,6 @@ export type ProviderModelsMap = {
   ];
   readonly ai21: readonly ['jamba-large', 'jamba-mini'];
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
-  readonly 'kimi-for-coding': readonly ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'];
   readonly 'alibaba-token-plan-cn': readonly [
     'MiniMax-M2.5',
     'deepseek-v3.2',

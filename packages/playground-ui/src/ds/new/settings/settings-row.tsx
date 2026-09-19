@@ -1,3 +1,5 @@
+import '../../../../new-theme.css';
+
 import { LockKeyholeIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Label } from '@/ds/components/Label/label';
@@ -45,11 +47,12 @@ export function SettingsRowLayout({
     <div
       data-slot={isSectionLayout ? 'section-row' : 'settings-row'}
       className={cn(
+        'new-theme',
         isSectionLayout
           ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
           : 'flex min-w-0 flex-col',
         layout === 'standalone' && 'gap-3 sm:flex-row sm:items-center sm:justify-between',
-        layout === 'factory' && 'gap-2 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4',
+        layout === 'factory' && 'gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
         className,
       )}
       {...props}
@@ -58,14 +61,9 @@ export function SettingsRowLayout({
         <LabelElement
           htmlFor={htmlFor}
           className={cn(
-            isSectionLayout ? 'text-ui-smd leading-ui-sm' : 'text-ui-md',
-            layout === 'standalone' && 'font-medium',
-            layout !== 'standalone' && 'text-neutral5',
-            layout === 'factory' && 'leading-ui-md',
-            isSectionLayout &&
-              'group-data-[variant=factory]/section:font-medium group-data-[variant=flat]/section:font-medium',
-            viewOnly && 'text-neutral3',
-            tone === 'destructive' && 'text-accent2',
+            'text-ui-md font-medium text-foreground',
+            viewOnly && 'text-muted-foreground',
+            tone === 'destructive' && 'text-destructive',
           )}
         >
           {label}
@@ -73,10 +71,8 @@ export function SettingsRowLayout({
         {description != null && (
           <DescriptionElement
             className={cn(
-              'text-neutral3',
-              isSectionLayout ? 'mt-1 max-w-[62ch] text-ui-sm leading-ui-sm text-pretty' : 'flex flex-col gap-0.5',
-              layout === 'standalone' && 'text-ui-md',
-              layout === 'factory' && 'text-ui-sm',
+              'text-ui-sm text-muted-foreground',
+              isSectionLayout ? 'mt-1 max-w-[62ch] text-pretty' : 'flex flex-col gap-0.5',
             )}
           >
             {description}
@@ -90,7 +86,7 @@ export function SettingsRowLayout({
             className={cn(
               'min-w-0',
               isSectionLayout && 'sm:justify-self-end',
-              viewOnly && 'flex items-center gap-2 text-ui-md text-neutral3',
+              viewOnly && 'flex items-center gap-2 text-ui-md text-muted-foreground',
             )}
           >
             {control}

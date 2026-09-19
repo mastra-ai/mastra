@@ -8,6 +8,7 @@ const STEP_KEY = 'mastracode.factory-create.step';
 const NAME_KEY = 'mastracode.factory-create.name';
 const REPO_KEY = 'mastracode.factory-create.repository';
 const LINEAR_PROJECT_KEY = 'mastracode.factory-create.linear-project-id';
+const JIRA_PROJECT_KEY = 'mastracode.factory-create.jira-project-id';
 const FACTORY_KEY = 'mastracode.factory-create.factory-id';
 const LINKED_KEY = 'mastracode.factory-create.linked-repository-id';
 const HOST_KEY = 'mastracode.factory-create.host-factory-id';
@@ -64,6 +65,8 @@ export interface CreateFactoryDraft {
   repository?: GithubRepo;
   /** The Linear project whose issues feed the new board, when the user picked one. */
   linearProjectId?: string;
+  /** The Jira project whose issues feed the new board, when the user picked one. */
+  jiraProjectId?: string;
   factoryId?: string;
   linkedRepositoryId?: string;
   /** The Factory whose shell hosts the wizard, so an OAuth return comes back to it. */
@@ -75,6 +78,7 @@ function readDraft(): CreateFactoryDraft {
     name: sessionStorage.getItem(NAME_KEY) ?? undefined,
     repository: readRepository(),
     linearProjectId: sessionStorage.getItem(LINEAR_PROJECT_KEY) ?? undefined,
+    jiraProjectId: sessionStorage.getItem(JIRA_PROJECT_KEY) ?? undefined,
     factoryId: sessionStorage.getItem(FACTORY_KEY) ?? undefined,
     linkedRepositoryId: sessionStorage.getItem(LINKED_KEY) ?? undefined,
     hostFactoryId: sessionStorage.getItem(HOST_KEY) ?? undefined,
@@ -90,6 +94,7 @@ function writeDraft({
   name,
   repository,
   linearProjectId,
+  jiraProjectId,
   factoryId,
   linkedRepositoryId,
   hostFactoryId,
@@ -98,6 +103,7 @@ function writeDraft({
   writeEntry(NAME_KEY, name);
   writeEntry(REPO_KEY, repository && JSON.stringify(repository));
   writeEntry(LINEAR_PROJECT_KEY, linearProjectId);
+  writeEntry(JIRA_PROJECT_KEY, jiraProjectId);
   writeEntry(FACTORY_KEY, factoryId);
   writeEntry(LINKED_KEY, linkedRepositoryId);
   writeEntry(HOST_KEY, hostFactoryId);
@@ -109,7 +115,16 @@ function writeEntry(key: string, value: string | undefined): void {
 }
 
 function clearDraft(): void {
-  for (const key of [STEP_KEY, NAME_KEY, REPO_KEY, LINEAR_PROJECT_KEY, FACTORY_KEY, LINKED_KEY, HOST_KEY])
+  for (const key of [
+    STEP_KEY,
+    NAME_KEY,
+    REPO_KEY,
+    LINEAR_PROJECT_KEY,
+    JIRA_PROJECT_KEY,
+    FACTORY_KEY,
+    LINKED_KEY,
+    HOST_KEY,
+  ])
     sessionStorage.removeItem(key);
 }
 
@@ -151,8 +166,11 @@ export function useCreateFactoryFlow() {
     startVcs: (name: string) => patchDraft.mutateAsync({ step: 'vcs', name }),
     chooseRepository: (repository: GithubRepo) => patchDraft.mutateAsync({ step: 'project-management', repository }),
     chooseLinearProject: (linearProjectId: string) =>
-      patchDraft.mutateAsync({ step: 'model-provider', linearProjectId }),
-    skipLinear: () => patchDraft.mutateAsync({ step: 'model-provider', linearProjectId: undefined }),
+      patchDraft.mutateAsync({ step: 'model-provider', linearProjectId, jiraProjectId: undefined }),
+    chooseJiraProject: (jiraProjectId: string) =>
+      patchDraft.mutateAsync({ step: 'model-provider', jiraProjectId, linearProjectId: undefined }),
+    skipProjectManagement: () =>
+      patchDraft.mutateAsync({ step: 'model-provider', linearProjectId: undefined, jiraProjectId: undefined }),
     /** Keep what the final commit already achieved, so a retry resumes instead of duplicating. */
     rememberFactory: (factory: FactoryProject | FactoryProjectPayload) =>
       patchDraft.mutateAsync({ factoryId: factory.id }),

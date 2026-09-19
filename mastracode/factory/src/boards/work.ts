@@ -6,7 +6,7 @@ import type { BoardPhaseDefinition } from './define-board.js';
 import { advanceApprovedPlan } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
 
-function linearIdentifier(item: FactoryRuleItemContext): string | undefined {
+function sourceIdentifier(item: FactoryRuleItemContext): string | undefined {
   const identifier = item.metadata?.identifier;
   return typeof identifier === 'string' ? identifier : undefined;
 }
@@ -14,8 +14,12 @@ function linearIdentifier(item: FactoryRuleItemContext): string | undefined {
 function sourceRef(item: FactoryRuleItemContext): string {
   const link = item.url ? ` (${item.url})` : '';
   if (item.source === 'linear-issue') {
-    const identifier = linearIdentifier(item);
+    const identifier = sourceIdentifier(item);
     return identifier ? `Linear issue ${identifier}${link}` : `Linear issue ${item.title}${link}`;
+  }
+  if (item.source === 'jira-issue') {
+    const identifier = sourceIdentifier(item);
+    return identifier ? `Jira issue ${identifier}${link}` : `Jira issue ${item.title}${link}`;
   }
   if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;
   const noun = item.source === 'github-pr' ? 'GitHub pull request' : 'GitHub issue';
@@ -59,6 +63,19 @@ function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
     role: 'triage',
     skillName: 'factory-triage',
     arguments: `${sourceRef(context.item)}\n\n${LINEAR_FETCH_HINT}`,
+  } as const;
+}
+
+const JIRA_FETCH_HINT =
+  "Start by fetching the issue's full details (description and comments) with the jira_get_issue tool.";
+
+function investigateTriagedJiraIssue(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:factory-triage-jira`,
+    role: 'triage',
+    skillName: 'factory-triage',
+    arguments: `${sourceRef(context.item)}\n\n${JIRA_FETCH_HINT}`,
   } as const;
 }
 
@@ -136,21 +153,25 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       kind: 'working',
       role: 'triage',
       outcomes: allOtherPhases,
-      onEnter: { issue: triageIssueEntry, linearIssue: investigateTriagedLinearIssue },
+      onEnter: {
+        issue: triageIssueEntry,
+        linearIssue: investigateTriagedLinearIssue,
+        jiraIssue: investigateTriagedJiraIssue,
+      },
     },
     planning: {
       title: 'Planning',
       kind: 'working',
       role: 'plan',
       outcomes: allOtherPhases,
-      onEnter: { issue: planWorkItem, linearIssue: planWorkItem, manual: planWorkItem },
+      onEnter: { issue: planWorkItem, linearIssue: planWorkItem, jiraIssue: planWorkItem, manual: planWorkItem },
     },
     execute: {
       title: 'Building',
       kind: 'working',
       role: 'work',
       outcomes: allOtherPhases,
-      onEnter: { issue: buildWorkItem, linearIssue: buildWorkItem, manual: buildWorkItem },
+      onEnter: { issue: buildWorkItem, linearIssue: buildWorkItem, jiraIssue: buildWorkItem, manual: buildWorkItem },
     },
     review: {
       title: 'Review',

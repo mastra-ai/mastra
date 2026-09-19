@@ -611,7 +611,6 @@
         "mistralai/ministral-3b-2512",
         "mistralai/ministral-8b-2512",
         "mistralai/mistral-large",
-        "mistralai/mistral-large-3-675b-instruct-2512",
         "mistralai/mistral-medium-3",
         "mistralai/mistral-medium-3.1",
         "mistralai/mistral-medium-3.5",
@@ -713,6 +712,7 @@
         "pokee-isaac",
         "poolside/laguna-s-2.1",
         "poolside/laguna-s-2.1:thinking",
+        "prism-ml/ternary-bonsai-2-27b",
         "qvq-max",
         "qwen/qwen-2.5-72b-instruct",
         "qwen/qwen-long",
@@ -983,6 +983,8 @@
       "models": [
         "claude-fable-5",
         "claude-fable-5-1",
+        "claude-opus-5",
+        "claude-sonnet-5",
         "deepseek-v3.2",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
@@ -1007,12 +1009,16 @@
         "gpt-5.6-sol",
         "gpt-5.6-terra",
         "gpt-6-astra",
+        "jev",
         "kimi-k3"
       ],
       "docUrl": "https://docs.vivgrid.com/models",
       "gateway": "models.dev",
       "npm": "@ai-sdk/openai",
       "modelOverrides": {
+        "claude-opus-5": {
+          "npm": "@ai-sdk/anthropic"
+        },
         "gemini-3.1-pro-preview": {
           "npm": "@ai-sdk/openai-compatible"
         },
@@ -1020,7 +1026,7 @@
           "npm": "@ai-sdk/openai-compatible"
         },
         "claude-fable-5-1": {
-          "npm": "@ai-sdk/openai-compatible"
+          "npm": "@ai-sdk/anthropic"
         },
         "gemini-3.1-flash-lite-preview": {
           "npm": "@ai-sdk/openai-compatible"
@@ -1029,7 +1035,7 @@
           "npm": "@ai-sdk/openai-compatible"
         },
         "claude-fable-5": {
-          "npm": "@ai-sdk/openai-compatible"
+          "npm": "@ai-sdk/anthropic"
         },
         "gpt-5.4-nano": {
           "npm": "@ai-sdk/openai-compatible"
@@ -1048,6 +1054,9 @@
         },
         "gemini-3.7-flash": {
           "npm": "@ai-sdk/openai-compatible"
+        },
+        "claude-sonnet-5": {
+          "npm": "@ai-sdk/anthropic"
         },
         "gpt-5.5": {
           "npm": "@ai-sdk/openai-compatible"
@@ -2473,6 +2482,7 @@
         "deepseek-v3-2-exp",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
+        "deepseek-v4.1-flash",
         "glm-5",
         "glm-5.1",
         "glm-5.2",
@@ -4035,7 +4045,6 @@
         "mistral-nemo-instruct-2407",
         "mistral-small-3.2-24b-instruct-2506",
         "qwen2.5-vl-72b-instruct",
-        "qwen3-32b",
         "qwen3-coder-30b-a3b-instruct",
         "qwen3.5-397b-a17b",
         "qwen3.5-9b",
@@ -4288,13 +4297,9 @@
         "deepseek/deepseek-v4-pro-0813",
         "deepseek/deepseek-v4.1-flash",
         "fish-audio/s1",
-        "fish-audio/s1-free",
         "fish-audio/s2-pro",
-        "fish-audio/s2-pro-free",
         "fish-audio/s2.1-pro",
-        "fish-audio/s2.1-pro-free",
         "fish-audio/transcribe-1",
-        "fish-audio/transcribe-1-free",
         "google/gemini-2.5-flash",
         "google/gemini-2.5-flash-image",
         "google/gemini-2.5-flash-lite",
@@ -4554,6 +4559,7 @@
         "zai/glm-5.3",
         "zai/glm-5.3-fast",
         "zai/glm-5.3-flash",
+        "zai/glm-5.3-flashx",
         "zai/glm-5v-turbo"
       ],
       "docUrl": "https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway",
@@ -5485,6 +5491,15 @@
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
     },
+    "kimi-code-plan-global": {
+      "url": "https://api.kimi.ai/coding/v1",
+      "apiKeyEnvVar": "KIMI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Kimi For Coding (kimi.ai)",
+      "models": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
+      "docUrl": "https://www.kimi.ai/code/docs/en/kimi-code/models.html",
+      "gateway": "models.dev"
+    },
     "inferx": {
       "url": "https://model.inferx.net/endpoints/v1",
       "apiKeyEnvVar": "INFERX_API_KEY",
@@ -5992,6 +6007,7 @@
         "poolside/laguna-s-2.1:free",
         "poolside/laguna-xs-2.1",
         "poolside/laguna-xs-2.1:free",
+        "prism-ml/ternary-bonsai-2-27b",
         "qwen/qwen-2.5-72b-instruct",
         "qwen/qwen-2.5-7b-instruct",
         "qwen/qwen-2.5-coder-32b-instruct",
@@ -6386,6 +6402,15 @@
       "name": "DeepSeek",
       "models": ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"],
       "docUrl": "https://api-docs.deepseek.com/quick_start/pricing",
+      "gateway": "models.dev"
+    },
+    "kimi-code-plan-cn": {
+      "url": "https://api.kimi.com/coding/v1",
+      "apiKeyEnvVar": "KIMI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Kimi For Coding (kimi.com)",
+      "models": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
+      "docUrl": "https://www.kimi.com/code/docs/en/kimi-code/models.html",
       "gateway": "models.dev"
     },
     "abacus": {
@@ -7153,6 +7178,7 @@
         "poolside/laguna-s-2.1:free",
         "poolside/laguna-xs-2.1",
         "poolside/laguna-xs-2.1:free",
+        "prism-ml/ternary-bonsai-2-27b",
         "qwen/qwen-2.5-72b-instruct",
         "qwen/qwen-2.5-7b-instruct",
         "qwen/qwen-2.5-coder-32b-instruct",
@@ -9262,16 +9288,6 @@
       "gateway": "models.dev",
       "npm": "@ai-sdk/perplexity"
     },
-    "kimi-for-coding": {
-      "url": "https://api.kimi.com/coding/v1",
-      "apiKeyEnvVar": "KIMI_API_KEY",
-      "apiKeyHeader": "Authorization",
-      "name": "Kimi For Coding",
-      "models": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
-      "docUrl": "https://www.kimi.com/code/docs/en/kimi-code/models.html",
-      "gateway": "models.dev",
-      "npm": "@ai-sdk/anthropic"
-    },
     "alibaba-token-plan-cn": {
       "url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
       "apiKeyEnvVar": "ALIBABA_TOKEN_PLAN_API_KEY",
@@ -10618,7 +10634,6 @@
       "mistralai/ministral-3b-2512",
       "mistralai/ministral-8b-2512",
       "mistralai/mistral-large",
-      "mistralai/mistral-large-3-675b-instruct-2512",
       "mistralai/mistral-medium-3",
       "mistralai/mistral-medium-3.1",
       "mistralai/mistral-medium-3.5",
@@ -10720,6 +10735,7 @@
       "pokee-isaac",
       "poolside/laguna-s-2.1",
       "poolside/laguna-s-2.1:thinking",
+      "prism-ml/ternary-bonsai-2-27b",
       "qvq-max",
       "qwen/qwen-2.5-72b-instruct",
       "qwen/qwen-long",
@@ -10967,6 +10983,8 @@
     "vivgrid": [
       "claude-fable-5",
       "claude-fable-5-1",
+      "claude-opus-5",
+      "claude-sonnet-5",
       "deepseek-v3.2",
       "deepseek-v4-flash",
       "deepseek-v4-pro",
@@ -10991,6 +11009,7 @@
       "gpt-5.6-sol",
       "gpt-5.6-terra",
       "gpt-6-astra",
+      "jev",
       "kimi-k3"
     ],
     "auriko": [
@@ -12075,6 +12094,7 @@
       "deepseek-v3-2-exp",
       "deepseek-v4-flash",
       "deepseek-v4-pro",
+      "deepseek-v4.1-flash",
       "glm-5",
       "glm-5.1",
       "glm-5.2",
@@ -13362,7 +13382,6 @@
       "mistral-nemo-instruct-2407",
       "mistral-small-3.2-24b-instruct-2506",
       "qwen2.5-vl-72b-instruct",
-      "qwen3-32b",
       "qwen3-coder-30b-a3b-instruct",
       "qwen3.5-397b-a17b",
       "qwen3.5-9b",
@@ -13577,13 +13596,9 @@
       "deepseek/deepseek-v4-pro-0813",
       "deepseek/deepseek-v4.1-flash",
       "fish-audio/s1",
-      "fish-audio/s1-free",
       "fish-audio/s2-pro",
-      "fish-audio/s2-pro-free",
       "fish-audio/s2.1-pro",
-      "fish-audio/s2.1-pro-free",
       "fish-audio/transcribe-1",
-      "fish-audio/transcribe-1-free",
       "google/gemini-2.5-flash",
       "google/gemini-2.5-flash-image",
       "google/gemini-2.5-flash-lite",
@@ -13843,6 +13858,7 @@
       "zai/glm-5.3",
       "zai/glm-5.3-fast",
       "zai/glm-5.3-flash",
+      "zai/glm-5.3-flashx",
       "zai/glm-5v-turbo"
     ],
     "wandb": [
@@ -14488,6 +14504,7 @@
       "MiniMax-M2.7-highspeed",
       "MiniMax-M3"
     ],
+    "kimi-code-plan-global": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
     "inferx": [
       "Agents-A1",
       "Devstral-2-123B-Instruct-2512-int4-AutoRound",
@@ -14891,6 +14908,7 @@
       "poolside/laguna-s-2.1:free",
       "poolside/laguna-xs-2.1",
       "poolside/laguna-xs-2.1:free",
+      "prism-ml/ternary-bonsai-2-27b",
       "qwen/qwen-2.5-72b-instruct",
       "qwen/qwen-2.5-7b-instruct",
       "qwen/qwen-2.5-coder-32b-instruct",
@@ -15238,6 +15256,7 @@
       "zai/glm-5.3-flash"
     ],
     "deepseek": ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"],
+    "kimi-code-plan-cn": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
     "abacus": [
       "MiniMaxAI/MiniMax-M2.7",
       "MiniMaxAI/MiniMax-M3",
@@ -15737,6 +15756,7 @@
       "poolside/laguna-s-2.1:free",
       "poolside/laguna-xs-2.1",
       "poolside/laguna-xs-2.1:free",
+      "prism-ml/ternary-bonsai-2-27b",
       "qwen/qwen-2.5-72b-instruct",
       "qwen/qwen-2.5-7b-instruct",
       "qwen/qwen-2.5-coder-32b-instruct",
@@ -16953,7 +16973,6 @@
     "nan": ["deepseek-v4-flash", "gemma4", "glm5.3", "glm5.3-flash", "mimo-v2.5", "qwen3.6", "qwen3.8-flash"],
     "ai21": ["jamba-large", "jamba-mini"],
     "perplexity": ["sonar", "sonar-deep-research", "sonar-pro", "sonar-reasoning-pro"],
-    "kimi-for-coding": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
     "alibaba-token-plan-cn": [
       "MiniMax-M2.5",
       "deepseek-v3.2",

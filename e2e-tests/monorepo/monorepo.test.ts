@@ -657,6 +657,12 @@ export const environmentRoute = registerApiRoute('/environment', {
           typescript: expect.any(String),
         }),
       );
+    });
+
+    it('should exclude dependencies imported only from dead NODE_ENV branches', async () => {
+      const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
+      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
+
       expect(packageJson.dependencies?.['date-fns']).toBeUndefined();
     });
 

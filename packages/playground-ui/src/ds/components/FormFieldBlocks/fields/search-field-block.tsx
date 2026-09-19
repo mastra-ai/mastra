@@ -5,6 +5,7 @@ import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
+import { fieldErrorId } from '../block/field-error-id';
 import { cn } from '@/lib/utils';
 
 export type SearchFieldBlockProps = {
@@ -34,6 +35,7 @@ export type SearchFieldBlockProps = {
 export function SearchFieldBlock({
   name,
   helpText,
+  error,
   errorMsg,
   required = false,
   disabled = false,
@@ -107,6 +109,8 @@ export function SearchFieldBlock({
             onChange={onChange}
             size={size}
             variant={variant}
+            error={error || Boolean(errorMsg)}
+            aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
             className={cn(
               size === 'xs' && 'px-7',
               size === 'sm' && 'px-8',
@@ -117,7 +121,7 @@ export function SearchFieldBlock({
           <SearchIcon
             aria-hidden="true"
             className={cn(
-              'absolute top-1/2 left-3 -translate-y-1/2 text-neutral3',
+              'absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground',
               size === 'xs' && 'size-3',
               size === 'sm' && 'size-3.5',
               (!size || size === 'md') && 'size-4',
@@ -144,7 +148,7 @@ export function SearchFieldBlock({
           )}
         </div>
         {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
-        {errorMsg && <FieldBlock.ErrorMsg>{errorMsg}</FieldBlock.ErrorMsg>}
+        {errorMsg && <FieldBlock.ErrorMsg name={name}>{errorMsg}</FieldBlock.ErrorMsg>}
       </FieldBlock.Column>
     </FieldBlock.Layout>
   );

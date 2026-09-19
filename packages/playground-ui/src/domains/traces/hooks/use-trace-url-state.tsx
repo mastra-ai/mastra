@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef } from 'react';
+import type { TraceSpanView } from '../components/trace-data-panel-view';
 import type { SpanTab, TraceDatePreset } from '../index';
 import {
   ROOT_ENTITY_TYPE_OPTIONS,
@@ -23,6 +24,7 @@ import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 const TRACE_ID_PARAM = 'traceId';
 const SPAN_ID_PARAM = 'spanId';
 const TAB_PARAM = 'tab';
+const SPAN_VIEW_PARAM = 'spanView';
 const SCORE_ID_PARAM = 'scoreId';
 const HIGHLIGHT_SPAN_IDS_PARAM = 'highlightSpanIds';
 
@@ -78,6 +80,8 @@ export interface UseTraceUrlStateResult {
    *  user navigates between spans inside the panel (which only changes `spanIdParam`). */
   anchorSpanIdParam: string | undefined;
   spanTabParam: SpanTab | undefined;
+  /** Which view the trace column shows; `tree` is the default and is not written to the URL. */
+  spanViewParam: TraceSpanView;
   scoreIdParam: string | undefined;
   /** Span ids featured in the timeline (e.g. the spans behind a reconstructed message). Empty when unset. */
   highlightSpanIdsParam: string[];
@@ -102,6 +106,7 @@ export interface UseTraceUrlStateResult {
   /** Convenience: clears the featured span selection. Equivalent to `handleSpanChange(null)`. */
   handleSpanClose: () => void;
   handleSpanTabChange: (tab: SpanTab) => void;
+  handleSpanViewChange: (view: TraceSpanView) => void;
   /** Selects a span AND switches its panel tab in a single URL update. Use when both must change
    *  from one interaction (e.g. "Evaluate Trace"). Calling `handleSpanChange` + `handleSpanTabChange`
    *  separately races: each functional `setSearchParams` updater reads the same pre-update
@@ -180,6 +185,7 @@ export function useTraceUrlState(
   const tabParam = searchParams.get(TAB_PARAM);
   const spanTabParam: SpanTab | undefined =
     tabParam === 'feedback' ? 'feedback' : tabParam === 'details' ? 'details' : undefined;
+  const spanViewParam: TraceSpanView = searchParams.get(SPAN_VIEW_PARAM) === 'timeline' ? 'timeline' : 'tree';
   const scoreIdParam = searchParams.get(SCORE_ID_PARAM) || undefined;
   const highlightSpanIdsRaw = searchParams.get(HIGHLIGHT_SPAN_IDS_PARAM);
   const highlightSpanIdsParam = useMemo(
@@ -259,6 +265,24 @@ export function useTraceUrlState(
   );
 
   const handleSpanClose = useCallback(() => handleSpanChange(null), [handleSpanChange]);
+
+  const handleSpanViewChange = useCallback(
+    (view: TraceSpanView) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          if (view === 'timeline') {
+            next.set(SPAN_VIEW_PARAM, view);
+          } else {
+            next.delete(SPAN_VIEW_PARAM);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const handleSpanTabChange = useCallback(
     (tab: SpanTab) => {
@@ -497,6 +521,7 @@ export function useTraceUrlState(
     spanIdParam,
     anchorSpanIdParam,
     spanTabParam,
+    spanViewParam,
     scoreIdParam,
     highlightSpanIdsParam,
     listMode,
@@ -508,6 +533,7 @@ export function useTraceUrlState(
     handleSpanChange,
     handleSpanClose,
     handleSpanTabChange,
+    handleSpanViewChange,
     handleSpanChangeWithTab,
     handleScoreChange,
     handleHighlightSpans,

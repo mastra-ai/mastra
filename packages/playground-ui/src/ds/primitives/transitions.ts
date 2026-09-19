@@ -25,7 +25,7 @@ export const hoverEffects = {
   // Brightness increase
   brightness: 'hover:brightness-110',
   // Background lift
-  lift: 'hover:bg-surface4',
+  lift: 'hover:bg-foreground/10',
 } as const;
 
 // Focus ring styles

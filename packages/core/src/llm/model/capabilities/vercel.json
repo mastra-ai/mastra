@@ -165,6 +165,7 @@
     "zai/glm-4.5v",
     "zai/glm-5.1",
     "zai/glm-5.3-flash",
+    "zai/glm-5.3-flashx",
     "zai/glm-5v-turbo"
   ],
   "temperature": [
@@ -451,6 +452,7 @@
     "zai/glm-5.3",
     "zai/glm-5.3-fast",
     "zai/glm-5.3-flash",
+    "zai/glm-5.3-flashx",
     "zai/glm-5v-turbo"
   ],
   "structuredOutput": [
@@ -558,6 +560,7 @@
     "zai/glm-5.2-fast",
     "zai/glm-5.3",
     "zai/glm-5.3-fast",
-    "zai/glm-5.3-flash"
+    "zai/glm-5.3-flash",
+    "zai/glm-5.3-flashx"
   ]
 }

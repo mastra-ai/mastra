@@ -175,7 +175,7 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
       const original = JSON.stringify(errorSpan);
       render(
         layout === 'panel' ? (
-          <SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} onClose={() => {}} />
+          <SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />
         ) : (
           <SpanDetailsView spanId={errorSpan.spanId} span={errorSpan} onClose={() => {}} />
         ),
@@ -203,7 +203,7 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
 
 describe('SpanDataPanelView integration', () => {
   it('shows rich payloads and the error banner for a span', () => {
-    render(<SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} onClose={() => {}} />);
+    render(<SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />);
     expect(slot('span-error')).not.toBeNull();
     expect(screen.getByText('City not found: Atlantis')).toBeTruthy();
   });

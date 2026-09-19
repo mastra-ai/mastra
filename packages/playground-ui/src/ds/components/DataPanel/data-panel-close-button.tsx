@@ -1,4 +1,4 @@
-import { ArrowLeftIcon } from 'lucide-react';
+import { ArrowLeftIcon, XIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
@@ -6,14 +6,22 @@ import { cn } from '@/lib/utils';
 export interface DataPanelCloseButtonProps {
   onClick: () => void;
   tooltip?: string;
+  /** Accessible name; override it when the arrow leads somewhere other than "closed" (e.g. back to a parent view). */
+  label?: string;
+  /**
+   * `arrow` (default) is the leading "leave this panel" control, rendered first in the header.
+   * `x` dismisses a nested column in place and belongs in `HeaderActions`, on the right.
+   */
+  icon?: 'arrow' | 'x';
   className?: string;
   variant?: ButtonProps['variant'];
 }
 
-/** Leading "leave this panel" arrow; render it as the first child of `DataPanel.Header`. */
 export function DataPanelCloseButton({
   onClick,
   tooltip = 'Close panel',
+  label = 'Close Panel',
+  icon = 'arrow',
   className,
   variant = 'ghost',
 }: DataPanelCloseButtonProps) {
@@ -22,11 +30,11 @@ export function DataPanelCloseButton({
       size="sm"
       variant={variant}
       onClick={onClick}
-      aria-label="Close Panel"
+      aria-label={label}
       tooltip={tooltip}
       className={cn('shrink-0', className)}
     >
-      <ArrowLeftIcon />
+      {icon === 'x' ? <XIcon /> : <ArrowLeftIcon />}
     </Button>
   );
 }
