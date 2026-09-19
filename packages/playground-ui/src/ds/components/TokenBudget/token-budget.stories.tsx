@@ -37,7 +37,7 @@ export const Budgets: Story = {
 
 export const Details: Story = {
   render: () => (
-    <div className="border-border1 bg-surface2 grid w-112 gap-5 rounded-xl border p-5">
+    <div className="border-border1 bg-surface2 grid w-[min(28rem,calc(100vw-2rem))] gap-5 rounded-xl border p-5">
       <TokenBudgetDetail
         icon={<MessagesSquareIcon />}
         label="Messages"
