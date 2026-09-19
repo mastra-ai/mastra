@@ -3146,6 +3146,43 @@ describe('Agent signals', () => {
     }
   });
 
+  it('does not cache a discarded full logical message during claimed-owner discovery', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'remote-lineage-owner-user', threadId: 'remote-lineage-owner-thread' };
+    const ownerAgent = { id: 'remote-lineage-owner-agent', stream: vi.fn() } as any;
+    const senderAgent = { id: 'remote-lineage-sender-agent' } as any;
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    const signal = {
+      id: 'remote-lineage-owner-signal',
+      type: 'user-message' as const,
+      contents: 'preserve response identity',
+    };
+    const options = {
+      ...target,
+      ifIdle: {
+        behavior: 'wake' as const,
+        requireClaimedOwner: true,
+        streamOptions: { logicalMessageIdentity: { input: 'remote-input', response: 'remote-response' } },
+      },
+    } as any;
+
+    try {
+      const first = senderRuntime.sendSignal(senderAgent, signal, options, pubsub);
+      await expect(first.accepted).resolves.toEqual({ action: 'discard' });
+
+      const retry = senderRuntime.sendSignal(senderAgent, signal, options, pubsub);
+      expect(retry.runId).not.toBe(first.runId);
+      expect(retry.accepted).not.toBe(first.accepted);
+      await expect(retry.accepted).resolves.toEqual({ action: 'discard' });
+    } finally {
+      claim.unsubscribe();
+      ownerRuntime.resetForTests();
+      senderRuntime.resetForTests();
+    }
+  });
+
   it('runs a local claimed-owner wake through public request-context preflight', async () => {
     const pubsub = new EventEmitterPubSub();
     const requestContext = new RequestContext();

@@ -6269,7 +6269,11 @@ export class AgentThreadStreamRuntime {
             onIdleSignalDiscarded,
           );
           void accepted.catch(() => {});
-          return acceptSignal({ signal, accepted, runId: discoveredRunId }, discoveredRunId);
+          return acceptSignal(
+            { signal, accepted, runId: discoveredRunId },
+            discoveredRunId,
+            !fullLogicalMessageIdentity,
+          );
         }
         if (isLocalReservedRun) {
           const disposition = this.#rememberSignalPayloadForRun(state, key, runId, signal);
