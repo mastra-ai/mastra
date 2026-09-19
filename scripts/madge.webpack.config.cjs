@@ -23,6 +23,14 @@ module.exports = {
   resolve: {
     alias,
     extensions: ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json'],
+    // Packages using TypeScript's NodeNext resolution write relative imports
+    // with `.js` specifiers that point at `.ts` sources. Without this, every
+    // such edge is dropped and those packages look dependency-free.
+    extensionAlias: {
+      '.js': ['.ts', '.tsx', '.js'],
+      '.mjs': ['.mts', '.mjs'],
+      '.cjs': ['.cts', '.cjs'],
+    },
     exportsFields: [],
     mainFields: [],
     aliasFields: [],

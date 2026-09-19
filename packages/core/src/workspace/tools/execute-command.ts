@@ -3,6 +3,10 @@ import { browserCliHandler } from '../../browser/cli-handler';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
+import {
+  DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES,
+  RetainedOutputBuffer,
+} from '../sandbox/process-manager/process-handle';
 import { coerceNumericString, emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
@@ -223,15 +227,17 @@ async function executeCommand(input: Record<string, any>, context: any) {
   }
 
   const startedAt = Date.now();
-  let stdout = '';
-  let stderr = '';
+  // Bounded copies used only on the error path, where the sandbox result is unavailable.
+  // Unbounded accumulation here crashes the process with RangeError on very large output.
+  const stdout = new RetainedOutputBuffer(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
+  const stderr = new RetainedOutputBuffer(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
   try {
     const result = await sandbox.executeCommand(command, [], {
       timeout: timeout ?? undefined,
       cwd: cwd ?? undefined,
       abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
       onStdout: async (data: string) => {
-        stdout += data;
+        stdout.append(data);
         await context?.writer?.custom({
           type: 'data-sandbox-stdout',
           data: { output: data, timestamp: Date.now(), toolCallId },
@@ -239,7 +245,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
         });
       },
       onStderr: async (data: string) => {
-        stderr += data;
+        stderr.append(data);
         await context?.writer?.custom({
           type: 'data-sandbox-stderr',
           data: { output: data, timestamp: Date.now(), toolCallId },
@@ -288,8 +294,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
     });
     span.end({ success: false }, { exitCode: -1 });
     const parts = formatCommandOutput(
-      await truncateOutput(stdout, tail, tokenLimit, tokenFrom),
-      await truncateOutput(stderr, tail, tokenLimit, tokenFrom),
+      await truncateOutput(stdout.toString(), tail, tokenLimit, tokenFrom),
+      await truncateOutput(stderr.toString(), tail, tokenLimit, tokenFrom),
     );
     const errorMessage = error instanceof Error ? error.message : String(error);
     return appendTerminalLine(parts, `Error: ${errorMessage}`);
