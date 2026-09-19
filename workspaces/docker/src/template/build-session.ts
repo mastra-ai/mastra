@@ -15,7 +15,7 @@
 import { randomUUID } from 'node:crypto';
 import { Server, ServerCredentials, type ServiceDefinition, type UntypedServiceImplementation } from '@grpc/grpc-js';
 import type Docker from 'dockerode';
-import { normalizeAbortError, throwIfAborted } from '../abort';
+import { createAbortError, throwIfAborted } from '../abort';
 
 export const SECRETS_GET_METHOD = '/moby.buildkit.secrets.v1.Secrets/GetSecret';
 const AUTH_CREDENTIALS_METHOD = '/moby.filesync.v1.Auth/Credentials';
@@ -39,9 +39,9 @@ export function openBuildSession(
   return new Promise((resolve, reject) => {
     let settled = false;
     const abort = () => {
-      if (settled) return;
+      if (settled || !abortSignal) return;
       settled = true;
-      reject(normalizeAbortError(abortSignal?.reason, 'build Docker template'));
+      reject(createAbortError(abortSignal, 'build Docker template'));
     };
     abortSignal?.addEventListener('abort', abort, { once: true });
     docker.modem.dial(
@@ -66,7 +66,7 @@ export function openBuildSession(
         settled = true;
         abortSignal?.removeEventListener('abort', abort);
         if (err) {
-          reject(abortSignal?.aborted ? normalizeAbortError(err, 'build Docker template') : err);
+          reject(abortSignal?.aborted ? createAbortError(abortSignal, 'build Docker template') : err);
           return;
         }
         const server = new Server();
