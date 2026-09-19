@@ -195,6 +195,48 @@ export interface ToolSearchPreselectOptions {
 
   /** Provider-specific options forwarded to the evaluation model. */
   providerOptions?: SharedV4ProviderOptions;
+
+  /**
+   * Called once per user message with the decision preselection reached, including
+   * the ones where it seeded nothing. Without it, seeding is invisible: a request
+   * that ran the normal search flow looks identical whether the classifier was
+   * unsure, errored, or simply picked a choice that maps to no tools. Use it for
+   * logs and metrics.
+   *
+   * It must not throw; errors from it are swallowed so that logging cannot fail a
+   * request.
+   */
+  onPreselect?: (decision: ToolPreselectDecision) => void | Promise<void>;
+}
+
+/** Why preselection seeded no tools. */
+export type ToolPreselectAbstainReason =
+  /** The classifier threw. The normal model-driven flow runs unchanged. */
+  | 'classifier-error'
+  /** The classifier returned no answer for the configured question. */
+  | 'no-answer'
+  /** The selected choice scored below `minProbability`. */
+  | 'below-threshold'
+  /** The selected choice maps to an empty tool list — usually the "no tools needed" criterion. */
+  | 'no-tools-for-choice'
+  /** Every tool for the selected choice was unknown to the catalog or rejected by `filter`. */
+  | 'tools-filtered-out';
+
+/** The decision preselection reached for a user message. */
+export interface ToolPreselectDecision {
+  /** Tools seeded into the loaded set. Empty whenever `abstained` is true. */
+  tools: string[];
+  /** The selected choice, or `undefined` when the classifier errored or returned no answer. */
+  choice?: string;
+  /**
+   * Confidence in `choice`, or `undefined` when the evaluation model returned no
+   * distribution. A number here is what `minProbability` is compared against.
+   */
+  probability?: number;
+  /** True when no tools were seeded, for any of the reasons in `reason`. */
+  abstained: boolean;
+  /** Why nothing was seeded. Only set when `abstained` is true. */
+  reason?: ToolPreselectAbstainReason;
 }
 
 /**
@@ -710,17 +752,37 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     return resolved;
   }
 
+  /** Reports the decision without letting a logging failure break the request. */
+  private async reportPreselect(
+    preselect: ToolSearchPreselectOptions,
+    decision: ToolPreselectDecision,
+  ): Promise<ToolPreselectDecision> {
+    if (!preselect.onPreselect) return decision;
+    try {
+      await preselect.onPreselect(decision);
+    } catch (error) {
+      console.warn(
+        '[ToolSearchProcessor] onPreselect callback threw, ignoring:',
+        error instanceof Error ? error.message : error,
+      );
+    }
+    return decision;
+  }
+
   /**
-   * Runs the preselect classifier and returns the tool names to seed. Returns an
-   * empty array whenever the classifier abstains, errors, or maps the selected
-   * choice to no tools — preselection never blocks or narrows the normal flow.
+   * Runs the preselect classifier and decides which tool names to seed. Seeds
+   * nothing whenever the classifier abstains, errors, or maps the selected choice
+   * to no tools — preselection never blocks or narrows the normal flow.
    */
   private async preselectToolNames(
     preselect: ToolSearchPreselectOptions,
     catalog: ToolCatalog,
     args: ProcessInputStepArgs,
     state: string,
-  ): Promise<string[]> {
+  ): Promise<ToolPreselectDecision> {
+    const abstain = (reason: ToolPreselectAbstainReason, partial?: Partial<ToolPreselectDecision>) =>
+      this.reportPreselect(preselect, { tools: [], abstained: true, reason, ...partial });
+
     let answer: { choice: string; probabilities?: Record<string, number> };
     try {
       const classifier = this.resolvePreselectClassifier(preselect);
@@ -732,21 +794,26 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     } catch (error) {
       // Fail open: preselection is an optimisation, never a gate.
       console.warn('[ToolSearchProcessor] preselect classifier failed, falling back to model-driven search:', error);
-      return [];
+      return abstain('classifier-error');
     }
 
     if (!answer) {
-      return [];
+      return abstain('no-answer');
     }
 
     // Abstain when the model is not confident enough. Providers that return no
     // distribution give no uncertainty signal, so the choice is taken as-is.
-    const probability = answer.probabilities?.[answer.choice];
+    const choice = answer.choice;
+    const probability = answer.probabilities?.[choice];
     if (probability !== undefined && probability < this.preselectMinProbability) {
-      return [];
+      return abstain('below-threshold', { choice, probability });
     }
 
-    const candidates = preselect.tools[answer.choice] ?? [];
+    const candidates = preselect.tools[choice] ?? [];
+    if (candidates.length === 0) {
+      return abstain('no-tools-for-choice', { choice, probability });
+    }
+
     const allowed: string[] = [];
     for (const name of candidates) {
       const tool = this.findToolForDynamicName(catalog, name);
@@ -754,7 +821,12 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       if (!(await this.isToolAllowed(tool, args.requestContext, 'load'))) continue;
       allowed.push(name);
     }
-    return allowed;
+
+    if (allowed.length === 0) {
+      return abstain('tools-filtered-out', { choice, probability });
+    }
+
+    return this.reportPreselect(preselect, { tools: allowed, choice, probability, abstained: false });
   }
 
   async processInputStep(args: ProcessInputStepArgs) {
@@ -765,11 +837,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // recorded via the store and become available on the model's next turn.
     const loadedToolNames = await this.store.getLoadedNames(storeContext);
 
-    // Seed the loaded set before the model's first turn. Runs only while the set
-    // is empty, so it costs at most one classifier call per conversation and
-    // stops once the model has loaded tools itself. Because this happens before
-    // the set is consumed below, seeded tools are available on this turn rather
-    // than the next one — unlike activation via `search_tools` / `load_tool`.
+    // Seed the loaded set before the model's first turn. Because this happens
+    // before the set is consumed below, seeded tools are available on this turn
+    // rather than the next one — unlike activation via `search_tools` / `load_tool`.
     let preselectedNames: string[] = [];
     if (this.preselect) {
       const userText = messageList.getLatestUserContent() ?? '';
@@ -780,7 +850,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       // single turn share the same message and reuse the first decision.
       if (userText.trim() && this.preselectedFor.get(threadKey) !== userText) {
         this.preselectedFor.set(threadKey, userText);
-        preselectedNames = await this.preselectToolNames(this.preselect, catalog, args, userText);
+        preselectedNames = (await this.preselectToolNames(this.preselect, catalog, args, userText)).tools;
         // Seeding is additive — previously loaded tools are never removed.
         const fresh = preselectedNames.filter(name => !loadedToolNames.has(name));
         if (fresh.length > 0) {

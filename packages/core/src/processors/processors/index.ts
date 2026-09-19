@@ -90,6 +90,8 @@ export {
   type ToolSearchFilterPhase,
   type ToolSearchProcessorOptions,
   type ToolSearchPreselectOptions,
+  type ToolPreselectDecision,
+  type ToolPreselectAbstainReason,
 } from './tool-search';
 export { SkillsProcessor, formatSkillsCatalog, type SkillCatalogEntry, type SkillsProcessorOptions } from './skills';
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';

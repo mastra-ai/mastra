@@ -149,6 +149,13 @@ const toolSearch = new ToolSearchProcessor({
             description: 'Provider-specific options forwarded to the evaluation model.',
             isOptional: true,
           },
+          {
+            name: 'preselect.onPreselect',
+            type: '(decision: ToolPreselectDecision) => void | Promise<void>',
+            description:
+              'Called once per user message with the decision preselection reached, including the ones where it seeded nothing. Receives the seeded tools, the selected choice, its probability, and the reason nothing was seeded. Must not throw; errors are swallowed so logging cannot fail a request.',
+            isOptional: true,
+          },
         ],
       },
     ],
@@ -398,6 +405,46 @@ Preselection is an additive prior, not a routing decision. It only adds tools to
 The classifier runs once per user message rather than once per step. A multi-step turn reuses one decision, and a follow-up that changes the subject gets a fresh one instead of inheriting the previous message's tools.
 
 When the selected choice falls below `minProbability`, the classifier abstains and the normal model-driven flow runs unchanged. If the classifier errors, preselection fails open and the request proceeds without seeded tools.
+
+### Seeing what preselection decided
+
+Because preselection fails open, a request that seeded nothing looks exactly like a request without `preselect` configured. Pass `onPreselect` to tell those cases apart:
+
+```typescript {7-9} filename="src/mastra/agents/support-agent.ts"
+const toolSearch = new ToolSearchProcessor({
+  tools: allTools,
+  preselect: {
+    classifier: router,
+    question: 'domain',
+    tools: toolGroups,
+    onPreselect: decision => {
+      logger.info('tool preselection', decision)
+    },
+  },
+})
+```
+
+The callback fires once per user message on every path, including abstention:
+
+```typescript oxfmt:false
+// Seeded
+{ tools: ['listPullRequests', 'mergePullRequest'], choice: 'github', probability: 0.94, abstained: false }
+
+// Abstained
+{ tools: [], choice: 'github', probability: 0.41, abstained: true, reason: 'below-threshold' }
+```
+
+`reason` separates outcomes that are otherwise indistinguishable from the outside:
+
+| Reason | Meaning |
+| - | - |
+| `below-threshold` | The classifier picked a choice but wasn't confident enough. Lower `minProbability` if this dominates. |
+| `no-tools-for-choice` | The classifier was confident the request needs no tools. Working as intended. |
+| `classifier-error` | The evaluation model failed. Preselection is silently off until it recovers. |
+| `no-answer` | The classifier returned nothing for `question`. |
+| `tools-filtered-out` | Every mapped tool was unknown to the catalog or rejected by `filter`. Usually a stale mapping. |
+
+Tracking the split between these is how you tell a well-tuned threshold from a classifier that has quietly stopped working.
 
 ### Choosing between `autoLoad` and `preselect`
 

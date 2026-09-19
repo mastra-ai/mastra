@@ -8,6 +8,7 @@ import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
 import type { ProcessInputStepArgs } from '../index';
 import { ToolSearchProcessor } from './tool-search';
+import type { ToolPreselectDecision } from './tool-search';
 
 const routerQuestions = {
   domain: {
@@ -363,6 +364,109 @@ describe('ToolSearchProcessor preselect', () => {
           tools: { ...preselectTools, slack: ['sendEmail'] },
         }),
       ).toThrow(/cannot return: slack/);
+    });
+  });
+
+  describe('onPreselect', () => {
+    const buildWith = (answer: ChoiceAnswer | Error, overrides: Record<string, unknown> = {}) => {
+      const { model } = createModel(answer);
+      const decisions: ToolPreselectDecision[] = [];
+      const processor = new ToolSearchProcessor({
+        tools: createTools(),
+        ...(overrides.filter ? { filter: overrides.filter as any } : {}),
+        preselect: {
+          classifier: new Classifier({ id: 'router', model, questions: routerQuestions, maxRetries: 0 }),
+          question: 'domain',
+          tools: preselectTools,
+          onPreselect: decision => {
+            decisions.push(decision);
+          },
+          ...overrides.preselect as object,
+        },
+      });
+      return { processor, decisions };
+    };
+
+    it('reports the seeded tools and the confidence behind them', async () => {
+      const { processor, decisions } = buildWith({
+        choice: 'github',
+        probabilities: { github: 0.9, email: 0.05, none: 0.05 },
+      });
+
+      await processor.processInputStep(createArgs('open an issue'));
+
+      expect(decisions).toEqual([
+        { tools: ['createIssue', 'listIssues'], choice: 'github', probability: 0.9, abstained: false },
+      ]);
+    });
+
+    it('distinguishes a low-confidence abstention from a confident "no tools" answer', async () => {
+      const unsure = buildWith({ choice: 'github', probabilities: { github: 0.4, email: 0.35, none: 0.25 } });
+      await unsure.processor.processInputStep(createArgs('open an issue'));
+
+      const noTools = buildWith({ choice: 'none', probabilities: { github: 0.02, email: 0.03, none: 0.95 } });
+      await noTools.processor.processInputStep(createArgs('thanks, that is all'));
+
+      // Both seed nothing, but only one of them is the classifier being unsure.
+      expect(unsure.decisions[0]).toMatchObject({ abstained: true, reason: 'below-threshold', probability: 0.4 });
+      expect(noTools.decisions[0]).toMatchObject({ abstained: true, reason: 'no-tools-for-choice', choice: 'none' });
+    });
+
+    it('reports a classifier outage rather than staying silent about it', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { processor, decisions } = buildWith(new Error('evaluation model unavailable'));
+
+      await processor.processInputStep(createArgs('open an issue'));
+
+      expect(decisions[0]).toEqual({ tools: [], abstained: true, reason: 'classifier-error' });
+      warn.mockRestore();
+    });
+
+    it('reports when the filter removed every tool the choice mapped to', async () => {
+      const { processor, decisions } = buildWith(
+        { choice: 'email', probabilities: { github: 0.05, email: 0.9, none: 0.05 } },
+        { filter: ({ toolName }: { toolName: string }) => toolName !== 'sendEmail' },
+      );
+
+      await processor.processInputStep(createArgs('email the team'));
+
+      expect(decisions[0]).toMatchObject({ abstained: true, reason: 'tools-filtered-out', choice: 'email' });
+    });
+
+    it('fires once per user message, matching when the decision is made', async () => {
+      const { processor, decisions } = buildWith({
+        choice: 'github',
+        probabilities: { github: 0.9, email: 0.05, none: 0.05 },
+      });
+
+      const args = createArgs('open an issue');
+      await processor.processInputStep(args);
+      await processor.processInputStep(args);
+
+      expect(decisions).toHaveLength(1);
+    });
+
+    it('does not let a throwing callback fail the request', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { model } = createModel({ choice: 'github', probabilities: { github: 0.9, email: 0.05, none: 0.05 } });
+      const processor = new ToolSearchProcessor({
+        tools: createTools(),
+        preselect: {
+          classifier: new Classifier({ id: 'router', model, questions: routerQuestions }),
+          question: 'domain',
+          tools: preselectTools,
+          onPreselect: () => {
+            throw new Error('logging backend down');
+          },
+        },
+      });
+
+      const result = await processor.processInputStep(createArgs('open an issue'));
+
+      // Seeding still happened; only the logging failed.
+      expect(activeToolNames(result).sort()).toEqual(['createIssue', 'listIssues']);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('onPreselect callback threw'), 'logging backend down');
+      warn.mockRestore();
     });
   });
 
