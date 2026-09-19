@@ -197,6 +197,7 @@ import type { ActiveThreadRun } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentClaimThreadPeerOptions,
+  AgentAbortThreadOptions,
   AgentConfig,
   AgentUpdateThreadPeerOptions,
   AgentDurableOption,
@@ -8681,7 +8682,7 @@ export class Agent<
     return { runs: matchedRuns, total };
   }
 
-  abortThreadStream(options: AgentThreadIdentityOptions): boolean {
+  abortThreadStream(options: AgentAbortThreadOptions): boolean {
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
 

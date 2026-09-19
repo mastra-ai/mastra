@@ -17,7 +17,7 @@ type InputShared_Auxiliary_21 =
       [key: string]: InputShared_Auxiliary_21;
     };
 
-type InputShared_Auxiliary_201 =
+type InputShared_Auxiliary_202 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,41 +52,41 @@ type InputShared_Auxiliary_201 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_201[];
+      args: InputShared_Auxiliary_202[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_201;
+      arg: InputShared_Auxiliary_202;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_220;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_220;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_220;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_220;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_220;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_220;
           };
     };
 
-type InputShared_Auxiliary_219 =
+type InputShared_Auxiliary_220 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -121,33 +121,33 @@ type InputShared_Auxiliary_219 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_219[];
+      args: InputShared_Auxiliary_220[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_219;
+      arg: InputShared_Auxiliary_220;
     };
 
-type InputShared_Auxiliary_246 =
+type InputShared_Auxiliary_247 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_246[];
+      args: InputShared_Auxiliary_247[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_246;
+      arg: InputShared_Auxiliary_247;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_201;
+            some: InputShared_Auxiliary_202;
           }
         | {
-            none: InputShared_Auxiliary_201;
+            none: InputShared_Auxiliary_202;
           };
     };
 
-type InputShared_Auxiliary_662 =
+type InputShared_Auxiliary_663 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -192,19 +192,19 @@ type InputShared_Auxiliary_662 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_662[];
+      args: InputShared_Auxiliary_663[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_662;
+      arg: InputShared_Auxiliary_663;
     };
 
-type InputShared_Auxiliary_736 = {
+type InputShared_Auxiliary_737 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_736[] | undefined;
+  children?: InputShared_Auxiliary_737[] | undefined;
 };
 
 type Shared_Auxiliary_745 = {
@@ -1729,7 +1729,7 @@ type InputShared_Type_86 = {
       }
     | undefined;
   steps: InputShared_Type_81[];
-  predicates: InputShared_Auxiliary_662[];
+  predicates: InputShared_Auxiliary_663[];
 };
 
 type InputShared_Type_87 = {
@@ -1743,7 +1743,7 @@ type InputShared_Type_87 = {
     | undefined;
   step: InputShared_Type_81;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_662;
+  predicate: InputShared_Auxiliary_663;
 };
 
 type InputShared_Type_88 =
@@ -5061,6 +5061,7 @@ export type PostAgentsAgentIdThreadsAbort_PathParams = GetAgentsAgentId_PathPara
 export type PostAgentsAgentIdThreadsAbort_Body = {
   resourceId?: string | undefined;
   threadId: string;
+  expectedRunId?: string | undefined;
 };
 
 export type PostAgentsAgentIdThreadsAbort_Response = {
@@ -5091,7 +5092,10 @@ export interface PostAgentsAgentIdThreadsAbort_RouteContract {
 // ============================================================================
 export type PostAgentsAgentIdThreadsSubscribe_PathParams = GetAgentsAgentId_PathParams;
 
-export type PostAgentsAgentIdThreadsSubscribe_Body = PostAgentsAgentIdThreadsAbort_Body;
+export type PostAgentsAgentIdThreadsSubscribe_Body = {
+  resourceId?: string | undefined;
+  threadId: string;
+};
 
 export type PostAgentsAgentIdThreadsSubscribe_Response = PostAgentsAgentIdGenerate_Response;
 
@@ -10051,7 +10055,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_201 | undefined;
+  where?: InputShared_Auxiliary_202 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10128,9 +10132,9 @@ export type PostObservabilityThreadsQuery_Body = {
       from: string;
       to: string;
     };
-    where?: InputShared_Auxiliary_201 | undefined;
+    where?: InputShared_Auxiliary_202 | undefined;
   };
-  where?: InputShared_Auxiliary_246 | undefined;
+  where?: InputShared_Auxiliary_247 | undefined;
   page?: {
     limit?: number;
     after?: (string | null) | undefined;
@@ -17951,7 +17955,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_736[] | undefined;
+  files?: InputShared_Auxiliary_737[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18009,7 +18013,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_736[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_737[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
