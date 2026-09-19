@@ -77,8 +77,6 @@ export interface MastraCodeState {
     reason: 'pool-exhausted' | 'persistent-outage';
     at: string;
   } | null;
-  /** Exhausted OAuth account IDs keyed by pack and resolved model. */
-  mastracodeAccountRoutingExhausted?: Record<string, Record<string, string[]>>;
   /**
    * Session-level reasoning-effort override. When unset, the effective level is
    * resolved at request time from settings (`models.modeThinkingDefaults[mode]`
@@ -129,7 +127,6 @@ export const stateSchema = z.object({
   currentModelId: z.string().optional(),
   modeId: z.string().optional(),
   activeModelPackId: z.string().nullable().optional(),
-  mastracodeAccountRoutingExhausted: z.record(z.string(), z.record(z.string(), z.array(z.string()))).optional(),
   subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),

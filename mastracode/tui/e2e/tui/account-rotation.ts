@@ -12,6 +12,8 @@ const PACK_NAME = 'rotation-kimi';
 const MODEL_ID = 'kimi-for-coding/kimi-for-coding';
 const PROMPT = 'Rotate to the next account when this one is rate limited.';
 const RESPONSE_TEXT = 'Completed on the second account after rotation.';
+const FOLLOWUP_PROMPT = 'Confirm the next turn starts on the account we rotated to.';
+const FOLLOWUP_RESPONSE_TEXT = 'Second turn completed on the current account.';
 const ACCOUNT_A_ACCESS = 'mc-rotation-a-access';
 const ACCOUNT_B_ACCESS = 'mc-rotation-b-access';
 const ACCOUNT_A_DEVICE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -75,7 +77,7 @@ function rateLimitResponse(): Response {
   );
 }
 
-function completionResponse(): Response {
+function completionResponse(text: string = RESPONSE_TEXT): Response {
   const events: Array<[string, object]> = [
     [
       'message_start',
@@ -93,10 +95,7 @@ function completionResponse(): Response {
       },
     ],
     ['content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }],
-    [
-      'content_block_delta',
-      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: RESPONSE_TEXT } },
-    ],
+    ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } }],
     ['content_block_stop', { type: 'content_block_stop', index: 0 }],
     [
       'message_delta',
@@ -112,8 +111,9 @@ function completionResponse(): Response {
  * A two-account Kimi For Coding OAuth pool where the active account is rate
  * limited: the account-rotation processor advances the registry, the retried
  * request completes on the second account (token AND device headers follow the
- * rotation), the switch renders as a transcript notice, and both the registry
- * state and the persisted notice survive an app restart.
+ * rotation), the switch renders as a transcript notice, a second turn starts on
+ * the account the pool landed on rather than re-trying the rate-limited one, and
+ * both the registry state and the persisted notice survive an app restart.
  *
  * Kimi is used instead of Anthropic because the Anthropic OAuth provider has a
  * vitest-only test-mode shortcut (`apiKey: 'test-api-key'`) that bypasses the
@@ -122,7 +122,8 @@ function completionResponse(): Response {
 export const accountRotationScenario: McE2eScenario = {
   name: 'account-rotation',
   description: 'Rotates to the next OAuth account on a 429 and shows the switch in the transcript.',
-  testName: 'rotates a rate-limited OAuth account, renders the switch, and persists it across restart',
+  testName:
+    'rotates a rate-limited OAuth account, resumes the next turn on it, renders the switch, and persists it across restart',
   async prepare({ appDataDir }) {
     scenarioAppDataDir = appDataDir;
     const settingsPath = join(appDataDir, 'settings.json');
@@ -184,6 +185,7 @@ export const accountRotationScenario: McE2eScenario = {
   async inProcessApp({ startMastraCodeApp }) {
     const patches = createGlobalPatchScope();
     outbound = [];
+    let completions = 0;
     const originalFetch = globalThis.fetch.bind(globalThis);
     patches.setProperty(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
       if (new URL(requestUrl(input)).hostname === 'api.kimi.com') {
@@ -191,7 +193,9 @@ export const accountRotationScenario: McE2eScenario = {
         const bearer = (headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
         const deviceId = headers.get('x-msh-device-id') ?? '';
         outbound.push({ bearer, deviceId });
-        return bearer === ACCOUNT_B_ACCESS ? completionResponse() : rateLimitResponse();
+        if (bearer !== ACCOUNT_B_ACCESS) return rateLimitResponse();
+        completions += 1;
+        return completionResponse(completions > 1 ? FOLLOWUP_RESPONSE_TEXT : RESPONSE_TEXT);
       }
       return originalFetch(input, init);
     });
@@ -271,6 +275,23 @@ export const accountRotationScenario: McE2eScenario = {
     const firstB = outbound.findIndex(request => request.bearer === ACCOUNT_B_ACCESS);
     if (firstB === -1 || outbound.slice(firstB).some(request => request.bearer === ACCOUNT_A_ACCESS)) {
       throw new Error(`Expected no account A request after the rotation, saw: ${JSON.stringify(outboundSummary())}`);
+    }
+
+    // A14: a second turn in the same thread starts on the account the pool is
+    // currently on (B) instead of re-trying the account that just rate limited.
+    // The `Starting on …` notice is the transcript proof; the outbound list is
+    // the wire proof that account A was never contacted again.
+    const requestsBeforeFollowup = outbound.length;
+    terminal.submit(FOLLOWUP_PROMPT);
+    await runtime.waitForScreenText(new RegExp(FOLLOWUP_RESPONSE_TEXT), terminal, 30_000);
+    await runtime.waitForScreenText(/Starting on Kimi account: Kimi Account B/i, terminal, 10_000);
+    runtime.printScreen('after second turn', terminal);
+    const followupRequests = outbound.slice(requestsBeforeFollowup);
+    if (followupRequests.length === 0 || followupRequests[0]!.bearer !== ACCOUNT_B_ACCESS) {
+      throw new Error(`Expected the second turn to start on account B, saw: ${JSON.stringify(outboundSummary())}`);
+    }
+    if (followupRequests.some(request => request.bearer === ACCOUNT_A_ACCESS)) {
+      throw new Error(`Expected the second turn to never contact account A, saw: ${JSON.stringify(outboundSummary())}`);
     }
 
     // On disk: the isolated auth.json slot now holds account B's tokens.

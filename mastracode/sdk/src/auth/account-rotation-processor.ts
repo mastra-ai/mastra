@@ -25,21 +25,15 @@ import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Process
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
 import { listResolvableModePacks, resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
 import { resolveModePackFallbackChain } from '../onboarding/packs.js';
-import {
-  findModePackForModel,
-  loadSettings,
-  resolveModePackModels,
-  THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
-} from '../onboarding/settings.js';
+import { findModePackForModel, loadSettings, resolveModePackModels } from '../onboarding/settings.js';
 import {
   getRequestAccountSelection,
-  isRequestAccountRoutingExhausted,
   markRequestAccountRoutingExhausted,
   setRequestAccountSelection,
 } from './account-routing-context.js';
 import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provider-auth-error.js';
 import { getOAuthProviders } from './storage.js';
-import type { CredentialStore } from './types.js';
+import type { CredentialStore, OAuthAccountRecord } from './types.js';
 
 export const ACCOUNT_SWITCH_PART_TYPE = 'data-mastracode-account-switch';
 
@@ -458,8 +452,6 @@ interface PackCascade {
   position: number;
 }
 
-export type AccountRoutingExhausted = Record<string, Record<string, string[]>>;
-
 interface AccountRoute {
   packId: string;
   modelId: string;
@@ -483,95 +475,10 @@ export type RoutingControllerContext = {
   isThreadActive?: () => boolean;
 };
 
-const exhaustedAccountPersistenceQueues = new Map<string, Promise<void>>();
-
-async function serializeExhaustedAccountPersistence(key: string, operation: () => Promise<void>): Promise<void> {
-  const previous = exhaustedAccountPersistenceQueues.get(key) ?? Promise.resolve();
-  const current = previous.catch(() => undefined).then(operation);
-  exhaustedAccountPersistenceQueues.set(key, current);
-  try {
-    await current;
-  } finally {
-    if (exhaustedAccountPersistenceQueues.get(key) === current) exhaustedAccountPersistenceQueues.delete(key);
-  }
-}
-
 function getRoutingController(
   args: Pick<RoutingProcessorArgs, 'requestContext'>,
 ): RoutingControllerContext | undefined {
   return args.requestContext?.get('controller') as RoutingControllerContext | undefined;
-}
-
-function parseAccountRoutingExhausted(value: unknown): AccountRoutingExhausted {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  const result: AccountRoutingExhausted = {};
-  for (const [packId, modelEntries] of Object.entries(value as Record<string, unknown>)) {
-    if (!modelEntries || typeof modelEntries !== 'object' || Array.isArray(modelEntries)) continue;
-    const models: Record<string, string[]> = {};
-    for (const [modelId, accountIds] of Object.entries(modelEntries as Record<string, unknown>)) {
-      if (Array.isArray(accountIds) && accountIds.every(accountId => typeof accountId === 'string')) {
-        models[modelId] = [...new Set(accountIds)];
-      }
-    }
-    if (Object.keys(models).length > 0) result[packId] = models;
-  }
-  return result;
-}
-
-/**
- * The single serialized read-modify-write for a thread's exhausted-account map.
- *
- * Every writer goes through here — the rotation processor when it excludes an
- * account, and `/models` subscription routing when the user clears one — so they
- * share one queue key (`controller.threadId`) and one read source (the persisted
- * thread setting, falling back to in-memory state). A clear that landed between
- * another writer's read and write can no longer be resurrected by that writer's
- * stale snapshot.
- *
- * `mutate` returns the next map, or `null` to leave the stored value untouched.
- */
-export async function updateExhaustedAccountRouting(
-  controller: RoutingControllerContext,
-  mutate: (current: AccountRoutingExhausted) => AccountRoutingExhausted | null,
-): Promise<void> {
-  const queueKey = typeof controller.threadId === 'string' ? controller.threadId : '__threadless__';
-  await serializeExhaustedAccountPersistence(queueKey, async () => {
-    const persisted = await controller.getThreadSetting?.(THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY);
-    const exhausted = parseAccountRoutingExhausted(
-      persisted ?? controller.getState?.()?.[THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY],
-    );
-    const next = mutate(exhausted);
-    if (next === null) return;
-    const value = Object.keys(next).length > 0 ? next : undefined;
-    await controller.setThreadSetting?.({ key: THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY, value });
-    if (controller.isThreadActive?.() !== false) {
-      await controller.setState?.({ [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: value });
-    }
-  });
-}
-
-/** Drop the exhausted-account exclusions for one pack/model, through the shared queue. */
-export async function clearExhaustedAccountRoute(
-  controller: RoutingControllerContext,
-  route: { packId: string; modelId: string },
-): Promise<void> {
-  await updateExhaustedAccountRouting(controller, exhausted => {
-    if (!exhausted[route.packId]?.[route.modelId]) return null;
-    const next = structuredClone(exhausted);
-    // `noUncheckedIndexedAccess` keeps the optional read visible on the clone,
-    // so narrow the bucket once instead of indexing three times.
-    const bucket = next[route.packId];
-    if (!bucket) return null;
-    delete bucket[route.modelId];
-    if (Object.keys(bucket).length === 0) delete next[route.packId];
-    return next;
-  });
-}
-
-function getExhaustedAccountIds(args: Pick<RoutingProcessorArgs, 'requestContext'>, route: AccountRoute): string[] {
-  const state = getRoutingController(args)?.getState?.();
-  const exhausted = parseAccountRoutingExhausted(state?.[THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]);
-  return exhausted[route.packId]?.[route.modelId] ?? [];
 }
 
 /**
@@ -644,24 +551,18 @@ function resolveAccountRoute(
   return providerId ? { packId: pack.id, modelId, providerId } : null;
 }
 
-async function persistExhaustedAccount(
-  args: Pick<RoutingProcessorArgs, 'requestContext'>,
-  route: AccountRoute,
-  accountInstanceId: string,
-): Promise<void> {
-  const controller = getRoutingController(args);
-  if (!controller) return;
-  await updateExhaustedAccountRouting(controller, exhausted => {
-    const current = exhausted[route.packId]?.[route.modelId] ?? [];
-    if (current.includes(accountInstanceId)) return null;
-    return {
-      ...exhausted,
-      [route.packId]: {
-        ...exhausted[route.packId],
-        [route.modelId]: [...current, accountInstanceId],
-      },
-    };
-  });
+/**
+ * A14: `Automatic` rotation starts *at* the persisted active account and walks
+ * insertion order from there, wrapping once. The active account is the cursor
+ * rotation last left at, so a turn that starts at index 0 regardless would
+ * re-activate and re-try an account the previous turn already moved past —
+ * which is the whole job the removed sticky-exclusion set was doing badly.
+ * With no persisted active account the order is plain insertion order.
+ */
+function orderAccountsFromActive(accounts: OAuthAccountRecord[], activeId: string | undefined) {
+  const index = activeId === undefined ? -1 : accounts.findIndex(account => account.id === activeId);
+  if (index <= 0) return accounts;
+  return [...accounts.slice(index), ...accounts.slice(0, index)];
 }
 
 async function applyPreferredAccountRoute(
@@ -674,15 +575,16 @@ async function applyPreferredAccountRoute(
   const accounts = store.listAccounts?.(route.providerId) ?? [];
   if (accounts.length === 0) return false;
   const tried = getTriedInstances(args.state);
-  const unavailable = new Set([
-    ...getExhaustedAccountIds(args, route),
-    ...accounts.filter(account => tried.has(account.id)).map(account => account.id),
-  ]);
+  const unavailable = new Set(accounts.filter(account => tried.has(account.id)).map(account => account.id));
+  const active = getRequestActiveAccount(args, store, route.providerId);
   const selected = // A12: a targeted route may use only the account it names. `Automatic`
-    // keeps insertion order with full pool rotation (A10).
-    (preferredId ? accounts.filter(account => account.id === preferredId) : accounts).find(
-      account => !unavailable.has(account.id),
-    );
+    // keeps insertion order with full pool rotation (A10), starting from the
+    // account the cursor already points at (A14).
+    (
+      preferredId
+        ? accounts.filter(account => account.id === preferredId)
+        : orderAccountsFromActive(accounts, active?.id)
+    ).find(account => !unavailable.has(account.id));
 
   for (const accountId of unavailable) tried.add(accountId);
   if (!selected) {
@@ -690,7 +592,6 @@ async function applyPreferredAccountRoute(
     return false;
   }
 
-  const active = getRequestActiveAccount(args, store, route.providerId);
   if (active?.id === selected.id) {
     setRequestAccountSelection(args.requestContext, route.providerId, selected.id);
     return false;
@@ -796,17 +697,12 @@ export class AccountRotationProcessor implements Processor {
       }
     }
 
-    if (classification.kind === 'rotate' && active && route?.providerId === providerId) {
-      await persistExhaustedAccount(args, route, active.id);
-    }
-
     // A12: only a pin on the provider that actually failed makes this failure
     // exclusive. `route.providerId` is derived from the route's model while
     // `providerId` comes from the failed request's URL, which during a cascade
     // can still describe the session model rather than the entry being retried;
     // when they differ the pin belongs to an unrelated route, so the provider
-    // that failed keeps its normal pool handling (line above applies the same
-    // guard before recording the exhausted entry).
+    // that failed keeps its normal pool handling.
     const targetAccountId =
       route?.providerId === providerId ? getRouteTargetAccountId(this.options.settingsPath, route) : undefined;
 
@@ -1132,18 +1028,13 @@ export class AccountStartNoticeProcessor implements Processor {
       }
     }
 
-    if (route && isRequestAccountRoutingExhausted(args.requestContext, route.providerId)) {
-      // A12: a targeted route cannot serve from a sibling, so name the
-      // selected subscription instead of claiming the whole provider pool is
-      // gone — the other subscriptions may be perfectly healthy.
-      const target = getRouteTargetAccountId(this.options.settingsPath, route);
-      throw new ProviderAuthRequiredError(
-        target
-          ? `The subscription selected for ${route.packId} · ${route.modelId} is exhausted. Pick another account or set the route to Automatic in /models.`
-          : `All saved ${route.providerId} subscriptions are exhausted for ${route.packId} · ${route.modelId}.`,
-      );
-    }
-
+    // A14: a route whose accounts are all unavailable is not a pre-emptive
+    // abort. `applyPreferredAccountRoute` marks the provider on the request so
+    // credential reads fail closed rather than falling through to the active
+    // account, and the request then runs and fails at the provider — which is
+    // what lets the error lane classify it and hand the turn to the pack's
+    // configured fallback chain. The removed persisted set threw here instead,
+    // before any socket opened, so the chain was never reached.
     const providerId = route?.providerId ?? providerFromSession(args);
     if (!providerId) return args.messageList;
 

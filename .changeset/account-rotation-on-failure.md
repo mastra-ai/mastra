@@ -13,4 +13,4 @@ Add accounts through the TUI — `/login` on an already-connected provider offer
   → (submenu) Set as active    # optional; rotation happens on demand anyway
 ```
 
-No configuration is needed beyond having two or more accounts for a provider; rotation follows account insertion order.
+No configuration is needed beyond having two or more accounts for a provider; rotation walks the provider's accounts in insertion order, starting from the account the pool is currently on.

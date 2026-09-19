@@ -1,11 +1,7 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import {
-  clearExhaustedAccountRoute,
-  PACK_FALLBACK_STATE_KEY,
-  providerFromModelId,
-} from '@mastra/code-sdk/auth/account-rotation-processor';
+import { PACK_FALLBACK_STATE_KEY, providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
@@ -1234,30 +1230,6 @@ async function askPreferredAccount(
   });
 }
 
-async function clearAccountRoutingExhaustion(ctx: SlashCommandContext, packId: string, modelId: string): Promise<void> {
-  // Routed through the processor's per-thread queue so a rotation write that read
-  // an earlier snapshot cannot resurrect the route this clear is removing. When a
-  // thread is bound the id is captured up front and read/written with the `...On`
-  // variants, matching how core binds the processor's `setThreadSetting`.
-  const threadId = ctx.state.session.thread.getId();
-  await clearExhaustedAccountRoute(
-    {
-      threadId: threadId ?? '__threadless__',
-      getState: () => ctx.state.session.state.get() as Record<string, unknown>,
-      setState: updates => ctx.state.session.state.set(updates),
-      getThreadSetting: key =>
-        threadId === null
-          ? ctx.state.session.thread.getSetting({ key })
-          : ctx.state.session.thread.getSettingOn({ threadId, key }),
-      setThreadSetting: setting =>
-        threadId === null
-          ? ctx.state.session.thread.setSetting(setting)
-          : ctx.state.session.thread.setSettingOn({ threadId, ...setting }),
-    },
-    { packId, modelId },
-  );
-}
-
 async function runSetSubscriptionRouting(ctx: SlashCommandContext, pack: ModePack): Promise<void> {
   while (true) {
     const modelId = await askRoutingModel(ctx, pack);
@@ -1278,7 +1250,6 @@ async function runSetSubscriptionRouting(ctx: SlashCommandContext, pack: ModePac
       delete settings.models.packAccountPreferences[pack.id];
     }
     saveSettings(settings);
-    await clearAccountRoutingExhaustion(ctx, pack.id, modelId);
     const providerId = providerFromModelId(modelId);
     const accountLabel = accountId
       ? (ctx.authStorage?.listAccounts(providerId ?? '').find(account => account.id === accountId)?.label ?? accountId)

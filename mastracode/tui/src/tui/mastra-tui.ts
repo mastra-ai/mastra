@@ -20,9 +20,7 @@ import {
 } from '@mastra/code-sdk/onboarding/index';
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/index';
 import {
-  parseThreadAccountRoutingExhausted,
   resolveThreadActiveModelPackId,
-  THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   THREAD_FALLBACK_STATUS_KEY,
   MASTRA_GATEWAY_PROVIDER,
@@ -162,12 +160,9 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
       : null;
   const currentState = state.session.state?.get?.() as Record<string, unknown> | undefined;
   const currentPending = currentState?.[PACK_FALLBACK_STATE_KEY];
-  const currentAccountRouting = currentState?.[THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY];
-  const persistedAccountRouting = parseThreadAccountRoutingExhausted(metadata);
-  if (validPendingFallback || currentPending || persistedAccountRouting || currentAccountRouting) {
+  if (validPendingFallback || currentPending) {
     const updates = {
       [PACK_FALLBACK_STATE_KEY]: validPendingFallback,
-      [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: persistedAccountRouting,
     };
     const applied = state.session.state.setIf
       ? await state.session.state.setIf(updates, () => state.session.thread.getId() === initThreadId)
@@ -1146,10 +1141,8 @@ export class MastraTUI {
     if (this.state.session.thread.getId() !== currentThreadId) return;
     const resolvedPackId = resolveThreadActiveModelPackId(settings, packs, metadata);
     const fallbackStatus = fallbackStatusFromMetadata(metadata);
-    const accountRoutingExhausted = parseThreadAccountRoutingExhausted(metadata);
     const updates = {
       activeModelPackId: resolvedPackId,
-      [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: accountRoutingExhausted,
     };
     const applied = this.state.session.state.setIf
       ? await this.state.session.state.setIf(updates, () => this.state.session.thread.getId() === currentThreadId)

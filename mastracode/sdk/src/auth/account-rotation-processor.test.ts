@@ -22,7 +22,6 @@ vi.hoisted(() => {
 
 import { setCredentialStoreProvider } from '../agents/credential-resolver.js';
 import { createRequestScopedCredentialStore } from '../agents/model.js';
-import { THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY } from '../onboarding/settings.js';
 import {
   ACCOUNT_SWITCH_PART_TYPE,
   PACK_FALLBACK_PART_TYPE,
@@ -31,7 +30,6 @@ import {
   AccountStartNoticeProcessor,
   accountSwitchNoticeText,
   classifyRotationError,
-  clearExhaustedAccountRoute,
   isAccountSwitchReason,
   providerFromError,
   providerFromModelId,
@@ -667,7 +665,7 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     expect(noModel.writer.custom).not.toHaveBeenCalled();
   });
 
-  it('A12: fails closed instead of using a sibling when the routed account is exhausted', async () => {
+  it('A14: a targeted route attempts its named account even when thread metadata carries a legacy exhausted mark', async () => {
     const seeded = await makeTwoAccountStorage();
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
     mkdirSync(appDataDir, { recursive: true });
@@ -686,7 +684,7 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     );
     const controllerState = {
       activeModelPackId: 'anthropic',
-      [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: {
+      mastracodeAccountRoutingExhausted: {
         anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id] },
       },
     };
@@ -699,13 +697,11 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     const args = makeInputArgs({ requestContext });
     const processor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
 
-    // The route names account A; A is exhausted. Account B is healthy but the
-    // route does not permit it — the user pinned A so this model cannot spend
-    // B's quota.
-    await expect(processor.processInput(args as any)).rejects.toThrow(
-      'The subscription selected for anthropic · anthropic/claude-fable-5 is exhausted',
-    );
-    expect(args.writer.custom).not.toHaveBeenCalled();
+    // A14: the persisted per-thread set is gone, so a stale mark cannot abort
+    // the turn. The route names A and A is attempted; the pin still forbids
+    // spending the healthy sibling's quota, so B is never activated.
+    await processor.processInput(args as any);
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).not.toBe(seeded.accountB.id);
   });
 
   it('A12: a targeted route never activates a sibling account and its failure goes to the fallback chain', async () => {
@@ -891,7 +887,7 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     expect(accountSwitchNoticeText(unavailable!.data)).toBe('Pinned Anthropic account unavailable (persistent outage)');
   });
 
-  it('A12: an Automatic route still rotates through the remaining accounts in insertion order', async () => {
+  it('A14: an Automatic route resumes at the persisted active account and walks insertion order from there', async () => {
     const seeded = await makeTwoAccountStorage();
     const accountC = await addThirdAccount(seeded.storage);
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
@@ -934,16 +930,22 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     expect((await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(429) } as never)).retry).toBe(true);
     expect((await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(429) } as never)).retry).toBe(true);
 
-    // Automatic rotates the whole pool: the request-start activation of the
-    // first account in insertion order, then each remaining account.
-    const destinations = inputArgs.writer.custom.mock.calls
+    // A14: `Automatic` resumes at the persisted active account (C, activated by
+    // the third `addAccount`) and walks insertion order from there, so the turn
+    // is announced as starting on C and rotation then visits A and B. Starting
+    // at A instead would re-try the account the cursor last moved past.
+    const parts = inputArgs.writer.custom.mock.calls
       .map(call => call[0])
       .filter(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to)
-      .map(part => part.data.to.id);
-    expect(destinations).toEqual([seeded.accountA.id, seeded.accountB.id, accountC.id]);
+      .map(part => ({ to: part.data.to.id, reason: part.data.reason }));
+    expect(parts).toEqual([
+      { to: accountC.id, reason: 'starting-on-account' },
+      { to: seeded.accountA.id, reason: 'rate-limit' },
+      { to: seeded.accountB.id, reason: 'rate-limit' },
+    ]);
   });
 
-  it('fails before provider execution when every routed account is already exhausted', async () => {
+  it('A14: a legacy persisted exhausted-route mark no longer aborts the turn at input', async () => {
     const seeded = await makeTwoAccountStorage();
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
     mkdirSync(appDataDir, { recursive: true });
@@ -961,20 +963,24 @@ describe('AccountStartNoticeProcessor.processInput', () => {
       threadId: 'thread-1',
       getState: () => ({
         activeModelPackId: 'anthropic',
-        [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: {
+        mastracodeAccountRoutingExhausted: {
           anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id, seeded.accountB.id] },
         },
       }),
     });
     const args = makeInputArgs({ requestContext });
 
+    // A14: every account marked exhausted by an older build is ignored — the
+    // request runs, so a real provider error can reach the error lane and the
+    // configured fallback chain is reachable. Previously this threw here.
     await expect(
       new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(args as any),
-    ).rejects.toThrow('All saved anthropic subscriptions are exhausted');
+    ).resolves.toBe(args.messageList);
     expect(args.writer.custom).not.toHaveBeenCalled();
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
   });
 
-  it('applies sticky exhaustion when subscription routing is Automatic', async () => {
+  it('A14: a legacy persisted exhausted mark does not stop Automatic rotation', async () => {
     const seeded = await makeTwoAccountStorage();
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
     mkdirSync(appDataDir, { recursive: true });
@@ -988,7 +994,7 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     );
     let controllerState: Record<string, unknown> = {
       activeModelPackId: 'anthropic',
-      [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: {
+      mastracodeAccountRoutingExhausted: {
         anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id] },
       },
     };
@@ -1007,13 +1013,15 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     const inputArgs = makeInputArgs({ requestContext });
     await new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(inputArgs as any);
 
-    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
+    // The stale mark does not exclude A from the pool: A is still the cursor,
+    // so the turn starts on it and the first rotate-classified error moves to B.
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
     const errorArgs = makeArgs({ state: inputArgs.state, writer: inputArgs.writer, requestContext });
     const result = await new AccountRotationProcessor({
       credentialStore: seeded.storage,
       maxProcessorRetries: 22,
     }).processAPIError({ ...errorArgs, error: apiError(429) } as never);
-    expect(result.retry).toBe(false);
+    expect(result.retry).toBe(true);
     expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
     expect(setState).not.toHaveBeenCalled();
   });
@@ -1270,7 +1278,7 @@ describe('pack-fallback parts', () => {
     expect(scoped.getStoredApiKey('openai-codex')).toBe('sk-other');
   });
 
-  it('A12: records the targeted account as exhausted so a later request fails closed rather than using a sibling', async () => {
+  it('A14: a targeted route never activates a sibling and records no exhausted-route mark', async () => {
     const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks(
       {},
@@ -1284,135 +1292,13 @@ describe('pack-fallback parts', () => {
     // The pinned account failed: the route does not rotate to B.
     expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: false });
 
-    const routingWrite = args.setThreadSetting.mock.calls.find(
-      ([setting]) => setting.key === THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
-    )?.[0];
-    expect(routingWrite).toEqual({
-      key: THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
-      value: {
-        anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id] },
-      },
-    });
-
-    const requestContext = new RequestContext();
-    requestContext.set('controller', {
-      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
-      threadId: 'thread-1',
-      getState: () => ({
-        activeModelPackId: 'anthropic',
-        [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: routingWrite?.value,
-      }),
-    });
-    const nextArgs = {
-      state: {} as Record<string, unknown>,
-      messages: [],
-      messageList: { marker: 'message-list' },
-      systemMessages: [],
-      writer: { custom: vi.fn(async () => {}) },
-      requestContext,
-    };
-
-    // The next request fails closed on the targeted account — it must never
-    // fall through to the healthy sibling subscription.
-    await expect(
-      new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(nextArgs as any),
-    ).rejects.toThrow('The subscription selected for anthropic · anthropic/claude-fable-5 is exhausted');
-    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).not.toBe(seeded.accountB.id);
-    expect(nextArgs.writer.custom).not.toHaveBeenCalled();
-  });
-
-  it('serializes concurrent sticky-exhaustion merges for the same thread', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({});
-    let persisted: unknown;
-    const makeConcurrentArgs = (accountId: string) => {
-      const requestContext = new RequestContext();
-      setRequestAccountSelection(requestContext, PROVIDER, accountId);
-      requestContext.set('controller', {
-        session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
-        threadId: 'thread-1',
-        getState: () => ({ activeModelPackId: 'anthropic' }),
-        getThreadSetting: vi.fn(async () => persisted),
-        setThreadSetting: vi.fn(async ({ value }: { value: unknown }) => {
-          await new Promise(resolve => setTimeout(resolve, 5));
-          persisted = value;
-        }),
-        isThreadActive: () => false,
-      });
-      return makeArgs({ requestContext });
-    };
-    const argsA = makeConcurrentArgs(seeded.accountA.id);
-    const argsB = makeConcurrentArgs(seeded.accountB.id);
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-
-    await Promise.all([
-      processor.processAPIError({ ...argsA, error: apiError(429) } as never),
-      processor.processAPIError({ ...argsB, error: apiError(429) } as never),
-    ]);
-
-    expect(persisted).toEqual({
-      anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id, seeded.accountB.id] },
-    });
-  });
-
-  it('does not resurrect a route cleared while a rotation write is in flight', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({});
-    const routeKey = 'anthropic/claude-fable-5';
-    // Account A is already excluded, so this rotation is leaving B and its write
-    // adds B. A clear issued in that window must land after the write, not between
-    // the write's read and its commit.
-    let persisted: unknown = { anthropic: { [routeKey]: [seeded.accountA.id] } };
-    const writes: unknown[] = [];
-    let releaseRead: () => void = () => {};
-    const readGate = new Promise<void>(resolve => {
-      releaseRead = resolve;
-    });
-    let signalReadStarted: () => void = () => {};
-    const readStarted = new Promise<void>(resolve => {
-      signalReadStarted = resolve;
-    });
-    let gated = false;
-    const controller = {
-      session: { modelId: routeKey, modeId: 'build' },
-      threadId: 'thread-1',
-      getState: () => ({ activeModelPackId: 'anthropic', [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: persisted }),
-      getThreadSetting: vi.fn(async (key: string) => {
-        if (key === THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY) {
-          if (!gated) {
-            gated = true;
-            signalReadStarted();
-            await readGate;
-          }
-          return persisted;
-        }
-        return undefined;
-      }),
-      setThreadSetting: vi.fn(async ({ value }: { value: unknown }) => {
-        writes.push(value);
-        persisted = value;
-      }),
-      setState: vi.fn(async () => {}),
-      isThreadActive: () => true,
-    };
-    const requestContext = new RequestContext();
-    setRequestAccountSelection(requestContext, PROVIDER, seeded.accountB.id);
-    requestContext.set('controller', controller);
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-
-    // Park the rotation between its read and its write.
-    const rotation = processor.processAPIError({ ...makeArgs({ requestContext }), error: apiError(429) } as never);
-    await readStarted;
-    // Issued while the rotation is parked, so it can only land after the commit.
-    const clear = clearExhaustedAccountRoute(controller, { packId: 'anthropic', modelId: routeKey });
-    releaseRead();
-    await Promise.all([rotation, clear]);
-
-    // The rotation committed first, then the clear read that result and removed the
-    // route. Were the clear unsynchronized it would have written `undefined` first
-    // and the rotation's stale snapshot would have put account A back.
-    expect(writes).toEqual([{ anthropic: { [routeKey]: [seeded.accountA.id, seeded.accountB.id] } }, undefined]);
-    expect(persisted).toBeUndefined();
+    // A14: the per-thread skip-list write is gone. The pin alone keeps the
+    // sibling off the route, so nothing persists that a later turn would read
+    // as "this route is dead, abort before trying".
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
+    expect(
+      args.setThreadSetting.mock.calls.some(([setting]) => setting.key === 'mastracodeAccountRoutingExhausted'),
+    ).toBe(false);
   });
 
   it('does not notify live fallback state when the transcript hop cannot be written', async () => {

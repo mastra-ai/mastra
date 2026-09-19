@@ -1019,9 +1019,10 @@ describe('syncInitialThreadState', () => {
 
     await syncInitialThreadState(state);
 
+    // A14: the persisted exhausted-route map is no longer restored — a stale
+    // mark must not come back as routing state. The durable pending hop is.
     expect(stateSet).toHaveBeenCalledWith({
       mastracodePendingPackFallback: pending,
-      mastracodeAccountRoutingExhausted: exhaustedRouting,
     });
   });
 

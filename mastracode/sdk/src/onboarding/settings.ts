@@ -1161,28 +1161,10 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
 
 export const THREAD_ACTIVE_MODEL_PACK_ID_KEY = 'activeModelPackId';
 export const THREAD_FALLBACK_STATUS_KEY = 'mastracodeFallbackStatus';
-export const THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY = 'mastracodeAccountRoutingExhausted';
 
 export interface ThreadSettings {
   activeModelPackId: string | null;
   modeModelIds: Record<string, string>;
-}
-
-export function parseThreadAccountRoutingExhausted(metadata: Record<string, unknown> | undefined) {
-  const value = metadata?.[THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY];
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const result: Record<string, Record<string, string[]>> = {};
-  for (const [packId, modelsValue] of Object.entries(value as Record<string, unknown>)) {
-    if (!modelsValue || typeof modelsValue !== 'object' || Array.isArray(modelsValue)) continue;
-    const models: Record<string, string[]> = {};
-    for (const [modelId, accountIds] of Object.entries(modelsValue as Record<string, unknown>)) {
-      if (Array.isArray(accountIds) && accountIds.every(accountId => typeof accountId === 'string')) {
-        models[modelId] = [...new Set(accountIds)];
-      }
-    }
-    if (Object.keys(models).length > 0) result[packId] = models;
-  }
-  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 export function parseThreadSettings(metadata: Record<string, unknown> | undefined): ThreadSettings {

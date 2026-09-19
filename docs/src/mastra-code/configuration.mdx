@@ -136,7 +136,7 @@ For eligible failures on the active account, Mastra Code automatically rotates t
 - **Auth failures** (HTTP 401/403) first force one token refresh of the current account; if the refreshed token still fails, the pool rotates.
 - **Server errors and network outages** first exhaust the normal transient retry budget; if the provider still can't serve the request, the error surfaces without another account being activated.
 
-Rotation walks the provider's accounts in the order they were added. Each account is tried at most once per request. When every account in the pool has been tried, the error surfaces normally or the request moves to the configured fallback pack. Other errors — malformed requests (HTTP 400 with no provider usage-limit message) and anything unrecognized — never rotate; they surface immediately.
+Rotation starts on the account the pool is currently on — the account the last rotation left active — and walks the provider's accounts in the order they were added, wrapping once. Each account is tried at most once per request. When every account in the pool has been tried, the error surfaces normally or the request moves to the configured fallback pack. Other errors — malformed requests (HTTP 400 with no provider usage-limit message) and anything unrecognized — never rotate; they surface immediately.
 
 Rotation applies to **Automatic** routes only. A model pinned to a specific account never rotates to a sibling account; its failures go to the pack's fallback chain.
 
