@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CircleCheckIcon, LoaderIcon } from 'lucide-react';
+import { ArrowLeftIcon, CircleCheckIcon, LoaderIcon, XIcon } from 'lucide-react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { AgentIcon } from '../../icons/AgentIcon';
 import { DatasetsIcon } from '../../icons/DatasetsIcon';
@@ -9,9 +10,10 @@ import { WorkspacesIcon } from '../../icons/WorkspacesIcon';
 import { Button } from '../Button';
 import { Combobox } from '../Combobox';
 import { CopyButton } from '../CopyButton';
-import { Header } from '../Header';
 import { Txt } from '../Txt';
-import { Breadcrumb, Crumb } from './Breadcrumb';
+import { Breadcrumb } from './Breadcrumb';
+import { Crumb } from './breadcrumb-crumb';
+import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof Breadcrumb> = {
   title: 'Navigation/Breadcrumb',
@@ -43,6 +45,19 @@ export const Default: Story = {
 export const TwoLevels: Story = {
   render: () => (
     <Breadcrumb label="Navigation">
+      <Crumb as="a" to="/dashboard">
+        Dashboard
+      </Crumb>
+      <Crumb as="span" to="/dashboard/settings" isCurrent>
+        Settings
+      </Crumb>
+    </Breadcrumb>
+  ),
+};
+
+export const ChevronSeparators: Story = {
+  render: () => (
+    <Breadcrumb label="Navigation" separator="chevron">
       <Crumb as="a" to="/dashboard">
         Dashboard
       </Crumb>
@@ -86,17 +101,87 @@ const AgentSwitcher = () => (
   <Combobox options={agents} value="weather" variant="ghost" size="icon-sm" aria-label="Switch agent" />
 );
 
+const projects = [
+  { label: 'Production project', value: 'production' },
+  { label: 'Staging project', value: 'staging' },
+  { label: 'Development project', value: 'development' },
+];
+
+const ProjectExitAction = ({ onExit }: { onExit: () => void }) => (
+  <span
+    className={cn(
+      'flex max-w-0 shrink-0 items-center overflow-hidden opacity-0',
+      'transition-[max-width,opacity] duration-normal ease-in-out motion-reduce:transition-none',
+      'group-focus-within:max-w-6 group-focus-within:opacity-100 group-hover:max-w-6 group-hover:opacity-100 pointer-coarse:max-w-6 pointer-coarse:opacity-100',
+    )}
+  >
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="shrink-0 hover:!bg-transparent active:!bg-transparent"
+      aria-label="Exit project"
+      onClick={onExit}
+    >
+      <XIcon />
+    </Button>
+  </span>
+);
+
+function WithActionExample() {
+  const [project, setProject] = useState('production');
+  const [showProject, setShowProject] = useState(true);
+
+  return (
+    <Breadcrumb.Bar actions={<Button size="sm">Deploy</Button>}>
+      <Breadcrumb.Item pathname="/projects">
+        <Crumb
+          as={showProject ? 'a' : 'span'}
+          to={showProject ? '/projects' : undefined}
+          isCurrent={!showProject}
+          icon={<WorkspacesIcon />}
+        >
+          Projects
+        </Crumb>
+      </Breadcrumb.Item>
+      {showProject && (
+        <Breadcrumb.Item pathname={`/projects/${project}`}>
+          <Crumb
+            as="span"
+            isCurrent
+            className="px-0"
+            action={<ProjectExitAction onExit={() => setShowProject(false)} />}
+          >
+            <Combobox
+              options={projects}
+              value={project}
+              onValueChange={setProject}
+              variant="ghost"
+              size="sm"
+              className="hover:!bg-transparent active:!bg-transparent data-[popup-open]:!bg-transparent [&_svg]:!size-3"
+              aria-label="Switch project"
+              footer={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  className="w-full justify-start"
+                  icon={<ArrowLeftIcon />}
+                  onClick={() => setShowProject(false)}
+                >
+                  Back to projects
+                </Button>
+              }
+            />
+          </Crumb>
+        </Breadcrumb.Item>
+      )}
+    </Breadcrumb.Bar>
+  );
+}
+
 export const WithAction: Story = {
-  render: () => (
-    <Breadcrumb label="Navigation">
-      <Crumb as="a" to="/agents" icon={<AgentIcon />}>
-        Agents
-      </Crumb>
-      <Crumb as="span" isCurrent action={<AgentSwitcher />}>
-        Weather agent
-      </Crumb>
-    </Breadcrumb>
-  ),
+  parameters: { layout: 'fullscreen' },
+  render: () => <WithActionExample />,
 };
 
 export const SingleItem: Story = {
@@ -124,15 +209,15 @@ export const TruncatedLabel: Story = {
 };
 
 const Usage = ({ title, children }: { title: string; children: ReactNode }) => (
-  <div className="flex flex-col gap-1">
-    <Txt variant="ui-xs" className="text-neutral3">
+  <div className="new-theme flex flex-col gap-1">
+    <Txt variant="ui-xs" className="text-muted-foreground">
       {title}
     </Txt>
-    <Header className="h-10 min-h-10 w-220 gap-2 overflow-hidden px-2">
+    <header className="border-border flex h-10 min-h-10 w-220 items-center gap-2 overflow-hidden border-b px-2">
       <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
         {children}
       </Breadcrumb>
-    </Header>
+    </header>
   </div>
 );
 
@@ -245,7 +330,7 @@ export const AllAppUsages: Story = {
  */
 export const ControlAlignment: Story = {
   render: () => (
-    <div className="bg-surface2 flex items-center gap-1 rounded-lg p-2">
+    <div className="new-theme bg-background flex items-center gap-1 rounded-lg p-2">
       <Breadcrumb label="Breadcrumb">
         <Crumb as="span" isCurrent>
           Span

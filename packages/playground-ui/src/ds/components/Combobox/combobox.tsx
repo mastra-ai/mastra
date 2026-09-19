@@ -40,6 +40,7 @@ type ComboboxSharedProps = {
   allowCustomValue?: boolean;
   /** Called with the search input text as it changes (and with `''` after a single-mode selection resets it). */
   onInputValueChange?: (value: string) => void;
+  footer?: React.ReactNode;
 };
 
 export type ComboboxSingleProps = ComboboxSharedProps & {
@@ -96,6 +97,7 @@ export function Combobox(props: ComboboxProps) {
     align = 'start',
     allowCustomValue = false,
     onInputValueChange,
+    footer,
   } = props;
   const multiple = isMultipleCombobox(props);
   const clearLabel = multiple ? props.clearLabel : undefined;
@@ -106,6 +108,7 @@ export function Combobox(props: ComboboxProps) {
       ? { label: `Use “${customValue}”`, value: customValue }
       : undefined;
   const displayedOptions = customOption ? [customOption, ...options] : options;
+  const showSearch = allowCustomValue || displayedOptions.length > 2;
   const selectedValues = multiple ? (props.value ?? EMPTY_VALUES) : EMPTY_VALUES;
   const selectedValueSet = React.useMemo(() => new Set(selectedValues), [selectedValues]);
   const selectedOption = multiple ? null : (options.find(option => option.value === props.value) ?? null);
@@ -156,10 +159,12 @@ export function Combobox(props: ComboboxProps) {
           className={comboboxStyles.positioner}
         >
           <BaseCombobox.Popup className={comboboxStyles.popup}>
-            <div className={comboboxStyles.searchContainer}>
-              <Search className={comboboxStyles.searchIcon} />
-              <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
-            </div>
+            {showSearch ? (
+              <div className={comboboxStyles.searchContainer}>
+                <Search className={comboboxStyles.searchIcon} />
+                <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
+              </div>
+            ) : null}
             <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
             <div className={cn(comboboxStyles.listScroller, menu.containerClassName)} {...menu.getContainerProps({})}>
               <FluidMenuItems menu={menu}>
@@ -200,6 +205,7 @@ export function Combobox(props: ComboboxProps) {
                 </BaseCombobox.List>
               </FluidMenuItems>
             </div>
+            {footer ? <div className="border-border border-t p-1">{footer}</div> : null}
             {selectedValues.length > 0 && clearLabel ? (
               <div className={cn('border-t', 'border-border', 'p-1')}>
                 <Button

@@ -17,6 +17,7 @@ describe('PageShell', () => {
         </PageShell>,
       );
 
+      expect(markup).toContain('new-theme');
       expect(markup).toContain('data-slot="page-header-icon"');
       expect(markup).toContain('data-slot="page-header-title"');
       expect(markup).toContain('data-slot="page-header-description"');

@@ -10,9 +10,11 @@ function ExampleContent() {
   return (
     <div className="grid gap-4">
       {Array.from({ length: 8 }, (_, index) => (
-        <article key={index} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
-          <p className="text-ui-sm text-neutral6 font-medium">Activity {index + 1}</p>
-          <p className="text-ui-xs text-neutral4 mt-1">A representative row that makes the content area scroll.</p>
+        <article key={index} className="rounded-studio-panel border-border bg-card border p-4">
+          <p className="text-ui-sm text-foreground font-medium">Activity {index + 1}</p>
+          <p className="text-ui-xs text-muted-foreground mt-1">
+            A representative row that makes the content area scroll.
+          </p>
         </article>
       ))}
     </div>
@@ -24,7 +26,7 @@ function SkeletonContent() {
   return (
     <div className="grid gap-4">
       {Array.from({ length: 4 }, (_, index) => (
-        <div key={index} className="rounded-studio-panel border-border1 bg-surface3 h-16 animate-pulse border" />
+        <div key={index} className="rounded-studio-panel border-border bg-card h-16 animate-pulse border" />
       ))}
     </div>
   );

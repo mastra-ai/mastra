@@ -5,12 +5,14 @@ import { AppShell } from './app-shell';
 
 function renderShell({
   mobileHeader = true,
+  pageHeader = true,
   routeHeader = true,
-}: { mobileHeader?: boolean; routeHeader?: boolean } = {}) {
+}: { mobileHeader?: boolean; pageHeader?: boolean; routeHeader?: boolean } = {}) {
   return renderToStaticMarkup(
     <AppShell
       mainLabel="Page content"
       mobileHeader={mobileHeader ? <header>Mobile header</header> : undefined}
+      pageHeader={pageHeader ? <header>Page header</header> : undefined}
       routeHeader={routeHeader ? <header>Route header</header> : undefined}
     >
       <main>Main content</main>
@@ -24,15 +26,20 @@ describe('AppShell', () => {
       const markup = renderShell();
 
       expect(markup).toContain('data-slot="app-shell"');
+      expect(markup).toContain('new-theme');
+      expect(markup).toContain('border-border');
+      expect(markup).toContain('bg-background');
       expect(markup).toContain('Mobile header');
       expect(markup).toContain('Route header');
+      expect(markup).toContain('Page header');
       expect(markup).toContain('Main content');
     });
 
     it('places the route header above the main content', () => {
       const markup = renderShell();
 
-      expect(markup.indexOf('Route header')).toBeLessThan(markup.indexOf('Main content'));
+      expect(markup.indexOf('Route header')).toBeLessThan(markup.indexOf('Page header'));
+      expect(markup.indexOf('Page header')).toBeLessThan(markup.indexOf('Main content'));
     });
 
     it('supports a consumer-owned frame wrapper', () => {
@@ -59,6 +66,16 @@ describe('AppShell', () => {
       const markup = renderShell({ mobileHeader: false });
 
       expect(markup).not.toContain('Mobile header');
+      expect(markup).toContain('Route header');
+      expect(markup).toContain('Main content');
+    });
+  });
+
+  describe('when the page header is omitted', () => {
+    it('renders the remaining slots', () => {
+      const markup = renderShell({ pageHeader: false });
+
+      expect(markup).not.toContain('Page header');
       expect(markup).toContain('Route header');
       expect(markup).toContain('Main content');
     });

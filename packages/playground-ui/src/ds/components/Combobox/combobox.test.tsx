@@ -58,6 +58,32 @@ describe('Combobox', () => {
     expect(screen.getByRole('option', { name: 'Google' })).toBeTruthy();
   });
 
+  it('omits search when there are at most two options', async () => {
+    render(<Combobox options={options.slice(0, 2)} searchPlaceholder="Search providers" />);
+
+    fireEvent.click(screen.getByRole('combobox'));
+    await screen.findByRole('option', { name: 'OpenAI' });
+
+    expect(screen.queryByPlaceholderText('Search providers')).toBeNull();
+  });
+
+  it('keeps search available for custom values with two options', async () => {
+    render(
+      <Combobox
+        options={options.slice(0, 2)}
+        allowCustomValue
+        onValueChange={vi.fn()}
+        searchPlaceholder="Search providers"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'custom-provider' }, inputType: 'insertText' });
+
+    expect(await screen.findByRole('option', { name: 'Use “custom-provider”' })).toBeTruthy();
+  });
+
   it('portals the popup into document.body when there is no portal container provider', async () => {
     const { container } = renderCombobox();
 
@@ -111,6 +137,25 @@ describe('Combobox', () => {
     await waitFor(() => {
       expect(onValueChange).toHaveBeenCalledWith(['openai', 'anthropic']);
     });
+  });
+
+  it('renders a custom popup footer', async () => {
+    const onBack = vi.fn();
+    render(
+      <Combobox
+        options={options}
+        footer={
+          <button type="button" onClick={onBack}>
+            Back to providers
+          </button>
+        }
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Back to providers' }));
+
+    expect(onBack).toHaveBeenCalledOnce();
   });
 
   it('clears a multi-selection from the popup footer', async () => {
