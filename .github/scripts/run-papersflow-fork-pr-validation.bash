@@ -20,6 +20,8 @@ NODE
 readonly VALIDATOR_REPOSITORY_ROOT TYPESCRIPT_MODULE_PATH
 PACKED_DECLARATION_CHECK="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-packed-declaration-fixture.mjs"
 readonly PACKED_DECLARATION_CHECK
+readonly PG_PERFORMANCE_INDEX_UNIT_TEST='stores/pg/src/storage/performance-indexes/performance-indexes.test.ts'
+readonly PG_PERFORMANCE_INDEX_UNIT_CONFIG='stores/pg/vitest.perf.config.ts'
 
 pf558_config() {
   PF558_PR_NUMBER="${PAPERSFLOW_PF558_PR_NUMBER:-266}"
@@ -4269,6 +4271,7 @@ run_validator_self_tests() {
   local mock_bin
   local command_log
   local command_environment_log
+  local config_log
   local docker_log
   local service_log
   local base_sha
@@ -4282,6 +4285,7 @@ run_validator_self_tests() {
   local fixture_inngest_adapter_blob fixture_inngest_adapter_sha
   local temporal_build_line temporal_typecheck_line
   local package_contract_dependency_base_sha package_contract_base_sha package_contract_head_sha rejected_case failed_command
+  local actual_config_base_sha
   local output
   local status
 
@@ -4299,6 +4303,7 @@ run_validator_self_tests() {
   mock_bin="$test_root/bin"
   command_log="$test_root/pnpm.log"
   command_environment_log="$test_root/pnpm-environment.log"
+  config_log="$test_root/generated-config.log"
   docker_log="$test_root/docker.log"
   service_log="$test_root/services.log"
   mkdir -p \
@@ -4328,6 +4333,9 @@ run_validator_self_tests() {
     "$fixture_repo/stores/libsql/src/storage/domains/workflows" \
     "$fixture_repo/stores/libsql/src/storage" \
     "$fixture_repo/stores/pg/src/storage/domains/workflows" \
+    "$fixture_repo/stores/pg/src/storage/domains/memory" \
+    "$fixture_repo/stores/pg/src/storage/db" \
+    "$fixture_repo/stores/pg/src/storage/performance-indexes" \
     "$fixture_repo/workflows/inngest/src/__tests__/adapters" \
     "$fixture_repo/workflows/inngest/src/durable-agent" \
     "$fixture_repo/workflows/inngest/src" \
@@ -4347,6 +4355,11 @@ run_validator_self_tests() {
     'printf '\''%s\n'\'' "$*" >> "${MOCK_PNPM_LOG:?}"' \
     'printf '\''LLM_TEST_MODE=%s\t%s\n'\'' "${LLM_TEST_MODE:-}" "$*" >> "${MOCK_PNPM_ENVIRONMENT_LOG:?}"' \
     'printf '\''OPENAI_API_KEY=%s\t%s\n'\'' "${OPENAI_API_KEY:-}" "$*" >> "${MOCK_PNPM_ENVIRONMENT_LOG:?}"' \
+    'if [[ " $* " == *"--config .pf4243-vitest.perf.config."* ]]; then' \
+    '  for config in stores/pg/.pf4243-vitest.perf.config.*.ts; do' \
+    '    [[ -f "$config" ]] && cat "$config" >> "${MOCK_PNPM_CONFIG_LOG:?}"' \
+    '  done' \
+    'fi' \
     'if [[ " $* " == *" check:core-imports "* && "${MOCK_FAIL_CORE_IMPORTS:-0}" == 1 ]]; then exit 23; fi' \
     'if [[ " $* " == *" check:permissions "* && "${MOCK_FAIL_PERMISSIONS:-0}" == 1 ]]; then exit 17; fi' \
     'if [[ -n "${MOCK_FAIL_PACKAGE_CONTRACT_COMMAND:-}" && "$*" == "$MOCK_FAIL_PACKAGE_CONTRACT_COMMAND" ]]; then exit 29; fi' \
@@ -4399,6 +4412,11 @@ run_validator_self_tests() {
     'done' \
     >> "$mock_bin/pnpm"
   chmod +x "$mock_bin/pnpm"
+  printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' \
+    'if [[ "${MOCK_FAIL_PF4243_CONFIG_MKTEMP:-0}" == 1 && "${1:-}" == *"/.pf4243-vitest.perf.config."* ]]; then exit 77; fi' \
+    'exec /usr/bin/mktemp "$@"' \
+    > "$mock_bin/mktemp"
+  chmod +x "$mock_bin/mktemp"
   # Expanded only inside the emitted mock.
   # shellcheck disable=SC2016
   printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' \
@@ -4587,10 +4605,30 @@ run_validator_self_tests() {
     printf '%s\n' "import { it } from 'vitest';" "it('libsql atomic resume', () => {});" \
       > stores/libsql/src/storage/domains/workflows/atomic-resume.test.ts
     printf '%s\n' '{}' > stores/pg/package.json
+    printf '%s\n' 'export default {};' > stores/pg/vitest.config.ts
+    printf '%s\n' \
+      "import { defineConfig } from 'vitest/config';" \
+      "import './vitest.perf.config-helper';" \
+      'export default defineConfig({ test: {} });' \
+      > stores/pg/vitest.perf.config.ts
+    printf '%s\n' 'export const pgPerformanceConfigHelper = "base";' \
+      > stores/pg/vitest.perf.config-helper.ts
+    printf '%s\n' 'export const pgConstraintHelper = "base";' \
+      > stores/pg/src/storage/db/constraint-utils.ts
     printf '%s\n' 'export const pgWorkflowStorage = true;' \
       > stores/pg/src/storage/domains/workflows/index.ts
     printf '%s\n' "import { it } from 'vitest';" "it('pg atomic resume', () => {});" \
       > stores/pg/src/storage/domains/workflows/atomic-resume.test.ts
+    printf '%s\n' \
+      "import { pgConstraintHelper } from '../db/constraint-utils';" \
+      "import { it } from 'vitest';" "it('pg performance index', () => pgConstraintHelper);" \
+      > stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    printf '%s\n' "import { it } from 'vitest';" \
+      "const connectionString = process.env.DB_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5435/mastra';" \
+      "it('pg row-number performance', () => connectionString);" \
+      > stores/pg/src/storage/domains/memory/row-number-performance.test.ts
+    printf '%s\n' "import { it } from 'vitest';" "it('pg external schema', () => {});" \
+      > stores/pg/src/storage/db/external-schema.integration.test.ts
     printf '%s\n' \
       '{"scripts":{"test":"vitest run","test:workflow":"vitest run --no-isolate --retry=1 src/index.test.ts","test:docker":"docker-compose up -d && vitest run --no-isolate --retry=1 --exclude='\''src/__tests__/adapters/**'\'' && docker-compose down"},"devDependencies":{"@ai-sdk/openai":"^1.3.24","inngest-cli":"^1.26.0"}}' \
       > workflows/inngest/package.json
@@ -4694,6 +4732,7 @@ run_validator_self_tests() {
         PATH="$mock_bin:$PATH" \
         MOCK_PNPM_LOG="$command_log" \
         MOCK_PNPM_ENVIRONMENT_LOG="$command_environment_log" \
+        MOCK_PNPM_CONFIG_LOG="$config_log" \
         MOCK_DOCKER_LOG="$docker_log" \
         MOCK_SERVICE_LOG="$service_log" \
         BASE_SHA="$base_sha" \
@@ -6495,6 +6534,365 @@ NODE
   assert_contains '--filter ./stores/pg --fail-if-no-match exec tsc --noEmit' "$command_log"
   assert_contains 'src/storage/domains/workflows/atomic-resume.test.ts' "$command_log"
   assert_contains 'postgres 127.0.0.1:5434' "$service_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' "import '/src/storage/domains/memory/row-number-performance.test.ts';" \
+      >> stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    git add .
+    git commit -q -m 'reject PostgreSQL unit imports of performance suite'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-hostile-import-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'Hostile PostgreSQL unit import fixture unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains \
+    'Unsupported fork-test runtime surface for stores/pg/src/storage/performance-indexes/performance-indexes.test.ts:' \
+    "$output"
+  assert_contains \
+    'unreviewed external module /src/storage/domains/memory/row-number-performance.test.ts' \
+    "$output"
+  assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
+  if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
+    echo 'Hostile PostgreSQL unit import reached a test runner or service probe.' >&2
+    cat "$command_log" "$service_log" >&2
+    exit 1
+  fi
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' "it('pg performance index head', () => {});" \
+      >> stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    printf '%s\n' "it('pg external schema head', () => {});" \
+      >> stores/pg/src/storage/db/external-schema.integration.test.ts
+    git add .
+    git commit -q -m 'exercise PostgreSQL performance and external schema routes'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-performance-and-external-schema-success.log"
+  if ! run_fixture "$head_sha" "$output"; then
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains '--filter ./stores/pg --fail-if-no-match exec tsc --noEmit' "$command_log"
+  assert_contains '--filter ./stores/pg --fail-if-no-match build:lib' "$command_log"
+  assert_contains '--filter ./stores/pg --fail-if-no-match lint' "$command_log"
+  assert_line_matches \
+    '^--dir stores/pg exec vitest run --config \.pf4243-vitest\.perf\.config\.[^ ]+\.ts --reporter=dot --reporter=json .*src/storage/performance-indexes/performance-indexes\.test\.ts$' \
+    "$command_log"
+  assert_line_matches \
+    '^--dir stores/pg exec vitest run --reporter=dot --reporter=json .*src/storage/db/external-schema\.integration\.test\.ts$' \
+    "$command_log"
+  assert_contains 'postgres 127.0.0.1:5434' "$service_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' 'export const pgConstraintHelper = "head";' \
+      > stores/pg/src/storage/db/constraint-utils.ts
+    git add .
+    git commit -q -m 'exercise PostgreSQL unit dependency admission'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-helper-dependency-success.log"
+  if ! run_fixture "$head_sha" "$output"; then
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains '--filter ./stores/pg --fail-if-no-match exec tsc --noEmit' "$command_log"
+  assert_contains '--filter ./stores/pg --fail-if-no-match build:lib' "$command_log"
+  assert_contains '--filter ./stores/pg --fail-if-no-match lint' "$command_log"
+  assert_line_matches \
+    '^--dir stores/pg exec vitest run --config \.pf4243-vitest\.perf\.config\.[^ ]+\.ts --reporter=dot --reporter=json .*src/storage/performance-indexes/performance-indexes\.test\.ts$' \
+    "$command_log"
+  assert_contains 'postgres 127.0.0.1:5434' "$service_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' \
+      "import { defineConfig } from 'vitest/config';" \
+      'export default defineConfig({ test: { pool: "forks" } });' \
+      > stores/pg/vitest.perf.config.ts
+    git add stores/pg/vitest.perf.config.ts
+    git commit -q -m 'exercise PostgreSQL unit config selection'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-config-only-success.log"
+  if ! run_fixture "$head_sha" "$output"; then
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_line_matches \
+    '^--dir stores/pg exec vitest run --config \.pf4243-vitest\.perf\.config\.[^ ]+\.ts --reporter=dot --reporter=json .*src/storage/performance-indexes/performance-indexes\.test\.ts$' \
+    "$command_log"
+  assert_line_match_count 1 \
+    '^--dir stores/pg exec vitest run --config \.pf4243-vitest\.perf\.config\.[^ ]+\.ts --reporter=dot --reporter=json .*src/storage/performance-indexes/performance-indexes\.test\.ts$' \
+    "$command_log"
+  assert_line_match_count 0 'pooler|row-number-performance|performance-indexes\.integration' "$command_log"
+  assert_contains 'postgres 127.0.0.1:5434' "$service_log"
+
+  actual_config_base_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    cat "$VALIDATOR_REPOSITORY_ROOT/stores/pg/vitest.perf.config.ts" \
+      > stores/pg/vitest.perf.config.ts
+    printf '%s\n' "import { it } from 'vitest';" \
+      "it('unscreened performance-index payload must never run', () => { throw new Error('unscreened payload executed'); });" \
+      > stores/pg/src/storage/performance-indexes/performance-indexes.test.ts.payload.ts
+    git add stores/pg/vitest.perf.config.ts
+    git add stores/pg/src/storage/performance-indexes/performance-indexes.test.ts.payload.ts
+    git commit -q -m 'prepare actual PostgreSQL performance config fixture'
+    git rev-parse HEAD
+  )"
+  head_sha="$(
+    cd "$fixture_repo"
+    printf '%s\n' "it('pg actual performance config head', () => {});" \
+      >> stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    git add stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    git commit -q -m 'exercise actual PostgreSQL performance config'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$config_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-actual-config-success.log"
+  if ! run_fixture "$head_sha" "$output" BASE_SHA="$actual_config_base_sha"; then
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_line_match_count 1 \
+    '^--dir stores/pg exec vitest run --config \.pf4243-vitest\.perf\.config\.[^ ]+\.ts --reporter=dot --reporter=json .*src/storage/performance-indexes/performance-indexes\.test\.ts$' \
+    "$command_log"
+  assert_contains "include: ['src/storage/performance-indexes/performance-indexes.test.ts']" "$config_log"
+  assert_not_contains 'performance-indexes.test.ts.payload.ts' "$config_log"
+  if [[ -n "$(find "$fixture_repo/stores/pg" -maxdepth 1 -type f -name '.pf4243-vitest.perf.config.*.ts' -print -quit)" ]]; then
+    echo 'Trusted PostgreSQL Vitest wrapper was not cleaned up after the unit run.' >&2
+    find "$fixture_repo/stores/pg" -maxdepth 1 -type f -name '.pf4243-vitest.perf.config.*.ts' -print >&2
+    exit 1
+  fi
+  assert_contains 'postgres 127.0.0.1:5434' "$service_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$actual_config_base_sha"
+    printf '%s\n' "it('pg generated config mktemp failure', () => {});" \
+      >> stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    git add stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    git commit -q -m 'fail closed when PostgreSQL wrapper creation fails'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$config_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-generated-config-mktemp-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output" BASE_SHA="$actual_config_base_sha" MOCK_FAIL_PF4243_CONFIG_MKTEMP=1
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'PostgreSQL generated-config mktemp failure unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains 'Unable to create trusted PostgreSQL Vitest config; failing closed.' "$output"
+  if grep -Fq -- 'exec vitest run' "$command_log"; then
+    echo 'PostgreSQL generated-config mktemp failure reached a test runner.' >&2
+    cat "$command_log" >&2
+    exit 1
+  fi
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$actual_config_base_sha"
+    printf '%s\n' \
+      "import { defineConfig } from 'vitest/config';" \
+      'export default defineConfig({});' \
+      > stores/pg/vitest.perf.config.ts
+    printf '%s\n' "it('pg missing config test block', () => {});" \
+      >> stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    git add .
+    git commit -q -m 'reject PostgreSQL config without test block'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-missing-config-test-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output" BASE_SHA="$actual_config_base_sha"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'PostgreSQL config without test block unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains 'config test is not a direct object' "$output"
+  assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
+  if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
+    echo 'PostgreSQL config without test block reached a test runner or service probe.' >&2
+    cat "$command_log" "$service_log" >&2
+    exit 1
+  fi
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' "fetch('https://invalid.example/pf4243-config-helper-hostile');" \
+      > stores/pg/vitest.perf.config-helper.ts
+    printf '%s\n' "it('pg performance index helper head', () => {});" \
+      >> stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    git add .
+    git commit -q -m 'reject hostile PostgreSQL config helper'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-config-helper-hostile-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'Hostile PostgreSQL unit config helper fixture unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains \
+    'Unsupported fork-test runtime surface for stores/pg/vitest.perf.config.ts:' \
+    "$output"
+  assert_contains 'stores/pg/vitest.perf.config-helper.ts: fetch()' "$output"
+  assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
+  if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
+    echo 'Hostile PostgreSQL unit config helper reached a test runner or service probe.' >&2
+    cat "$command_log" "$service_log" >&2
+    exit 1
+  fi
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' "fetch('https://invalid.example/pf4243-config-hostile');" \
+      >> stores/pg/vitest.perf.config.ts
+    git add stores/pg/vitest.perf.config.ts
+    git commit -q -m 'reject hostile PostgreSQL unit config'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-config-hostile-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'Hostile PostgreSQL unit config fixture unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains \
+    'Unsupported fork-test runtime surface for stores/pg/vitest.perf.config.ts:' \
+    "$output"
+  assert_contains 'stores/pg/vitest.perf.config.ts: fetch()' "$output"
+  assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
+  if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
+    echo 'Hostile PostgreSQL unit config reached a test runner or service probe.' >&2
+    cat "$command_log" "$service_log" >&2
+    exit 1
+  fi
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' \
+      "import { defineConfig } from 'vitest/config';" \
+      "const loaderKey = 'setup' + 'Files';" \
+      'const hooks = {};' \
+        "export default defineConfig({ test: { globalSetup: ['./global-setup.ts'], runner: ['./runner.ts'], [loaderKey]: ['./setup.ts'], ...hooks } });" \
+      > stores/pg/vitest.perf.config.ts
+    printf '%s\n' "it('pg performance index loader hook', () => {});" \
+      >> stores/pg/src/storage/performance-indexes/performance-indexes.test.ts
+    git add .
+    git commit -q -m 'reject PostgreSQL config loader hooks'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unit-config-loader-hook-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'PostgreSQL config loader-hook fixture unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains \
+    'Unsupported fork-test runtime surface for stores/pg/vitest.perf.config.ts:' \
+    "$output"
+  assert_contains 'config test field globalSetup is unsupported' "$output"
+  assert_contains 'config test field runner is unsupported' "$output"
+  assert_contains 'config test computed properties are unsupported' "$output"
+  assert_contains 'config test object spread is unsupported' "$output"
+  assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
+  if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
+    echo 'PostgreSQL config loader-hook fixture reached a test runner or service probe.' >&2
+    cat "$command_log" "$service_log" >&2
+    exit 1
+  fi
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' "it('pg performance integration head', () => {});" \
+      > stores/pg/src/storage/performance-indexes/performance-indexes.integration.test.ts
+    printf '%s\n' "it('pg row-number performance head', () => {});" \
+      > stores/pg/src/storage/domains/memory/row-number-performance.test.ts
+    printf '%s\n' "it('pg pooler performance head', () => {});" \
+      > stores/pg/src/storage/pooler-init.pooler.test.ts
+    git add .
+    git commit -q -m 'reject unowned PostgreSQL performance suites'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  : > "$service_log"
+  output="$test_root/pg-unowned-performance-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'Unowned PostgreSQL performance fixture unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains 'stores/pg/src/storage/performance-indexes/performance-indexes.integration.test.ts' "$output"
+  assert_contains 'stores/pg/src/storage/domains/memory/row-number-performance.test.ts' "$output"
+  assert_contains 'stores/pg/src/storage/pooler-init.pooler.test.ts' "$output"
+  assert_contains 'Failing closed instead of reporting incomplete validation as successful.' "$output"
+  if grep -Fq -- 'exec vitest run' "$command_log" || [[ -s "$service_log" ]]; then
+    echo 'Unowned PostgreSQL performance fixture reached a test runner or service probe.' >&2
+    cat "$command_log" "$service_log" >&2
+    exit 1
+  fi
 
   head_sha="$(
     cd "$fixture_repo"
@@ -13644,6 +14042,7 @@ fi
 
 is_explicit_fork_safe_test() {
   case "$1" in
+    "$PG_PERFORMANCE_INDEX_UNIT_TEST" | \
     packages/core/src/agent/durable/__tests__/durable-agent-background-tasks.e2e.test.ts | \
       packages/core/src/harness/v1/session.permission-gate.e2e.test.ts | \
       packages/core/src/harness/v1/session.plan-task.e2e.test.ts | \
@@ -13886,6 +14285,8 @@ const bannedBuiltins = new Set([
 ]);
 const nodeBuiltins = new Set(builtinModules.map(specifier => specifier.replace(/^node:/, '').split('/')[0]));
 const exactTestEntries = new Set([
+  'stores/pg/src/storage/performance-indexes/performance-indexes.test.ts',
+  'stores/pg/vitest.perf.config.ts',
   'packages/core/src/agent/__tests__/supervisor-integration.test.ts',
   'packages/core/src/agent/__tests__/tool-approval.e2e.test.ts',
   'packages/core/src/agent/durable/__tests__/durable-agent-background-tasks.e2e.test.ts',
@@ -13929,6 +14330,8 @@ function approvedExactExternalSpecifier(specifier, importer, occurrences) {
   const bareSpecifier = specifier.startsWith('node:') ? specifier.slice('node:'.length) : specifier;
   return (
     specifier === 'vitest' ||
+    (specifier === 'vitest/config' &&
+      repositoryPath(importer) === 'stores/pg/vitest.perf.config.ts') ||
     specifier === 'zod' ||
     specifier.startsWith('zod/') ||
     specifier === '@internal/ai-sdk-v5/test' ||
@@ -14034,6 +14437,182 @@ function runtimeGlobalFindings(file, source) {
   return findings;
 }
 
+function configLoaderHookFindings(file, source) {
+  if (repositoryPath(file) !== 'stores/pg/vitest.perf.config.ts') return new Set();
+  const parsed = sourceFile(file, source);
+  const findings = new Set();
+  const addFinding = (reason, node) => {
+    const text = node && typeof node.getText === 'function' ? node.getText(parsed).slice(0, 120) : '';
+    findings.add(text ? `${reason}: ${text}` : reason);
+  };
+  const propertyName = node => {
+    if (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) return node.text;
+    return undefined;
+  };
+  const unwrap = node => {
+    let current = node;
+    while (
+      current &&
+      (ts.isParenthesizedExpression(current) ||
+        ts.isAsExpression(current) ||
+        ts.isTypeAssertionExpression(current) ||
+        ts.isNonNullExpression(current) ||
+        (ts.isSatisfiesExpression && ts.isSatisfiesExpression(current)))
+    ) {
+      current = current.expression;
+    }
+    return current;
+  };
+  const stringArray = node => {
+    const candidate = unwrap(node);
+    return (
+      !!candidate &&
+      ts.isArrayLiteralExpression(candidate) &&
+      candidate.elements.every(element => ts.isStringLiteralLike(element))
+    );
+  };
+  const topLevelArrayBinding = name =>
+    parsed.statements.some(
+      statement =>
+        ts.isVariableStatement(statement) &&
+        statement.declarationList.declarations.some(
+          declaration =>
+            ts.isIdentifier(declaration.name) &&
+            declaration.name.text === name &&
+            stringArray(declaration.initializer),
+        ),
+    );
+  const supportedInclude = node => {
+    const candidate = unwrap(node);
+    return (
+      stringArray(candidate) ||
+      (!!candidate &&
+        ts.isIdentifier(candidate) &&
+        candidate.text === 'include' &&
+        topLevelArrayBinding(candidate.text))
+    );
+  };
+  const supportedExclude = node => {
+    const candidate = unwrap(node);
+    if (stringArray(candidate)) return true;
+    return (
+      !!candidate &&
+      ts.isConditionalExpression(candidate) &&
+      ts.isIdentifier(candidate.condition) &&
+      candidate.condition.text === 'includePgPerfIntegration' &&
+      stringArray(candidate.whenTrue) &&
+      stringArray(candidate.whenFalse)
+    );
+  };
+  const inspectObject = (node, label, allowedFields, allowedShorthandFields = new Set()) => {
+    const object = unwrap(node);
+    if (!object || !ts.isObjectLiteralExpression(object)) {
+      addFinding(`${label} is not a direct object`, node);
+      return undefined;
+    }
+    const properties = new Map();
+    for (const property of object.properties) {
+      if (ts.isSpreadAssignment(property)) {
+        addFinding(`${label} object spread is unsupported`, property);
+        continue;
+      }
+      if (ts.isShorthandPropertyAssignment(property)) {
+        const name = propertyName(property.name);
+        if (!name || !allowedShorthandFields.has(name)) {
+          addFinding(`${label} methods and accessors are unsupported`, property);
+          continue;
+        }
+        if (properties.has(name)) {
+          addFinding(`${label} field ${name} is duplicated`, property.name);
+          continue;
+        }
+        properties.set(name, { initializer: property.name, node: property });
+        continue;
+      }
+      if (!ts.isPropertyAssignment(property)) {
+        addFinding(`${label} methods and accessors are unsupported`, property);
+        continue;
+      }
+      if (ts.isComputedPropertyName(property.name)) {
+        addFinding(`${label} computed properties are unsupported`, property.name);
+        continue;
+      }
+      const name = propertyName(property.name);
+      if (!name || !allowedFields.has(name)) {
+        addFinding(`${label} field ${name ?? '<unknown>'} is unsupported`, property);
+        continue;
+      }
+      if (properties.has(name)) {
+        addFinding(`${label} field ${name} is duplicated`, property.name);
+        continue;
+      }
+      properties.set(name, { initializer: property.initializer, node: property });
+    }
+    return properties;
+  };
+  const defaultExport = parsed.statements.find(statement => ts.isExportAssignment(statement));
+  const defaultExpression = defaultExport && unwrap(defaultExport.expression);
+  const hasDefineConfigImport = parsed.statements.some(
+    statement =>
+      ts.isImportDeclaration(statement) &&
+      ts.isStringLiteralLike(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text === 'vitest/config' &&
+      statement.importClause &&
+      !statement.importClause.isTypeOnly &&
+      statement.importClause.namedBindings &&
+      ts.isNamedImports(statement.importClause.namedBindings) &&
+      statement.importClause.namedBindings.elements.some(
+        element =>
+          !element.isTypeOnly &&
+          (element.propertyName ?? element.name).text === 'defineConfig' &&
+          element.name.text === 'defineConfig',
+      ),
+  );
+  if (!hasDefineConfigImport) {
+    findings.add('config must import defineConfig from vitest/config');
+  }
+  const configObject =
+    defaultExpression &&
+    ts.isCallExpression(defaultExpression) &&
+    ts.isIdentifier(defaultExpression.expression) &&
+    defaultExpression.expression.text === 'defineConfig' &&
+    defaultExpression.arguments.length === 1
+      ? unwrap(defaultExpression.arguments[0])
+      : undefined;
+  if (
+    !configObject ||
+    !ts.isObjectLiteralExpression(configObject)
+  ) {
+    findings.add('config export is not a direct defineConfig object');
+  } else {
+    const configProperties = inspectObject(configObject, 'config', new Set(['test']));
+    const testProperty = configProperties?.get('test');
+    const testProperties = inspectObject(
+      testProperty?.initializer,
+      'config test',
+      new Set(['environment', 'fileParallelism', 'include', 'exclude', 'pool']),
+      new Set(['include']),
+    );
+    if (!testProperties) {
+      // inspectObject already reported the structural failure.
+    } else {
+      const validators = {
+        environment: node => ts.isStringLiteralLike(unwrap(node)) && unwrap(node).text === 'node',
+        fileParallelism: node => unwrap(node).kind === ts.SyntaxKind.FalseKeyword,
+        include: supportedInclude,
+        exclude: supportedExclude,
+        pool: node => ts.isStringLiteralLike(unwrap(node)) && unwrap(node).text === 'forks',
+      };
+      for (const [name, property] of testProperties) {
+        if (!validators[name](property.initializer)) {
+          addFinding(`config test field ${name} has an unsupported value`, property.initializer);
+        }
+      }
+    }
+  }
+  return findings;
+}
+
 function unsupportedRuntimeReasons(file, source) {
   const reasons = new Set();
   const wasReachableFromExactTest = baseGraph.has(repositoryPath(file));
@@ -14084,6 +14663,9 @@ function unsupportedRuntimeReasons(file, source) {
     } else {
       reasons.add(finding.reason);
     }
+  }
+  for (const finding of configLoaderHookFindings(file, source)) {
+    reasons.add(finding);
   }
   return reasons;
 }
@@ -14157,6 +14739,7 @@ mapfile -t detected_tests < <(
 # tool-approval.e2e.test.ts remains an exact changed-file exception, but is not
 # dependency-triggered until its committed replay baseline is repaired.
 for explicit_test in \
+  stores/pg/src/storage/performance-indexes/performance-indexes.test.ts \
   packages/core/src/agent/__tests__/supervisor-integration.test.ts \
   packages/core/src/agent/durable/__tests__/durable-agent-background-tasks.e2e.test.ts \
   packages/core/src/harness/v1/session.permission-gate.e2e.test.ts \
@@ -14176,8 +14759,39 @@ for explicit_test in \
   fi
 done
 
+# The native performance configuration is part of the exact unit's execution
+# contract, but it is not imported by the test file. A config-only change must
+# therefore enqueue this unit explicitly; the config entrypoint and its local
+# dependency closure are scanned after exact-unit selection below.
+if grep -Fxq "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" "$changed_files"; then
+  if ! git_regular_file_at_head "$PG_PERFORMANCE_INDEX_UNIT_CONFIG"; then
+    printf '%s\n' "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" >> "$unsupported_tests"
+  elif git_regular_file_at_head "$PG_PERFORMANCE_INDEX_UNIT_TEST"; then
+    detected_tests+=("$PG_PERFORMANCE_INDEX_UNIT_TEST")
+  else
+    printf '%s\n' "$PG_PERFORMANCE_INDEX_UNIT_TEST" >> "$unsupported_tests"
+  fi
+fi
+
 if (( ${#detected_tests[@]} > 0 )); then
   mapfile -t detected_tests < <(printf '%s\n' "${detected_tests[@]}" | sort -u)
+fi
+
+# The native performance configuration is part of the exact unit's execution
+# contract even when the config file itself is unchanged. Scan it after exact
+# unit selection so a changed local config dependency cannot bypass the
+# runtime-surface policy.
+pg_performance_index_unit_selected=false
+for file in "${detected_tests[@]}"; do
+  if [[ "$file" == "$PG_PERFORMANCE_INDEX_UNIT_TEST" ]]; then
+    pg_performance_index_unit_selected=true
+    break
+  fi
+done
+if [[ "$pg_performance_index_unit_selected" == true ]] &&
+  (! git_regular_file_at_head "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" ||
+    test_runtime_surface_has_unsupported_runtime "$PG_PERFORMANCE_INDEX_UNIT_CONFIG"); then
+  printf '%s\n' "$PG_PERFORMANCE_INDEX_UNIT_CONFIG" >> "$unsupported_tests"
 fi
 
 if (( ${#detected_tests[@]} > 0 )) && [[ "$supervisor_provider_gate_verified" != true ]]; then
@@ -14292,6 +14906,8 @@ if (( ${#detected_tests[@]} > 0 )); then
     elif [[ "$file" == stores/* && "$file" != stores/_test-utils/* && \
       "$file" != stores/pg/* && "$file" != stores/redis/* ]]; then
       printf '%s\n' "$file" >> "$unsupported_tests"
+    elif [[ "$file" == "$PG_PERFORMANCE_INDEX_UNIT_TEST" ]]; then
+      printf '%s\n' "$file" >> "$changed_tests"
     elif [[ "$file" == stores/pg/* && \
       ( "$file" =~ \.pooler\.test\. || "$file" =~ \.performance\.test\. || \
         "$file" == */performance-indexes/* || "$file" == */row-number-performance.test.* ) ]]; then
@@ -14623,6 +15239,48 @@ if (
 NODE
 }
 
+run_pg_performance_index_unit() (
+  local test_dir="$1"
+  local relative_file="$2"
+  local timeout_seconds="$3"
+  local test_result="$4"
+  local generated_config=''
+
+  # The native config and its local runtime closure have already passed the
+  # literal scanner before this trusted wrapper is created. Keep the wrapper
+  # in the package root so its import resolves through that screened config,
+  # then constrain Vitest discovery to the one admitted file.
+  trap 'if [[ -n "$generated_config" ]]; then rm -f -- "$generated_config"; fi' EXIT
+  if ! generated_config="$(mktemp "$test_dir/.pf4243-vitest.perf.config.XXXXXX.ts")"; then
+    echo 'Unable to create trusted PostgreSQL Vitest config; failing closed.' >&2
+    return 1
+  fi
+  if ! cat > "$generated_config" <<'EOF'
+import nativeConfig from './vitest.perf.config.ts';
+
+const nativeTest = nativeConfig.test ?? {};
+
+export default {
+  ...nativeConfig,
+  test: {
+    ...nativeTest,
+    include: ['src/storage/performance-indexes/performance-indexes.test.ts'],
+    exclude: nativeTest.exclude ?? [],
+  },
+};
+EOF
+  then
+    echo 'Unable to write trusted PostgreSQL Vitest config; failing closed.' >&2
+    return 1
+  fi
+  echo "Running the admitted PostgreSQL unit with a trusted generated config (screened native config; exact include): $(basename "$generated_config")"
+  timeout --kill-after=30s "${timeout_seconds}s" \
+    "${vitest_environment[@]}" pnpm --dir "$test_dir" exec vitest run \
+      --config "$(basename "$generated_config")" \
+      --reporter=dot --reporter=json --outputFile.json="$test_result" \
+      "$relative_file"
+)
+
 test_status=0
 while IFS= read -r file; do
   status=0
@@ -14676,6 +15334,15 @@ while IFS= read -r file; do
 
   if [[ "$test_dir" == "." ]]; then
     test_dir=""
+  fi
+
+  vitest_config_args=()
+  if [[ "$file" == "$PG_PERFORMANCE_INDEX_UNIT_TEST" ]]; then
+    if [[ "$test_dir" != "stores/pg" || ! -f "$test_dir/vitest.perf.config.ts" ]]; then
+      echo "The exact PostgreSQL performance-index unit route requires stores/pg/vitest.perf.config.ts; failing closed." >&2
+      test_status=1
+      continue
+    fi
   fi
 
   if [[ "$file" == packages/core/src/agent/__tests__/agent-signals.test.ts ]]; then
@@ -14739,10 +15406,15 @@ while IFS= read -r file; do
       echo "Running changed test file in full: $file"
       test_result="$(mktemp)"
       set +e
-      timeout --kill-after=30s "${timeout_seconds}s" \
-        "${vitest_environment[@]}" pnpm --dir "$test_dir" exec vitest run \
-          --reporter=dot --reporter=json --outputFile.json="$test_result" \
-          "$relative_file"
+      if [[ "$file" == "$PG_PERFORMANCE_INDEX_UNIT_TEST" ]]; then
+        run_pg_performance_index_unit "$test_dir" "$relative_file" "$timeout_seconds" "$test_result"
+      else
+        timeout --kill-after=30s "${timeout_seconds}s" \
+          "${vitest_environment[@]}" pnpm --dir "$test_dir" exec vitest run \
+            "${vitest_config_args[@]}" \
+            --reporter=dot --reporter=json --outputFile.json="$test_result" \
+            "$relative_file"
+      fi
       status=$?
       set -e
 

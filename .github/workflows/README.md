@@ -243,8 +243,22 @@ The `mbenhamd/mastra` fork intentionally runs a small PR validation surface:
   remains stale. Other integration-named Server tests remain fail-closed.
   Other Playwright files, `e2e-tests/**`, nested
   integration-test packages, integration-test filename variants, explicit
-  provider E2E files, and PostgreSQL pooler/performance suites fail closed until
-  a dedicated fork-safe workflow provides their required setup.
+  provider E2E files, PostgreSQL pooler suites, and PostgreSQL performance
+  suites other than the exact
+  `stores/pg/src/storage/performance-indexes/performance-indexes.test.ts` unit
+  file fail closed until a dedicated fork-safe workflow provides their required
+  setup. The admitted unit file runs through `stores/pg/vitest.perf.config.ts`;
+  changes to that native config enqueue exactly this unit, and every admitted
+  unit run screens both the config and test runtime-dependency closures before
+  writing a fresh trusted wrapper in `stores/pg`. That wrapper preserves the
+  screened test options and exclusions but replaces discovery with the exact
+  admitted unit path, then is removed after the run so sibling payload files
+  cannot be selected by the native broad globs.
+  The config must retain a direct `defineConfig({ test: { ... } })` shape with
+  only the reviewed `environment`, `fileParallelism`, `include`, `exclude`,
+  and `pool` fields; loader hooks, unknown fields, methods, accessors,
+  computed properties, and spreads fail closed before runner or PostgreSQL
+  service execution.
   The PF-2044 ownership map additionally admits only the exact Convex cache,
   LibSQL composite Harness wiring, LibSQL Harness/thread-state, Google Cloud
   PubSub group, Redis Streams PubSub, and Inngest regression files needed by
