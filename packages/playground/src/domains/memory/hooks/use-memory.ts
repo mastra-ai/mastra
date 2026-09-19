@@ -1,4 +1,9 @@
-import type { GetObservationalMemoryResponse, GetMemoryStatusResponse } from '@mastra/client-js';
+import type {
+  GetObservationalMemoryResponse,
+  GetMemoryStatusResponse,
+  GetMemoryThreadBranchHistoryResponse,
+  ListMemoryThreadBranchesResponse,
+} from '@mastra/client-js';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -138,6 +143,97 @@ export const useCloneThread = () => {
     },
     onError: () => {
       toast.error('Failed to clone thread');
+    },
+  });
+};
+
+type BranchHistoryEntry = GetMemoryThreadBranchHistoryResponse['history'][number];
+
+export interface ThreadBranchesInfo {
+  isSupported: boolean;
+  parentThread: BranchHistoryEntry['thread'] | null;
+  fork: BranchHistoryEntry['branch'];
+  branches: ListMemoryThreadBranchesResponse['branches'];
+}
+
+const NO_BRANCHING: ThreadBranchesInfo = { isSupported: false, parentThread: null, fork: null, branches: [] };
+
+const isBranchingUnsupportedError = (error: unknown): boolean =>
+  error instanceof Error && error.message.includes('BRANCHING_UNSUPPORTED');
+
+const isBranchThreadNotFoundError = (error: unknown): boolean =>
+  error instanceof Error && error.message.includes('BRANCH_NOT_FOUND');
+
+/**
+ * Loads the shared-history lineage of a thread: its parent + own fork metadata
+ * (from the root-to-current branch history) and its direct child branches.
+ * Reports `isSupported: false` instead of erroring when the configured memory
+ * has no branch support, so branch UI simply stays hidden for custom Memory.
+ */
+export const useThreadBranches = ({ threadId, agentId }: { threadId?: string; agentId?: string }) => {
+  const client = useMastraClient();
+  const requestContext = useMergedRequestContext();
+
+  return useQuery({
+    queryKey: ['memory', 'thread-branches', threadId, agentId, requestContext],
+    queryFn: async (): Promise<ThreadBranchesInfo | null> => {
+      if (!threadId || !agentId) return null;
+      const thread = client.getMemoryThread({ threadId, agentId });
+      try {
+        const [historyResult, childrenResult] = await Promise.all([
+          thread.getBranchHistory({ requestContext }),
+          thread.listBranches({ perPage: false, requestContext }),
+        ]);
+        const own = historyResult.history[historyResult.history.length - 1];
+        const parentThread = own?.branch
+          ? (historyResult.history[historyResult.history.length - 2]?.thread ?? null)
+          : null;
+        return { isSupported: true, parentThread, fork: own?.branch ?? null, branches: childrenResult.branches };
+      } catch (error) {
+        if (isBranchingUnsupportedError(error)) return NO_BRANCHING;
+        throw error;
+      }
+    },
+    enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    // The thread row may not be persisted yet right after navigating away from
+    // /threads/new — retry the not-found window, but never retry hard failures.
+    retry: (failureCount, error) => isBranchThreadNotFoundError(error) && failureCount < 5,
+    refetchOnWindowFocus: false,
+  });
+};
+
+export const useBranchThread = () => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+  const requestContext = useMergedRequestContext();
+
+  return useMutation({
+    mutationFn: async ({
+      threadId,
+      agentId,
+      branchPointMessageId,
+      title,
+    }: {
+      threadId: string;
+      agentId: string;
+      branchPointMessageId: string;
+      title?: string;
+    }) => {
+      const thread = client.getMemoryThread({ threadId, agentId });
+      return thread.branch({ branchPointMessageId, title, requestContext });
+    },
+    onSuccess: (_, variables) => {
+      const { agentId } = variables;
+      if (agentId) {
+        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['memory', 'thread-branches'] });
+      }
+      toast.success('Thread branched successfully');
+    },
+    onError: () => {
+      toast.error('Failed to branch thread');
     },
   });
 };
