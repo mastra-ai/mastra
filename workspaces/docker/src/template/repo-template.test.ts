@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SETUP_MARKER_PATH } from '@internal/workspace';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildRepoTemplate, createDockerRepoTemplate, resolveHead } from './repo-template';
 
 const cloneUrl = 'https://example.com/acme/app.git';
@@ -120,6 +120,20 @@ describe('createDockerRepoTemplate', () => {
     };
     const resolver = createDockerRepoTemplate({ getRepositoryAccess, buildEnv, ref: sha })!;
     await expect(resolver({ abortSignal: controller.signal })).rejects.toMatchObject({ code: 'ABORTED' });
+  });
+
+  it('forwards the resolver signal to build environment resolution', async () => {
+    const controller = new AbortController();
+    const buildEnv = vi.fn(() => ({}));
+    const resolver = createDockerRepoTemplate({
+      getRepositoryAccess: async () => ({ cloneUrl }),
+      buildEnv,
+      ref: sha,
+    })!;
+
+    await resolver({ abortSignal: controller.signal });
+
+    expect(buildEnv).toHaveBeenCalledWith({ abortSignal: controller.signal });
   });
 
   it('rejects pre-aborted resolution before requesting repository access', async () => {

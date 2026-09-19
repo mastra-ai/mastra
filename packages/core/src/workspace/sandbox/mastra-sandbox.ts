@@ -487,7 +487,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
 
     let result: SandboxStartResult | void;
     try {
-      result = this._useAcquisitionPrimitives ? await this._acquire() : await this._implStart(options);
+      result = this._useAcquisitionPrimitives ? await this._acquire(options) : await this._implStart(options);
       // Status must flip to 'running' BEFORE the onStart hook: hooks run
       // commands, which reach `ensureRunning()` and would otherwise join the
       // in-flight `_startPromise` and deadlock awaiting their own start.
@@ -539,14 +539,14 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * a provider-native handle for {@link connect} to adopt, or `undefined` when
    * nothing usable exists. Avoid side effects where the provider's API allows.
    */
-  protected find?(): Promise<THandle | undefined>;
+  protected find?(options?: SandboxStartOptions): Promise<THandle | undefined>;
 
   /**
    * Adopt/wake/resume the handle {@link find} returned. Throwing fails
    * `start()`: a provider that should fall back to creating fresh puts that
    * policy in `find` (return `undefined` for an unusable handle) instead.
    */
-  protected connect?(handle: THandle): Promise<void> | void;
+  protected connect?(handle: THandle, options?: SandboxStartOptions): Promise<void> | void;
 
   /**
    * Provision a fresh VM/environment for this sandbox's logical id.
@@ -554,11 +554,11 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * acquisition, which derives the outcome from the branch that ran: find then
    * connect reports 'connected', create reports 'created'.
    */
-  protected create?(): Promise<void> | void;
+  protected create?(options?: SandboxStartOptions): Promise<void> | void;
 
   /** Base-orchestrated acquisition (rung 1 — see {@link start}). */
-  private async _acquire(): Promise<SandboxStartResult> {
-    const handle = this.find ? await this.find() : undefined;
+  private async _acquire(options?: SandboxStartOptions): Promise<SandboxStartResult> {
+    const handle = this.find ? await this.find(options) : undefined;
     if (handle != null) {
       // Checked rather than optional: adopting nothing would still report
       // 'connected'. The constructor rejects this pairing, but a `connect`
@@ -566,10 +566,10 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
       if (!this.connect) {
         throw new Error(`${this.constructor.name}: find() requires connect() to adopt the handle it returns.`);
       }
-      await this.connect(handle);
+      await this.connect(handle, options);
       return { outcome: 'connected' };
     }
-    await this.create!();
+    await this.create!(options);
     return { outcome: 'created' };
   }
 

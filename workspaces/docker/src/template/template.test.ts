@@ -346,6 +346,52 @@ describe('DockerTemplate.build', () => {
     const template = new DockerTemplate().runCmd('echo hi');
     await expect(template.build()).rejects.toThrow('daemon unreachable');
   });
+
+  it('cancels a pending buildImage acquisition and remains retryable', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    let resolveBuild!: (stream: { destroy: ReturnType<typeof vi.fn> }) => void;
+    const lateStream = { destroy: vi.fn() };
+    mockDocker.buildImage.mockImplementationOnce(
+      () => new Promise(resolve => (resolveBuild = resolve)) as ReturnType<typeof mockDocker.buildImage>,
+    );
+    const controller = new AbortController();
+    const template = new DockerTemplate().runCmd('echo hi');
+    const build = template.build({ abortSignal: controller.signal });
+    await vi.waitFor(() => expect(mockDocker.buildImage).toHaveBeenCalledTimes(1));
+
+    controller.abort(new Error('cancel acquisition'));
+    await expect(build).rejects.toMatchObject({ code: 'ABORTED', cause: controller.signal.reason });
+    resolveBuild(lateStream);
+    await vi.waitFor(() => expect(lateStream.destroy).toHaveBeenCalledTimes(1));
+
+    await expect(template.build()).resolves.toMatchObject({ status: 'ready' });
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels a pending secret build acquisition and closes late resources', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    let dialCallback!: (error: Error | null, stream?: unknown) => void;
+    const request = { destroy: vi.fn() };
+    const lateStream = { destroy: vi.fn() };
+    mockDocker.modem.dial.mockImplementationOnce((_options, callback) => {
+      dialCallback = callback;
+      return request;
+    });
+    const controller = new AbortController();
+    const template = new DockerTemplate({ secrets: { TOKEN: 'value' } }).runWithSecrets('echo hi', {
+      secrets: ['TOKEN'],
+      output: '/out',
+    });
+    const build = template.build({ abortSignal: controller.signal });
+    await vi.waitFor(() => expect(mockDocker.modem.dial).toHaveBeenCalledTimes(1));
+
+    controller.abort(new Error('cancel secret acquisition'));
+    await expect(build).rejects.toMatchObject({ code: 'ABORTED', cause: controller.signal.reason });
+    expect(request.destroy).toHaveBeenCalledTimes(1);
+    expect(mockSession.close).toHaveBeenCalled();
+    dialCallback(null, lateStream);
+    expect(lateStream.destroy).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('DockerTemplate.createSandbox', () => {

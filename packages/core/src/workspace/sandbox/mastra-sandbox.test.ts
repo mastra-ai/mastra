@@ -1003,6 +1003,9 @@ class PrimitiveSandbox extends MastraSandbox<string> {
   connectCalls = 0;
   createCalls = 0;
   lastConnectedHandle: string | undefined;
+  findOptions: SandboxStartOptions | undefined;
+  connectOptions: SandboxStartOptions | undefined;
+  createOptions: SandboxStartOptions | undefined;
   connectError: Error | undefined;
   createError: Error | undefined;
 
@@ -1012,19 +1015,22 @@ class PrimitiveSandbox extends MastraSandbox<string> {
     super({ ...options, name: 'PrimitiveSandbox' });
   }
 
-  protected override async find(): Promise<string | undefined> {
+  protected override async find(options?: SandboxStartOptions): Promise<string | undefined> {
     this.findCalls += 1;
+    this.findOptions = options;
     return this.vmExists ? 'vm-handle' : undefined;
   }
 
-  protected override async connect(handle: string): Promise<void> {
+  protected override async connect(handle: string, options?: SandboxStartOptions): Promise<void> {
     this.connectCalls += 1;
     this.lastConnectedHandle = handle;
+    this.connectOptions = options;
     if (this.connectError) throw this.connectError;
   }
 
-  protected override async create(): Promise<void> {
+  protected override async create(options?: SandboxStartOptions): Promise<void> {
     this.createCalls += 1;
+    this.createOptions = options;
     if (this.createError) throw this.createError;
     this.vmExists = true;
   }
@@ -1062,6 +1068,22 @@ describe('MastraSandbox acquisition primitives', () => {
     expect(sandbox.findCalls).toBe(1);
     expect(sandbox.createCalls).toBe(1);
     expect(sandbox.connectCalls).toBe(0);
+  });
+
+  it('forwards start options through acquisition primitives', async () => {
+    const controller = new AbortController();
+    const options = { abortSignal: controller.signal };
+    const created = new PrimitiveSandbox();
+
+    await created.start(options);
+    expect(created.findOptions).toBe(options);
+    expect(created.createOptions).toBe(options);
+
+    const connected = new PrimitiveSandbox();
+    connected.vmExists = true;
+    await connected.start(options);
+    expect(connected.findOptions).toBe(options);
+    expect(connected.connectOptions).toBe(options);
   });
 
   it('a create-only provider (no find) always creates', async () => {

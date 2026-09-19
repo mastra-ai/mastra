@@ -33,7 +33,7 @@
 import posixPath from 'node:path/posix';
 import Docker from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
-import { normalizeAbortError, throwIfAborted, waitForAbortable } from '../abort';
+import { createAbortError, normalizeAbortError, throwIfAborted, waitForAbortable } from '../abort';
 import { DockerSandbox, type DockerSandboxOptions } from '../sandbox';
 import { openBuildSession, type BuildSession } from './build-session';
 import {
@@ -354,7 +354,16 @@ export class DockerTemplate {
           session.close();
         }
       } else {
-        const stream = await docker.buildImage(context, { t: tag, nocache });
+        const build = docker.buildImage(context, { t: tag, nocache }).then(stream => {
+          if (abortSignal?.aborted) {
+            (stream as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
+            throw createAbortError(abortSignal, 'build Docker template');
+          }
+          return stream;
+        });
+        const stream = await waitForAbortable(build, abortSignal, 'build Docker template', () => {
+          (context as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
+        });
         await this.#followBuild(docker, stream, abortSignal);
       }
     } catch (error) {
@@ -403,7 +412,29 @@ export class DockerTemplate {
     let stream: NodeJS.ReadableStream;
     try {
       stream = await new Promise<NodeJS.ReadableStream>((resolve, reject) => {
-        docker.modem.dial(
+        let settled = false;
+        let request: { destroy?(error?: Error): void } | undefined;
+        const finish = (error?: unknown, data?: unknown) => {
+          if (settled) {
+            if (data) (data as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
+            return;
+          }
+          settled = true;
+          abortSignal?.removeEventListener('abort', abort);
+          error === undefined ? resolve(data as NodeJS.ReadableStream) : reject(error);
+        };
+        const abort = () => {
+          (context as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
+          request?.destroy?.();
+          session.close();
+          if (abortSignal) finish(createAbortError(abortSignal, 'build Docker template'));
+        };
+        abortSignal?.addEventListener('abort', abort, { once: true });
+        if (abortSignal?.aborted) {
+          abort();
+          return;
+        }
+        request = docker.modem.dial(
           {
             path: '/build?',
             method: 'POST',
@@ -412,10 +443,9 @@ export class DockerTemplate {
             isStream: true,
             statusCodes: { 200: true, 500: 'server error' },
           },
-          (err: Error | null, data: unknown) => (err ? reject(err) : resolve(data as NodeJS.ReadableStream)),
-        );
+          (err: Error | null, data: unknown) => finish(err ?? undefined, data),
+        ) as unknown as { destroy?(error?: Error): void } | undefined;
       });
-      throwIfAborted(abortSignal, 'build Docker template');
     } catch (error) {
       session.close();
       throw error;
@@ -434,7 +464,7 @@ export class DockerTemplate {
       };
       const abort = () => {
         (stream as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
-        finish(normalizeAbortError(new Error('aborted'), 'build Docker template'));
+        if (abortSignal) finish(createAbortError(abortSignal, 'build Docker template'));
       };
       abortSignal?.addEventListener('abort', abort, { once: true });
       if (abortSignal?.aborted) {
