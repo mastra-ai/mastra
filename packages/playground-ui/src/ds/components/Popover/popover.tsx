@@ -1,3 +1,4 @@
+import '../../../../new-theme.css';
 import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import type { PopoverPopupProps, PopoverPositionerProps } from '@base-ui/react/popover';
 import * as React from 'react';
@@ -12,11 +13,6 @@ const Popover = PopoverPrimitive.Root;
 
 export type PopoverTriggerProps = Omit<PopoverPrimitive.Trigger.Props, 'className'> & TriggerButtonProps;
 
-/**
- * The button that opens the popover. Renders a design-system `<Button>` by
- * default, so it takes Button's `variant` / `size` / `tooltip`. Pass `render`
- * to project the behavior onto your own element (then the look is yours).
- */
 const PopoverTrigger = React.forwardRef<HTMLButtonElement, PopoverTriggerProps>(
   ({ className, asChild, render, children, variant, size, tooltip, ...props }, ref) => {
     const resolved = resolveTriggerRender({ render, asChild, children, variant, size, tooltip, className });
@@ -34,7 +30,6 @@ type PopoverContentPositionerProps = Omit<PopoverPositionerProps, keyof PopoverP
 
 type PopoverContentProps = PopoverPopupProps &
   PopoverContentPositionerProps & {
-    /** Optional portal container, forwarded to `Popover.Portal`. */
     container?: HTMLElement | null;
   };
 
@@ -60,8 +55,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
     ref,
   ) => {
     const classNameString = typeof className === 'string' ? className : undefined;
-    // Default to the nearest SideDialog/Drawer popup so the content stays
-    // interactive inside a modal drawer; an explicit `container` still wins.
+    // Modal drawers require the portal inside their popup to stay interactive.
     const resolvedContainer = usePortalContainer(container);
     const positionerProps: PopoverContentPositionerProps = {
       align,
@@ -85,9 +79,10 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
             ref={ref}
             data-slot="popover-content"
             className={cn(
-              'z-50 w-72 origin-[var(--transform-origin)] rounded-xl border border-border1 bg-surface3 text-neutral5 shadow-dialog focus-visible:outline-hidden',
+              'new-theme z-50 w-72 origin-[var(--transform-origin)] rounded-xl border border-border bg-popover text-foreground shadow-dialog focus-visible:outline-hidden',
               'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
+              'motion-reduce:data-[open]:animate-none motion-reduce:data-[closed]:animate-none',
               classNameString && /\bp[trblxy]?-\S+/.test(classNameString) ? false : `px-3 py-3.5`,
               className,
             )}

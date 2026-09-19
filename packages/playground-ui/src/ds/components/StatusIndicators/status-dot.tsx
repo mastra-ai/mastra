@@ -55,7 +55,7 @@ function StatusDotPopoverInner<T>({
           side="top"
           align="start"
           sideOffset={6}
-          className="text-ui-xs text-neutral6 w-auto max-w-xs px-2.5 py-1.5"
+          className="text-ui-xs w-auto max-w-xs px-2.5 py-1.5"
           onMouseEnter={onHoverOpen}
           onMouseLeave={onHoverScheduleClose}
         >
