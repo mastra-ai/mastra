@@ -10,6 +10,7 @@ const { mockPage, mockLocator, mockContext, mockManager } = vi.hoisted(() => {
   };
 
   const mockPage = {
+    bringToFront: vi.fn().mockResolvedValue(undefined),
     url: vi.fn().mockReturnValue('https://example.com'),
     title: vi.fn().mockResolvedValue('Example'),
     goto: vi.fn(),

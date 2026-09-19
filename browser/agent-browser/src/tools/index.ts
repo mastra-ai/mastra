@@ -32,7 +32,7 @@ export { BROWSER_TOOLS, type BrowserToolName } from './constants';
  * The browser is lazily initialized on first tool use.
  */
 export function createAgentBrowserTools(browser: AgentBrowser): Record<string, Tool<any, any>> {
-  return {
+  const tools: Record<string, Tool<any, any>> = {
     // Core (9)
     [BROWSER_TOOLS.GOTO]: createGotoTool(browser),
     [BROWSER_TOOLS.SNAPSHOT]: createSnapshotTool(browser),
@@ -54,4 +54,11 @@ export function createAgentBrowserTools(browser: AgentBrowser): Record<string, T
     // Escape hatch (1)
     [BROWSER_TOOLS.EVALUATE]: createEvaluateTool(browser),
   };
+  for (const [name, tool] of Object.entries(tools)) {
+    const execute = tool.execute;
+    if (name !== BROWSER_TOOLS.CLOSE && execute) {
+      tool.execute = (input, context) => browser.runBrowserOperation(() => execute(input, context));
+    }
+  }
+  return tools;
 }

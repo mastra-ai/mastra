@@ -235,6 +235,12 @@ export class AgentController<TState = {}> {
    * (e.g. {@link setResourceId}) preserve the session's registry scope.
    */
   readonly #sessionScopes = new WeakMap<Session<TState>, string>();
+  readonly #sessionRuntimeIds = new WeakMap<Session<TState>, string>();
+  readonly #sessionBrowserOwners = new WeakMap<MastraBrowser, Set<Session<TState>>>();
+  readonly #sessionOwnedBrowsers = new WeakMap<Session<TState>, MastraBrowser>();
+  readonly #borrowedBrowsers = new WeakSet<MastraBrowser>();
+  readonly #browserReleases = new WeakMap<MastraBrowser, { pending: boolean; promise: Promise<void> }>();
+  readonly #failedSessionCleanup = new Map<string, Session<TState>>();
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
@@ -513,6 +519,11 @@ export class AgentController<TState = {}> {
       let pendingDeletion = this.#deletionsInProgress.get(registryKey);
       if (pendingDeletion) await pendingDeletion;
 
+      if (this.#failedSessionCleanup.has(registryKey)) {
+        await this.deleteSession({ resourceId: effectiveResourceId, scope });
+        continue;
+      }
+
       const existing = this.#sessionsByResource.get(registryKey);
       if (existing) {
         const session = await existing;
@@ -549,6 +560,11 @@ export class AgentController<TState = {}> {
             await session.thread.switch({ threadId });
           } else {
             await session.thread.create({ id: threadId });
+          }
+          // An early subscription may create the Session before its exact thread
+          // arrives. Only an unused factory browser can follow that initial bind.
+          if (this.#sessionOwnedBrowsers.get(session)?.status === 'pending') {
+            session.__bindBrowserIdentity();
           }
         }
         // A deletion may have started during the thread-rebinding awaits.
@@ -672,8 +688,15 @@ export class AgentController<TState = {}> {
     }
 
     let browserToConnect = overrides?.browser ?? this.browser;
+    const ownsBrowser = typeof browserToConnect === 'function';
     if (typeof browserToConnect === 'function') {
       browserToConnect = await browserToConnect({ requestContext, mastra: this.getMastra() });
+    }
+
+    // Do not hand a closing browser to a new owner or static borrower. A failed
+    // release remains an admission barrier until the owning session retries it.
+    while (browserToConnect && this.#browserReleases.has(browserToConnect)) {
+      await this.#browserReleases.get(browserToConnect)!.promise;
     }
 
     const session = this.#wireSession(
@@ -691,44 +714,98 @@ export class AgentController<TState = {}> {
       }),
     );
 
-    if (overrides?.threadId) {
-      const existingThread = await session.thread.getById({ threadId: overrides.threadId });
-      if (existingThread) {
-        if (existingThread.resourceId !== effectiveResourceId) {
-          throw new Error(`Thread not found: ${overrides.threadId}`);
-        }
-        await this.config.threadLock?.acquire(existingThread.id);
-        session.thread.set({ threadId: existingThread.id });
-        await session.thread.loadMetadata();
-        await session.thread.ensureCurrentSubscription();
-      } else {
-        await session.thread.create({ id: overrides.threadId });
-      }
-    } else {
-      // Same scope `thread.create()` stamps, matched strictly: a thread outside
-      // this session's scope — including one carrying no scope at all — belongs
-      // to nobody here and must not be auto-resumed.
-      const scopeEntries = Object.entries(session.getThreadScope());
-
-      const threads = await session.thread.list();
-      const candidates = threads.filter(t => {
-        const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-        return scopeEntries.every(([key, value]) => metadata[key] === value);
-      });
-
-      if (candidates.length === 0) {
-        await session.thread.create();
-      } else {
-        const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
-        await this.config.threadLock?.acquire(mostRecent.id);
-        session.thread.set({ threadId: mostRecent.id });
-        await session.thread.loadMetadata();
-        await session.thread.ensureCurrentSubscription();
-      }
+    this.#sessionRuntimeIds.set(session, randomUUID());
+    if (ownsBrowser && session.browser) {
+      this.#sessionOwnedBrowsers.set(session, session.browser);
+      const owners = this.#sessionBrowserOwners.get(session.browser) ?? new Set<Session<TState>>();
+      owners.add(session);
+      this.#sessionBrowserOwners.set(session.browser, owners);
+    } else if (session.browser) {
+      this.#borrowedBrowsers.add(session.browser);
     }
 
-    await this.#notifySessionCreated(session);
-    return session;
+    try {
+      if (overrides?.threadId) {
+        const existingThread = await session.thread.getById({ threadId: overrides.threadId });
+        if (existingThread) {
+          if (existingThread.resourceId !== effectiveResourceId) {
+            throw new Error(`Thread not found: ${overrides.threadId}`);
+          }
+          await this.config.threadLock?.acquire(existingThread.id);
+          session.thread.set({ threadId: existingThread.id });
+          await session.thread.loadMetadata();
+          await session.thread.ensureCurrentSubscription();
+        } else {
+          await session.thread.create({ id: overrides.threadId });
+        }
+      } else {
+        // Same scope `thread.create()` stamps, matched strictly: a thread outside
+        // this session's scope — including one carrying no scope at all — belongs
+        // to nobody here and must not be auto-resumed.
+        const scopeEntries = Object.entries(session.getThreadScope());
+
+        const threads = await session.thread.list();
+        const candidates = threads.filter(t => {
+          const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+          return scopeEntries.every(([key, value]) => metadata[key] === value);
+        });
+
+        if (candidates.length === 0) {
+          await session.thread.create();
+        } else {
+          const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+          await this.config.threadLock?.acquire(mostRecent.id);
+          session.thread.set({ threadId: mostRecent.id });
+          await session.thread.loadMetadata();
+          await session.thread.ensureCurrentSubscription();
+        }
+      }
+
+      if (ownsBrowser) session.__bindBrowserIdentity();
+      await this.#notifySessionCreated(session);
+      return session;
+    } catch (error) {
+      const registryKey = sessionRegistryKey(effectiveResourceId, overrides?.scope);
+      this.#failedSessionCleanup.set(registryKey, session);
+      await this.#releaseSessionBrowser(session);
+      this.#failedSessionCleanup.delete(registryKey);
+      throw error;
+    }
+  }
+
+  async #releaseSessionBrowser(session: Session<TState>): Promise<void> {
+    const browser = this.#sessionOwnedBrowsers.get(session);
+    const owners = browser && this.#sessionBrowserOwners.get(browser);
+    if (!browser || !owners?.has(session)) return;
+    const detach = () => {
+      owners.delete(session);
+      this.#sessionOwnedBrowsers.delete(session);
+      session.browser = undefined;
+      if (owners.size === 0) this.#sessionBrowserOwners.delete(browser);
+    };
+    if (owners.size > 1 || this.#borrowedBrowsers.has(browser)) {
+      detach();
+      return;
+    }
+    const existingRelease = this.#browserReleases.get(browser);
+    if (existingRelease?.pending) {
+      await existingRelease.promise;
+      return;
+    }
+    const release = {
+      pending: true,
+      promise: Promise.resolve().then(async () => {
+        await browser.close();
+        detach();
+        this.#browserReleases.delete(browser);
+      }),
+    };
+    this.#browserReleases.set(browser, release);
+    try {
+      await release.promise;
+    } finally {
+      release.pending = false;
+    }
   }
 
   /**
@@ -754,22 +831,37 @@ export class AgentController<TState = {}> {
     if (this.#deletionsInProgress.has(registryKey)) return false;
 
     const pending = this.#sessionsByResource.get(registryKey);
-    if (!pending) return false;
+    if (!pending && !this.#failedSessionCleanup.has(registryKey)) return false;
 
     // Track the deletion by registry key and set it synchronously, before any
     // await, so a concurrent createSession that resumes from `await existing`
     // sees the flag and waits instead of returning a session being torn down.
     const deletion: { tolerantPromise?: Promise<void> } = {};
     const deletionPromise = (async () => {
-      const session = await pending;
+      const session = pending
+        ? await pending.catch(error => {
+            const failed = this.#failedSessionCleanup.get(registryKey);
+            if (!failed) throw error;
+            return failed;
+          })
+        : await Promise.resolve(this.#failedSessionCleanup.get(registryKey)!);
       this.#sessionsBeingDeleted.add(session);
       // tolerantPromise is set synchronously below before this microtask runs.
       this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
       session.abort();
+      try {
+        await this.#releaseSessionBrowser(session);
+      } catch (error) {
+        // Keep the session and browser reachable so deletion can retry cleanup.
+        this.#sessionsBeingDeleted.delete(session);
+        this.#sessionDeletionPromises.delete(session);
+        throw error;
+      }
       session.thread.cleanupSubscription();
       try {
         await session.thread.clearAndReleaseLock();
       } finally {
+        this.#failedSessionCleanup.delete(registryKey);
         // Notify inside the finally: even when lock release fails the session
         // is deregistered for good, and listeners mirror the registry.
         await this.#dropSessionFromRegistry(registryKey, session);
@@ -1386,13 +1478,26 @@ export class AgentController<TState = {}> {
     if (this.workspace && typeof agent.hasOwnWorkspace === 'function' && !agent.hasOwnWorkspace()) {
       agent.__setWorkspace(this.workspace);
     }
-    if (
-      this.browser &&
-      typeof agent.hasOwnBrowser === 'function' &&
-      !agent.hasOwnBrowser() &&
-      typeof this.browser !== 'function'
-    ) {
-      agent.setBrowser(this.browser);
+    if (this.browser && typeof agent.hasOwnBrowser === 'function' && !agent.hasOwnBrowser()) {
+      if (typeof this.browser === 'function') {
+        agent.setBrowser(async ({ requestContext }) => {
+          const context = requestContext.get('controller') as AgentControllerRequestContext<TState> | undefined;
+          if (!context || context.controllerId !== this.id || !context.resourceId || !context.session?.id)
+            return undefined;
+          const session = await this.getSessionByResource(context.resourceId, context.scope);
+          if (
+            !session ||
+            this.#sessionsBeingDeleted.has(session) ||
+            this.#sessionRuntimeIds.get(session) !== context.session.runtimeId ||
+            session.identity.getId() !== context.session.id ||
+            session.thread.getId() !== context.threadId
+          )
+            return undefined;
+          return session.browser;
+        });
+      } else {
+        agent.setBrowser(this.browser);
+      }
     }
 
     // Propagate controller channels onto the resolved (possibly lazily-built)
@@ -1663,6 +1768,7 @@ export class AgentController<TState = {}> {
     }
 
     session.thread.cleanupSubscription();
+    if (previousResourceId !== resourceId) await this.#releaseSessionBrowser(session);
     session.identity.setResourceId({ resourceId });
     const releasePreviousThreadLock = session.thread.clearAndReleaseLock();
 
@@ -2319,6 +2425,7 @@ export class AgentController<TState = {}> {
       scope: this.#sessionScopes.get(session),
       session: {
         id: session.identity.getId(),
+        runtimeId: this.#sessionRuntimeIds.get(session),
         ownerId: session.identity.getOwnerId(),
         modeId: scope?.modeId ?? session.mode.get(),
         modelId: session.model.get(),

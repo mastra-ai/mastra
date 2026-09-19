@@ -457,6 +457,64 @@ The `browser_snapshot` tool returns an accessibility tree with element refs like
 { "tool": "browser_goto", "input": { "url": "https://example.com" } }
 ```
 
+## Shared session viewer
+
+`AgentBrowser` can expose the same pages used by its tools to a Controller
+Session client. Viewing an inactive browser returns an error; it never launches
+a browser. The server checks the resource, stored thread and browser launch
+identity before accepting a viewer or input command.
+
+Configure the initial viewport and language before saved tabs navigate:
+
+```typescript
+const browser = new AgentBrowser({
+  scope: 'shared',
+  viewerPreferences: { width: 1280, height: 720, deviceScaleFactor: 2, locale: 'en-US' },
+  screencast: { format: 'png', maxWidth: 4096, maxHeight: 4096 },
+})
+```
+
+`configureViewer(preferences, threadId?)` applies settings to existing pages
+without reloading them. Width and height are CSS pixels. The supported ranges
+are 240–3840 by 160–2160, with a device scale factor from 1 to 2. Language uses
+Chromium's language and locale overrides. It does not translate an already
+loaded page or override a site's account, cookie or location preferences.
+Viewer-created tabs and tool navigation await preference application.
+
+After opening the browser through the server's own authorized launch path,
+pass its current `getActivityState().incarnation` to an exact-thread client:
+
+```typescript
+const session = client.getAgentController('code').session(resourceId, scope, { threadId })
+const viewer = session.browser(incarnation)
+const subscription = await viewer.subscribe({
+  onEvent: event => {
+    // Render state.tabs or a frame's base64 image and CSS viewport dimensions.
+  },
+  onError: error => console.error(error),
+  signal: abortController.signal,
+})
+await viewer.command({ type: 'navigate', url: 'https://example.com' })
+await viewer.command({ type: 'preferences', preferences: {
+  width: 390, height: 844, deviceScaleFactor: 2, locale: 'ar-SA',
+} })
+subscription.unsubscribe()
+viewer.dispose()
+```
+
+Commands include navigation, back, forward, reload, new-tab, switch-tab,
+close-tab, mouse, keyboard and text. Tab commands use zero-based indices.
+Input coordinates use the frame's CSS viewport, not the image's pixel size.
+The client orders commands and never retries them. Obsolete consecutive mouse
+movement and resize requests are coalesced. A disposed handle rejects pending
+input without closing the remote browser.
+
+Subscriptions share one capture per browser/thread. The server keeps only the
+latest waiting frame and state for a slow viewer. Closing the last viewer
+releases capture; native browser lifetime and agent execution continue. Use
+authenticated headers or cookies through the normal client configuration;
+credentials do not belong in a stream URL.
+
 ## Related
 
 - [MastraBrowser](/reference/browser/mastra-browser): Base class reference

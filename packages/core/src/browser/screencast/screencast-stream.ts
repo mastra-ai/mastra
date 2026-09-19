@@ -45,6 +45,9 @@ interface CdpScreencastFrame {
 export class ScreencastStream extends EventEmitter {
   /** Whether screencast is currently active */
   private active: boolean = false;
+  private reconnecting?: Promise<void>;
+  private reconnectAgain = false;
+  private stopping = false;
 
   /** Resolved options with defaults applied (excludes threadId which is only used for page selection) */
   private options: Required<Omit<ScreencastOptions, 'threadId'>>;
@@ -77,6 +80,7 @@ export class ScreencastStream extends EventEmitter {
    * If already active, returns immediately.
    */
   async start(): Promise<void> {
+    if (!this.reconnecting) this.stopping = false;
     if (this.active) {
       return;
     }
@@ -88,9 +92,47 @@ export class ScreencastStream extends EventEmitter {
     try {
       // Get CDP session from provider
       this.cdpSession = await this.provider.getCdpSession();
+      const session = this.cdpSession;
+      let capturing = false;
+      let pending: CdpScreencastFrame | undefined;
+      const deliver = async (params: CdpScreencastFrame) => {
+        capturing = true;
+        try {
+          const data = (await this.provider.captureFrame?.(this.options)) ?? params.data;
+          if (this.cdpSession !== session || this.stopping) return;
+          this.emit('frame', {
+            data,
+            timestamp: params.metadata?.timestamp ? params.metadata.timestamp * 1000 : Date.now(),
+            viewport: {
+              width: params.metadata?.deviceWidth ?? 0,
+              height: params.metadata?.deviceHeight ?? 0,
+              offsetTop: params.metadata?.offsetTop,
+              scrollOffsetX: params.metadata?.scrollOffsetX,
+              scrollOffsetY: params.metadata?.scrollOffsetY,
+              pageScaleFactor: params.metadata?.pageScaleFactor,
+            },
+            sessionId: params.sessionId,
+          } satisfies ScreencastFrameData);
+        } catch (error) {
+          if (this.cdpSession === session && !this.stopping) this.emit('error', error);
+        } finally {
+          void session.send('Page.screencastFrameAck', { sessionId: params.sessionId }).catch(() => {});
+          capturing = false;
+          const next = pending;
+          pending = undefined;
+          if (next && this.cdpSession === session && !this.stopping) void deliver(next);
+        }
+      };
 
       // Set up frame handler
       this.frameHandler = (params: CdpScreencastFrame) => {
+        if (this.provider.captureFrame) {
+          if (capturing) {
+            if (pending) void session.send('Page.screencastFrameAck', { sessionId: pending.sessionId }).catch(() => {});
+            pending = params;
+          } else void deliver(params);
+          return;
+        }
         const frameData: ScreencastFrameData = {
           data: params.data,
           // CDP provides timestamp in seconds, convert to milliseconds for consistency
@@ -161,6 +203,8 @@ export class ScreencastStream extends EventEmitter {
    * Safe to call even if browser/CDP session is already closed.
    */
   async stop(): Promise<void> {
+    this.stopping = true;
+    await this.reconnecting?.catch(() => {});
     if (!this.active) {
       return;
     }
@@ -186,6 +230,7 @@ export class ScreencastStream extends EventEmitter {
         // Browser/session already closed - this is expected in external close scenarios
         hadError = true;
       }
+      await this.cdpSession.detach?.().catch(() => {});
       this.cdpSession = null;
     }
 
@@ -215,6 +260,23 @@ export class ScreencastStream extends EventEmitter {
    * @throws Error if reconnection fails (also emits 'error' event)
    */
   async reconnect(): Promise<void> {
+    if (this.stopping) return;
+    if (this.reconnecting) {
+      this.reconnectAgain = true;
+      return this.reconnecting;
+    }
+    this.reconnecting = (async () => {
+      do {
+        this.reconnectAgain = false;
+        await this.reconnectOnce();
+      } while (this.reconnectAgain && !this.stopping);
+    })().finally(() => {
+      this.reconnecting = undefined;
+    });
+    return this.reconnecting;
+  }
+
+  private async reconnectOnce(): Promise<void> {
     // Clean up existing session
     if (this.cdpSession && this.frameHandler && this.cdpSession.off) {
       try {
@@ -232,6 +294,7 @@ export class ScreencastStream extends EventEmitter {
       } catch {
         // Old session may already be detached - this is expected
       }
+      await this.cdpSession.detach?.().catch(() => {});
       this.cdpSession = null;
     }
 

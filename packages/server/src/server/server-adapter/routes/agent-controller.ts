@@ -36,11 +36,17 @@ import {
   SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE,
 } from '../../handlers/agent-controller';
 import type { ServerRoute } from '.';
+import {
+  COMMAND_AGENT_CONTROLLER_BROWSER_ROUTE,
+  STREAM_AGENT_CONTROLLER_BROWSER_ROUTE,
+} from '../../handlers/agent-controller-browser';
 
 /**
  * Canonical `AgentController` session API, served under `/agent-controller/...`.
  */
 export const AGENT_CONTROLLER_ROUTES: readonly ServerRoute[] = [
+  COMMAND_AGENT_CONTROLLER_BROWSER_ROUTE,
+  STREAM_AGENT_CONTROLLER_BROWSER_ROUTE,
   LIST_AGENT_CONTROLLERS_ROUTE,
   LIST_AGENT_CONTROLLER_MODES_ROUTE,
   LIST_AGENT_CONTROLLER_MODELS_ROUTE,
