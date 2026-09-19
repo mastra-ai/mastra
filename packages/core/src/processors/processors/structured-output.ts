@@ -302,7 +302,12 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         memory: {
           thread: threadId,
           ...(resourceId ? { resource: resourceId } : {}),
-          options: { readOnly: true },
+          // retainFullInput: the messages above replay the parent request deliberately, so
+          // the structuring run's prompt matches the parent's prefix and provider prompt
+          // caching still hits. Trimming the replay against stored history would rewrite
+          // that prefix (and on a retry would drop the attempt being structured).
+          // readOnly keeps the replay from being persisted.
+          options: { readOnly: true, retainFullInput: true },
         },
         providerOptions: this.providerOptions,
         ...observabilityContext,

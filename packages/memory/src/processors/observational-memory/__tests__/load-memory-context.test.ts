@@ -56,7 +56,26 @@ describe('22573 history loader', () => {
     expect(
       await loadMemoryContextMessages({ memory, messageList: list, threadId: 'thread', resourceId: 'resource' }),
     ).toBe(result);
-    expect(list.get.all.db()).toEqual([incoming]);
+    expect(list.get.all.db()).toHaveLength(1);
+    expect(list.get.all.db()[0]).toMatchObject({
+      id: 'assistant',
+      createdAt: pending.createdAt,
+      content: {
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'color',
+              toolName: 'changeColor',
+              args: { color: 'green' },
+              result: { applied: true },
+            },
+          },
+        ],
+      },
+    });
+    expect(list.get.input.db()).toHaveLength(1);
     expect(memory.persistMessages).not.toHaveBeenCalled();
   });
 

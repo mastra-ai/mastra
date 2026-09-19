@@ -452,7 +452,7 @@ describe('StructuredOutputProcessor', () => {
           memory: {
             thread: 'thread-123',
             resource: 'resource-456',
-            options: { readOnly: true },
+            options: { readOnly: true, retainFullInput: true },
           },
         }),
       );
@@ -541,7 +541,7 @@ describe('StructuredOutputProcessor', () => {
           },
           memory: {
             thread: 'thread-123',
-            options: { readOnly: true },
+            options: { readOnly: true, retainFullInput: true },
           },
         }),
       );
@@ -639,7 +639,7 @@ describe('StructuredOutputProcessor', () => {
           memory: {
             thread: 'thread-123',
             resource: 'resource-456',
-            options: { readOnly: true },
+            options: { readOnly: true, retainFullInput: true },
           },
         }),
       );
@@ -760,7 +760,7 @@ describe('StructuredOutputProcessor', () => {
           memory: {
             thread: 'thread-123',
             resource: 'resource-456',
-            options: { readOnly: true },
+            options: { readOnly: true, retainFullInput: true },
           },
         }),
       );

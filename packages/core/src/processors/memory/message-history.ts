@@ -174,27 +174,12 @@ export class MessageHistory implements Processor {
         return msg.role !== 'system' && (!boundary || isAfterMemoryTokenBoundary(msg, boundary));
       });
 
-      // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
-      // This includes messages added by previous processors like SemanticRecall
-      const existingMessages = messageList.get.all.db();
-      const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
-      const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
+      // 3. Add stored history in chronological order. MessageList layers any matching
+      // input copy onto the stored message so memory remains the authoritative base.
+      const chronologicalMessages = filteredMessages.reverse();
 
-      // Reverse to chronological order (oldest first) since we fetched DESC
-      const chronologicalMessages = uniqueHistoricalMessages.reverse();
-
-      if (chronologicalMessages.length === 0) {
-        span?.update({ attributes: { messageCount: 0 } });
-        return messageList;
-      }
-
-      // Add historical messages with source: 'memory'
       for (const msg of chronologicalMessages) {
-        if (msg.role === 'system') {
-          continue; // memory should not store system messages
-        } else {
-          messageList.add(msg, 'memory');
-        }
+        messageList.add(msg, 'memory');
       }
 
       span?.update({ attributes: { messageCount: chronologicalMessages.length } });
