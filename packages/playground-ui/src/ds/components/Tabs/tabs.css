@@ -61,6 +61,11 @@
       border-radius: 9999px;
     }
 
+    /* `size="sm"`: the control-size class fixes the height, so drop the vertical padding. */
+    [data-variant='pill'][data-size='sm'] [data-slot='tab'] {
+      padding-block: 0;
+    }
+
     :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab'][data-active][data-closable] {
       padding-right: 34px;
     }

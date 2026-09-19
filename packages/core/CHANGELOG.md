@@ -1,5 +1,110 @@
 # @mastra/core
 
+## 1.68.0-alpha.6
+
+### Minor Changes
+
+- Added `generateTitle.emitEvent` so HTTP and stream clients receive the generated thread title without polling. ([#24247](https://github.com/mastra-ai/mastra/pull/24247))
+
+  Thread titles are generated in the background after a run finishes. The `onTitleGenerated` callback only works for in-process callers, so an app driving an agent over HTTP had no way to know when the title was ready ([#21203](https://github.com/mastra-ai/mastra/issues/21203)).
+
+  With `emitEvent: true`, the run stream waits for the title and emits it as a transient `data-thread-title` chunk before `finish`:
+
+  ```typescript
+  const memory = new Memory({
+    options: {
+      generateTitle: {
+        emitEvent: true,
+      },
+    },
+  });
+
+  // Consumers read it from the run's stream before the `finish` chunk.
+  for await (const chunk of stream.fullStream) {
+    if (chunk.type === 'data-thread-title') {
+      console.log(chunk.data.threadId, chunk.data.title);
+    }
+  }
+  ```
+
+  The chunk is transient, so it is never persisted as part of the conversation. The default stays fully non-blocking: without `emitEvent`, title generation still runs in the background and does not delay the stream.
+
+  The `generateTitle` object also accepts `minMessages` (minimum number of thread messages before a title is generated, default `1`) and an optional `model` (defaults to the agent's own model), so title generation can run on a smaller or cheaper model than the conversation.
+
+  Durable and evented agents don't emit the chunk yet; the title is still generated and persisted.
+
+### Patch Changes
+
+- Fixed image and file URLs returned from a tool's toModelOutput being corrupted before reaching the model. Fixes https://github.com/mastra-ai/mastra/issues/22618 ([#24371](https://github.com/mastra-ai/mastra/pull/24371))
+
+  - Remote image-url and file-url tool results are no longer rewritten into a media part with the URL stuffed into the Base64-only data field, and their providerOptions are no longer dropped.
+  - URL parts are preserved as-is and converted to the correct shape for the target model's specification version: image-url/file-url for v3 models, url-tagged file parts for v4 models.
+  - Messages persisted by older versions with a URL in the media data field are healed the same way.
+  - Mastra's internal modelOutput metadata is no longer leaked to providers in the outgoing prompt.
+
+- Fixed evented workflows failing with "condition is not a function" when a dountil or dowhile loop body is a nested workflow and events go through a serializing pubsub such as Redis Streams. The loop condition is now read from the live workflow registry instead of the serialized event payload, which cannot carry functions. Fixes [#23111](https://github.com/mastra-ai/mastra/issues/23111). ([#24366](https://github.com/mastra-ai/mastra/pull/24366))
+
+- Fixed aborting suspended agent runs so parked tool calls are denied, the thread is released, and messages sent immediately after Stop receive a response. ([#24266](https://github.com/mastra-ai/mastra/pull/24266))
+
+- Fixed active goals being reported to the agent as cancelled, and stopped the goal being repeated in the model's context on every step. ([#24342](https://github.com/mastra-ai/mastra/pull/24342))
+
+  A goal that was still running could be projected as having no objective, which the agent reads as "the goal was cancelled" and stops working on it. That happened when the goal state processor could not reach storage, including when `inputProcessors` was configured as a function and the processor never received the Mastra instance. The last known objective is now kept when storage cannot be read, and the instance is propagated to processors contributed by signal providers. A stale cached pause record could also be trusted over storage; the cached record is now only trusted when it shows the goal active, and storage is re-read otherwise.
+
+  The projection is append-only, so re-emitting it duplicated the objective in context instead of updating it. It re-emitted on every attempt because the change it keyed on advanced each time. An objective that is already in context is now left alone.
+
+## 1.68.0-alpha.5
+
+### Minor Changes
+
+- Added list-compatible page pagination to advanced trace queries while preserving keyset cursors. ([#24061](https://github.com/mastra-ai/mastra/pull/24061))
+
+  ```ts
+  const result = await client.queryTraces({
+    timeRange,
+    pagination: { page: 0, perPage: 25 },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed durable agents passing `stepNumber: 0` and an empty `steps` list to `processLLMRequest`, `processLLMResponse`, and `processOutputStep` on every step. Processor hooks now receive the correct zero-based step index and the running step list, matching non-durable agents. Fixes #24279 ([#24293](https://github.com/mastra-ai/mastra/pull/24293))
+
+- Fixed agent and workflow delegation so model-driven resumes use framework-persisted suspended tool-call identity, including falsy resume payloads, and cannot select sibling runs by supplying a run ID. Successful resumes now retire every persisted representation of only the selected suspension. ([#24258](https://github.com/mastra-ai/mastra/pull/24258))
+
+- Fixed durable agent approval resumes so live assistant events and token usage are recorded once. (#23116) ([#24265](https://github.com/mastra-ai/mastra/pull/24265))
+
+- Fixed replay of OpenAI-hosted `tool_search` across turns. The Responses API gives a hosted search's call and its output distinct item ids (`tsc_…` / `tso_…`); Mastra now keeps both on the stored tool part and splits them back apart when building a prompt, so each side replays as its own `item_reference` instead of the same one twice. Hosted searches are also kept provider-executed through a round trip, so their result is no longer re-serialized as a client-mode `tool_search_output`. ([#23611](https://github.com/mastra-ai/mastra/pull/23611))
+
+  Conversations recorded before this fix kept only one of the two ids, so that hosted search pair can no longer be replayed faithfully — the single id would be referenced twice. A completed hosted search (succeeded or errored) with only one id is now omitted when building a prompt, and the model rediscovers the tool on the next turn; the rest of the conversation is unaffected and the part is still retained in response messages, so nothing is deleted from stored history. In-flight searches, which legitimately carry only a call id, and client-executed tools named `tool_search` are untouched.
+
+- Fixed tool calls missing from MODEL_GENERATION span output when agents run through the streaming loop or durable workflows. Observability exporters such as PostHog now receive the tool calls, so PostHog's Tools tab and `$ai_output_choices` show them for streamed generations. Fixes #24291 ([#24306](https://github.com/mastra-ai/mastra/pull/24306))
+
+- Fixed skill discovery for `Workspace` instances that use a dynamic `filesystem` resolver. ([#24317](https://github.com/mastra-ai/mastra/pull/24317))
+
+  When `skills` is configured without `skillSource`, discovery now uses the filesystem resolved for the request. It no longer reads skills from the server's local disk, so host-local skills cannot appear for other tenants and each tenant's own skills are found.
+
+  Skill discovery and search state are isolated per resolved filesystem, with a bounded cache so per-request filesystems do not grow the search index. Unscoped `workspace.search()` no longer returns request-scoped skill documents (from dynamic `skills` resolvers or resolver-backed filesystems) and still returns up to `topK` regular documents. Static filesystems, explicit `skillSource`, and the no-filesystem fallback are unchanged.
+
+  ```ts
+  const workspace = new Workspace({
+    filesystem: ({ requestContext }) => getTenantFilesystem(requestContext.get('orgId')),
+    skills: ['skills'],
+  });
+
+  // Now reads from the tenant's filesystem, not process.cwd()
+  const scoped = await workspace.skills!.getScoped!({ requestContext });
+  await scoped.list();
+  ```
+
+- Fixed requests failing with a 400 "Requests ending with a model turn are not supported" error on Gemini 3 models when the conversation ends with an assistant message. Fixes #23320. ([#23609](https://github.com/mastra-ai/mastra/pull/23609))
+
+  - The trailing-message guard that Anthropic models already had under native structured output now also covers Google, Vertex AI, and gateway-routed Gemini 3+ models, for every request rather than only structured-output ones.
+  - The guard is attached whenever an agent has input processors, because a processor can switch the model mid-step. It checks the final model before running and is skipped entirely, with no processor span, when that model does not need it.
+  - The guard mirrors prompt conversion: assistant messages that end on a tool result are left alone, and history that ends on assistant text followed by an unfinished tool call is guarded correctly.
+  - The synthetic continuation turn is added as request-only context instead of being saved to the thread, so memory and chat UIs no longer show a "Continue." or "Generate the structured response." message the user never sent.
+  - `PrefillErrorHandler` also recognizes the Gemini error so the reactive retry path covers it too.
+  - Explicitly versioned Gemini 2.x models and Anthropic prefill behavior are unchanged. Unversioned Google ids such as `gemini-flash-latest` or `gemma-*` are guarded conservatively because they can resolve to a Gemini 3 model.
+
 ## 1.68.0-alpha.4
 
 ### Patch Changes

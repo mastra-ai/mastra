@@ -500,6 +500,31 @@ describe('useTraceUrlState.handleSpanChange', () => {
   });
 });
 
+describe('useTraceUrlState.handleSpanViewChange', () => {
+  it('defaults to the tree view when the param is absent or unknown', () => {
+    render(<Harness initial="traceId=t1&spanView=nope" />);
+
+    expect(api.spanViewParam).toBe('tree');
+  });
+
+  it('stores the timeline view in the URL', () => {
+    render(<Harness initial="traceId=t1" />);
+
+    act(() => api.handleSpanViewChange('timeline'));
+
+    expect(paramsNow().get('spanView')).toBe('timeline');
+    expect(api.spanViewParam).toBe('timeline');
+  });
+
+  it('drops the param when going back to the tree view', () => {
+    render(<Harness initial="traceId=t1&spanView=timeline" />);
+
+    act(() => api.handleSpanViewChange('tree'));
+
+    expect(paramsNow().get('spanView')).toBeNull();
+  });
+});
+
 describe('useTraceUrlState.handleSpanTabChange', () => {
   it('stores a non-default tab and clears the score', () => {
     render(<Harness initial="traceId=t1&spanId=s1&scoreId=sc1" />);

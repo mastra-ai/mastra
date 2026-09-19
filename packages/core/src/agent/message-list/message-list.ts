@@ -43,6 +43,7 @@ import type {
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart } from './utils/stamp-part';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
@@ -669,6 +670,10 @@ export class MessageList {
             for (let i = 0; i < modelMsg.content.length; i++) {
               const part = modelMsg.content[i]!;
               if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
+                // The stored modelOutput is substituted into `output` here. The
+                // internal `mastra.modelOutput` marker stays on the part: input
+                // processors read it to tell a toModelOutput-mapped result apart
+                // from a raw fallback (see ToolCallFilter).
                 modelMsg.content[i] = {
                   ...part,
                   output: storedModelOutputs.get(part.toolCallId) as any,
@@ -1423,7 +1428,13 @@ export class MessageList {
                   ? { ...existing, ...values }
                   : values;
             }
-            return merged as AIV5Type.ProviderMetadata;
+            // Some hosted tools (e.g. OpenAI `tool_search`) give the call and its
+            // output DIFFERENT Responses item ids (tsc_… / tso_…). The namespace
+            // merge above keeps only one `itemId`, so replay would reference the
+            // same item twice ("Duplicate item found"). Retain the call's id and
+            // stash the result's beside it; prompt conversion splits them back
+            // onto their own tool parts.
+            return preserveResponseItemIdsOnMerge(original, incoming, merged) as AIV5Type.ProviderMetadata;
           })()
         : undefined;
 

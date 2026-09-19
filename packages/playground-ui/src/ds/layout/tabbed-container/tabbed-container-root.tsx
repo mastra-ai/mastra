@@ -75,7 +75,7 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
         <div data-slot="tabbed-container-query">
           {search ? (
             <div data-slot="tabbed-container-search">
-              <ListSearch {...search} size="md" variant="filled" shortcutDisabled={!active} />
+              <ListSearch {...search} size="md" shortcutDisabled={!active} />
             </div>
           ) : null}
           {filter ? (

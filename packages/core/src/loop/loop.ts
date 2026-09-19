@@ -31,7 +31,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   let loggerToUse =
     logger ||
     new ConsoleLogger({
-      level: 'debug',
+      level: 'error',
     });
 
   if (models.length === 0 || !models[0]) {

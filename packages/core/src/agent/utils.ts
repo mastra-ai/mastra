@@ -68,7 +68,7 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
   } catch (error) {
     if (!isStructuredOutputFormatError(error)) throw error;
 
-    console.warn('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
+    agent.__getLogger().warn('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
     const result = await agent.generate(prompt, {
       ...options,
       structuredOutput: {
@@ -138,7 +138,7 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
   } catch (error) {
     if (!isStructuredOutputFormatError(error)) throw error;
 
-    console.warn('Error in tryStreamWithJsonFallback. Attempting fallback.', error);
+    agent.__getLogger().warn('Error in tryStreamWithJsonFallback. Attempting fallback.', error);
     await onStreamAttempt?.();
     const result = await agent.stream(prompt, {
       ...streamOptions,

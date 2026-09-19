@@ -167,16 +167,8 @@ export function SignalDefinitionFormDialog({
                 Instruction changes create a new version and apply only to new traces. Existing analysis is unchanged.
               </p>
             ) : null}
-            {validationError ? (
-              <div role="alert">
-                <FieldBlock.ErrorMsg>{validationError}</FieldBlock.ErrorMsg>
-              </div>
-            ) : null}
-            {error ? (
-              <div role="alert">
-                <FieldBlock.ErrorMsg>{error}</FieldBlock.ErrorMsg>
-              </div>
-            ) : null}
+            {validationError ? <FieldBlock.ErrorMsg>{validationError}</FieldBlock.ErrorMsg> : null}
+            {error ? <FieldBlock.ErrorMsg>{error}</FieldBlock.ErrorMsg> : null}
           </form>
         </DialogBody>
         <DialogFooter>

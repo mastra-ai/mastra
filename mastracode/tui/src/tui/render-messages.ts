@@ -472,6 +472,10 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);
+    // Register before any of the insertion paths below return: the
+    // addUserMessage dedup guard keys on this map, so an unregistered reminder
+    // would render again if the same signal message is dispatched twice.
+    state.messageComponentsById.set(message.id, reminderComponent);
 
     // If the reminder anchors before a user message that has not been rendered
     // yet (its id is not mapped), fall back to inserting it before the latest

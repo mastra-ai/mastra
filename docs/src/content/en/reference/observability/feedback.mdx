@@ -522,6 +522,12 @@ Use `FeedbackFilter` in `listFeedback()` and OLAP query `filters`.
     description: 'Filter by the user who provided the feedback.',
     isOptional: true,
   },
+  {
+    name: 'reviewStatus',
+    type: "'needs-review' | 'reviewed'",
+    description: 'Filter by review status.',
+    isOptional: true,
+  },
   { name: 'entityType', type: 'EntityType', description: 'Filter by entity type.', isOptional: true },
   { name: 'entityName', type: 'string', description: 'Filter by entity name.', isOptional: true },
   { name: 'entityVersionId', type: 'string', description: 'Filter by entity version ID.', isOptional: true },
@@ -563,7 +569,7 @@ Use `FeedbackFilter` in `listFeedback()` and OLAP query `filters`.
 
 ## HTTP routes
 
-These routes belong to a Mastra runtime and use its configured observability storage. They're separate from the [unversioned Mastra Platform feedback query API](/docs/mastra-platform/api#observability-feedback-query-api), which doesn't provide a feedback creation route.
+These routes belong to a Mastra runtime and use its configured observability storage. They're separate from the [unversioned Mastra Platform Feedback API](/docs/mastra-platform/api#feedback-api), which doesn't provide a feedback creation route.
 
 | Method | Path | Purpose | Permission |
 | - | - | - | - |
@@ -575,6 +581,71 @@ These routes belong to a Mastra runtime and use its configured observability sto
 | `POST` | `/api/observability/feedback/breakdown` | Group feedback by dimensions | `observability:read` |
 | `POST` | `/api/observability/feedback/timeseries` | Bucket feedback by interval | `observability:read` |
 | `POST` | `/api/observability/feedback/percentiles` | Return percentile series | `observability:read` |
+
+### List query parameters
+
+`GET /api/observability/feedback` takes its arguments as URL query parameters. The [Mastra Platform Feedback API](/docs/mastra-platform/api#feedback-api) accepts the same parameters on its `GET /feedback` endpoint.
+
+```bash
+curl -sS "http://localhost:4111/api/observability/feedback?traceId=trace-123&environment=production&feedbackType=rating&page=0&perPage=20"
+```
+
+Every field of [`FeedbackFilter`](#feedbackfilter) is accepted as a top-level query parameter with the same name, for example `traceId`, `spanId`, `feedbackType`, `feedbackSource`, `feedbackUserId`, `reviewStatus`, `entityName`, `environment`, `experimentId`, or `tags`. Repeat a parameter to pass multiple values where the filter accepts an array, such as `feedbackType=rating&feedbackType=thumbs`. Pass object-valued filters such as `timestamp` as JSON, for example `timestamp={"start":"2026-01-01T00:00:00Z"}` URL-encoded.
+
+The remaining parameters control paging and delta polling:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'mode',
+    type: "'page' | 'delta'",
+    description: "List mode. Defaults to 'page'.",
+    isOptional: true,
+  },
+  {
+    name: 'page',
+    type: 'number',
+    description: 'Zero-indexed page number. Page mode only.',
+    isOptional: true,
+    defaultValue: '0',
+  },
+  {
+    name: 'perPage',
+    type: 'number',
+    description: 'Records per page, from 1 to 100. Page mode only.',
+    isOptional: true,
+    defaultValue: '10',
+  },
+  {
+    name: 'field',
+    type: "'timestamp'",
+    description: 'Sort field. Page mode only.',
+    isOptional: true,
+    defaultValue: "'timestamp'",
+  },
+  {
+    name: 'direction',
+    type: "'ASC' | 'DESC'",
+    description: 'Sort direction. Page mode only.',
+    isOptional: true,
+    defaultValue: "'DESC'",
+  },
+  {
+    name: 'after',
+    type: 'string',
+    description: 'Opaque delta cursor returned by the previous delta response. Delta mode only.',
+    isOptional: true,
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    description: 'Maximum number of updates to return, from 1 to 100. Delta mode only.',
+    isOptional: true,
+  },
+]}
+/>
+
+Requests that mix modes return `400`, for example `page` or `perPage` with `mode=delta`, or `after` or `limit` without it. The analytics routes take the same JSON bodies as [`getFeedbackAggregate()`](#getfeedbackaggregateargs), [`getFeedbackBreakdown()`](#getfeedbackbreakdownargs), [`getFeedbackTimeSeries()`](#getfeedbacktimeseriesargs), and [`getFeedbackPercentiles()`](#getfeedbackpercentilesargs).
 
 ## Related
 

@@ -136,11 +136,11 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   return (
     <>
       <div className="flex items-center gap-2 pb-2">
-        <Button icon={<WorkflowIcon />} as={Link} href={`/workflows/${workflowId}/graph`}>
+        <Button icon={<WorkflowIcon />} render={<Link href={`/workflows/${workflowId}/graph`} />}>
           Go to workflow
         </Button>
         {runId && (
-          <Button icon={<Eye />} as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
+          <Button icon={<Eye />} render={<Link href={`/workflows/${workflowId}/graph/${runId}`} />}>
             See run
           </Button>
         )}

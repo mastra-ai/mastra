@@ -227,10 +227,10 @@ const commentItemActionsLayout: Record<CommentVariant, string> = {
   default:
     'flex items-center gap-1 opacity-0 group-focus-within/comment-item:opacity-100 group-hover/comment-item:opacity-100 motion-safe:transition-opacity',
   embed: '',
-  // Hung over the row's own top edge, so it never reflows the body it floats above.
+  // Inline at the end of the header row, revealed on hover/focus.
   // `pointer-fine` only: a touch screen has no hover to reveal it with.
   thread:
-    'bg-surface2 border-border1 absolute -top-2 right-2 flex items-center gap-0.5 rounded-lg border px-0.5 transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-focus-within/comment-item:opacity-100 pointer-fine:group-hover/comment-item:opacity-100',
+    'ml-auto flex shrink-0 items-center gap-0.5 self-center transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-focus-within/comment-item:opacity-100 pointer-fine:group-hover/comment-item:opacity-100',
 };
 
 export type CommentItemActionsProps = ComponentPropsWithoutRef<'div'>;
