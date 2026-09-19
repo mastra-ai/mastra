@@ -105,6 +105,7 @@
         "@openrouter/ai-sdk-provider",
         "@openrouter/ai-sdk-provider-v5",
         "@tavily/core",
+        "firecrawl",
         "parallel-web",
         "elevenlabs"
       ],
