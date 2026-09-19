@@ -333,6 +333,64 @@ const handleApproval = async () => {
 }
 ```
 
+#### Classifier-gated approval
+
+`requireApproval` also accepts a function that receives the parsed tool input, so the decision to escalate can be made per call rather than per tool. Requiring approval for every call to a destructive tool is noisy: most deletions are routine, and reviewers who approve everything stop reading. A [Classifier](/reference/classifier/classifier) can judge the specific arguments and escalate only the calls that warrant it.
+
+Configure the question in the constructor so the criteria stay stable across calls. Stable criteria are what make the probability comparable between requests, which is what lets you set a threshold at all:
+
+```typescript title="src/mastra/tools/delete-record.ts"
+import { Classifier } from '@mastra/core/classifier'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const riskJudge = new Classifier({
+  id: 'deletion-risk',
+  model,
+  questions: {
+    risky: {
+      type: 'boolean',
+      criteria: {
+        true: 'Deleting this record could cause data loss that is hard to reverse',
+        false: 'Deleting this record is routine and easily reversible',
+      },
+    },
+  },
+})
+
+export const deleteRecord = createTool({
+  id: 'delete-record',
+  description: 'Delete a record by ID',
+  inputSchema: z.object({
+    id: z.string(),
+    table: z.string(),
+    cascade: z.boolean(),
+  }),
+  outputSchema: z.object({ deleted: z.boolean() }),
+  requireApproval: async input => {
+    try {
+      const result = await riskJudge.evaluate({ state: input })
+      return result.answers.risky.probability >= 0.4
+    } catch {
+      // Fail closed: if the judge is unavailable, ask a human.
+      return true
+    }
+  },
+  execute: async ({ id }) => {
+    await db.delete(id)
+    return { deleted: true }
+  },
+})
+```
+
+The threshold is yours to choose. The classifier reports a probability and takes no position on what to do with it, so pick the number from the cost of each mistake. Approval gates are asymmetric: an unnecessary prompt wastes a reviewer's time, while a missed one runs a destructive call unsupervised. That asymmetry is why the example uses `0.4` rather than an even split, and why the `catch` returns `true`. Failing closed is the opposite of how retrieval-style classifier policies behave, and deliberately so.
+
+:::caution
+
+Returning a boolean discards the probability, so the reviewer sees the approval request without knowing why it was raised or how confident the judge was. If your interface shows that reasoning, write the evidence somewhere the approval handler can read it before returning, such as the request context or your own audit log. The evidence is not carried on the `tool-call-approval` chunk.
+
+:::
+
 ### Approval using `suspend()`
 
 With this approach, neither the agent nor the tool uses `requireApproval`. Instead, the tool's `execute` function calls `suspend()` to pause at a specific point and return context or confirmation prompts to the user. This is useful when approval depends on runtime conditions rather than being unconditional.
