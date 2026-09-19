@@ -20,3 +20,5 @@ const memory = new Memory({
 ```
 
 Two bookkeeping fixes also apply under the default `'abort'` policy, where a failed async-buffer cycle is swallowed rather than rethrown: the async buffer cursor no longer advances past messages a failed cycle never observed, and multi-thread messages are marked observed after the observer output is parsed rather than before the call. Previously both advanced on failure, so the unobserved messages were silently skipped instead of being retried in a later cycle.
+
+Structured-extractor calls now run on the same `maxRetries` ladder as the rest of the stage instead of having no retry coverage, and a cancellation wrapped inside another error is recognised as an abort everywhere, so `'continue'` can never absorb a cancelled turn.
