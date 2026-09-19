@@ -2,6 +2,8 @@
   "attachment": [
     "claude-fable-5",
     "claude-fable-5-1",
+    "claude-opus-5",
+    "claude-sonnet-5",
     "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
     "gemini-3.7-flash",
@@ -37,6 +39,8 @@
   "structuredOutput": [
     "claude-fable-5",
     "claude-fable-5-1",
+    "claude-opus-5",
+    "claude-sonnet-5",
     "deepseek-v4-flash",
     "deepseek-v4-pro",
     "deepseek-v4-pro-0813",
@@ -58,6 +62,7 @@
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-6-astra",
+    "jev",
     "kimi-k3"
   ]
 }

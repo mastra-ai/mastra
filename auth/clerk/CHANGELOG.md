@@ -1,5 +1,26 @@
 # @mastra/auth-clerk
 
+## 1.3.0-alpha.1
+
+### Minor Changes
+
+- Added single-organization login restriction to `@mastra/auth-clerk`. Set `organizationId` or `organizationSlug` (or the `CLERK_ORGANIZATION_ID` / `CLERK_ORGANIZATION_SLUG` env vars) to only allow members of one Clerk organization to sign in. Non-members are denied during authorization and SSO callback. ([#24188](https://github.com/mastra-ai/mastra/pull/24188))
+
+  ```typescript
+  new MastraAuthClerk({
+    jwksUri: process.env.CLERK_JWKS_URI,
+    publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+    secretKey: process.env.CLERK_SECRET_KEY,
+    organizationId: process.env.CLERK_ORGANIZATION_ID,
+  });
+  ```
+
+## 1.2.5-alpha.0
+
+### Patch Changes
+
+- Fixed a stored XSS advisory in Clerk by updating @clerk/backend to 3.17.2. `createClerkClient` and the rest of the Mastra Clerk auth API are unchanged. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
 ## 1.2.4
 
 ### Patch Changes

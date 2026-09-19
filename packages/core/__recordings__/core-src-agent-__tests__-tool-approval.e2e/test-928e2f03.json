@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "288378faaec408ca",
+      "hash": "829bcb10b0b9c9e8",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -94,6 +94,17 @@
                       }
                     ]
                   },
+                  "suspendedToolCallId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The toolCallId of the suspended tool to resume"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "anyOf": [
                       {
@@ -122,6 +133,7 @@
                   "resourceId",
                   "instructions",
                   "maxSteps",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
@@ -131,6 +143,7 @@
                   "resourceId",
                   "instructions",
                   "maxSteps",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]
@@ -506,7 +519,7 @@
       }
     },
     {
-      "hash": "6d1d2b4770474c93",
+      "hash": "e4e8587ec1358717",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -600,6 +613,17 @@
                       }
                     ]
                   },
+                  "suspendedToolCallId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The toolCallId of the suspended tool to resume"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "anyOf": [
                       {
@@ -628,6 +652,7 @@
                   "resourceId",
                   "instructions",
                   "maxSteps",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
@@ -637,6 +662,7 @@
                   "resourceId",
                   "instructions",
                   "maxSteps",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]

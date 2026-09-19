@@ -1099,6 +1099,45 @@ describe('E2BSandbox', () => {
       );
     });
 
+    it('closes stdin so commands that read it cannot hang', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      // `rg`/`grep`/`cat` with no path argument read stdin. executeCommand runs to
+      // completion and never feeds stdin, so leaving it attached would block the
+      // command forever.
+      await sandbox.executeCommand('rg', ['pattern', '--files-with-matches']);
+
+      expect(mockSandbox.commands.run).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ background: true, stdin: false }),
+      );
+    });
+
+    it('keeps stdin attached for processes.spawn so processes stay drivable', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await sandbox.processes.spawn('node server.js');
+
+      expect(mockSandbox.commands.run).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ background: true, stdin: true }),
+      );
+    });
+
+    it('rejects sendStdin on an ignore-mode process', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      // Spawned with stdin detached, so there is no channel for input. Reject
+      // like the local and Docker handles instead of posting an input RPC.
+      const handle = await sandbox.processes.spawn('cat', { stdinMode: 'ignore' });
+
+      await expect(handle.sendStdin('data\n')).rejects.toThrow(/stdin/i);
+      expect(mockSandbox.commands.sendStdin).not.toHaveBeenCalled();
+    });
+
     it('defaults cwd to the configured workingDirectory', async () => {
       const sandbox = new E2BSandbox({ workingDirectory: '/srv/app' });
       await sandbox._start();

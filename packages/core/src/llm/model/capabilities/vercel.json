@@ -16,6 +16,7 @@
     "alibaba/qwen3.8-flash",
     "alibaba/qwen3.8-max",
     "alibaba/qwen3.8-max-0902",
+    "alibaba/qwen3.8-omni-flash",
     "alibaba/wan-v3.0-video",
     "alibaba/wan-v3.0-video-prime",
     "amazon/nova-2-lite",
@@ -164,6 +165,7 @@
     "zai/glm-4.5v",
     "zai/glm-5.1",
     "zai/glm-5.3-flash",
+    "zai/glm-5.3-flashx",
     "zai/glm-5v-turbo"
   ],
   "temperature": [
@@ -299,10 +301,6 @@
     "klingai/kling-v3.0-i2v",
     "klingai/kling-v3.0-motion-control",
     "klingai/kling-v3.0-t2v",
-    "kwaipilot/kat-coder-air-v2.5",
-    "kwaipilot/kat-coder-pro-v1",
-    "kwaipilot/kat-coder-pro-v2",
-    "kwaipilot/kat-coder-pro-v2.5",
     "meta/llama-3.1-70b",
     "meta/llama-3.1-8b",
     "meta/llama-3.3-70b",
@@ -454,6 +452,7 @@
     "zai/glm-5.3",
     "zai/glm-5.3-fast",
     "zai/glm-5.3-flash",
+    "zai/glm-5.3-flashx",
     "zai/glm-5v-turbo"
   ],
   "structuredOutput": [
@@ -554,12 +553,14 @@
     "spacexai/grok-4.5",
     "spacexai/grok-4.6",
     "spacexai/grok-build-0.1",
+    "typesafe-ai/jev",
     "zai/glm-5-turbo",
     "zai/glm-5.1",
     "zai/glm-5.2",
     "zai/glm-5.2-fast",
     "zai/glm-5.3",
     "zai/glm-5.3-fast",
-    "zai/glm-5.3-flash"
+    "zai/glm-5.3-flash",
+    "zai/glm-5.3-flashx"
   ]
 }

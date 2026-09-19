@@ -1,5 +1,104 @@
 # @mastra/factory
 
+## 0.16.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`6ef8186`](https://github.com/mastra-ai/mastra/commit/6ef8186ade9c8ca69269deed07fd47a942ecf70d), [`34e4d21`](https://github.com/mastra-ai/mastra/commit/34e4d21e62c61e11e52aa7d6c39748b1120fbb93), [`8702f39`](https://github.com/mastra-ai/mastra/commit/8702f39331322ef0296fd3d68c0bd0997079faaa), [`e6072cb`](https://github.com/mastra-ai/mastra/commit/e6072cbbd3482e37027e53e4d62da7aad6a36c41), [`2ea44c1`](https://github.com/mastra-ai/mastra/commit/2ea44c1b578d8116507160ac32c7824faa07158e), [`8d808d8`](https://github.com/mastra-ai/mastra/commit/8d808d8452b8acd5eda4f8cfe014331a8c0f1e92), [`8d808d8`](https://github.com/mastra-ai/mastra/commit/8d808d8452b8acd5eda4f8cfe014331a8c0f1e92)]:
+  - @mastra/core@1.68.0-alpha.6
+  - @mastra/code-sdk@1.8.0-alpha.6
+
+## 0.16.0-alpha.5
+
+### Patch Changes
+
+- Fixed synchronous `onAccepted` hook failures rejecting an already-committed Factory transition and skipping its `stage_moved` audit record. Synchronous throws are now isolated and logged the same way as asynchronous rejections. ([#24304](https://github.com/mastra-ai/mastra/pull/24304))
+
+- Updated dependencies [[`8d578e4`](https://github.com/mastra-ai/mastra/commit/8d578e42f3ecfa9d625f23d6a78e666023cda7ff), [`4266b67`](https://github.com/mastra-ai/mastra/commit/4266b677d33bb20651ca296f64aa91fa3b3d4e82), [`bec18d0`](https://github.com/mastra-ai/mastra/commit/bec18d05e7f997ead6ada04a4dc0179c3cad8aa2), [`abecb67`](https://github.com/mastra-ai/mastra/commit/abecb6709643785fd87a3ff9251032a61479ccab), [`ee7187e`](https://github.com/mastra-ai/mastra/commit/ee7187e7bf66db46630f33c64e86b1ff7bb0c0b7), [`babda00`](https://github.com/mastra-ai/mastra/commit/babda005397d2780aa21be0a7670688b704bdb2f), [`2476423`](https://github.com/mastra-ai/mastra/commit/24764233246dc85d7bcba8f8bb610110449a54d6), [`bdab4a8`](https://github.com/mastra-ai/mastra/commit/bdab4a889808d502f398a8086af3b50cc3bfbcd5), [`53cdd63`](https://github.com/mastra-ai/mastra/commit/53cdd6368b12aea743f95118a49fc6b93985fd20)]:
+  - @mastra/code-sdk@1.8.0-alpha.5
+  - @mastra/core@1.68.0-alpha.5
+
+## 0.16.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`697fecc`](https://github.com/mastra-ai/mastra/commit/697feccaa4ad5df913c22e47bf16f493dd7956a8), [`0bf287c`](https://github.com/mastra-ai/mastra/commit/0bf287c36ec14b45f5a4fdd0d279698694f592dd), [`6249741`](https://github.com/mastra-ai/mastra/commit/6249741f8463bdc5a05ded2b35b143f92f33afbf), [`2480359`](https://github.com/mastra-ai/mastra/commit/248035940aa048c7bcd8cfe7845915dc4734b571), [`b26e528`](https://github.com/mastra-ai/mastra/commit/b26e5288891641044a3c26a498c06259985fed10), [`b2f412a`](https://github.com/mastra-ai/mastra/commit/b2f412ae77fa5379471d103ebcc1ba69b22dd353)]:
+  - @mastra/core@1.68.0-alpha.4
+  - @mastra/code-sdk@1.8.0-alpha.4
+
+## 0.16.0-alpha.3
+
+### Minor Changes
+
+- Added an explicit `delivery` choice to Factory worker guidance. ([#24138](https://github.com/mastra-ai/mastra/pull/24138))
+
+  Use `delivery: "send"` for immediate guidance or `delivery: "queue"` to wait for the worker’s current run to complete.
+
+### Patch Changes
+
+- Fixed Factory skill dispatch sending a second kickoff into a binding whose previous run is still in flight. A new skill decision for a binding now waits for that binding's live run to end before delivering. This holds across dispatcher replicas: the dispatcher hosting a run records its ownership in the shared open-run ledger and heartbeats it, and a replica that sees a fresh claim from another owner retries later instead of starting a duplicate. A stale record left behind by a crashed run no longer blocks the binding. Delivery outcomes that could not be confirmed now fail with the stable codes `skill_delivery_ambiguous` and `run_terminal_event_missing` instead of `unknown`. ([#23968](https://github.com/mastra-ai/mastra/pull/23968))
+
+- Updated dependencies [[`b246a1b`](https://github.com/mastra-ai/mastra/commit/b246a1ba0cec1ca2781c661a6b90c777520b64c7), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`b2942c0`](https://github.com/mastra-ai/mastra/commit/b2942c0f3c99dd1edba9dc8c2c17bfa55c851ae8), [`99fab39`](https://github.com/mastra-ai/mastra/commit/99fab399c35952ae15427ea64845d4762e9ec144), [`d65d4d4`](https://github.com/mastra-ai/mastra/commit/d65d4d40a24a482d5b0ee83d9bab6042702ca1be), [`4fb5ae9`](https://github.com/mastra-ai/mastra/commit/4fb5ae9e2cba9b14ba6c5cef0894e49bccf6f607), [`caa5ddb`](https://github.com/mastra-ai/mastra/commit/caa5ddb9e3ce4dea6c8aaf31f4620be8398a095d), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`e581e66`](https://github.com/mastra-ai/mastra/commit/e581e66e14bb1b2863698aecca7324fbf1ec4ff5), [`a3f8f05`](https://github.com/mastra-ai/mastra/commit/a3f8f05ecb60c52056c590325e3821ecfc85afe3), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`9cd9b4e`](https://github.com/mastra-ai/mastra/commit/9cd9b4eca69a3db0a0c415d0dcedf266cc7d5ec6), [`3589cde`](https://github.com/mastra-ai/mastra/commit/3589cde4ea8dd210df6b9a2355a3e568210965fc), [`783e48a`](https://github.com/mastra-ai/mastra/commit/783e48aba82489a085230f6b8539a9fb338c326b), [`07a81c8`](https://github.com/mastra-ai/mastra/commit/07a81c8be0cbdb5413ffa5c289d32765d80f4ea4), [`07ff1b8`](https://github.com/mastra-ai/mastra/commit/07ff1b8eafbd9c7786ef77decc6be3b63497cfd9), [`0ca5d6d`](https://github.com/mastra-ai/mastra/commit/0ca5d6d58a24e73a364451660a5a8696883eba45)]:
+  - @mastra/core@1.68.0-alpha.3
+  - @mastra/code-sdk@1.8.0-alpha.3
+
+## 0.16.0-alpha.2
+
+### Patch Changes
+
+- Fix `prepareRunStart` replaying a dead run binding after abort recovery. When a stage was re-entered following an abort, the replay guard matched the prior pending-start row by kickoff key alone and returned its original (already revoked) binding, so the re-entry re-bound the dead session and never used the freshly minted one. The replay branch now honors a pending-start row only when its binding is still active; a revoked or missing binding is discarded so a fresh binding is minted instead. ([#24097](https://github.com/mastra-ai/mastra/pull/24097))
+
+- Fixed Factory session threads keeping their initial work-item title forever. Those titles are derived from the work item rather than typed by a user, so they no longer opt out of automatic title updates. ([#23791](https://github.com/mastra-ai/mastra/pull/23791))
+
+- Updated dependencies [[`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`467e0a6`](https://github.com/mastra-ai/mastra/commit/467e0a630db09a1750ce9271bddb38e46681bf04), [`c016c9b`](https://github.com/mastra-ai/mastra/commit/c016c9bd051612714e662588e5928b72bd6a6ac6), [`644ac13`](https://github.com/mastra-ai/mastra/commit/644ac131110a9f24a8d92b62dd3777384211a2e7), [`aa38e6f`](https://github.com/mastra-ai/mastra/commit/aa38e6f424a0eae0e43a5c2ae0b387e404f5e6a6), [`8d9eadb`](https://github.com/mastra-ai/mastra/commit/8d9eadb59ccbcae054600128aa15d95ea4d1141a), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`76c7d98`](https://github.com/mastra-ai/mastra/commit/76c7d989f691510d7bfc016723cc78d7e08ac108), [`61f953a`](https://github.com/mastra-ai/mastra/commit/61f953a79736ac0d8a9650f0561c6dab1b097c8e), [`32edb03`](https://github.com/mastra-ai/mastra/commit/32edb0371b8d884bee66897f236e852a959ae07a), [`bc12e6c`](https://github.com/mastra-ai/mastra/commit/bc12e6cd9cc74fb078b006ed5d14429e2101cbb2)]:
+  - @mastra/core@1.68.0-alpha.2
+  - @mastra/code-sdk@1.7.3-alpha.2
+
+## 0.16.0-alpha.1
+
+### Minor Changes
+
+- Added Linear team intake sources so Factory boards can ingest active projectless issues while preserving project precedence for overlapping selections. ([#23929](https://github.com/mastra-ai/mastra/pull/23929))
+
+  Select a whole Linear team under Settings, Intake, or send the team source id directly. Team source ids come from `GET /web/linear/teams`; the Platform-backed integration issues opaque ids, the self-managed integration uses `linear-team:<teamId>`.
+
+  ```ts
+  await fetch('/web/intake/config', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      linear: { enabled: true, sourceIds: ['linear-team:team-1', 'project-1'] },
+    }),
+  });
+  ```
+
+  A team source syncs active issues in the triage, backlog, unstarted, and started states, including issues without a project. When a project and its team are both selected, the project selection takes precedence for that project's issues.
+
+  Rerouting a Linear issue no longer creates a duplicate card. The Factory that already has the card keeps it, and the card's details stay available there. A new card appears on the newly routed Factory only after the existing card is finished.
+
+### Patch Changes
+
+- Fixed query-parser, static-site generation, parseBody, and XSS security issues by updating hono to 4.13.7. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Fixed Factory plan handoffs when Auto-approve plans is off. ([#24001](https://github.com/mastra-ai/mastra/pull/24001))
+
+  Plan agents now leave work items in Planning until a maintainer approves the plan. Factory does not queue a build before that approval.
+
+  Preapproved plans and projects with Auto-approve plans enabled continue to advance automatically. Arming an autonomous run does not approve a plan.
+
+  Fixes #23742.
+
+- Fixed the Factory keeping a review or work run executing after an external terminal transition revoked its binding. Terminal-stage cleanup now aborts the live run on each retired seat (leaving alone the seat that drove its own transition and any successor that took the session over), a resumed session whose binding was revoked on a settled item now surfaces a clear retirement error instead of silently dropping its transition tool, and a settled card no longer retries its close-out to the attempt limit as a false blocked state. ([#24005](https://github.com/mastra-ai/mastra/pull/24005))
+
+- Fixed Factory re-entry re-appending the entire skill document on same-stage re-runs. This happened, for example, when a review re-triggered as a pull request was updated. The session now continues with a compact message that references the already-active skill and carries only the fresh context. This avoids re-pasting the full skill body every time and sharply cuts redundant prompt-cache token usage. ([#24084](https://github.com/mastra-ai/mastra/pull/24084))
+
+- Fixed a chat-library security advisory by updating chat to 4.37.0. Agent and factory chat APIs are unchanged. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Updated dependencies [[`81ccd7b`](https://github.com/mastra-ai/mastra/commit/81ccd7b93040952fe9c7168a2757c43a217f0a87), [`a46385d`](https://github.com/mastra-ai/mastra/commit/a46385dc1b773d1e1453627b1d62e7b6ebe93cf1), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`25d940a`](https://github.com/mastra-ai/mastra/commit/25d940add25504daebe65bc5cc02f268d6eba07c), [`d7f0579`](https://github.com/mastra-ai/mastra/commit/d7f0579a0445469430b9eadbf9c28ed3fa009839), [`b483910`](https://github.com/mastra-ai/mastra/commit/b48391034dee9a19396c1b3ec084ecf20faf550e), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`fa4c366`](https://github.com/mastra-ai/mastra/commit/fa4c3664c5446ae13d991204275883b2d7f00690), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`1670091`](https://github.com/mastra-ai/mastra/commit/16700919c35dadb9737dc7fe7e5feb67cc209494), [`b8e3ee5`](https://github.com/mastra-ai/mastra/commit/b8e3ee5da5cbc46b182ca75214acda667bac5205), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`d777788`](https://github.com/mastra-ai/mastra/commit/d7777889d72b4f37a3d50b830f8208c736ee0e7a), [`56680bf`](https://github.com/mastra-ai/mastra/commit/56680bfff71e7cdad71721b424b160bdd5de6e02), [`93a3425`](https://github.com/mastra-ai/mastra/commit/93a342569d592d0449eee7b4b4f7555dc001081b), [`b130872`](https://github.com/mastra-ai/mastra/commit/b130872508e95f17894c2ed4932d4952db0a2d3c), [`1853f3d`](https://github.com/mastra-ai/mastra/commit/1853f3d9331e3131930581556df781cca85f2d2d), [`fdb59c6`](https://github.com/mastra-ai/mastra/commit/fdb59c6a4c3d9aea19159886aac8d80602763f04)]:
+  - @mastra/core@1.68.0-alpha.1
+  - @mastra/slack@1.6.4-alpha.0
+  - @mastra/code-sdk@1.7.3-alpha.1
+
 ## 0.15.1-alpha.0
 
 ### Patch Changes

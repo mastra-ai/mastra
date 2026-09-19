@@ -1,5 +1,125 @@
 # @mastra/mcp
 
+## 2.0.0-alpha.4
+
+### Major Changes
+
+- Rebuilt `@mastra/mcp` on the MCP 2026-07-28 revision. Servers serve that revision only, and every request is self-contained: there is no `initialize` handshake, session header, `ping`, or standalone HTTP+SSE transport. Streamable HTTP responses still stream as Server-Sent Events. Requires `@mastra/core` 1.68 or newer. The full migration guide is at `/reference/migrations/mcp-v2`. ([#23876](https://github.com/mastra-ai/mastra/pull/23876))
+
+  **Migration.** A tool that needs input from the caller no longer awaits `context.mcp.elicitation.sendRequest()`. It calls `context.suspend(payload)` and returns; the server answers `input_required`, and when the caller replies the tool runs again with `context.resumeData` and `context.suspendPayload`. On the client, `mcp.elicitation.onRequest()` becomes a per-server `inputRequests` handler.
+
+  ```diff
+    execute: async ({ orderId }, context) => {
+  -   const answer = await context.mcp!.elicitation.sendRequest({ message: 'Address?', requestedSchema });
+  -   if (answer.action !== 'accept') return { confirmed: false };
+  -   return { confirmed: await book(orderId, answer.content.address) };
+  +   if (!context.resumeData) return context.suspend({ phase: 'address' });
+  +   return { confirmed: await book(orderId, context.resumeData.address) };
+    },
+  ```
+
+  ```diff
+  - mcp.elicitation.onRequest('returns', async params => askUser(params));
+  + const mcp = new MCPClient({
+  +   servers: { returns: { url, inputRequests: async ({ key, params }) => askUser(key, params) } },
+  + });
+  ```
+
+  ```ts
+  import { createTool } from '@mastra/core/tools';
+  import { MCPClient, MCPServer } from '@mastra/mcp';
+  import { z } from 'zod';
+
+  const bookDelivery = createTool({
+    id: 'bookDelivery',
+    inputSchema: z.object({ orderId: z.string() }),
+    suspendSchema: z.object({ phase: z.literal('address') }),
+    resumeSchema: z.object({ address: z.string() }),
+    outputSchema: z.object({ bookingId: z.string() }),
+    execute: async ({ orderId }, context) => {
+      if (!context.resumeData) return context.suspend({ phase: 'address' });
+      return { bookingId: await book(orderId, context.resumeData.address) };
+    },
+  });
+
+  const server = new MCPServer({
+    name: 'Returns Desk',
+    version: '2.0.0',
+    tools: { bookDelivery },
+    // Signs the continuation state; share it across every process that may answer a resumed round.
+    requestState: { key: process.env.MCP_REQUEST_STATE_KEY! },
+  });
+
+  const client = new MCPClient({
+    servers: {
+      returns: {
+        url: new URL('https://returns.example.com/mcp'),
+        // Called once per embedded request per round; return accept, decline or cancel.
+        inputRequests: async ({ key, params }) => {
+          if (params.mode !== 'form') return { action: 'decline' };
+          return { action: 'accept', content: await promptUser(key, params.requestedSchema) };
+        },
+      },
+    },
+  });
+  ```
+
+  The server keeps nothing between rounds: what it needs to resume (method, tool, argument hash, caller, round and your `suspendPayload`) travels in the signed `requestState` the client echoes back, so a tampered, expired or foreign state is rejected before the tool runs. Without `requestState.key` the server signs with a per-process key and a round can only be resumed on the process that started it.
+
+  **Also changed**
+
+  - `MCPClient` probes each server with `server/discover` and falls back to the legacy handshake unless `protocolVersion` pins `'2026-07-28'` or `'legacy'`; `getServerProtocolVersions()` reports the outcome. Legacy connections keep the shared verbs but not subscriptions, list-changed handlers or input requests.
+  - `server.executeTool()` and the REST execute route return `{ status: 'suspended', suspendPayload, resumeSchema }` or `{ status: 'completed', output }`, and answer invalid input with an error instead of a completed result.
+  - `context.mcp` keeps `extra`, `log` and `progress`; `elicitation.sendRequest`, `extra.sendRequest` and `extra.sendNotification` throw on a 2.0 server.
+  - Log levels are requested per request through the `io.modelcontextprotocol/logLevel` metadata key.
+  - `resources.subscribe` and `resources.unsubscribe` keep their signatures but ride one `subscriptions/listen` stream per server.
+  - Tool schemas are advertised and validated as JSON Schema 2020-12, with untrusted schemas bounded to 128 levels and 10,000 nodes.
+  - Server definitions accept a `traceContext` provider; received W3C trace fields are available to tools as `requestContext.get('traceContext')`.
+  - `MCPOAuthClientProvider` requires exactly one of `clientInformation` or `clientMetadataUrl` and never registers dynamically.
+
+  **Removed:** the server `protocolVersion` option, `startSSE`, `startHonoSSE`, `connectSSE`, `handleServerlessRequest`, `sessionId`, `sessionIds`, `reconnectionOptions`, `eventSourceInit`, `elicitation` actions, `roots`, `sampling`, `logging/setLevel`, `sendLoggingMessage()`, `getServer()`, `resources/subscribe`, `registerClient` and `OAuthClientRegistrationError`.
+
+### Patch Changes
+
+- Updated dependencies [[`6ef8186`](https://github.com/mastra-ai/mastra/commit/6ef8186ade9c8ca69269deed07fd47a942ecf70d), [`34e4d21`](https://github.com/mastra-ai/mastra/commit/34e4d21e62c61e11e52aa7d6c39748b1120fbb93), [`8702f39`](https://github.com/mastra-ai/mastra/commit/8702f39331322ef0296fd3d68c0bd0997079faaa), [`e6072cb`](https://github.com/mastra-ai/mastra/commit/e6072cbbd3482e37027e53e4d62da7aad6a36c41), [`8d808d8`](https://github.com/mastra-ai/mastra/commit/8d808d8452b8acd5eda4f8cfe014331a8c0f1e92)]:
+  - @mastra/core@1.68.0-alpha.6
+
+## 1.18.1-alpha.3
+
+### Patch Changes
+
+- Fixed a Hono security advisory (CVE-2026-84363 family) by raising the hono dependency and peer ranges to `^4.13.5`. ([#24308](https://github.com/mastra-ai/mastra/pull/24308))
+
+- Updated dependencies [[`4266b67`](https://github.com/mastra-ai/mastra/commit/4266b677d33bb20651ca296f64aa91fa3b3d4e82), [`bec18d0`](https://github.com/mastra-ai/mastra/commit/bec18d05e7f997ead6ada04a4dc0179c3cad8aa2), [`abecb67`](https://github.com/mastra-ai/mastra/commit/abecb6709643785fd87a3ff9251032a61479ccab), [`ee7187e`](https://github.com/mastra-ai/mastra/commit/ee7187e7bf66db46630f33c64e86b1ff7bb0c0b7), [`babda00`](https://github.com/mastra-ai/mastra/commit/babda005397d2780aa21be0a7670688b704bdb2f), [`2476423`](https://github.com/mastra-ai/mastra/commit/24764233246dc85d7bcba8f8bb610110449a54d6), [`bdab4a8`](https://github.com/mastra-ai/mastra/commit/bdab4a889808d502f398a8086af3b50cc3bfbcd5), [`53cdd63`](https://github.com/mastra-ai/mastra/commit/53cdd6368b12aea743f95118a49fc6b93985fd20)]:
+  - @mastra/core@1.68.0-alpha.5
+
+## 1.18.1-alpha.2
+
+### Patch Changes
+
+- Fix type errors when passing consumer Hono SSE streams and contexts to MCPServer. Hono is now a required peer dependency (`^4.12.8`), and the public SSE boundary uses structural types so consumer values remain compatible while Hono declarations continue to be bundled during type generation. ([#23842](https://github.com/mastra-ai/mastra/pull/23842))
+
+- Updated dependencies [[`697fecc`](https://github.com/mastra-ai/mastra/commit/697feccaa4ad5df913c22e47bf16f493dd7956a8), [`0bf287c`](https://github.com/mastra-ai/mastra/commit/0bf287c36ec14b45f5a4fdd0d279698694f592dd), [`6249741`](https://github.com/mastra-ai/mastra/commit/6249741f8463bdc5a05ded2b35b143f92f33afbf), [`2480359`](https://github.com/mastra-ai/mastra/commit/248035940aa048c7bcd8cfe7845915dc4734b571), [`b26e528`](https://github.com/mastra-ai/mastra/commit/b26e5288891641044a3c26a498c06259985fed10), [`b2f412a`](https://github.com/mastra-ai/mastra/commit/b2f412ae77fa5379471d103ebcc1ba69b22dd353)]:
+  - @mastra/core@1.68.0-alpha.4
+
+## 1.18.1-alpha.1
+
+### Patch Changes
+
+- Removed MastraApiMCPServer while its tool design is reconsidered. ([#24118](https://github.com/mastra-ai/mastra/pull/24118))
+
+- Updated dependencies [[`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`467e0a6`](https://github.com/mastra-ai/mastra/commit/467e0a630db09a1750ce9271bddb38e46681bf04), [`c016c9b`](https://github.com/mastra-ai/mastra/commit/c016c9bd051612714e662588e5928b72bd6a6ac6), [`644ac13`](https://github.com/mastra-ai/mastra/commit/644ac131110a9f24a8d92b62dd3777384211a2e7), [`aa38e6f`](https://github.com/mastra-ai/mastra/commit/aa38e6f424a0eae0e43a5c2ae0b387e404f5e6a6), [`8d9eadb`](https://github.com/mastra-ai/mastra/commit/8d9eadb59ccbcae054600128aa15d95ea4d1141a), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`76c7d98`](https://github.com/mastra-ai/mastra/commit/76c7d989f691510d7bfc016723cc78d7e08ac108), [`61f953a`](https://github.com/mastra-ai/mastra/commit/61f953a79736ac0d8a9650f0561c6dab1b097c8e), [`32edb03`](https://github.com/mastra-ai/mastra/commit/32edb0371b8d884bee66897f236e852a959ae07a), [`bc12e6c`](https://github.com/mastra-ai/mastra/commit/bc12e6cd9cc74fb078b006ed5d14429e2101cbb2)]:
+  - @mastra/core@1.68.0-alpha.2
+
+## 1.18.1-alpha.0
+
+### Patch Changes
+
+- Fixed query-parser, static-site generation, parseBody, and XSS security issues by updating hono to 4.13.7. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Updated dependencies [[`81ccd7b`](https://github.com/mastra-ai/mastra/commit/81ccd7b93040952fe9c7168a2757c43a217f0a87), [`a46385d`](https://github.com/mastra-ai/mastra/commit/a46385dc1b773d1e1453627b1d62e7b6ebe93cf1), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`25d940a`](https://github.com/mastra-ai/mastra/commit/25d940add25504daebe65bc5cc02f268d6eba07c), [`d7f0579`](https://github.com/mastra-ai/mastra/commit/d7f0579a0445469430b9eadbf9c28ed3fa009839), [`b483910`](https://github.com/mastra-ai/mastra/commit/b48391034dee9a19396c1b3ec084ecf20faf550e), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`fa4c366`](https://github.com/mastra-ai/mastra/commit/fa4c3664c5446ae13d991204275883b2d7f00690), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`1670091`](https://github.com/mastra-ai/mastra/commit/16700919c35dadb9737dc7fe7e5feb67cc209494), [`b8e3ee5`](https://github.com/mastra-ai/mastra/commit/b8e3ee5da5cbc46b182ca75214acda667bac5205), [`d777788`](https://github.com/mastra-ai/mastra/commit/d7777889d72b4f37a3d50b830f8208c736ee0e7a), [`56680bf`](https://github.com/mastra-ai/mastra/commit/56680bfff71e7cdad71721b424b160bdd5de6e02), [`93a3425`](https://github.com/mastra-ai/mastra/commit/93a342569d592d0449eee7b4b4f7555dc001081b), [`b130872`](https://github.com/mastra-ai/mastra/commit/b130872508e95f17894c2ed4932d4952db0a2d3c), [`1853f3d`](https://github.com/mastra-ai/mastra/commit/1853f3d9331e3131930581556df781cca85f2d2d), [`fdb59c6`](https://github.com/mastra-ai/mastra/commit/fdb59c6a4c3d9aea19159886aac8d80602763f04)]:
+  - @mastra/core@1.68.0-alpha.1
+
 ## 1.18.0
 
 ### Patch Changes

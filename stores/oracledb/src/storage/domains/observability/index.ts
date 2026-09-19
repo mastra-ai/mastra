@@ -1,4 +1,10 @@
-import { ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import {
+  executeRetentionPrune,
+  ObservabilityStorage,
+  resolveRetentionTargets,
+  retentionCutoffMs,
+  TABLE_SPANS,
+} from '@mastra/core/storage';
 import type {
   BatchCreateLogsArgs,
   BatchCreateScoresArgs,
@@ -35,6 +41,10 @@ import type {
   ScoreRecord,
   TracingStorageStrategy,
   UpdateSpanArgs,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 
 import { indexNameForTable, qualifyName } from '../../../vector/identifiers';
@@ -55,6 +65,11 @@ import * as spansOps from './spans';
 export { getDefaultObservabilityIndexDefinitions, LOG_EVENTS_TABLE, logEventsTableSql } from './schema';
 
 export class ObservabilityOracle extends ObservabilityStorage {
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPANS, column: 'startedAt', indexed: true },
+    logs: { table: LOG_EVENTS_TABLE, column: 'timestamp', indexed: true },
+  };
+
   static readonly MANAGED_TABLES = [TABLE_SPANS, LOG_EVENTS_TABLE] as const;
 
   private readonly db: OracleDB;
@@ -68,6 +83,22 @@ export class ObservabilityOracle extends ObservabilityStorage {
     this.schemaName = config.schemaName;
     this.skipDefaultIndexes = config.skipDefaultIndexes;
     this.indexes = filterIndexesForTables(config.indexes, ObservabilityOracle.MANAGED_TABLES);
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: ObservabilityOracle.retentionTables,
+      order: ['spans', 'logs'],
+    });
+    return executeRetentionPrune({
+      domain: 'observability',
+      targets,
+      options,
+      cutoffFor: (target, now) => new Date(retentionCutoffMs(target.policy, now)),
+      deleteBatch: (target, cutoff, limit) =>
+        this.db.pruneBatch({ tableName: target.table, column: target.column, cutoff, limit }),
+    });
   }
 
   async init(): Promise<void> {

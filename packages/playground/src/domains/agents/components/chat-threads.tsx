@@ -7,6 +7,7 @@ import {
   ThreadListItem,
   ThreadListItems,
   ThreadListNewItem,
+  ThreadListSeparator,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -51,7 +52,7 @@ export const ChatThreads = ({
       <ThreadList embedded={embedded}>
         {/* pt-[3px] lines the hide button up with the collapsed panel's expand button (top-2 vs border+p-1) */}
         <div className="flex items-center gap-1 pt-[3px]">
-          <ThreadListNewItem as={Link} to={newThreadLink}>
+          <ThreadListNewItem render={<Link href={newThreadLink} />}>
             <Icon>
               <Plus />
             </Icon>
@@ -80,6 +81,8 @@ export const ChatThreads = ({
             </Tooltip>
           )}
         </div>
+
+        <ThreadListSeparator />
 
         {threads.length === 0 ? (
           <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>

@@ -16,6 +16,7 @@ import { formatMessagesForObserver } from '../observer-agent';
 import { withRetry } from '../retry';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
+import { resolveThreadTitleUpdate } from './thread-title';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class AsyncBufferObservationStrategy extends ObservationStrategy {
@@ -144,6 +145,18 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     if (!processed.observations) return;
 
     const { record, threadId, resourceId, messages } = this.opts;
+
+    // `Memory.deleteThread` clears the observational-memory record along with the
+    // thread, so a buffered cycle that finishes after the delete would write to a
+    // removed row and index vectors the already-finished cleanup will never delete.
+    // Keying off the record rather than the thread row matters: observation can
+    // legitimately run for a thread that was never persisted.
+    const liveRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    if (!liveRecord) {
+      omDebug(`[OM:asyncBuffer] skipping persist for thread ${threadId}: observational memory record is gone`);
+      return;
+    }
+
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
     await withRetry(
       () =>
@@ -170,13 +183,14 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
 
     // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
-    const newTitle = processed.threadTitle?.trim();
-    const hasValidThreadTitle = !!newTitle && newTitle.length >= 3;
+    const candidateTitle = processed.threadTitle?.trim();
+    const hasValidThreadTitle = !!candidateTitle && candidateTitle.length >= 3;
     if (hasValidThreadTitle || processed.extractedValues) {
       const thread = await this.storage.getThreadById({ threadId });
       if (thread) {
         const oldTitle = thread.title?.trim();
-        const shouldUpdateThreadTitle = hasValidThreadTitle && newTitle !== oldTitle;
+        const newTitle = resolveThreadTitleUpdate(thread, candidateTitle);
+        const shouldUpdateThreadTitle = newTitle !== undefined;
         const previousOmMetadata = getThreadOMMetadata(thread.metadata);
         const metadataUpdate = buildThreadMetadataFromExtractedValues(
           processed.extractors ?? this.observationConfig.extractors,

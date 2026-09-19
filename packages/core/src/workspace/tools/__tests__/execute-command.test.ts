@@ -534,6 +534,31 @@ describe('executeCommandTool data chunks', () => {
 
       expect(receivedCommand).toBe('cat file.txt | grep error');
     });
+
+    it('passes stdinMode ignore to spawn for background commands', async () => {
+      let receivedOptions: any;
+
+      const { context } = createMockContext({
+        executeCommand: async () => {
+          return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      (context.workspace as any).sandbox.processes = {
+        spawn: async (_cmd: string, options: any) => {
+          receivedOptions = options;
+          return { pid: 123 };
+        },
+      };
+
+      const { executeCommandWithBackgroundTool } = await import('../execute-command');
+      await executeCommandWithBackgroundTool.execute!(
+        { command: 'npm start', timeout: null, cwd: null, tail: null, background: true },
+        context,
+      );
+
+      expect(receivedOptions).toHaveProperty('stdinMode', 'ignore');
+    });
   });
 });
 

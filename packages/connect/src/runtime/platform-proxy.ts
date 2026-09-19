@@ -13,7 +13,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import {
   getConnectionContext,
-  proxyRequest,
+  proxyRequestWithResponse,
   resolveClient,
   type ConnectClientOptions,
   type ConnectionContext,
@@ -47,6 +47,18 @@ export interface PlatformProxyRequest {
 /** Templates treat provider response bodies as untyped JSON until they validate them. */
 type ProviderResponseData = ReturnType<typeof JSON.parse>;
 
+/**
+ * Connection facts as templates consume them. The upstream SDK types
+ * connection config and metadata values as `any` and vendored templates are
+ * written against that contract (they narrow with schema parses or truthiness
+ * checks), so the template-facing surface mirrors it. The package's own API
+ * (`ConnectionContext` in client.ts) stays strictly typed.
+ */
+export interface TemplateConnectionContext {
+  connection_config: Record<string, ProviderResponseData>;
+  metadata: Record<string, ProviderResponseData> | null;
+}
+
 /** Mirrors the upstream response shape closely enough for the templates we vendor. */
 export interface PlatformProxyResponse<T = ProviderResponseData> {
   data: T;
@@ -77,8 +89,21 @@ export interface PlatformProxy {
   put<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   patch<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   delete<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
-  getConnection(): Promise<ConnectionContext>;
-  getMetadata<T = Record<string, unknown> | null>(): Promise<T>;
+  getConnection(): Promise<TemplateConnectionContext>;
+  /**
+   * Mirrors the upstream SDK contract templates are written against: always
+   * resolves to an object (empty when the connection has no metadata).
+   */
+  getMetadata<T = Record<string, ProviderResponseData>>(): Promise<T>;
+  /**
+   * Templates cache derived connection facts here (for example the Jira
+   * templates resolve and store the Atlassian `cloudId`/`baseUrl`). The
+   * platform connection record is not writable from a tool, so updates land
+   * in an in-memory overlay shared by every request-bound copy of the
+   * toolset's proxy: `getMetadata` reads through it, and a fresh process
+   * simply re-derives the values on its first call.
+   */
+  updateMetadata(update: Record<string, unknown>): Promise<void>;
   ActionError: typeof ToolActionError;
   log: (...args: unknown[]) => void;
   /**
@@ -98,6 +123,13 @@ interface CreatePlatformProxyOptions {
   connectionId?: string;
   client?: ConnectClientOptions;
   requestContext?: RequestContext;
+  /**
+   * Internal: the metadata overlay shared across request-bound copies of one
+   * toolset proxy. The connection id is fixed per proxy context, so the
+   * overlay is per-connection; revisit if connection resolution ever becomes
+   * request-scoped.
+   */
+  metadataOverlay?: Record<string, unknown>;
 }
 
 function requireConnectionId(connectionId?: string): string {
@@ -134,18 +166,15 @@ async function callProxy<T>(
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      const data = (await proxyRequest(client, resolvedConnectionId, {
+      const response = await proxyRequestWithResponse(client, resolvedConnectionId, {
         method,
         path: config.endpoint,
         query: config.params,
         headers: config.headers,
         baseUrlOverride: config.baseUrlOverride,
         body: config.data,
-      })) as T;
-      // proxyRequest currently returns the parsed JSON body only; templates
-      // rarely inspect status/headers, but expose stubs to keep the shape
-      // faithful.
-      return { data, status: 200, headers: {} };
+      });
+      return { ...response, data: response.data as T };
     } catch (error) {
       lastError = error;
       // Only retry on network-ish failures. MastraConnectError with
@@ -180,7 +209,12 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
     <T>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>> =>
       callProxy<T>(method, context, config);
   let connectionContext: Promise<ConnectionContext> | undefined;
-  const getConnection = () => (connectionContext ??= loadConnectionContext(context));
+  const loadConnection = () => (connectionContext ??= loadConnectionContext(context));
+  const getConnection = async (): Promise<TemplateConnectionContext> => {
+    const { connection_config, metadata } = await loadConnection();
+    return { connection_config: connection_config ?? {}, metadata };
+  };
+  const metadataOverlay = context.metadataOverlay ?? {};
   return {
     get: bind('GET'),
     post: bind('POST'),
@@ -188,12 +222,18 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
     patch: bind('PATCH'),
     delete: bind('DELETE'),
     getConnection,
-    getMetadata: async <T = Record<string, unknown> | null>() => (await getConnection()).metadata as T,
+    getMetadata: async <T = Record<string, ProviderResponseData>>() => {
+      const metadata = (await loadConnection()).metadata;
+      return { ...(metadata ?? {}), ...metadataOverlay } as T;
+    },
+    updateMetadata: async update => {
+      Object.assign(metadataOverlay, update);
+    },
     ActionError: ToolActionError,
     // Upstream template logs may contain request or provider data. Keep the
     // compatibility method but discard arbitrary values at this trust boundary.
     log: () => {},
     requestContext: context.requestContext,
-    withRequestContext: requestContext => createPlatformProxy({ ...context, requestContext }),
+    withRequestContext: requestContext => createPlatformProxy({ ...context, requestContext, metadataOverlay }),
   };
 }

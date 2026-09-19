@@ -1,5 +1,11 @@
 # @mastra/auth-better-auth
 
+## 1.1.6-alpha.0
+
+### Patch Changes
+
+- Fixed Better Auth so attackers cannot tell whether an account exists or send requests as a signed-in user from another site. Updated better-auth to 1.7.4. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
 ## 1.1.5
 
 ### Patch Changes

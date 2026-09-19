@@ -1,5 +1,21 @@
 # @mastra/voice-xai-realtime
 
+## 0.2.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`6c781fd`](https://github.com/mastra-ai/mastra/commit/6c781fda62eb0b0b74d016f188ed0b2db5cfdceb)]:
+  - @mastra/schema-compat@1.3.11-alpha.1
+
+## 0.2.11-alpha.0
+
+### Patch Changes
+
+- Fixed a WebSocket denial-of-service advisory by updating ws to 8.21.3. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Updated dependencies [[`fef227a`](https://github.com/mastra-ai/mastra/commit/fef227a8b7cb0ad7f68087e26d1fd2051054a61a)]:
+  - @mastra/schema-compat@1.3.11-alpha.0
+
 ## 0.2.10
 
 ### Patch Changes

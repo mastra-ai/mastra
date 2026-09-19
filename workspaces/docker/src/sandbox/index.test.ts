@@ -266,6 +266,55 @@ describe('DockerSandbox', () => {
       expect(sandbox.workingDirectory).toBe('/workspace');
     });
 
+    describe('template option', () => {
+      const fakeTemplate = (overrides: Partial<{ workdir: string; status: 'ready' | 'failed' }> = {}) =>
+        ({
+          workdir: overrides.workdir,
+          build: vi.fn(async () => ({
+            status: overrides.status ?? 'ready',
+            templateId: 'mastra-template:abc',
+            error: overrides.status === 'failed' ? 'step failed' : undefined,
+          })),
+        }) as unknown as import('../template/template').DockerTemplate;
+
+      it('rejects image and template together', () => {
+        expect(() => new DockerSandbox({ image: 'x', template: fakeTemplate() })).toThrow(/mutually exclusive/);
+      });
+
+      it('builds the template on start and boots from its image, adopting its workdir', async () => {
+        const template = fakeTemplate({ workdir: '/srv/repo' });
+        const sandbox = new DockerSandbox({ template });
+        await sandbox._start();
+
+        expect(template.build).toHaveBeenCalledTimes(1);
+        // Built on the sandbox's own daemon, not whatever the template defaulted to.
+        expect(template.build).toHaveBeenCalledWith({ docker: mockDocker });
+        expect(mockDocker.createContainer).toHaveBeenCalledWith(
+          expect.objectContaining({ Image: 'mastra-template:abc', WorkingDir: '/srv/repo' }),
+        );
+        expect(sandbox.workingDirectory).toBe('/srv/repo');
+      });
+
+      it('keeps an explicit workingDirectory over the template workdir', async () => {
+        const sandbox = new DockerSandbox({ template: fakeTemplate({ workdir: '/srv/repo' }), workingDirectory: '/x' });
+        await sandbox._start();
+        expect(mockDocker.createContainer).toHaveBeenCalledWith(expect.objectContaining({ WorkingDir: '/x' }));
+      });
+
+      it('resolves a template function on each container-creating start', async () => {
+        const resolver = vi.fn(async () => fakeTemplate());
+        const sandbox = new DockerSandbox({ template: resolver });
+        await sandbox._start();
+        expect(resolver).toHaveBeenCalledTimes(1);
+      });
+
+      it('fails start when the template build fails', async () => {
+        const sandbox = new DockerSandbox({ template: fakeTemplate({ status: 'failed' }) });
+        await expect(sandbox._start()).rejects.toThrow(/step failed/);
+        expect(mockDocker.createContainer).not.toHaveBeenCalled();
+      });
+    });
+
     it('enables an init process (HostConfig.Init) by default to reap zombies', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();
@@ -582,6 +631,23 @@ describe('DockerSandbox', () => {
       // Should get the existing container
       expect(mockDocker.getContainer).toHaveBeenCalledWith('existing-container-id');
       expect(sandbox.status).toBe('running');
+    });
+
+    it('adopts the reconnected container working directory when none was given', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        Config: { WorkingDir: '/workspace/repo' },
+      });
+
+      const sandbox = new DockerSandbox({ id: 'existing-sandbox' });
+      await sandbox._start();
+      expect(sandbox.workingDirectory).toBe('/workspace/repo');
+
+      const explicit = new DockerSandbox({ id: 'existing-sandbox', workingDirectory: '/custom' });
+      await explicit._start();
+      expect(explicit.workingDirectory).toBe('/custom');
     });
 
     it('should warn when requested hardening options differ on reconnect', async () => {
@@ -1082,6 +1148,38 @@ describe('DockerSandbox', () => {
         }),
       );
       expect(mockExec.start).toHaveBeenCalledWith({ hijack: true, stdin: true });
+    });
+
+    it('should not attach stdin when stdinMode is ignore', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('cat', { stdinMode: 'ignore' });
+
+      // A command that reads stdin must see EOF, not an attached pipe nothing
+      // writes to — otherwise it blocks until the timeout.
+      expect(mockContainer.exec).toHaveBeenCalledWith(expect.objectContaining({ AttachStdin: false }));
+      expect(mockExec.start).toHaveBeenCalledWith({ hijack: true, stdin: false });
+
+      // With no stdin stream, driving stdin must report it is unsupported.
+      await expect(handle.sendStdin('data')).rejects.toThrow(/stdin/i);
+    });
+
+    it('executeCommand with stdinMode ignore completes a stdin-reading command', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      // Build a proper stream that immediately emits end
+      const { PassThrough } = await import('node:stream');
+      const endStream = new PassThrough();
+      setTimeout(() => endStream.end(), 10);
+      mockExec.start.mockResolvedValueOnce(endStream as any);
+
+      const result = await sandbox.executeCommand('cat', [], { timeout: 5000 });
+
+      expect(mockContainer.exec).toHaveBeenCalledWith(expect.objectContaining({ AttachStdin: false }));
+      expect(result.timedOut).not.toBe(true);
+      expect(result.exitCode).toBe(0);
     });
 
     it('should close the writable side of the exec stream to signal EOF', async () => {

@@ -79,7 +79,7 @@ export function resolveJsonPromptInjection(
 type InjectJsonInstructionArgs = Parameters<typeof injectJsonInstructionIntoMessagesV3>[0];
 
 /**
- * Typed V2 wrapper for the provider-utils v4 helper, which only reads and rewrites the
+ * Typed V2 wrapper for the `@ai-sdk/provider-utils-v6` helper, which only reads and rewrites the
  * leading system message's string content — a shape shared by V2 and V3 prompts.
  */
 function injectJsonInstructionIntoMessages(
@@ -91,18 +91,31 @@ function injectJsonInstructionIntoMessages(
   }) as unknown as LanguageModelV2Prompt;
 }
 
-function buildJsonInstruction(schema: unknown) {
+/**
+ * Caller-supplied `structuredOutput.instructions` replace the generated schema dump only when
+ * they carry actual text. Empty / whitespace-only values fall back to the generated instruction.
+ */
+function hasCompactInstructions(instructions: string | undefined): instructions is string {
+  return typeof instructions === 'string' && instructions.trim().length > 0;
+}
+
+function buildJsonInstruction(schema: unknown, instructions?: string) {
+  if (hasCompactInstructions(instructions)) {
+    return instructions;
+  }
   return `Return your response as JSON matching this schema:\n\n${JSON.stringify(schema)}\n\nReturn only valid JSON. Do not include markdown or explanatory text.`;
 }
 
 function injectJsonInstructionIntoLatestUserMessage({
   messages,
   schema,
+  instructions,
 }: {
   messages: LanguageModelV2Prompt;
   schema: unknown;
+  instructions?: string;
 }): LanguageModelV2Prompt {
-  const instruction = buildJsonInstruction(schema);
+  const instruction = buildJsonInstruction(schema, instructions);
   const prompt = messages.map(message => ({
     ...message,
     content: Array.isArray(message.content) ? [...message.content] : message.content,
@@ -222,15 +235,24 @@ export function execute<OUTPUT = undefined>({
 
   // For direct mode (no model provided for structuring agent), inject JSON schema instruction if opting out of native response format with jsonPromptInjection
   if (structuredOutputMode === 'direct' && responseFormat?.type === 'json' && injectionMode) {
+    const compactInstructions = hasCompactInstructions(structuredOutput?.instructions)
+      ? structuredOutput.instructions
+      : undefined;
     prompt =
       injectionMode === 'inline'
         ? injectJsonInstructionIntoLatestUserMessage({
             messages: inputMessages,
             schema: responseFormat.schema,
+            instructions: compactInstructions,
           })
         : injectJsonInstructionIntoMessages({
             messages: inputMessages,
-            schema: responseFormat.schema,
+            // Compact instructions replace the schema dump entirely. Passing them in the
+            // `schemaSuffix` slot (with no schema) suppresses the AI SDK's default generic
+            // suffix, which would otherwise be appended when `schema` is nullish.
+            ...(compactInstructions
+              ? { schema: undefined, schemaPrefix: undefined, schemaSuffix: compactInstructions }
+              : { schema: responseFormat.schema }),
           });
   }
 

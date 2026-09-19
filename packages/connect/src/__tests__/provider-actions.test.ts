@@ -29,6 +29,7 @@ for (const [providerId, count] of [
 
     it('registers its complete toolset and supports allowTools', () => {
       const provider = PROVIDERS.find(entry => entry.integrationId === providerId)!;
+      if (provider.transport === 'mcp') throw new Error(`${providerId} unexpectedly uses MCP`);
       expect(Object.keys(provider.createTools({ connectionId: 'connection' }))).toHaveLength(count);
       expect(
         Object.keys(provider.createTools({ connectionId: 'connection', allowTools: [fixtures[0]!.tool] })),
@@ -39,6 +40,7 @@ for (const [providerId, count] of [
       it(`${fixture.tool} executes through the authenticated platform connection proxy`, async () => {
         const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json(fixture.response));
         const provider = PROVIDERS.find(entry => entry.integrationId === providerId)!;
+        if (provider.transport === 'mcp') throw new Error(`${providerId} unexpectedly uses MCP`);
         const tools = provider.createTools({
           connectionId: 'connection',
           client: { baseUrl: 'https://platform.example.test', accessToken: 'test-platform-token', fetch: fetchMock },
@@ -83,6 +85,7 @@ describe('generated Resend secret redaction', () => {
       };
       const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json(upstream));
       const provider = PROVIDERS.find(entry => entry.integrationId === 'resend')!;
+      if (provider.transport === 'mcp') throw new Error('resend unexpectedly uses MCP');
       const tools = provider.createTools({
         connectionId: 'connection',
         client: { baseUrl: 'https://platform.example.test', accessToken: 'test-platform-token', fetch: fetchMock },

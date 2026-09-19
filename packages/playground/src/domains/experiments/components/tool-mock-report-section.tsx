@@ -37,9 +37,7 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
 
   return (
     <div className="grid gap-2" data-testid="tool-mock-report">
-      <DataPanel.SectionHeading icon={<WrenchIcon />} className="mb-2">
-        Tool Mocks
-      </DataPanel.SectionHeading>
+      <DataPanel.SectionHeading icon={<WrenchIcon />}>Tool Mocks</DataPanel.SectionHeading>
 
       {failure && (
         <Notice variant="destructive" title="Mock mismatch">

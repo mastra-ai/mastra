@@ -5,8 +5,8 @@
  * without crashing the server or leaking internal errors.
  */
 
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
 import { Elysia } from 'elysia';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MastraServer } from '../index';

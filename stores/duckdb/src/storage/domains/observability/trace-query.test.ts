@@ -1,15 +1,24 @@
 import {
   encodeTraceQueryCursor,
+  parseGetTraceQueryFieldsArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
+  planTraceQueryObservedFields,
+  TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
 import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DuckDBConnection } from '../../db/index';
-import { compileDuckDBThreadQuery, compileDuckDBTraceQuery, queryThreads, queryTraces } from './trace-query';
+import {
+  compileDuckDBThreadQuery,
+  compileDuckDBTraceQuery,
+  getTraceQueryObservedFields,
+  queryThreads,
+  queryTraces,
+} from './trace-query';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
 
@@ -22,6 +31,20 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('DuckDB advanced trace query', () => {
+  it('normalizes discovery resource exhaustion without exposing driver details', async () => {
+    const query = vi.fn().mockRejectedValue(new Error('Out of Memory Error: failed to allocate secret query'));
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    await expect(getTraceQueryObservedFields({ query } as unknown as DuckDBConnection, discoveryPlan)).rejects.toEqual(
+      expect.objectContaining<Partial<TraceQueryResourceLimitError>>({
+        code: 'TRACE_QUERY_RESOURCE_LIMIT',
+        message: 'The trace query exceeded its resource limit',
+      }),
+    );
+  });
+
   it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({
@@ -294,6 +317,22 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values.at(-1)).toBe(5);
   });
 
+  it('compiles list-compatible rows and metadata into one query', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        orderBy: [{ field: 'endedAt', direction: 'asc' }],
+        pagination: { page: 2, perPage: 25 },
+      }),
+    );
+
+    expect(compiled.sql).toContain('page_rows AS');
+    expect(compiled.sql).toContain('ORDER BY endedAt ASC, traceId ASC');
+    expect(compiled.sql).toContain('LIMIT ? OFFSET ?');
+    expect(compiled.sql).toContain('SELECT COUNT(*) AS total\n    FROM candidates');
+    expect(compiled.sql).toContain('LEFT JOIN page_rows ON TRUE');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
+  });
+
   it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
     const metadataKey = ` actor'role `;
     const metadataValue = `clinician' OR TRUE --`;
@@ -410,7 +449,68 @@ describe('DuckDB advanced trace query', () => {
       page: { next: expect.any(String) },
     });
     if (!('traces' in response)) throw new Error('Expected trace results');
-    expect(Object.keys(response.traces[0]!)).toHaveLength(10);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(response.traces[0]).toMatchObject({
+      name: 'Agent run',
+      entityId: 'agent-1',
+      parentSpanId: null,
+      createdAt: '2026-01-01T12:00:00.000Z',
+      metadata: { customer: { id: 'customer-1' }, count: 2 },
+      inputPreview: 'Help with my order',
+    });
+    expect(response.traces[0]).not.toHaveProperty('input');
+  });
+
+  it('returns null for absent optional root span details', async () => {
+    const row = {
+      ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+      entityId: null,
+      metadata: null,
+      input: null,
+    };
+    const query = vi.fn().mockResolvedValue([row]);
+    const response = await queryTraces({ query } as unknown as DuckDBConnection, plan());
+
+    expect(response.traces[0]).toMatchObject({
+      name: 'Agent run',
+      entityId: null,
+      parentSpanId: null,
+      metadata: null,
+      inputPreview: null,
+    });
+    expect(response.page.next).toBeNull();
+  });
+
+  it('returns exact list-compatible pagination metadata from one statement', async () => {
+    const query = vi.fn().mockResolvedValue([{ ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), total: 3n }]);
+    const response = await queryTraces(
+      { query } as unknown as DuckDBConnection,
+      plan({ pagination: { page: 1, perPage: 2 } }),
+    );
+
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(response).toMatchObject({
+      traces: [{ traceId: 'trace-c' }],
+      pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
+    });
+    expect(response).not.toHaveProperty('page');
+  });
+
+  it.each([
+    ['empty', 0, 0],
+    ['out-of-range', 3, 7],
+  ])('preserves totals for %s pages without trace rows', async (_case, page, total) => {
+    const query = vi.fn().mockResolvedValue([{ traceId: null, total: BigInt(total) }]);
+
+    const response = await queryTraces(
+      { query } as unknown as DuckDBConnection,
+      plan({ pagination: { page, perPage: 2 } }),
+    );
+
+    expect(response).toEqual({
+      traces: [],
+      pagination: { total, page, perPage: 2, hasMore: false },
+    });
   });
 
   it('returns fixed thread identities and computes the next cursor from the last visible row', async () => {
@@ -432,6 +532,11 @@ function traceRow(traceId: string, startedAt: string) {
   return {
     traceId,
     rootSpanId: `root-${traceId}`,
+    name: 'Agent run',
+    entityId: 'agent-1',
+    parentSpanId: null,
+    metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
+    input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
     threadId: null,
     resourceId: null,
     startedAt: new Date(startedAt),

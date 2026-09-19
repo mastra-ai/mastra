@@ -16,6 +16,7 @@ import { StringField } from './components/string-field';
 import { SubmitButton } from './components/submit-button';
 import { UnionField } from './components/union-field';
 import { CustomAutoForm } from './custom-auto-form';
+import { FormReadOnlyContext } from './field-context';
 import type { AutoFormProps } from './types';
 
 const ShadcnUIComponents: AutoFormUIComponents = {
@@ -44,11 +45,8 @@ export function AutoForm<T extends Record<string, any>>({
   readOnly,
   ...props
 }: AutoFormProps<T> & { readOnly?: boolean }) {
-  // Memoize UI components to prevent unnecessary re-renders
   const mergedUiComponents = useMemo(() => ({ ...ShadcnUIComponents, ...uiComponents }), [uiComponents]);
 
-  // Memoize form components with readOnly prop to prevent focus loss on re-renders
-  // Only merge readOnly when explicitly set (not undefined) to preserve field-level settings
   const mergedFormComponents = useMemo(() => {
     const mergeInputProps = (inputProps?: Record<string, unknown>) =>
       readOnly === undefined ? inputProps : { ...inputProps, readOnly };
@@ -70,5 +68,9 @@ export function AutoForm<T extends Record<string, any>>({
     };
   }, [readOnly, formComponents]);
 
-  return <CustomAutoForm {...props} uiComponents={mergedUiComponents} formComponents={mergedFormComponents} />;
+  return (
+    <FormReadOnlyContext value={readOnly === true}>
+      <CustomAutoForm {...props} uiComponents={mergedUiComponents} formComponents={mergedFormComponents} />
+    </FormReadOnlyContext>
+  );
 }

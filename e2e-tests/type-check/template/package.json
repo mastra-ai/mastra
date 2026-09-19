@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@mastra/core": "type-check-test",
+    "@mastra/mcp": "type-check-test",
     "@mastra/client-js": "type-check-test",
     "@mastra/auth": "type-check-test",
     "@mastra/auth-workos": "type-check-test",
@@ -27,10 +28,10 @@
     "openai-v4": "npm:@ai-sdk/openai@^1.3.24",
     "openai-v5": "npm:@ai-sdk/openai@^2.0.89",
     "ai-v7": "npm:ai@^7.0.0",
-    "hono": "4.12.34"
+    "hono": "4.13.7"
   },
   "devDependencies": {
-    "vitest": "4.1.5",
+    "vitest": "4.1.11",
     "@types/node": "22.19.15",
     "typescript": "^5.9.3"
   }

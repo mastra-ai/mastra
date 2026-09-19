@@ -169,8 +169,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         }
       }
 
-      // Parse request context from query params (GET)
-      if (c.req.method === 'GET') {
+      // Parse request context from query params.
+      if (c.req.method === 'GET' || c.req.method === 'POST') {
         try {
           const encodedRequestContext = c.req.query('requestContext');
           if (encodedRequestContext) {

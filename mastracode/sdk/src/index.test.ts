@@ -66,6 +66,7 @@ vi.mock('@mastra/core/agent-controller', () => ({
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},
+  createBackgroundWorkSignalProcessor: () => ({}),
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -235,7 +236,12 @@ describe('createMastraCode startup performance', () => {
     expect(result.storageWarning).toBe('Storage fallback warning');
     expect(syncGateways).not.toHaveBeenCalled();
     resolveSync?.();
-  });
+    // Almost all of this test's wall time is transforming and importing the
+    // entry module graph, not the startup path it asserts on: measured at
+    // ~9s on an idle machine and ~57s under heavy load, for the same code.
+    // A tight budget here fails on that import cost rather than on the
+    // ordering contract, so give it room for a contended runner.
+  }, 60_000);
 });
 
 describe('Kimi startup access', () => {

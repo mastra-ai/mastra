@@ -1,6 +1,8 @@
-import type { BuilderModelPolicy } from '@mastra/client-js';
+import type { BuilderSettingsResponse } from '@mastra/client-js';
 import { FALLBACK_MODEL } from './constants';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
+
+type BuilderModelPolicy = Pick<NonNullable<BuilderSettingsResponse['modelPolicy']>, 'active' | 'default'>;
 
 export type StarterModel = {
   provider: string;

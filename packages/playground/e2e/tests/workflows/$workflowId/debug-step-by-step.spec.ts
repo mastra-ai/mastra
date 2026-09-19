@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
+import { topLevelWorkflowNodes } from '../../__utils__/workflow-nodes';
 
 /**
  * FEATURE: Workflow debug mode "Run next step" (per-step execution)
@@ -31,7 +32,7 @@ function runNextStepButton(page: Page) {
 }
 
 function nodes(page: Page) {
-  return page.locator('[data-workflow-node]');
+  return topLevelWorkflowNodes(page);
 }
 
 async function expectStepSuccess(page: Page, index: number) {
@@ -57,8 +58,8 @@ test.describe('Workflow debug "Run next step"', () => {
 
       // ARRANGE: put input + activate debug mode.
       await page.getByRole('textbox', { name: 'Text' }).fill('A');
-      await page.getByRole('switch', { name: 'Debug' }).click();
-      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      await page.getByRole('switch', { name: 'Step by step' }).click();
+      await expect(page.getByRole('switch', { name: 'Step by step' })).toBeChecked();
 
       // ACT: start execution. With debug mode on this runs per-step and pauses immediately.
       await runButton(page).click();
@@ -119,8 +120,8 @@ test.describe('Workflow debug "Run next step"', () => {
       await expectStepSuccess(page, 13);
 
       // ASSERT: the run finished end-to-end. The final step output carries the "-ENDED" suffix.
-      await page.getByRole('button', { name: 'Run output' }).click();
-      await expect(page.getByRole('dialog')).toContainText('-ENDED');
+      await page.getByRole('button', { name: 'Run data' }).click();
+      await expect(page.getByTestId('workflow-run-data')).toContainText('-ENDED');
     });
   });
 });
