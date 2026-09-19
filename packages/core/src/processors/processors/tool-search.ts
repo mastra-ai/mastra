@@ -1,9 +1,14 @@
+import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod/v4';
 import { parseMemoryRequestContext } from '../../memory/types';
 import { MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
+import { getRequestContextExecutionSource } from '../../request-context/execution-source';
+import { standardSchemaToJSONSchema, toStandardSchema } from '../../schema';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
+import { isDeferredTool } from '../../tools/deferred-tool';
+import type { DeferredTool } from '../../tools/deferred-tool';
 import { BM25Index } from '../../workspace/search/bm25';
 import type { TokenizeOptions } from '../../workspace/search/bm25';
 import type { ProcessInputStepArgs, Processor } from '../index';
@@ -29,6 +34,14 @@ export interface ToolSearchProcessorOptions {
    * These tools are not immediately available - they must be discovered via search and loaded on demand.
    */
   tools: Record<string, Tool<any, any>>;
+
+  /**
+   * Request-scoped search metadata. Called on discovery or when restoring loaded
+   * tools, or when injectCatalog is enabled. Full schemas resolve on activation.
+   */
+  deferredTools?: (args: { requestContext?: RequestContext }) => Promise<Record<string, DeferredTool>>;
+  /** Metadata policy for deferred entries; the ordinary filter still sees full tools only. */
+  deferredFilter?: (args: Omit<ToolSearchFilterArgs, 'tool'> & { tool: DeferredTool }) => boolean | Promise<boolean>;
 
   /**
    * Also make the tools the agent resolved for this request (`args.tools`)
@@ -190,13 +203,14 @@ const META_TOOL_NAMES = new Set(['search_tools', 'load_tool']);
 
 /** A searchable set of tools: the tools themselves plus their BM25 index. */
 type ToolCatalog = {
-  tools: Record<string, Tool<any, any>>;
+  tools: Record<string, Tool<any, any> | DeferredTool>;
   index: BM25Index;
   /** Tool ID -> full description, for formatting search results. */
   descriptions: Map<string, string>;
+  deferredRead?: Promise<void>;
 };
 
-function buildToolCatalog(tools: Record<string, Tool<any, any>>): ToolCatalog {
+function buildToolCatalog(tools: Record<string, Tool<any, any> | DeferredTool>): ToolCatalog {
   const index = new BM25Index({}, TOOL_SEARCH_TOKENIZE_OPTIONS);
   const descriptions = new Map<string, string>();
 
@@ -236,6 +250,8 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
   private includeResolvedTools: boolean;
   private injectCatalog: boolean;
+  private deferredTools?: ToolSearchProcessorOptions['deferredTools'];
+  private deferredFilter?: ToolSearchProcessorOptions['deferredFilter'];
   private searchConfig: Required<NonNullable<ToolSearchProcessorOptions['search']>>;
   private filter?: ToolSearchProcessorOptions['filter'];
 
@@ -248,6 +264,8 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   constructor(options: ToolSearchProcessorOptions) {
     this.includeResolvedTools = options.includeResolvedTools ?? false;
     this.injectCatalog = options.injectCatalog ?? false;
+    this.deferredTools = options.deferredTools;
+    this.deferredFilter = options.deferredFilter;
     this.filter = options.filter;
     this.searchConfig = {
       topK: options.search?.topK ?? 5,
@@ -288,11 +306,11 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     return { threadId: this.getThreadId(args), args };
   }
 
-  private findToolById(catalog: ToolCatalog, toolId: string): Tool<any, any> | undefined {
+  private findToolById(catalog: ToolCatalog, toolId: string): Tool<any, any> | DeferredTool | undefined {
     return Object.values(catalog.tools).find(tool => tool.id === toolId);
   }
 
-  private findToolForDynamicName(catalog: ToolCatalog, toolName: string): Tool<any, any> | undefined {
+  private findToolForDynamicName(catalog: ToolCatalog, toolName: string): Tool<any, any> | DeferredTool | undefined {
     const toolByKey = catalog.tools[toolName];
     const toolById = this.findToolById(catalog, toolName);
     return this.filter ? (toolById ?? toolByKey) : (toolByKey ?? toolById);
@@ -305,9 +323,10 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    * across requests would hand one caller another caller's tool instance.
    */
   private catalogForStep(stepTools: Record<string, unknown> | undefined): ToolCatalog {
-    if (!this.includeResolvedTools) return this.staticCatalog;
+    if (!this.includeResolvedTools)
+      return this.deferredTools ? buildToolCatalog({ ...this.staticCatalog.tools }) : this.staticCatalog;
     const resolved = searchableResolvedTools(stepTools);
-    if (Object.keys(resolved).length === 0) return this.staticCatalog;
+    if (Object.keys(resolved).length === 0 && !this.deferredTools) return this.staticCatalog;
     return buildToolCatalog({ ...this.staticCatalog.tools, ...resolved });
   }
 
@@ -336,11 +355,47 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     return lines.join('\n');
   }
 
+  private async ensureDeferredCatalog(catalog: ToolCatalog, requestContext?: RequestContext): Promise<void> {
+    if (!this.deferredTools) return;
+    catalog.deferredRead ??= (async () => {
+      const deferred = await this.deferredTools!({ requestContext });
+      for (const [name, tool] of Object.entries(deferred)) {
+        if (name !== tool.id || META_TOOL_NAMES.has(name) || Object.hasOwn(catalog.tools, name)) {
+          throw new Error(`Invalid or duplicate deferred tool: ${name}`);
+        }
+      }
+      const expanded = buildToolCatalog({ ...catalog.tools, ...deferred });
+      catalog.tools = expanded.tools;
+      catalog.index = expanded.index;
+      catalog.descriptions = expanded.descriptions;
+    })();
+    await catalog.deferredRead;
+  }
+
+  private async resolveTool(
+    tool: Tool<any, any> | DeferredTool,
+    requestContext?: RequestContext,
+  ): Promise<Tool<any, any>> {
+    if (!isDeferredTool(tool)) return tool;
+    const resolved = await tool.resolve({ requestContext });
+    if (!resolved || resolved.id !== tool.id || isDeferredTool(resolved)) {
+      throw new Error(`Deferred tool did not resolve its declared identity: ${tool.id}`);
+    }
+    return resolved;
+  }
+
   private async isToolAllowed(
-    tool: Tool<any, any>,
+    tool: Tool<any, any> | DeferredTool,
     requestContext: RequestContext | undefined,
     phase: ToolSearchFilterPhase,
   ): Promise<boolean> {
+    if (isDeferredTool(tool)) {
+      try {
+        return (await this.deferredFilter?.({ toolName: tool.id, tool, requestContext, phase })) ?? true;
+      } catch {
+        return false;
+      }
+    }
     if (!this.filter) {
       return true;
     }
@@ -352,6 +407,54 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     }
   }
 
+  private protectTool(
+    toolName: string,
+    tool: Tool<any, any>,
+    requestContext?: RequestContext,
+    deferred?: DeferredTool,
+  ): Tool<any, any> {
+    if (deferred && tool.execute) {
+      const inputContract = tool.inputSchema
+        ? standardSchemaToJSONSchema(toStandardSchema(tool.inputSchema), { io: 'input' })
+        : undefined;
+      const execute = async (input: unknown, context: any) => {
+        const currentContext = getRequestContextExecutionSource(context?.requestContext ?? requestContext);
+        if (currentContext !== getRequestContextExecutionSource(requestContext))
+          throw new Error(`Deferred tool request identity changed: ${toolName}`);
+        const catalog = this.catalogForStep(undefined);
+        await this.ensureDeferredCatalog(catalog, currentContext);
+        const current = this.findToolForDynamicName(catalog, toolName);
+        if (!current || !(await this.isToolAllowed(current, currentContext, 'active'))) {
+          throw new Error(`Deferred tool is no longer authorized: ${toolName}`);
+        }
+        if (!isDeferredTool(current) || current.binding !== deferred.binding) {
+          throw new Error(`Deferred tool execution target changed: ${toolName}`);
+        }
+        const resolved = await this.resolveTool(deferred, currentContext);
+        if (
+          !(await this.isToolAllowed(resolved, currentContext, 'active')) ||
+          !(await this.isToolAllowed(tool, currentContext, 'active'))
+        ) {
+          throw new Error(`Deferred tool is no longer authorized: ${toolName}`);
+        }
+        const currentInputContract = resolved.inputSchema
+          ? standardSchemaToJSONSchema(toStandardSchema(resolved.inputSchema), { io: 'input' })
+          : undefined;
+        if (
+          !isDeepStrictEqual(inputContract, currentInputContract) ||
+          tool.requireApproval !== resolved.requireApproval
+        ) {
+          throw new Error(`Deferred tool contract changed after activation: ${toolName}`);
+        }
+        // Keep the exact approved validator, transforms, and executor together.
+        // The refreshed result above reauthorizes the original binding only.
+        return tool.execute!(input, context);
+      };
+      return Object.assign(Object.create(Object.getPrototypeOf(tool)), tool, { execute });
+    }
+    return tool;
+  }
+
   private async getSuggestedToolNames(
     catalog: ToolCatalog,
     toolName: string,
@@ -360,7 +463,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     const matchesToolName = (name: string) =>
       name.toLowerCase().includes(toolName.toLowerCase()) || toolName.toLowerCase().includes(name.toLowerCase());
 
-    if (!this.filter) {
+    if (!this.filter && !this.deferredFilter) {
       return Object.keys(catalog.tools).filter(matchesToolName);
     }
 
@@ -392,13 +495,32 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     requestContext?: RequestContext,
   ): Promise<Record<string, Tool<any, any>>> {
     const loadedTools: Record<string, Tool<any, any>> = {};
+    if ([...loadedNames].some(name => !this.findToolForDynamicName(catalog, name))) {
+      await this.ensureDeferredCatalog(catalog, requestContext);
+    }
 
     for (const toolName of loadedNames) {
       const tool = this.findToolForDynamicName(catalog, toolName);
       if (tool) {
         const isAllowed = await this.isToolAllowed(tool, requestContext, 'active');
         if (isAllowed) {
-          loadedTools[toolName] = tool;
+          // A removed/revoked connector must not prevent an unrelated reply.
+          // Explicit discovery/loading still reports resolution failures.
+          let resolved: Tool<any, any>;
+          try {
+            resolved = await this.resolveTool(tool, requestContext);
+          } catch (error) {
+            if (!isDeferredTool(tool)) throw error;
+            continue;
+          }
+          if (!isDeferredTool(tool) || (await this.isToolAllowed(resolved, requestContext, 'active'))) {
+            loadedTools[toolName] = this.protectTool(
+              toolName,
+              resolved,
+              requestContext,
+              isDeferredTool(tool) ? tool : undefined,
+            );
+          }
         }
       }
     }
@@ -503,7 +625,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // Get BM25 results (request more than topK to allow for re-ranking after boosting).
     // When filtering is enabled, inspect every BM25 match so denied high-ranking tools
     // do not prevent lower-ranking allowed tools from filling the result set.
-    const searchLimit = this.filter ? catalog.index.size : this.searchConfig.topK * 2;
+    const searchLimit = this.filter || this.deferredFilter ? catalog.index.size : this.searchConfig.topK * 2;
     const bm25Results = catalog.index.search(query, searchLimit, 0);
 
     if (bm25Results.length === 0) return [];
@@ -556,6 +678,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
   async processInputStep(args: ProcessInputStepArgs) {
     const { tools, messageList } = args;
+    const requestContext = args.requestContext;
     const catalog = this.catalogForStep(tools);
     const storeContext = this.makeStoreContext(args);
     // Snapshot of names already loaded as of this step. Newly activated tools are
@@ -578,6 +701,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // Optionally inject the catalog so the model can skip the search step and
     // load tools directly. `search_tools` stays available as a keyword fallback.
     if (this.injectCatalog) {
+      await this.ensureDeferredCatalog(catalog, requestContext);
       const catalogList = await this.formatCatalog(catalog, args.requestContext);
       if (catalogList) {
         messageList.addSystem(
@@ -619,6 +743,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
         message: z.string(),
       }),
       execute: async ({ query }) => {
+        await this.ensureDeferredCatalog(catalog, requestContext);
         // Use BM25 search for relevance-ranked results
         const results = await this.searchTools(catalog, query, args.requestContext);
 
@@ -634,20 +759,24 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
           // no explicit load_tool call needed. The store records the activation;
           // for the context store this result in the conversation messages is the durable record.
           const newlyLoaded: string[] = [];
+          const activationResults: typeof results = [];
           for (const result of results) {
-            if (!loadedToolNames.has(result.name)) {
-              newlyLoaded.push(result.name);
-            }
+            const tool = this.findToolForDynamicName(catalog, result.name);
+            if (!tool || (isDeferredTool(tool) && !(await this.isToolAllowed(tool, requestContext, 'load')))) continue;
+            const resolved = await this.resolveTool(tool, requestContext);
+            if (isDeferredTool(tool) && !(await this.isToolAllowed(resolved, requestContext, 'load'))) continue;
+            activationResults.push(result);
+            if (!loadedToolNames.has(result.name)) newlyLoaded.push(result.name);
           }
           await this.store.addLoaded(newlyLoaded, storeContext);
           for (const name of newlyLoaded) loadedToolNames.add(name);
 
           return {
-            results,
+            results: activationResults,
             message:
-              `Found and loaded ${results.length} tool(s): ${results.map(r => r.name).join(', ')}. ` +
+              `Found and loaded ${activationResults.length} tool(s): ${activationResults.map(r => r.name).join(', ')}. ` +
               `They are available on your next turn — call them directly.` +
-              (newlyLoaded.length < results.length ? ' Some were already loaded.' : ''),
+              (newlyLoaded.length < activationResults.length ? ' Some were already loaded.' : ''),
           };
         }
 
@@ -684,6 +813,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
         alreadyLoaded: z.array(z.string()).optional(),
       }),
       execute: async ({ toolName, toolNames }) => {
+        await this.ensureDeferredCatalog(catalog, requestContext);
         // Determine which tools to load
         let toLoad: string[];
         const toolNamesProvided = toolNames !== undefined;
@@ -727,11 +857,20 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
           }
 
           // Check if already loaded (snapshot of prior steps, plus this call).
-          if (loadedToolNames.has(name) || loaded.includes(name)) {
+          if (!isDeferredTool(matchingTool) && (loadedToolNames.has(name) || loaded.includes(name))) {
             alreadyLoaded.push(name);
             continue;
           }
 
+          const resolved = await this.resolveTool(matchingTool, requestContext);
+          if (isDeferredTool(matchingTool) && !(await this.isToolAllowed(resolved, requestContext, 'load'))) {
+            notFound.push(name);
+            continue;
+          }
+          if (loadedToolNames.has(name) || loaded.includes(name)) {
+            alreadyLoaded.push(name);
+            continue;
+          }
           loaded.push(name);
         }
 

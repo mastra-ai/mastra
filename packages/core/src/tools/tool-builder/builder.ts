@@ -27,6 +27,7 @@ import { SpanType, wrapMastra, EntityType, getOrCreateSpan, createObservabilityC
 import type { AnySpan } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
+import { registerRequestContextExecutionSource } from '../../request-context/execution-source';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { StandardSchemaWithJSON } from '../../schema';
 import { getNeedsApprovalFn, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
@@ -97,6 +98,7 @@ function mergeRequestContexts(
   for (const [key, value] of closureRC.entries()) {
     merged.set(key, value);
   }
+  registerRequestContextExecutionSource(merged, closureRC);
   return merged;
 }
 

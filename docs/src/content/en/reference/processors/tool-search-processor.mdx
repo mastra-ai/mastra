@@ -49,6 +49,20 @@ const toolSearch = new ToolSearchProcessor({
             isOptional: false,
           },
           {
+            name: 'deferredTools',
+            type: '(args: { requestContext?: RequestContext }) => Promise<Record<string, DeferredTool>>',
+            description:
+              'Fetch searchable tool IDs and descriptions when discovery or restoration needs them. Each entry resolves its full Tool only when selected. An unloaded text response does not call this function unless injectCatalog is enabled.',
+            isOptional: true,
+          },
+          {
+            name: 'deferredFilter',
+            type: '(args: Omit<ToolSearchFilterArgs, "tool"> & { tool: DeferredTool }) => boolean | Promise<boolean>',
+            description:
+              'Optional visibility and activation policy for deferred metadata. The ordinary filter receives full tools only. A thrown error denies the tool.',
+            isOptional: true,
+          },
+          {
             name: 'includeResolvedTools',
             type: 'boolean',
             description:
@@ -240,6 +254,44 @@ const agent = new Agent({
 Each request is indexed on its own, so a tool loaded by one caller never resolves to another caller's instance of the same tool name.
 
 This option applies to every tool resolved for the request, including memory, workspace, skill, and browser tools. Only the `search_tools` and `load_tool` meta-tools stay in the prompt, so any tool the agent relies on implicitly must be found through search before it can be called.
+
+## Defer remote schemas
+
+Use `deferredTools` when preparing a remote tool library requires network calls or schema conversion. Its entries contain an `id`, `description`, and `resolve` function. The object key must equal the ID and must not collide with another tool or the search/load meta-tools.
+
+```typescript
+import { ToolSearchProcessor } from '@mastra/core/processors'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const toolSearch = new ToolSearchProcessor({
+  tools: {},
+  deferredTools: async ({ requestContext }) => ({
+    listMessages: {
+      id: 'listMessages',
+      description: 'List messages in the caller mailbox',
+      resolve: async () =>
+        createTool({
+          id: 'listMessages',
+          description: 'List messages in the caller mailbox',
+          inputSchema: z.object({ limit: z.number().int().positive() }),
+          execute: async ({ limit }) => ({ owner: requestContext?.get('userId'), limit }),
+        }),
+    },
+  }),
+  search: { autoLoad: true, topK: 1 },
+})
+```
+
+The metadata catalog is read on search, explicit load, or restoration of a previously loaded deferred tool. Setting `injectCatalog: true` also reads metadata during preparation so the model can see the catalog, without resolving full schemas. The catalog is scoped to a model step. Resolving one entry must return its complete tool with the same ID, input schema, approval requirement, and executor. Mastra then uses its existing validation, approval, and execution path.
+
+Use `deferredFilter` for metadata visibility. `filter` keeps its existing full-tool contract and runs after a deferred entry resolves. Search without automatic loading does not resolve schemas; automatic loading resolves only allowed matches.
+
+Each later step rebuilds deferred entries with the current request context. Before executing a deferred tool, Mastra rereads its metadata and reauthorizes the original binding. It retains the exact activated validator, transforms, and executor together. A changed account binding, model-visible input contract, or approval requirement blocks execution; a refreshed definition never replaces an already-approved executor. This also checks access when approval resumes a captured executor. Do not share credential-bound executors across requests. A failed schema resolution fails explicit loading instead of recording success. A previously loaded entry that can no longer resolve is withheld from that step, so an unrelated text reply can continue. Metadata catalog failures still fail preparation when restoration needs that catalog.
+
+For registered provider connections, pass the result of `deferStoredToolProviders` from `@mastra/core/tool-provider` through `deferredTools`. It preserves connection suffixes and resolves only the selected slug through the registered provider. Supply every authorized slug and its description in the stored provider configuration; the helper does not enumerate the provider catalog itself.
+
+Use a stable `binding` string when one tool name can address different execution targets. `deferStoredToolProviders` supplies it from the original provider and account pin. A deferred executor cannot cross unrelated request contexts. Mastra preserves identity through its own merged and transformed execution views; restored runs rebuild their own tools.
 
 ## Extended usage example
 
