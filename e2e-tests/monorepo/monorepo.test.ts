@@ -1154,7 +1154,7 @@ export const mastra = new Mastra({
     );
 
     it(
-      'should exit non-zero when a workspace subpath import cannot be resolved',
+      'should reject an unresolved subpath from an externalized workspace package',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-missing-dep-test-${pkgManager}-`));
         try {
@@ -1182,8 +1182,7 @@ export const mastra = new Mastra({
           const output = `${buildResult.stdout}\n${buildResult.stderr}`;
 
           expect(buildResult.exitCode, output).toBe(1);
-          expect(output).toContain('Missing "./missing" specifier in "@inner/subpath-only" package');
-          expect(output).toContain('@inner/subpath-only/missing');
+          expect(output).toContain('Could not resolve workspace package subpath "@inner/subpath-only/missing".');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
