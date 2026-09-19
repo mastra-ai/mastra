@@ -87,6 +87,24 @@ describe('viewer preferences in Chromium', () => {
     expect(await page.evaluate(() => document.activeElement?.id)).toBe('draft');
     await page.keyboard.insertText(' Arabic input');
     expect(await page.locator('#draft').inputValue()).toContain('Arabic input');
+    await page.evaluate(() => {
+      document.body.style.height = '3000px';
+      window.scrollTo(0, 500);
+    });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    for (const maxSize of [4096, 844]) {
+      const scrolled = (await settings.capture(page, { format: 'png', maxWidth: maxSize, maxHeight: maxSize }))!;
+      const dimensions = Buffer.from(scrolled, 'base64');
+      expect([dimensions.readUInt32BE(16), dimensions.readUInt32BE(20)]).toEqual(maxSize === 4096 ? [780, 1688] : [390, 844]);
+      expect(await page.evaluate(() => [innerWidth, innerHeight, scrollY])).toEqual([390, 844, 500]);
+      const pixel = await page.evaluate(async data => {
+        const image = new Image(); image.src = 'data:image/png;base64,' + data; await image.decode();
+        const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+        const ctx = canvas.getContext('2d')!; ctx.drawImage(image, 0, 0);
+        return [...ctx.getImageData(image.width - 2, image.height - 2, 1, 1).data];
+      }, scrolled);
+      expect(pixel).toEqual([0, 255, 0, 255]);
+    }
     await session.detach();
   }, 20000);
 });
