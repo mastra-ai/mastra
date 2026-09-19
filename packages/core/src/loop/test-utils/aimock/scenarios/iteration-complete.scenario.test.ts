@@ -147,6 +147,9 @@ describeForAllEngines('AIMock loop scenario: onIterationComplete hook', engine =
     await runLoopScenario({
       engine,
       llm: getMock(),
+      // Agents now resolve the shared stability error processors, whose retry would change the
+      // request/step counts this case asserts. Opt out to keep its subject under test.
+      errorProcessors: [],
       prompt: 'Search for test',
       tools: { search: searchTool },
       stopWhen: ({ steps }: { steps: number }) => steps >= 2,

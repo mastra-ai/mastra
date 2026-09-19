@@ -78,7 +78,9 @@ function supervisorModel(receivedPrompts: any[]) {
 
 function setup(model = failingModel(), memory?: MockMemory, backgroundRetries?: number) {
   const receivedPrompts: any[] = [];
-  const head = new Agent({ id: 'head', name: 'head', instructions: 'x', model, memory });
+  // Subagent error propagation and background-retry counts are the subject here, so these agents opt
+  // out of the default error processors; their retry layer would change the observed attempts.
+  const head = new Agent({ id: 'head', name: 'head', instructions: 'x', model, memory, errorProcessors: [] });
   const supervisor = new Agent({
     id: 'sup',
     name: 'sup',
@@ -86,6 +88,7 @@ function setup(model = failingModel(), memory?: MockMemory, backgroundRetries?: 
     model: supervisorModel(receivedPrompts),
     agents: { head },
     memory,
+    errorProcessors: [],
     ...(backgroundRetries === undefined
       ? {}
       : {

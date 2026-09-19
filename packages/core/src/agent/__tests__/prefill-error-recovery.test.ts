@@ -4,6 +4,8 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { PrefillErrorHandler } from '../../processors/prefill-error-handler';
+import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
+import { StreamErrorRetryProcessor } from '../../processors/stream-error-retry-processor';
 import { Agent } from '../agent';
 
 /**
@@ -402,7 +404,16 @@ describe('PrefillErrorHandler Recovery', () => {
           { model: exhaustedPrimary, maxRetries: 0, id: 'primary' },
           { model: secondary, maxRetries: 0, id: 'secondary' },
         ],
-        errorProcessors: [{ id: 'retry-secondary-error', processAPIError }],
+        // This case pins where a caller processor's retry lands relative to fallback models. The
+        // agent adds the shared stability defaults unless their ids are present, so the list names
+        // all three with neutral instances (no retry budget) to keep the caller's processor the only
+        // one that retries.
+        errorProcessors: [
+          { id: 'retry-secondary-error', processAPIError },
+          new ProviderHistoryCompat(),
+          new StreamErrorRetryProcessor({ maxRetries: 0 }),
+          new PrefillErrorHandler(),
+        ],
       });
 
       const result = await agent.generate('Hello');

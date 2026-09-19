@@ -11,7 +11,7 @@ The `PrefillErrorHandler` is an **error processor** that handles assistant-respo
 
 When the error is detected, the processor sends a hidden `system-reminder` signal with `continue` as its contents and signals a retry. The reminder is persisted as signal metadata, which keeps it available for retry reconstruction and raw history while standard UI-facing message conversions hide it.
 
-Add this processor to `errorProcessors` when you want Mastra to recover from assistant prefill rejections (for example Anthropic's "assistant message prefill" and Qwen/llama.cpp's "assistant response prefill is incompatible with `enable_thinking`" errors).
+Mastra adds this processor to every agent's `errorProcessors` by default, after `StreamErrorRetryProcessor`. It only acts on the first retry attempt, so it needs no configuration. Supply your own instance to tune it — anything already in your list is kept and the default is only added when its `id` is absent.
 
 ## How it works
 
@@ -24,7 +24,7 @@ The processor now reacts to the API rejection itself instead of re-checking whet
 
 ## Usage example
 
-Add `PrefillErrorHandler` to `errorProcessors` for any agent that should retry assistant-prefill failures:
+To tune or explicitly scope prefill recovery, supply your own instance — the default `PrefillErrorHandler` is not added when you do:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from '@mastra/core/agent'

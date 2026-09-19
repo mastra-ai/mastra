@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent/agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '../../agent/goal/objective';
 import { signalToXmlMarkup } from '../../agent/signals';
+import { StreamErrorRetryProcessor } from '../../processors/stream-error-retry-processor';
 import { STABILITY_ERROR_PROCESSOR_IDS } from '../../processors/stability-defaults';
 import { LocalFilesystem, LocalSandbox, Workspace } from '../../workspace';
 import type { PromptContext } from '../index';
@@ -109,10 +110,17 @@ describe('createCodingAgent', () => {
     expect(ids).toEqual([...STABILITY_ERROR_PROCESSOR_IDS]);
   });
 
-  it('honors a caller-provided error processor list verbatim', async () => {
-    const agent = createCodingAgent(baseConfig({ errorProcessors: [] }));
+  it('keeps a caller-provided error processor list and adds only missing defaults', async () => {
+    const customRetry = new StreamErrorRetryProcessor({ maxRetries: 7 });
+    const agent = createCodingAgent(baseConfig({ errorProcessors: [customRetry] }));
 
-    expect(await agent.listErrorProcessors()).toEqual([]);
+    const ids = (await agent.listErrorProcessors()).map(processor => processor.id);
+
+    expect(ids).toEqual(['stream-error-retry-processor', 'provider-history-compat', 'prefill-error-handler']);
+    // The caller's tuned instance is the one that runs — the default is not added alongside it.
+    const resolved = await agent.listErrorProcessors();
+    expect(resolved[0]).toBe(customRetry);
+    expect(resolved.filter(processor => processor.id === 'stream-error-retry-processor')).toHaveLength(1);
   });
 
   it('does not include TaskSignalProvider when no memory is configured', async () => {

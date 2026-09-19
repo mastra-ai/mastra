@@ -13,7 +13,7 @@ Use it when an agent may switch between model providers or reuse message history
 
 ## Usage example
 
-Add `ProviderHistoryCompat` to `inputProcessors` when you want all built-in compatibility rules available for an agent:
+Mastra adds this processor to every agent's `errorProcessors` by default when your list does not already contain that `id`. Among the added defaults it comes first, so its outbound prompt rules run before the retry processors. Supply your own instance to add custom rules or position it yourself:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -24,11 +24,11 @@ export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
   model: 'anthropic/claude-sonnet-4-5',
-  inputProcessors: [new ProviderHistoryCompat()],
+  errorProcessors: [new ProviderHistoryCompat({ additionalRules: [/* ... */] })],
 })
 ```
 
-Mastra agents don't add this processor automatically. Add it explicitly when you need provider history compatibility rules, reactive API error recovery, custom rules, or predictable processor ordering.
+A supplied `ProviderHistoryCompat` is used instead of the default — the default is only added when no processor in your list carries that `id`. Place an instance in `inputProcessors` when you want the prompt-rewriting rules to run in the input lane instead.
 
 ## Constructor parameters
 

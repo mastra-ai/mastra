@@ -117,6 +117,45 @@ const agent = new Agent({
 - `outputProcessors` run during and after the LLM response.
 - `errorProcessors` run when the LLM API call throws, so they can recover from provider errors.
 
+### Error processors are enabled by default
+
+Every agent starts from your `errorProcessors` list and adds whichever of these three it does not already contain:
+
+1. `ProviderHistoryCompat` — repairs provider-specific history incompatibilities in the outbound prompt
+1. `StreamErrorRetryProcessor` — retries transient API and stream failures within its own `maxRetries` budget
+1. `PrefillErrorHandler` — recovers from assistant-response prefill rejections
+
+A default is only added when nothing in your list carries its `id`, so your own instance always wins and is never duplicated. Your processors keep their positions at the front of the list, ahead of the added defaults — error processors stop at the first one that returns `{ retry: true }`, so a processor you supply is always reached before the framework's retry.
+
+To customize one without losing the rest, pass a processor with the same `id`:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { StreamErrorRetryProcessor } from '@mastra/core/processors'
+
+const agent = new Agent({
+  id: 'tuned-agent',
+  name: 'tuned-agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: '...',
+  errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })],
+})
+```
+
+The `StreamErrorRetryProcessor` above is the only stream-retry processor on the agent; the default `ProviderHistoryCompat` and `PrefillErrorHandler` are still added because your list does not name them. Pass all three ids to run a completely custom set.
+
+To run with no error processors at all, pass an explicitly empty array:
+
+```typescript
+new Agent({
+  id: 'no-error-recovery-agent',
+  name: 'no-error-recovery-agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: '...',
+  errorProcessors: [],
+})
+```
+
 Each array also accepts a function that returns an array, so processors can be built per-request from `RequestContext`:
 
 ```typescript
@@ -882,7 +921,7 @@ const agent = new Agent({
   name: 'Quality Agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   outputProcessors: [new QualityChecker()],
-  maxProcessorRetries: 3, // Maximum retry attempts. If unset, retries are disabled (unless errorProcessors are configured, in which case it defaults to 10).
+  maxProcessorRetries: 3, // Step retry limit for processInputStep/processOutputStep. Unset by default, which disables those retries.
 })
 ```
 
@@ -895,9 +934,9 @@ The retry mechanism:
 
 ### Error processor retry limits
 
-`processAPIError()` has a separate default: when `errorProcessors` are configured and `maxProcessorRetries` is omitted, the runtime allows up to `10` retries. Set the limit explicitly when you need a bounded retry budget.
+`processAPIError()` has a separate retry budget. When `errorProcessors` resolve to a non-empty list and `maxProcessorRetries` is omitted, the runtime allows up to `10` error-processor retries. Error processors are enabled by default on every agent (see [Error processors are enabled by default](#error-processors-are-enabled-by-default)), but `maxProcessorRetries` itself stays unset — so `processInputStep()` and `processOutputStep()` retries still need an explicit limit.
 
-For `StreamErrorRetryProcessor`, also set its `maxRetries` to the same value. Its own default is `1`, which can otherwise be lower than the agent cap. Keep model retries at `0` when the processor is the only retry mechanism for a request.
+For `StreamErrorRetryProcessor`, its own `maxRetries` (default `1`) bounds retries independently of the agent cap. Keep model retries at `0` when the processor is the only retry mechanism for a request.
 
 ### Violation callbacks
 

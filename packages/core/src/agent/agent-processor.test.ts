@@ -6,6 +6,9 @@ import { z } from 'zod/v4';
 import { noopLogger } from '../logger';
 import type { Processor, ProcessOutputStepArgs } from '../processors/index';
 import { isProcessorWorkflow } from '../processors/index';
+import { ProviderHistoryCompat } from '../processors/provider-history-compat';
+import { PrefillErrorHandler } from '../processors/prefill-error-handler';
+import { StreamErrorRetryProcessor } from '../processors/stream-error-retry-processor';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import { RequestContext } from '../request-context';
 import { createTool } from '../tools/tool';
@@ -3756,5 +3759,121 @@ describe('Workflow as Processor', () => {
       expect(stepLog[0]).toEqual({ stepNumber: 0, stepsLength: 0 });
       expect(stepLog[1]).toEqual({ stepNumber: 1, stepsLength: 1 });
     });
+  });
+});
+
+describe('error processors — shared stability defaults', () => {
+  const testModel = new MockLanguageModelV2({
+    doGenerate: async () => ({
+      content: [{ type: 'text' as const, text: 'ok' }],
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      rawCall: { rawPrompt: [], rawSettings: {} },
+      warnings: [],
+    }),
+  });
+
+  const DEFAULT_ERROR_PROCESSOR_IDS = [
+    'provider-history-compat',
+    'stream-error-retry-processor',
+    'prefill-error-handler',
+  ] as const;
+
+  const bareAgent = (config: Record<string, unknown> = {}) =>
+    new Agent({
+      id: 'stability-defaults-agent',
+      name: 'Stability Defaults Agent',
+      instructions: 'test',
+      model: testModel,
+      ...config,
+    });
+
+  it('resolves the shared stability defaults, in order, for a bare agent', async () => {
+    const agent = bareAgent();
+
+    const resolved = await agent.listErrorProcessors();
+
+    expect(resolved.map(processor => processor.id)).toEqual([...DEFAULT_ERROR_PROCESSOR_IDS]);
+  });
+
+  it('keeps the caller list first and adds only the defaults it does not already carry', async () => {
+    const customProcessor: Processor = {
+      id: 'custom-error-processor',
+      processAPIError: async () => ({ retry: true }),
+    };
+    const agent = bareAgent({ errorProcessors: [customProcessor] });
+
+    const resolved = await agent.listErrorProcessors();
+
+    // The caller's processor runs first: error processors short-circuit on the first `{ retry: true }`,
+    // so a caller processor placed behind the default retry would never be reached.
+    expect(resolved[0]).toBe(customProcessor);
+    expect(resolved.map(processor => processor.id)).toEqual(['custom-error-processor', ...DEFAULT_ERROR_PROCESSOR_IDS]);
+  });
+
+  it('does not duplicate a caller processor whose id matches a default', async () => {
+    const customCompat = new ProviderHistoryCompat();
+    const agent = bareAgent({ errorProcessors: [customCompat] });
+
+    const resolved = await agent.listErrorProcessors();
+    const compatProcessors = resolved.filter(processor => processor.id === 'provider-history-compat');
+
+    expect(compatProcessors).toEqual([customCompat]);
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'stream-error-retry-processor',
+      'prefill-error-handler',
+    ]);
+    // The caller's instance is the one that runs, and it stays in the caller's position.
+    expect(resolved[0]).toBe(customCompat);
+  });
+
+  it('leaves a caller list that already names every default untouched', async () => {
+    const customRetry = new StreamErrorRetryProcessor({ maxRetries: 5 });
+    const agent = bareAgent({
+      errorProcessors: [new ProviderHistoryCompat(), customRetry, new PrefillErrorHandler()],
+    });
+
+    const resolved = await agent.listErrorProcessors();
+
+    expect(resolved).toHaveLength(3);
+    expect(resolved[1]).toBe(customRetry);
+  });
+
+  it('treats an explicitly empty caller list as an opt-out', async () => {
+    const agent = bareAgent({ errorProcessors: [] });
+
+    expect(await agent.listErrorProcessors()).toEqual([]);
+  });
+
+  it('resolves a function-form errorProcessors list before deduping', async () => {
+    const customCompat = new ProviderHistoryCompat();
+    const customProcessor: Processor = {
+      id: 'custom-error-processor',
+      processAPIError: async () => ({ retry: true }),
+    };
+    const agent = bareAgent({ errorProcessors: () => [customCompat, customProcessor] });
+
+    const resolved = await agent.listErrorProcessors();
+
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'custom-error-processor',
+      'stream-error-retry-processor',
+      'prefill-error-handler',
+    ]);
+    expect(resolved[0]).toBe(customCompat);
+  });
+
+  it('leaves getConfiguredProcessorIds reporting only what the caller configured', async () => {
+    const customProcessor: Processor = {
+      id: 'custom-error-processor',
+      processAPIError: async () => ({ retry: true }),
+    };
+
+    expect((await bareAgent().getConfiguredProcessorIds()).errorProcessorIds).toEqual([]);
+    expect(
+      (await bareAgent({ errorProcessors: [customProcessor] }).getConfiguredProcessorIds()).errorProcessorIds,
+    ).toEqual(['custom-error-processor']);
   });
 });

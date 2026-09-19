@@ -1,7 +1,27 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import type { ErrorProcessor } from '../../../../processors';
+import {
+  PrefillErrorHandler,
+  ProviderHistoryCompat,
+  StreamErrorRetryProcessor,
+} from '../../../../processors';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+
+/**
+ * These scenarios assert exactly which error processors run. The agent adds the shared stability
+ * defaults unless their ids are already present, and the durable engine resolves that list from the
+ * agent rather than from call-time options. Naming all three ids here keeps the list to the
+ * processors under test; the instances carry no retry budget so they stay neutral.
+ */
+function withStockStabilityDefaults(processors: ErrorProcessor[]): ErrorProcessor[] {
+  return [
+    ...processors,
+    new ProviderHistoryCompat(),
+    new StreamErrorRetryProcessor({ maxRetries: 0 }),
+    new PrefillErrorHandler(),
+  ];
+}
 
 /**
  * Regression class: error processor API error recovery.
@@ -34,7 +54,7 @@ describeForAllEngines('AIMock loop scenario: error processor recovery', engine =
       llm: getMock(),
       prompt: 'Test error recovery.',
       stopWhen: stepCountIs(1),
-      errorProcessors: [errorProcessor],
+      errorProcessors: withStockStabilityDefaults([errorProcessor]),
       fixtures: llm => {
         // Return 400 error
         llm.onMessage(/.*/, {
@@ -71,7 +91,7 @@ describeForAllEngines('AIMock loop scenario: error processor recovery', engine =
       llm: getMock(),
       prompt: 'Test context access.',
       stopWhen: stepCountIs(1),
-      errorProcessors: [errorProcessor],
+      errorProcessors: withStockStabilityDefaults([errorProcessor]),
       fixtures: llm => {
         llm.onMessage(/.*/, {
           error: { message: 'Bad request', type: 'invalid_request_error', code: 'invalid_request' },
@@ -107,7 +127,7 @@ describeForAllEngines('AIMock loop scenario: error processor recovery', engine =
       llm: getMock(),
       prompt: 'Test no retry.',
       stopWhen: stepCountIs(1),
-      errorProcessors: [errorProcessor],
+      errorProcessors: withStockStabilityDefaults([errorProcessor]),
       fixtures: llm => {
         llm.onMessage(/.*/, {
           error: { message: 'Permanent error', type: 'invalid_request_error', code: 'invalid_request' },

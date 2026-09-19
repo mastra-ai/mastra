@@ -374,8 +374,7 @@ export type SendAgentStateSignalOptions<OUTPUT = unknown> = SendAgentSignalOptio
  * @experimental Agent state signal APIs are experimental and may change in a future release.
  */
 export type SendAgentStateSignalResult<OUTPUT = unknown> =
-  | (SendAgentSignalResult<OUTPUT> & { skipped?: false })
-  | { skipped: true; reason: 'unchanged'; signal?: undefined };
+  (SendAgentSignalResult<OUTPUT> & { skipped?: false }) | { skipped: true; reason: 'unchanged'; signal?: undefined };
 
 /**
  * @experimental Agent notification signal APIs are experimental and may change in a future release.
@@ -461,8 +460,7 @@ export interface AgentThreadSubscription<OUTPUT = unknown> {
 export type ToolsetsInput = Record<string, ToolsInput>;
 
 type FallbackFields<OUTPUT = undefined> =
-  | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
-  | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
+  { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never } | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
 export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
@@ -957,14 +955,18 @@ interface AgentConfigBase<
   /**
    * Maximum number of times processors can trigger a retry per generation.
    * When a processor calls abort({ retry: true }), the agent retries with feedback.
-   * Input and output processor retries require this value to be set. When
-   * errorProcessors are configured and it is omitted, their runtime cap is 10.
-   * Set it explicitly to bound every retry path.
+   * Unset by default. Input and output processor retries require this value to be
+   * set. When error processors resolve to a non-empty list and this is omitted,
+   * their runtime cap is 10.
    */
   maxProcessorRetries?: number;
   /**
    * Error processors that handle LLM API rejections.
    * These implement `processAPIError` and can inspect the error, modify messages, and signal a retry.
+   * Defaults to the shared stability processors — `ProviderHistoryCompat`,
+   * `StreamErrorRetryProcessor`, and `PrefillErrorHandler`, in that order. Each default is added only
+   * when no processor in your list carries its `id`, and your processors keep their positions ahead of
+   * the added defaults.
    * Error processors can also be placed in `inputProcessors` or `outputProcessors`.
    */
   errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
@@ -1136,11 +1138,11 @@ export type AgentGenerateOptions<
   /**
    * Maximum number of times processors can trigger a retry for this generation.
    * Overrides the agent's default maxProcessorRetries. Input and output processor
-   * retries require an explicit cap; errorProcessors default to a cap of 10 when
-   * configured without one. Set this explicitly to bound every retry path.
+   * retries require an explicit cap; error processors default to a cap of 10 when
+   * they resolve to a non-empty list and no cap is set.
    */
   maxProcessorRetries?: number;
-  /** Error processors to use for this generation call (overrides agent's default) */
+  /** Error processors to use for this generation call. Replaces the agent's resolved list, including its defaults. */
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
