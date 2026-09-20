@@ -134,12 +134,14 @@ describe('buildGitLabVersionControl', () => {
     const result = setup();
     const { repository } = await register(result);
 
-    await expect(
-      result.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository.id }),
-    ).resolves.toEqual({
+    const target = await result.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository.id });
+    expect(target).toEqual({
       connection: { type: 'oauth', accessToken: 'gitlab-connection:connection-1' },
-      sourceId: 'acme/app',
+      sourceId: '101',
     });
+    const listMergeRequests = vi.spyOn(result.api, 'listMergeRequests').mockResolvedValue([]);
+    await result.versionControl.listPullRequests({ ...target, state: 'open' });
+    expect(listMergeRequests).toHaveBeenCalledWith('101', expect.objectContaining({ state: 'opened' }));
   });
 
   it('returns repository clone access from the stored installation connection', async () => {

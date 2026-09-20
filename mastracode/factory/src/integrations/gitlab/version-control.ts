@@ -446,7 +446,10 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       if (!installation) throw new Error('Version-control installation not found.');
       const connection = parseConnection(installation.providerMetadata.connection);
       if (!connection) throw new GitLabApiError('GitLab installation connection metadata is invalid.', 500);
-      return { connection, sourceId: repository.slug };
+      // Platform's proxy normalizes encoded slashes in a project path before
+      // forwarding to GitLab. The immutable numeric project ID works for both
+      // proxied and direct API requests and is already persisted on the row.
+      return { connection, sourceId: repository.externalId };
     },
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       const repository = await sourceControlStorage().repositories.get({ orgId, id: repositoryId });
