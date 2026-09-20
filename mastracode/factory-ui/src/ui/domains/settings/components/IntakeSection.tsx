@@ -25,6 +25,7 @@ import type { SourcePickerGroup } from './IntakeSourcePicker';
 import { GithubLabelRouting } from './GithubLabelRouting';
 import { IntakeSourceRouting, LinearRouting } from './LinearRouting';
 
+import { KnowledgeImportersSection } from './KnowledgeImportersSection';
 import { SettingsSubsection } from './SettingsSubsection';
 
 function toggleId(ids: string[] | null, id: string): string[] | null {
@@ -540,6 +541,7 @@ export function IntakeSection() {
         </SettingsSubsection>
       )}
       <IncidentioIntakeSection config={config} busy={busy} update={update} factories={factoriesQuery.data ?? []} />
+      <KnowledgeImportersSection />
     </div>
   );
 }
