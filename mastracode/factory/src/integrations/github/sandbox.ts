@@ -469,7 +469,7 @@ async function fetchStartPoint(
     workdir,
     'fetch',
     ...(changeRequestRef && shallowClone ? ['--unshallow'] : []),
-    ...(changeRequestRef ? ['--filter=blob:none'] : []),
+    ...(pullRequestNumber !== undefined ? ['--filter=blob:none'] : []),
     'origin',
     baseBranch,
   ];
@@ -481,7 +481,7 @@ async function fetchStartPoint(
   if (base.exitCode !== 0 || !changeRequestRef) return base;
   return gitTransfer(
     sandbox,
-    ['-C', workdir, 'fetch', '--filter=blob:none', 'origin', changeRequestRef],
+    ['-C', workdir, 'fetch', ...(pullRequestNumber !== undefined ? ['--filter=blob:none'] : []), 'origin', changeRequestRef],
     {
       env,
       timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
@@ -517,6 +517,7 @@ async function checkoutSessionBranchImpl(
   // helper when reopening an older checkout so a stale sandbox cannot retain
   // credentials injected by an earlier implementation.
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
+  const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
   const credentialKey = authUsername ? 'credential.' + credentialScope(cleanCloneUrl) + '.helper' : 'credential.helper';
   if (authUsername) {
     await execute(sandbox, 'git', ['-C', workdir, 'config', '--unset-all', credentialKey]);
@@ -537,7 +538,7 @@ async function checkoutSessionBranchImpl(
     `refs/heads/${branch}`,
   ]);
   if (local.exitCode === 0) {
-    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch]);
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch], { env: authEnv });
     if (checkout.exitCode !== 0) {
       if (isBlockedByLocalWork(checkout)) return;
       throw classifyGitFailure(checkout, 'clone-failed');
@@ -548,11 +549,11 @@ async function checkoutSessionBranchImpl(
   const shallowClone =
     changeRequestSession &&
     (await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--is-shallow-repository'])).stdout.trim() === 'true';
-  const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
   const fetch = await fetchStartPoint(sandbox, workdir, options, shallowClone, authEnv);
   if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
 
   const create = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch, 'FETCH_HEAD'], {
+    env: authEnv,
     timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
     phase: 'branch checkout',
   });
@@ -562,7 +563,7 @@ async function checkoutSessionBranchImpl(
   // The branch exists even though the show-ref probe missed it: either another
   // materialization created it concurrently (adopt it), or the sandbox carries
   // a broken loose ref (remove it and retry).
-  const adopt = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch]);
+  const adopt = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch], { env: authEnv });
   if (adopt.exitCode === 0 || isBlockedByLocalWork(adopt)) return;
 
   let drop = await execute(sandbox, 'git', ['-C', workdir, 'update-ref', '--no-deref', '-d', `refs/heads/${branch}`]);
@@ -574,6 +575,7 @@ async function checkoutSessionBranchImpl(
   if (drop.exitCode !== 0) throw classifyGitFailure(create, 'clone-failed');
 
   const retry = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch, 'FETCH_HEAD'], {
+    env: authEnv,
     timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
     phase: 'branch checkout retry',
   });

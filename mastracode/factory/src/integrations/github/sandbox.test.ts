@@ -581,9 +581,15 @@ describe('checkoutSessionBranch', () => {
       authUsername: 'oauth2',
     });
 
-    expect(sandbox.calls).toContain('git -C /workspace/repo fetch --unshallow --filter=blob:none origin main');
-    expect(sandbox.calls).toContain('git -C /workspace/repo fetch --filter=blob:none origin refs/merge-requests/6/head');
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch --unshallow origin main');
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch origin refs/merge-requests/6/head');
     expect(sandbox.calls).toContain('git -C /workspace/repo checkout -b factory/gitlab-mr-6-2c3b494988ac FETCH_HEAD');
+    const checkout = sandbox.executions.find(execution => execution.args.includes('checkout'));
+    expect(checkout?.options?.env).toMatchObject({
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.https://gitlab.example.com/acme/platform/app.git.extraHeader',
+      GIT_TERMINAL_PROMPT: '0',
+    });
     expect(sandbox.calls.join('\n')).not.toContain('!gh auth git-credential');
     expect(sandbox.calls.join('\n')).not.toContain('tok-secret');
   });
