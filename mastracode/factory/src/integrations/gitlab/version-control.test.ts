@@ -16,7 +16,7 @@ const POSITION: GitLabDiscussionPosition = {
   new_line: 42,
 };
 
-function setup(repositoryAccessToken: string | null = 'glpat-secret') {
+function setup(repositoryAccessToken: string | null = 'glpat-secret', webBaseUrl?: string) {
   const storage = new SourceControlStorageInMemory('gitlab');
   const api = new GitLabApiClient({
     baseUrl: 'https://gitlab.example.com',
@@ -27,6 +27,7 @@ function setup(repositoryAccessToken: string | null = 'glpat-secret') {
     api,
     connection: { type: 'oauth' as const, accessToken: 'gitlab-connection:connection-1' },
     host: 'gitlab.example.com',
+    ...(webBaseUrl ? { webBaseUrl } : {}),
     repositoryAccessToken: repositoryAccessToken ? async () => repositoryAccessToken : undefined,
   }));
   const versionControl = buildGitLabVersionControl({ contextForConnection });
@@ -161,6 +162,23 @@ describe('buildGitLabVersionControl', () => {
       type: 'oauth',
       accessToken: 'gitlab-connection:connection-1',
     }, 'gitlab.example.com');
+  });
+
+  it('preserves a self-managed relative URL root for clone and merge-request note links', async () => {
+    const result = setup('glpat-secret', 'https://gitlab.example.com/gitlab');
+    const { repository } = await register(result);
+
+    await expect(
+      result.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository.id }),
+    ).resolves.toMatchObject({ cloneUrl: 'https://gitlab.example.com/gitlab/acme/app.git' });
+
+    vi.spyOn(result.api, 'listMergeRequestNotes').mockResolvedValue([note()]);
+    const comments = await result.versionControl.listComments({
+      connection: CONNECTION,
+      sourceId: '101:acme/app',
+      pullRequestId: '17',
+    });
+    expect(comments.comments[0]?.url).toBe('https://gitlab.example.com/gitlab/acme/app/-/merge_requests/17#note_91');
   });
 
   it('does not expose a Platform connection selector as a repository credential', async () => {

@@ -195,6 +195,9 @@ export class GitLabApiClient {
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       throw new Error('GitLabApiClient baseUrl must be an absolute HTTP(S) URL.');
     }
+    if (url.username || url.password || url.search || url.hash) {
+      throw new Error('GitLabApiClient baseUrl must not include credentials, query, or fragment.');
+    }
     const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
     const isLoopback = hostname === 'localhost' || hostname === '::1' || /^127(?:\.\d{1,3}){3}$/.test(hostname);
     if (url.protocol === 'http:' && !isLoopback) {

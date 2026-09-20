@@ -24,6 +24,12 @@ describe('GitLabApiClient', () => {
     expect(() => new GitLabApiClient({ baseUrl: 'http://localhost:8080', accessToken: 'token' })).not.toThrow();
     expect(() => new GitLabApiClient({ baseUrl: 'http://127.0.0.1:8080', accessToken: 'token' })).not.toThrow();
     expect(() => new GitLabApiClient({ baseUrl: 'http://[::1]:8080', accessToken: 'token' })).not.toThrow();
+    expect(() => new GitLabApiClient({ baseUrl: 'https://user:secret@gitlab.example.com', accessToken: 'token' })).toThrow(
+      /credentials, query, or fragment/,
+    );
+    expect(() => new GitLabApiClient({ baseUrl: 'https://gitlab.example.com/?key=secret', accessToken: 'token' })).toThrow(
+      /credentials, query, or fragment/,
+    );
   });
 
   it('checks the current identity without listing projects', async () => {
@@ -39,6 +45,18 @@ describe('GitLabApiClient', () => {
     const request = requestOf(fetchMock);
     expect(request.url).toBe('https://gitlab.example.com/api/v4/user');
     expect(request.init.headers).toMatchObject({ 'private-token': 'personal-token' });
+  });
+
+  it('preserves a self-managed relative URL root in direct API requests', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json({ id: 7, username: 'rhys' }));
+    const client = new GitLabApiClient({
+      baseUrl: 'https://gitlab.example.com/gitlab/',
+      accessToken: 'group-token',
+      fetchImpl: fetchMock,
+    });
+
+    await client.getCurrentUser();
+    expect(requestOf(fetchMock).url).toBe('https://gitlab.example.com/gitlab/api/v4/user');
   });
 
   it('lists projects directly with a private token', async () => {

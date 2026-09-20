@@ -30,6 +30,7 @@ export interface GitLabVersionControlContext {
   api: GitLabApiClient;
   connection: IntegrationConnection;
   host: string;
+  webBaseUrl?: string;
   repositoryAccessToken?: () => Promise<string>;
 }
 
@@ -131,7 +132,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     return {
       comments: notes
         .filter(note => !note.system && note.type !== 'DiffNote')
-        .map(note => toPullRequestComment(context.host, input.sourceId, mergeRequestIid, note)),
+        .map(note => toPullRequestComment(webBaseUrl(context), input.sourceId, mergeRequestIid, note)),
       nextCursor: notes.length === GITLAB_NOTES_PAGE_SIZE ? String(page + 1) : null,
     };
   };
@@ -140,14 +141,14 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     const context = await deps.contextForConnection(input.connection);
     const mergeRequestIid = requirePositiveId(input.pullRequestId, 'merge request');
     const note = await context.api.createMergeRequestNote(input.sourceId, mergeRequestIid, input.body);
-    return toPullRequestComment(context.host, input.sourceId, mergeRequestIid, note);
+    return toPullRequestComment(webBaseUrl(context), input.sourceId, mergeRequestIid, note);
   };
 
   const updateComment: VersionControl['updateComment'] = async input => {
     const context = await deps.contextForConnection(input.connection);
     const { mergeRequestIid, noteId } = parseNoteId(input.commentId);
     const note = await context.api.updateMergeRequestNote(input.sourceId, mergeRequestIid, noteId, input.body);
-    return toPullRequestComment(context.host, input.sourceId, mergeRequestIid, note);
+    return toPullRequestComment(webBaseUrl(context), input.sourceId, mergeRequestIid, note);
   };
 
   const deleteComment: VersionControl['deleteComment'] = async input => {
@@ -162,7 +163,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     const approvals = await context.api.getMergeRequestApprovals(input.sourceId, mergeRequestIid);
     return {
       reviews: (approvals.approved_by ?? []).map(({ user }) =>
-        toApprovalReview(context.host, input.sourceId, mergeRequestIid, user),
+        toApprovalReview(webBaseUrl(context), input.sourceId, mergeRequestIid, user),
       ),
       nextCursor: null,
     };
@@ -187,14 +188,14 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
             candidate.username === currentUser?.username
           : String(candidate.id ?? candidate.username) === reviewerKey,
       );
-      return user ? toApprovalReview(context.host, input.sourceId, mergeRequestIid, user) : null;
+      return user ? toApprovalReview(webBaseUrl(context), input.sourceId, mergeRequestIid, user) : null;
     }
     const noteId = parsePositiveInteger(input.reviewId.slice(commentPrefix.length));
     if (noteId === null) return null;
     try {
       const note = await context.api.getMergeRequestNote(input.sourceId, mergeRequestIid, noteId);
       if (note.system || note.type === 'DiffNote') return null;
-      return toCommentReview(context.host, input.sourceId, mergeRequestIid, note);
+      return toCommentReview(webBaseUrl(context), input.sourceId, mergeRequestIid, note);
     } catch (error) {
       if (error instanceof GitLabApiError && error.status === 404) return null;
       throw error;
@@ -250,7 +251,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
           .filter(note => !note.system)
           .map(note =>
             toReviewComment(
-              context.host,
+              webBaseUrl(context),
               input.sourceId,
               mergeRequestIid,
               discussion.id,
@@ -288,7 +289,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         input.body,
       );
       return toReviewComment(
-        context.host,
+        webBaseUrl(context),
         input.sourceId,
         mergeRequestIid,
         thread.discussionId,
@@ -335,7 +336,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     });
     const note = discussion.notes.find(candidate => candidate.position) ?? discussion.notes[0];
     if (!note) throw new GitLabApiError('GitLab discussion response did not include a note.', 502);
-    return toReviewComment(context.host, input.sourceId, mergeRequestIid, discussion.id, note, null, position);
+    return toReviewComment(webBaseUrl(context), input.sourceId, mergeRequestIid, discussion.id, note, null, position);
   };
 
   const updateReviewComment: VersionControl['updateReviewComment'] = async input => {
@@ -358,7 +359,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       input.body,
     );
     return toReviewComment(
-      context.host,
+      webBaseUrl(context),
       input.sourceId,
       reference.mergeRequestIid,
       reference.discussionId,
@@ -504,10 +505,10 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         throw notSupported('This GitLab connection does not expose credentials for repository cloning.');
       }
       const token = await context.repositoryAccessToken();
-      const host = normalizeHost(context.host);
+      const baseUrl = webBaseUrl(context);
       const slug = normalizeSlug(repository.slug);
       return {
-        cloneUrl: `https://${host}/${slug}.git`,
+        cloneUrl: `${baseUrl}/${slug}.git`,
         authorization: { scheme: 'bearer', token, username: 'oauth2' },
       };
     },
@@ -565,7 +566,7 @@ async function submitReviewAction(
     await context.api.approveMergeRequest(input.sourceId, mergeRequestIid, input.commitId);
     const comment = body
       ? toPullRequestComment(
-          context.host,
+          webBaseUrl(context),
           input.sourceId,
           mergeRequestIid,
           await context.api.createMergeRequestNote(input.sourceId, mergeRequestIid, body),
@@ -573,7 +574,7 @@ async function submitReviewAction(
       : null;
     return {
       id: String(mergeRequestIid) + ':approval',
-      url: comment?.url ?? mergeRequestUrl(context.host, input.sourceId, mergeRequestIid),
+      url: comment?.url ?? mergeRequestUrl(webBaseUrl(context), input.sourceId, mergeRequestIid),
       author: comment?.author ?? null,
       body: comment?.body ?? null,
       state: 'approved',
@@ -584,7 +585,7 @@ async function submitReviewAction(
   const body = input.body?.trim();
   if (!body) throw new GitLabApiError('GitLab comment reviews require a body.', 400);
   const note = await context.api.createMergeRequestNote(input.sourceId, mergeRequestIid, body);
-  return toCommentReview(context.host, input.sourceId, mergeRequestIid, note);
+  return toCommentReview(webBaseUrl(context), input.sourceId, mergeRequestIid, note);
 }
 
 function toCommentReview(host: string, sourceId: string, mergeRequestIid: number, note: GitLabNote): Review {
@@ -637,7 +638,30 @@ function toReviewComment(
 }
 
 function mergeRequestUrl(host: string, sourceId: string, mergeRequestIid: number): string {
-  return `https://${normalizeHost(host)}/${sourcePath(sourceId)}/-/merge_requests/${mergeRequestIid}`;
+  return `${host}/${sourcePath(sourceId)}/-/merge_requests/${mergeRequestIid}`;
+}
+
+function webBaseUrl(context: GitLabVersionControlContext): string {
+  const host = normalizeHost(context.host);
+  if (!context.webBaseUrl) return `https://${host}`;
+  let url: URL;
+  try {
+    url = new URL(context.webBaseUrl);
+  } catch {
+    throw new GitLabApiError('GitLab web base URL is invalid.', 400);
+  }
+  const loopback = url.hostname === 'localhost' || url.hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(url.hostname);
+  if (
+    url.host !== host ||
+    (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new GitLabApiError('GitLab web base URL is invalid.', 400);
+  }
+  return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
 }
 
 function sourcePath(sourceId: string): string {
@@ -770,7 +794,7 @@ function toPullRequestComment(
 ): PullRequestComment {
   return {
     id: `${mergeRequestIid}:${note.id}`,
-    url: `https://${normalizeHost(host)}/${sourcePath(sourceId)}/-/merge_requests/${mergeRequestIid}#note_${note.id}`,
+    url: `${mergeRequestUrl(host, sourceId, mergeRequestIid)}#note_${note.id}`,
     author: displayName(note.author),
     body: note.body,
     createdAt: note.created_at,

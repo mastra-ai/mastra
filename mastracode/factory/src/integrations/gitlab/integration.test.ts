@@ -182,6 +182,34 @@ describe('GitLabIntegration', () => {
     expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({ 'private-token': 'group-token' });
   });
 
+  it('keeps a direct self-managed relative URL root when resolving clone access', async () => {
+    const gitlab = new GitLabIntegration({
+      baseUrl: 'https://gitlab.example.com/gitlab/',
+      accessToken: 'group-token',
+      accessTokenType: 'group',
+    });
+    const storage = new SourceControlStorageInMemory('gitlab');
+    gitlab.versionControl.initialize({ storage });
+    const installation = await gitlab.versionControl.registerInstallation({
+      orgId: 'org-1',
+      userId: 'user-1',
+      installation: {
+        externalId: 'direct',
+        accountName: 'gitlab.example.com',
+        metadata: { connection: { type: 'oauth', accessToken: 'gitlab-direct-access-token' } },
+      },
+    });
+    const [repository] = await gitlab.versionControl.registerRepositories({
+      orgId: 'org-1',
+      installationId: installation.id,
+      repositories: [{ externalId: '10', slug: 'mastra/platform', defaultBranch: 'main' }],
+    });
+
+    await expect(
+      gitlab.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository!.id }),
+    ).resolves.toMatchObject({ cloneUrl: 'https://gitlab.example.com/gitlab/mastra/platform.git' });
+  });
+
   it('round-trips a listed project-local issue id into an update', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

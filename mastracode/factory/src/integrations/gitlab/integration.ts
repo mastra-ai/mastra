@@ -46,6 +46,7 @@ interface GitLabConnectionContext {
   api: GitLabApiClient;
   connection: IntegrationConnection;
   host: string;
+  webBaseUrl?: string;
   /** Resolves a fresh provider token for a single brokered git operation. */
   repositoryAccessToken?: () => Promise<string>;
 }
@@ -678,6 +679,7 @@ export class GitLabIntegration extends GitLabIntegrationBase {
       api,
       connection: { type: 'oauth', accessToken: DIRECT_CONNECTION_TOKEN },
       host: new URL(this.#baseUrl).host,
+      webBaseUrl: this.#baseUrl,
       repositoryAccessToken: async () => this.#accessToken,
     };
   }
