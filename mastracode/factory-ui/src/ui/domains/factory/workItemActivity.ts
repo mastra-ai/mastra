@@ -39,7 +39,7 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
       avatarUrl: `https://github.com/${encodeURIComponent(author)}.png?size=64`,
     };
   }
-  if (item.source === 'gitlab-issue') {
+  if (item.source === 'gitlab-issue' || item.source === 'gitlab-pr') {
     const author = metadataString(item.metadata, 'author');
     return author ? { id: `gitlab:${author}`, name: author } : undefined;
   }
@@ -65,7 +65,7 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
  * assignee is the current owner and is also represented in the activity rail.
  */
 function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined {
-  if (item.source === 'gitlab-issue') {
+  if (item.source === 'gitlab-issue' || item.source === 'gitlab-pr') {
     const assignee = metadataString(item.metadata, 'assignee');
     return assignee ? { id: `gitlab:${assignee}`, name: assignee } : undefined;
   }

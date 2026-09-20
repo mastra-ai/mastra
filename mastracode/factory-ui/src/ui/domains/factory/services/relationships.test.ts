@@ -60,6 +60,22 @@ describe('Factory work item relationships', () => {
     expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBe(issue.id);
   });
 
+  it('links a GitLab MR back to its issue session and names it as a Review item', () => {
+    const issue = workItem({
+      id: 'gitlab-issue-1', source: 'gitlab-issue',
+      sessions: { work: { sessionId: 'session-1', branch: 'feature/gitlab', threadId: 'thread-1', startedBy: 'user-1' } },
+    });
+    const review = workItem({
+      id: 'gitlab-mr-5', source: 'gitlab-pr',
+      metadata: { headBranch: 'feature/gitlab', gitlabMergeRequestIid: 5 },
+    });
+    expect(relatedWorkItemIndex([review, issue])(review)).toEqual([issue]);
+    expect(relatedWorkItemIndex([review, issue])(issue)).toEqual([review]);
+    expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBe(issue.id);
+    expect(relationshipLabel(review)).toBe('Review: MR !5');
+    expect(workItemReferenceLabel(review)).toBe('MR !5');
+  });
+
   it('given a review with an explicit parent, when another work item shares its branch, then branch inference does not add a second parent', () => {
     const explicitParent = workItem({ id: 'issue-24', source: 'github-issue' });
     const sameBranch = workItem({

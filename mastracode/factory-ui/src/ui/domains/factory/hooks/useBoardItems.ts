@@ -130,7 +130,7 @@ export function useBoardItems({
     // rather than guessing a phase the board may not declare.
     const initialPhase = catalog.data?.find(board => board.id === kind)?.initialPhase;
     const { source, sourceKey, title, url, metadata, customPrompt } = payload.candidate;
-    const parentWorkItemId = source === 'github-pr' ? inferredParentWorkItemId(metadata, all) : undefined;
+    const parentWorkItemId = source === 'github-pr' || source === 'gitlab-pr' ? inferredParentWorkItemId(metadata, all) : undefined;
     void (async () => {
       const item = await upsert.mutateAsync({
         board: kind,

@@ -10,6 +10,7 @@ import { WorkspaceFilesToggle } from '../../workspace-viewer/components/Workspac
 import { useWorkspacePanel } from '../../workspace-viewer/context/useWorkspacePanel';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
+import { isPullRequestSource } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
@@ -23,6 +24,7 @@ function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): Work
 function sessionTitle(item: WorkItem): string {
   const number = workItemNumber(item);
   if (item.source === 'github-pr' && number) return `PR #${number}: ${item.title}`;
+  if (item.source === 'gitlab-pr' && number) return `MR !${number}: ${item.title}`;
   if (item.source === 'github-issue' && number) return `Issue #${number}: ${item.title}`;
   return item.title;
 }
@@ -30,6 +32,7 @@ function sessionTitle(item: WorkItem): string {
 function externalWorkItemLabel(item: WorkItem): string {
   const number = workItemNumber(item);
   if (item.source === 'github-pr') return number ? `PR #${number}` : 'Pull request';
+  if (item.source === 'gitlab-pr') return number ? `MR !${number}` : 'Merge request';
   if (item.source === 'github-issue') return number ? `Issue #${number}` : 'Issue';
   if (item.source === 'linear-issue') {
     return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : (number ?? 'Linear issue');
@@ -87,7 +90,7 @@ export function FactorySessionHeader() {
 }
 
 function WorkItemBreadcrumb({ item, factoryId }: { item: WorkItem; factoryId?: string }) {
-  const isReview = item.source === 'github-pr';
+  const isReview = isPullRequestSource(item.source);
 
   return (
     <nav className="text-ui-sm flex min-w-0 items-center gap-2" aria-label="Factory session breadcrumb">
@@ -183,6 +186,11 @@ function WorkItemActions({
           reviewItem={item}
           threadId={threadId}
         />
+      ) : null}
+      {item.source === 'gitlab-pr' && item.url ? (
+        <Button as="a" variant="ghost" size="sm" href={item.url} target="_blank" rel="noreferrer">
+          {externalWorkItemLabel(item)}
+        </Button>
       ) : null}
     </>
   );

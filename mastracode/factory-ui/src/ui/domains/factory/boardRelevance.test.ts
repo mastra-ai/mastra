@@ -87,6 +87,13 @@ describe('board relevance', () => {
     expect([...relevance['review-requested']]).toEqual(['github:monalisa']);
   });
 
+  it('attributes GitLab MR authors, assignees, and requested reviewers to GitLab identities', () => {
+    const relevance = workItemRelevance({ ...item, source: 'gitlab-pr' }, undefined);
+    expect([...relevance.authored]).toEqual(['gitlab:octocat']);
+    expect([...relevance.assigned]).toEqual(['gitlab:hubot']);
+    expect([...relevance['review-requested']]).toEqual(['gitlab:monalisa']);
+  });
+
   it('matches any selected relevance type for the selected teammate', () => {
     expect(workItemMatchesRelevance(item, activityPage, 'github:octocat', new Set(['authored']))).toBe(true);
     expect(workItemMatchesRelevance(item, activityPage, 'github:octocat', new Set(['assigned']))).toBe(false);

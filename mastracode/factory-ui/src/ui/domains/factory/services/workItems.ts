@@ -21,6 +21,10 @@ export type WorkItemSource =
   | 'slack-thread'
   | 'manual';
 
+export function isPullRequestSource(source: WorkItemSource): boolean {
+  return source === 'github-pr' || source === 'gitlab-pr';
+}
+
 export interface WorkItemSessionRef {
   sessionId: string;
   branch: string;
