@@ -449,6 +449,10 @@ describe('PlatformGitLabIntegration', () => {
     });
 
     const input = { orgId: 'org-1', repositoryId: repository!.id };
+    await expect(
+      gitlab.versionControl.getRepositoryAccess({ orgId: 'org-other', repositoryId: repository!.id }),
+    ).rejects.toThrow('Version-control repository not found.');
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/credentials'))).toHaveLength(0);
     await expect(gitlab.versionControl.getRepositoryAccess(input)).resolves.toEqual({
       cloneUrl: 'https://gitlab.com/mastra/platform.git',
       authorization: { scheme: 'bearer', token, username: 'oauth2' },
