@@ -160,7 +160,7 @@ describe('buildGitLabVersionControl', () => {
     expect(result.contextForConnection).toHaveBeenLastCalledWith({
       type: 'oauth',
       accessToken: 'gitlab-connection:connection-1',
-    });
+    }, 'gitlab.example.com');
   });
 
   it('does not expose a Platform connection selector as a repository credential', async () => {

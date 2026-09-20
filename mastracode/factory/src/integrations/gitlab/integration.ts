@@ -114,6 +114,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   };
   readonly versionControl = buildGitLabVersionControl({
     contextForConnection: connection => this.#versionControlContext(connection),
+    contextForStoredInstallation: (connection, host) => this.#versionControlContextForInstallation(connection, host),
   });
   initialize({
     projects,
@@ -331,6 +332,18 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       );
     }
     return contexts[0]!;
+  }
+  async #versionControlContextForInstallation(
+    connection: IntegrationConnection,
+    host: string | undefined,
+  ): Promise<GitLabConnectionContext> {
+    // A direct PAT intentionally overrides Platform credentials. Old links can
+    // retain their Platform connection id; use the PAT only for the same host.
+    if (this.diagnostics().mode === 'direct' && host) {
+      const [direct] = await this.activeContexts();
+      if (direct && normalizeGitLabHost(host) === normalizeGitLabHost(direct.host)) return direct;
+    }
+    return this.#versionControlContext(connection);
   }
   async #contextForReference(reference: GitLabSourceReference): Promise<GitLabConnectionContext> {
     if (reference.connectionId) return this.contextById(reference.connectionId);

@@ -313,6 +313,49 @@ describe('GitLabIntegration', () => {
     ).rejects.toMatchObject({ status: 404 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('uses a direct token for a same-host repository linked under Platform OAuth', async () => {
+    const gitlab = direct(vi.fn<typeof fetch>());
+    const storage = new SourceControlStorageInMemory('gitlab');
+    gitlab.versionControl.initialize({ storage });
+    const installation = await storage.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'git_platform_connection',
+      providerMetadata: {
+        host: 'gitlab.com',
+        connection: { type: 'oauth', accessToken: 'gitlab-connection:git_platform_connection' },
+      },
+    });
+    const repository = await storage.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '10', slug: 'mastra/platform', defaultBranch: 'main' },
+    });
+
+    await expect(gitlab.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository.id })).resolves.toEqual({
+      connection: { type: 'oauth', accessToken: 'gitlab-direct-access-token' },
+      sourceId: '10:mastra/platform',
+    });
+    await expect(gitlab.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository.id })).resolves.toEqual({
+      cloneUrl: 'https://gitlab.com/mastra/platform.git',
+      authorization: { scheme: 'bearer', token: 'group-token', username: 'oauth2' },
+    });
+
+    const otherHost = await storage.installations.upsert({
+      orgId: 'org-1', connectedByUserId: 'user-1', externalId: 'git_other_connection',
+      providerMetadata: {
+        host: 'gitlab.other.example',
+        connection: { type: 'oauth', accessToken: 'gitlab-connection:git_other_connection' },
+      },
+    });
+    const otherRepository = await storage.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: otherHost.id, externalId: '11', slug: 'mastra/other', defaultBranch: 'main' },
+    });
+    await expect(gitlab.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: otherRepository.id })).rejects.toThrow(
+      'GitLab connection is unavailable.',
+    );
+  });
 });
 
 describe('PlatformGitLabIntegration', () => {

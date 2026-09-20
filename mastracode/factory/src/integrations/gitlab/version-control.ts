@@ -35,6 +35,7 @@ export interface GitLabVersionControlContext {
 
 export interface GitLabVersionControlDependencies {
   contextForConnection(connection: IntegrationConnection): Promise<GitLabVersionControlContext>;
+  contextForStoredInstallation?(connection: IntegrationConnection, host: string | undefined): Promise<GitLabVersionControlContext>;
 }
 
 export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies): VersionControl {
@@ -477,9 +478,13 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       if (!installation) throw new Error('Version-control installation not found.');
       const connection = parseConnection(installation.providerMetadata.connection);
       if (!connection) throw new GitLabApiError('GitLab installation connection metadata is invalid.', 500);
+      const context = await (deps.contextForStoredInstallation ?? deps.contextForConnection)(
+        connection,
+        typeof installation.providerMetadata.host === 'string' ? installation.providerMetadata.host : undefined,
+      );
       // The API uses GitLab's immutable numeric project ID because Platform's
       // proxy normalizes encoded path slashes; retain the slug for browser URLs.
-      return { connection, sourceId: `${repository.externalId}:${repository.slug}` };
+      return { connection: context.connection, sourceId: `${repository.externalId}:${repository.slug}` };
     },
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       const repository = await sourceControlStorage().repositories.get({ orgId, id: repositoryId });
@@ -491,7 +496,10 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       if (!installation) throw new Error('Version-control installation not found.');
       const connection = parseConnection(installation.providerMetadata.connection);
       if (!connection) throw new GitLabApiError('GitLab installation connection metadata is invalid.', 500);
-      const context = await deps.contextForConnection(connection);
+      const context = await (deps.contextForStoredInstallation ?? deps.contextForConnection)(
+        connection,
+        typeof installation.providerMetadata.host === 'string' ? installation.providerMetadata.host : undefined,
+      );
       if (!context.repositoryAccessToken) {
         throw notSupported('This GitLab connection does not expose credentials for repository cloning.');
       }
