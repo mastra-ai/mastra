@@ -298,11 +298,11 @@ const platformImportersEnabled = Boolean(
 );
 // Destination scopes are resolved dynamically at each cron fire via
 // `factoryProjectScopes(storage)`: one `resource:<projectId>` per Factory
-// project, so new projects start syncing without a restart. The
-// parameterized access grant (`resource:$projectId`) makes each resolved
-// scope writable. Note the project Importers tab lists an importer's
-// declared static bindings; dynamic destinations surface through the runs
-// they produce rather than as pre-declared binding rows.
+// project (filtered by any per-connection routing selection), so new
+// projects start syncing without a restart. The parameterized access grant
+// (`resource:$projectId`) makes each resolved scope writable. The project
+// Importers tab resolves these dynamic destinations at request time, so a
+// connected importer is listed before its first run.
 const demoImportersResolver = (() => {
   if (!demoKnowledgeEnabled || !platformImportersEnabled) return undefined;
   const scopes = factoryProjectScopes(storage);
