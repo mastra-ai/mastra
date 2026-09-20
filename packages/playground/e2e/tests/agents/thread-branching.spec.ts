@@ -130,6 +130,9 @@ test.describe('Thread branching', () => {
     });
 
     test('lists the branch in the parent thread memory sidebar after a reload', async () => {
+      // branchFromFirstReply plus a fresh page load and sidebar open can
+      // approach the default 30s budget; give the whole flow headroom.
+      test.setTimeout(90000);
       const { sourceThreadId, branchThreadId } = await branchFromFirstReply(page);
 
       // Lineage persists server-side; a fresh page load on the parent must show it.
