@@ -19,12 +19,17 @@ import {
 } from '../importer-runtime.js';
 import { createFakeState } from './fixtures/importer-harness.js';
 
+function conn(id: string) {
+  return { id, integrationId: 'test', status: 'active' } as never;
+}
+
 describe('importer-runtime helpers', () => {
   describe('importerCronTrigger', () => {
     it('maps concrete access keys to static bindings with the provider source', () => {
       const trigger = importerCronTrigger('notion:c1', {
         access: { 'org:acme': 'owner', 'resource:abc': 'edit' },
         schedule: '0 * * * *',
+        connection: conn('c1'),
       });
       expect(trigger.schedule).toBe('0 * * * *');
       expect(trigger.bindings).toEqual([
@@ -38,6 +43,7 @@ describe('importer-runtime helpers', () => {
       const trigger = importerCronTrigger('linear:c2', {
         access: { 'resource:$projectId': 'owner', 'org:acme': 'edit' },
         schedule: '0 * * * *',
+        connection: conn('c2'),
       });
       expect(trigger.bindings).toEqual([{ source: 'linear:c2', scope: 'org:acme' }]);
     });
@@ -46,6 +52,7 @@ describe('importer-runtime helpers', () => {
       const trigger = importerCronTrigger('notion:c5', {
         access: { 'org:acme$2026': 'owner', 'resource:$projectId': 'owner' },
         schedule: '0 * * * *',
+        connection: conn('c5'),
       });
       expect(trigger.bindings).toEqual([{ source: 'notion:c5', scope: 'org:acme$2026' }]);
     });
@@ -55,6 +62,7 @@ describe('importer-runtime helpers', () => {
         access: { 'resource:$projectId': 'owner' },
         schedule: '0 * * * *',
         scopes: async () => ['resource:one', 'resource:two'],
+        connection: conn('c3'),
       });
       expect(trigger.bindings).toBeUndefined();
       expect(trigger.resolveBindings).toBeTypeOf('function');
@@ -64,11 +72,27 @@ describe('importer-runtime helpers', () => {
       ]);
     });
 
+    it('passes the importer connection to the scopes resolver for per-connection routing', async () => {
+      const seen: string[] = [];
+      const trigger = importerCronTrigger('notion:c6', {
+        access: { 'resource:$projectId': 'owner' },
+        schedule: '0 * * * *',
+        scopes: ({ connection }) => {
+          seen.push(connection.id);
+          return [`resource:for-${connection.id}`];
+        },
+        connection: conn('c6'),
+      });
+      await expect(trigger.resolveBindings!()).resolves.toEqual([{ source: 'notion:c6', scope: 'resource:for-c6' }]);
+      expect(seen).toEqual(['c6']);
+    });
+
     it('keeps concrete keys as static bindings alongside a dynamic scopes resolver', async () => {
       const trigger = importerCronTrigger('zendesk:c4', {
         access: { 'org:acme': 'edit', 'resource:$projectId': 'owner' },
         schedule: '0 * * * *',
         scopes: () => ['resource:one'],
+        connection: conn('c4'),
       });
       expect(trigger.bindings).toEqual([{ source: 'zendesk:c4', scope: 'org:acme' }]);
       await expect(trigger.resolveBindings!()).resolves.toEqual([{ source: 'zendesk:c4', scope: 'resource:one' }]);
