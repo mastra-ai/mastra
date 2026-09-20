@@ -1,11 +1,11 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import { Agent } from '../agent';
 import { createScorer } from '../../evals/base';
 import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
+import { Agent } from '../agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
 import { createGoalScorer } from './scorer';
