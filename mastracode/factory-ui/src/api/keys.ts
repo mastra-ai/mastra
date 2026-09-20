@@ -44,6 +44,10 @@ export const queryKeys = {
     [...queryKeys.gitlabIssuesAll(baseUrl), factoryProjectId ?? null, board ?? null] as const,
   gitlabIssue: (baseUrl: string, factoryProjectId: string | undefined, issueId: string | undefined) =>
     ['gitlab', 'issue', baseUrl, factoryProjectId ?? null, issueId ?? null] as const,
+  gitlabPulls: (baseUrl: string, factoryProjectId: string | undefined, projectRepositoryId: string | undefined) =>
+    ['gitlab', 'prs', baseUrl, factoryProjectId ?? null, projectRepositoryId ?? null] as const,
+  gitlabPull: (baseUrl: string, factoryProjectId: string | undefined, projectRepositoryId: string | undefined, number: number | undefined) =>
+    ['gitlab', 'pr', baseUrl, factoryProjectId ?? null, projectRepositoryId ?? null, number ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearTeams: () => ['linear', 'teams'] as const,

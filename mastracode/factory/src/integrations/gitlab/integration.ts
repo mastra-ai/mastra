@@ -167,6 +167,28 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   protected abstract activeContexts(): Promise<GitLabConnectionContext[]>;
   protected abstract contextById(connectionId: string): Promise<GitLabConnectionContext>;
 
+  /** Resolve only a GitLab repository linked to this Factory in this organization. */
+  async getLinkedRepository(input: { orgId: string; factoryProjectId: string; projectRepositoryId: string }) {
+    if (!this.#sourceControl) return null;
+    const connections = await this.#sourceControl.connections.list({
+      orgId: input.orgId,
+      factoryProjectId: input.factoryProjectId,
+    });
+    for (const connection of connections) {
+      if (connection.integrationId !== 'gitlab') continue;
+      const links = await this.#sourceControl.projectRepositories.list({ orgId: input.orgId, connectionId: connection.id });
+      const link = links.find(candidate => candidate.id === input.projectRepositoryId);
+      if (!link) continue;
+      const repository = await this.#sourceControl.repositories.get({ orgId: input.orgId, id: link.repositoryId });
+      const installation = await this.#sourceControl.installations.get({ orgId: input.orgId, id: connection.installationId });
+      if (!repository || !installation) return null;
+      const host = installation.providerMetadata.host;
+      if (typeof host !== 'string' || !host) return null;
+      return { repository, host: normalizeGitLabHost(host) };
+    }
+    return null;
+  }
+
   async getProjectMemberAccessLevel(
     connectionId: string,
     projectId: string,

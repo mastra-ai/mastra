@@ -2,7 +2,11 @@ import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
 import { useMemo, useState } from 'react';
 
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
-import { useGitLabIssuesQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
+import {
+  useGitLabIssuesQuery,
+  useGitLabMergeRequestsQuery,
+  useGitLabStatusQuery,
+} from '../../../../hooks/useGitLabData';
 import {
   useIntakeBindingsQuery,
   useIntakeConfigQuery,
@@ -14,6 +18,7 @@ import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../hooks/us
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import {
   gitlabCandidate,
+  gitlabMergeRequestCandidate,
   incidentioCandidate,
   issueCandidate,
   jiraCandidate,
@@ -55,6 +60,7 @@ export function useBoardIntake({
   const review = kind === 'review';
   const initialPhase = definition.initialPhase;
   const projectRepositoryId = repository.projectRepositoryId;
+  const gitlabRepository = repository.provider === 'gitlab';
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
   const jiraStatusQuery = useJiraStatusQuery();
@@ -130,7 +136,7 @@ export function useBoardIntake({
   // confused with the Work board's review-receiving lane.
   const githubIntakeActive = (kind === 'work' || routedHere || routesFailed) && githubEnabled && githubSelected;
   const available: IntakeSource[] = review
-    ? ['github-prs']
+    ? [gitlabRepository ? 'gitlab-prs' : 'github-prs']
     : [
         ...(githubIntakeActive ? (['github'] as const) : []),
         ...(gitlabReady ? (['gitlab'] as const) : []),
@@ -138,7 +144,9 @@ export function useBoardIntake({
         ...(jiraReady ? (['jira'] as const) : []),
         ...(incidentioReady ? (['incidentio'] as const) : []),
       ];
-  const [selected, setSelected] = useState<IntakeSource>(review ? 'github-prs' : 'github');
+  const [selected, setSelected] = useState<IntakeSource>(
+    review ? (gitlabRepository ? 'gitlab-prs' : 'github-prs') : 'github',
+  );
   const active: IntakeSource | undefined = available.includes(selected) ? selected : available[0];
 
   // Fetch every configured source so teammate filters can include provider identities
@@ -160,7 +168,11 @@ export function useBoardIntake({
         : [],
     [issues.data, labelRoutes, kind, routesSettled],
   );
-  const pulls = useProjectPullRequestsQuery(review ? projectRepositoryId : undefined);
+  const pulls = useProjectPullRequestsQuery(review && !gitlabRepository ? projectRepositoryId : undefined);
+  const mergeRequests = useGitLabMergeRequestsQuery(
+    review && gitlabRepository ? factoryProjectId : undefined,
+    review && gitlabRepository ? projectRepositoryId : undefined,
+  );
   const gitlabIssues = useGitLabIssuesQuery(
     !review && gitlabReady ? factoryProjectId : undefined,
     !review && gitlabReady ? kind : undefined,
@@ -212,7 +224,9 @@ export function useBoardIntake({
   const participantCandidates = useMemo(
     () =>
       review
-        ? (pulls.data ?? []).map(pullRequestCandidate)
+        ? gitlabRepository
+          ? (mergeRequests.data ?? []).map(gitlabMergeRequestCandidate)
+          : (pulls.data ?? []).map(pullRequestCandidate)
         : [
             ...boardIssues.map(issueCandidate),
             ...boardGitLabIssues.map(gitlabCandidate),
@@ -220,7 +234,17 @@ export function useBoardIntake({
             ...boardJiraIssues.map(jiraCandidate),
             ...boardIncidentioIssues.map(incidentioCandidate),
           ],
-    [boardIssues, pulls.data, boardGitLabIssues, boardLinearIssues, boardJiraIssues, boardIncidentioIssues, review],
+    [
+      boardIssues,
+      pulls.data,
+      mergeRequests.data,
+      boardGitLabIssues,
+      boardLinearIssues,
+      boardJiraIssues,
+      boardIncidentioIssues,
+      review,
+      gitlabRepository,
+    ],
   );
   const { candidates, alreadyMaterialized } = useMemo(() => {
     const all: BoardCandidate[] = review
@@ -307,6 +331,7 @@ export function useBoardIntake({
   const browsed = {
     github: githubFeed,
     'github-prs': pulls,
+    'gitlab-prs': mergeRequests,
     gitlab: gitlabFeed,
     linear: linearFeed,
     jira: jiraFeed,

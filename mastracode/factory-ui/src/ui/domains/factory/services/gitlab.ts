@@ -59,6 +59,29 @@ export interface GitLabIssuePage {
   nextCursor: string | null;
 }
 
+export interface GitLabMergeRequest {
+  number: number;
+  externalId: string;
+  title: string;
+  url: string;
+  author: string | null;
+  assignees: string[];
+  requestedReviewers: string[];
+  baseBranch: string;
+  headBranch: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GitLabMergeRequestPage {
+  pullRequests: GitLabMergeRequest[];
+  nextPage: number | null;
+}
+
+export interface GitLabMergeRequestDetail extends GitLabMergeRequest {
+  description: string | null;
+}
+
 export interface GitLabProject {
   id: string;
   name: string;
@@ -149,6 +172,30 @@ async function getGitLabResource<T>(baseUrl: string, path: string, init?: Reques
     throw error;
   }
   return (await res.json()) as T;
+}
+
+export function listGitLabMergeRequests(
+  baseUrl: string,
+  factoryProjectId: string,
+  projectRepositoryId: string,
+  page: number,
+): Promise<GitLabMergeRequestPage> {
+  return getGitLabResource(
+    baseUrl,
+    `/web/gitlab/projects/${encodeURIComponent(projectRepositoryId)}/prs?factoryProjectId=${encodeURIComponent(factoryProjectId)}&page=${page}`,
+  );
+}
+
+export function getGitLabMergeRequest(
+  baseUrl: string,
+  factoryProjectId: string,
+  projectRepositoryId: string,
+  number: number,
+): Promise<GitLabMergeRequestDetail> {
+  return getGitLabResource(
+    baseUrl,
+    `/web/gitlab/projects/${encodeURIComponent(projectRepositoryId)}/prs/${number}?factoryProjectId=${encodeURIComponent(factoryProjectId)}`,
+  );
 }
 
 export function isGitLabAuthError(error: unknown): boolean {

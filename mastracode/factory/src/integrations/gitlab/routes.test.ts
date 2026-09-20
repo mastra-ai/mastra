@@ -56,6 +56,40 @@ describe('GitLab webhook auth boundary', () => {
 });
 
 describe('GitLab UI routes', () => {
+  it('serves Review MR candidates only for a repository linked to the caller-owned Factory', async () => {
+    const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
+    vi.spyOn(gitlab, 'resolveOrgId').mockResolvedValue('org1');
+    const linked = vi.spyOn(gitlab, 'getLinkedRepository').mockResolvedValue(null);
+    const list = vi.spyOn(gitlab.versionControl, 'listPullRequests').mockResolvedValue({ pullRequests: [], nextCursor: null });
+    const target = vi.spyOn(gitlab.versionControl, 'getRepositoryTarget').mockResolvedValue({
+      connection: { type: 'oauth', accessToken: 'gitlab-connection:direct' },
+      sourceId: '10:acme/app',
+    });
+    const path = '/web/gitlab/projects/link-1/prs?factoryProjectId=factory-1&page=1';
+    const absent = await buildApp(gitlab, orgUser()).request(path);
+    expect(absent.status).toBe(404);
+    expect(list).not.toHaveBeenCalled();
+
+    linked.mockResolvedValue({ repository: { id: 'repo-1', externalId: '10' }, host: 'gitlab.com' } as never);
+    list.mockResolvedValue({
+      pullRequests: [{
+        id: '5', title: 'Validate MR', url: 'https://gitlab.com/acme/app/-/merge_requests/5',
+        author: 'rhys', assignees: [], requestedReviewers: [], body: 'description',
+        state: 'open', draft: false, merged: false, mergeable: true,
+        baseBranch: 'main', headBranch: 'feature', headSha: 'abc',
+        createdAt: '2026-09-18T00:00:00Z', updatedAt: '2026-09-18T00:00:00Z',
+      }],
+      nextCursor: null,
+    });
+    const response = await buildApp(gitlab, orgUser()).request(path);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.pullRequests[0]).toMatchObject({ number: 5, title: 'Validate MR' });
+    expect(body.pullRequests[0].externalId).toMatch(/^gitlab-pr:/);
+    expect(target).toHaveBeenCalledWith({ orgId: 'org1', repositoryId: 'repo-1' });
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ includeDrafts: false, cursor: '1' }));
+  });
+
   it('reports direct server configuration without exposing credentials', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ id: 7, username: 'rhys' }), { status: 200 }),

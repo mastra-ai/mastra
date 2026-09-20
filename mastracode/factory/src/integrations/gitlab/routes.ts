@@ -83,6 +83,15 @@ function gitlabProjectPayload(source: { id: string; name: string; metadata?: Rec
   };
 }
 
+function positiveId(value: string | undefined): number | null {
+  const number = Number(value);
+  return value && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(number) ? number : null;
+}
+
+function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid: number): string {
+  return `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host, projectId, mergeRequestIid }), 'utf8').toString('base64url')}`;
+}
+
 async function reconcileGitLabSourceIdentity({
   intake,
   orgId,
@@ -252,6 +261,98 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
                 installationStorageId: installation.id,
                 sandboxProvider: options.sandbox ? 'custom' : 'none',
               },
+            });
+          } catch (error) {
+            return gitlabFetchError(loose(c), error);
+          }
+        },
+      }),
+      registerApiRoute('/web/gitlab/projects/:id/prs', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await resolveOrgTenant(loose(c), auth);
+          if ('response' in resolved) return resolved.response;
+          const factoryProjectId = c.req.query('factoryProjectId')?.trim();
+          const page = positiveId(c.req.query('page') ?? '1');
+          if (!factoryProjectId || !page) return c.json({ error: 'invalid_request' }, 400);
+          if ((await gitlab.resolveOrgId(factoryProjectId)) !== resolved.tenant.orgId)
+            return c.json({ error: 'factory_project_not_found' }, 404);
+          const linked = await gitlab.getLinkedRepository({
+            orgId: resolved.tenant.orgId,
+            factoryProjectId,
+            projectRepositoryId: c.req.param('id'),
+          });
+          if (!linked) return c.json({ error: 'project_repository_not_found' }, 404);
+          const projectId = positiveId(linked.repository.externalId);
+          if (!projectId) return c.json({ error: 'invalid_gitlab_project' }, 502);
+          try {
+            const target = await gitlab.versionControl.getRepositoryTarget({
+              orgId: resolved.tenant.orgId,
+              repositoryId: linked.repository.id,
+            });
+            const result = await gitlab.versionControl.listPullRequests({
+              ...target,
+              includeDrafts: false,
+              cursor: String(page),
+            });
+            return c.json({
+              pullRequests: result.pullRequests.map(pr => ({
+                number: Number(pr.id),
+                externalId: mergeRequestSourceKey(linked.host, projectId, Number(pr.id)),
+                title: pr.title,
+                url: pr.url,
+                author: pr.author,
+                assignees: pr.assignees ?? [],
+                requestedReviewers: pr.requestedReviewers ?? [],
+                baseBranch: pr.baseBranch,
+                headBranch: pr.headBranch,
+                createdAt: pr.createdAt,
+                updatedAt: pr.updatedAt,
+              })),
+              nextPage: result.nextCursor === null ? null : Number(result.nextCursor),
+            });
+          } catch (error) {
+            return gitlabFetchError(loose(c), error);
+          }
+        },
+      }),
+      registerApiRoute('/web/gitlab/projects/:id/prs/:number', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await resolveOrgTenant(loose(c), auth);
+          if ('response' in resolved) return resolved.response;
+          const factoryProjectId = c.req.query('factoryProjectId')?.trim();
+          const number = positiveId(c.req.param('number'));
+          if (!factoryProjectId || !number) return c.json({ error: 'invalid_request' }, 400);
+          if ((await gitlab.resolveOrgId(factoryProjectId)) !== resolved.tenant.orgId)
+            return c.json({ error: 'factory_project_not_found' }, 404);
+          const linked = await gitlab.getLinkedRepository({
+            orgId: resolved.tenant.orgId,
+            factoryProjectId,
+            projectRepositoryId: c.req.param('id'),
+          });
+          if (!linked) return c.json({ error: 'project_repository_not_found' }, 404);
+          try {
+            const target = await gitlab.versionControl.getRepositoryTarget({
+              orgId: resolved.tenant.orgId,
+              repositoryId: linked.repository.id,
+            });
+            const pr = await gitlab.versionControl.getPullRequest({ ...target, pullRequestId: String(number) });
+            if (!pr) return c.json({ error: 'merge_request_not_found' }, 404);
+            return c.json({
+              number,
+              title: pr.title,
+              url: pr.url,
+              author: pr.author,
+              assignees: pr.assignees ?? [],
+              requestedReviewers: pr.requestedReviewers ?? [],
+              baseBranch: pr.baseBranch,
+              headBranch: pr.headBranch,
+              createdAt: pr.createdAt,
+              updatedAt: pr.updatedAt,
+              description: pr.body,
             });
           } catch (error) {
             return gitlabFetchError(loose(c), error);
