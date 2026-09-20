@@ -336,7 +336,8 @@ export class FactoryTransitionService {
     }
     const itemSource = workItemSource(item.externalSource);
     const source = factoryRuleSourceForWorkItem(itemSource);
-    const legacyBoard = source === 'pullRequest' ? 'review' : 'work';
+    const isPullRequest = source === 'pullRequest' || source === 'gitlabPullRequest';
+    const legacyBoard = isPullRequest ? 'review' : 'work';
     if (item.board === null && !this.#boards.has(legacyBoard)) {
       return this.#commitRejection(
         request,
@@ -354,7 +355,7 @@ export class FactoryTransitionService {
         `The work item belongs to board "${itemBoard}", not "${request.board}".`,
       );
     }
-    if ((itemBoard === 'review' && source !== 'pullRequest') || (itemBoard === 'work' && source === 'pullRequest')) {
+    if ((itemBoard === 'review' && !isPullRequest) || (itemBoard === 'work' && isPullRequest)) {
       return this.#commitRejection(
         request,
         transitionId,
