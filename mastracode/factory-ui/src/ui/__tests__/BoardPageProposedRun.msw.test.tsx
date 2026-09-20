@@ -79,7 +79,7 @@ const userSession = {
   baseBranch: 'main',
   sandboxId: null,
   sandboxWorkdir: null,
-  materializedAt: null,
+  materializedAt: '2026-08-10T00:00:00.000Z',
   createdAt: '2026-08-10T00:00:00.000Z',
   updatedAt: '2026-08-10T00:00:00.000Z',
 };
