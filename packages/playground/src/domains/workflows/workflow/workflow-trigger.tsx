@@ -2,10 +2,12 @@ import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLocalStorageState } from '@mastra/playground-ui/hooks/use-local-storage-state';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext, useRef } from 'react';
+import { z } from 'zod/v4';
 import { WorkflowRequestContextDialog } from '../components/workflow-request-context-dialog';
 import { WorkflowRunOptionsDialog } from '../components/workflow-run-options-dialog';
 import type { WorkflowRunContextType } from '../context/workflow-run-context';
@@ -73,6 +75,11 @@ export function WorkflowTrigger({
   const pendingStart = useRef<AbortController | null>(null);
   const observedParamRun = useRef<string | null>(null);
   const [cancelResponse, setCancelResponse] = useState<{ runId: string; message: string }>();
+  const [resourceId, setResourceId] = useLocalStorageState({
+    initialKey: `workflow-run-resource-id:${workflowId}`,
+    defaultValue: '',
+    schema: z.string(),
+  });
 
   const activeRunId = paramsRunId || contextRunId;
   const currentCancellation = cancelResponse?.runId === activeRunId ? cancelResponse : undefined;
@@ -96,7 +103,8 @@ export function WorkflowTrigger({
       setCancelResponse(undefined);
       setResult(null);
 
-      const run = await createWorkflowRun({ workflowId });
+      const trimmedResourceId = resourceId.trim() || undefined;
+      const run = await createWorkflowRun({ workflowId, resourceId: trimmedResourceId });
       if (request.signal.aborted) return;
 
       setContextRunId(run.runId);
@@ -105,7 +113,14 @@ export function WorkflowTrigger({
       const { initialState, inputData: dataInputData } = data ?? {};
       const inputData = hasStateSchema ? dataInputData : data;
 
-      await streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
+      await streamWorkflow({
+        workflowId,
+        runId: run.runId,
+        inputData,
+        initialState,
+        requestContext,
+        resourceId: trimmedResourceId,
+      });
     } catch (error) {
       if (!request.signal.aborted) toast.error(error instanceof Error ? error.message : 'Error executing workflow');
     } finally {
@@ -205,7 +220,7 @@ export function WorkflowTrigger({
                 {workflow?.requestContextSchema && (
                   <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
                 )}
-                <WorkflowRunOptionsDialog />
+                <WorkflowRunOptionsDialog resourceId={resourceId} onResourceIdChange={setResourceId} />
               </>
             }
           />

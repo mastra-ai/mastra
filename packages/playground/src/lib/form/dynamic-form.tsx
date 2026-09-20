@@ -1,11 +1,12 @@
 import type { ButtonProps } from '@mastra/playground-ui/components/Button';
 import { Label } from '@mastra/playground-ui/components/Label';
 import type { ReactNode } from 'react';
-import { useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { AutoForm } from './auto-form';
 import { FormSubmitRow } from './components/form-submit-row';
+import type { FormSubmitRowProps } from './components/form-submit-row';
 import { ROOT_FIELD_KEY } from './field-context';
 import { isEmptyZodObject } from './is-empty-zod-object';
 import { CustomZodProvider } from './zod-provider';
@@ -35,6 +36,17 @@ function isZodObjectLike(schema: any): boolean {
 function getFormInput(values: Record<string, unknown>, isWrapped: boolean) {
   return isWrapped ? values[ROOT_FIELD_KEY] : values;
 }
+
+const SubmitRowContext = createContext<FormSubmitRowProps | null>(null);
+
+// Defined once, outside any hook: AutoForm renders `uiComponents.SubmitButton` as a component
+// type, so recreating it per render would unmount and remount everything in `submitActions`.
+const SubmitButton = ({ children }: { children: ReactNode }) => {
+  const rowProps = useContext(SubmitRowContext);
+  return rowProps ? <FormSubmitRow {...rowProps}>{children}</FormSubmitRow> : null;
+};
+
+const uiComponents = { SubmitButton };
 
 export function DynamicForm({
   schema,
@@ -119,23 +131,19 @@ export function DynamicForm({
     return new CustomZodProvider(normalizeSchema(schema));
   }, [schema, isNotZodObject]);
 
-  const uiComponents = useMemo(
-    () => ({
-      SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) =>
-        onSubmit ? (
-          <FormSubmitRow
-            isSubmitLoading={isSubmitLoading}
-            submitButtonLabel={submitButtonLabel}
-            submitButtonIcon={submitButtonIcon}
-            submitButtonVariant={submitButtonVariant}
-            submitButtonFullWidth={submitButtonFullWidth}
-            submitActions={submitActions}
-            leftActions={leftActions}
-          >
-            {buttonChildren}
-          </FormSubmitRow>
-        ) : null,
-    }),
+  const submitRow = useMemo<FormSubmitRowProps | null>(
+    () =>
+      onSubmit
+        ? {
+            isSubmitLoading,
+            submitButtonLabel,
+            submitButtonIcon,
+            submitButtonVariant,
+            submitButtonFullWidth,
+            submitActions,
+            leftActions,
+          }
+        : null,
     [
       onSubmit,
       isSubmitLoading,
@@ -182,18 +190,20 @@ export function DynamicForm({
   }
 
   return (
-    <AutoForm
-      schema={schemaProvider}
-      onSubmit={handleSubmit}
-      onFormInit={handleFormInit}
-      defaultValues={normalizedDefaultValues}
-      formProps={formPropsObj}
-      uiComponents={uiComponents}
-      formComponents={formComponents}
-      withSubmit={true}
-      readOnly={readOnly}
-    >
-      {children}
-    </AutoForm>
+    <SubmitRowContext.Provider value={submitRow}>
+      <AutoForm
+        schema={schemaProvider}
+        onSubmit={handleSubmit}
+        onFormInit={handleFormInit}
+        defaultValues={normalizedDefaultValues}
+        formProps={formPropsObj}
+        uiComponents={uiComponents}
+        formComponents={formComponents}
+        withSubmit={true}
+        readOnly={readOnly}
+      >
+        {children}
+      </AutoForm>
+    </SubmitRowContext.Provider>
   );
 }

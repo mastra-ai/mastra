@@ -48,6 +48,7 @@ export type StreamWorkflowRunParams = {
   initialState?: Record<string, unknown>;
   requestContext: Record<string, unknown>;
   perStep?: boolean;
+  resourceId?: string;
 };
 
 export type ResumeWorkflowRunParams = {
@@ -89,7 +90,11 @@ export type WorkflowRunContextType = {
   isLoadingRunExecutionResult?: boolean;
   isStreamingWorkflow: boolean;
   isCancellingWorkflowRun: boolean;
-  createWorkflowRun: (params: { workflowId: string; prevRunId?: string }) => Promise<{ runId: string }>;
+  createWorkflowRun: (params: {
+    workflowId: string;
+    prevRunId?: string;
+    resourceId?: string;
+  }) => Promise<{ runId: string }>;
   streamWorkflow: (params: StreamWorkflowRunParams) => Promise<void>;
   resumeWorkflow: (params: ResumeWorkflowRunParams) => Promise<void>;
   observeWorkflowStream: (params: ObserveWorkflowRunParams) => void;
