@@ -2,10 +2,8 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 
 import { MessageList } from '../agent/message-list';
-import type { ProcessAPIErrorArgs } from './index';
-import { ProviderHistoryCompat } from './provider-history-compat';
 import { PrefillErrorHandler } from './prefill-error-handler';
-import { StreamErrorRetryProcessor } from './stream-error-retry-processor';
+import { ProviderHistoryCompat } from './provider-history-compat';
 import {
   ECONNRESET_MAX_RETRIES,
   ECONNRESET_RETRY_INITIAL_DELAY_MS,
@@ -14,6 +12,8 @@ import {
   isECONNRESETError,
   STABILITY_ERROR_PROCESSOR_IDS,
 } from './stability-defaults';
+import { StreamErrorRetryProcessor } from './stream-error-retry-processor';
+import type { ProcessAPIErrorArgs } from './index';
 
 /**
  * Minimal args for driving `processAPIError` directly. `abortSignal` is always
@@ -120,7 +120,7 @@ describe('default stability StreamErrorRetryProcessor policy', () => {
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toBeUndefined();
   });
 
-  it('retries an unknown 500 error twice via `retryUnknownErrors`', async () => {
+  it('retries a transient 500 that carries provider `isRetryable` metadata', async () => {
     const processor = retryProcessor();
     const error = makeApiError(500, true);
 
@@ -129,13 +129,15 @@ describe('default stability StreamErrorRetryProcessor policy', () => {
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 2 }))).resolves.toBeUndefined();
   });
 
-  it('retries a generic unknown error twice via `retryUnknownErrors`', async () => {
+  it('does not retry an unknown error that is neither retryable nor matched', async () => {
+    // The default stays off `retryUnknownErrors` so a deterministic failure —
+    // a rejected structured-output attempt, an invalid request, a validation
+    // error — is not replayed. Retrying one of those turns a single model call
+    // into three and hides the real error behind the retries.
     const processor = retryProcessor();
     const error = new Error('completely unknown failure');
 
-    await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toEqual({ retry: true });
-    await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toEqual({ retry: true });
-    await expect(processor.processAPIError(makeArgs({ error, retryCount: 2 }))).resolves.toBeUndefined();
+    await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toBeUndefined();
   });
 });
 
