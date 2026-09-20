@@ -122,9 +122,7 @@ export const reviewBoard = defineBoard({
     done: {
       title: 'Done',
       kind: 'terminal',
-      // A completed review is not a merged change request. A later provider
-      // close-without-merge still retires the card for both GitHub and GitLab.
-      outcomes: { updated: 'review', closed: 'canceled' },
+      outcomes: { updated: 'review' },
     },
     canceled: {
       title: 'Canceled',

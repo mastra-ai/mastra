@@ -20,7 +20,7 @@ const MERGE_REQUEST_SOURCE = `gitlab-pr:${Buffer.from(
 describe('GitLab merge-request reconciler', () => {
   it.each([
     { initialStage: 'review', initialState: 'open', merged: true, expectedStage: 'done' },
-    { initialStage: 'done', initialState: 'closed', merged: false, expectedStage: 'canceled' },
+    { initialStage: 'review', initialState: 'closed', merged: false, expectedStage: 'canceled' },
   ])('replays a missed terminal outcome from $initialStage through governed rules', async ({ initialStage, initialState, merged, expectedStage }) => {
     const seeded = await createFactoryStorageForTests();
     const sourceControl = seeded.sourceControl.forIntegration('gitlab');
