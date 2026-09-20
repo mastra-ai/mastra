@@ -41,6 +41,12 @@ export const server = setupServer(
   http.get('*/web/integrations/platform/:provider/connections', () =>
     HttpResponse.json({ error: 'not_found' }, { status: 404 }),
   ),
+  // Ambient per-connection knowledge import routing — an older server (no
+  // routing storage domain wired) mounts no routing routes; the control
+  // hides on 404. Routing tests override with `server.use(...)`.
+  http.get('*/web/integrations/platform/:provider/connections/:connectionId/routing', () =>
+    HttpResponse.json({ error: 'not_found' }, { status: 404 }),
+  ),
   // Ambient platform integration catalog. A deployment without Platform
   // credentials doesn't mount the catalog route at all — 404 mirrors that
   // reality so the `usePlatformCatalogQuery` retry-off gate hides logo

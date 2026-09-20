@@ -48,6 +48,7 @@ export const queryKeys = {
   jiraStatus: () => ['jira', 'status'] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
   platformCatalog: () => ['platform-catalog'] as const,
+  knowledgeImporterRouting: (connectionId: string) => ['knowledge-importer-routing', connectionId] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
   jiraIssuesAll: () => ['jira', 'issues'] as const,
   jiraIssues: (factoryProjectId: string | undefined) =>

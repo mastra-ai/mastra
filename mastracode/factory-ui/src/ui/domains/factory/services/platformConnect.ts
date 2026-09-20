@@ -168,6 +168,48 @@ export async function listPlatformConnections(
   return connections;
 }
 
+/**
+ * Where one connection's knowledge imports land: every Factory project
+ * (`mode: 'all'`, the default) or a selected subset. Mirrors the server's
+ * `knowledge_importer_routing` row.
+ */
+export interface KnowledgeImporterRouting {
+  mode: 'all' | 'selected';
+  projectIds: string[];
+}
+
+/** Load a connection's import routing. Unset routing comes back as mode `all`. */
+export async function getKnowledgeImporterRouting(
+  baseUrl: string,
+  provider: PlatformConnectProviderId,
+  connectionId: string,
+): Promise<KnowledgeImporterRouting> {
+  const { routing } = await requestJson<{ routing: KnowledgeImporterRouting }>(
+    baseUrl,
+    `/web/integrations/platform/${provider}/connections/${encodeURIComponent(connectionId)}/routing`,
+  );
+  return routing;
+}
+
+/** Save a connection's import routing. */
+export async function putKnowledgeImporterRouting(
+  baseUrl: string,
+  provider: PlatformConnectProviderId,
+  connectionId: string,
+  routing: KnowledgeImporterRouting,
+): Promise<KnowledgeImporterRouting> {
+  const response = await requestJson<{ routing: KnowledgeImporterRouting }>(
+    baseUrl,
+    `/web/integrations/platform/${provider}/connections/${encodeURIComponent(connectionId)}/routing`,
+    {
+      method: 'PUT',
+      headers: { Accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify(routing),
+    },
+  );
+  return response.routing;
+}
+
 /** Mint a Nango connect session for a new provider connection. */
 export async function createPlatformConnectSession(
   baseUrl: string,

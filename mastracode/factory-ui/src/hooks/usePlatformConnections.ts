@@ -5,12 +5,17 @@ import { queryKeys } from '../api/keys';
 import {
   createPlatformConnectSession,
   createPlatformReconnectSession,
+  getKnowledgeImporterRouting,
   listPlatformCatalog,
   listPlatformConnections,
+  putKnowledgeImporterRouting,
   runHeadlessAuth,
   waitForActiveConnection,
 } from '../ui/domains/factory/services/platformConnect';
-import type { PlatformConnectProviderId } from '../ui/domains/factory/services/platformConnect';
+import type {
+  KnowledgeImporterRouting,
+  PlatformConnectProviderId,
+} from '../ui/domains/factory/services/platformConnect';
 
 /**
  * The org's Platform connections for one provider. Server responds 403/404
@@ -80,6 +85,37 @@ export function useConnectPlatformProviderMutation(provider: PlatformConnectProv
       return waitForActiveConnection(baseUrl, provider, session.connectionId);
     },
     onSettled: invalidate,
+  });
+}
+
+/**
+ * A connection's knowledge import routing. Unset routing resolves as
+ * `mode: 'all'` — the server's default when no row was ever saved.
+ */
+export function useKnowledgeImporterRoutingQuery(
+  provider: PlatformConnectProviderId,
+  connectionId: string,
+  enabled: boolean = true,
+) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.knowledgeImporterRouting(connectionId),
+    queryFn: () => getKnowledgeImporterRouting(baseUrl, provider, connectionId),
+    enabled,
+    retry: false,
+  });
+}
+
+/** Save a connection's knowledge import routing and refresh the cached copy. */
+export function useSaveKnowledgeImporterRoutingMutation(provider: PlatformConnectProviderId, connectionId: string) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (routing: KnowledgeImporterRouting) =>
+      putKnowledgeImporterRouting(baseUrl, provider, connectionId, routing),
+    onSuccess: routing => {
+      queryClient.setQueryData(queryKeys.knowledgeImporterRouting(connectionId), routing);
+    },
   });
 }
 

@@ -737,6 +737,31 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   const graphQuery = useKnowledgeGraph(factoryProjectId, selectedScopeId, threadId, { paused: !idle });
   const graph = graphQuery.data;
 
+  // A `?scope=` deep link can be stale (session bookmarked before a db reset,
+  // or the scope was deleted). When the graph endpoint 404s on a URL-driven
+  // scope, drop the search param so the view falls back to the default
+  // (project scope or thread scope) instead of showing `scope_not_found`.
+  useEffect(() => {
+    if (
+      requestedScopeId &&
+      requestedScopeId !== 'org' &&
+      requestedScopeId !== 'resource' &&
+      requestedScopeId !== 'thread' &&
+      graphQuery.error instanceof RequestError &&
+      graphQuery.error.status === 404 &&
+      !threadId
+    ) {
+      setSearchParams(
+        params => {
+          const copy = new URLSearchParams(params);
+          copy.delete('scope');
+          return copy;
+        },
+        { replace: true },
+      );
+    }
+  }, [requestedScopeId, graphQuery.error, threadId, setSearchParams]);
+
   // Arrival diffing: baseline per view; a view switch resets it (no mass
   // arrival animation on switch), same-view polls diff by id sets.
   const baseline = useRef<DiffBaseline | null>(null);
