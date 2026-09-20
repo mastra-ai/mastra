@@ -2172,31 +2172,39 @@ export class HarnessPG extends HarnessStorage {
             'active',
           );
         }
-        // Attachment rows lock before operation rows, matching the save and
-        // bulk-delete paths: a pending-PUT check that waits on a saver's
-        // operation lock keeps that lock after the rechecked row turns
-        // terminal, so checking before this select would hold an operation
-        // lock while waiting on attachment rows — the inverse order.
-        const sessionAttachments = await tx.execute({
-          sql: `SELECT * FROM ${TABLE_HARNESS_ATTACHMENTS}
-                WHERE harness_name = ? AND session_id = ? FOR UPDATE`,
-          args: [namespace, sessionId],
-        });
-        // A first upload reserves its PUT intent before the external byte
-        // owner is called, so the attachment row may not exist yet. Fence the
-        // whole session scope before deleting the session; otherwise a late
-        // owner response could leave an orphaned object behind the deleted
-        // incarnation.
-        await this.#assertNoPendingAttachmentPutsTx(tx, namespace, sessionId);
         deleteCandidates.set(`${namespace}\u0000${sessionId}`, {
           namespace,
           sessionId,
           resourceId: record.resourceId,
           threadId: record.threadId,
           version: record.version,
-          attachmentRows: sessionAttachments.rows,
+          attachmentRows: [],
           ...(sessionIncarnation !== undefined ? { sessionIncarnation } : {}),
         });
+      }
+
+      // Every session lock is held before any attachment lock: the reference
+      // save path takes a session lock then another session's attachment row,
+      // so an interleaved session→attachment order here could wait on a
+      // session lock while holding attachments — the inverse order. Within
+      // each candidate, attachment rows lock before operation rows, matching
+      // the save and bulk-delete paths: a pending-PUT check that waits on a
+      // saver's operation lock keeps that lock after the rechecked row turns
+      // terminal, so checking before this select would hold an operation lock
+      // while waiting on attachment rows — again the inverse order.
+      for (const candidate of deleteCandidates.values()) {
+        const sessionAttachments = await tx.execute({
+          sql: `SELECT * FROM ${TABLE_HARNESS_ATTACHMENTS}
+                WHERE harness_name = ? AND session_id = ? FOR UPDATE`,
+          args: [candidate.namespace, candidate.sessionId],
+        });
+        // A first upload reserves its PUT intent before the external byte
+        // owner is called, so the attachment row may not exist yet. Fence the
+        // whole session scope before deleting the session; otherwise a late
+        // owner response could leave an orphaned object behind the deleted
+        // incarnation.
+        await this.#assertNoPendingAttachmentPutsTx(tx, candidate.namespace, candidate.sessionId);
+        candidate.attachmentRows = sessionAttachments.rows;
       }
 
       const retiredProjectionCapacity = new Map<string, { pendingIntents: number; pendingBytes: number }>();

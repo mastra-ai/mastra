@@ -213,4 +213,15 @@ describe('InMemoryHarnessAttachmentByteOwner', () => {
     ).resolves.toMatchObject({ outcome: 'deleted' });
     await expect(cleanOwner.save(input)).rejects.toThrow();
   });
+
+  it('rejects a providerId whose encoded form exceeds the scope-component bound', () => {
+    // Each CJK codepoint URI-encodes to 9 characters ('%E6%BC%A2'), so 512 raw
+    // characters satisfy the raw-length check while producing a blob-reference
+    // segment past the bound load and delete enforce — an object saved under it
+    // would be unaddressable.
+    expect(() => new InMemoryHarnessAttachmentByteOwner({ providerId: '漢'.repeat(512) })).toThrow(
+      HarnessAttachmentByteOwnerInvalidInputError,
+    );
+    expect(() => new InMemoryHarnessAttachmentByteOwner({ providerId: 'native-attachment-test' })).not.toThrow();
+  });
 });

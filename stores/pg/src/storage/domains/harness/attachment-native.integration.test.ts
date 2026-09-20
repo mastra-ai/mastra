@@ -1466,6 +1466,116 @@ describe('HarnessPG native external attachment ownership', () => {
     expect(operation.status).toBe('cleaned');
   });
 
+  it('locks every session row before attachments when deleting multiple sessions', async () => {
+    const harness = store.stores.harness!;
+    const sessionA = createSampleSessionRecord({
+      id: 'native-multi-delete-a',
+      resourceId: 'multi-delete-a-resource',
+      threadId: 'multi-delete-a-thread',
+    });
+    const sessionB = createSampleSessionRecord({
+      id: 'native-multi-delete-b',
+      resourceId: 'multi-delete-b-resource',
+      threadId: 'multi-delete-b-thread',
+    });
+    await harness.createOrLoadActiveSession(sessionA, {
+      initialLease: { ownerId: 'owner-a', ttlMs: 60_000 },
+    });
+    await harness.createOrLoadActiveSession(sessionB, {
+      initialLease: { ownerId: 'owner-b', ttlMs: 60_000 },
+    });
+    await harness.saveAttachment({
+      sessionId: sessionA.id,
+      attachmentId: 'shared-attachment',
+      name: 'shared.txt',
+      mimeType: 'text/plain',
+      source: 'inline',
+      data: new TextEncoder().encode('shared attachment'),
+    });
+
+    const db = store.db as unknown as {
+      connect: () => Promise<{
+        query: (query: string, values?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
+        release: () => void;
+      }>;
+    };
+    const originalConnect = db.connect.bind(store.db);
+    let dSessionBSelectIssued!: () => void;
+    const dAtSessionB = new Promise<void>(resolve => (dSessionBSelectIssued = resolve));
+    let saveSessionLockHeld!: () => void;
+    const saveHoldsSessionB = new Promise<void>(resolve => (saveSessionLockHeld = resolve));
+    let deleteSessionSelects = 0;
+    db.connect = async () => {
+      const connection = await originalConnect();
+      return {
+        release: connection.release.bind(connection),
+        async query(query: string, values?: unknown[]) {
+          // The reference save takes session B's row lock, then wants a FOR
+          // KEY SHARE on session A's attachment. If the multi-session delete
+          // interleaves session and attachment locks, it holds A's attachment
+          // while waiting on B's session row — and the save's reference lock
+          // then completes the 40P01 cycle. Holding every session lock first
+          // keeps the delete parked on B without an attachment lock in hand.
+          if (
+            query.includes('SELECT * FROM') &&
+            query.includes('mastra_harness_sessions') &&
+            query.includes('FOR UPDATE')
+          ) {
+            const selected = await connection.query(query, values);
+            saveSessionLockHeld();
+            return selected;
+          }
+          if (query.includes('parent_session_id') && query.includes('FOR UPDATE')) {
+            deleteSessionSelects += 1;
+            if (deleteSessionSelects === 1) await saveHoldsSessionB;
+            if (deleteSessionSelects === 2) dSessionBSelectIssued();
+          }
+          if (query.includes('FOR KEY SHARE') && query.includes('mastra_harness_attachments')) {
+            await dAtSessionB;
+          }
+          return connection.query(query, values);
+        },
+      };
+    };
+
+    try {
+      const referenceSave = harness
+        .saveSessionWithAttachmentReferences(
+          createSampleSessionRecord({
+            id: sessionB.id,
+            resourceId: sessionB.resourceId,
+            threadId: sessionB.threadId,
+          }),
+          { ownerId: 'owner-b', ifVersion: 1 },
+          [
+            {
+              sessionId: sessionA.id,
+              attachmentId: 'shared-attachment',
+              source: 'queued_item',
+              sourceId: 'ref-1',
+            },
+          ],
+        )
+        .catch((error: unknown) => error);
+      const multiDelete = harness
+        .deleteSessions({ sessions: [{ sessionId: sessionA.id }, { sessionId: sessionB.id }] })
+        .catch((error: unknown) => error);
+
+      for (const outcome of [await referenceSave, await multiDelete]) {
+        if (!(outcome instanceof Error)) continue;
+        expect(outcome).toBeInstanceOf(HarnessStorageAttachmentPendingError);
+        expect((outcome as { code?: string }).code).not.toBe('40P01');
+      }
+    } finally {
+      db.connect = originalConnect;
+    }
+    const remaining = await store.db.one<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM "${schemaName}"."mastra_harness_sessions" WHERE id IN ($1, $2)`,
+      [sessionA.id, sessionB.id],
+    );
+    expect(remaining.count).toBe('0');
+  });
+
   it('does not spend projection quota when only the attachment byte owner is configured', async () => {
     const offSchema = `pf4267_proj_off_${randomUUID().replaceAll('-', '_')}`;
     const offStore = new PostgresStore({

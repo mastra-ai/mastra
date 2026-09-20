@@ -183,7 +183,9 @@ export class InMemoryHarnessAttachmentByteOwner implements HarnessAttachmentByte
 
   constructor(options: InMemoryHarnessAttachmentByteOwnerOptions = {}) {
     const providerId = options.providerId ?? 'memory';
-    assertSafeText(providerId, 'providerId', MAX_SCOPE_COMPONENT_LENGTH);
+    // The id is URI-encoded into every derived blob reference, so it must
+    // satisfy the same encoded-component bound as the owner scope fields.
+    assertScopeComponent(providerId, 'providerId');
     this.#providerId = providerId;
     this.#objects = options.objects ?? new Map();
   }
