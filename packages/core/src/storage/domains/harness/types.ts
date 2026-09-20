@@ -380,8 +380,6 @@ export interface SessionRecord {
    */
   harnessName: string;
   id: string;
-  /** Storage-assigned lifetime fence used by native terminal callbacks. */
-  sessionIncarnation?: string;
   resourceId: string;
   threadId: string;
   /**

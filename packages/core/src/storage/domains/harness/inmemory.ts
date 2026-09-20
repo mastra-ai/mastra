@@ -1571,9 +1571,6 @@ export class InMemoryHarness extends HarnessStorage {
       if (!sameTerminalIntentValue(existingIntent, terminalResult, projection)) {
         throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
       }
-      if (currentEvidence.status === 'failed') {
-        throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
-      }
       if (
         currentEvidence.status === 'completed' &&
         JSON.stringify(currentEvidence.result) !== JSON.stringify(resultEvidence.result)
