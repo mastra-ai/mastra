@@ -5,6 +5,7 @@ import { queryKeys } from '../api/keys';
 import {
   createPlatformConnectSession,
   createPlatformReconnectSession,
+  listPlatformCatalog,
   listPlatformConnections,
   runHeadlessAuth,
   waitForActiveConnection,
@@ -23,6 +24,22 @@ export function usePlatformConnectionsQuery(provider: PlatformConnectProviderId,
     queryFn: () => listPlatformConnections(baseUrl, provider),
     enabled,
     retry: false,
+  });
+}
+
+/**
+ * Load the Platform integration catalog. Cached longer than the connection
+ * list because the catalog is org-wide and stable — this powers logos and
+ * display names across every knowledge-importer/settings card.
+ */
+export function usePlatformCatalogQuery(enabled: boolean = true) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.platformCatalog(),
+    queryFn: () => listPlatformCatalog(baseUrl),
+    enabled,
+    retry: false,
+    staleTime: 60_000,
   });
 }
 
