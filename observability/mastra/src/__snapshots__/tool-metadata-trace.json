@@ -3,11 +3,13 @@
     "agent_run: \"agent run: 'metadata-agent'\"",
     "└── model_generation: \"llm: 'mock-model-id'\"",
     "    ├── model_step: \"step: 0\"",
+    "    │   ├── processor_run: \"llm request processor: provider-history-compat\"",
     "    │   ├── model_inference: \"inference: 0\"",
     "    │   │   ├── model_chunk: \"chunk: 'tool-call'\"",
     "    │   │   └── model_chunk: \"chunk: 'tool-result'\"",
     "    │   └── tool_call: \"tool: 'metadataTool'\"",
     "    └── model_step: \"step: 1\"",
+    "        ├── processor_run: \"llm request processor: provider-history-compat\"",
     "        └── model_inference: \"inference: 1\"",
     "            └── model_chunk: \"chunk: 'text'\""
   ],
@@ -192,6 +194,50 @@
                   "span": {
                     "id": "<span-4>",
                     "traceId": "<trace-1>",
+                    "name": "llm request processor: provider-history-compat",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "input_processor",
+                    "entityId": "provider-history-compat",
+                    "attributes": {
+                      "processorExecutor": "legacy",
+                      "processorIndex": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You use tools and add metadata"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Use metadata tool to process some data"
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 0,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-5>",
+                    "traceId": "<trace-1>",
                     "name": "inference: 0",
                     "type": "model_inference",
                     "completed": true,
@@ -244,14 +290,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-5>",
+                        "id": "<span-6>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'tool-call'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-4>",
+                        "parentId": "<span-5>",
                         "entityType": "agent",
                         "entityId": "metadata-agent",
                         "attributes": {
@@ -273,14 +319,14 @@
                     },
                     {
                       "span": {
-                        "id": "<span-6>",
+                        "id": "<span-7>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'tool-result'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": true,
                         "isRootSpan": false,
-                        "parentId": "<span-4>",
+                        "parentId": "<span-5>",
                         "entityType": "agent",
                         "entityId": "metadata-agent",
                         "attributes": {
@@ -299,7 +345,7 @@
                 },
                 {
                   "span": {
-                    "id": "<span-7>",
+                    "id": "<span-8>",
                     "traceId": "<trace-1>",
                     "name": "tool: 'metadataTool'",
                     "type": "tool_call",
@@ -335,7 +381,7 @@
             },
             {
               "span": {
-                "id": "<span-8>",
+                "id": "<span-9>",
                 "traceId": "<trace-1>",
                 "name": "step: 1",
                 "type": "model_step",
@@ -396,14 +442,90 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-9>",
+                    "id": "<span-10>",
+                    "traceId": "<trace-1>",
+                    "name": "llm request processor: provider-history-compat",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-9>",
+                    "entityType": "input_processor",
+                    "entityId": "provider-history-compat",
+                    "attributes": {
+                      "processorExecutor": "legacy",
+                      "processorIndex": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You use tools and add metadata"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Use metadata tool to process some data"
+                            }
+                          ]
+                        },
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "tool-call",
+                              "toolCallId": "call-metadata-1",
+                              "toolName": "metadataTool",
+                              "input": {
+                                "input": "some data"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "role": "tool",
+                          "content": [
+                            {
+                              "type": "tool-result",
+                              "toolCallId": "call-metadata-1",
+                              "toolName": "metadataTool",
+                              "output": {
+                                "type": "json",
+                                "value": {
+                                  "output": "Processed: some data"
+                                }
+                              },
+                              "input": {
+                                "input": "some data"
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 1,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-11>",
                     "traceId": "<trace-1>",
                     "name": "inference: 1",
                     "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-8>",
+                    "parentId": "<span-9>",
                     "entityType": "agent",
                     "entityId": "metadata-agent",
                     "attributes": {
@@ -442,14 +564,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-10>",
+                        "id": "<span-12>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'text'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-9>",
+                        "parentId": "<span-11>",
                         "entityType": "agent",
                         "entityId": "metadata-agent",
                         "attributes": {
