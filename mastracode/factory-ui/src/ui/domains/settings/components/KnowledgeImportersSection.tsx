@@ -51,36 +51,56 @@ const PROVIDER_DESCRIPTIONS: Record<PlatformConnectProviderId, string> = {
   fireflies: 'Sync Fireflies meeting transcripts and summaries into knowledge.',
 };
 
-/** Small status pill rendered in the top-right of each provider card. */
-function ConnectionStatusPill({ connections }: { connections: PlatformProviderConnection[] }) {
-  const active = connections.filter(c => c.status === 'active').length;
-  const needsReauth = connections.some(c => c.status === 'needs_reauth');
-
-  if (needsReauth) {
-    return (
-      <span className="rounded-full bg-red-950 px-2 py-0.5 text-ui-xs font-medium text-red-200">
-        Needs reauthorization
-      </span>
-    );
-  }
-  if (active > 0) {
-    return (
-      <span className="rounded-full bg-emerald-950 px-2 py-0.5 text-ui-xs font-medium text-emerald-200">
-        {active === 1 ? 'Connected' : `${active} connected`}
-      </span>
-    );
-  }
+/**
+ * Render the list of active + needs-reauth connections for a provider. The
+ * card's connected-vs-not state is conveyed implicitly by the presence of
+ * this list (connected) or a bare Connect button (not connected) — no
+ * "Not connected" / "Not yet connected" copy on the card itself.
+ */
+function ConnectionLabels({
+  provider,
+  connections,
+}: {
+  provider: PlatformConnectProviderId;
+  connections: PlatformProviderConnection[];
+}) {
   return (
-    <span className="rounded-full bg-surface3 px-2 py-0.5 text-ui-xs font-medium text-icon3">
-      Not connected
-    </span>
+    <ul className="flex flex-col gap-2">
+      {connections.map(connection => {
+        const needsReauth = connection.status === 'needs_reauth';
+        return (
+          <li key={connection.id} className="flex items-center justify-between gap-2">
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                aria-hidden
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${needsReauth ? 'bg-red-400' : 'bg-emerald-400'}`}
+              />
+              <Txt as="span" variant="ui-sm" className="text-icon5 truncate">
+                {connection.accountLabel ?? connection.id}
+              </Txt>
+            </span>
+            {needsReauth && (
+              <ProviderConnectControl
+                provider={provider}
+                reconnectConnectionId={connection.id}
+                label="Reconnect"
+                size="xs"
+              />
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
 /**
- * One card per importer provider — badge, name, description, live status
- * pill, and a Connect / Reconnect / Add another action. Each provider fetches
- * independently so a transient failure on one doesn't blank the grid.
+ * One card per importer provider — logo, name, description, and either the
+ * list of live connections (when connected) or a Connect button (when not).
+ * The connection state is conveyed implicitly by the card contents: a card
+ * with account labels is a connected card; a card with a Connect button
+ * isn't. Each provider fetches independently so a transient failure on one
+ * doesn't blank the grid.
  */
 function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnectProviderId; logoUrl: string | null }) {
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
@@ -91,45 +111,38 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
   const isError = connectionsQuery.isError;
   const unavailable = isError && isPlatformConnectUnavailableError(connectionsQuery.error);
   const connections = connectionsQuery.data ?? [];
-  const activeConnection = connections.find(c => c.status === 'active');
-  const needsReauth = connections.find(c => c.status === 'needs_reauth');
+  const liveConnections = connections.filter(c => c.status === 'active' || c.status === 'needs_reauth');
+  const isConnected = liveConnections.length > 0;
 
   return (
     <Card className="flex flex-col gap-3 p-4">
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <IntegrationLogo
-            provider={provider}
-            displayName={meta.displayName}
-            logoUrl={logoUrl ?? undefined}
-          />
-          <div className="min-w-0">
-            <Txt as="h4" variant="ui-md" className="text-icon6 font-semibold">
-              {meta.displayName}
-            </Txt>
-            <Txt as="p" variant="ui-sm" className="text-icon3 mt-0.5">
-              {description}
-            </Txt>
-          </div>
+      <header className="flex min-w-0 items-start gap-3">
+        <IntegrationLogo provider={provider} displayName={meta.displayName} logoUrl={logoUrl ?? undefined} />
+        <div className="min-w-0">
+          <Txt as="h4" variant="ui-md" className="text-icon6 font-semibold">
+            {meta.displayName}
+          </Txt>
+          <Txt as="p" variant="ui-sm" className="text-icon3 mt-0.5">
+            {description}
+          </Txt>
         </div>
-        {!isLoading && !isError && <ConnectionStatusPill connections={connections} />}
       </header>
 
-      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border1 pt-3">
+      <div className="mt-auto border-t border-border1 pt-3">
         {isLoading && (
           <Txt as="span" variant="ui-xs" className="text-icon3">
             Loading connection status…
           </Txt>
         )}
         {isError && !unavailable && (
-          <>
+          <div className="flex items-center justify-between gap-2">
             <Txt as="span" variant="ui-xs" className="text-icon3">
               Couldn't load connections.
             </Txt>
             <Button size="xs" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
               Retry
             </Button>
-          </>
+          </div>
         )}
         {isError && unavailable && (
           <Txt as="span" variant="ui-xs" className="text-icon3">
@@ -137,32 +150,11 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
           </Txt>
         )}
         {!isLoading && !isError && (
-          <>
-            <Txt as="span" variant="ui-xs" className="text-icon3 truncate">
-              {needsReauth?.accountLabel ??
-                activeConnection?.accountLabel ??
-                (needsReauth ? 'Reauthorize to resume syncing' : 'Not yet connected')}
-            </Txt>
-            <div className="flex shrink-0 items-center gap-1">
-              {needsReauth ? (
-                <ProviderConnectControl
-                  provider={provider}
-                  reconnectConnectionId={needsReauth.id}
-                  label="Reconnect"
-                  size="xs"
-                />
-              ) : connections.length > 0 ? (
-                <ProviderConnectControl
-                  provider={provider}
-                  label="Add another"
-                  size="xs"
-                  variant="ghost"
-                />
-              ) : (
-                <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} size="xs" />
-              )}
-            </div>
-          </>
+          isConnected ? (
+            <ConnectionLabels provider={provider} connections={liveConnections} />
+          ) : (
+            <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} size="xs" />
+          )
         )}
       </div>
     </Card>
