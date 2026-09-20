@@ -4540,6 +4540,47 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Deletes one bounded batch of aged snapshots while taking the same parent
+   * revision and handoff locks as ordinary workflow writers. A handoff row is
+   * a durable fence, so retention must leave both pending and completed runs
+   * in place rather than deleting around that fence through the generic table
+   * pruner.
+   */
+  private async pruneWorkflowSnapshotsBatch(cutoff: Date | number, limit: number): Promise<number> {
+    return this.#db.client.tx(async t => {
+      const candidates = await t.manyOrNone<{ workflow_name: string; run_id: string }>(
+        `SELECT snapshot.workflow_name, snapshot.run_id
+         FROM ${this.workflowSnapshotTableName()} AS snapshot
+         INNER JOIN ${this.workflowParentRevisionTableName()} AS revision
+           ON revision.workflow_name = snapshot.workflow_name AND revision.run_id = snapshot.run_id
+         WHERE snapshot."updatedAtZ" < $1
+           AND NOT EXISTS (
+             SELECT 1 FROM ${this.workflowSnapshotHandoffTableName()} AS handoff
+             WHERE handoff.workflow_name = snapshot.workflow_name AND handoff.run_id = snapshot.run_id
+           )
+         ORDER BY snapshot."updatedAtZ", snapshot.workflow_name, snapshot.run_id
+         LIMIT $2`,
+        [cutoff, limit],
+      );
+      let deleted = 0;
+      for (const candidate of candidates) {
+        const revision = await this.lockExistingWorkflowParentRevision(t, candidate.workflow_name, candidate.run_id);
+        if (!revision) continue;
+        if (await this.lockWorkflowSnapshotHandoff(t, candidate.workflow_name, candidate.run_id)) continue;
+        const result = await t.query(
+          `DELETE FROM ${this.workflowSnapshotTableName()}
+           WHERE workflow_name = $1 AND run_id = $2 AND "updatedAtZ" < $3`,
+          [candidate.workflow_name, candidate.run_id, cutoff],
+        );
+        if ((result.rowCount ?? 0) !== 1) continue;
+        await this.bumpWorkflowParentRevision(t, candidate.workflow_name, candidate.run_id, revision.generation);
+        deleted++;
+      }
+      return deleted;
+    });
+  }
+
   /** Delete workflow run snapshots older than the `workflowSnapshot` policy's `maxAge`, batched. */
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
     await this.ensureRetentionIndexes(policies);
@@ -4548,7 +4589,13 @@ export class WorkflowsPG extends WorkflowsStorage {
       descriptor: WorkflowsPG.retentionTables,
       order: ['workflowSnapshot'],
     });
-    return runPrune({ db: this.#db, domain: 'workflows', targets, options });
+    return runPrune({
+      db: this.#db,
+      domain: 'workflows',
+      targets,
+      options,
+      deleteBatch: (_target, cutoff, limit) => this.pruneWorkflowSnapshotsBatch(cutoff, limit),
+    });
   }
 
   /**

@@ -155,4 +155,27 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
       hasMore: false,
     });
   });
+
+  it('keeps fenced snapshots out of retention pruning', async () => {
+    const workflowName = `retention-fenced-${randomUUID()}`;
+    const runId = randomUUID();
+    const canonical = snapshot(runId, 'waiting');
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: canonical });
+    await workflows.claimWorkflowSnapshotHandoff({
+      workflowName,
+      runId,
+      expectedCanonical: { kind: 'present', snapshot: canonical },
+      snapshot: snapshot(runId, 'waiting', { handoff: true }),
+      mutationFence: 'opaque-owner',
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await workflows.prune({ workflowSnapshot: { maxAge: '0ms' } });
+
+    await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({ status: 'waiting' });
+    await expect(workflows.listWorkflowSnapshotHandoffs({ workflowName })).resolves.toMatchObject({
+      records: [{ workflowName, runId, status: 'pending' }],
+      hasMore: false,
+    });
+  });
 });

@@ -25,22 +25,29 @@ export class WorkflowSnapshotHandoffFenceError extends TypeError {
   }
 }
 
-function canonicalize(value: unknown): unknown {
+function sortCanonicalJson(value: unknown): unknown {
   if (value === null || typeof value !== 'object') return value;
-  if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map(canonicalize);
+  if (Array.isArray(value)) return value.map(sortCanonicalJson);
   const record = value as Record<string, unknown>;
   return Object.fromEntries(
     Object.keys(record)
       .sort()
-      .map(key => [key, canonicalize(record[key])]),
+      .map(key => [key, sortCanonicalJson(record[key])]),
   );
+}
+
+function canonicalize(value: unknown): unknown {
+  const serialized = JSON.stringify(value);
+  return serialized === undefined ? undefined : sortCanonicalJson(JSON.parse(serialized));
 }
 
 /** Compares the JSON-native snapshot representation independent of key order. */
 export function workflowSnapshotHandoffSnapshotsEqual(left: WorkflowRunState, right: WorkflowRunState): boolean {
   try {
-    return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
+    const leftCanonical = canonicalize(left);
+    const rightCanonical = canonicalize(right);
+    if (leftCanonical === undefined || rightCanonical === undefined) return false;
+    return JSON.stringify(leftCanonical) === JSON.stringify(rightCanonical);
   } catch {
     return false;
   }

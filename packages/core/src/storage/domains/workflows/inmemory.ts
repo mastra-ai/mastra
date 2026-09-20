@@ -298,6 +298,13 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     if (includeStack) {
       Object.defineProperty(out, 'stack', { value: value.stack, writable: true, configurable: true });
     }
+    const toJSONDescriptor = Object.getOwnPropertyDescriptor(value, 'toJSON');
+    if (typeof toJSONDescriptor?.value === 'function') {
+      Object.defineProperty(out, 'toJSON', {
+        ...toJSONDescriptor,
+        value: toJSONDescriptor.value,
+      });
+    }
     // Register in `seen` BEFORE recursing so cycles (incl. self-referential
     // `cause`) terminate.
     seen.set(value, out);

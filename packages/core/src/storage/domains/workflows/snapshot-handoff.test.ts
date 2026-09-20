@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { getErrorFromUnknown } from '../../../error';
 import type { WorkflowRunState } from '../../../workflows';
 import { InMemoryStore } from '../../mock';
 
@@ -140,5 +141,31 @@ describe('workflow snapshot handoff', () => {
       terminalStatus: 'success',
     });
     await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({ status: 'success' });
+  });
+
+  it('compares serializable errors using the persisted JSON representation', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const runId = 'serializable-error-run';
+    const handoffSnapshot = snapshot(runId, 'failed', {
+      error: getErrorFromUnknown(new Error('step failed'), { serializeStack: false }),
+    });
+    const input = {
+      workflowName: 'serializable-error-workflow',
+      runId,
+      expectedCanonical: { kind: 'absent' as const },
+      snapshot: handoffSnapshot,
+      mutationFence: 'opaque-owner',
+    };
+
+    await expect(workflows.claimWorkflowSnapshotHandoff(input)).resolves.toMatchObject({ status: 'created' });
+    await expect(workflows.claimWorkflowSnapshotHandoff(input)).resolves.toMatchObject({ status: 'existing' });
+    await expect(
+      workflows.completeWorkflowSnapshotHandoff({
+        ...input,
+        expectedSnapshot: handoffSnapshot,
+        snapshot: snapshot(runId, 'success'),
+      }),
+    ).resolves.toMatchObject({ status: 'completed' });
   });
 });
