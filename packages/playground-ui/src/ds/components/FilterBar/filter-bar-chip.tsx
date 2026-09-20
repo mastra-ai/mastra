@@ -29,7 +29,7 @@ import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
 export const segmentClass = cn(
-  'flex max-w-48 min-w-0 items-center gap-1 px-2 text-ui-sm leading-ui-sm whitespace-nowrap outline-none',
+  'flex max-w-48 min-w-0 items-center gap-1 px-2 text-ui-sm whitespace-nowrap outline-none',
   'first:rounded-l-lg last:rounded-r-lg',
 );
 

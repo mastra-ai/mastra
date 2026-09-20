@@ -36,13 +36,13 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(onPresetChange).toHaveBeenCalledWith('last-7d');
   });
 
-  it('renders the range error with the error token', () => {
+  it('renders the range error with the shared field message', () => {
     renderCustom({ dateFrom: new Date(2026, 0, 10), dateTo: new Date(2026, 0, 5) });
 
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
 
-    const error = screen.getByText(/start date\/time must be before/i);
-    expect(error.className).toContain('text-error');
-    expect(error.className).not.toContain('text-red-500');
+    const error = screen.getByRole('alert');
+    expect(error.className).toContain('text-foreground');
+    expect(error.className).toContain('[&>svg]:text-destructive');
   });
 });

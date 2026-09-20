@@ -7,7 +7,7 @@ export function WorkflowDebugModeSwitch() {
   const descriptionId = useId();
 
   return (
-    <label className="flex min-w-0 cursor-pointer items-center gap-2">
+    <label className="text-ui-sm flex min-w-0 cursor-pointer items-center gap-2">
       <Switch
         checked={debugMode}
         onCheckedChange={setDebugMode}

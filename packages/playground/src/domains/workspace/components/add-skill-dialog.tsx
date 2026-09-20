@@ -7,6 +7,7 @@ import {
   DialogDescription,
   DialogBody,
 } from '@mastra/playground-ui/components/Dialog';
+import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -362,9 +363,9 @@ export function AddSkillDialog({
               {writableMounts && writableMounts.length > 1 && (
                 <div className="bg-surface3 border-border1 flex items-center gap-3 rounded-lg border p-3">
                   <Folder className="text-icon4 h-4 w-4 shrink-0" />
-                  <label htmlFor="mount-select" className="text-icon5 text-ui-md font-medium whitespace-nowrap">
+                  <FieldBlock.Label name="mount-select" htmlFor="mount-select" className="whitespace-nowrap">
                     Install to
-                  </label>
+                  </FieldBlock.Label>
                   <select
                     id="mount-select"
                     value={selectedMount ?? ''}

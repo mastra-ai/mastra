@@ -4,15 +4,23 @@ import { cn } from '@/lib/utils';
 export type FieldBlockLabelProps = {
   children: React.ReactNode;
   name: string;
+  htmlFor?: string;
   required?: boolean;
   size?: 'default' | 'bigger';
   className?: string;
 };
 
-export function FieldBlockLabel({ children, name, required, size = 'default', className }: FieldBlockLabelProps) {
+export function FieldBlockLabel({
+  children,
+  name,
+  htmlFor = `input-${name}`,
+  required,
+  size = 'default',
+  className,
+}: FieldBlockLabelProps) {
   return (
     <label
-      htmlFor={`input-${name}`}
+      htmlFor={htmlFor}
       // A field label is secondary text describing its control, so it sits at `ui-sm`.
       // `bigger` promotes it to body size for a field that leads a section.
       className={cn(

@@ -100,21 +100,21 @@ export interface TaskListRowProps extends ComponentProps<'li'> {
 export const TaskListRow = ({ task, className, ...props }: TaskListRowProps) => (
   <li className={cn('flex items-start gap-2 py-0.5', className)} {...props}>
     <TaskListStatusIcon status={task.status} />
-    <span className={cn('text-ui-sm leading-ui-sm', textClasses[task.status])}>{taskLabel(task)}</span>
+    <span className={cn('text-ui-sm', textClasses[task.status])}>{taskLabel(task)}</span>
   </li>
 );
 
 const TaskListSummary = ({ task }: { task: TaskListItem }) => (
   <span className="flex min-w-0 flex-1 items-center gap-2">
     <TaskListStatusIcon status={task.status} className="pt-0" />
-    <span className={cn('truncate text-ui-sm leading-ui-sm', textClasses[task.status])}>{taskLabel(task)}</span>
+    <span className={cn('truncate text-ui-sm', textClasses[task.status])}>{taskLabel(task)}</span>
   </span>
 );
 
 const TaskListTitle = ({ title }: { title: ReactNode }) => (
   <span className="flex min-w-0 flex-1 items-center gap-2">
     <ListChecks className="text-accent6 size-4 shrink-0" />
-    <span className="text-ui-sm leading-ui-sm text-neutral6 truncate font-medium">{title}</span>
+    <span className="text-ui-sm text-neutral6 truncate font-medium">{title}</span>
   </span>
 );
 

@@ -22,7 +22,7 @@ export default meta;
 type Story = StoryObj<typeof Tooltip>;
 
 const KbdHint = ({ children }: { children: React.ReactNode }) => (
-  <kbd className="bg-muted text-ui-xs leading-ui-xs text-muted-foreground ml-1 inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 font-mono">
+  <kbd className="bg-muted text-ui-xs text-muted-foreground ml-1 inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 font-mono">
     {children}
   </kbd>
 );

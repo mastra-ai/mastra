@@ -66,6 +66,7 @@ export function SelectFieldBlock({
           disabled={disabled}
         >
           <SelectTrigger
+            id={`input-${name}`}
             size={size}
             aria-invalid={errorMsg ? true : undefined}
             aria-describedby={errorMsg ? fieldErrorId(name) : undefined}

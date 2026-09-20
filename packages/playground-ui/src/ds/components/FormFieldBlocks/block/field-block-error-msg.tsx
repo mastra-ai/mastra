@@ -29,7 +29,8 @@ export function FieldBlockErrorMsg({ children, name, className }: FieldBlockErro
         className,
       )}
     >
-      <TriangleAlertIcon aria-hidden /> {children}
+      <TriangleAlertIcon aria-hidden />
+      {children}
     </p>
   );
 }

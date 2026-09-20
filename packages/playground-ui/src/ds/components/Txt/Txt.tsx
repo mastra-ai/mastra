@@ -15,19 +15,19 @@ export interface TxtProps extends HTMLAttributes<HTMLDivElement | HTMLLabelEleme
 
 const variants = {
   // UI text sizes
-  'ui-xs': 'text-ui-xs leading-ui-xs',
-  'ui-sm': 'text-ui-sm leading-ui-sm',
-  'ui-smd': 'text-ui-smd leading-ui-smd',
-  'ui-md': 'text-ui-md leading-ui-md',
-  'ui-lg': 'text-ui-lg leading-ui-lg',
+  'ui-xs': 'text-ui-xs',
+  'ui-sm': 'text-ui-sm',
+  'ui-smd': 'text-ui-smd',
+  'ui-md': 'text-ui-md',
+  'ui-lg': 'text-ui-lg',
   // Header sizes
-  'header-xs': 'text-header-xs leading-header-xs',
-  'header-sm': 'text-header-sm leading-header-sm',
-  'header-md': 'text-header-md leading-header-md',
-  'header-lg': 'text-header-lg leading-header-lg',
-  'header-xl': 'text-header-xl leading-header-xl',
-  title: 'text-ui-md leading-ui-md font-semibold text-neutral6',
-  caption: 'text-ui-sm leading-ui-sm text-neutral3',
+  'header-xs': 'text-header-xs',
+  'header-sm': 'text-header-sm',
+  'header-md': 'text-header-md',
+  'header-lg': 'text-header-lg',
+  'header-xl': 'text-header-xl',
+  title: 'text-ui-md font-semibold text-neutral6',
+  caption: 'text-ui-sm text-neutral3',
 };
 
 const fonts = {

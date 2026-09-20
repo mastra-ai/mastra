@@ -1,12 +1,10 @@
-import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
-import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAgentSettings } from '@/domains/agents/context/agent-context';
@@ -20,8 +18,6 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
   const [providerOptionsValue, setProviderOptionsValue] = useState('');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const theme = useCodemirrorTheme();
 
   const { handleCopy } = useCopyToClipboard({ text: providerOptionsValue });
 
@@ -80,9 +76,9 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
       <div className="@container/advanced">
         <div className="grid grid-cols-1 gap-2 pb-2 @xs/advanced:grid-cols-2">
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="frequency-penalty">
+            <FieldBlock.Label name="frequency-penalty" htmlFor="frequency-penalty">
               Frequency Penalty
-            </Txt>
+            </FieldBlock.Label>
             <Input
               id="frequency-penalty"
               type="number"
@@ -104,9 +100,9 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="presence-penalty">
+            <FieldBlock.Label name="presence-penalty" htmlFor="presence-penalty">
               Presence Penalty
-            </Txt>
+            </FieldBlock.Label>
             <Input
               id="presence-penalty"
               type="number"
@@ -128,9 +124,9 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="top-k">
+            <FieldBlock.Label name="top-k" htmlFor="top-k">
               Top K
-            </Txt>
+            </FieldBlock.Label>
             <Input
               id="top-k"
               type="number"
@@ -149,9 +145,9 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-tokens">
+            <FieldBlock.Label name="max-tokens" htmlFor="max-tokens">
               Max Tokens
-            </Txt>
+            </FieldBlock.Label>
             <Input
               id="max-tokens"
               type="number"
@@ -170,9 +166,9 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-steps">
+            <FieldBlock.Label name="max-steps" htmlFor="max-steps">
               Max Steps
-            </Txt>
+            </FieldBlock.Label>
             <Input
               id="max-steps"
               type="number"
@@ -191,9 +187,9 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-retries">
+            <FieldBlock.Label name="max-retries" htmlFor="max-retries">
               Max Retries
-            </Txt>
+            </FieldBlock.Label>
             <Input
               id="max-retries"
               type="number"
@@ -212,9 +208,9 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="seed">
+            <FieldBlock.Label name="seed" htmlFor="seed">
               Seed
-            </Txt>
+            </FieldBlock.Label>
             <Input
               id="seed"
               type="number"
@@ -235,9 +231,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
 
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="provider-options">
-              Provider Options
-            </Txt>
+            <FieldBlock.Label name="provider-options">Provider Options</FieldBlock.Label>
 
             <div className="flex items-center gap-2">
               <Tooltip>
@@ -284,19 +278,18 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
               )}
             </div>
           </div>
-          <CodeMirror
+          <CodeEditor
+            id="input-provider-options"
             value={providerOptionsValue}
             onChange={setProviderOptionsValue}
-            theme={theme}
-            extensions={[jsonLanguage]}
-            readOnly={!canEdit}
-            className="h-dropdown-max-height overflow-scroll rounded-lg border bg-transparent p-2 shadow-sm transition-colors"
+            language="json"
+            editable={canEdit}
+            showCopyButton={false}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? fieldErrorId('provider-options') : undefined}
+            className="h-dropdown-max-height"
           />
-          {error && (
-            <Txt variant="ui-md" className="text-accent2">
-              {error}
-            </Txt>
-          )}
+          {error && <FieldBlock.ErrorMsg name="provider-options">{error}</FieldBlock.ErrorMsg>}
         </div>
       </div>
     </TooltipProvider>

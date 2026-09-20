@@ -301,8 +301,14 @@ describe('Combobox', () => {
   });
 
   it('says what went wrong under the field, and nothing when nothing did', () => {
-    const withError = render(<Combobox options={options} error="Required" />);
-    expect(screen.getByText('Required')).toBeTruthy();
+    const withError = render(<Combobox options={options} name="provider" error="Required" />);
+    const field = screen.getByRole('combobox');
+    const message = screen.getByRole('alert');
+
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    expect(field.getAttribute('aria-describedby')).toBe('error-provider');
+    expect(message.id).toBe('error-provider');
+    expect(message.textContent).toContain('Required');
     const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
 
     cleanup();

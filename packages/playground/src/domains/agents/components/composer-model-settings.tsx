@@ -38,7 +38,7 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
     <div className="flex items-center gap-2">
       <RadioGroupItem value="network" id="network" className="text-neutral6" disabled={itemDisabled} />
       <Label
-        className={cn('text-neutral6 text-ui-md', !isNetworkAvailable && 'text-neutral3! cursor-not-allowed')}
+        className={cn('text-neutral6', !isNetworkAvailable && 'text-neutral3! cursor-not-allowed')}
         htmlFor="network"
       >
         Network
@@ -85,7 +85,7 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
         disabled={itemDisabled}
       />
       <Label
-        className={cn('text-neutral6 text-ui-md', !supported && 'text-neutral3! cursor-not-allowed')}
+        className={cn('text-neutral6', !supported && 'text-neutral3! cursor-not-allowed')}
         htmlFor="streamSubscription"
       >
         Stream subscription (default)
@@ -215,7 +215,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-neutral6"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="generateLegacy">
+                      <Label className="text-neutral6" htmlFor="generateLegacy">
                         Generate (Legacy)
                       </Label>
                     </div>
@@ -228,7 +228,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-neutral6"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="generate">
+                      <Label className="text-neutral6" htmlFor="generate">
                         Generate
                       </Label>
                     </div>
@@ -241,7 +241,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-neutral6"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="streamLegacy">
+                      <Label className="text-neutral6" htmlFor="streamLegacy">
                         Stream (Legacy)
                       </Label>
                     </div>
@@ -257,7 +257,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-neutral6"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="stream">
+                      <Label className="text-neutral6" htmlFor="stream">
                         Stream
                       </Label>
                     </div>

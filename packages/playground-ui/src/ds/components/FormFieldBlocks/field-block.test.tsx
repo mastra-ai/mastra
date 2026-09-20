@@ -3,6 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FieldBlock } from './block/field-block';
 import { TextFieldBlock } from './fields/text-field-block';
+import { TextareaFieldBlock } from './fields/textarea-field-block';
 
 afterEach(() => cleanup());
 
@@ -17,6 +18,17 @@ describe('FieldBlock error wiring', () => {
     expect(input.getAttribute('aria-describedby')).toBe('error-email');
     expect(message.id).toBe('error-email');
     expect(message.textContent).toContain('@ symbol');
+  });
+
+  it('ties a textarea message to its control', () => {
+    render(<TextareaFieldBlock name="bio" label="Bio" errorMsg="Bio is too long." />);
+
+    const textarea = screen.getByLabelText('Bio');
+    const message = screen.getByRole('alert');
+
+    expect(textarea.getAttribute('aria-invalid')).toBe('true');
+    expect(textarea.getAttribute('aria-describedby')).toBe('error-bio');
+    expect(message.id).toBe('error-bio');
   });
 
   it('leaves a healthy field unmarked', () => {
@@ -60,6 +72,19 @@ describe('FieldBlock error wiring', () => {
     render(<FieldBlock.ErrorMsg name="">Required.</FieldBlock.ErrorMsg>);
 
     expect(screen.getByRole('alert').id).toBe('error-');
+  });
+
+  it('supports controls whose id does not use the field prefix', () => {
+    render(
+      <>
+        <FieldBlock.Label name="schema" htmlFor="schema-editor">
+          Schema
+        </FieldBlock.Label>
+        <textarea id="schema-editor" />
+      </>,
+    );
+
+    expect(screen.getByLabelText('Schema').id).toBe('schema-editor');
   });
 
   it('labels a field at the secondary text role, with required as metadata', () => {

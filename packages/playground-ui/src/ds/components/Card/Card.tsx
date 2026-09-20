@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
   // Base styles
-  'duration-normal rounded-lg transition-all ease-out-custom motion-reduce:transition-none',
+  'rounded-lg transition-all duration-normal ease-out-custom motion-reduce:transition-none',
   {
     variants: {
       appearance: {
@@ -87,11 +87,7 @@ CardHeader.displayName = 'CardHeader';
 export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement>;
 
 export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(({ className, ...props }, ref) => (
-  <h3
-    ref={ref}
-    className={cn('text-ui-md leading-none font-semibold tracking-tight text-neutral6', className)}
-    {...props}
-  />
+  <h3 ref={ref} className={cn('text-ui-md font-semibold tracking-tight text-neutral6', className)} {...props} />
 ));
 CardTitle.displayName = 'CardTitle';
 

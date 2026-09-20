@@ -227,7 +227,7 @@ const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>
       }}
       className={cn(
         variant === 'destructive' ? menuItemDestructiveClass : menuItemClass,
-        size === 'sm' && 'h-form-xs gap-2 rounded-sm py-1 text-ui-xs leading-none',
+        size === 'sm' && 'h-form-xs gap-2 rounded-sm py-1 text-ui-xs',
         inset && menuItemInsetClass,
         className,
       )}

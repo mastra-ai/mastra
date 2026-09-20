@@ -45,8 +45,8 @@ const InlineResult = ({
       {icon}
     </span>
     <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-ui-sm leading-ui-sm text-neutral6 truncate font-medium">{title}</span>
-      <span className="text-ui-xs leading-ui-xs text-neutral3 truncate">{subtitle}</span>
+      <span className="text-ui-sm text-neutral6 truncate font-medium">{title}</span>
+      <span className="text-ui-xs text-neutral3 truncate">{subtitle}</span>
     </span>
   </CommandItem>
 );
@@ -101,7 +101,7 @@ export const InlineVercelStyle: Story = {
         <CommandInput
           placeholder="Find..."
           rightSlot={
-            <Kbd className="border-border1 bg-surface4 text-neutral4 text-ui-xs min-w-0 rounded px-1.5 py-0">Esc</Kbd>
+            <Kbd className="border-border1 bg-surface4 text-ui-xs text-neutral4 min-w-0 rounded px-1.5 py-0">Esc</Kbd>
           }
         />
         <CommandList
@@ -175,9 +175,9 @@ export const WithDialog: Story = {
 
     return (
       <>
-        <p className="text-neutral3 text-ui-md mb-4">
+        <p className="text-ui-md text-neutral3 mb-4">
           Press{' '}
-          <kbd className="border-border1 bg-surface4 text-neutral5 text-ui-xs pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono font-medium select-none">
+          <kbd className="border-border1 bg-surface4 text-ui-xs text-neutral5 pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono font-medium select-none">
             <span className="text-ui-sm">⌘</span>K
           </kbd>{' '}
           or click the button below

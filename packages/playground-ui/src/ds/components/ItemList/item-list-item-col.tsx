@@ -33,7 +33,7 @@ export function ItemListItemStatus({ status }: ItemListItemStatusProps) {
           })}
         ></div>
       ) : (
-        <div className="text-ui-sm text-neutral2 leading-none">-</div>
+        <div className="text-ui-sm text-neutral2">-</div>
       )}
       <VisuallyHidden>Status: {status ? status : 'not provided'}</VisuallyHidden>
     </div>

@@ -99,6 +99,8 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                     <div className="flex flex-col gap-2">
                       <Combobox
                         multiple
+                        name="scorers"
+                        aria-label="Scorers"
                         options={options}
                         value={selectedIds}
                         onValueChange={handleValueChange}
@@ -202,7 +204,7 @@ function ScorerConfigPanel({
       />
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-ui-sm">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4">
           Sampling
         </Label>
         <RadioGroup
@@ -214,13 +216,13 @@ function ScorerConfigPanel({
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-neutral5 text-ui-md cursor-pointer">
+            <Label htmlFor={`${scorerId}-none`} className="text-neutral5 cursor-pointer">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-neutral5 text-ui-md cursor-pointer">
+            <Label htmlFor={`${scorerId}-ratio`} className="text-neutral5 cursor-pointer">
               Ratio (percentage)
             </Label>
           </div>
@@ -228,7 +230,7 @@ function ScorerConfigPanel({
 
         {samplingType === 'ratio' && (
           <div className="mt-1 flex flex-col gap-1.5">
-            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-ui-sm">
+            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4">
               Sample Rate (0-1)
             </Label>
             <Input
