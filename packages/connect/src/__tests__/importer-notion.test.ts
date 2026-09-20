@@ -169,6 +169,30 @@ describe('notion importer', () => {
     expect(importer.nodes.size).toBe(2);
   });
 
+  it('does not advance the watermark when the run bails on maxRecords before draining the descending walk', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    // First run: seed a watermark from a small, drained window so the second run has state to preserve.
+    request.mockResolvedValueOnce(
+      searchResponse([{ id: 'p0', title: 'Zero', lastEditedTime: '2026-08-01T00:00:00Z' }]),
+    );
+    await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
+    const seededWatermark = await state.get('notion:watermark');
+    expect(seededWatermark).toBe(JSON.stringify({ watermark: '2026-08-01T00:00:00Z' }));
+
+    // Second run: return a huge single page that exceeds DEFAULT_MAX_RECORDS_PER_RUN (500) without
+    // crossing the watermark, then a `has_more: true` cursor. The record cap should trigger before
+    // the walk reaches previousWatermark — meaning we did NOT drain, so watermark must stay.
+    const bigPage = Array.from({ length: 501 }, (_, i) => ({
+      id: `p${i + 1}`,
+      title: `Page ${i + 1}`,
+      lastEditedTime: `2026-09-${String((i % 30) + 1).padStart(2, '0')}T00:00:00Z`,
+    }));
+    request.mockResolvedValueOnce(searchResponse(bigPage, 'cursor-1'));
+    await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
+    // Watermark should still be the seeded value; not advanced past the un-fetched tail.
+    expect(await state.get('notion:watermark')).toBe(seededWatermark);
+  });
+
   it('rejects malformed payloads via zod so the run fails and the watermark is preserved', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValueOnce({ results: [{ object: 'page' }] });

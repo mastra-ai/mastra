@@ -153,6 +153,31 @@ describe('fireflies importer', () => {
     expect(importer.nodes.size).toBe(26);
   });
 
+  it('does not advance the watermark when the run bails on maxRecords before the source signals end', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    // First run: fully drained (one small page, fewer than limit).
+    request.mockResolvedValueOnce(
+      transcriptsResponse([{ id: 't0', title: 'Seed', date: '2026-08-01T00:00:00Z', overview: 'seed' }]),
+    );
+    await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
+    const seededWatermark = await state.get('fireflies:watermark');
+    expect(seededWatermark).toBe(JSON.stringify({ watermark: '2026-08-01T00:00:00Z' }));
+
+    // Second run: return 501 transcripts across full pages (limit = 25). The record cap trips
+    // before a partial page signals end — watermark must stay at the seeded value.
+    const fullPages = Array.from({ length: 21 }, (_, page) =>
+      Array.from({ length: 25 }, (_, j) => ({
+        id: `t-${page}-${j}`,
+        title: `M${page}-${j}`,
+        date: `2026-09-${String((page + 1) % 30 || 30).padStart(2, '0')}T00:00:00Z`,
+        overview: `o-${page}-${j}`,
+      })),
+    );
+    for (const page of fullPages) request.mockResolvedValueOnce(transcriptsResponse(page));
+    await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
+    expect(await state.get('fireflies:watermark')).toBe(seededWatermark);
+  });
+
   it('rejects malformed payloads via zod', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValueOnce({ data: { transcripts: [{ title: 'no id' }] } });
