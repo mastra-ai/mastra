@@ -323,7 +323,7 @@ describe('KnowledgeImportersSection', () => {
       expect(await screen.findByRole('button', { name: 'Sync to: All projects' })).toBeInTheDocument();
     });
 
-    it('refuses to uncheck the last selected project — sync-nowhere is not a valid state', async () => {
+    it('allows unchecking the last selected project — connected but linked to no Factory is valid', async () => {
       useFeaturesHandler(true);
       notionConnected();
       useProjectsHandler();
@@ -332,12 +332,14 @@ describe('KnowledgeImportersSection', () => {
 
       const user = userEvent.setup();
       await user.click(await screen.findByRole('button', { name: 'Sync to: 1 of 2 projects' }));
-      // Beta is the only selected project — unchecking it is a no-op.
+      // Beta is the only selected project — unchecking it leaves the
+      // connection established but routed nowhere.
       await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Beta' }));
 
-      await new Promise(resolve => setTimeout(resolve, 20));
-      expect(puts).toEqual([]);
-      expect(screen.getByRole('menuitemcheckbox', { name: 'Beta' })).toHaveAttribute('aria-checked', 'true');
+      await waitFor(() => {
+        expect(puts).toEqual([{ mode: 'selected', projectIds: [] }]);
+      });
+      expect(await screen.findByRole('button', { name: 'Sync to: No projects' })).toBeInTheDocument();
     });
 
     it('offers a retry instead of hiding when the routing load fails transiently', async () => {
