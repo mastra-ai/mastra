@@ -22,6 +22,10 @@ describe('TracesDataListEntityCell entity icon', () => {
     expect(renderCell(EntityType.WORKFLOW_RUN).container.querySelector('svg')).not.toBeNull();
   });
 
+  it('renders an icon for the lowercase stored value "mcp_server"', () => {
+    expect(renderCell(EntityType.MCP_SERVER).container.querySelector('svg')).not.toBeNull();
+  });
+
   it('still renders an icon for legacy uppercase values', () => {
     expect(renderCell('AGENT').container.querySelector('svg')).not.toBeNull();
     expect(renderCell('WORKFLOW').container.querySelector('svg')).not.toBeNull();

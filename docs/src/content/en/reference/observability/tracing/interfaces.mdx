@@ -72,6 +72,7 @@ interface SpanTypeMap {
   CLIENT_TOOL_CALL: ClientToolCallAttributes
   PROVIDER_TOOL_CALL: ProviderToolCallAttributes
   MCP_TOOL_CALL: MCPToolCallAttributes
+  MCP_SERVER_REQUEST: MCPServerRequestAttributes
   PROCESSOR_RUN: ProcessorRunAttributes
   WORKFLOW_STEP: WorkflowStepAttributes
   WORKFLOW_CONDITIONAL: WorkflowConditionalAttributes
@@ -525,6 +526,9 @@ enum SpanType {
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
 
+  /** A request served by a Mastra MCPServer (the server side of an MCP edge) */
+  MCP_SERVER_REQUEST = 'mcp_server_request',
+
   /**
    * Processor execution. This is the default; a processor can declare a
    * different span type so its span names the subsystem it belongs to.
@@ -784,6 +788,35 @@ interface MCPToolCallAttributes {
 
   /** Whether tool execution was successful */
   success?: boolean
+}
+```
+
+### `MCPServerRequestAttributes`
+
+Attributes of a request served by a Mastra `MCPServer`.
+
+```typescript
+interface MCPServerRequestAttributes {
+  /** MCP method served, e.g. 'tools/call', 'resources/list', 'prompts/get' */
+  mcpMethod: string
+
+  /** Name or URI of the tool, prompt, or resource requested. Absent on list-style calls. */
+  targetName?: string
+
+  /** Configured MCPServer name */
+  mcpServer: string
+
+  /** Configured MCPServer version */
+  serverVersion?: string
+
+  /** Negotiated MCP protocol revision for this request */
+  mcpProtocolVersion?: string
+
+  /** Client implementation name, when the client reported one */
+  clientName?: string
+
+  /** Client implementation version, when the client reported one */
+  clientVersion?: string
 }
 ```
 

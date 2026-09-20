@@ -340,6 +340,12 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      */
     mcp?: MCPToolExecutionContext;
     /**
+     * Skip the TOOL_CALL span for this execution. Set by the MCP server, which
+     * already wraps the call in an MCP_SERVER_REQUEST span. Nested agent and
+     * workflow runs still attach to `tracingContext.currentSpan`.
+     */
+    skipToolSpan?: boolean;
+    /**
      * Workspace for tool execution. When provided at execution time, this overrides
      * any workspace configured at tool build time. Allows dynamic workspace selection
      * per-step via prepareStep.
