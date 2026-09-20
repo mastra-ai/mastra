@@ -1,6 +1,11 @@
 import type { WorkflowRunState } from '../workflows';
 import type { WorkflowSnapshotHandoffCanonicalState, WorkflowSnapshotHandoffCursor } from './types';
 
+const WORKFLOW_HANDOFF_UNSAFE_JSON_UNICODE_ESCAPE_RE = new RegExp(
+  String.raw`(?<!\\)((?:\\\\)*)(?:(\\u[Dd][89AaBb][0-9A-Fa-f]{2}\\u[Dd][CcDdEeFf][0-9A-Fa-f]{2})|\\u(?:0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2}))`,
+  'g',
+);
+
 /** Raised when an ordinary native writer attempts to mutate a fenced run. */
 export class WorkflowSnapshotHandoffFenceError extends TypeError {
   readonly code = 'WORKFLOW_SNAPSHOT_HANDOFF_FENCED';
@@ -45,7 +50,11 @@ function canonicalize(value: unknown): unknown {
     }
     return nestedValue;
   });
-  return serialized === undefined ? undefined : sortCanonicalJson(JSON.parse(serialized));
+  if (serialized === undefined) return undefined;
+  const sanitized = serialized
+    .replace(WORKFLOW_HANDOFF_UNSAFE_JSON_UNICODE_ESCAPE_RE, '$1$2')
+    .replace(/(^|[^\\])(\\(?!["\\/bfnrtu]))/g, '$1\\\\');
+  return sortCanonicalJson(JSON.parse(sanitized));
 }
 
 /** Materializes a handoff snapshot using the JSON representation persisted by durable adapters. */

@@ -194,5 +194,25 @@ describe('workflow snapshot handoff', () => {
     };
     await expect(workflows.claimWorkflowSnapshotHandoff(presentInput)).resolves.toMatchObject({ status: 'created' });
     await expect(workflows.claimWorkflowSnapshotHandoff(presentInput)).resolves.toMatchObject({ status: 'existing' });
+
+    const unsafeWorkflowName = 'unsafe-json-workflow';
+    const unsafeRunId = 'unsafe-json-run';
+    const unsafeCanonical = snapshot(unsafeRunId, 'waiting', {
+      payload: `a${String.fromCharCode(0)}b${String.fromCharCode(0xd800)}`,
+    });
+    await workflows.persistWorkflowSnapshot({
+      workflowName: unsafeWorkflowName,
+      runId: unsafeRunId,
+      snapshot: unsafeCanonical,
+    });
+    const unsafeInput = {
+      workflowName: unsafeWorkflowName,
+      runId: unsafeRunId,
+      expectedCanonical: { kind: 'present' as const, snapshot: unsafeCanonical },
+      snapshot: snapshot(unsafeRunId, 'waiting'),
+      mutationFence: 'unsafe-owner',
+    };
+    await expect(workflows.claimWorkflowSnapshotHandoff(unsafeInput)).resolves.toMatchObject({ status: 'created' });
+    await expect(workflows.claimWorkflowSnapshotHandoff(unsafeInput)).resolves.toMatchObject({ status: 'existing' });
   });
 });

@@ -66,6 +66,7 @@ import {
   persistWorkflowStepUpdateRecord,
   rollbackWorkflowResumeRecord,
   WorkflowSnapshotHandoffFenceError,
+  materializeWorkflowSnapshotHandoffSnapshot,
   validateWorkflowSnapshotHandoffFence,
   validateWorkflowSnapshotHandoffLimit,
   workflowSnapshotHandoffCanonicalStatesEqual,
@@ -373,7 +374,8 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   private materializeWorkflowSnapshotHandoffSnapshot(snapshot: WorkflowRunState): WorkflowRunState {
-    const materialized: unknown = JSON.parse(sanitizeJsonForPg(JSON.stringify(snapshot)));
+    const canonical = materializeWorkflowSnapshotHandoffSnapshot(snapshot);
+    const materialized: unknown = JSON.parse(sanitizeJsonForPg(JSON.stringify(canonical)));
     if (!materialized || typeof materialized !== 'object' || Array.isArray(materialized)) {
       throw new TypeError('Workflow snapshot handoff snapshot must be a JSON object');
     }
@@ -4999,8 +5001,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     input: ClaimWorkflowSnapshotHandoffInput,
   ): Promise<ClaimWorkflowSnapshotHandoffResult> {
     validateWorkflowSnapshotHandoffFence(input.mutationFence);
-    const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(input.snapshot));
-    const materializedSnapshot = JSON.parse(serializedSnapshot) as WorkflowRunState;
+    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
+    const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
     const expectedCanonical =
       input.expectedCanonical.kind === 'present'
         ? {
@@ -5065,8 +5067,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     input: TransitionWorkflowSnapshotHandoffInput,
   ): Promise<TransitionWorkflowSnapshotHandoffResult> {
     validateWorkflowSnapshotHandoffFence(input.mutationFence);
-    const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(input.snapshot));
-    const materializedSnapshot = JSON.parse(serializedSnapshot) as WorkflowRunState;
+    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
+    const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
     const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.expectedSnapshot);
     return this.#db.client.tx(async t => {
       await this.lockExistingWorkflowParentRevision(t, input.workflowName, input.runId);
@@ -5113,8 +5115,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     input: CompleteWorkflowSnapshotHandoffInput,
   ): Promise<CompleteWorkflowSnapshotHandoffResult> {
     validateWorkflowSnapshotHandoffFence(input.mutationFence);
-    const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(input.snapshot));
-    const materializedSnapshot = JSON.parse(serializedSnapshot) as WorkflowRunState;
+    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
+    const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
     const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.expectedSnapshot);
     return this.#db.client.tx(async t => {
       await this.lockExistingWorkflowParentRevision(t, input.workflowName, input.runId);
