@@ -208,6 +208,98 @@ describe('KnowledgeImportersSection', () => {
     });
   });
 
+  describe('per-connection routing', () => {
+    const notionConnected = () =>
+      useConnectionHandlers({
+        notion: [{ id: 'notion-1', integrationId: 'notion', status: 'active', accountLabel: 'acme-workspace' }],
+      });
+
+    /** Two Factory projects for the selector; connections sub-fetch stays ambient-empty. */
+    function useProjectsHandler() {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+          HttpResponse.json({ projects: [{ id: 'p1', name: 'Alpha' }, { id: 'p2', name: 'Beta' }] }),
+        ),
+      );
+    }
+
+    function useRoutingHandlers(initial: { mode: 'all' | 'selected'; projectIds: string[] }) {
+      let current = initial;
+      const puts: Array<{ mode: string; projectIds?: string[] }> = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/notion/connections/notion-1/routing`, () =>
+          HttpResponse.json({ routing: current }),
+        ),
+        http.put(
+          `${TEST_BASE_URL}/web/integrations/platform/notion/connections/notion-1/routing`,
+          async ({ request }) => {
+            const body = (await request.json()) as { mode: 'all' | 'selected'; projectIds?: string[] };
+            puts.push(body);
+            current = { mode: body.mode, projectIds: body.projectIds ?? [] };
+            return HttpResponse.json({ routing: current });
+          },
+        ),
+      );
+      return puts;
+    }
+
+    it('summarizes an unrouted connection as syncing to all projects', async () => {
+      useFeaturesHandler(true);
+      notionConnected();
+      useProjectsHandler();
+      useRoutingHandlers({ mode: 'all', projectIds: [] });
+      renderSection();
+
+      expect(await screen.findByText('Syncs to all projects')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Change' })).toBeInTheDocument();
+    });
+
+    it('summarizes a selected-mode connection with its live project count', async () => {
+      useFeaturesHandler(true);
+      notionConnected();
+      useProjectsHandler();
+      useRoutingHandlers({ mode: 'selected', projectIds: ['p2'] });
+      renderSection();
+
+      expect(await screen.findByText('Syncs to 1 of 2 projects')).toBeInTheDocument();
+    });
+
+    it('saves a project selection through the routing PUT and updates the summary', async () => {
+      useFeaturesHandler(true);
+      notionConnected();
+      useProjectsHandler();
+      const puts = useRoutingHandlers({ mode: 'all', projectIds: [] });
+      renderSection();
+
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: 'Change' }));
+
+      // Uncheck "All projects" — the per-project list appears.
+      await user.click(await screen.findByRole('checkbox', { name: /All projects/i }));
+      await user.click(await screen.findByRole('checkbox', { name: 'Alpha' }));
+      await user.click(await screen.findByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(puts).toEqual([{ mode: 'selected', projectIds: ['p1'] }]);
+      });
+      // Editor collapses back to the updated summary.
+      expect(await screen.findByText('Syncs to 1 of 2 projects')).toBeInTheDocument();
+    });
+
+    it('hides the routing control entirely when the server mounts no routing routes', async () => {
+      useFeaturesHandler(true);
+      notionConnected();
+      useProjectsHandler();
+      // No routing handler override — the ambient 404 stands in for an
+      // older server without the routing storage domain.
+      renderSection();
+
+      expect(await screen.findByText('acme-workspace')).toBeInTheDocument();
+      expect(screen.queryByText(/Syncs to/)).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+    });
+  });
+
   describe('brand logos', () => {
     it('renders the Nango-supplied logo when the platform catalog knows the provider', async () => {
       useFeaturesHandler(true);

@@ -18,13 +18,20 @@
  * semantics.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Card } from '@mastra/playground-ui/components/Card';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { usePlatformCatalogQuery, usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import {
+  useKnowledgeImporterRoutingQuery,
+  usePlatformCatalogQuery,
+  usePlatformConnectionsQuery,
+  useSaveKnowledgeImporterRoutingMutation,
+} from '../../../../hooks/usePlatformConnections';
 import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { IntegrationLogo } from '../../../ui/IntegrationLogo';
@@ -53,6 +60,126 @@ const PROVIDER_DESCRIPTIONS: Record<PlatformConnectProviderId, string> = {
 };
 
 /**
+ * Per-connection "Sync to" control. Collapsed it summarizes where the
+ * connection's imports land ("Syncs to all projects" / "Syncs to 2 of 5
+ * projects") with a Change affordance; expanded it offers an All-projects
+ * toggle plus a per-project checkbox list, saved through the routing PUT.
+ * The importer picks the change up on its next cron fire — no restart.
+ */
+function ConnectionRoutingControl({
+  provider,
+  connectionId,
+}: {
+  provider: PlatformConnectProviderId;
+  connectionId: string;
+}) {
+  const routingQuery = useKnowledgeImporterRoutingQuery(provider, connectionId);
+  const factoriesQuery = useFactoriesQuery();
+  const saveMutation = useSaveKnowledgeImporterRoutingMutation(provider, connectionId);
+  const [editing, setEditing] = useState(false);
+  const [draftAll, setDraftAll] = useState(true);
+  const [draftIds, setDraftIds] = useState<ReadonlySet<string>>(new Set());
+
+  // Routing routes only mount when the Factory wires the routing storage
+  // domain — on an older server the query 404s and the control hides
+  // entirely rather than advertising a dead Change button.
+  if (routingQuery.isError) return null;
+  if (routingQuery.isPending) return null;
+
+  const routing = routingQuery.data;
+  const projects = factoriesQuery.data ?? [];
+  const selectedCount =
+    routing.mode === 'all' ? projects.length : projects.filter(p => routing.projectIds.includes(p.id)).length;
+  const summary =
+    routing.mode === 'all'
+      ? 'Syncs to all projects'
+      : `Syncs to ${selectedCount} of ${projects.length} project${projects.length === 1 ? '' : 's'}`;
+
+  const beginEditing = () => {
+    setDraftAll(routing.mode === 'all');
+    setDraftIds(new Set(routing.projectIds));
+    setEditing(true);
+  };
+
+  const save = () => {
+    saveMutation.mutate(
+      draftAll ? { mode: 'all', projectIds: [] } : { mode: 'selected', projectIds: [...draftIds] },
+      { onSuccess: () => setEditing(false) },
+    );
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <Txt as="span" variant="ui-xs" className="text-icon3">
+          {summary}
+        </Txt>
+        <Button size="xs" variant="ghost" onClick={beginEditing}>
+          Change
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex cursor-pointer items-center gap-2">
+        <Checkbox checked={draftAll} onCheckedChange={() => setDraftAll(current => !current)} />
+        <Txt as="span" variant="ui-sm" className="text-icon5">
+          All projects
+        </Txt>
+      </label>
+      {!draftAll && (
+        <ul className="flex flex-col gap-1 pl-1">
+          {projects.map(project => (
+            <li key={project.id}>
+              <label className="flex cursor-pointer items-center gap-2">
+                <Checkbox
+                  checked={draftIds.has(project.id)}
+                  onCheckedChange={() =>
+                    setDraftIds(current => {
+                      const next = new Set(current);
+                      if (next.has(project.id)) next.delete(project.id);
+                      else next.add(project.id);
+                      return next;
+                    })
+                  }
+                />
+                <Txt as="span" variant="ui-sm" className="text-icon5 truncate">
+                  {project.name}
+                </Txt>
+              </label>
+            </li>
+          ))}
+          {projects.length === 0 && (
+            <Txt as="span" variant="ui-xs" className="text-icon3">
+              No projects yet.
+            </Txt>
+          )}
+        </ul>
+      )}
+      {saveMutation.isError && (
+        <Txt as="span" variant="ui-xs" className="text-red-400">
+          Couldn't save routing. Try again.
+        </Txt>
+      )}
+      <div className="flex items-center gap-2">
+        <Button
+          size="xs"
+          onClick={save}
+          disabled={saveMutation.isPending || (!draftAll && draftIds.size === 0)}
+        >
+          {saveMutation.isPending ? 'Saving…' : 'Save'}
+        </Button>
+        <Button size="xs" variant="ghost" onClick={() => setEditing(false)} disabled={saveMutation.isPending}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Render the list of active + needs-reauth connections for a provider. The
  * card's connected-vs-not state is conveyed implicitly by the presence of
  * this list (connected) or a bare Connect button (not connected) — no
@@ -79,29 +206,34 @@ function ConnectionLabels({
         const label = connection.accountLabel ?? `Connected by ${displayName}`;
         const connectedAt = connection.connectedAt ? relativeTime(connection.connectedAt) : '';
         return (
-          <li key={connection.id} className="flex items-center justify-between gap-2">
-            <span className="flex min-w-0 items-center gap-2">
-              <span
-                aria-hidden
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${needsReauth ? 'bg-red-400' : 'bg-emerald-400'}`}
-              />
-              <Txt as="span" variant="ui-sm" className="text-icon5 truncate">
-                {label}
-              </Txt>
-              {connectedAt && (
-                <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
-                  · Connected at: {connectedAt}
+          <li key={connection.id} className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  aria-hidden
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${needsReauth ? 'bg-red-400' : 'bg-emerald-400'}`}
+                />
+                <Txt as="span" variant="ui-sm" className="text-icon5 truncate">
+                  {label}
                 </Txt>
+                {connectedAt && (
+                  <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
+                    · Connected at: {connectedAt}
+                  </Txt>
+                )}
+              </span>
+              {needsReauth && (
+                <ProviderConnectControl
+                  provider={provider}
+                  reconnectConnectionId={connection.id}
+                  label="Reconnect"
+                  size="xs"
+                />
               )}
-            </span>
-            {needsReauth && (
-              <ProviderConnectControl
-                provider={provider}
-                reconnectConnectionId={connection.id}
-                label="Reconnect"
-                size="xs"
-              />
-            )}
+            </div>
+            <div className="pl-3.5">
+              <ConnectionRoutingControl provider={provider} connectionId={connection.id} />
+            </div>
           </li>
         );
       })}
