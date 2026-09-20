@@ -204,6 +204,17 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     return member?.access_level;
   }
 
+  async getWorkItemAuthorUsername(
+    connectionId: string,
+    projectId: string,
+    kind: 'issue' | 'merge_request',
+    iid: number,
+  ): Promise<string | undefined> {
+    const api = (await this.contextById(connectionId)).api;
+    const item = kind === 'issue' ? await api.getIssue(projectId, iid) : await api.getMergeRequest(projectId, iid);
+    return item.author?.username;
+  }
+
   async isProjectMemberTrustedForSource(sourceId: string, username: string): Promise<boolean> {
     const reference = decodeSourceId(sourceId);
     if (!reference) throw new GitLabApiError('GitLab source identity is invalid.', 400);
@@ -607,6 +618,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       title: issue.title,
       url: issue.web_url,
       author: displayName(issue.author),
+      authorUsername: issue.author?.username ?? null,
       state: issue.state,
       stateType: issue.state === 'closed' ? 'completed' : 'unstarted',
       priority: typeof issue.weight === 'number' ? String(issue.weight) : null,

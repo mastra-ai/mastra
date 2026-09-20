@@ -47,6 +47,8 @@ export interface IntakeIssue {
   title: string;
   url: string;
   author: string | null;
+  /** Stable provider login for access checks; `author` is a display name. */
+  authorUsername?: string | null;
   state: string | null;
   stateType: string | null;
   priority: string | null;

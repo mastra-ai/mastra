@@ -149,6 +149,7 @@ describe('GitLab merge-request reconciler', () => {
       versionControl: { getPullRequest } as VersionControl,
       rules: resolveGitLabRules(),
       getProjectMemberAccessLevel,
+      getWorkItemAuthorUsername: vi.fn().mockResolvedValue('maintainer'),
     };
     const context = {
       storage: { projects: seeded.projects, sourceControl, intake: seeded.intake },

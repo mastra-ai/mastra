@@ -102,7 +102,7 @@ describe('GitLab issue reconciler', () => {
           description: 'Closed upstream.',
           state: 'closed',
           web_url: `https://${HOST}/${PROJECT_PATH}/-/issues/42`,
-          author: { name: 'Maintainer', username: 'maintainer' },
+          author: { name: 'Maintainer Person', username: 'maintainer' },
           assignee: null,
           assignees: [],
           labels: [{ name: 'bug', color: '#428BCA' }],
@@ -139,6 +139,8 @@ describe('GitLab issue reconciler', () => {
     const reconcile = attachGitLabIssueReconciler(gitlab, context);
 
     await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
+    const [trustedItem] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
+    expect(trustedItem?.metadata).toMatchObject({ author: 'Maintainer Person', authorTrusted: true });
     accessLevel = 10;
     await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
     const decisions = await seeded.workItems.listDeferredDecisions(project.orgId, project.id);
@@ -148,7 +150,7 @@ describe('GitLab issue reconciler', () => {
     });
     const [item] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
     expect(item?.metadata).toMatchObject({
-      author: 'Maintainer',
+      author: 'Maintainer Person',
       authorTrusted: false,
       state: 'closed',
       labelColors: { bug: '#428BCA' },

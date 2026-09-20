@@ -198,6 +198,7 @@ describe('GitLabIntegration', () => {
     expect(page.issues[0]?.id).toBe('42');
     expect(page.issues[0]?.labels).toEqual(['bug']);
     expect(page.issues[0]?.labelColors).toEqual({ bug: '#d73a4a' });
+    expect(page.issues[0]).toMatchObject({ author: 'Grace', authorUsername: 'grace' });
 
     await gitlab.intake.updateIssue({
       connection: { type: 'oauth', accessToken: 'gitlab-direct-access-token' },
@@ -245,6 +246,8 @@ describe('GitLabIntegration', () => {
 
     expect(detail).toMatchObject({
       identifier: 'mastra/platform#42',
+      author: 'Grace',
+      authorUsername: 'grace',
       description: 'The full issue description.',
       labelColors: { bug: '#d73a4a' },
       comments: [{ author: 'Lin', body: 'ship it' }],
@@ -572,6 +575,18 @@ describe('PlatformGitLabIntegration', () => {
       .fn<typeof fetch>()
       .mockResolvedValue(json([{ id: 2, username: 'alice', state: 'blocked', access_level: 50 }]));
     await expect(direct(fetchMock).getProjectMemberAccessLevel('direct', '10', 'alice')).resolves.toBeUndefined();
+  });
+  it('resolves issue and merge-request authors through the same GitLab API client', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/issues?iids%5B%5D=42')) return json([issue()]);
+      if (url.endsWith('/merge_requests/17')) return json({ author: { username: 'review-author' } });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const gitlab = direct(fetchMock);
+
+    await expect(gitlab.getWorkItemAuthorUsername('direct', '10', 'issue', 42)).resolves.toBe('grace');
+    await expect(gitlab.getWorkItemAuthorUsername('direct', '10', 'merge_request', 17)).resolves.toBe('review-author');
   });
   it('uses MASTRA_GITLAB_CONNECTION_ID as an optional filter and otherwise discovers every GitLab connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {

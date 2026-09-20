@@ -133,6 +133,7 @@ async function setup(
   const gitlab: GitLabRulesIntegration = {
     rules: resolveGitLabRules(),
     getProjectMemberAccessLevel: vi.fn().mockResolvedValue(options.accessLevel ?? 40),
+    getWorkItemAuthorUsername: vi.fn().mockResolvedValue('maintainer'),
   };
   const service = new GitLabRules({
     gitlab,
@@ -236,6 +237,67 @@ describe('GitLabRules', () => {
     ]);
   });
 
+  it('uses GitLab author_id when the issue webhook sender is its author', async () => {
+    const { seeded, project, gitlab, service } = await setup();
+    const event = issueOpened('issue-author-id');
+    const { author: _author, ...attributes } = event.payload.object_attributes;
+    await expect(service.ingest({
+      ...event,
+      payload: {
+        ...event.payload,
+        user: { id: 7, username: 'maintainer' },
+        object_attributes: { ...attributes, author_id: 7 },
+      },
+    })).resolves.toEqual({ status: 'committed' });
+    expect(gitlab.getWorkItemAuthorUsername).not.toHaveBeenCalled();
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { metadata: { author: 'maintainer', authorTrusted: true } } },
+    ]);
+  });
+
+  it('resolves an issue author from GitLab when a different user triggers the webhook', async () => {
+    const { seeded, project, gitlab, service } = await setup();
+    vi.mocked(gitlab.getProjectMemberAccessLevel).mockImplementation(async (_connectionId, _projectId, username) =>
+      username === 'maintainer' ? 40 : 10,
+    );
+    const event = issueOpened('issue-author-lookup');
+    const { author: _author, ...attributes } = event.payload.object_attributes;
+    await expect(service.ingest({
+      ...event,
+      payload: {
+        ...event.payload,
+        user_username: 'external-editor',
+        user: { id: 8, username: 'external-editor' },
+        object_attributes: { ...attributes, author_id: 7 },
+      },
+    })).resolves.toEqual({ status: 'committed' });
+    expect(gitlab.getWorkItemAuthorUsername).toHaveBeenCalledWith('direct', PROJECT_ID, 'issue', 42);
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      {
+        actor: { username: 'external-editor', trusted: false },
+        decision: { metadata: { author: 'maintainer', authorTrusted: true } },
+      },
+    ]);
+  });
+
+  it('fails closed when GitLab cannot resolve the issue author', async () => {
+    const { seeded, project, gitlab, service } = await setup();
+    vi.mocked(gitlab.getWorkItemAuthorUsername).mockRejectedValue(new Error('GitLab unavailable'));
+    const event = issueOpened('issue-author-unavailable');
+    const { author: _author, ...attributes } = event.payload.object_attributes;
+    await expect(service.ingest({
+      ...event,
+      payload: {
+        ...event.payload,
+        user: { id: 8, username: 'maintainer' },
+        object_attributes: { ...attributes, author_id: 7 },
+      },
+    })).resolves.toEqual({ status: 'committed' });
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { metadata: { authorTrusted: false, autoStartCandidate: false } } },
+    ]);
+  });
+
   it('materializes GitLab merge requests as Review cards with provider identity', async () => {
     const { seeded, project, service } = await setup();
     await expect(service.ingest(mergeRequestOpened())).resolves.toEqual({ status: 'committed' });
@@ -254,6 +316,23 @@ describe('GitLabRules', () => {
           },
         },
       },
+    ]);
+  });
+  it('uses GitLab author_id when the merge-request webhook sender is its author', async () => {
+    const { seeded, project, gitlab, service } = await setup();
+    const event = mergeRequestOpened('mr-author-id');
+    const { author: _author, ...attributes } = event.payload.object_attributes;
+    await expect(service.ingest({
+      ...event,
+      payload: {
+        ...event.payload,
+        user: { id: 7, username: 'maintainer' },
+        object_attributes: { ...attributes, author_id: 7 },
+      },
+    })).resolves.toEqual({ status: 'committed' });
+    expect(gitlab.getWorkItemAuthorUsername).not.toHaveBeenCalled();
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { metadata: { author: 'maintainer', authorTrusted: true } } },
     ]);
   });
   it('does not trust a merge-request author merely because the webhook sender is trusted', async () => {

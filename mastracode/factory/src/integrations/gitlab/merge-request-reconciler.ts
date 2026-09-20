@@ -114,7 +114,7 @@ async function connectionForItem(
 export type GitLabMergeRequestReconciler = () => Promise<IssueReconcileSummary>;
 
 export function attachGitLabMergeRequestReconciler(
-  gitlab: Pick<GitLabIntegrationBase, 'versionControl' | 'rules' | 'getProjectMemberAccessLevel'>,
+  gitlab: Pick<GitLabIntegrationBase, 'versionControl' | 'rules' | 'getProjectMemberAccessLevel' | 'getWorkItemAuthorUsername'>,
   context: IntegrationContext,
 ): GitLabMergeRequestReconciler | undefined {
   if (!context.runtime) return undefined;

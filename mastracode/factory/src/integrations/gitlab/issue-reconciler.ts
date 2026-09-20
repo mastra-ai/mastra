@@ -32,7 +32,7 @@ function closedIssueEvent(item: WorkItemRow, issue: IntakeIssue): ParsedGitLabWe
   if (!projectId || !issueIid || !host || !projectPath) {
     throw new Error('GitLab issue work item is missing canonical reconciliation metadata.');
   }
-  const username = issue.author?.trim() || 'factory-reconciler';
+  const username = issue.authorUsername?.trim() || 'factory-reconciler';
   return {
     event: 'Issue Hook',
     deliveryId: `reconcile:issue:${normalizeHost(host)}:${projectId}:${issueIid}:${issue.updatedAt}:closed`,
@@ -64,7 +64,7 @@ function closedIssueEvent(item: WorkItemRow, issue: IntakeIssue): ParsedGitLabWe
 export function attachGitLabIssueReconciler(
   gitlab: Pick<
     GitLabIntegrationBase,
-    'intake' | 'rules' | 'getProjectMemberAccessLevel' | 'isProjectMemberTrustedForSource'
+    'intake' | 'rules' | 'getProjectMemberAccessLevel' | 'getWorkItemAuthorUsername' | 'isProjectMemberTrustedForSource'
   >,
   context: IntegrationContext,
 ): GitLabIssueReconciler | undefined {
@@ -77,7 +77,9 @@ export function attachGitLabIssueReconciler(
     state: issue.state,
     stateType: issue.stateType,
     author: issue.author,
-    authorTrusted: issue.author ? await gitlab.isProjectMemberTrustedForSource(sourceId, issue.author) : undefined,
+    authorTrusted: issue.authorUsername
+      ? await gitlab.isProjectMemberTrustedForSource(sourceId, issue.authorUsername)
+      : false,
     assignee: issue.assignee,
     assignees: issue.assignees ?? [],
     labels: issue.labels,

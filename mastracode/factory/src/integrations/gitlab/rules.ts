@@ -127,6 +127,12 @@ async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
 export interface GitLabRulesIntegration {
   readonly rules: GitLabEventRules;
   getProjectMemberAccessLevel(connectionId: string, projectId: string, username: string): Promise<number | undefined>;
+  getWorkItemAuthorUsername(
+    connectionId: string,
+    projectId: string,
+    kind: 'issue' | 'merge_request',
+    iid: number,
+  ): Promise<string | undefined>;
 }
 
 interface GitLabRulesOptions {
@@ -254,8 +260,35 @@ export class GitLabRules {
         )
       : undefined;
     const actorTrusted = await this.#trusted(target.connectionIds, String(projectId), username);
-    const issueAuthor = string(object(issue?.author)?.username);
-    const mergeRequestAuthor = string(object(mergeRequest?.author)?.username);
+    const eventUserId = number(object(parsed.payload.user)?.id) ?? number(parsed.payload.user_id);
+    const resolveAuthor = async (
+      item: Record<string, unknown> | undefined,
+      kind: 'issue' | 'merge_request',
+      iid: number | undefined,
+    ): Promise<string | undefined> => {
+      if (!item || !iid) return undefined;
+      const embedded = string(object(item.author)?.username);
+      if (embedded) return embedded;
+      if (eventUserId && eventUserId === number(item.author_id)) return username;
+      for (const connectionId of target.connectionIds) {
+        try {
+          const resolved = await this.options.gitlab.getWorkItemAuthorUsername(
+            connectionId,
+            String(projectId),
+            kind,
+            iid,
+          );
+          if (resolved) return resolved;
+        } catch {
+          // Another active credential may cover this project; otherwise leave author trust unset.
+        }
+      }
+      return undefined;
+    };
+    const [issueAuthor, mergeRequestAuthor] = await Promise.all([
+      resolveAuthor(issue, 'issue', issueIid),
+      resolveAuthor(mergeRequest, 'merge_request', mergeRequestIid),
+    ]);
     const authorTrusted = async (author: string | undefined): Promise<boolean> => {
       if (!author) return false;
       return author === username
@@ -298,10 +331,12 @@ export class GitLabRules {
           factoryProject,
           board: { board: board.id, initialPhase: board.initialPhase },
           issue,
+          issueAuthor,
           issueAuthorTrusted,
           issueIid,
           issueSourceKey,
           mergeRequest,
+          mergeRequestAuthor,
           mergeRequestAuthorTrusted,
           mergeRequestIid,
           mergeRequestKey,
@@ -340,10 +375,12 @@ export class GitLabRules {
     factoryProject: { createdAt: Date };
     board: { board: string; initialPhase: string };
     issue: Record<string, unknown> | undefined;
+    issueAuthor: string | undefined;
     issueAuthorTrusted: boolean;
     issueIid: number | undefined;
     issueSourceKey: string | undefined;
     mergeRequest: Record<string, unknown> | undefined;
+    mergeRequestAuthor: string | undefined;
     mergeRequestAuthorTrusted: boolean;
     mergeRequestIid: number | undefined;
     mergeRequestKey: string | undefined;
@@ -352,8 +389,8 @@ export class GitLabRules {
     ingressIdentity: string;
   }): Promise<{ status: IngressStatus }> {
     const note = object(input.parsed.payload.object_attributes);
-    const issueAuthor = string(object(input.issue?.author)?.username) ?? string(object(input.parsed.payload.user)?.username);
-    const mergeRequestAuthor = string(object(input.mergeRequest?.author)?.username);
+    const issueAuthor = input.issueAuthor;
+    const mergeRequestAuthor = input.mergeRequestAuthor;
     const mergeRequestState = string(input.mergeRequest?.state);
     const context: FactoryGitLabRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
