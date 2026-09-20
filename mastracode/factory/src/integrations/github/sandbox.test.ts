@@ -19,6 +19,7 @@ import {
   MaterializeError,
   pushBranch,
   pushRepositoryBranch,
+  refreshMergeRequestCheckout,
   resolveGitIdentity,
   runSetupCommand,
   runTeardownCommand,
@@ -668,6 +669,53 @@ describe('checkoutSessionBranch', () => {
     const err = await checkoutSessionBranch(sandbox, '/workspace/repo', opts).catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('clone-failed');
+  });
+});
+
+describe('refreshMergeRequestCheckout', () => {
+  const oldHead = 'a'.repeat(40);
+  const newHead = 'b'.repeat(40);
+  const input = {
+    branch: 'factory/gitlab-mr-7-abc123',
+    mergeRequestNumber: 7,
+    expectedHeadSha: newHead,
+    access: { cloneUrl: 'https://gitlab.com/acme/repo.git', authorization: { scheme: 'bearer' as const, token: 'secret-token', username: 'oauth2' } },
+  };
+
+  it('fetches the provider MR ref with an ephemeral credential and moves only a clean bound checkout', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { ...OK, stdout: `${input.branch}\n` };
+      if (script.includes('rev-parse HEAD')) return { ...OK, stdout: `${oldHead}\n` };
+      if (script.includes('rev-parse FETCH_HEAD')) return { ...OK, stdout: `${newHead}\n` };
+      return OK;
+    });
+    await expect(refreshMergeRequestCheckout(sandbox, '/workspace/repo', input)).resolves.toEqual({ headSha: newHead, changed: true });
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch origin refs/merge-requests/7/head');
+    expect(sandbox.calls).toContain(`git -C /workspace/repo checkout -B ${input.branch} FETCH_HEAD`);
+    expect(sandbox.calls.join('\n')).not.toContain('secret-token');
+    const fetch = sandbox.executions.find(entry => entry.args.includes('fetch'));
+    expect(fetch?.options?.env).toMatchObject({ GIT_TERMINAL_PROMPT: '0' });
+  });
+
+  it('refuses to overwrite local review work before fetching', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { ...OK, stdout: `${input.branch}\n` };
+      if (script.includes('status --porcelain')) return { ...OK, stdout: '?? review-notes.txt\n' };
+      return OK;
+    });
+    await expect(refreshMergeRequestCheckout(sandbox, '/workspace/repo', input)).rejects.toThrow('local changes');
+    expect(sandbox.calls.join('\n')).not.toContain('fetch origin');
+  });
+
+  it('refuses a fetched head that differs from current provider metadata', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { ...OK, stdout: `${input.branch}\n` };
+      if (script.includes('rev-parse HEAD')) return { ...OK, stdout: `${oldHead}\n` };
+      if (script.includes('rev-parse FETCH_HEAD')) return { ...OK, stdout: `${'c'.repeat(40)}\n` };
+      return OK;
+    });
+    await expect(refreshMergeRequestCheckout(sandbox, '/workspace/repo', input)).rejects.toThrow('differs');
+    expect(sandbox.calls.join('\n')).not.toContain('checkout -B');
   });
 });
 

@@ -28,14 +28,11 @@ function checkoutHint(item: FactoryRuleItemContext): string {
   const sessionBranch = workItemBranch(item);
   const deepen = `if git rev-parse --is-shallow-repository | grep -qx true; then git fetch --unshallow --filter=blob:none origin; fi`;
   if (item.source === 'gitlab-pr') {
-    const refresh = safeHeadBranch
-      ? `${deepen} && git fetch --filter=blob:none origin ${safeHeadBranch} && git checkout -B ${sessionBranch} FETCH_HEAD`
-      : undefined;
     return (
       `The merge-request head is checked out on branch \`${sessionBranch}\` with the repository history. ` +
       `Use source_control_get_change_request to read current GitLab metadata and the provider-neutral source-control tools for review actions. ` +
-      `Past file contents load on demand, so keep \`git log -S\` and \`-G\` to a path.` +
-      (refresh ? ` If the remote head moved, refresh with \`${refresh}\`.` : '') +
+      `Before inspecting the diff, call source_control_refresh_change_request_checkout and verify \`git rev-parse HEAD\` equals the reported MR head. ` +
+      `If refresh fails, report the gap and do not approve; never fetch with an untrusted branch name or a credential from the environment.` +
       headBranch
     );
   }

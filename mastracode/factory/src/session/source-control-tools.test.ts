@@ -274,6 +274,19 @@ describe('createSourceControlTools', () => {
     expect(setup.createPullRequest).not.toHaveBeenCalled();
   });
 
+  it('rejects checkout refresh outside a bound GitLab MR review session', async () => {
+    const setup = await fixture();
+    const tools = createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+    await expect((tools.source_control_refresh_change_request_checkout!.execute as any)({})).rejects.toThrow(
+      'only available in a bound GitLab merge-request review session',
+    );
+    expect(setup.getRepositoryTarget).not.toHaveBeenCalled();
+  });
+
   it('fails closed when a session exists in more than one provider partition', async () => {
     const first = await fixture('gitlab');
     const second = await fixture('github');

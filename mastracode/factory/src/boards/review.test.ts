@@ -60,8 +60,10 @@ describe('reviewBoard', () => {
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected review invocation.');
     expect(decision.arguments).toContain('GitLab merge request !5');
     expect(decision.arguments).toContain('source_control_get_change_request');
+    expect(decision.arguments).toContain('source_control_refresh_change_request_checkout');
     expect(decision.arguments).toContain('untrusted MR metadata');
     expect(decision.arguments).not.toContain('gh pr');
+    expect(decision.arguments).not.toContain('git fetch');
   });
 
   it('does not interpolate an unsafe GitLab head branch into a shell refresh hint', async () => {

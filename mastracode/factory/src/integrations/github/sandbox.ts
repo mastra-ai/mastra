@@ -499,6 +499,48 @@ export async function checkoutSessionBranch(
   return timedPhase('workspace.checkout', () => checkoutSessionBranchImpl(sandbox, workdir, options));
 }
 
+/** Refresh an existing GitLab review checkout without exposing its credential to the agent. */
+export async function refreshMergeRequestCheckout(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  input: { branch: string; mergeRequestNumber: number; expectedHeadSha: string; access: RepositoryAccess },
+): Promise<{ headSha: string; changed: boolean }> {
+  const { branch, mergeRequestNumber, expectedHeadSha, access } = input;
+  if (!isValidGitRef(branch) || !Number.isSafeInteger(mergeRequestNumber) || mergeRequestNumber <= 0 ||
+      !/^[0-9a-f]{40}$/i.test(expectedHeadSha)) {
+    throw new Error('Refusing to refresh a GitLab review with invalid session or head metadata.');
+  }
+  const token = access.authorization?.token;
+  if (!token) throw new Error('GitLab repository access did not include a bearer token.');
+  const env = gitAuthenticationEnvironment(access.cloneUrl, token, access.authorization?.username ?? 'oauth2', 'pull-failed');
+  const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
+  if (current.exitCode !== 0 || current.stdout.trim() !== branch) {
+    throw new Error('The active checkout is not on its bound review branch.');
+  }
+  const status = await execute(sandbox, 'git', ['-C', workdir, 'status', '--porcelain', '--untracked-files=all']);
+  if (status.exitCode !== 0 || status.stdout.trim()) {
+    throw new Error('The review checkout has local changes; refusing to replace them.');
+  }
+  const before = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', 'HEAD']);
+  if (before.exitCode !== 0) throw new Error('Could not read the current review checkout head.');
+  const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', `refs/merge-requests/${mergeRequestNumber}/head`], {
+    env,
+    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+    phase: 'GitLab review head refresh',
+  });
+  if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+  const fetched = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', 'FETCH_HEAD']);
+  if (fetched.exitCode !== 0 || fetched.stdout.trim().toLowerCase() !== expectedHeadSha.toLowerCase()) {
+    throw new Error('The fetched GitLab review head differs from the provider-reported head; retry after it settles.');
+  }
+  if (before.stdout.trim().toLowerCase() === expectedHeadSha.toLowerCase()) {
+    return { headSha: expectedHeadSha, changed: false };
+  }
+  const updated = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-B', branch, 'FETCH_HEAD'], { env });
+  if (updated.exitCode !== 0) throw classifyGitFailure(updated, 'pull-failed');
+  return { headSha: expectedHeadSha, changed: true };
+}
+
 async function checkoutSessionBranchImpl(
   sandbox: ExecutableSandbox,
   workdir: string,

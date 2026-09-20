@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
-import { pushRepositoryBranch } from '../integrations/github/sandbox.js';
+import { pushRepositoryBranch, refreshMergeRequestCheckout } from '../integrations/github/sandbox.js';
 import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { resolveSessionWorkdir } from '../sandbox/session-sandbox.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
@@ -17,6 +17,7 @@ import type {
   SourceControlSession,
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
+import { mergeRequestNumberFromBranch } from '../work-item-branch.js';
 
 type RepositorySessionState = {
   factoryProjectId?: string;
@@ -150,6 +151,40 @@ export function createSourceControlTools({
   });
 
   return {
+    source_control_refresh_change_request_checkout: createTool({
+      id: 'source_control_refresh_change_request_checkout',
+      description:
+        'Refresh the active GitLab review session checkout to its current MR head. The MR, repository, branch, and credential are resolved server-side; no provider credentials enter the agent workspace.',
+      inputSchema: z.object({}),
+      execute: async (_input, { workspace }) => {
+        const target = await withTarget();
+        const mergeRequestNumber = mergeRequestNumberFromBranch(target.session.branch);
+        if (target.provider.id !== 'gitlab' || mergeRequestNumber === undefined) {
+          throw new Error('Checkout refresh is only available in a bound GitLab merge-request review session.');
+        }
+        const ref = await reference(target);
+        const mergeRequest = await target.provider.versionControl.getPullRequest({
+          ...ref,
+          pullRequestId: String(mergeRequestNumber),
+        });
+        if (!mergeRequest || mergeRequest.state !== 'open' || mergeRequest.merged) {
+          throw new Error('The bound GitLab merge request is no longer open.');
+        }
+        const sandbox = executableSandbox(workspace?.sandbox);
+        const workdir = await resolveSessionWorkdir(target.session.id, sandbox, target.repository.slug);
+        const access = await target.provider.versionControl.getRepositoryAccess({
+          orgId: target.orgId,
+          repositoryId: target.repository.id,
+        });
+        const result = await refreshMergeRequestCheckout(sandbox, workdir, {
+          branch: target.session.branch,
+          mergeRequestNumber,
+          expectedHeadSha: mergeRequest.headSha,
+          access,
+        });
+        return result;
+      },
+    }),
     source_control_push_branch: createTool({
       id: 'source_control_push_branch',
       description:
