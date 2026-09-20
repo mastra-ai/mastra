@@ -84,6 +84,15 @@ describe('factoryProjectScopes', () => {
       await expect(scopes(scopesContext('conn-unrouted'))).resolves.toEqual(['resource:p1', 'resource:p2']);
     });
 
+    it('resolves zero scopes for a connection routed to no projects — connected but syncing nowhere', async () => {
+      const { storage } = fakeStorage({
+        projects: [{ id: 'p1' }, { id: 'p2' }],
+        routing: new Map([['conn-idle', { mode: 'selected' as const, projectIds: [] }]]),
+      });
+      const scopes = factoryProjectScopes(storage);
+      await expect(scopes(scopesContext('conn-idle'))).resolves.toEqual([]);
+    });
+
     it('routes different connections of the same provider independently', async () => {
       const { storage } = fakeStorage({
         projects: [{ id: 'p1' }, { id: 'p2' }],

@@ -1166,6 +1166,12 @@ export class MastraFactory {
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
                 routing: importerRoutingStorage,
                 projects: factoryProjectsStorage,
+                // Ties new connections to the deployment's Platform project so
+                // the knowledge `importers()` resolver (project-scoped) sees
+                // them; also drives the self-heal for older connections.
+                ...(process.env.MASTRA_PROJECT_ID?.trim()
+                  ? { platformProjectId: process.env.MASTRA_PROJECT_ID.trim() }
+                  : {}),
               })
             : []),
         ],

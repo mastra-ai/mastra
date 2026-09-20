@@ -78,9 +78,9 @@ const PROVIDER_DESCRIPTIONS: Record<PlatformConnectProviderId, string> = {
  * the menu never blocks on the network. A failed save reverts the summary and
  * raises a toast. The importer picks changes up on its next cron fire.
  *
- * Sync-nowhere is not a valid state: unchecking the last selected project is
- * a no-op (the item stays checked) rather than silently widening back to all
- * projects.
+ * An empty selection is valid: the connection stays established on the
+ * Platform ("Sync to: No projects") and its imports simply land in no
+ * Factory project until one is linked.
  */
 function RoutingMenu({ provider, connectionId }: { provider: PlatformConnectProviderId; connectionId: string }) {
   const routingQuery = useKnowledgeImporterRoutingQuery(provider, connectionId);
@@ -118,7 +118,9 @@ function RoutingMenu({ provider, connectionId }: { provider: PlatformConnectProv
   const selectedCount = projects.filter(p => selectedIds.has(p.id)).length;
   const summary = isAll
     ? 'All projects'
-    : `${selectedCount} of ${projects.length} project${projects.length === 1 ? '' : 's'}`;
+    : selectedCount === 0
+      ? 'No projects'
+      : `${selectedCount} of ${projects.length} project${projects.length === 1 ? '' : 's'}`;
 
   const commit = (next: KnowledgeImporterRouting) => {
     setOptimistic(next);
@@ -130,15 +132,13 @@ function RoutingMenu({ provider, connectionId }: { provider: PlatformConnectProv
 
   const toggleProject = (projectId: string) => {
     if (isAll) {
-      // Narrowing from "all": everything except the toggled project.
-      const rest = projects.filter(p => p.id !== projectId).map(p => p.id);
-      if (rest.length === 0) return; // sole project — nothing to narrow to
-      commit({ mode: 'selected', projectIds: rest });
+      // Narrowing from "all": everything except the toggled project. With a
+      // single project this yields an (allowed) empty selection.
+      commit({ mode: 'selected', projectIds: projects.filter(p => p.id !== projectId).map(p => p.id) });
       return;
     }
     const next = new Set(routing.projectIds);
     if (next.has(projectId)) {
-      if (next.size === 1) return; // sync-nowhere is not a valid state
       next.delete(projectId);
     } else {
       next.add(projectId);

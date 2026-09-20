@@ -28,7 +28,12 @@ function connection(id: string, integrationId: string, status: 'active' | 'needs
 function buildApp(
   user: TestAuthUser | null,
   fetchImpl: typeof fetch,
-  options: { authEnabled?: boolean; routing?: KnowledgeImporterRoutingStorage; projects?: FactoryProjectsStorage } = {},
+  options: {
+    authEnabled?: boolean;
+    routing?: KnowledgeImporterRoutingStorage;
+    projects?: FactoryProjectsStorage;
+    platformProjectId?: string;
+  } = {},
 ): Hono {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -46,6 +51,7 @@ function buildApp(
       }),
       routing: options.routing,
       projects: options.projects,
+      platformProjectId: options.platformProjectId,
     }),
   );
   return app;
@@ -110,6 +116,86 @@ describe('platform connect routes', () => {
     );
   });
 
+  describe('platform project attachment', () => {
+    it('mints project-scoped connect sessions when the deployment knows its Platform project', async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json(SESSION, 201));
+      const app = buildApp(org1(), fetchImpl, { platformProjectId: 'proj-42' });
+
+      const response = await app.request('/web/integrations/platform/notion/connect-session', { method: 'POST' });
+      expect(response.status).toBe(201);
+      // Project-scoped mint → the Platform attaches the connection to the
+      // project, which is what the knowledge importers resolver enumerates.
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'https://integrations.example.com/v2/projects/proj-42/integrations/notion/connect-sessions',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('self-heals unattached active connections when listing, exactly once per process', async () => {
+      const attachCalls: string[] = [];
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith('/v2/connections')) {
+          return json({
+            connections: [connection('conn-n1', 'notion'), connection('conn-n2', 'notion', 'needs_reauth')],
+          });
+        }
+        if (init?.method === 'POST' && url.includes('/v2/projects/proj-42/connections/')) {
+          attachCalls.push(url);
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      const app = buildApp(org1(), fetchImpl, { platformProjectId: 'proj-42' });
+
+      const first = await app.request('/web/integrations/platform/notion/connections');
+      expect(first.status).toBe(200);
+      // Only the active connection is attached — needs_reauth ones are left
+      // for the reconnect flow (the Platform rejects establishing links for
+      // connections it may be about to recycle).
+      expect(attachCalls).toEqual(['https://integrations.example.com/v2/projects/proj-42/connections/conn-n1']);
+
+      // Second list: the in-process dedupe suppresses a repeat POST.
+      const second = await app.request('/web/integrations/platform/notion/connections');
+      expect(second.status).toBe(200);
+      expect(attachCalls).toHaveLength(1);
+    });
+
+    it('still answers the connections list when the attach self-heal fails', async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith('/v2/connections')) return json({ connections: [connection('conn-n1', 'notion')] });
+        if (init?.method === 'POST') return json({ error: 'project_not_found' }, 404);
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      const app = buildApp(org1(), fetchImpl, { platformProjectId: 'proj-missing' });
+
+      const response = await app.request('/web/integrations/platform/notion/connections');
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        connections: [expect.objectContaining({ id: 'conn-n1' })],
+      });
+    });
+
+    it('keeps org-level minting and skips attachment when no project id is configured', async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
+        const url = String(input);
+        if (url.endsWith('/v2/connections')) return json({ connections: [connection('conn-n1', 'notion')] });
+        if (url.endsWith('/v2/integrations/notion/connect-sessions')) return json(SESSION, 201);
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      const app = buildApp(org1(), fetchImpl);
+
+      await app.request('/web/integrations/platform/notion/connections');
+      const mint = await app.request('/web/integrations/platform/notion/connect-session', { method: 'POST' });
+      expect(mint.status).toBe(201);
+      // No project-scoped URLs anywhere in the call log.
+      for (const call of fetchImpl.mock.calls) {
+        expect(String(call[0])).not.toContain('/v2/projects/');
+      }
+    });
+  });
+
   it('mints a reconnect session only for a connection owned by the provider', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
       const url = String(input);
@@ -164,18 +250,24 @@ describe('platform connect routes', () => {
       await expect(cross.json()).resolves.toEqual({ error: 'connection_not_found' });
     });
 
-    it('rejects a selected mode with an empty project selection', async () => {
+    it('accepts a selected mode with an empty project selection — connected but linked nowhere', async () => {
       const { routing } = routingFixtures();
       const fetchImpl = vi.fn<typeof fetch>().mockImplementation(listWithNotion);
       const app = buildApp(org1(), fetchImpl, { routing });
 
+      // A Platform connection with no Factory destinations is a valid state:
+      // the OAuth grant stays established, imports just land nowhere until
+      // the user links a project.
       const response = await app.request('/web/integrations/platform/notion/connections/conn-notion/routing', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ mode: 'selected', projectIds: [] }),
       });
-      expect(response.status).toBe(400);
-      await expect(response.json()).resolves.toMatchObject({ error: 'empty_selection' });
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ routing: { mode: 'selected', projectIds: [] } });
+
+      const get = await app.request('/web/integrations/platform/notion/connections/conn-notion/routing');
+      await expect(get.json()).resolves.toEqual({ routing: { mode: 'selected', projectIds: [] } });
     });
 
     it('round-trips a selected-projects routing through PUT and GET', async () => {

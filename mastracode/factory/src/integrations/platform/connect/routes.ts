@@ -105,6 +105,15 @@ export interface BuildPlatformConnectRoutesOptions {
    */
   routing?: KnowledgeImporterRoutingStorage;
   projects?: FactoryProjectsStorage;
+  /**
+   * Platform project this deployment belongs to (`MASTRA_PROJECT_ID`). When
+   * set, connect sessions are minted project-scoped so the resulting
+   * connection is attached to the project — which is what
+   * `@mastra/connect`'s `importers()` resolver enumerates. Without the
+   * attachment a connection "exists" org-wide but no importer ever sees it.
+   * Existing unattached connections are self-healed on list (idempotent).
+   */
+  platformProjectId?: string;
 }
 
 async function resolveOrgTenant(
@@ -200,7 +209,44 @@ async function buildCatalogSnapshot(client: PlatformApiClient): Promise<Platform
 }
 
 export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOptions): ApiRoute[] {
-  const { auth, client, routing, projects } = options;
+  const { auth, client, routing, projects, platformProjectId } = options;
+
+  /**
+   * Connection ids already attached to the Platform project this process
+   * lifetime — dedupes the self-heal POSTs on every connections list. The
+   * attach endpoint is idempotent, so a false miss (process restart) only
+   * costs one extra 204.
+   */
+  const attachedConnectionIds = new Set<string>();
+
+  /**
+   * Attach org-level connections to the deployment's Platform project so the
+   * `importers()` resolver (which enumerates project connections) can see
+   * them. Heals connections minted before Factory used project-scoped
+   * connect sessions. Failures are logged-and-swallowed: attachment is a
+   * background repair, never a reason to fail the connections list.
+   */
+  async function attachConnectionsToProject(connections: PlatformConnectionRow[]): Promise<void> {
+    if (!platformProjectId) return;
+    const pending = connections.filter(connection => !attachedConnectionIds.has(connection.id));
+    await Promise.all(
+      pending.map(async connection => {
+        try {
+          await client.request(
+            'POST',
+            `/v2/projects/${encodeURIComponent(platformProjectId)}/connections/${encodeURIComponent(connection.id)}`,
+          );
+          attachedConnectionIds.add(connection.id);
+        } catch (err) {
+          console.warn(
+            `[platform-connect] Could not attach connection ${connection.id} to project ${platformProjectId}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
+      }),
+    );
+  }
 
   let cache: { rows: PlatformCatalogRow[]; fetchedAt: number } | null = null;
   /** In-flight request de-duplication so a burst of card renders shares one call. */
@@ -263,6 +309,11 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
           const connections = result.connections.filter(connection =>
             provider.connectionIntegrationIds.includes(connection.integrationId),
           );
+          // Self-heal: make sure every listed connection is attached to the
+          // deployment's Platform project so knowledge importers can find it.
+          // Awaited so a freshly healed connection is visible to the very
+          // next `importers()` resolution; failures never fail the list.
+          await attachConnectionsToProject(connections.filter(connection => connection.status === 'active'));
           return c.json({ connections });
         } catch (err) {
           return platformError(c, err);
@@ -279,9 +330,14 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
         const resolved = await resolveOrgTenant(c, auth);
         if ('response' in resolved) return resolved.response;
         try {
+          // Project-scoped when the deployment knows its Platform project:
+          // the resulting connection lands attached, which is what the
+          // knowledge `importers()` resolver enumerates.
           const session = await client.request<PlatformSessionResponse>(
             'POST',
-            `/v2/integrations/${encodeURIComponent(provider.integrationId)}/connect-sessions`,
+            platformProjectId
+              ? `/v2/projects/${encodeURIComponent(platformProjectId)}/integrations/${encodeURIComponent(provider.integrationId)}/connect-sessions`
+              : `/v2/integrations/${encodeURIComponent(provider.integrationId)}/connect-sessions`,
             {},
           );
           c.header('Cache-Control', 'no-store');
@@ -349,15 +405,9 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
                   );
                 }
                 projectIds = [...new Set(raw as string[])];
-                // "Sync nowhere" is not a routing state — an empty selection
-                // would silently stop the sync. The UI blocks this too;
-                // disconnect the provider to stop importing entirely.
-                if (projectIds.length === 0) {
-                  return c.json(
-                    { error: 'empty_selection', message: 'Select at least one project, or use mode "all".' },
-                    400,
-                  );
-                }
+                // An empty selection is valid: the connection stays
+                // established on the Platform but its imports land in no
+                // Factory project until the user links one.
                 if (projects) {
                   await projects.ensureReady();
                   const known = new Set((await projects.list({ orgId: resolved.tenant.orgId })).map(p => p.id));
