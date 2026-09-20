@@ -1,4 +1,5 @@
 import type * as authStudioModule from '@mastra/auth-studio';
+import type { ImportersOptions } from '@mastra/connect';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
@@ -387,19 +388,45 @@ describe('MastraFactory.prepare', () => {
       }
     });
 
-    it('warns once and skips auto-construction if importers() throws', async () => {
+    it('skips silently when platform env is absent (no throw, no warn)', async () => {
+      // Only ACCESS_TOKEN set — PROJECT_ID missing → platformEnvPresent is false.
+      // We fall through to the "no auto-construction" branch silently. This is
+      // the do-not-crash-on-boot invariant: a local dev host without full
+      // platform env must not warn about a call that was never attempted.
       const restore = withEnv({
-        // Platform token present but no project id → importers() throws
-        // `missing_project_id` at call time.
         MASTRA_PLATFORM_ACCESS_TOKEN: 'token',
       });
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       try {
         const config = await prepareFactory({ storage: fakeStorage() });
         expect(config.knowledge).toBeUndefined();
-        // No env vars → we fall through to the "no auto-construction" branch
-        // silently (no warn). This asserts that path, not the try/catch.
         expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/factory:knowledge/));
+      } finally {
+        warn.mockRestore();
+        restore();
+      }
+    });
+
+    it('warns once and skips auto-construction if importers() throws', async () => {
+      // Full platform env present, so `platformEnvPresent` is true and
+      // `importersFromConnect(importersOptions)` is actually called. Passing
+      // `ttlMs: -1` makes importers() throw `invalid_options` at call time —
+      // this is what exercises the try/catch in resolveEffectiveKnowledge.
+      const restore = withEnv({
+        MASTRA_PLATFORM_ACCESS_TOKEN: 'token',
+        MASTRA_PROJECT_ID: 'proj_test',
+      });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const config = await prepareFactory({
+          storage: fakeStorage(),
+          importersOptions: { ttlMs: -1 } as unknown as ImportersOptions,
+        });
+        expect(config.knowledge).toBeUndefined();
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringMatching(/factory:knowledge.*Skipping auto-construction/),
+          expect.anything(),
+        );
       } finally {
         warn.mockRestore();
         restore();
