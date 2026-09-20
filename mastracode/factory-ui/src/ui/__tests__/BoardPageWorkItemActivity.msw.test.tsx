@@ -555,7 +555,7 @@ describe('Board work-item activity', () => {
     const { client } = renderBoard('review', '?teammate=github%3Anobody');
     await waitForMutationsIdle(client);
 
-    expect(await screen.findByText('No pull requests match filters')).toBeInTheDocument();
+    expect(await screen.findByText('No change requests match filters')).toBeInTheDocument();
   });
 
   it('shows distinct draft, open, closed, and merged pull request icons', async () => {
