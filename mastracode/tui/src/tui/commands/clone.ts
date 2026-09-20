@@ -43,11 +43,7 @@ export async function askCloneName(state: TUIState): Promise<string | null> {
  * and shows an info banner. Every clone path should call this after
  * `controller.session.thread.clone()` succeeds.
  */
-export async function resetUIAfterClone(
-  ctx: CloneResetContext,
-  clonedTitle: string,
-  banner?: string,
-): Promise<void> {
+export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: string, banner?: string): Promise<void> {
   const { state } = ctx;
   disposeAssistantRenderState(state);
   state.chatContainer.clear();
