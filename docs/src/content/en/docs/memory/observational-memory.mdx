@@ -562,6 +562,8 @@ The Observer and Reflector run in the background. Any model that works with Mast
 
 Automatic selection uses `google/gemini-2.5-flash` when `GOOGLE_GENERATIVE_AI_API_KEY` is configured. Otherwise, it selects a low-cost model for the active main model's provider, then falls back to the active main model. Observer and Reflector resolve independently before each invocation.
 
+When the active main model is a model **instance** rather than a `provider/model` string, auto uses that instance as-is instead of substituting a low-cost model. An agent configured with `openai('__AI_SDK_OPENAI_MODEL_BASE__')` observes and reflects with that same model, not `__GATEWAY_OPENAI_MODEL_MINI__`. Pass a concrete model ID to the role if you want the low-cost model in that case.
+
 Mastra recommends using a model that has a large context window (128K+ tokens) and is fast enough to run in the background without slowing down your actions.
 
 To pin a model instead, set a concrete model ID. We've also successfully tested `__GATEWAY_OPENAI_MODEL_MINI__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3`, and `glm-4.7`.

@@ -7,7 +7,13 @@ import type { OMPack } from './packs.js';
 import type { GlobalSettings } from './settings.js';
 import { loadSettings, saveSettings } from './settings.js';
 
-/** Whether the user has already chosen any persisted OM model or pack. */
+/**
+ * Whether the user has already chosen any persisted OM model or pack.
+ *
+ * No longer called inside this repo — auto selection replaced the "seed a pack
+ * at login" flow — but part of the documented `@mastra/code-sdk/onboarding/om-settings`
+ * surface since 1.1.0, so it stays for external callers.
+ */
 export function hasExplicitOMConfiguration(settings: GlobalSettings): boolean {
   const {
     activeOmPackId,
@@ -32,7 +38,12 @@ export function hasExplicitOMConfiguration(settings: GlobalSettings): boolean {
   return [settings.onboarding.omPackId, activeOmPackId].some(packId => packId && packId !== 'custom');
 }
 
-/** Seed a built-in OM pack unless the user already chose one; true when settings changed. */
+/**
+ * Seed a built-in OM pack unless the user already chose one; true when settings changed.
+ *
+ * The TUI stopped calling this when auto became the default; kept exported for
+ * external callers alongside {@link hasExplicitOMConfiguration}.
+ */
 export function applyOMDefaultIfUnconfigured(settings: GlobalSettings, pack: OMPack): boolean {
   if (hasExplicitOMConfiguration(settings)) return false;
 
