@@ -26,11 +26,16 @@ function createState(threadOverrides: Record<string, unknown> = {}) {
     allSystemReminderComponents: [] as unknown[],
     allShellComponents: [] as unknown[],
     pendingNewThread: true,
-    options: { backgroundToolsEnabled: false },
     session: {
       thread: {
         getId: vi.fn(() => 'thread-1'),
-        listActiveMessages: vi.fn(async () => [{ id: 'msg-fork' }]),
+        listActiveMessages: vi.fn(async () => [
+          {
+            id: 'msg-fork',
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'fork point reply' }] },
+          },
+        ]),
         branch: vi.fn(async () => ({
           thread: { id: 'branch-1', title: 'My Branch' },
           branch: {
@@ -106,8 +111,40 @@ describe('handleBranchCommand', () => {
       branchPointMessageId: 'msg-fork',
       title: 'My Branch',
     });
+    expect(mocks.askModalQuestion).toHaveBeenNthCalledWith(
+      1,
+      state.ui,
+      expect.objectContaining({ question: 'Branch from "fork point reply"?' }),
+    );
     expect(mocks.resetUIAfterClone).toHaveBeenCalledWith(ctx, 'My Branch', 'Branched thread: My Branch');
     expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('skips trailing signal rows when resolving the fork point', async () => {
+    mocks.askModalQuestion.mockResolvedValueOnce('Yes').mockResolvedValueOnce(null);
+    const state = createState({
+      listActiveMessages: vi.fn(async () => [
+        { id: 'msg-chat', role: 'assistant', content: { format: 2, parts: [{ type: 'text', text: 'chat reply' }] } },
+        { id: 'msg-signal', role: 'signal', content: { format: 2, parts: [] } },
+      ]),
+    });
+    const ctx = createCtx(state);
+
+    await handleBranchCommand(ctx as never);
+
+    expect(state.session.thread.branch).toHaveBeenCalledWith({ branchPointMessageId: 'msg-chat' });
+  });
+
+  it('shows info when only signal rows exist', async () => {
+    const state = createState({
+      listActiveMessages: vi.fn(async () => [{ id: 'msg-signal', role: 'signal', content: { format: 2, parts: [] } }]),
+    });
+    const ctx = createCtx(state);
+
+    await handleBranchCommand(ctx as never);
+
+    expect(ctx.showInfo).toHaveBeenCalledWith('No messages to branch from yet');
+    expect(state.session.thread.branch).not.toHaveBeenCalled();
   });
 
   it('maps BRANCHING_UNSUPPORTED to a friendly info message', async () => {
