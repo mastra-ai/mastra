@@ -18,7 +18,7 @@
 import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve, relative, dirname, join } from 'node:path';
+import { resolve, relative, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript-classic';
 
@@ -761,6 +761,87 @@ if (flags.includeTypeOnlyTypeTests && flags.ignoreTypeOnlySymbols) {
 }
 
 const selectedResult = flags.fileLevel ? fileLevelResult : symbolAwareResult;
+
+// ---------------------------------------------------------------------------
+// Guard: colocated tests the graph failed to reach
+// ---------------------------------------------------------------------------
+
+// A changed source file with a test at its colocated path, where that test
+// imports the source, must select that test. When neither traversal finds it
+// the graph itself is missing the edge — the failure mode behind #24218, where
+// unmapped `.js` specifiers made whole packages look dependency-free and select
+// zero tests. Deliberately narrow: the test must import the source (so
+// same-named tests don't trip it) and must be missing from the file-level
+// result too (so symbol-aware pruning, e.g. type-only-only imports, doesn't).
+const testFileSet = new Set(testFiles);
+
+// Matches every source extension the detector knows about, so specifiers and
+// paths normalize the same way for `.js`, `.mjs` and `.mts` alike.
+const SOURCE_EXT_RE = /\.(?:ts|tsx|js|jsx|mts|cts|mjs|cjs)$/;
+
+function colocatedTestsFor(changedRel) {
+  if (/\.(test|spec)\.(ts|tsx)$/.test(changedRel) || changedRel.endsWith('.test-d.ts')) return [];
+  const withoutExt = changedRel.replace(SOURCE_EXT_RE, '');
+  const dir = dirname(withoutExt);
+  const base = withoutExt.slice(dir === '.' ? 0 : dir.length + 1);
+  const prefixes = dir === '.' ? [''] : [`${dir}/`, `${dir}/__tests__/`, `${dir}/tests/`];
+  const found = [];
+  for (const prefix of prefixes) {
+    for (const suffix of ['.test.ts', '.test.tsx', '.spec.ts', '.spec.tsx']) {
+      const candidate = `${prefix}${base}${suffix}`;
+      if (testFileSet.has(candidate)) found.push(candidate);
+    }
+  }
+  return found;
+}
+
+// Repository-relative path a relative import points at, extensionless, or
+// undefined when the specifier is bare or aliased and so cannot be mapped
+// without the workspace alias table.
+function resolveRelativeSpecifier(testRel, specifier) {
+  const noExt = specifier.replace(SOURCE_EXT_RE, '');
+  if (!noExt.startsWith('./') && !noExt.startsWith('../')) return undefined;
+  const target = resolve(dirname(resolve(ROOT, testRel)), noExt);
+  return relative(ROOT, target).split(sep).join('/');
+}
+
+function importsSource(testRel, changedRel) {
+  const changedNoExt = changedRel.replace(SOURCE_EXT_RE, '');
+  const changedBase = changedNoExt.split('/').pop();
+  // Parse rather than pattern-match: a string literal that happens to contain
+  // an import statement must not count, and side-effect imports have no `from`.
+  const { moduleEdges } = parseFile(ROOT, testRel);
+  return moduleEdges.some(({ moduleName }) => {
+    const resolved = resolveRelativeSpecifier(testRel, moduleName);
+    // Relative imports are matched on their resolved path, so a same-named
+    // module elsewhere in the repo cannot pass for the changed source.
+    if (resolved !== undefined) return resolved === changedNoExt;
+    // Aliased imports fall back to the module basename.
+    return moduleName.replace(SOURCE_EXT_RE, '').split('/').pop() === changedBase;
+  });
+}
+
+const unreachableColocated = [];
+for (const changedRel of changedRelative) {
+  for (const testRel of colocatedTestsFor(changedRel)) {
+    if (fileLevelResult.affected.has(testRel) || selectedResult.affected.has(testRel)) continue;
+    if (!importsSource(testRel, changedRel)) continue;
+    unreachableColocated.push({ changed: changedRel, test: testRel });
+  }
+}
+
+if (unreachableColocated.length > 0) {
+  const details = unreachableColocated
+    .map(({ changed, test }) => `  ${changed}\n    is imported by ${test}, but that test was not selected`)
+    .join('\n');
+  console.error(
+    `Error: ${unreachableColocated.length} colocated test(s) not selected for changed source file(s):\n\n` +
+      `${details}\n\n` +
+      'The module graph is missing the edge between them, so this selection is incomplete. ' +
+      'Check that scripts/madge.webpack.config.cjs can resolve the specifier style these files use.',
+  );
+  process.exit(1);
+}
 
 // ---------------------------------------------------------------------------
 // Output
