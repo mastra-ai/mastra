@@ -1257,6 +1257,18 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           source: 'preupload',
           data: new Uint8Array([1]),
         });
+        await harness
+          .saveAttachment({
+            sessionId: 'session-1',
+            attachmentId: 'a1',
+            name: 'second.txt',
+            mimeType: 'text/plain',
+            source: 'preupload',
+            data: new Uint8Array([2, 3]),
+          })
+          .catch(error => {
+            expect(error?.code).toBe('harness.storage.attachment_conflict');
+          });
         const loaded = await harness.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' });
         expect(loaded?.name).toBe('first.txt');
         expect(Array.from(loaded?.data ?? [])).toEqual([1]);
