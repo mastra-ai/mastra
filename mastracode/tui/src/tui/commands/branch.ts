@@ -20,9 +20,6 @@ async function switchToThread(ctx: SlashCommandContext, threadId: string, banner
   const { state } = ctx;
   try {
     await state.session.thread.switch({ threadId });
-    if (state.options.backgroundToolsEnabled) {
-      await state.waitForAgentControllerEvents?.();
-    }
   } catch (error) {
     if (error instanceof ThreadLockError) {
       ctx.showError(`Thread is locked by pid ${error.ownerPid}`);
@@ -148,11 +145,13 @@ export async function handleBranchesCommand(ctx: SlashCommandContext): Promise<v
   }
 
   const cancelLabel = 'Cancel';
+  const labelFor = (entry: (typeof branches)[number]) =>
+    entry.thread.title ? `${entry.thread.title} · ${entry.thread.id.slice(0, 8)}` : entry.thread.id;
   const answer = await askModalQuestion(state.ui, {
     question: `Branches of this thread (${branches.length}):`,
     options: [
       ...branches.map(entry => ({
-        label: entry.thread.title || entry.thread.id,
+        label: labelFor(entry),
         description: `Forked at ${new Date(entry.branch.branchCreatedAt).toLocaleString()}`,
       })),
       { label: cancelLabel, description: 'Stay on this thread' },
@@ -160,7 +159,7 @@ export async function handleBranchesCommand(ctx: SlashCommandContext): Promise<v
   });
   if (!answer || answer === cancelLabel) return;
 
-  const selected = branches.find(entry => (entry.thread.title || entry.thread.id) === answer);
+  const selected = branches.find(entry => labelFor(entry) === answer);
   if (!selected) return;
 
   await switchToThread(ctx, selected.thread.id, `Switched to branch: ${selected.thread.title || selected.thread.id}`);
