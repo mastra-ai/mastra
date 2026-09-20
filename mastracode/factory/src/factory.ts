@@ -73,6 +73,7 @@ import { PlatformJiraIntegration } from './integrations/platform/jira/integratio
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { prepareSessionRunContext } from './integrations/subscription-session.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
+import { withProjectScopedIntegrations } from './knowledge/project-scopes.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
@@ -456,6 +457,12 @@ function invalidSandboxOptionMessage(option: unknown): string {
  *      (dev override — routes work, no live syncs);
  *    - otherwise `undefined` → no auto-construction.
  *
+ * When auto-constructing with `importers()` and the host didn't pass explicit
+ * `importersOptions.integrations`, every catalogue provider defaults to
+ * per-project destinations: dynamic scopes enumerating the Factory project
+ * inventory at each cron fire, with a parameterized access grant
+ * (`resource:$projectId`) so each project's scope is writable.
+ *
  * Any throw from `importers()` (missing project id, credential resolution, …)
  * is swallowed with a single console warning — Factory boot must survive a
  * misconfigured platform env.
@@ -480,7 +487,7 @@ function resolveEffectiveKnowledge(input: {
     effectiveImporters = input.importers;
   } else if (platformEnvPresent) {
     try {
-      effectiveImporters = importersFromConnect(input.importersOptions);
+      effectiveImporters = importersFromConnect(withProjectScopedIntegrations(input.importersOptions, input.storage));
     } catch (error) {
       console.warn('[factory:knowledge] Skipping auto-construction — importers() failed:', error);
       return undefined;
