@@ -1992,25 +1992,25 @@ class SessionOMRole {
   }
 
   /** Switch this role's model, persist it, and emit the effective concrete model. */
-  async switchModel({ model }: { model: OMModel }): Promise<void> {
-    if (model === 'auto') {
+  async switchModel({ modelId }: { modelId: OMModel }): Promise<void> {
+    if (modelId === 'auto') {
       await this.#setState?.({
-        [this.#config.selectionKey]: model,
+        [this.#config.selectionKey]: modelId,
         [this.#config.modelIdKey]: undefined,
       });
       await this.#deleteSetting?.({ key: this.#config.modelIdKey });
     } else {
       await this.#setState?.({
-        [this.#config.selectionKey]: model,
-        [this.#config.modelIdKey]: model,
+        [this.#config.selectionKey]: modelId,
+        [this.#config.modelIdKey]: modelId,
       });
-      await this.#setSetting?.({ key: this.#config.modelIdKey, value: model });
+      await this.#setSetting?.({ key: this.#config.modelIdKey, value: modelId });
     }
-    await this.#setSetting?.({ key: this.#config.selectionKey, value: model });
+    await this.#setSetting?.({ key: this.#config.selectionKey, value: modelId });
 
-    const modelId = this.modelId();
-    if (modelId) {
-      this.#bus.emit({ type: 'om_model_changed', role: this.#config.role, modelId });
+    const effectiveModelId = this.modelId();
+    if (effectiveModelId) {
+      this.#bus.emit({ type: 'om_model_changed', role: this.#config.role, modelId: effectiveModelId });
     }
   }
 }
