@@ -892,9 +892,7 @@ export class MastraFactory {
             const recovered = await resolveFactorySessionAddress({
               requestContext,
               storage: workItemsStorage,
-              ...(storage.isDomainReady('source-control')
-                ? { sessions: sourceControlStorage.forIntegration('github').sessions }
-                : {}),
+              ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
             });
             if (recovered?.binding) {
               const state = context.getState();
