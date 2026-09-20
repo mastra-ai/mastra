@@ -2017,7 +2017,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             fetched.push(...batch);
             const batchLast = batch.at(-1);
             if (batch.length < batchLimit || !batchLast) break;
-            nodeCursor = createKnowledgeNodeCursor(batchLast, { isScope: false });
+            // The continuation cursor must embed the same filters as the
+            // listNodes call above — a structural lens queries without the
+            // isScope filter, and a mismatched cursor throws on the next batch.
+            nodeCursor = createKnowledgeNodeCursor(batchLast, structuralLens ? {} : { isScope: false });
           }
           const eligible = fetched.filter(node => node.id !== selected.id && !pinnedNodeIdSet.has(node.id));
           const members = eligible.slice(0, Math.max(0, limit - (structuralLens ? 1 : 0)));

@@ -608,6 +608,26 @@ describe('KnowledgeRoutes', () => {
     );
   });
 
+  // Regression: the internal pagination loop minted its continuation cursor
+  // with an isScope filter the structural-lens query doesn't use, so any
+  // structural scope with >100 members threw a cursor mismatch (500 banner).
+  it('paginates a structural lens with more than 100 members without a cursor mismatch', async () => {
+    const h = await createHarness();
+    const projectScopeId = h.projectScope.at(-1)!;
+    for (let index = 0; index < 105; index += 1) {
+      await h.knowledge.createNode({
+        name: `Imported page ${String(index).padStart(3, '0')}`,
+        scopeIds: [projectScopeId],
+      });
+    }
+
+    const scopeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const scopeBody = (await scopeResponse.json()) as KnowledgeScopeTreePayload;
+    const response = await rawGraph(h, `?scopeId=${scopeBody.scope.id}`);
+    expect(response.status).toBe(200);
+    expect(response.body.nodes.length).toBeGreaterThan(100);
+  });
+
   // 1
   it('returns entities and wikilink edges (owner entity → mentioned entity) from seeded facts', async () => {
     const h = await createHarness();
