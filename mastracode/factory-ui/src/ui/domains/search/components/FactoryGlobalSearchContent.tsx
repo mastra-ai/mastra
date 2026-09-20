@@ -108,7 +108,10 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 const target = result.target;
                 if (target.kind === 'candidate') {
                   const [move] = cardMoves(target.candidate, target.candidate.column);
-                  const board = target.candidate.source === 'github-pr' ? reviewBoard : workBoard;
+                  const board =
+                    target.candidate.source === 'github-pr' || target.candidate.source === 'gitlab-pr'
+                      ? reviewBoard
+                      : workBoard;
                   if (move) board.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
                   return;
                 }
