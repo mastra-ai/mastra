@@ -1,5 +1,6 @@
 import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import { disposeAssistantRenderState } from '../assistant-render-registry.js';
+import { getMessageText } from '../db-message-parts.js';
 import { askModalQuestion } from '../modal-question.js';
 import { resetUIAfterClone } from './clone.js';
 import type { SlashCommandContext } from './types.js';
@@ -56,15 +57,19 @@ export async function handleBranchCommand(ctx: SlashCommandContext): Promise<voi
     return;
   }
 
-  const messages = await state.session.thread.listActiveMessages({ limit: 1 });
-  const forkMessage = messages[messages.length - 1];
+  const messages = await state.session.thread.listActiveMessages({ limit: 50 });
+  // Signal rows (goal-judge/notification bookkeeping) are persisted alongside
+  // chat messages but are not valid fork points — skip them.
+  const forkMessage = [...messages].reverse().find(message => message.role !== 'signal');
   if (!forkMessage) {
     ctx.showInfo('No messages to branch from yet');
     return;
   }
 
+  const snippet = getMessageText(forkMessage).replace(/\s+/g, ' ').trim();
+  const forkLabel = snippet.length > 60 ? `${snippet.slice(0, 60)}…` : snippet;
   const answer = await askModalQuestion(state.ui, {
-    question: 'Branch the current thread from this point?',
+    question: forkLabel ? `Branch from "${forkLabel}"?` : `Branch from this ${forkMessage.role} message?`,
     options: [
       { label: 'Yes', description: 'Create a shared-history branch' },
       { label: 'No', description: 'Cancel' },
