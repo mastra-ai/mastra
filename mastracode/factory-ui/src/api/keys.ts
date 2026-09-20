@@ -127,7 +127,8 @@ export const queryKeys = {
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,
   defaultModel: () => ['default-model'] as const,
-  om: (resourceId: string | undefined, factoryId?: string) => ['om', resourceId ?? null, factoryId ?? null] as const,
+  om: (resourceId: string | undefined, scope?: string, factoryId?: string) =>
+    ['om', resourceId ?? null, scope ?? null, factoryId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,

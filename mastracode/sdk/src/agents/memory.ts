@@ -101,16 +101,13 @@ function resolveOmRoleModelForRequest(
     factorySettings !== undefined ? (factoryModelId ?? 'auto') : state?.[`${role}ModelSelection`];
   const legacyModelId = factorySettings === undefined ? state?.[`${role}ModelId`] : undefined;
   const selectedModelId =
-    roleOverride ??
     (typeof selection === 'string' && selection !== 'auto'
       ? selection
       : selection && typeof selection === 'object' && 'mode' in selection && selection.mode === 'model'
         ? 'modelId' in selection && typeof selection.modelId === 'string'
           ? selection.modelId
           : undefined
-        : !selection
-          ? legacyModelId
-          : undefined);
+        : undefined) ?? (!selection ? roleOverride : undefined);
 
   if (selectedModelId) {
     requestContext.set(`om.${role}.selectionMode`, 'model');
@@ -127,6 +124,12 @@ function resolveOmRoleModelForRequest(
       requestContext.set(`om.${role}.effectiveModelId`, routeMemory[0]?.model.modelId);
       return routeMemory.length === 1 ? routeMemory[0]!.model : routeMemory;
     }
+  }
+
+  if (!selection && legacyModelId) {
+    requestContext.set(`om.${role}.selectionMode`, 'model');
+    requestContext.set(`om.${role}.effectiveModelId`, legacyModelId);
+    return resolveModel(legacyModelId, resolveOptions);
   }
 
   const currentModelId = controller?.session.modelId || (state?.currentModelId as string | undefined);

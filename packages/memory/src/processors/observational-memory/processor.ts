@@ -19,6 +19,7 @@ import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 
 /**
  * Coerce a shared `state.__omTurn` value to a usable live turn.
@@ -32,6 +33,15 @@ import type { TokenCounterModelContext } from './token-counter';
  */
 function asLiveTurn(value: unknown): ObservationTurn | undefined {
   return value && typeof (value as ObservationTurn).end === 'function' ? (value as ObservationTurn) : undefined;
+}
+
+function captureActorModel(model: ProcessInputStepArgs['model']): ProcessInputStepArgs['model'] | string {
+  if (!(model instanceof ModelRouterLanguageModel)) return model;
+
+  // A plain router came from a model ID and can safely route a low-cost sibling.
+  // Preserve configured routers because their routing inputs may only work for the active model.
+  // Older compatible Core versions lack the provenance accessor, so preserve their instances too.
+  return typeof model.__getReusableRouterId === 'function' ? (model.__getReusableRouterId() ?? model) : model;
 }
 
 /** Subset of Memory that the processor needs — avoids circular imports. */
@@ -210,7 +220,12 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
     const actorModelContext = model
-      ? { provider: model.provider, modelId: model.modelId, providerOptions: args.providerOptions, model }
+      ? {
+          provider: model.provider,
+          modelId: model.modelId,
+          providerOptions: args.providerOptions,
+          model: captureActorModel(model),
+        }
       : undefined;
     state.__omActorModelContext = actorModelContext;
 

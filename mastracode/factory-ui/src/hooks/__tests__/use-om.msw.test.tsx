@@ -25,6 +25,26 @@ describe('useOMQuery', () => {
     });
   });
 
+  describe('when scopes share a resource id', () => {
+    it('keeps their server responses isolated in the query cache', async () => {
+      server.use(
+        http.get(URL, ({ request }) => {
+          const scope = new global.URL(request.url).searchParams.get('scope');
+          return HttpResponse.json(omResponse({ observationThreshold: scope === 'org' ? 22_000 : 11_000 }));
+        }),
+      );
+
+      const { result } = renderHookWithProviders(() => ({
+        user: useOMQuery('res-1', 'user', 'factory-1'),
+        org: useOMQuery('res-1', 'org', 'factory-1'),
+      }));
+
+      await waitFor(() => expect(result.current.user.isSuccess && result.current.org.isSuccess).toBe(true));
+      expect(result.current.user.data?.config.observationThreshold).toBe(11_000);
+      expect(result.current.org.data?.config.observationThreshold).toBe(22_000);
+    });
+  });
+
   describe('when a resourceId is provided', () => {
     it('passes resourceId and returns the config', async () => {
       let seenResource: string | null = null;
