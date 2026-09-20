@@ -632,12 +632,14 @@ export class GitLabApiClient {
     try {
       response = await direct.fetch(`${direct.baseUrl}${apiPath}${suffix}`, init);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message.split(direct.accessToken).join('[REDACTED]') : String(error);
+      const message = (error instanceof Error ? error.message : String(error))
+        .split(direct.accessToken)
+        .join('[REDACTED]');
       throw new GitLabApiError(message, null);
     }
     if (!response.ok) {
-      throw new GitLabApiError(await extractError(response), response.status);
+      const message = (await extractError(response)).split(direct.accessToken).join('[REDACTED]');
+      throw new GitLabApiError(message, response.status);
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;

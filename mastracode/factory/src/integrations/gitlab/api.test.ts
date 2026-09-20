@@ -304,4 +304,21 @@ describe('GitLabApiClient', () => {
     expect(error).toBeInstanceOf(GitLabApiError);
     expect(error).toMatchObject({ status, code, message: 'provider failed' });
   });
+
+  it('redacts a direct token echoed by a rejected GitLab response or transport error', async () => {
+    const token = 'glpat-regression-secret';
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ message: `rejected ${token}` }, 401))
+      .mockRejectedValueOnce(new Error(`transport refused ${token}`));
+    const client = new GitLabApiClient({ baseUrl: 'https://gitlab.com', accessToken: token, fetchImpl: fetchMock });
+
+    for (const expectedStatus of [401, null]) {
+      const error = await client.getCurrentUser().catch(caught => caught);
+      expect(error).toBeInstanceOf(GitLabApiError);
+      expect(error.status).toBe(expectedStatus);
+      expect(error.message).toContain('[REDACTED]');
+      expect(error.message).not.toContain(token);
+    }
+  });
 });
