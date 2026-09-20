@@ -21,6 +21,41 @@ function renderRepositoriesSettings() {
 }
 
 describe('Repositories settings', () => {
+  it('offers reconnection when the Platform GitLab account needs reauthorization', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: false, connected: false, installations: [], reason: 'missing_config' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          configured: false,
+          mode: 'platform',
+          connections: [{ id: 'conn-1', integrationId: 'gitlab', status: 'needs_reauth', accountLabel: 'fixture' }],
+          accounts: [],
+          reauthRequired: true,
+          reason: 'not_connected',
+        }),
+      ),
+    );
+
+    renderRepositoriesSettings();
+
+    expect(await screen.findByRole('link', { name: 'Reconnect GitLab' })).toHaveAttribute(
+      'href',
+      'https://projects.mastra.ai',
+    );
+  });
+
   it('shows GitLab repository details without unrelated GitHub settings for a GitLab-only Factory', async () => {
     let gitlabProjectReads = 0;
     server.use(

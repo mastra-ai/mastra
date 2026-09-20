@@ -44,7 +44,11 @@ export function RepositoriesSection() {
             )}
             {gitlabStatus?.mode === 'platform' && (
               <Button as="a" href={MASTRA_PROJECTS_URL} target="_blank" variant="outline" size="sm">
-                {gitlabStatus.configured ? 'Manage GitLab connection' : 'Connect GitLab'}
+                {gitlabStatus.reauthRequired
+                  ? 'Reconnect GitLab'
+                  : gitlabStatus.configured
+                    ? 'Manage GitLab connection'
+                    : 'Connect GitLab'}
               </Button>
             )}
             {gitlabStatus?.configured && gitlabStatus.mode === 'direct' && (
