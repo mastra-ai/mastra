@@ -57,6 +57,7 @@ interface ConnectionRow {
   integrationId: string;
   status: 'active' | 'needs_reauth';
   accountLabel: string | null;
+  connectedAt?: string | null;
 }
 
 /**
@@ -151,21 +152,41 @@ describe('KnowledgeImportersSection', () => {
   });
 
   describe('feature on with existing connections', () => {
-    it('shows the account label and no Connect button when Notion has one active connection', async () => {
+    it('shows the account label, connected time, and no Connect button when Notion has one active connection', async () => {
       useFeaturesHandler(true);
+      // Freshly minted 5 minutes ago — the compact relative-time helper will
+      // render this as "5m", which is the assertion below.
+      const connectedAt = new Date(Date.now() - 5 * 60_000).toISOString();
       useConnectionHandlers({
-        notion: [{ id: 'notion-1', integrationId: 'notion', status: 'active', accountLabel: 'acme-workspace' }],
+        notion: [
+          { id: 'notion-1', integrationId: 'notion', status: 'active', accountLabel: 'acme-workspace', connectedAt },
+        ],
       });
       renderSection();
 
       // Notion row lists the account label. That's the only signal — no
       // "Connected" pill, no redundant status copy.
       expect(await screen.findByText('acme-workspace')).toBeInTheDocument();
+      // And the connection time renders alongside as compact relative text.
+      expect(await screen.findByText('· 5m')).toBeInTheDocument();
       // With an active connection there is no per-card Connect button — the
       // presence of a listed account is what conveys the connected state.
       expect(screen.queryByRole('button', { name: 'Connect Notion' })).toBeNull();
       // Other providers unaffected.
       expect(await screen.findByRole('button', { name: 'Connect Confluence' })).toBeInTheDocument();
+    });
+
+    it('falls back to "Connected by <provider>" when the account label is missing, never the raw id', async () => {
+      useFeaturesHandler(true);
+      useConnectionHandlers({
+        linear: [{ id: 'linear-abc-123', integrationId: 'linear', status: 'active', accountLabel: null }],
+      });
+      renderSection();
+
+      // Nothing about the internal connection id should ever hit the DOM —
+      // users see either the workspace/account label or the humane fallback.
+      expect(await screen.findByText('Connected by Linear')).toBeInTheDocument();
+      expect(screen.queryByText('linear-abc-123')).toBeNull();
     });
 
     it('lists a stale Zendesk connection with a Reconnect button and no Connect fallback', async () => {

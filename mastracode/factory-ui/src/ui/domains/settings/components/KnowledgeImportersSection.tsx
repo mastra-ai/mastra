@@ -26,6 +26,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { usePlatformCatalogQuery, usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
 import { useServerFeatures } from '../../../../hooks/useServerFeatures';
+import { relativeTime } from '../../../../lib/date/relativeTime';
 import { IntegrationLogo } from '../../../ui/IntegrationLogo';
 import {
   isPlatformConnectUnavailableError,
@@ -56,18 +57,27 @@ const PROVIDER_DESCRIPTIONS: Record<PlatformConnectProviderId, string> = {
  * card's connected-vs-not state is conveyed implicitly by the presence of
  * this list (connected) or a bare Connect button (not connected) — no
  * "Not connected" / "Not yet connected" copy on the card itself.
+ *
+ * We never surface the raw connection id: if the Platform can't supply an
+ * `accountLabel`, we fall back to "Connected by <displayName>". The
+ * connection's `connectedAt` timestamp — when present — is rendered as a
+ * compact relative time so users can see how fresh each connection is.
  */
 function ConnectionLabels({
   provider,
+  displayName,
   connections,
 }: {
   provider: PlatformConnectProviderId;
+  displayName: string;
   connections: PlatformProviderConnection[];
 }) {
   return (
     <ul className="flex flex-col gap-2">
       {connections.map(connection => {
         const needsReauth = connection.status === 'needs_reauth';
+        const label = connection.accountLabel ?? `Connected by ${displayName}`;
+        const connectedAt = connection.connectedAt ? relativeTime(connection.connectedAt) : '';
         return (
           <li key={connection.id} className="flex items-center justify-between gap-2">
             <span className="flex min-w-0 items-center gap-2">
@@ -76,8 +86,13 @@ function ConnectionLabels({
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${needsReauth ? 'bg-red-400' : 'bg-emerald-400'}`}
               />
               <Txt as="span" variant="ui-sm" className="text-icon5 truncate">
-                {connection.accountLabel ?? connection.id}
+                {label}
               </Txt>
+              {connectedAt && (
+                <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
+                  · {connectedAt}
+                </Txt>
+              )}
             </span>
             {needsReauth && (
               <ProviderConnectControl
@@ -151,7 +166,7 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
         )}
         {!isLoading && !isError && (
           isConnected ? (
-            <ConnectionLabels provider={provider} connections={liveConnections} />
+            <ConnectionLabels provider={provider} displayName={meta.displayName} connections={liveConnections} />
           ) : (
             <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} size="xs" />
           )
