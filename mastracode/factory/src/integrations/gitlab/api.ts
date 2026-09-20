@@ -586,9 +586,17 @@ export class GitLabApiClient {
       if (value !== undefined) query.set(key, String(value));
     }
     const suffix = query.size > 0 ? `?${query.toString()}` : '';
+    // Repository targets carry both the immutable numeric ID for GitLab API
+    // requests and the path for browser links. A Platform proxy decodes %2F,
+    // so forwarding a path-based project locator would turn into a 404.
+    const apiPath = path.replace(/^\/api\/v4\/projects\/([^/]+)/, (full, encoded: string) => {
+      const target = decodeURIComponent(encoded);
+      const match = /^(\d+):(.+)$/.exec(target);
+      return match ? `/api/v4/projects/${encodeURIComponent(match[1]!)}` : full;
+    });
 
     if (this.#platform) {
-      const proxyPath = `/v2/connections/${encodeURIComponent(this.#platform.connectionId)}/proxy${path}${suffix}`;
+      const proxyPath = `/v2/connections/${encodeURIComponent(this.#platform.connectionId)}/proxy${apiPath}${suffix}`;
       try {
         return await this.#platform.client.request<T>(method, proxyPath, options.body);
       } catch (error) {
@@ -610,7 +618,7 @@ export class GitLabApiClient {
 
     let response: Response;
     try {
-      response = await direct.fetch(`${direct.baseUrl}${path}${suffix}`, init);
+      response = await direct.fetch(`${direct.baseUrl}${apiPath}${suffix}`, init);
     } catch (error) {
       const message =
         error instanceof Error ? error.message.split(direct.accessToken).join('[REDACTED]') : String(error);

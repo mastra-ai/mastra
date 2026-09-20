@@ -446,10 +446,9 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       if (!installation) throw new Error('Version-control installation not found.');
       const connection = parseConnection(installation.providerMetadata.connection);
       if (!connection) throw new GitLabApiError('GitLab installation connection metadata is invalid.', 500);
-      // Platform's proxy normalizes encoded slashes in a project path before
-      // forwarding to GitLab. The immutable numeric project ID works for both
-      // proxied and direct API requests and is already persisted on the row.
-      return { connection, sourceId: repository.externalId };
+      // The API uses GitLab's immutable numeric project ID because Platform's
+      // proxy normalizes encoded path slashes; retain the slug for browser URLs.
+      return { connection, sourceId: `${repository.externalId}:${repository.slug}` };
     },
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       const repository = await sourceControlStorage().repositories.get({ orgId, id: repositoryId });
@@ -595,7 +594,12 @@ function toReviewComment(
 }
 
 function mergeRequestUrl(host: string, sourceId: string, mergeRequestIid: number): string {
-  return `https://${normalizeHost(host)}/${normalizeSlug(sourceId)}/-/merge_requests/${mergeRequestIid}`;
+  return `https://${normalizeHost(host)}/${sourcePath(sourceId)}/-/merge_requests/${mergeRequestIid}`;
+}
+
+function sourcePath(sourceId: string): string {
+  const match = /^\d+:(.+)$/.exec(sourceId);
+  return normalizeSlug(match?.[1] ?? sourceId);
 }
 
 function packDiscussionId(mergeRequestIid: number, discussionId: string): string {
@@ -723,7 +727,7 @@ function toPullRequestComment(
 ): PullRequestComment {
   return {
     id: `${mergeRequestIid}:${note.id}`,
-    url: `https://${normalizeHost(host)}/${normalizeSlug(sourceId)}/-/merge_requests/${mergeRequestIid}#note_${note.id}`,
+    url: `https://${normalizeHost(host)}/${sourcePath(sourceId)}/-/merge_requests/${mergeRequestIid}#note_${note.id}`,
     author: displayName(note.author),
     body: note.body,
     createdAt: note.created_at,

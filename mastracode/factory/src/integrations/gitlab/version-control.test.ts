@@ -137,11 +137,14 @@ describe('buildGitLabVersionControl', () => {
     const target = await result.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository.id });
     expect(target).toEqual({
       connection: { type: 'oauth', accessToken: 'gitlab-connection:connection-1' },
-      sourceId: '101',
+      sourceId: '101:acme/app',
     });
     const listMergeRequests = vi.spyOn(result.api, 'listMergeRequests').mockResolvedValue([]);
     await result.versionControl.listPullRequests({ ...target, state: 'open' });
-    expect(listMergeRequests).toHaveBeenCalledWith('101', expect.objectContaining({ state: 'opened' }));
+    expect(listMergeRequests).toHaveBeenCalledWith('101:acme/app', expect.objectContaining({ state: 'opened' }));
+    vi.spyOn(result.api, 'listMergeRequestNotes').mockResolvedValue([note()]);
+    const comments = await result.versionControl.listComments({ ...target, pullRequestId: '17' });
+    expect(comments.comments[0]?.url).toBe('https://gitlab.example.com/acme/app/-/merge_requests/17#note_91');
   });
 
   it('returns repository clone access from the stored installation connection', async () => {

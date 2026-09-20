@@ -204,6 +204,28 @@ describe('GitLabApiClient', () => {
     expect(requestOf(fetchMock).init.headers).toMatchObject({ authorization: 'Bearer platform-token' });
   });
 
+  it('uses the numeric project ID from a repository target while retaining its path for UI links', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => json({ iid: 17 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const platformClient = new GitLabApiClient({
+      client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+      connectionId: 'a1b_gitlab',
+    });
+    const directClient = new GitLabApiClient({
+      baseUrl: 'https://gitlab.example.com',
+      accessToken: 'direct-token',
+      fetchImpl: fetchMock,
+    });
+
+    await platformClient.getMergeRequest('101:group/project', 17);
+    await directClient.getMergeRequest('101:group/project', 17);
+
+    expect(requestOf(fetchMock, 0).url).toBe(
+      'https://integrations.example.com/v2/connections/a1b_gitlab/proxy/api/v4/projects/101/merge_requests/17',
+    );
+    expect(requestOf(fetchMock, 1).url).toBe('https://gitlab.example.com/api/v4/projects/101/merge_requests/17');
+  });
+
   it.each([
     [401, 'gitlab_auth_failed'],
     [403, 'gitlab_auth_failed'],
