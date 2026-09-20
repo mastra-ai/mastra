@@ -7,7 +7,6 @@ import {
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   readWatermark,
-  walkPages,
   writeWatermark,
 } from '../../importer-runtime.js';
 
@@ -58,38 +57,30 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
       const collected: ZendeskTicket[] = [];
       let cursor: string | undefined = previousCursor;
       let lastCursorSeen: string | undefined = previousCursor;
-      let endOfStream = false;
-
-      await walkPages(
-        { signal: context.signal, maxRecords: DEFAULT_MAX_RECORDS_PER_RUN, maxPages: DEFAULT_MAX_PAGES_PER_RUN },
-        async () => {
-          const query: Record<string, string | number | boolean | undefined> = {};
-          if (cursor) {
-            query.cursor = cursor;
-          } else {
-            // Initial run — start from epoch to fetch all tickets. Callers can override
-            // start_time by pre-seeding the cursor if they need a narrower window.
-            query.start_time = 0;
-          }
-          const parsed = cursorResponseSchema.parse(
-            await ctx.request({
-              method: 'GET',
-              path: 'api/v2/incremental/tickets/cursor.json',
-              query,
-            }),
-          );
-          for (const ticket of parsed.tickets) collected.push(ticket);
-          if (parsed.after_cursor) lastCursorSeen = parsed.after_cursor;
-          if (parsed.end_of_stream) {
-            endOfStream = true;
-            return undefined;
-          }
-          if (!parsed.after_cursor) return undefined;
-          cursor = parsed.after_cursor;
-          return { pageIndex: 0 };
-        },
-        async ({ recordsProcessed }) => recordsProcessed,
-      );
+      for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
+        if (context.signal.aborted) break;
+        const query: Record<string, string | number | boolean | undefined> = {};
+        if (cursor) {
+          query.cursor = cursor;
+        } else {
+          // Initial run — start from epoch to fetch all tickets. Callers can override
+          // start_time by pre-seeding the cursor if they need a narrower window.
+          query.start_time = 0;
+        }
+        const parsed = cursorResponseSchema.parse(
+          await ctx.request({
+            method: 'GET',
+            path: 'api/v2/incremental/tickets/cursor.json',
+            query,
+          }),
+        );
+        for (const ticket of parsed.tickets) collected.push(ticket);
+        if (parsed.after_cursor) lastCursorSeen = parsed.after_cursor;
+        if (parsed.end_of_stream) break;
+        if (!parsed.after_cursor) break;
+        cursor = parsed.after_cursor;
+        if (collected.length >= DEFAULT_MAX_RECORDS_PER_RUN) break;
+      }
 
       for (const ticket of collected) {
         if (context.signal.aborted) return;
@@ -131,13 +122,12 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
         }
       }
 
-      // Zendesk's after_cursor is opaque — store it verbatim. Commit only after
-      // the window's mutations have all been applied.
+      // Zendesk's after_cursor is opaque — store it verbatim. The runner's pending-state
+      // batching commits this only if the handler returns cleanly, so ordering within the
+      // handler is not load-bearing; write once at the end for clarity.
       if (lastCursorSeen && lastCursorSeen !== previousCursor) {
         await writeWatermark(context.state, ZENDESK_CURSOR_KEY, lastCursorSeen);
       }
-      // end_of_stream lets subsequent runs re-use the same cursor (server returns []).
-      void endOfStream;
     },
   };
 }

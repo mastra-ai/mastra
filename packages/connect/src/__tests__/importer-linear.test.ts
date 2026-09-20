@@ -157,6 +157,28 @@ describe('linear importer', () => {
     expect(importer.nodes.size).toBe(2);
   });
 
+  it('does not advance the watermark when the run bails on maxRecords before hasNextPage: false', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    // First run: seed a watermark from a fully drained window.
+    request.mockResolvedValueOnce(
+      issuesResponse([{ id: 'i0', title: 'Zero', description: 'seed', updatedAt: '2026-08-01T00:00:00Z' }]),
+    );
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+    const seededWatermark = await state.get('linear:watermark');
+    expect(seededWatermark).toBe(JSON.stringify({ watermark: '2026-08-01T00:00:00Z' }));
+
+    // Second run: return one page that already exceeds DEFAULT_MAX_RECORDS_PER_RUN and signals
+    // hasNextPage: true. The record cap trips before the source exhausts — watermark must stay.
+    const bigNodes = Array.from({ length: 501 }, (_, i) => ({
+      id: `i${i + 1}`,
+      title: `Issue ${i + 1}`,
+      updatedAt: `2026-09-${String((i % 30) + 1).padStart(2, '0')}T00:00:00Z`,
+    }));
+    request.mockResolvedValueOnce(issuesResponse(bigNodes, 'cursor-1'));
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+    expect(await state.get('linear:watermark')).toBe(seededWatermark);
+  });
+
   it('rejects malformed payloads via zod', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValueOnce({ data: { issues: { nodes: [{ id: 'i1' }], pageInfo: { hasNextPage: false } } } });

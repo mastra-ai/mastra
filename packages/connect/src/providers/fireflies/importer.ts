@@ -7,7 +7,6 @@ import {
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   readWatermark,
-  walkPages,
   writeWatermark,
 } from '../../importer-runtime.js';
 
@@ -95,29 +94,34 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
+      // Fireflies GraphQL doesn't guarantee ordering across pages, so we can't safely advance
+      // the watermark unless the source told us it was done (partial page = end). If we hit
+      // maxPages/maxRecords instead, we don't know what's in the un-fetched tail — leave the
+      // watermark where it was and let a subsequent run refetch and continue.
       const collected: FirefliesTranscript[] = [];
       let skip = 0;
       const limit = 25;
-
-      await walkPages(
-        { signal: context.signal, maxRecords: DEFAULT_MAX_RECORDS_PER_RUN, maxPages: DEFAULT_MAX_PAGES_PER_RUN },
-        async () => {
-          const variables: Record<string, unknown> = { limit, skip };
-          if (previousWatermark) variables.fromDate = previousWatermark;
-          const parsed = transcriptsResponseSchema.parse(
-            await ctx.request({
-              method: 'POST',
-              path: 'graphql',
-              body: { query: TRANSCRIPTS_QUERY, variables },
-            }),
-          );
-          for (const transcript of parsed.data.transcripts) collected.push(transcript);
-          if (parsed.data.transcripts.length < limit) return undefined;
-          skip += parsed.data.transcripts.length;
-          return { pageIndex: 0 };
-        },
-        async ({ recordsProcessed }) => recordsProcessed,
-      );
+      let drainedFully = false;
+      for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
+        if (context.signal.aborted) break;
+        const variables: Record<string, unknown> = { limit, skip };
+        if (previousWatermark) variables.fromDate = previousWatermark;
+        const parsed = transcriptsResponseSchema.parse(
+          await ctx.request({
+            method: 'POST',
+            path: 'graphql',
+            body: { query: TRANSCRIPTS_QUERY, variables },
+          }),
+        );
+        for (const transcript of parsed.data.transcripts) collected.push(transcript);
+        if (parsed.data.transcripts.length < limit) {
+          drainedFully = true;
+          break;
+        }
+        skip += parsed.data.transcripts.length;
+        if (collected.length >= DEFAULT_MAX_RECORDS_PER_RUN) break;
+      }
+      if (previousWatermark === undefined && collected.length === 0) drainedFully = true;
 
       // Oldest-first so a mid-run failure leaves the watermark low.
       collected.sort((a, b) => {
@@ -126,7 +130,7 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
         return ad.localeCompare(bd);
       });
 
-      let latestSeen: string | undefined;
+      let lastProcessed: string | undefined;
       for (const transcript of collected) {
         if (context.signal.aborted) return;
         const address = `fireflies:transcript:${transcript.id}`;
@@ -160,10 +164,12 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
             if (!kept.has(previous.id)) await node.removeRecord(previous.id);
           }
         }
-        if (date && (!latestSeen || date > latestSeen)) latestSeen = date;
+        if (date && (!lastProcessed || date > lastProcessed)) lastProcessed = date;
       }
 
-      if (latestSeen) await writeWatermark(context.state, FIREFLIES_WATERMARK_KEY, latestSeen);
+      if (drainedFully && lastProcessed) {
+        await writeWatermark(context.state, FIREFLIES_WATERMARK_KEY, lastProcessed);
+      }
     },
   };
 }

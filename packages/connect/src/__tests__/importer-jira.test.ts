@@ -139,6 +139,21 @@ describe('jira importer', () => {
     expect(importer.nodes.size).toBe(51);
   });
 
+  it('formats the JQL watermark literal correctly for the second run (yyyy-MM-dd HH:mm)', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      searchResponse([{ key: 'PROJ-1', summary: 'A', description: 'v1', updated: '2026-09-01T10:23:45.678+0000' }]),
+    );
+    await runImporter(jiraImporterRegistration.createImporter(ctx), { importer, state });
+    request.mockResolvedValueOnce(searchResponse([]));
+    await runImporter(jiraImporterRegistration.createImporter(ctx), { importer, state });
+    const secondCall = request.mock.calls[1]![0]! as { query: { jql: string } };
+    // JQL date literal must be YYYY-MM-DD HH:mm — no T separator, no timezone offset, no seconds.
+    expect(secondCall.query.jql).toMatch(/updated >= "\d{4}-\d{2}-\d{2} \d{2}:\d{2}"/);
+    expect(secondCall.query.jql).not.toMatch(/T/);
+    expect(secondCall.query.jql).not.toMatch(/\+00/);
+  });
+
   it('rejects malformed payloads via zod', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValueOnce({ issues: [{ key: 'PROJ-1' }] });

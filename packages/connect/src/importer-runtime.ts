@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
-import { z } from 'zod';
-
 import type { KnowledgeImporterState } from '@mastra/core/knowledge';
+import { z } from 'zod';
 
 /** Maximum records processed per handler invocation. Bounded runs are a hard invariant. */
 export const DEFAULT_MAX_RECORDS_PER_RUN = 500;
@@ -61,25 +60,35 @@ export interface PagedRunControl<TPage> {
   readonly recordsProcessed: number;
 }
 
+export interface PagedRunResult {
+  /** `true` iff `fetchPage` returned `undefined` — i.e. the source signalled no more pages. */
+  readonly exhausted: boolean;
+  /** Total records the caller reported processed across all pages. */
+  readonly recordsProcessed: number;
+}
+
 /**
  * Bounded pagination helper. `fetchPage` is called until it returns `undefined`
  * (no more pages), the abort signal fires, `maxPages` is hit, or `handle` reports
  * that the caller-tracked record count has reached `maxRecords`. Callers advance
- * their own record counter — the helper only enforces the bounds.
+ * their own record counter — the helper only enforces the bounds. The returned
+ * `exhausted` flag lets callers distinguish "reached end of source" from "hit a
+ * bound" — critical for watermark discipline on descending walks.
  */
 export async function walkPages<TPage>(
   limits: PagedRunLimits,
   fetchPage: (pageIndex: number) => Promise<TPage | undefined>,
   handle: (control: PagedRunControl<TPage>) => Promise<number>,
-): Promise<void> {
+): Promise<PagedRunResult> {
   const maxPages = limits.maxPages ?? DEFAULT_MAX_PAGES_PER_RUN;
   const maxRecords = limits.maxRecords ?? DEFAULT_MAX_RECORDS_PER_RUN;
   let recordsProcessed = 0;
   for (let pageIndex = 0; pageIndex < maxPages; pageIndex++) {
-    if (limits.signal.aborted) return;
+    if (limits.signal.aborted) return { exhausted: false, recordsProcessed };
     const page = await fetchPage(pageIndex);
-    if (page === undefined) return;
+    if (page === undefined) return { exhausted: true, recordsProcessed };
     recordsProcessed = await handle({ page, recordsProcessed });
-    if (recordsProcessed >= maxRecords) return;
+    if (recordsProcessed >= maxRecords) return { exhausted: false, recordsProcessed };
   }
+  return { exhausted: false, recordsProcessed };
 }

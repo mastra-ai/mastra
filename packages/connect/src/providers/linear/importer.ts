@@ -7,7 +7,6 @@ import {
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   readWatermark,
-  walkPages,
   writeWatermark,
 } from '../../importer-runtime.js';
 
@@ -78,45 +77,51 @@ function createLinearImporter(ctx: ImporterProviderContext) {
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
+      // Linear's default orderBy: updatedAt walks newest→oldest. Truncation on
+      // maxPages/maxRecords means the OLDER tail wasn't fetched — advance the watermark
+      // only when the source exhausted pagination (hasNextPage = false); otherwise
+      // leave it so a subsequent run refetches this window and continues toward the tail.
       const collected: LinearIssue[] = [];
       let cursor: string | undefined;
-
-      await walkPages(
-        { signal: context.signal, maxRecords: DEFAULT_MAX_RECORDS_PER_RUN, maxPages: DEFAULT_MAX_PAGES_PER_RUN },
-        async () => {
-          const variables: Record<string, unknown> = { after: cursor };
-          if (previousWatermark) {
-            variables.filter = { updatedAt: { gte: previousWatermark } };
-          }
-          const parsed = issuesResponseSchema.parse(
-            await ctx.request({
-              method: 'POST',
-              path: 'graphql',
-              body: { query: ISSUES_QUERY, variables },
-            }),
-          );
-          for (const issue of parsed.data.issues.nodes) collected.push(issue);
-          if (!parsed.data.issues.pageInfo.hasNextPage || !parsed.data.issues.pageInfo.endCursor) return undefined;
-          cursor = parsed.data.issues.pageInfo.endCursor;
-          return { pageIndex: 0 };
-        },
-        async ({ recordsProcessed }) => recordsProcessed,
-      );
+      let drainedFully = false;
+      for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
+        if (context.signal.aborted) break;
+        const variables: Record<string, unknown> = { after: cursor };
+        if (previousWatermark) variables.filter = { updatedAt: { gte: previousWatermark } };
+        const parsed = issuesResponseSchema.parse(
+          await ctx.request({
+            method: 'POST',
+            path: 'graphql',
+            body: { query: ISSUES_QUERY, variables },
+          }),
+        );
+        for (const issue of parsed.data.issues.nodes) collected.push(issue);
+        if (!parsed.data.issues.pageInfo.hasNextPage || !parsed.data.issues.pageInfo.endCursor) {
+          drainedFully = true;
+          break;
+        }
+        cursor = parsed.data.issues.pageInfo.endCursor;
+        if (collected.length >= DEFAULT_MAX_RECORDS_PER_RUN) break;
+      }
+      if (previousWatermark === undefined && collected.length === 0) drainedFully = true;
 
       // Oldest-first so a mid-run failure leaves the watermark low.
       collected.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
 
-      let latestSeen: string | undefined;
+      let lastProcessed: string | undefined;
       for (const issue of collected) {
         if (context.signal.aborted) return;
         const address = `linear:issue:${issue.id}`;
         const archived = Boolean(issue.archivedAt || issue.trashed);
         if (archived) {
-          if (!canRemove) continue;
-          const existing = await importer.getNode(address);
-          if (!existing) continue;
-          const records = await existing.listRecords();
-          for (const record of records) await existing.removeRecord(record.id);
+          if (canRemove) {
+            const existing = await importer.getNode(address);
+            if (existing) {
+              const records = await existing.listRecords();
+              for (const record of records) await existing.removeRecord(record.id);
+            }
+          }
+          lastProcessed = issue.updatedAt;
           continue;
         }
         const title = issue.title || issue.identifier || issue.id;
@@ -147,10 +152,12 @@ function createLinearImporter(ctx: ImporterProviderContext) {
             if (previous.id !== recordId) await node.removeRecord(previous.id);
           }
         }
-        if (!latestSeen || issue.updatedAt > latestSeen) latestSeen = issue.updatedAt;
+        lastProcessed = issue.updatedAt;
       }
 
-      if (latestSeen) await writeWatermark(context.state, LINEAR_WATERMARK_KEY, latestSeen);
+      if (drainedFully && lastProcessed) {
+        await writeWatermark(context.state, LINEAR_WATERMARK_KEY, lastProcessed);
+      }
     },
   };
 }

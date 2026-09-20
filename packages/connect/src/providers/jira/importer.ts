@@ -7,11 +7,28 @@ import {
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   readWatermark,
-  walkPages,
   writeWatermark,
 } from '../../importer-runtime.js';
 
 const JIRA_WATERMARK_KEY = 'jira:watermark';
+
+/**
+ * Jira JQL accepts `"yyyy-MM-dd HH:mm"` for date literals — not ISO 8601 with T or timezone.
+ * The stored watermark keeps Jira's own format for round-tripping, but the JQL literal is
+ * derived from a Date parse. Round DOWN to the minute (JQL granularity) and re-issue the
+ * boundary inclusively so the record whose timestamp matches the minute isn't skipped.
+ */
+function jqlDateLiteral(watermark: string): string {
+  const parsed = new Date(watermark);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Jira importer: cannot parse stored watermark '${watermark}' as a date`);
+  }
+  // Truncate to minute; JQL's `updated >=` is inclusive at the granularity given.
+  const iso = parsed.toISOString(); // e.g. 2026-09-02T10:00:00.123Z
+  const yyyyMmDd = iso.slice(0, 10);
+  const hhmm = iso.slice(11, 16);
+  return `${yyyyMmDd} ${hhmm}`;
+}
 
 const issueSchema = z.object({
   id: z.string().optional(),
@@ -56,34 +73,32 @@ function createJiraImporter(ctx: ImporterProviderContext) {
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
-      const jql = previousWatermark ? `updated >= "${previousWatermark}" ORDER BY updated ASC` : 'ORDER BY updated ASC';
+      const jql = previousWatermark
+        ? `updated >= "${jqlDateLiteral(previousWatermark)}" ORDER BY updated ASC`
+        : 'ORDER BY updated ASC';
 
       const collected: JiraIssue[] = [];
       let startAt = 0;
       const pageSize = 50;
-
-      await walkPages(
-        { signal: context.signal, maxRecords: DEFAULT_MAX_RECORDS_PER_RUN, maxPages: DEFAULT_MAX_PAGES_PER_RUN },
-        async () => {
-          const parsed = searchResponseSchema.parse(
-            await ctx.request({
-              method: 'GET',
-              path: 'rest/api/3/search',
-              query: {
-                jql,
-                fields: 'summary,description,status,project,updated',
-                startAt,
-                maxResults: pageSize,
-              },
-            }),
-          );
-          for (const issue of parsed.issues) collected.push(issue);
-          if (parsed.issues.length < pageSize) return undefined;
-          startAt += parsed.issues.length;
-          return { pageIndex: 0 };
-        },
-        async ({ recordsProcessed }) => recordsProcessed,
-      );
+      for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
+        if (context.signal.aborted) break;
+        const parsed = searchResponseSchema.parse(
+          await ctx.request({
+            method: 'GET',
+            path: 'rest/api/3/search',
+            query: {
+              jql,
+              fields: 'summary,description,status,project,updated',
+              startAt,
+              maxResults: pageSize,
+            },
+          }),
+        );
+        for (const issue of parsed.issues) collected.push(issue);
+        if (parsed.issues.length < pageSize) break;
+        startAt += parsed.issues.length;
+        if (collected.length >= DEFAULT_MAX_RECORDS_PER_RUN) break;
+      }
 
       let latestSeen: string | undefined;
       for (const issue of collected) {

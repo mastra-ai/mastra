@@ -7,7 +7,6 @@ import {
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   readWatermark,
-  walkPages,
   writeWatermark,
 } from '../../importer-runtime.js';
 
@@ -82,24 +81,21 @@ function createConfluenceImporter(ctx: ImporterProviderContext) {
       let start = 0;
       let latestSeen: string | undefined;
       const processed: ConfluenceResult[] = [];
-
-      await walkPages(
-        { signal: context.signal, maxRecords: DEFAULT_MAX_RECORDS_PER_RUN, maxPages: DEFAULT_MAX_PAGES_PER_RUN },
-        async () => {
-          const parsed = searchResponseSchema.parse(
-            await ctx.request({
-              method: 'GET',
-              path: 'wiki/rest/api/content/search',
-              query: { cql, expand: 'body.storage,version,space,history.lastUpdated', start, limit: 25 },
-            }),
-          );
-          for (const result of parsed.results) processed.push(result);
-          if (parsed.results.length === 0 || !parsed._links?.next) return undefined;
-          start += parsed.results.length;
-          return { pageIndex: 0 };
-        },
-        async ({ recordsProcessed }) => recordsProcessed,
-      );
+      const pageSize = 25;
+      for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
+        if (context.signal.aborted) break;
+        const parsed = searchResponseSchema.parse(
+          await ctx.request({
+            method: 'GET',
+            path: 'wiki/rest/api/content/search',
+            query: { cql, expand: 'body.storage,version,space,history.lastUpdated', start, limit: pageSize },
+          }),
+        );
+        for (const result of parsed.results) processed.push(result);
+        if (parsed.results.length === 0 || !parsed._links?.next) break;
+        start += parsed.results.length;
+        if (processed.length >= DEFAULT_MAX_RECORDS_PER_RUN) break;
+      }
 
       for (const result of processed) {
         if (context.signal.aborted) return;

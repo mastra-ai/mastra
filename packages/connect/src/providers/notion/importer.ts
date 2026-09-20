@@ -7,7 +7,6 @@ import {
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   readWatermark,
-  walkPages,
   writeWatermark,
 } from '../../importer-runtime.js';
 
@@ -119,48 +118,58 @@ function createNotionImporter(ctx: ImporterProviderContext) {
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
-      // Search sorts newest-first; walk pages until we cross the watermark, then process oldest-first.
+      // Search sorts newest-first; walk pages until we cross the watermark or exhaust the source.
+      // If we hit maxPages/maxRecords before crossing the watermark, `drainedFully` is false and
+      // we advance to the OLDEST processed rather than the newest — otherwise the un-fetched
+      // older tail would be skipped forever.
       const collected: NotionSearchResult[] = [];
       let cursor: string | undefined;
-      let latestSeen: string | undefined;
-      await walkPages(
-        { signal: context.signal, maxRecords: DEFAULT_MAX_RECORDS_PER_RUN, maxPages: DEFAULT_MAX_PAGES_PER_RUN },
-        async () => {
-          const body: Record<string, unknown> = {
-            sort: { direction: 'descending', timestamp: 'last_edited_time' },
-            page_size: 50,
-          };
-          if (cursor) body.start_cursor = cursor;
-          const parsed = searchResponseSchema.parse(await ctx.request({ method: 'POST', path: 'v1/search', body }));
-          const stopAtWatermark = previousWatermark !== undefined;
-          for (const result of parsed.results) {
-            if (!latestSeen || result.last_edited_time > latestSeen) latestSeen = result.last_edited_time;
-            if (stopAtWatermark && result.last_edited_time < previousWatermark) {
-              // Sorted descending — anything past this is already imported.
-              return undefined;
-            }
-            collected.push(result);
+      let drainedFully = false;
+      let recordsCollected = 0;
+      pager: for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
+        if (context.signal.aborted) break;
+        const body: Record<string, unknown> = {
+          sort: { direction: 'descending', timestamp: 'last_edited_time' },
+          page_size: 50,
+        };
+        if (cursor) body.start_cursor = cursor;
+        const parsed = searchResponseSchema.parse(await ctx.request({ method: 'POST', path: 'v1/search', body }));
+        for (const result of parsed.results) {
+          if (previousWatermark !== undefined && result.last_edited_time < previousWatermark) {
+            // Sorted descending — anything past this is already imported.
+            drainedFully = true;
+            break pager;
           }
-          if (!parsed.has_more || !parsed.next_cursor) return undefined;
-          cursor = parsed.next_cursor;
-          return { pageIndex: 0 };
-        },
-        async ({ recordsProcessed }) => recordsProcessed,
-      );
+          collected.push(result);
+          recordsCollected++;
+          if (recordsCollected >= DEFAULT_MAX_RECORDS_PER_RUN) break pager;
+        }
+        if (!parsed.has_more || !parsed.next_cursor) {
+          drainedFully = true;
+          break;
+        }
+        cursor = parsed.next_cursor;
+      }
+      // First-ever run: if nothing was collected, treat as drained.
+      if (previousWatermark === undefined && collected.length === 0) drainedFully = true;
 
       // Process oldest-first so a mid-run failure leaves the watermark low.
       collected.sort((a, b) => a.last_edited_time.localeCompare(b.last_edited_time));
 
+      let lastProcessed: string | undefined;
       for (const result of collected) {
         if (context.signal.aborted) return;
         const address = nodeAddress(result);
         const archived = Boolean(result.archived ?? result.in_trash);
         if (archived) {
-          if (!canRemove) continue;
-          const existing = await importer.getNode(address);
-          if (!existing) continue;
-          const records = await existing.listRecords();
-          for (const record of records) await existing.removeRecord(record.id);
+          if (canRemove) {
+            const existing = await importer.getNode(address);
+            if (existing) {
+              const records = await existing.listRecords();
+              for (const record of records) await existing.removeRecord(record.id);
+            }
+          }
+          lastProcessed = result.last_edited_time;
           continue;
         }
 
@@ -188,10 +197,18 @@ function createNotionImporter(ctx: ImporterProviderContext) {
             if (previous.id !== recordId) await node.removeRecord(previous.id);
           }
         }
+        lastProcessed = result.last_edited_time;
       }
 
       // Single trailing checkpoint — advance watermark only after every mutation committed.
-      if (latestSeen) await writeWatermark(context.state, NOTION_WATERMARK_KEY, latestSeen);
+      // If we drained fully (walked back to previousWatermark or exhausted the source), the
+      // newest processed timestamp is a safe boundary. If we bailed on maxPages/maxRecords,
+      // the un-fetched tail is OLDER than everything collected — keep the watermark where it
+      // was so a subsequent run refetches this window (idempotent via contentRecordId) and
+      // continues toward the older tail.
+      if (drainedFully && lastProcessed) {
+        await writeWatermark(context.state, NOTION_WATERMARK_KEY, lastProcessed);
+      }
     },
   };
 }
