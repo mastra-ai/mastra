@@ -185,7 +185,7 @@ describe('GitLabIntegration', () => {
   it('round-trips a listed project-local issue id into an update', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(json([issue(10, 42)]))
+      .mockResolvedValueOnce(json([{ ...issue(10, 42), weight: 3 }]))
       .mockResolvedValueOnce(json([issue(10, 42)]))
       .mockResolvedValueOnce(json({ ...issue(10, 42), state: 'closed' }));
     const gitlab = direct(fetchMock);
@@ -198,6 +198,7 @@ describe('GitLabIntegration', () => {
     expect(page.issues[0]?.id).toBe('42');
     expect(page.issues[0]?.labels).toEqual(['bug']);
     expect(page.issues[0]?.labelColors).toEqual({ bug: '#d73a4a' });
+    expect(page.issues[0]?.priority).toBe('3');
     expect(page.issues[0]).toMatchObject({ author: 'Grace', authorUsername: 'grace' });
 
     await gitlab.intake.updateIssue({
