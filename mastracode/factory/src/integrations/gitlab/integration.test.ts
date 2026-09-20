@@ -209,6 +209,34 @@ describe('GitLabIntegration', () => {
     expect(String(fetchMock.mock.calls[2]?.[0])).toContain('/projects/10/issues/42');
   });
 
+  it('continues issue pagination across a full page and then the next selected project', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      const projectId = url.pathname.match(/\/projects\/(10|11)\/issues$/)?.[1];
+      const page = Number(url.searchParams.get('page'));
+      if (projectId === '10' && page === 1) return json(Array.from({ length: 30 }, (_, index) => issue(10, index + 1)));
+      if (projectId === '10' && page === 2) return json([]);
+      if (projectId === '11' && page === 1) return json([issue(11, 1, 'mastra/control')]);
+      throw new Error(`Unexpected GitLab issue request: ${url.pathname}${url.search}`);
+    });
+    const gitlab = direct(fetchMock);
+    const primary = encodeSourceId({ connectionId: 'direct', projectId: '10', projectPath: 'mastra/platform' });
+    const control = encodeSourceId({ connectionId: 'direct', projectId: '11', projectPath: 'mastra/control' });
+    const input = { connection: { type: 'oauth' as const, accessToken: 'gitlab-direct-access-token' }, sourceIds: [primary, control] };
+
+    const first = await gitlab.intake.listIssues(input);
+    const second = await gitlab.intake.listIssues({ ...input, cursor: first.nextCursor ?? undefined });
+    const third = await gitlab.intake.listIssues({ ...input, cursor: second.nextCursor ?? undefined });
+
+    expect(first.issues).toHaveLength(30);
+    expect(first.issues.every(candidate => decodeSourceId(candidate.sourceId)?.projectId === '10')).toBe(true);
+    expect(second).toMatchObject({ issues: [] });
+    expect(second.nextCursor).toBeTruthy();
+    expect(third.issues).toMatchObject([{ id: '1' }]);
+    expect(decodeSourceId(third.issues[0]!.sourceId)?.projectId).toBe('11');
+    expect(third.nextCursor).toBeNull();
+  });
+
   it('fetches issue detail, discussion notes, comments, and state changes directly', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
