@@ -27,7 +27,7 @@ import { relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
-import { SessionActivityWick } from '../../workspaces/components/SessionActivity';
+import { ActivityWick } from '@mastra/playground-ui/components/Activity';
 import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import { CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 import { RelatedWorkItemLink } from './RelatedWorkItemLink';
@@ -248,7 +248,7 @@ export function WorkItemCard({
           highlighted && 'border-warning1/40 bg-warning1/5 ring-1 ring-warning1/30',
         )}
       >
-        {wickStatus && <SessionActivityWick status={wickStatus} />}
+        {wickStatus && <ActivityWick status={wickStatus} />}
         <button
           ref={deepLinkRef}
           type="button"

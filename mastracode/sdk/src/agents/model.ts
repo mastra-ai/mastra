@@ -1,9 +1,15 @@
+import type { ModelWithRetries } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
+import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
+import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
+import { listBuiltinModePacks, resolveModePackFallbackChain } from '../onboarding/packs.js';
 import {
+  findModePackForModel,
   loadSettings,
   resolveDefaultThinkingLevel,
+  resolveModePackModels,
   stripMastraCodeCustomProviderPrefix,
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
@@ -15,6 +21,7 @@ import {
   MASTRA_GATEWAY_PREFIX,
   MASTRACODE_GATEWAY_ID,
   MastraCodeGateway,
+  getGlobalAuthStorage,
   reloadAuthStorage,
   stripMastraGatewayPrefix,
 } from './mastracode-gateway.js';
@@ -53,6 +60,69 @@ function getAgentControllerHeaders(requestContext?: RequestContext): ModelReques
   };
 
   return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+function accountCredential(account: OAuthAccountRecord) {
+  const { type: _type, id: _id, label: _label, addedAt: _addedAt, active: _active, ...credential } = account;
+  return { type: 'oauth' as const, ...credential };
+}
+
+export function createRequestScopedCredentialStore(
+  base: CredentialStore,
+  requestContext?: RequestContext,
+): CredentialStore {
+  const selectedId = (providerId: string) => getRequestAccountSelection(requestContext, providerId);
+  const selectedAccount = (providerId: string) => {
+    const accountInstanceId = selectedId(providerId);
+    return accountInstanceId
+      ? base.listAccounts?.(providerId).find(account => account.id === accountInstanceId)
+      : undefined;
+  };
+  // Routing rejected every account for this provider on this request. Fail
+  // closed on every credential read: falling through to `base` would use the
+  // provider's active account — the exhausted one routing just refused.
+  const rejectAll = (providerId: string) => isRequestAccountRoutingExhausted(requestContext, providerId);
+
+  return {
+    allowEnvironmentFallback: base.allowEnvironmentFallback,
+    reload: () => base.reload(),
+    get: providerId => {
+      if (rejectAll(providerId)) return undefined;
+      // A selection that no longer resolves (the account was removed between
+      // routing and the credential read) must not fall through to the active
+      // account — that is the account routing deliberately passed over.
+      const accountInstanceId = selectedId(providerId);
+      if (accountInstanceId === undefined) return base.get(providerId);
+      const selected = selectedAccount(providerId);
+      return selected ? accountCredential(selected) : undefined;
+    },
+    getStoredApiKey: providerId => {
+      if (rejectAll(providerId)) return undefined;
+      // The provider-wide `apikey:` slot is never the credential routing
+      // selected, so serving it to a routed request is an OAuth -> API-key
+      // fallback of the same provider — the one combination this feature
+      // forbids. Unlike `get`, this read has no account argument to pass
+      // through, so a selection fails it closed instead.
+      if (selectedId(providerId) !== undefined) return undefined;
+      return base.getStoredApiKey(providerId);
+    },
+    getApiKey: providerId =>
+      rejectAll(providerId) ? Promise.resolve(undefined) : base.getApiKey(providerId, selectedId(providerId)),
+    getOAuthCredential: base.getOAuthCredential
+      ? providerId =>
+          rejectAll(providerId)
+            ? Promise.resolve(undefined)
+            : base.getOAuthCredential!(providerId, selectedId(providerId))
+      : undefined,
+    listAccounts: base.listAccounts ? providerId => base.listAccounts!(providerId) : undefined,
+    getActiveAccount: base.getActiveAccount ? providerId => base.getActiveAccount!(providerId) : undefined,
+    activateAccount: base.activateAccount
+      ? (providerId, accountInstanceId) => base.activateAccount!(providerId, accountInstanceId)
+      : undefined,
+    removeAccount: base.removeAccount
+      ? (providerId, accountInstanceId) => base.removeAccount!(providerId, accountInstanceId)
+      : undefined,
+  };
 }
 
 export function createMastraCodeGateway(options: MastraCodeGatewayOptions): MastraCodeGateway {
@@ -142,7 +212,8 @@ export function resolveModel(
   // Deployed web registers a per-tenant credential store provider; when the
   // request carries an authenticated tenant, resolve credentials through the
   // caller's own store (user > org > env). Undefined = global AuthStorage.
-  const credentialStore = resolveCredentialStore(options?.requestContext);
+  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
+  const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
   const gateway = createMastraCodeGateway({
     mastraGatewayBaseUrl: rawGatewayBase.replace(/\/+$/, '').replace(/\/v1$/, ''),
     mastraGatewayApiKey: mgApiKey,
@@ -201,17 +272,62 @@ export function resolveRequestThinkingLevel(
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }
 
+/** Structural pack shape for fallback resolution (custom pack models are partial by nature). */
+export interface ResolvableModePack {
+  id: string;
+  name: string;
+  models: Record<string, string>;
+}
+
+/** All packs a fallback chain may reference: every builtin plus saved customs. */
+export function listResolvableModePacks(settings: ReturnType<typeof loadSettings>): ResolvableModePack[] {
+  return [
+    ...listBuiltinModePacks(),
+    ...settings.customModelPacks.map(pack => ({
+      id: `custom:${pack.name}`,
+      name: pack.name,
+      models: { ...pack.models },
+    })),
+  ];
+}
+
 /**
  * Dynamic model function that reads the current model from controller state.
  * This allows runtime model switching via the /models picker.
+ *
+ * When the session's model came from a pack with a fallback chain configured
+ * (`settings.models.packFallbacks`), returns core's `ModelWithRetries[]`
+ * fallback array instead of a bare model: the active pack's model first, then
+ * each fallback pack's model for the same mode. Core advances the array when
+ * the error processors decline to retry (pool exhausted / persistent outage —
+ * see AccountRotationProcessor). Entry ids are unique per occurrence — the
+ * one allowed revisit of a pack gets `<packId>#2` — because core re-resolves
+ * the active fallback index by id across agentic steps.
  */
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
-): ResolvedModel {
+): ResolvedModel | ModelWithRetries[] {
   const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
 
-  const modelId = agentControllerContext?.session?.modelId;
+  const controllerState = agentControllerContext?.getState?.() as
+    | {
+        activeModelPackId?: unknown;
+        mastracodePendingPackFallback?: { toPackId?: unknown; toModelId?: unknown; threadId?: unknown } | null;
+      }
+    | undefined;
+  const pendingState = controllerState?.mastracodePendingPackFallback;
+  const pendingFallback =
+    pendingState &&
+    (pendingState.threadId === undefined ||
+      (typeof pendingState.threadId === 'string' && pendingState.threadId === agentControllerContext?.threadId))
+      ? pendingState
+      : undefined;
+  const pendingModelId =
+    pendingFallback && typeof pendingFallback.toModelId === 'string' && pendingFallback.toModelId.length > 0
+      ? pendingFallback.toModelId
+      : undefined;
+  const modelId = pendingModelId ?? agentControllerContext?.session?.modelId;
   if (!modelId) {
     // A missing controller context means the run was started without session
     // request context at all (e.g. a signal delivered to an idle thread) —
@@ -226,8 +342,114 @@ export function getDynamicModel(
   }
 
   const thinkingLevel = resolveRequestThinkingLevel(agentControllerContext, settingsPath);
+  const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
+  const primary = resolveModel(modelId, resolveOptions);
 
-  return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
+  const settings = loadSettings(settingsPath);
+  // `models?` tolerates partial settings mocks; loaded settings always carry it.
+  const fallbacks = settings.models?.packFallbacks ?? {};
+  if (Object.keys(fallbacks).length === 0) return primary;
+
+  const modeId = agentControllerContext?.session?.modeId ?? 'build';
+  const packs = listResolvableModePacks(settings);
+  const pendingPackId =
+    pendingFallback && typeof pendingFallback.toPackId === 'string' && pendingFallback.toPackId.length > 0
+      ? pendingFallback.toPackId
+      : undefined;
+  const statePackId = pendingPackId ?? controllerState?.activeModelPackId ?? settings.models.activeModelPackId;
+  const activePack = findModePackForModel(
+    settings,
+    packs,
+    modelId,
+    modeId,
+    typeof statePackId === 'string' ? statePackId : undefined,
+  );
+  if (!activePack) return primary;
+
+  const chain = resolveModePackFallbackChain(fallbacks, activePack.id, settings.customModelPacks);
+  if (chain.length < 2) return primary;
+
+  const entries: ModelWithRetries[] = [{ id: activePack.id, model: primary }];
+  const appearances = new Map<string, number>([[activePack.id, 1]]);
+  for (const packId of chain.slice(1)) {
+    const pack = packs.find(candidate => candidate.id === packId);
+    if (!pack) break;
+    const entryModelId = resolveModePackModels(settings, pack)[modeId];
+    if (!entryModelId) break;
+    // Best-effort resolution: an unresolvable fallback (e.g. unconnected
+    // provider in deployed fail-closed mode) truncates the chain here rather
+    // than failing the request before the primary is ever tried.
+    let entryModel: ResolvedModel;
+    try {
+      entryModel = resolveModel(entryModelId, resolveOptions);
+    } catch {
+      break;
+    }
+    const occurrence = (appearances.get(packId) ?? 0) + 1;
+    appearances.set(packId, occurrence);
+    entries.push({
+      id: occurrence === 1 ? packId : `${packId}#${occurrence}`,
+      model: entryModel,
+    });
+  }
+  // A chain that truncated to the primary alone is indistinguishable from no
+  // chain — return the bare model so core never sees a one-entry array.
+  if (entries.length < 2) return primary;
+  return entries;
+}
+
+/** OM fallback-chain entry: a pack's OM model resolved through the gateway. Assignable to `ModelWithRetries`. */
+export type PackMemoryModelChainEntry = { id: string; model: GatewayLanguageModel };
+
+/**
+ * Resolve the observational-memory model for the active mode pack, walking the
+ * pack's fallback chain (`settings.models.packFallbacks`) and collecting each
+ * pack's optional `models.memory` entry. Packs without an OM model are skipped
+ * (the field is optional, so absence must not truncate the chain); duplicate
+ * model ids collapse so an A⇄B cycle never retries an identical OM model.
+ *
+ * Returns a bare model for a single entry, a fallback array for multiple
+ * entries (OM's internal agents run the same agentic loop, so the array gives
+ * OM its own cross-pack failover), or `undefined` when no pack in the chain
+ * defines an OM model — callers then fall back to the standalone OM
+ * configuration.
+ */
+export function resolvePackMemoryModelChain(
+  settings: ReturnType<typeof loadSettings>,
+  startPackId: string,
+  resolveOptions: Parameters<typeof resolveModel>[1],
+): GatewayLanguageModel | PackMemoryModelChainEntry[] | undefined {
+  const packs = listResolvableModePacks(settings);
+  if (!packs.some(pack => pack.id === startPackId)) return undefined;
+
+  const chain = resolveModePackFallbackChain(
+    settings.models?.packFallbacks ?? {},
+    startPackId,
+    settings.customModelPacks,
+  );
+  const seenModelIds = new Set<string>();
+  const entries: PackMemoryModelChainEntry[] = [];
+  for (const packId of chain) {
+    const pack = packs.find(candidate => candidate.id === packId);
+    if (!pack) break;
+    const memoryModelId = resolveModePackModels(settings, pack).memory;
+    if (!memoryModelId || seenModelIds.has(memoryModelId)) continue;
+    seenModelIds.add(memoryModelId);
+    // Best-effort resolution: an unresolvable OM entry (e.g. unconnected
+    // provider in deployed fail-closed mode) truncates the chain here rather
+    // than failing observation before the pack's own OM model is tried.
+    let entryModel: ResolvedModel;
+    try {
+      entryModel = resolveModel(memoryModelId, resolveOptions);
+    } catch {
+      break;
+    }
+    entries.push({ id: `${packId}:memory`, model: entryModel });
+  }
+
+  if (entries.length === 0) return undefined;
+  if (entries.length === 1) return entries[0]!.model;
+  return entries;
 }
 
 /**

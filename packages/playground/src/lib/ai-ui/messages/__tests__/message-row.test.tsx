@@ -330,6 +330,39 @@ describe('MessageRow', () => {
     expect(document.querySelector('[data-testid="tool-badge"]')).toBeTruthy();
   });
 
+  describe('when a completed tool result has image model output', () => {
+    it('renders the generated image in the assistant message', () => {
+      const toolPart: ToolInvocationPart = {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName: 'openai_create_image',
+          toolCallId: 'call-image',
+          state: 'result',
+          args: { prompt: 'A pineapple' },
+          result: { data: [{ b64_json: 'iVBORw0KGgo=' }] },
+        },
+        providerMetadata: {
+          mastra: {
+            modelOutput: {
+              type: 'content',
+              value: [{ type: 'media', data: 'iVBORw0KGgo=', mediaType: 'image/png' }],
+            },
+          },
+        },
+      };
+
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: { format: 2, metadata: { mode: 'stream' }, parts: [toolPart] },
+        }),
+      );
+
+      const image = screen.getByRole<HTMLImageElement>('img', { name: 'Preview' });
+      expect(image.src).toBe('data:image/png;base64,iVBORw0KGgo=');
+    });
+  });
+
   describe('when plain tool calls run back to back', () => {
     const toolCall = (
       toolCallId: string,
@@ -353,6 +386,31 @@ describe('MessageRow', () => {
 
       fireEvent.click(within(group).getByRole('button'));
       expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(3);
+    });
+
+    it('preserves a failed call and its error text when the group is expanded', () => {
+      renderRow(
+        withCalls([
+          toolCall('call-1'),
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolName: 'genericTool',
+              toolCallId: 'failed-call',
+              state: 'output-error',
+              args: {},
+              errorText: 'Grouped tool failed',
+            },
+          },
+          toolCall('call-3'),
+        ]),
+      );
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      fireEvent.click(within(group).getByRole('button'));
+      expect(screen.getAllByRole('img', { name: 'Failed' })).toHaveLength(2);
+      const failedCard = screen.getAllByTestId('tool-badge')[1]!;
+      fireEvent.click(within(failedCard).getByRole('button'));
+      expect(failedCard.textContent).toContain('Grouped tool failed');
     });
 
     it('summarizes successful results without expanding the group', () => {

@@ -85,7 +85,12 @@ describe('ActivityLine', () => {
     await ready(session.finishWorkspace, client);
     await send(user);
 
-    await session.emit({ type: 'message_update', message: assistantText('Auth starts at the composer') });
+    await session.emit({ type: 'message_start', message: assistantText('') });
+    await session.emit({
+      type: 'message_update',
+      id: 'assistant-1',
+      event: { type: 'text-delta', delta: 'Auth starts at the composer' },
+    });
 
     // The reveal draws at most one word per frame; allow loaded workers to finish the paced reply.
     await waitFor(() => expect(document.body).toHaveTextContent('Auth starts at the composer'), { timeout: 3000 });
@@ -100,7 +105,12 @@ describe('ActivityLine', () => {
     await send(user);
     await screen.findByText('Thinking');
 
-    await session.emit({ type: 'message_update', message: assistantText('Auth starts at the composer') });
+    await session.emit({ type: 'message_start', message: assistantText('') });
+    await session.emit({
+      type: 'message_update',
+      id: 'assistant-1',
+      event: { type: 'text-delta', delta: 'Auth starts at the composer' },
+    });
 
     expect(screen.getByText('Thinking')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());

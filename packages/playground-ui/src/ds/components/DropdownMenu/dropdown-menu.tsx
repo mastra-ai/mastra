@@ -3,7 +3,7 @@ import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
 import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import '@/ds/primitives/focus.css';
+import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import {
   MENU_SIDE_OFFSET,
   menuItemCheckClass,
@@ -34,6 +34,11 @@ const DropdownMenuRadioGroup = MenuPrimitive.RadioGroup;
 
 export type DropdownMenuTriggerProps = Omit<MenuPrimitive.Trigger.Props, 'className'> & TriggerButtonProps;
 
+/**
+ * The button that opens the menu. Renders a design-system `<Button>` by
+ * default, so it takes Button's `variant` / `size` / `tooltip`. Pass `render`
+ * to project the behavior onto your own element (then the look is yours).
+ */
 const DropdownMenuTrigger = React.forwardRef<HTMLButtonElement, DropdownMenuTriggerProps>(
   ({ className, asChild, render, children, variant, size, tooltip, ...props }, ref) => {
     const resolved = resolveTriggerRender({ render, asChild, children, variant, size, tooltip, className });
@@ -54,7 +59,7 @@ type DropdownMenuSubTriggerProps = MenuPrimitive.SubmenuTrigger.Props & {
 const DropdownMenuSubTrigger = React.forwardRef<HTMLDivElement, DropdownMenuSubTriggerProps>(
   ({ className, inset, children, ...props }, ref) => (
     <MenuPrimitive.SubmenuTrigger
-      ref={ref}
+      ref={useFluidMenuItemRef(ref)}
       className={cn(
         menuItemClass,
         'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
@@ -92,12 +97,15 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
       arrowPadding,
       disableAnchorTracking,
       collisionAvoidance,
+      children,
       ...props
     },
     ref,
   ) => {
-    // Keep the submenu inside the modal's interaction boundary.
+    // Default to the nearest SideDialog/Drawer popup so the submenu stays
+    // interactive inside a modal drawer.
     const resolvedContainer = usePortalContainer();
+    const menu = useFluidMenu<HTMLDivElement>();
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,
       alignOffset,
@@ -117,11 +125,13 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
       <MenuPrimitive.Portal container={resolvedContainer}>
         <MenuPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
           <MenuPrimitive.Popup
-            ref={ref}
             data-slot="dropdown-menu-sub-content"
-            className={cn(menuPopupClass, className)}
+            className={cn(menuPopupClass, menu.containerClassName, className)}
             {...props}
-          />
+            {...menu.getContainerProps(props, ref)}
+          >
+            <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
+          </MenuPrimitive.Popup>
         </MenuPrimitive.Positioner>
       </MenuPrimitive.Portal>
     );
@@ -153,12 +163,15 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
       arrowPadding,
       disableAnchorTracking,
       collisionAvoidance,
+      children,
       ...props
     },
     ref,
   ) => {
-    // Keep the menu inside the modal's interaction boundary unless a container overrides it.
+    // Default to the nearest SideDialog/Drawer popup so the menu stays
+    // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
+    const menu = useFluidMenu<HTMLDivElement>();
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,
       alignOffset,
@@ -178,11 +191,15 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
       <MenuPrimitive.Portal container={resolvedContainer}>
         <MenuPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
           <MenuPrimitive.Popup
-            ref={ref}
             data-slot="dropdown-menu-content"
-            className={cn(menuPopupClass, size === 'sm' && 'rounded-md p-0.5', className)}
+            className={cn(menuPopupClass, menu.containerClassName, size === 'sm' && 'rounded-md p-0.5', className)}
             {...props}
-          />
+            {...menu.getContainerProps(props, ref)}
+          >
+            <FluidMenuItems menu={menu} className={size === 'sm' ? 'rounded-sm' : undefined}>
+              {children}
+            </FluidMenuItems>
+          </MenuPrimitive.Popup>
         </MenuPrimitive.Positioner>
       </MenuPrimitive.Portal>
     );
@@ -194,14 +211,14 @@ type DropdownMenuItemProps = MenuPrimitive.Item.Props & {
   inset?: boolean;
   variant?: 'default' | 'destructive';
   size?: 'default' | 'sm';
-  /** Compatibility alias for onClick from the previous Radix API. */
+  /** Alias for `onClick`, kept for compatibility with the previous Radix API. */
   onSelect?: MenuPrimitive.Item.Props['onClick'];
 };
 
 const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>(
   ({ className, inset, variant = 'default', size = 'default', onSelect, onClick, ...props }, ref) => (
     <MenuPrimitive.Item
-      ref={ref}
+      ref={useFluidMenuItemRef(ref)}
       data-inset={inset ? '' : undefined}
       data-variant={variant}
       onClick={event => {
@@ -222,7 +239,12 @@ DropdownMenuItem.displayName = 'DropdownMenuItem';
 
 const DropdownMenuCheckboxItem = React.forwardRef<HTMLDivElement, MenuPrimitive.CheckboxItem.Props>(
   ({ className, children, checked, ...props }, ref) => (
-    <MenuPrimitive.CheckboxItem ref={ref} className={cn(menuItemClass, className)} checked={checked} {...props}>
+    <MenuPrimitive.CheckboxItem
+      ref={useFluidMenuItemRef(ref)}
+      className={cn(menuItemClass, className)}
+      checked={checked}
+      {...props}
+    >
       {children}
       <MenuPrimitive.CheckboxItemIndicator className={menuItemCheckClass}>
         <CheckIcon />
@@ -234,7 +256,7 @@ DropdownMenuCheckboxItem.displayName = 'DropdownMenuCheckboxItem';
 
 const DropdownMenuRadioItem = React.forwardRef<HTMLDivElement, MenuPrimitive.RadioItem.Props>(
   ({ className, children, ...props }, ref) => (
-    <MenuPrimitive.RadioItem ref={ref} className={cn(menuItemClass, className)} {...props}>
+    <MenuPrimitive.RadioItem ref={useFluidMenuItemRef(ref)} className={cn(menuItemClass, className)} {...props}>
       {children}
       <MenuPrimitive.RadioItemIndicator className={menuItemCheckClass}>
         <CheckIcon />
@@ -267,6 +289,12 @@ const DropdownMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTML
 };
 DropdownMenuShortcut.displayName = 'DropdownMenuShortcut';
 
+/**
+ *
+ * Right now, these are the props mostly used for the menu
+ * if we find out, consumers need more props, we can just extend it
+ * with componentProps
+ */
 function DropdownMenu({
   open,
   defaultOpen,

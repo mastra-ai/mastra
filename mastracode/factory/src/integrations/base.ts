@@ -191,7 +191,13 @@ export interface FactoryIntegration {
    * agent tools, intake capability calls — reach storage without a service
    * locator. Mirrors `sourceControl.initialize`.
    */
-  initialize?(args: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage; auth: RouteAuth }): void;
+  initialize?(args: {
+    storage: IntegrationStorageHandle;
+    projects: FactoryProjectsStorage;
+    auth: RouteAuth;
+    /** Cross-integration intake selection/binding domain, for per-request authorization. */
+    intake: IntakeStorage;
+  }): void;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds
@@ -244,8 +250,10 @@ export interface FactoryIntegration {
    */
   channels?(ctx: IntegrationContext): FactoryChannelsConfig;
   /**
-   * Mirrors web feed comments to the platform thread a work item is bound to.
-   * Collected alongside `channels()`: a publisher posts through the channel SDK.
+   * Mirrors web feed comments outward — to the platform thread a work item is
+   * bound to, a webhook, or an issue tracker. Collected from every READY
+   * integration independent of `channels()`: an integration may publish without
+   * owning a chat channel.
    */
   feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
   /**

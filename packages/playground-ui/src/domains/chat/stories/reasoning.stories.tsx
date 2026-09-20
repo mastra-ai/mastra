@@ -1,4 +1,4 @@
-import type { ReasoningPart } from '@mastra/react';
+import type { ReasoningPart } from '@mastra/react/ui';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { ReasoningPartRenderer } from '../messages/renderers/reasoning-part-renderer';
@@ -9,7 +9,8 @@ const meta = {
   parameters: {
     docs: {
       description: {
-        component: 'Studio reasoning states. Factory currently renders reasoning as inline italic Markdown.',
+        component:
+          'Shared Studio and Factory reasoning: inline Markdown with a collapsible body, streaming indicator, and provider redaction notice.',
       },
     },
   },
@@ -59,4 +60,14 @@ export const Redacted: Story = {
 export const EmptyCompleted: Story = {
   args: { part: { type: 'reasoning', reasoning: '' } },
   parameters: { docs: { description: { story: 'Intentionally blank: no empty panel or reasoning toggle.' } } },
+};
+
+export const Markdown: Story = {
+  args: {
+    part: {
+      type: 'reasoning',
+      reasoning:
+        'I will check **streaming behavior** before changing `agent.stream()`.\n\n- Read [the documentation](https://mastra.ai/docs).\n- Preserve existing callbacks.\n\n```ts\nconst result = await agent.stream(messages, { memory: { thread: "thread-1", resource: "user-1" } });\n```',
+    },
+  },
 };

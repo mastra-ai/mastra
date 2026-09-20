@@ -1,24 +1,12 @@
-import type { DatasetItemToolMock } from '@mastra/client-js';
+import type { DatasetItemVersionResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
-export interface DatasetItemVersion {
-  id: string;
-  datasetId: string;
-  datasetVersion: number;
-  input: unknown;
-  groundTruth?: unknown;
-  expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  scorerIds?: string[];
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+export type DatasetItemVersion = DatasetItemVersionResponse & {
   validTo: number | null;
   isDeleted: boolean;
-  createdAt: Date | string;
-  updatedAt: Date | string;
   isLatest: boolean;
-}
+};
 
 /**
  * Hook to fetch full item history (SCD-2 rows).
@@ -39,10 +27,10 @@ export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
           input: version.input,
           groundTruth: version.groundTruth,
           expectedTrajectory: version.expectedTrajectory,
-          toolMocks: version.toolMocks,
-          scorerIds: version.scorerIds,
-          requestContext: version.requestContext,
-          metadata: version.metadata,
+          toolMocks: version.toolMocks ?? undefined,
+          scorerIds: version.scorerIds ?? undefined,
+          requestContext: version.requestContext ?? undefined,
+          metadata: version.metadata ?? undefined,
           validTo: version.validTo,
           isDeleted: version.isDeleted,
           createdAt: version.createdAt,
@@ -78,12 +66,12 @@ export const useDatasetItemVersion = (
         input: v.input,
         groundTruth: v.groundTruth,
         expectedTrajectory: v.expectedTrajectory,
-        toolMocks: v.toolMocks,
-        scorerIds: v.scorerIds,
-        requestContext: v.requestContext,
-        metadata: v.metadata,
-        validTo: v.validTo ?? null,
-        isDeleted: v.isDeleted ?? false,
+        toolMocks: v.toolMocks ?? undefined,
+        scorerIds: v.scorerIds ?? undefined,
+        requestContext: v.requestContext ?? undefined,
+        metadata: v.metadata ?? undefined,
+        validTo: null,
+        isDeleted: false,
         createdAt: v.createdAt,
         updatedAt: v.updatedAt,
         isLatest: latestVersion != null ? datasetVersion === latestVersion : false,

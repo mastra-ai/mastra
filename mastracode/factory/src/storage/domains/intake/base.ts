@@ -1,9 +1,10 @@
 /**
- * Per-user intake selections for every configured intake integration.
+ * Org-wide intake selections for every configured intake integration.
  *
  * Integration ids are dynamic. Each integration contributes provider-neutral
  * sources through `FactoryIntegration.intake`; this domain only persists which
- * source ids the user selected.
+ * source ids the organization selected. The selection feeds shared boards, so
+ * every member reads the same one.
  */
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
@@ -19,7 +20,20 @@ export type IntakeConfig = Record<string, IntakeSelection>;
 
 export const DEFAULT_INTAKE_CONFIG: IntakeConfig = {};
 
-export const INTAKE_SETTINGS_SCHEMA: CollectionSchema = {
+export const INTAKE_ORG_SETTINGS_SCHEMA: CollectionSchema = {
+  name: 'intake_org_settings',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    config: { type: 'json' },
+    created_at: { type: 'timestamp' },
+    updated_at: { type: 'timestamp' },
+  },
+  uniqueIndexes: [{ name: 'intake_org_settings_org_unique', columns: ['org_id'] }],
+};
+
+/** Collection evolution is additive, so the per-member unique index cannot be narrowed: rows stay and are folded at boot. */
+export const LEGACY_INTAKE_USER_SETTINGS_SCHEMA: CollectionSchema = {
   name: 'intake_settings',
   columns: {
     id: { type: 'uuid-pk' },
@@ -32,10 +46,27 @@ export const INTAKE_SETTINGS_SCHEMA: CollectionSchema = {
   uniqueIndexes: [{ name: 'intake_settings_org_user_unique', columns: ['org_id', 'user_id'] }],
 };
 
+/** What the org effectively saw while selections were personal: a member's sources fed the shared board only while their switch was on. */
+export function mergeIntakeSelections(configs: readonly IntakeConfig[]): IntakeConfig {
+  const merged: IntakeConfig = Object.create(null);
+  for (const config of configs) {
+    for (const [integrationId, selection] of Object.entries(config)) {
+      const current = merged[integrationId] ?? { enabled: false, sourceIds: null };
+      const syncing = selection.enabled ? (selection.sourceIds ?? []) : [];
+      const sourceIds = [...new Set([...(current.sourceIds ?? []), ...syncing])];
+      merged[integrationId] = {
+        enabled: current.enabled || selection.enabled,
+        sourceIds: sourceIds.length ? sourceIds : null,
+      };
+    }
+  }
+  return merged;
+}
+
 /**
  * Binds an intake source to the Factory project its items belong to.
  *
- * Intake selections are per user and org-wide, so they cannot say *where* an
+ * Intake selections are org-wide, so they cannot say *where* an
  * ingested item should land. GitHub items are naturally scoped by their linked
  * repository; providers without that link (Linear) need this explicit binding
  * so viewing one project's board cannot materialize another project's items.
@@ -164,10 +195,30 @@ export class IntakeStorage extends FactoryStorageDomain {
   }
 
   async init(): Promise<void> {
-    await this.ensureCollections([INTAKE_SETTINGS_SCHEMA, INTAKE_SOURCE_BINDINGS_SCHEMA, INTAKE_LABEL_ROUTES_SCHEMA]);
+    await this.ensureCollections([
+      INTAKE_ORG_SETTINGS_SCHEMA,
+      LEGACY_INTAKE_USER_SETTINGS_SCHEMA,
+      INTAKE_SOURCE_BINDINGS_SCHEMA,
+      INTAKE_LABEL_ROUTES_SCHEMA,
+    ]);
+    await this.#foldLegacyUserSelections();
+  }
+
+  async #foldLegacyUserSelections(): Promise<void> {
+    const legacyRows = await this.ops.findMany<{ org_id: string; config: IntakeConfig }>('intake_settings', {});
+    const byOrg = new Map<string, IntakeConfig[]>();
+    for (const row of legacyRows) {
+      byOrg.set(row.org_id, [...(byOrg.get(row.org_id) ?? []), row.config]);
+    }
+    for (const [orgId, configs] of byOrg) {
+      const folded = await this.ops.findOne('intake_org_settings', { org_id: orgId });
+      if (folded) continue;
+      await this.#insertConfigIfAbsent(orgId, mergeIntakeSelections(configs));
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany('intake_org_settings', {});
     await this.ops.deleteMany('intake_settings', {});
     await this.ops.deleteMany('intake_source_bindings', {});
     await this.ops.deleteMany('intake_label_routes', {});
@@ -179,21 +230,16 @@ export class IntakeStorage extends FactoryStorageDomain {
 
   async getConfig({
     orgId,
-    userId,
     integrationIds,
   }: {
     orgId: string;
-    userId: string;
     /**
      * When provided, the result contains exactly these integration ids, with
      * unset integrations defaulting to `{ enabled: true, sourceIds: null }`.
      */
     integrationIds?: string[];
   }): Promise<IntakeConfig> {
-    const row = await this.#db.findOne<{ config: IntakeConfig }>('intake_settings', {
-      org_id: orgId,
-      user_id: userId,
-    });
+    const row = await this.#db.findOne<{ config: IntakeConfig }>('intake_org_settings', { org_id: orgId });
     const saved = structuredClone(row?.config ?? DEFAULT_INTAKE_CONFIG);
     if (!integrationIds) return saved;
     return Object.fromEntries(
@@ -201,16 +247,23 @@ export class IntakeStorage extends FactoryStorageDomain {
     );
   }
 
-  async saveConfig({ orgId, userId, config }: { orgId: string; userId: string; config: IntakeConfig }): Promise<void> {
+  async saveConfig({ orgId, config }: { orgId: string; config: IntakeConfig }): Promise<void> {
     const now = new Date();
-    const where = { org_id: orgId, user_id: userId };
-    const updated = await this.#db.updateMany('intake_settings', where, { config, updated_at: now });
+    const where = { org_id: orgId };
+    const updated = await this.#db.updateMany('intake_org_settings', where, { config, updated_at: now });
     if (updated > 0) return;
+    if (await this.#insertConfigIfAbsent(orgId, config)) return;
+    await this.#db.updateMany('intake_org_settings', where, { config, updated_at: now });
+  }
+
+  async #insertConfigIfAbsent(orgId: string, config: IntakeConfig): Promise<boolean> {
+    const now = new Date();
     try {
-      await this.#db.insertOne('intake_settings', { ...where, config, created_at: now, updated_at: now });
+      await this.#db.insertOne('intake_org_settings', { org_id: orgId, config, created_at: now, updated_at: now });
+      return true;
     } catch (error) {
-      if (!(error instanceof UniqueViolationError)) throw error;
-      await this.#db.updateMany('intake_settings', where, { config, updated_at: now });
+      if (error instanceof UniqueViolationError) return false;
+      throw error;
     }
   }
 

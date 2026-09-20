@@ -5,7 +5,7 @@
     "testName": "StructuredOutputProcessor Integration Tests > with real LLM > should handle fallback strategy gracefully",
     "model": "gpt-4o",
     "createdAt": "2026-05-18T10:50:58.300Z",
-    "updatedAt": "2026-09-11T01:51:56.291Z"
+    "updatedAt": "2026-09-19T04:36:52.540Z"
   },
   "recordings": [
     {
@@ -31,7 +31,7 @@
             }
           ]
         },
-        "timestamp": 1789091514888
+        "timestamp": 1789792610957
       },
       "response": {
         "status": 200,
@@ -40,11 +40,11 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a39307b018ceb103-LAX",
+          "cf-ray": "a3d5e44abdbf6d35-LAX",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 11 Sep 2026 01:51:56 GMT",
-          "openai-processing-ms": "1301",
+          "date": "Sat, 19 Sep 2026 04:36:52 GMT",
+          "openai-processing-ms": "1392",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -55,18 +55,18 @@
           "x-ratelimit-remaining-tokens": "29999824",
           "x-ratelimit-reset-requests": "6ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_9759a9727bd9435fa3ac568b2cc1aba5"
+          "x-request-id": "req_28af93108f504f748a31cc9512c03548"
         },
         "body": {
-          "id": "resp_0792baa65b142b1f006aa35ebaf46887d08391ce9da19b5bfc",
+          "id": "resp_08cd3247f8c1004a006aae11631ad487d0a450a529138efce3",
           "object": "response",
-          "created_at": 1789091514,
+          "created_at": 1789792611,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1789091516,
+          "completed_at": 1789792612,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -77,7 +77,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0792baa65b142b1f006aa35ebbe6f887d0b458b078e5faed37",
+              "id": "msg_08cd3247f8c1004a006aae11641b0c87d08978454caa934dde",
               "type": "message",
               "status": "completed",
               "content": [
@@ -85,7 +85,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "I can help with a different type of request. Let me know if there's something else I can assist you with."
+                  "text": "I'm sorry, but that's impossible. However, I can provide the number 1000 for you."
                 }
               ],
               "role": "assistant"
@@ -140,11 +140,11 @@
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 24,
+            "output_tokens": 21,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 181
+            "total_tokens": 178
           },
           "user": null,
           "metadata": {}

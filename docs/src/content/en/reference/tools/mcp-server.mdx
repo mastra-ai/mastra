@@ -14,34 +14,6 @@ Note that if you only need to use your tools or agents directly within your Mast
 
 It supports both [stdio (subprocess) and SSE (HTTP) MCP transports](https://modelcontextprotocol.io/docs/concepts/transports).
 
-## Operate a remote Mastra server
-
-Use `MastraApiMCPServer` to give MCP clients the Mastra server operations from the `mastra api` CLI. It reads the target server's API schema when it starts and only registers operations supported by that server. Factory commands and routes outside this catalog aren't exposed.
-
-```typescript
-import { Mastra } from '@mastra/core/mastra'
-import { MastraApiMCPServer } from '@mastra/mcp'
-
-const operations = await MastraApiMCPServer.create({
-  url: 'https://my-mastra-server.example.com',
-  headers: {
-    Authorization: `Bearer ${process.env.MASTRA_API_TOKEN}`,
-  },
-})
-
-export const mastra = new Mastra({
-  mcpServers: { operations },
-})
-```
-
-Tool names follow the CLI command hierarchy. For example, `mastra api workflow run start` becomes `workflow_run_start`.
-
-The server can expose 60 tools across agents, workflows, tools, MCP servers, memory threads, working memory, traces, logs, metrics, scores, datasets, experiments, and Trace Intelligence. Each tool uses the input schema returned by the target server. Trace list and get tools also support the CLI's `verbose` option.
-
-The server uses stateless MCP transport. Read operations, mutations, and destructive operations have separate MCP tool annotations. Agent, workflow, experiment, and tool execution are marked as potentially destructive because they can invoke operations that delete or overwrite data. These annotations are hints for MCP clients, not authorization checks. Each tool call sends one request to the target API and doesn't retry mutations.
-
-Use `headers` to authenticate the API schema request. For tool calls, the MCP caller's bearer token replaces the configured `Authorization` header. You can also set `apiPrefix`, `timeoutMs`, `id`, `name`, and `version`.
-
 ## Constructor
 
 To create a new `MCPServer`, you need to provide some basic information about your server, the tools it will offer, and optionally, any agents you want to expose as tools.
@@ -82,6 +54,12 @@ const server = new MCPServer({
   },
 })
 ```
+
+## Tool schemas and structured results
+
+MCP tool input and output schemas are advertised as JSON Schema 2020-12, the dialect the `2026-07-28` revision assumes, with the dialect declared in `$schema`. Advertised Mastra tool schemas preserve supported references, composition keywords, and tuple (`prefixItems`) shapes.
+
+A tool with an `outputSchema` can return any JSON value, including an object, array, string, number, boolean, or `null`. The value is sent as `structuredContent` without wrapping it in an object. The server validates successful structured output against the tool's output schema before returning it.
 
 ### Configuration Properties
 
@@ -563,32 +541,27 @@ async startHTTP({
   httpPath,
   req,
   res,
-  options = { sessionIdGenerator: () => randomUUID() },
+  options,
 }: {
   url: URL;
   httpPath: string;
   req: http.IncomingMessage;
   res: http.ServerResponse<http.IncomingMessage>;
-  options?: StreamableHTTPServerTransportOptions;
+  options?: MCPServerHTTPRequestOptions;
 }): Promise<void>
 ```
 
-#### Options with `protocolVersion: '2026-07-28'`
+Every request is self-contained: there is no session to create or resume, so `options` only carries request guards.
 
-The `2026-07-28` protocol uses one shared stateless handler instead of a transport configured for each request. `startHTTP()` handles legacy transport options as follows:
-
-| Options | Behavior |
+| Option | Behavior |
 | - | - |
-| `serverless: true`, `serverlessStreaming: true`, `sessionIdGenerator: undefined` | Accepted because the modern handler already provides stateless requests and automatic request-scoped streaming. |
-| `allowedHosts`, `allowedOrigins`, `enableDnsRebindingProtection` | Enforced before the request reaches the modern handler. Host and origin lists are active when `enableDnsRebindingProtection` is `true`. |
-| `sessionIdGenerator` with a function, session callbacks, or `eventStore` | Rejected because the modern protocol doesn't create HTTP sessions. |
-| `enableJsonResponse`, `retryInterval`, `keepAliveMs`, or `supportedProtocolVersions` | Rejected because these values configure a shared handler and can't vary between requests. |
-| `serverless: false` or `serverlessStreaming: false` | Rejected because these values request behavior that differs from the modern handler. |
-| Unknown options | Rejected instead of being ignored. |
+| `enableDnsRebindingProtection` | When `true`, the `Host` header is checked against `allowedHosts` and the `Origin` header against `allowedOrigins` before the request is handled. A check only runs when its list is non-empty. A rejected request receives a `403` JSON-RPC error. |
+| `allowedHosts` | Hostnames accepted in the `Host` header. Matching is port-agnostic: `localhost:3000` in the list allows any port on `localhost`. Write IPv6 addresses with brackets (`[::1]`). |
+| `allowedOrigins` | Origins accepted in the `Origin` header. Only the hostname is compared, so `https://app.example.com:8443` allows every scheme and port on `app.example.com`. Requests without an `Origin` header pass because non-browser MCP clients don't send one. |
 
-Omit `options` when you don't need request guards or compatibility declarations.
+Omit `options` when you don't need request guards.
 
-Here's an example of how you might use `startHTTP` within an HTTP server request handler. In this example an MCP client could connect to your MCP server at `http://localhost:1234/http`:
+Here's an example of how you might use `startHTTP` within an HTTP server request handler. In this example an MCP client could connect to your MCP server at `http://localhost:1234/mcp`:
 
 ```typescript
 import http from 'http'
@@ -599,9 +572,6 @@ const httpServer = http.createServer(async (req, res) => {
     httpPath: `/mcp`,
     req,
     res,
-    options: {
-      sessionIdGenerator: () => randomUUID(),
-    },
   })
 })
 
@@ -610,7 +580,7 @@ httpServer.listen(PORT, () => {
 })
 ```
 
-For **serverless environments** (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, etc.), use `serverless: true` to enable stateless operation on the legacy protocol path. Servers configured with `protocolVersion: '2026-07-28'` are already stateless and may omit this option.
+Because every request is self-contained, nothing needs to persist between invocations, so `startHTTP` works in serverless environments (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, AWS Lambda, Deno Deploy). The method still takes Node-style `http.IncomingMessage` and `http.ServerResponse` objects, so a Fetch-based runtime has to convert its `Request` with an adapter such as `fetch-to-node` and turn the result back into a `Response`:
 
 ```typescript
 // Supabase Edge Function example
@@ -633,15 +603,7 @@ serve(async req => {
     // Convert Deno Request to Node.js-compatible format
     const { req: nodeReq, res: nodeRes } = toReqRes(req)
 
-    await server.startHTTP({
-      url,
-      httpPath: '/mcp',
-      req: nodeReq,
-      res: nodeRes,
-      options: {
-        serverless: true, // ← Enable stateless mode for serverless
-      },
-    })
+    await server.startHTTP({ url, httpPath: '/mcp', req: nodeReq, res: nodeRes })
 
     return toFetchResponse(nodeRes)
   }
@@ -650,54 +612,7 @@ serve(async req => {
 })
 ```
 
-:::note[When to use serverless: true]
-
-Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
-
-- Supabase Edge Functions
-- Cloudflare Workers
-- Vercel Edge Functions
-- Netlify Edge Functions
-- AWS Lambda
-- Deno Deploy
-
-Use the default session-based mode (without `serverless: true`) for:
-
-- Long-lived Node.js servers
-- Docker containers
-- Traditional hosting (VPS, dedicated servers)
-
-The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
-
-By default, serverless mode buffers each request into a single JSON response, so `notifications/progress` sent by a tool never reach the client. Set `serverlessStreaming: true` to handle the request with request-scoped SSE streaming instead, which delivers progress notifications before the final result:
-
-```typescript
-await server.startHTTP({
-  url,
-  httpPath: '/mcp',
-  req: nodeReq,
-  res: nodeRes,
-  options: {
-    serverless: true,
-    serverlessStreaming: true, // ← Stream request-scoped notifications/progress
-  },
-})
-```
-
-This is still stateless: no `mcp-session-id` is required or persisted. It only enables notifications scoped to the current request (such as progress). The session-dependent features below remain unavailable.
-
-On the legacy protocol path, the following MCP features require session state or persistent connections and **won't work** in serverless mode (including with `serverlessStreaming: true`):
-
-- **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
-- **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
-- **Resource update notifications** - `resources.notifyUpdated()` requires active subscriptions and persistent connections to notify clients
-- **Prompt list change notifications** - `prompts.notifyListChanged()` requires persistent connections to push updates to clients
-- **Tool list change notifications** - `toolActions.notifyListChanged()` requires persistent connections to push updates to clients
-- **Server log notifications** - `sendLoggingMessage()` requires persistent connections to push log messages to clients
-
-These features work normally in long-lived server environments (Node.js servers, Docker containers, etc.).
-
-:::
+Request-scoped features (`input_required` rounds, progress, per-request logs) stream inside the request that triggered them. Notifications that outlive a request (`resources.notifyUpdated()`, `prompts.notifyListChanged()`, `toolActions.notifyListChanged()`) are delivered on the `subscriptions/listen` stream a client keeps open, so they only reach clients while that stream is served by a running instance.
 
 Here are the details for the values needed by the `startHTTP` method:
 
@@ -725,56 +640,34 @@ Here are the details for the values needed by the `startHTTP` method:
   },
   {
     name: 'options',
-    type: 'StreamableHTTPServerTransportOptions',
-    description: 'Optional configuration for the HTTP transport. See the options table below for more details.',
+    type: 'MCPServerHTTPRequestOptions',
+    description: 'Optional request guards. See the options table below for more details.',
     optional: true,
   },
 ]}
 />
 
-The `StreamableHTTPServerTransportOptions` object allows you to customize the behavior of the HTTP transport. Here are the available options:
+The `MCPServerHTTPRequestOptions` object carries request guards:
 
 <PropertiesTable
   content={[
   {
-    name: 'serverless',
+    name: 'enableDnsRebindingProtection',
     type: 'boolean',
     description:
-      'If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.',
+      'If `true`, the `Host` and `Origin` headers are validated against `allowedHosts` and `allowedOrigins` before the request is handled. Defaults to `false`.',
     optional: true,
   },
   {
-    name: 'serverlessStreaming',
-    type: 'boolean',
-    description:
-      'If `true`, serverless requests use request-scoped SSE streaming instead of a buffered JSON response, allowing in-request `notifications/progress` to reach the client before the final result. Only takes effect together with `serverless: true`. Defaults to `false` (buffered JSON responses), which preserves backward-compatible behavior. It enables only request-scoped notifications such as progress; elicitation, subscriptions, and out-of-request notifications still require session state.',
+    name: 'allowedHosts',
+    type: 'string[]',
+    description: 'Hosts (`host[:port]`) accepted when DNS rebinding protection is enabled.',
     optional: true,
   },
   {
-    name: 'sessionIdGenerator',
-    type: '(() => string) | undefined',
-    description:
-      'A function that generates a unique session ID. This should be a cryptographically secure, globally unique string. Return `undefined` to disable session management.',
-  },
-  {
-    name: 'onsessioninitialized',
-    type: '(sessionId: string) => void',
-    description:
-      'A callback that is invoked when a new session is initialized. This is useful for tracking active MCP sessions.',
-    optional: true,
-  },
-  {
-    name: 'enableJsonResponse',
-    type: 'boolean',
-    description:
-      'If `true`, the server will return plain JSON responses instead of using Server-Sent Events (SSE) for streaming. Defaults to `false`.',
-    optional: true,
-  },
-  {
-    name: 'eventStore',
-    type: 'EventStore',
-    description:
-      'An event store for message resumability. Providing this enables clients to reconnect and resume message streams.',
+    name: 'allowedOrigins',
+    type: 'string[]',
+    description: 'Origins accepted when DNS rebinding protection is enabled.',
     optional: true,
   },
 ]}

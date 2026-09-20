@@ -14,6 +14,7 @@ import {
   AgentChatLoadingSkeleton,
   AgentSidebarLoadingSkeleton,
 } from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
 import { ThreadsPanelShortcuts } from '@/domains/agents/components/threads-panel-shortcuts';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
@@ -28,7 +29,6 @@ import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { cleanProviderId } from '@/domains/llm/utils';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
-import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
 
 function AgentThread() {
   const { agentId, threadId } = useParams();
@@ -74,8 +74,6 @@ function AgentThread() {
   );
 
   const messageId = searchParams.get('messageId') ?? undefined;
-  // A new thread has no traces yet, so the advanced (trace-based) view falls back to the chat.
-  const isAdvancedVariant = searchParams.get('variant') === 'advanced' && !isNewThread;
   const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
@@ -104,7 +102,7 @@ function AgentThread() {
 
   // A 404 is authoritative even if a previous fetch left stale data in the cache.
   if (error && is404NotFoundError(error)) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   if (error) {
@@ -112,7 +110,7 @@ function AgentThread() {
   }
 
   if (!agent) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
@@ -166,23 +164,19 @@ function AgentThread() {
                     >
                       <div key={actualThreadId} className="relative flex h-full min-h-0 flex-col">
                         <div className="relative grid min-h-0 flex-1">
-                          {isAdvancedVariant ? (
-                            <ThreadViewByTrace threadId={actualThreadId} />
-                          ) : (
-                            <AgentChat
-                              agentId={agentId!}
-                              agentName={agent?.name}
-                              modelVersion={agent?.modelVersion}
-                              supportsMemory={agent?.supportsMemory}
-                              threadId={actualThreadId}
-                              memory={hasMemory}
-                              refreshThreadList={handleRefreshThreadList}
-                              modelList={agent?.modelList}
-                              messageId={messageId}
-                              suggestedPrompts={suggestedPrompts}
-                              isNewThread={isNewThread}
-                            />
-                          )}
+                          <AgentChat
+                            agentId={agentId!}
+                            agentName={agent?.name}
+                            modelVersion={agent?.modelVersion}
+                            supportsMemory={agent?.supportsMemory}
+                            threadId={actualThreadId}
+                            memory={hasMemory}
+                            refreshThreadList={handleRefreshThreadList}
+                            modelList={agent?.modelList}
+                            messageId={messageId}
+                            suggestedPrompts={suggestedPrompts}
+                            isNewThread={isNewThread}
+                          />
                         </div>
                       </div>
                     </AgentLayout>

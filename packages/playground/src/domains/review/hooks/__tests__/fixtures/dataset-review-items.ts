@@ -12,7 +12,7 @@ const pagination: PaginationInfo = {
   hasMore: false,
 };
 
-const experiment: DatasetExperiment = {
+export const experiment: DatasetExperiment = {
   id: EXPERIMENT_ID,
   datasetId: DATASET_ID,
   datasetVersion: 1,

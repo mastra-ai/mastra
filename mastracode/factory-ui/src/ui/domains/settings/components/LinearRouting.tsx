@@ -5,18 +5,28 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../../hooks/useIntakeConfig';
-import type { LinearProject } from '../../factory/services/linear';
+import { isLinearTeamSourceId, linearTeamSourceId } from '../../factory/services/linear';
+import type { LinearProject, LinearTeam } from '../../factory/services/linear';
 
 const UNROUTED = '__unrouted__';
 const NO_BOARD = '__no_board__';
 
-export function LinearRouting({
+/**
+ * Routing for one provider's selected intake sources. A source feeds exactly
+ * one board of one Factory; until it is routed to both, its issues are not
+ * picked up.
+ */
+export function IntakeSourceRouting({
+  integrationId,
+  label,
   sourceIds,
-  projects,
+  sources,
   factories,
 }: {
+  integrationId: string;
+  label: string;
   sourceIds: string[];
-  projects: LinearProject[];
+  sources: { id: string; name: string }[];
   factories: { id: string; name: string }[];
 }) {
   const bindingsQuery = useIntakeBindingsQuery();
@@ -26,10 +36,10 @@ export function LinearRouting({
 
   const route = (sourceId: string, factoryProjectId: string | null, board: string | null) => {
     saveBinding.mutate(
-      { integrationId: 'linear', sourceId, factoryProjectId, board },
+      { integrationId, sourceId, factoryProjectId, board },
       {
-        onSuccess: () => toast.success('Linear routing updated'),
-        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save Linear routing'),
+        onSuccess: () => toast.success(`${label} routing updated`),
+        onError: err => toast.error(err instanceof Error ? err.message : `Failed to save ${label} routing`),
       },
     );
   };
@@ -37,17 +47,17 @@ export function LinearRouting({
   return (
     <div className="flex flex-col">
       {sourceIds.map(sourceId => {
-        const name = projects.find(project => project.id === sourceId)?.name ?? sourceId;
+        const name = sources.find(source => source.id === sourceId)?.name ?? sourceId;
         const binding = bindings.find(
-          candidate => candidate.integrationId === 'linear' && candidate.sourceId === sourceId,
+          candidate => candidate.integrationId === integrationId && candidate.sourceId === sourceId,
         );
 
         const routedFactory = factories.find(candidate => candidate.id === binding?.factoryProjectId);
         const board = binding?.board ?? null;
         const description = !routedFactory
-          ? "Not routed — this project's issues won't be picked up."
+          ? "Not routed — this source's issues won't be picked up."
           : board === null
-            ? "Choose a board — this project's issues won't be picked up until one is set."
+            ? "Choose a board — this source's issues won't be picked up until one is set."
             : undefined;
         return (
           <SettingsRow key={sourceId} label={name} description={description}>
@@ -55,7 +65,6 @@ export function LinearRouting({
               <Select
                 value={routedFactory?.id ?? UNROUTED}
                 disabled={busy || factories.length === 0}
-
                 onValueChange={value => {
                   const next = value === UNROUTED ? null : value;
                   route(sourceId, next, next === routedFactory?.id ? board : null);
@@ -89,6 +98,37 @@ export function LinearRouting({
         );
       })}
     </div>
+  );
+}
+
+export function LinearRouting({
+  sourceIds,
+  projects,
+  teams,
+  factories,
+}: {
+  sourceIds: string[];
+  projects: LinearProject[];
+  teams: LinearTeam[];
+  factories: { id: string; name: string }[];
+}) {
+  const teamBySourceId = new Map(teams.map(team => [linearTeamSourceId(team), team]));
+  const labelFor = (sourceId: string): string => {
+    if (isLinearTeamSourceId(sourceId)) {
+      const team = teamBySourceId.get(sourceId);
+      return team ? `All issues in ${team.name}` : sourceId;
+    }
+    return projects.find(project => project.id === sourceId)?.name ?? sourceId;
+  };
+
+  return (
+    <IntakeSourceRouting
+      integrationId="linear"
+      label="Linear"
+      sourceIds={sourceIds}
+      sources={sourceIds.map(sourceId => ({ id: sourceId, name: labelFor(sourceId) }))}
+      factories={factories}
+    />
   );
 }
 

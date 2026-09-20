@@ -4,9 +4,9 @@
  * Tests that the server properly enforces RBAC permissions on API endpoints.
  */
 
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
 import { Elysia } from 'elysia';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MastraServer } from '../index';

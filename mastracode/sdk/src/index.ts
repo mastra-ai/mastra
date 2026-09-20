@@ -22,6 +22,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
 import {
   AgentsMDInjector,
+  createBackgroundWorkSignalProcessor,
   isBadRequestError,
   PrefillErrorHandler,
   ProviderHistoryCompat,
@@ -50,6 +51,8 @@ import { PostgresStore } from '@mastra/pg';
 import { createThreadOwnershipManager } from './agent-connections/ownership.js';
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
+import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
+import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
@@ -70,6 +73,11 @@ import { createDynamicTools, createToolHooks } from './agents/tools.js';
 import type { PostToolObserver, ToolLike } from './agents/tools.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
+import {
+  AccountRotationProcessor,
+  AccountStartNoticeProcessor,
+  PACK_FALLBACK_STATE_KEY,
+} from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
@@ -88,6 +96,7 @@ import {
   resolveModelDefaults,
   resolveOmRoleModel,
   saveSettings,
+  THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { PluginManager } from './plugins/manager.js';
@@ -128,12 +137,22 @@ const CODE_AGENT_ID = 'code-agent';
 // settings, so all modes/subagents benefit from a short wait before retrying a transient failure.
 // Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
 const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 10;
+// Shared ceiling for the whole processor error lane: core counts every
+// processor-requested retry against this one number. Sized for the largest
+// legitimate cascade — a rotation step per remaining account per pack hop
+// (8 representative accounts x 8 packs) — rather than an open-ended budget, so
+// a custom or plugin processor that returns `retry: true` loops at most this
+// many times instead of amplifying one request without bound.
+const MASTRACODE_MAX_PROCESSOR_RETRIES = 64;
 const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 500;
 const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
 const TRANSIENT_CONNECTION_ERROR_CODES = new Set(['ECONNRESET', 'EPIPE']);
 const TRANSIENT_CONNECTION_MESSAGE_PATTERN = /econnreset|socket hang up|write epipe|other side closed/i;
-const TRANSIENT_SERVER_ERROR_STATUSES = new Set([500, 502, 503]);
+// Any 5xx is treated as transient so server errors exhaust the transient retry
+// budget before the account-rotation processor classifies them as a persistent
+// outage (hop). Must stay aligned with `classifyRotationError`'s 5xx check.
+const isTransientServerStatus = (status: number) => status >= 500 && status < 600;
 const TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN = /internal server|server error|api may be experiencing issues/i;
 
 /**
@@ -171,8 +190,8 @@ function isTransientServerError(error: unknown): boolean {
 
   const errorObj = typeof error === 'object' ? (error as { status?: unknown; statusCode?: unknown }) : undefined;
   if (
-    (typeof errorObj?.status === 'number' && TRANSIENT_SERVER_ERROR_STATUSES.has(errorObj.status)) ||
-    (typeof errorObj?.statusCode === 'number' && TRANSIENT_SERVER_ERROR_STATUSES.has(errorObj.statusCode))
+    (typeof errorObj?.status === 'number' && isTransientServerStatus(errorObj.status)) ||
+    (typeof errorObj?.statusCode === 'number' && isTransientServerStatus(errorObj.statusCode))
   ) {
     return true;
   }
@@ -450,6 +469,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Auth storage (shared with Claude Max / OpenAI providers and AgentController)
   const authStorage = createAuthStorage();
   const globalSettings = loadSettings(config?.settingsPath);
+  const backgroundToolsEnabled = globalSettings.backgroundTools?.enabled ?? false;
   const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
 
@@ -667,7 +687,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
       : undefined);
   const memory =
-    config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector, knowledge));
+    config?.memory === false
+      ? undefined
+      : (config?.memory ?? getDynamicMemory(storage, vector, knowledge, config?.settingsPath));
   // Only the default memory wiring registers the subconscious tools; a
   // caller-supplied memory is opaque here, so its prompt must not advertise them.
   const hasSubconscious =
@@ -706,6 +728,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   pluginManager?.setRuntime({
     getController: () => pluginRuntimeController,
     getActiveSession: () => activeSession,
+    getStorage: () => ({ storage, storageBackend: storageResult.backend, vector }),
   });
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
@@ -737,15 +760,69 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // target session without an explicit model selection falls back to a
     // real model rather than failing the run: the current session's live
     // selection (what the user actually picked), then the mode's default.
-    const modeId = session.mode.get();
-    const defaultModeModelId = controller.listModes().find(mode => mode.id === modeId)?.defaultModelId;
-    const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
+    const targetThread = await session.thread.getById({ threadId });
+    const metadata =
+      targetThread?.resourceId === resourceId
+        ? (targetThread.metadata as Record<string, unknown> | undefined)
+        : undefined;
+    const modes = controller.listModes();
+    const savedModeId = metadata?.currentModeId;
+    const defaultMode = modes.find(mode => mode.default) ?? modes[0];
+    const modeId =
+      typeof savedModeId === 'string' && modes.some(mode => mode.id === savedModeId)
+        ? savedModeId
+        : (defaultMode?.id ?? session.mode.get());
+    const savedModeModelId = metadata?.[`modeModelId_${modeId}`];
+    const legacyModelId = metadata?.currentModelId;
+    const defaultModeModelId = modes.find(mode => mode.id === modeId)?.defaultModelId;
+    const modelId =
+      (typeof savedModeModelId === 'string' ? savedModeModelId : undefined) ??
+      (typeof legacyModelId === 'string' ? legacyModelId : undefined) ??
+      defaultModeModelId ??
+      session.model.get() ??
+      '';
+    const baseState = { ...session.state.get() } as MastraCodeState;
+    delete baseState.activeModelPackId;
+    delete baseState.mastracodePendingPackFallback;
+    const persistedSandboxPaths = metadata?.sandboxAllowedPaths;
+    baseState.sandboxAllowedPaths =
+      Array.isArray(persistedSandboxPaths) && persistedSandboxPaths.every(path => typeof path === 'string')
+        ? persistedSandboxPaths
+        : [];
+    const persistedStateKeys = [
+      'thinkingLevel',
+      'notifications',
+      THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+      PACK_FALLBACK_STATE_KEY,
+    ] as const;
+    for (const key of persistedStateKeys) {
+      const value = metadata?.[key];
+      if (value !== undefined) (baseState as Record<string, unknown>)[key] = value;
+    }
+    let notificationState = baseState;
+    const getNotificationState = () => ({ ...notificationState });
+    const setNotificationState = async (updates: Partial<MastraCodeState>) => {
+      notificationState = { ...notificationState, ...updates };
+      if (session.thread.getId() === threadId) await session.state.set(updates);
+    };
+    const updateNotificationState: NonNullable<AgentControllerRequestContext['updateState']> = async updater => {
+      const update = await updater(getNotificationState());
+      if (update.updates) await setNotificationState(update.updates);
+      for (const event of update.events ?? []) {
+        if (session.thread.getId() === threadId) session.emit(event);
+      }
+      return update.result;
+    };
     const requestContext = new RequestContext();
     const agentControllerContext: AgentControllerRequestContext = {
       controllerId: controller.id,
-      state: session.state.get(),
-      getState: () => session.state.get(),
-      setState: updates => session.state.set(updates),
+      state: getNotificationState(),
+      getState: getNotificationState,
+      setState: setNotificationState,
+      updateState: updateNotificationState,
+      getThreadSetting: key => session.thread.getSettingOn({ threadId, key }),
+      setThreadSetting: setting => session.thread.setSettingOn({ threadId, key: setting.key, value: setting.value }),
+      isThreadActive: () => session.thread.getId() === threadId,
       threadId,
       resourceId,
       session: {
@@ -754,13 +831,23 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         modeId,
         modelId,
         state: {
-          get: () => session.state.get(),
-          set: updates => session.state.set(updates),
-          update: updater => session.state.update(updater),
+          get: getNotificationState,
+          set: setNotificationState,
+          update: updateNotificationState,
         },
       },
       workspace: session.getWorkspace(),
-      getSubagentModelId: params => session.subagents.model.get(params ?? {}),
+      emitEvent: event => {
+        if (session.thread.getId() === threadId) session.emit(event);
+      },
+      getSubagentModelId: params => {
+        const agentType = params?.agentType;
+        const perType = agentType ? metadata?.[`subagentModelId_${agentType}`] : undefined;
+        const global = metadata?.subagentModelId;
+        if (typeof perType === 'string') return perType;
+        if (typeof global === 'string') return global;
+        return session.thread.getId() === threadId ? session.subagents.model.get(params ?? {}) : null;
+      },
     };
     requestContext.set('controller', agentControllerContext);
 
@@ -769,7 +856,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       requestContext,
       maxSteps: 1000,
       savePerStep: false,
-      requireToolApproval: (session.state.get() as Record<string, unknown>).yolo !== true,
+      requireToolApproval: notificationState.yolo !== true,
       modelSettings: { temperature: 1 },
     };
   };
@@ -793,6 +880,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const mastraCodeInputProcessors: InputProcessor[] = [
     ...(config?.inputProcessors ?? []),
     new PlanRejectionAbortProcessor(),
+    ...(backgroundToolsEnabled ? [createBackgroundWorkSignalProcessor()] : []),
     new AgentsMDInjector({
       // Untrusted checkouts (review sessions on PR branches) must not have
       // the working tree's instruction files injected as system reminders —
@@ -890,7 +978,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         hasSubagents: subagents.length > 0,
       });
     },
-    maxProcessorRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
     model: ctx => getDynamicModel(ctx, config?.settingsPath),
@@ -916,7 +1003,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         },
       },
     },
-    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
+    tools: createDynamicTools(
+      mcpManager,
+      config?.extraTools,
+      config?.disabledTools,
+      storage,
+      pluginTools,
+      backgroundToolsEnabled,
+    ),
     hooks: createToolHooks(hookManager, config?.postToolObserver),
     scorers: {
       outcome: {
@@ -961,6 +1055,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     inputProcessors: () => [
       ...mastraCodeInputProcessors,
+      // Input-lane notice ONLY (no processAPIError — see the class doc): the
+      // runner walks input processors first in runProcessAPIError, so an
+      // input-lane processAPIError would rotate before transient retries run.
+      new AccountStartNoticeProcessor({ credentialStore: authStorage, settingsPath: config?.settingsPath }),
       ...readPluginProcessors().input.map(entry => entry.value),
       ...(pluginSignalLane?.getInputProcessors() ?? []),
     ],
@@ -1000,7 +1098,23 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         ],
       }),
       new PrefillErrorHandler(),
+      // Rotation runs last in the error lane: a transient error reaching here
+      // means StreamErrorRetryProcessor already spent its budget, which is the
+      // hop condition; quota/auth errors were never transient-matched and
+      // rotate immediately.
+      new AccountRotationProcessor({
+        credentialStore: authStorage,
+        // Same budget core enforces (maxProcessorRetries below): past it, core
+        // discards retry:true, so the processor no-ops instead of rotating.
+        maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
+        // Same settings file getDynamicModel reads (model: above) so the pack
+        // cascade the processor announces matches the chain core will walk.
+        settingsPath: config?.settingsPath,
+      }),
     ],
+    // Individual processors have tighter limits; this remains a defensive
+    // ceiling for custom/plugin processors that might retry indefinitely.
+    maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
   });
 
   // const defaultSubAgents: Array<AgentControllerSubagent> = [];
@@ -1178,10 +1292,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
-  const controller: AgentController<MastraCodeState> = new AgentController<MastraCodeState>({
+  const backgroundCompletionEvents = backgroundToolsEnabled ? createBackgroundCompletionEvents() : undefined;
+  let controller: AgentController<MastraCodeState>;
+  controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
+    ...(backgroundToolsEnabled
+      ? {
+          backgroundTasks: {
+            enabled: true,
+            recoverStaleTasksOnStart: false,
+            ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
+          },
+        }
+      : {}),
     observability,
     memory,
     pubsub: signalsPubSub,
@@ -1189,7 +1314,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     agent: codeAgent,
     subagents,
     gateways: [amazonBedrockGateway, mastraCodeGateway],
-    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
+    workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,
@@ -1238,17 +1363,30 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   if (useCrossAgentSignals) {
     controller.onSessionCreated(
       async session => {
-        const threadOwnership = createThreadOwnershipManager(threadId =>
-          controller.getCurrentAgent(session).claimThreadOwnership({
+        const latestObservedTitles = new Map<string, { revision: number; title: string | undefined }>();
+        const threadOwnership = createThreadOwnershipManager(async threadId => {
+          const revisionAtStart = latestObservedTitles.get(threadId)?.revision ?? 0;
+          const thread = await session.thread.getById({ threadId });
+          const agent = controller.getCurrentAgent(session);
+          const claim = await agent.claimThreadOwnership({
             threadId,
             resourceId: session.identity.getResourceId(),
             streamOptions: () => session.machinery.buildStreamOptions({}),
             peer: {
-              label: `${project.name} (${threadId})`,
-              title: project.name,
+              label: project.name,
+              ...(thread?.title ? { title: thread.title } : {}),
             },
-          }),
-        );
+          });
+          const observedTitle = latestObservedTitles.get(threadId);
+          if (claim.claimed && observedTitle && observedTitle.revision !== revisionAtStart) {
+            agent.updateThreadPeerAdvertisement({
+              resourceId: session.identity.getResourceId(),
+              threadId,
+              peer: { title: observedTitle.title },
+            });
+          }
+          return claim;
+        });
 
         const claimThreadOwnership = async (threadId: string) => {
           try {
@@ -1260,6 +1398,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         const unsubscribeSession = session.subscribe(event => {
           if (event.type === 'thread_changed') void claimThreadOwnership(event.threadId);
           else if (event.type === 'thread_created') void claimThreadOwnership(event.thread.id);
+          else if (event.type === 'thread_title_updated' || event.type === 'om_thread_title_updated') {
+            const title = event.type === 'thread_title_updated' ? event.title : event.newTitle;
+            const revision = (latestObservedTitles.get(event.threadId)?.revision ?? 0) + 1;
+            latestObservedTitles.set(event.threadId, { revision, title });
+            controller.getCurrentAgent(session).updateThreadPeerAdvertisement({
+              resourceId: session.identity.getResourceId(),
+              threadId: event.threadId,
+              peer: { title },
+            });
+          }
         });
         sessionPeerCleanup.set(session, () => {
           unsubscribeSession();
@@ -1342,6 +1490,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     builtinOmPacks,
     effectiveDefaults,
     githubSignals,
+    backgroundToolsEnabled,
+    backgroundCompletionEvents,
     // Identity for the single local session (Case 3). Servers ignore these and
     // mint per-request sessions with client-supplied resourceIds instead.
     sessionId,
@@ -1589,7 +1739,16 @@ export async function prepareAgentControllerMount(
   finalize: () => Promise<void>;
 }> {
   const base = await createMastraCodeAgentController(config);
-  const { controller, storage, authStorage, projectPath, codeAgent, mcpManager } = base;
+  const {
+    controller,
+    storage,
+    authStorage,
+    projectPath,
+    codeAgent,
+    mcpManager,
+    backgroundToolsEnabled,
+    backgroundCompletionEvents,
+  } = base;
   const controllerId = config?.controllerId ?? controller.id;
   const apiRoutes = config?.buildApiRoutes?.({ controller, authStorage });
   const extraServerConfig = config?.buildServerConfig?.({ controller, authStorage });
@@ -1605,6 +1764,15 @@ export async function prepareAgentControllerMount(
     agentControllers: { [controllerId]: controller },
     storage,
     ...(base.knowledge ? { knowledge: { [base.knowledge.id]: base.knowledge } } : {}),
+    ...(backgroundToolsEnabled
+      ? {
+          backgroundTasks: {
+            enabled: true,
+            recoverStaleTasksOnStart: false,
+            ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
+          },
+        }
+      : {}),
     // Mirror the controller's internal-Mastra construction (which passes
     // `config.pubsub` through): the server-owned Mastra must run its event
     // bus on the same transport so streams/workflows/signals stay

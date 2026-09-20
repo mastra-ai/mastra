@@ -1,36 +1,53 @@
+import '../../../../new-theme.css';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import { controlSizeClasses } from '@/ds/primitives/control-size';
-import '@/ds/primitives/focus.css';
 import {
+  disabledOutlineSurfaceStyle,
+  disabledFilledSurfaceStyle,
   inputOutlineAndFocusStyle,
   inputSurfaceAndFocusStyle,
+  resolveFieldVariant,
   sharedFormElementDisabledStyle,
   unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
+import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
   cn(
-    'flex w-full border bg-transparent text-neutral6',
-    'transition-all duration-normal ease-out-custom',
-    'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
-    'focus:placeholder:opacity-70',
-    // Native number spinners clip pill corners; compose InputGroup buttons for a stepper.
+    'new-theme flex w-full border bg-transparent text-foreground',
+    'transition-[background-color,border-color,color] duration-normal ease-out-custom motion-reduce:transition-none',
+    'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
+    'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
+    // type="number": hide native browser spinner arrows (they clip the pill).
+    // For incrementable numeric inputs, compose <InputGroup> with +/- buttons
+    // instead — see the NumberWithStepper story. WebKit uses the spin-button
+    // pseudo-elements; Firefox needs `appearance: textfield` on the input.
     '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
     '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
     '[&[type=number]]:[appearance:textfield]',
-    // Custom InputGroup clear buttons replace the browser's search-clear control.
+    // type="search": drop WebKit's native clear button so the DS owns the search chrome.
+    // Compose an <InputGroup> with an InputGroupButton to add a clear control.
     '[&::-webkit-search-cancel-button]:appearance-none',
   ),
   {
     variants: {
       variant: {
-        default: cn(inputSurfaceAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
-        filled: cn(inputSurfaceAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
-        outline: cn(inputOutlineAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
+        default: cn(
+          inputSurfaceAndFocusStyle,
+          'rounded-full',
+          sharedFormElementDisabledStyle,
+          disabledFilledSurfaceStyle,
+        ),
+        outline: cn(
+          inputOutlineAndFocusStyle,
+          'rounded-full',
+          sharedFormElementDisabledStyle,
+          disabledOutlineSurfaceStyle,
+        ),
         unstyled: unstyledFormElementStyle,
       },
       size: {
@@ -48,7 +65,9 @@ const inputVariants = cva(
 );
 
 export type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> &
-  VariantProps<typeof inputVariants> & {
+  Omit<VariantProps<typeof inputVariants>, 'variant'> & {
+    /** `filled` is a deprecated alias for `default`; both render the filled surface. */
+    variant?: VariantProps<typeof inputVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
     error?: boolean;
   };
@@ -59,8 +78,8 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       <input
         type={type}
         className={cn(
-          inputVariants({ variant, size }),
-          error && 'border-error hover:border-error focus-visible:border-error',
+          inputVariants({ variant: resolveFieldVariant(variant), size }),
+          error && 'border-error focus-visible:border-error',
           className,
         )}
         data-testid={testId}

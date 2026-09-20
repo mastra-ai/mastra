@@ -33,6 +33,7 @@ function createToolHandlerContext(): EventHandlerContext {
   const session = { displayState: { get: vi.fn(() => ({ toolInputBuffers: new Map() })) } };
   const state = {
     chatContainer,
+    options: {},
     ui: { requestRender: vi.fn() },
     terminal: { columns: 100 },
     pendingTools: new Map(),
@@ -58,6 +59,33 @@ function createToolHandlerContext(): EventHandlerContext {
     },
   } as EventHandlerContext;
 }
+
+describe('background placeholder opt-in', () => {
+  it.each([undefined, false, true])('interprets ordinary tool placeholders only when enabled is true (%s)', enabled => {
+    const ctx = createToolHandlerContext();
+    ctx.state.options.backgroundToolsEnabled = enabled;
+    handleToolStart(ctx, 'collision', 'execute_command', { command: 'printf demo' });
+    handleToolEnd(ctx, 'collision', 'Background task started. Task ID: visible-demo-123', false);
+    expect(ctx.state.pendingTools.has('collision')).toBe(enabled === true);
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n')).includes('background · visible-demo-123')).toBe(
+      enabled === true,
+    );
+  });
+
+  it.each([undefined, false, true])('interprets plugin placeholders only when enabled is true (%s)', enabled => {
+    const ctx = createToolHandlerContext();
+    ctx.state.options.backgroundToolsEnabled = enabled;
+    ctx.state.pluginManager = {
+      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+    } as unknown as TUIState['pluginManager'];
+    handleToolStart(ctx, 'collision', 'mastra_expert', { question: 'demo' });
+    handleToolEnd(ctx, 'collision', 'Background task started. Task ID: visible-demo-123', false);
+    expect(ctx.state.pendingSubagents.has('collision')).toBe(enabled === true);
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n')).includes('background · visible-demo-123')).toBe(
+      enabled === true,
+    );
+  });
+});
 
 describe('task tool rendering', () => {
   afterEach(() => {

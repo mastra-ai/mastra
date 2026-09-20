@@ -1,7 +1,32 @@
 import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
+import {
+  ActivityIcon,
+  BoxIcon,
+  BracesIcon,
+  BuildingIcon,
+  ClockIcon,
+  FingerprintIcon,
+  FlaskConicalIcon,
+  GlobeIcon,
+  HashIcon,
+  LayersIcon,
+  MessageSquareIcon,
+  PlayIcon,
+  RadioIcon,
+  ServerIcon,
+  TagIcon,
+  TagsIcon,
+  UserIcon,
+  WaypointsIcon,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import type { TraceMetadataFilterField } from './hooks/use-trace-metadata-filter-fields';
+import { TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from './trace-query-filters';
 import type { TraceDatePreset } from './types';
-import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
+import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { stringToThemedColor, themedHueColor } from '@/lib/colors';
 
 type EntityTypeValue = `${EntityType}`;
 
@@ -33,6 +58,23 @@ export const TRACE_STATUS_OPTIONS = [
  *  rather than the generic `filter*` set, but appear as rows in the Filter
  *  popover so users can manage all filters from one place. */
 export const TRACE_SYNTHETIC_FILTER_FIELD_IDS = ['rootEntityType', 'status'] as const;
+
+/** Discovered `metadata.<key>` fields are dynamic, so they use a prefix-based URL
+ *  scheme (`filterMetadata.<key>`) instead of the fixed `filter*` param map. */
+export const TRACE_METADATA_FILTER_FIELD_PREFIX = 'metadata.';
+export const TRACE_METADATA_FILTER_PARAM_PREFIX = 'filterMetadata.';
+
+export const isTraceMetadataFieldId = (fieldId: string) =>
+  fieldId.startsWith(TRACE_METADATA_FILTER_FIELD_PREFIX) && fieldId.length > TRACE_METADATA_FILTER_FIELD_PREFIX.length;
+
+const isTraceMetadataParam = (param: string) =>
+  param.startsWith(TRACE_METADATA_FILTER_PARAM_PREFIX) && param.length > TRACE_METADATA_FILTER_PARAM_PREFIX.length;
+
+export const metadataFieldIdToParam = (fieldId: string) =>
+  TRACE_METADATA_FILTER_PARAM_PREFIX + fieldId.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length);
+
+export const metadataParamToFieldId = (param: string) =>
+  TRACE_METADATA_FILTER_FIELD_PREFIX + param.slice(TRACE_METADATA_FILTER_PARAM_PREFIX.length);
 
 export const TRACE_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
 export const TRACE_STATUS_PARAM = 'status';
@@ -148,98 +190,168 @@ export function hasAnyTraceFilterParams(params: URLSearchParams): boolean {
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     if (params.has(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId])) return true;
   }
+  for (const param of params.keys()) {
+    if (isTraceMetadataParam(param)) return true;
+  }
   return false;
 }
 
-export function createTracePropertyFilterFields({
-  availableTags,
+/** The trace query API only runs equality (`eq`) and set membership (`in`)
+ *  predicates, so the FilterBar offers exactly those two operators. */
+export const TRACE_FILTER_BAR_OPERATORS: FilterBarOperator[] = [
+  { id: 'is', label: 'is' },
+  { id: 'in', label: 'in', arity: 'many' },
+];
+
+const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
+  rootEntityType: 'Primitive Type',
+  entityName: 'Primitive Name',
+  entityId: 'Primitive ID',
+  status: 'Status',
+  tags: 'Tags',
+  serviceName: 'Service Name',
+  environment: 'Environment',
+  traceId: 'Trace ID',
+  runId: 'Run ID',
+  threadId: 'Thread ID',
+  sessionId: 'Session ID',
+  requestId: 'Request ID',
+  resourceId: 'Resource ID',
+  userId: 'User ID',
+  organizationId: 'Organization ID',
+  experimentId: 'Experiment ID',
+};
+
+/** Icon and hue for each known trace filter key. Hues are spread by hand — hashing
+ *  the ids clusters them (e.g. `environment`/`entityName`/`timeRange` all land on green). */
+const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; hue: number }> = {
+  timeRange: { icon: ClockIcon, hue: 30 },
+  rootEntityType: { icon: BoxIcon, hue: 265 },
+  entityName: { icon: TagIcon, hue: 290 },
+  entityId: { icon: FingerprintIcon, hue: 315 },
+  status: { icon: ActivityIcon, hue: 0 },
+  tags: { icon: TagsIcon, hue: 340 },
+  serviceName: { icon: ServerIcon, hue: 175 },
+  environment: { icon: GlobeIcon, hue: 145 },
+  traceId: { icon: WaypointsIcon, hue: 215 },
+  runId: { icon: PlayIcon, hue: 195 },
+  threadId: { icon: MessageSquareIcon, hue: 235 },
+  sessionId: { icon: LayersIcon, hue: 100 },
+  requestId: { icon: RadioIcon, hue: 55 },
+  resourceId: { icon: HashIcon, hue: 80 },
+  userId: { icon: UserIcon, hue: 20 },
+  organizationId: { icon: BuildingIcon, hue: 120 },
+  experimentId: { icon: FlaskConicalIcon, hue: 160 },
+};
+
+export const traceFilterFieldIcon = (fieldId: string) => TRACE_FILTER_BAR_FIELD_META[fieldId]?.icon;
+
+/** Stable per-field accent; known keys use a curated hue, others fall back to a hashed one. */
+export const traceFilterFieldColor = (fieldId: string) => {
+  const hue = TRACE_FILTER_BAR_FIELD_META[fieldId]?.hue;
+  return hue === undefined ? stringToThemedColor(fieldId) : themedHueColor(hue);
+};
+
+const traceFieldBase = (id: string) => ({
+  id,
+  label: TRACE_FILTER_BAR_LABELS[id] ?? id,
+  icon: traceFilterFieldIcon(id),
+  color: traceFilterFieldColor(id),
+});
+
+const TRACE_FILTER_BAR_TEXT_FIELD_IDS = [
+  'entityId',
+  'traceId',
+  'runId',
+  'threadId',
+  'sessionId',
+  'requestId',
+  'resourceId',
+  'userId',
+  'organizationId',
+  'experimentId',
+] as const;
+
+/** FilterBar field definitions for the trace pages. Fields the query API cannot
+ *  filter on (see `TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS`) are omitted, as is the
+ *  `running` status, so no chip advertises a filter that has no effect. Hidden
+ *  fields are never offered in the input's field step but still label existing
+ *  (e.g. scoped, read-only) chips. */
+export function createTraceFilterBarFields({
   availableRootEntityNames,
-  availableServiceNames,
   availableEnvironments,
-  loading,
+  hiddenFieldIds = [],
+  metadataFields = [],
 }: {
-  availableTags: string[];
   availableRootEntityNames: string[];
-  availableServiceNames: string[];
   availableEnvironments: string[];
-  loading?: {
-    tags?: boolean;
-    entityNames?: boolean;
-    serviceNames?: boolean;
-    environments?: boolean;
-  };
-}): PropertyFilterField[] {
-  const fields: PropertyFilterField[] = [
-    {
-      id: 'rootEntityType',
-      label: 'Primitive Type',
-      kind: 'pick-multi',
-      searchable: false,
-      options: ROOT_ENTITY_TYPE_OPTIONS.map(o => ({ label: o.label, value: o.entityType })),
-      placeholder: 'Choose entity type',
-      emptyText: 'No entity types.',
-    },
-    {
-      id: 'entityName',
-      label: 'Primitive Name',
-      kind: 'pick-multi',
-      options: availableRootEntityNames.map(name => ({ label: name, value: name })),
-      placeholder: 'Choose entity names',
-      emptyText: 'No entity names found.',
-      isLoading: loading?.entityNames,
-    },
-    { id: 'entityId', label: 'Primitive ID', kind: 'text' },
-    {
-      id: 'status',
-      label: 'Status',
-      kind: 'pick-multi',
-      searchable: false,
-      options: TRACE_STATUS_OPTIONS.map(o => ({ label: o.label, value: o.value })),
-      placeholder: 'Choose status',
-      emptyText: 'No statuses.',
-    },
-    {
-      id: 'tags',
-      label: 'Tags',
-      kind: 'pick-multi',
-      multi: true,
-      options: availableTags.map(tag => ({ label: tag, value: tag })),
-      placeholder: 'Choose tags',
-      emptyText: 'No tags found.',
-      isLoading: loading?.tags,
-    },
-    {
-      id: 'serviceName',
-      label: 'Service Name',
-      kind: 'pick-multi',
-      options: availableServiceNames.map(name => ({ label: name, value: name })),
-      placeholder: 'Choose service names',
-      emptyText: 'No service names found.',
-      isLoading: loading?.serviceNames,
-    },
-    {
-      id: 'environment',
-      label: 'Environment',
-      kind: 'pick-multi',
-      options: availableEnvironments.map(env => ({ label: env, value: env })),
-      placeholder: 'Choose environments',
-      emptyText: 'No environments found.',
-      isLoading: loading?.environments,
-    },
-    { id: 'traceId', label: 'Trace ID', kind: 'text' },
-    { id: 'runId', label: 'Run ID', kind: 'text' },
-    { id: 'threadId', label: 'Thread ID', kind: 'text' },
-    { id: 'sessionId', label: 'Session ID', kind: 'text' },
-    { id: 'requestId', label: 'Request ID', kind: 'text' },
-    { id: 'resourceId', label: 'Resource ID', kind: 'text' },
-    { id: 'userId', label: 'User ID', kind: 'text' },
-    { id: 'organizationId', label: 'Organization ID', kind: 'text' },
-    { id: 'experimentId', label: 'Experiment ID', kind: 'text' },
+  hiddenFieldIds?: readonly string[];
+  /** Discovered `metadata.<key>` paths with a lazy value-suggestions resolver each. */
+  metadataFields?: readonly TraceMetadataFilterField[];
+}): FilterBarField[] {
+  const pick = (id: string, suggestions: { value: string; label?: string }[]): FilterBarField => ({
+    ...traceFieldBase(id),
+    operators: ['is'],
+    strict: true,
+    suggestions,
+  });
+  const text = (id: string): FilterBarField => ({ ...traceFieldBase(id), operators: ['is'] });
+
+  const pickFields: FilterBarField[] = [
+    pick(
+      'rootEntityType',
+      ROOT_ENTITY_TYPE_OPTIONS.map(o => ({ value: o.entityType, label: o.label })),
+    ),
+    pick(
+      'entityName',
+      availableRootEntityNames.map(name => ({ value: name })),
+    ),
+    pick(
+      'status',
+      TRACE_STATUS_OPTIONS.filter(o => o.value !== 'running').map(o => ({ value: o.value, label: o.label })),
+    ),
+    pick(
+      'environment',
+      availableEnvironments.map(env => ({ value: env })),
+    ),
   ];
-  const byLabel = (a: PropertyFilterField, b: PropertyFilterField) => a.label.localeCompare(b.label);
-  const pickMulti = fields.filter(f => f.kind === 'pick-multi').sort(byLabel);
-  const text = fields.filter(f => f.kind === 'text').sort(byLabel);
-  return [...pickMulti, ...text];
+  const textFields = TRACE_FILTER_BAR_TEXT_FIELD_IDS.map(text);
+  const metadataBarFields: FilterBarField[] = metadataFields
+    .filter(({ path }) => isTraceMetadataFieldId(path))
+    .map(({ path, suggestions }) => ({
+      id: path,
+      label: path.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length),
+      icon: BracesIcon,
+      color: stringToThemedColor(path),
+      operators: ['is'],
+      suggestions,
+    }));
+
+  const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
+  const hidden = new Set(hiddenFieldIds);
+  return [...pickFields.sort(byLabel), ...textFields.sort(byLabel), ...metadataBarFields.sort(byLabel)]
+    .filter(field => !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id))
+    .map(field => (hidden.has(field.id) ? { ...field, hidden: true } : field));
+}
+
+/** One FilterBar item per token, keyed by field id so chip order == URL order.
+ *  Empty values ('' / []) are kept: that's a pending chip whose field was just
+ *  changed and whose value hasn't been picked yet (the query builder skips it).
+ *  Only the legacy 'Any' sentinel is mapped back to an empty value. */
+export function traceTokensToFilterBarItems(tokens: PropertyFilterToken[]): FilterBarItem[] {
+  return tokens.map(token => ({
+    id: token.fieldId,
+    fieldId: token.fieldId,
+    operatorId: token.fieldId === 'tags' ? 'in' : 'is',
+    value: token.value === 'Any' ? '' : token.value,
+  }));
+}
+
+export function filterBarItemsToTraceTokens(items: FilterBarItem[]): PropertyFilterToken[] {
+  return items.map(item => ({
+    fieldId: item.fieldId,
+    value: Array.isArray(item.value) ? item.value.map(String) : String(item.value),
+  }));
 }
 
 /**
@@ -263,7 +375,7 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Pro
 
   const seen = new Set<string>();
   for (const [paramName] of searchParams.entries()) {
-    const fieldId = paramToFieldId.get(paramName);
+    const fieldId = isTraceMetadataParam(paramName) ? metadataParamToFieldId(paramName) : paramToFieldId.get(paramName);
     if (!fieldId || seen.has(fieldId)) continue;
     seen.add(fieldId);
 
@@ -313,6 +425,10 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
     }
   }
 
+  for (const [param, value] of searchParams.entries()) {
+    if (isTraceMetadataParam(param) && value) next.set(param, value);
+  }
+
   return next;
 }
 
@@ -328,8 +444,15 @@ export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: 
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     params.delete(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId]);
   }
+  for (const param of Array.from(params.keys())) {
+    if (isTraceMetadataParam(param)) params.delete(param);
+  }
 
   for (const token of tokens) {
+    if (isTraceMetadataFieldId(token.fieldId)) {
+      if (typeof token.value === 'string') params.set(metadataFieldIdToParam(token.fieldId), token.value.trim());
+      continue;
+    }
     if (token.fieldId === 'rootEntityType' && typeof token.value === 'string') {
       params.set(TRACE_ROOT_ENTITY_TYPE_PARAM, token.value);
       continue;
@@ -459,25 +582,4 @@ export function buildTraceListFilters({
   }
 
   return filters;
-}
-
-/**
- * "Clear" semantics: keep all filter pills but neutralize each value.
- * '' for text fields, 'Any' for single-select pick-multi, [] for multi-select pick-multi.
- * Date range is intentionally NOT touched here — that's a separate concern.
- */
-export function neutralizeFilterTokens(
-  filterFields: PropertyFilterField[],
-  filterTokens: PropertyFilterToken[],
-): PropertyFilterToken[] {
-  return filterTokens.map(token => {
-    const field = filterFields.find(f => f.id === token.fieldId);
-    if (!field) return token;
-    if (field.kind === 'text') return { fieldId: token.fieldId, value: '' };
-    if (field.kind === 'pick-multi') {
-      if (field.omitAnyOption) return token;
-      return field.multi ? { fieldId: token.fieldId, value: [] } : { fieldId: token.fieldId, value: 'Any' };
-    }
-    return token;
-  });
 }

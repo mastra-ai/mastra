@@ -1,5 +1,5 @@
 import type { Agent } from '../agent';
-import type { MastraDBMessage } from '../agent/message-list/state/types';
+import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { BackgroundTaskManagerConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
@@ -774,11 +774,11 @@ export function defaultOMProgressState(): OMProgressState {
 /**
  * Events emitted by the controller that UIs can subscribe to.
  *
- * Streamed `message_start`, `message_update`, and `message_end` events for one
- * assistant turn intentionally share a live `MastraDBMessage`. Its content is
- * updated in place as later deltas arrive. `display_state_changed.currentMessage`
- * refers to that same live message. Consumers that retain an event across an
- * asynchronous or storage boundary must copy or serialize the value there.
+ * A logical message emits one `message_start` containing its initial
+ * `MastraDBMessage`, zero or more compact id-addressed `message_update` deltas,
+ * and one id-only `message_end` after terminal metadata has been applied.
+ * Consumers reconstruct streamed text, reasoning, and non-text message parts
+ * from ordered deltas, then use the id-only end to finalize the matching entry.
  */
 export type AgentControllerEvent =
   | { type: 'mode_changed'; modeId: string; previousModeId: string }
@@ -790,8 +790,15 @@ export type AgentControllerEvent =
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
   | { type: 'message_start'; message: MastraDBMessage }
-  | { type: 'message_update'; message: MastraDBMessage }
-  | { type: 'message_end'; message: MastraDBMessage }
+  | {
+      type: 'message_update';
+      id: string;
+      event:
+        | { type: 'text-delta'; delta: string }
+        | { type: 'reasoning-delta'; index: number; delta: string }
+        | { type: 'part'; index: number; part: MastraMessagePart };
+    }
+  | { type: 'message_end'; id: string }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
   | {
@@ -1001,6 +1008,8 @@ export interface AgentControllerRequestState<TState = unknown> {
   get: () => Readonly<TState>;
   /** Update session-owned controller state. */
   set: (updates: Partial<TState>) => Promise<void>;
+  /** Apply an update only while a caller-owned identity still matches. */
+  setIf?: (updates: Partial<TState>, shouldApply: () => boolean) => Promise<boolean>;
   /** Update session-owned controller state from the latest snapshot in a serialized transaction. */
   update: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 }
@@ -1047,7 +1056,16 @@ export interface AgentControllerRequestContext<TState = unknown> {
   /** Update controller state from the latest state snapshot in a serialized transaction. */
   updateState?: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
-  /** Current thread ID */
+  /** Read a setting from the thread captured for this request. */
+  getThreadSetting?: (key: string) => Promise<unknown>;
+
+  /** Persist a setting on the thread captured for this request. */
+  setThreadSetting?: (setting: { key: string; value: unknown }) => Promise<void>;
+
+  /** Whether the thread captured for this request is still active in the session. */
+  isThreadActive?: () => boolean;
+
+  /** Thread ID captured for this request. */
   threadId: string | null;
 
   /** Current resource ID */

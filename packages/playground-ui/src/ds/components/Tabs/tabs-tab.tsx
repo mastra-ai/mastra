@@ -3,8 +3,8 @@ import { useContext, useEffect, useRef } from 'react';
 import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
-import '@/ds/primitives/focus.css';
-import { transitions } from '@/ds/primitives/transitions';
+import { controlSizeClasses } from '@/ds/primitives/control-size';
+import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type TabProps = {
@@ -53,11 +53,13 @@ export const Tab = ({
     return () => observer.disconnect();
   }, [register, value, children, disabled, onClick, onClose]);
   useEffect(() => () => unregister?.(value), [unregister, value]);
-  // The tab renders a div, so disabled styling must also match Base UI aria/data attributes.
+  // The tab renders as a <div>, so the recipe's `disabled:` pseudo never matches; mirror it on the
+  // aria/data attributes Base UI sets.
+  const size = list?.size ?? 'md';
   const tabClassName =
     list?.variant === 'pill-ghost'
       ? cn(
-          buttonVariants({ variant: 'ghost', size: 'md' }),
+          buttonVariants({ variant: 'ghost', size }),
           'relative z-10 whitespace-nowrap',
           'data-[active]:text-neutral6',
           'aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
@@ -65,10 +67,13 @@ export const Tab = ({
           className,
         )
       : cn(
-          'text-ui-smd font-normal text-neutral3',
+          // `sm` mirrors the `sm` button box so tabs sit level with sibling `size="sm"` controls.
+          size === 'sm' ? controlSizeClasses.sm : 'text-ui-smd',
+          'font-normal text-neutral3',
           attention && 'relative',
           'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
           transitions.colors,
+          focusRing.visible,
           'hover:text-neutral4',
           'data-[active]:text-neutral5',
           'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
@@ -87,11 +92,10 @@ export const Tab = ({
       disabled={disabled || overflowed}
       data-slot="tab"
       data-closable={onClose ? '' : undefined}
-      className={cn(tabClassName, 'ds-focus ds-focus-contour')}
+      className={tabClassName}
       onClick={onClick}
     >
       {children}
-      <span aria-hidden="true" data-slot="focus-decoration" />
       {attention && (
         <>
           <span aria-hidden="true" data-slot="tab-attention" />
@@ -103,7 +107,7 @@ export const Tab = ({
   if (disabled && disabledTooltip) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{tab}</TooltipTrigger>
+        <TooltipTrigger render={<span tabIndex={0} className="inline-flex" />}>{tab}</TooltipTrigger>
         <TooltipContent>{disabledTooltip}</TooltipContent>
       </Tooltip>
     );

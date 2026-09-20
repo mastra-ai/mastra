@@ -2,22 +2,100 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type { IntakeConfig } from '../../../factory/services/intake';
+import type { IntakeConfig, IntakeSourceBinding } from '../../../factory/services/intake';
+import type { JiraProject, JiraStatus } from '../../../factory/services/jira';
 import type { LinearProject, LinearStatus } from '../../../factory/services/linear';
 import { IntakeSection } from '../IntakeSection';
 
+// Headless Nango auth is the browser boundary the SPA drives after the
+// server mints a connect/reconnect session. The SDK opens the provider's
+// consent popup (a real window), so tests stub the SDK and assert the
+// session token and integration id it receives — everything up to that
+// point (session minting, connection polling) stays on the MSW network.
+const nangoAuthCalls: Array<{ integrationId: string; options: Record<string, unknown> }> = [];
+const nangoConstructorOptions: Array<Record<string, unknown>> = [];
+
+vi.mock('@nangohq/frontend', () => {
+  class MockNango {
+    win = { close: vi.fn() };
+    constructor(options: Record<string, unknown>) {
+      nangoConstructorOptions.push(options);
+    }
+    auth(integrationId: string, options: Record<string, unknown>) {
+      nangoAuthCalls.push({ integrationId, options });
+      return Promise.resolve({ connectionId: 'nango-conn', providerConfigKey: integrationId });
+    }
+  }
+  class AuthError extends Error {
+    type = 'unknown';
+  }
+  return { default: MockNango, AuthError };
+});
+
+beforeEach(() => {
+  nangoAuthCalls.length = 0;
+  nangoConstructorOptions.length = 0;
+});
+
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
+const BINDINGS_URL = `${TEST_BASE_URL}/web/intake/bindings`;
 const LINEAR_STATUS_URL = `${TEST_BASE_URL}/web/linear/status`;
 const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
+const LINEAR_TEAMS_URL = `${TEST_BASE_URL}/web/linear/teams`;
+const JIRA_STATUS_URL = `${TEST_BASE_URL}/web/jira/status`;
+const JIRA_PROJECTS_URL = `${TEST_BASE_URL}/web/jira/projects`;
+const JIRA_CONNECT_SESSION_URL = `${TEST_BASE_URL}/web/integrations/platform/jira/connect-session`;
+const JIRA_CONNECTIONS_URL = `${TEST_BASE_URL}/web/integrations/platform/jira/connections`;
+const INCIDENTIO_CONNECTIONS_URL = `${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`;
+const INTAKE_SOURCES_URL = `${TEST_BASE_URL}/web/intake/sources`;
+
+/**
+ * Stub the platform connect seam: session minting plus the connection list
+ * the mutation polls after the popup resolves. Returns the mint log so specs
+ * can assert which session (connect vs reconnect) was requested.
+ */
+function usePlatformConnectHandlers({
+  connections = [{ id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' }],
+}: {
+  connections?: Array<{ id: string; integrationId: string; status: string; accountLabel: string | null }>;
+} = {}) {
+  const minted: Array<{ kind: 'connect' | 'reconnect'; connectionId: string }> = [];
+  const session = (connectionId: string) => ({
+    connectionId,
+    integrationId: 'jira',
+    connectUrl: 'https://connect.nango.dev/session-token',
+    sessionToken: 'session-token',
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  server.use(
+    http.get(JIRA_CONNECTIONS_URL, () => HttpResponse.json({ connections })),
+    http.post(JIRA_CONNECT_SESSION_URL, () => {
+      const connectionId = connections[0]?.id ?? 'a1b_new';
+      minted.push({ kind: 'connect', connectionId });
+      return HttpResponse.json(session(connectionId), { status: 201 });
+    }),
+    http.post(`${JIRA_CONNECTIONS_URL}/:connectionId/reconnect-session`, ({ params }) => {
+      const connectionId = String(params.connectionId);
+      minted.push({ kind: 'reconnect', connectionId });
+      return HttpResponse.json(session(connectionId), { status: 201 });
+    }),
+  );
+  return minted;
+}
+
+const FACTORY_A = '11111111-1111-4111-8111-111111111111';
+const FACTORY_B = '22222222-2222-4222-8222-222222222222';
 
 function baseConfig(): IntakeConfig {
   return {
     github: { enabled: true, sourceIds: null },
     linear: { enabled: true, sourceIds: null },
+    jira: { enabled: false, sourceIds: null },
+    incidentio: { enabled: false, sourceIds: null },
   };
 }
 
@@ -28,7 +106,12 @@ const connectedStatus: LinearStatus = {
   reason: 'ready',
 };
 
-const engTeam = { id: 'team-eng', key: 'ENG', name: 'Engineering' };
+const engTeam = {
+  id: 'team-eng',
+  key: 'ENG',
+  name: 'Engineering',
+  sourceId: 'linear-team:opaque-eng',
+};
 const designTeam = { id: 'team-des', key: 'DES', name: 'Design' };
 
 const linearProjects: LinearProject[] = [
@@ -36,6 +119,8 @@ const linearProjects: LinearProject[] = [
   { id: 'lproj-2', name: 'Design refresh', state: 'planned', teams: [] },
   { id: 'lproj-3', name: 'Shared initiative', state: 'started', teams: [engTeam, designTeam] },
 ];
+
+const linearTeams = [engTeam, designTeam];
 
 function seedGithubProject() {
   server.use(
@@ -76,8 +161,146 @@ function useIntakeHandlers({
     }),
     http.get(LINEAR_STATUS_URL, () => HttpResponse.json(status)),
     http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
+    http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: linearTeams })),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json({ boards: [] })),
   );
   return saved;
+}
+
+const jiraReadyStatus: JiraStatus = {
+  enabled: true,
+  configured: true,
+  mode: 'platform',
+  site: 'acme.atlassian.net',
+  sites: ['acme.atlassian.net', 'beta.atlassian.net'],
+  connections: [
+    {
+      id: 'a1b_acme',
+      integrationId: 'jira',
+      status: 'active',
+      accountLabel: 'acme.atlassian.net',
+    },
+    {
+      id: 'a1b_beta',
+      integrationId: 'jira',
+      status: 'active',
+      accountLabel: 'beta.atlassian.net',
+    },
+  ],
+  reason: 'ready',
+};
+
+const jiraProjects: JiraProject[] = [
+  { id: '10001', key: 'ENG', name: 'Engineering', connectionId: 'a1b_acme', site: 'acme.atlassian.net' },
+  { id: '10002', key: 'OPS', name: 'Operations', connectionId: 'a1b_beta', site: 'beta.atlassian.net' },
+];
+
+/**
+ * Layer connected Jira sites on top of the base intake handlers. The ambient
+ * MSW handlers answer `/web/jira/*` with 404 when Platform integration access
+ * is unavailable, so unavailable-feature specs skip this helper.
+ */
+function useJiraHandlers({
+  config = baseConfig(),
+  bindings = [],
+}: { config?: IntakeConfig; bindings?: IntakeSourceBinding[] } = {}) {
+  const saved = useIntakeHandlers({ config });
+  const savedBindings: Array<{
+    integrationId: string;
+    sourceId: string;
+    factoryProjectId: string | null;
+    board: string | null;
+  }> = [];
+  server.use(
+    http.get(JIRA_STATUS_URL, () => HttpResponse.json(jiraReadyStatus)),
+    http.get(JIRA_PROJECTS_URL, () => HttpResponse.json({ projects: jiraProjects })),
+    http.get(BINDINGS_URL, () => HttpResponse.json({ bindings })),
+    http.put(BINDINGS_URL, async ({ request }) => {
+      const body = (await request.json()) as {
+        integrationId: string;
+        sourceId: string;
+        factoryProjectId: string | null;
+        board: string | null;
+      };
+      savedBindings.push(body);
+      const next = body.factoryProjectId === null ? [] : [body as IntakeSourceBinding];
+      return HttpResponse.json({ bindings: next });
+    }),
+  );
+  return { saved, savedBindings };
+}
+
+function useIncidentioHandlers({
+  config = { ...baseConfig(), incidentio: { enabled: true, sourceIds: ['incidentio-source:follow-ups'] } },
+  bindings = [],
+}: { config?: IntakeConfig; bindings?: IntakeSourceBinding[] } = {}) {
+  const saved = useIntakeHandlers({ config });
+  const savedBindings: Array<{
+    integrationId: string;
+    sourceId: string;
+    factoryProjectId: string | null;
+    board: string | null;
+  }> = [];
+  server.use(
+    http.get(INCIDENTIO_CONNECTIONS_URL, () =>
+      HttpResponse.json({
+        connections: [
+          {
+            id: 'incidentio-acme',
+            integrationId: 'incident-io',
+            status: 'active',
+            accountLabel: 'acme',
+          },
+        ],
+      }),
+    ),
+    http.get(INTAKE_SOURCES_URL, () =>
+      HttpResponse.json({
+        sources: [
+          {
+            integrationId: 'incidentio',
+            id: 'incidentio-source:incidents',
+            name: 'Incidents (acme)',
+            type: 'incident',
+          },
+          {
+            integrationId: 'incidentio',
+            id: 'incidentio-source:follow-ups',
+            name: 'Incident follow-ups (acme)',
+            type: 'follow-up',
+          },
+        ],
+        failures: [],
+      }),
+    ),
+    http.get(BINDINGS_URL, () => HttpResponse.json({ bindings })),
+    http.put(BINDINGS_URL, async ({ request }) => {
+      const body = (await request.json()) as {
+        integrationId: string;
+        sourceId: string;
+        factoryProjectId: string | null;
+        board: string | null;
+      };
+      savedBindings.push(body);
+      const next = body.factoryProjectId === null ? [] : [body as IntakeSourceBinding];
+      return HttpResponse.json({ bindings: next });
+    }),
+  );
+  return { saved, savedBindings };
+}
+
+function seedFactories() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({
+        projects: [
+          { id: FACTORY_A, name: 'Acme Web' },
+          { id: FACTORY_B, name: 'Acme API' },
+        ],
+      }),
+    ),
+  );
 }
 
 function renderIntakeSection() {
@@ -90,8 +313,8 @@ function renderIntakeSection() {
 }
 
 describe('IntakeSection', () => {
-  describe('given a config with both sources enabled', () => {
-    it('lists the GitHub repositories and Linear projects without an extra expand step', async () => {
+  describe('given a config with the default sources enabled', () => {
+    it('lists every work intake source and expands the configured pickers', async () => {
       seedGithubProject();
       useIntakeHandlers();
 
@@ -99,6 +322,7 @@ describe('IntakeSection', () => {
 
       expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
       expect(await screen.findByRole('switch', { name: 'Sync Linear issues' })).toBeChecked();
+      expect(await screen.findByRole('switch', { name: 'Sync Jira issues' })).toBeInTheDocument();
 
       expect(await screen.findByRole('checkbox', { name: 'mastra' })).toBeInTheDocument();
       expect(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
@@ -111,7 +335,7 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      const projects = await screen.findByRole('group', { name: 'Linear projects' });
+      const projects = await screen.findByRole('group', { name: 'Linear projects and teams' });
 
       expect(within(projects).getByText('Engineering')).toBeInTheDocument();
       expect(within(projects).getByText('Design')).toBeInTheDocument();
@@ -131,6 +355,8 @@ describe('IntakeSection', () => {
         config: {
           github: { enabled: true, sourceIds: ['mastra'] },
           linear: { enabled: true, sourceIds: ['lproj-1'] },
+          jira: { enabled: false, sourceIds: null },
+          incidentio: { enabled: false, sourceIds: null },
         },
       });
 
@@ -145,7 +371,7 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      const search = await screen.findByRole('textbox', { name: 'Search Linear projects' });
+      const search = await screen.findByRole('textbox', { name: 'Search Linear projects and teams' });
       expect(await screen.findByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
 
       await userEvent.type(search, 'road');
@@ -207,14 +433,18 @@ describe('IntakeSection', () => {
 
       await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
-      expect(await screen.findByRole('status', { name: 'Saving Linear projects selection' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('status', { name: 'Saving Linear projects and teams selection' }),
+      ).toBeInTheDocument();
       // Base UI's checkbox root is a span, so disabled state is exposed via aria-disabled.
       expect(screen.getByRole('checkbox', { name: 'Q3 Roadmap' })).toHaveAttribute('aria-disabled', 'true');
 
       releaseSave();
 
       await waitFor(() =>
-        expect(screen.queryByRole('status', { name: 'Saving Linear projects selection' })).not.toBeInTheDocument(),
+        expect(
+          screen.queryByRole('status', { name: 'Saving Linear projects and teams selection' }),
+        ).not.toBeInTheDocument(),
       );
       expect(screen.getByRole('checkbox', { name: 'Q3 Roadmap' })).not.toHaveAttribute('aria-disabled');
     });
@@ -232,6 +462,73 @@ describe('IntakeSection', () => {
       // have fired, so a doubled label toggle shows up as a third request here.
       await userEvent.click(await screen.findByText('Design refresh'));
       await waitFor(() => expect(saved).toHaveLength(2));
+    });
+  });
+
+  describe('when a Linear team is picked', () => {
+    it('persists the team as its own source id', async () => {
+      const saved = useIntakeHandlers();
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'All issues in Engineering' }));
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
+    });
+    it('waits for a returned team DTO before enabling opaque team selection', async () => {
+      const saved = useIntakeHandlers();
+      let releaseTeams!: () => void;
+      const teamsPending = new Promise<void>(resolve => {
+        releaseTeams = resolve;
+      });
+      server.use(
+        http.get(LINEAR_TEAMS_URL, async () => {
+          await teamsPending;
+          return HttpResponse.json({ teams: linearTeams });
+        }),
+      );
+
+      renderIntakeSection();
+
+      expect(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
+      expect(screen.queryByRole('checkbox', { name: 'All issues in Engineering' })).not.toBeInTheDocument();
+
+      releaseTeams();
+
+      const team = await screen.findByRole('checkbox', { name: 'All issues in Engineering' });
+      await userEvent.click(team);
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
+    });
+
+    it('keeps explicit projects editable so the selection can switch to team-only intake', async () => {
+      const saved = useIntakeHandlers({
+        config: {
+          github: { enabled: true, sourceIds: null },
+          linear: { enabled: true, sourceIds: ['linear-team:opaque-eng', 'lproj-1'] },
+          jira: { enabled: false, sourceIds: null },
+          incidentio: { enabled: false, sourceIds: null },
+        },
+      });
+
+      renderIntakeSection();
+
+      // The explicit project remains actionable because it wins over the team
+      // source until the user removes it.
+      const project = await screen.findByRole('checkbox', { name: /Q3 Roadmap/ });
+      expect(project).toBeChecked();
+      expect(project).not.toHaveAttribute('aria-disabled');
+      const linearSection = screen.getByRole('region', { name: 'Linear issues' });
+      expect(within(linearSection).getByText('project takes precedence')).toBeInTheDocument();
+
+      await userEvent.click(project);
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
+
+      // Projects that are only included through a selected team remain selectable too.
+      expect(within(linearSection).getAllByText('included via team').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByRole('checkbox', { name: /Design refresh/ })).not.toHaveAttribute('aria-disabled');
     });
   });
 
@@ -305,6 +602,325 @@ describe('IntakeSection', () => {
     });
   });
 
+  describe('given Jira uses deployment credentials', () => {
+    it('keeps the self-hosted setup guidance when the integration is unavailable', async () => {
+      useIntakeHandlers();
+      server.use(
+        http.get(JIRA_STATUS_URL, () =>
+          HttpResponse.json({
+            enabled: false,
+            configured: false,
+            mode: 'direct',
+            site: null,
+            reason: 'missing_config',
+          } satisfies JiraStatus),
+        ),
+      );
+
+      renderIntakeSection();
+
+      expect(
+        await screen.findByText(
+          'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeDisabled();
+    });
+  });
+
+  describe('given the organization has no connected Jira account', () => {
+    it('connects Jira headlessly through a minted platform session', async () => {
+      useIntakeHandlers();
+      const minted = usePlatformConnectHandlers();
+      server.use(
+        http.get(JIRA_STATUS_URL, () =>
+          HttpResponse.json({
+            enabled: true,
+            configured: false,
+            mode: 'platform',
+            site: null,
+            sites: [],
+            connections: [],
+            reason: 'not_connected',
+          } satisfies JiraStatus),
+        ),
+      );
+
+      renderIntakeSection();
+
+      expect(
+        await screen.findByText('Connect a Jira account to sync issues from this organization.'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeDisabled();
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).not.toBeChecked();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Connect Jira' }));
+
+      // The SPA runs the provider's OAuth popup itself, keyed by the
+      // server-minted session token — no Platform round trip.
+      await waitFor(() => expect(nangoAuthCalls).toHaveLength(1));
+      expect(minted).toEqual([{ kind: 'connect', connectionId: 'a1b_acme' }]);
+      expect(nangoConstructorOptions[0]).toEqual({ connectSessionToken: 'session-token' });
+      expect(nangoAuthCalls[0]).toEqual({
+        integrationId: 'jira',
+        options: { detectClosedAuthWindow: true },
+      });
+      expect(await screen.findByText('Jira connected')).toBeInTheDocument();
+    });
+
+    it('reconnects the rejected account headlessly when Jira needs reauthorization', async () => {
+      useIntakeHandlers();
+      const minted = usePlatformConnectHandlers();
+      server.use(
+        http.get(JIRA_STATUS_URL, () =>
+          HttpResponse.json({
+            enabled: true,
+            configured: false,
+            mode: 'platform',
+            site: null,
+            sites: [],
+            connections: [
+              {
+                id: 'a1b_acme',
+                integrationId: 'jira',
+                status: 'needs_reauth',
+                accountLabel: 'acme.atlassian.net',
+              },
+            ],
+            reason: 'not_connected',
+          } satisfies JiraStatus),
+        ),
+      );
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('A connected Jira account needs to be reconnected.')).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeDisabled();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Reconnect Jira' }));
+
+      await waitFor(() => expect(nangoAuthCalls).toHaveLength(1));
+      expect(minted).toEqual([{ kind: 'reconnect', connectionId: 'a1b_acme' }]);
+      expect(nangoConstructorOptions[0]).toEqual({ connectSessionToken: 'session-token' });
+    });
+  });
+
+  describe('given Jira is configured on the server', () => {
+    it('enables the toggle and persists switching Jira on', async () => {
+      const { saved } = useJiraHandlers();
+
+      renderIntakeSection();
+
+      const toggle = await screen.findByRole('switch', { name: 'Sync Jira issues' });
+      expect(toggle).toBeEnabled();
+      expect(toggle).not.toBeChecked();
+
+      await userEvent.click(toggle);
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.jira.enabled).toBe(true);
+      expect(saved[0]!.github.enabled).toBe(true);
+    });
+
+    it('shows a Platform-managed connection even when the status does not expose connection metadata', async () => {
+      useJiraHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } } });
+      server.use(
+        http.get(JIRA_STATUS_URL, () =>
+          HttpResponse.json({
+            enabled: true,
+            configured: true,
+            mode: 'platform',
+            site: null,
+            sites: [],
+            reason: 'ready',
+          } satisfies JiraStatus),
+        ),
+      );
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('Connected through Mastra Platform')).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeEnabled();
+      expect(await screen.findByRole('group', { name: 'Jira projects' })).toBeInTheDocument();
+    });
+
+    it('shows the site and persists an explicit project selection', async () => {
+      const { saved } = useJiraHandlers({
+        config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } },
+      });
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('2 Jira sites connected')).toBeInTheDocument();
+      // Each site appears both as a connection row (with its own reconnect
+      // affordance) and as a project group label in the picker.
+      expect(await screen.findAllByText('acme.atlassian.net')).not.toHaveLength(0);
+      expect(await screen.findAllByText('beta.atlassian.net')).not.toHaveLength(0);
+      const jiraSection = screen.getByRole('region', { name: 'Jira issues' });
+      expect(within(jiraSection).getAllByRole('button', { name: 'Reconnect' })).toHaveLength(2);
+
+      const projects = await screen.findByRole('group', { name: 'Jira projects' });
+      await userEvent.click(within(projects).getByRole('checkbox', { name: 'ENG · Engineering' }));
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.jira.sourceIds).toEqual(['10001']);
+    });
+
+    it('routes a selected Jira project to a Factory through the generic bindings', async () => {
+      seedFactories();
+      const { savedBindings } = useJiraHandlers({
+        config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
+      });
+
+      renderIntakeSection();
+
+      // Unrouted projects warn that no board picks them up.
+      expect(await screen.findByText(/Not routed — this source's issues won't be picked up\./)).toBeInTheDocument();
+
+      await userEvent.click(await screen.findByLabelText('Factory for ENG · Engineering'));
+      await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
+
+      await waitFor(() => expect(savedBindings).toHaveLength(1));
+      expect(savedBindings[0]).toEqual({
+        integrationId: 'jira',
+        sourceId: '10001',
+        factoryProjectId: FACTORY_A,
+        board: null,
+      });
+      expect(await screen.findByText('Jira routing updated')).toBeInTheDocument();
+    });
+
+    it('clears a Jira routing back to not routed', async () => {
+      seedFactories();
+      const { savedBindings } = useJiraHandlers({
+        config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
+        bindings: [{ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_A, board: 'work' }],
+      });
+
+      renderIntakeSection();
+
+      const trigger = await screen.findByLabelText('Factory for ENG · Engineering');
+      await waitFor(() => expect(trigger).toHaveTextContent('Acme Web'));
+
+      await userEvent.click(trigger);
+      await userEvent.click(await screen.findByRole('option', { name: 'Not routed' }));
+
+      await waitFor(() => expect(savedBindings).toHaveLength(1));
+      expect(savedBindings[0]).toEqual({
+        integrationId: 'jira',
+        sourceId: '10001',
+        factoryProjectId: null,
+        board: null,
+      });
+    });
+
+    it('surfaces rejected connections as reconnect guidance instead of an empty picker', async () => {
+      useJiraHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } } });
+      server.use(
+        http.get(JIRA_PROJECTS_URL, () =>
+          HttpResponse.json({ error: 'jira_auth_failed', message: 'Jira rejected the credentials' }, { status: 409 }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      expect(
+        await screen.findByText('Jira rejected a connected account. Reconnect it to resume syncing.'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Reconnect Jira' })).toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Jira projects' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('given the incident.io Platform connect route is mounted', () => {
+    it('collects an API key in a dialog and submits it without a popup', async () => {
+      useIntakeHandlers();
+      const connections: Array<{
+        id: string;
+        integrationId: string;
+        status: string;
+        accountLabel: string | null;
+      }> = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`, () =>
+          HttpResponse.json({ connections }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connect-session`, () => {
+          connections.push({ id: 'inc-1', integrationId: 'incident-io', status: 'active', accountLabel: 'Acme' });
+          return HttpResponse.json(
+            {
+              connectionId: 'inc-1',
+              integrationId: 'incident-io',
+              connectUrl: 'https://connect.nango.dev/session-token',
+              sessionToken: 'incident-session-token',
+              expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            },
+            { status: 201 },
+          );
+        }),
+      );
+
+      renderIntakeSection();
+
+      const section = await screen.findByRole('region', { name: 'incident.io follow-ups' });
+      await userEvent.click(within(section).getByRole('button', { name: 'Connect incident.io' }));
+
+      const dialog = await screen.findByRole('dialog');
+      await userEvent.type(within(dialog).getByLabelText('incident.io API key'), 'inc-api-key');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));
+
+      await waitFor(() => expect(nangoAuthCalls).toHaveLength(1));
+      expect(nangoConstructorOptions[0]).toEqual({ connectSessionToken: 'incident-session-token' });
+      expect(nangoAuthCalls[0]).toEqual({
+        integrationId: 'incident-io',
+        options: { credentials: { apiKey: 'inc-api-key' } },
+      });
+      expect(await screen.findByText('incident.io connected')).toBeInTheDocument();
+    });
+  });
+
+  describe('given incident.io follow-up intake is configured', () => {
+    it('routes only follow-up sources and marks incident board configuration as coming soon', async () => {
+      seedFactories();
+      const { savedBindings } = useIncidentioHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
+          HttpResponse.json({ boards: [{ id: 'work', title: 'Work' }] }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      const section = await screen.findByRole('region', { name: 'incident.io follow-ups' });
+      expect(within(section).getByRole('checkbox', { name: 'Incident follow-ups (acme)' })).toBeChecked();
+      expect(within(section).queryByRole('checkbox', { name: 'Incidents (acme)' })).not.toBeInTheDocument();
+      expect(within(section).getByText('Incident board configuration')).toBeInTheDocument();
+      expect(within(section).getByText('Coming soon')).toBeInTheDocument();
+
+      await userEvent.click(await screen.findByLabelText('Factory for Incident follow-ups (acme)'));
+      await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
+
+      await waitFor(() => expect(savedBindings).toHaveLength(1));
+      expect(savedBindings[0]).toEqual({
+        integrationId: 'incidentio',
+        sourceId: 'incidentio-source:follow-ups',
+        factoryProjectId: FACTORY_A,
+        board: null,
+      });
+
+      await userEvent.click(await screen.findByLabelText('Board for Incident follow-ups (acme)'));
+      await userEvent.click(await screen.findByRole('option', { name: 'Work' }));
+
+      await waitFor(() => expect(savedBindings).toHaveLength(2));
+      expect(savedBindings[1]).toEqual({
+        integrationId: 'incidentio',
+        sourceId: 'incidentio-source:follow-ups',
+        factoryProjectId: FACTORY_A,
+        board: 'work',
+      });
+    });
+  });
+
   describe('given the server omits unregistered integrations', () => {
     // The server returns a dynamic map keyed by integration id and drops keys
     // for integrations that aren't registered, so the config can arrive as `{}`.
@@ -315,6 +931,7 @@ describe('IntakeSection', () => {
         http.get(CONFIG_URL, () => HttpResponse.json({ config: {} })),
         http.get(LINEAR_STATUS_URL, () => HttpResponse.json(connectedStatus)),
         http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
+        http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: linearTeams })),
       );
 
       renderIntakeSection();
@@ -331,6 +948,7 @@ describe('IntakeSection', () => {
         http.get(CONFIG_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
         http.get(LINEAR_STATUS_URL, () => HttpResponse.json(connectedStatus)),
         http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
+        http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: linearTeams })),
       );
 
       renderIntakeSection();

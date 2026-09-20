@@ -464,6 +464,36 @@ describe('LocalSandbox', () => {
       await expect(sandbox.processes!.list()).resolves.toEqual([]);
     });
 
+    it('should not hang when the command reads stdin', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+
+      // `cat` with no file arguments copies stdin, so it only exits once stdin
+      // reaches EOF. Commands run through executeCommand have nothing feeding
+      // their stdin, so if it were left as an open pipe this would block until
+      // the timeout instead of returning. A command that reads stdin — `rg` or
+      // `grep` with no path argument, a bare `read` — must exit, not hang.
+      const result = await sandbox.executeCommand('cat', [], { timeout: 10_000 });
+
+      expect(result.timedOut).not.toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe('');
+      expect(result.executionTimeMs).toBeLessThan(5_000);
+    }, 15_000);
+
+    it('should not hang when a Node process reads stdin', async () => {
+      // Cross-platform variant: `node -e` reading stdin until EOF. Runs on
+      // Windows too since it doesn't depend on POSIX commands.
+      const result = await sandbox.executeCommand(
+        'node',
+        ['-e', 'process.stdin.resume(); process.stdin.on("end", () => process.exit(0));'],
+        { timeout: 10_000 },
+      );
+
+      expect(result.timedOut).not.toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.executionTimeMs).toBeLessThan(5_000);
+    }, 15_000);
+
     it('should handle command failure', async () => {
       if (os.platform() === 'win32') return; // Uses POSIX commands
       const result = await sandbox.executeCommand('ls', ['nonexistent-directory-12345']);
@@ -827,6 +857,29 @@ describe('LocalSandbox', () => {
             isolation: unavailableBackend as 'seatbelt' | 'bwrap',
           }),
       ).toThrow(IsolationUnavailableError);
+    });
+
+    it('should throw a clear error when seatbelt is requested on Windows', () => {
+      const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+
+      try {
+        expect(
+          () =>
+            new LocalSandbox({
+              workingDirectory: tempDir,
+              isolation: 'seatbelt',
+            }),
+        ).toThrowError(
+          expect.objectContaining({
+            name: 'IsolationUnavailableError',
+            code: 'ISOLATION_UNAVAILABLE',
+            backend: 'seatbelt',
+            reason: 'Seatbelt isolation is only supported on macOS, not Windows.',
+          }),
+        );
+      } finally {
+        platformSpy.mockRestore();
+      }
     });
 
     it('should include isolation in getInfo', async () => {

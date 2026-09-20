@@ -5,9 +5,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Comment,
   type CommentVariant,
-  CommentComposer,
-  CommentComposerInput,
-  CommentComposerSend,
   CommentItem,
   CommentItemActions,
   CommentItemAuthor,
@@ -18,9 +15,17 @@ import {
   CommentItemTimestamp,
   CommentList,
 } from '@mastra/playground-ui/components/Comment';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { format } from 'date-fns';
-import { Trash2Icon, Trash2, ChevronRight, ChevronLeft, ClipboardCheck } from 'lucide-react';
+import { ArrowUp, Trash2, ChevronRight, ChevronLeft, ClipboardCheck, EllipsisIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
@@ -89,32 +94,40 @@ function FeedbackItems({
     );
     const feedbackId = fb.feedbackId;
     const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;
-    const markReviewed = onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed' && (
-      <Button
-        icon={<ClipboardCheck />}
-        variant="ghost"
-        size="sm"
-        disabled={pendingFeedbackId === feedbackId}
-        onClick={() => onMarkReviewed(feedbackId)}
-      >
-        Mark reviewed
-      </Button>
-    );
-    const deleteAction = onRequestDelete && feedbackId && (
-      <Button
-        size="icon-sm"
-        variant="ghost"
-        aria-label="Delete feedback"
-        disabled={isDeleting}
-        onClick={() => onRequestDelete(feedbackId)}
-      >
-        <Trash2Icon />
-      </Button>
-    );
-    const actions = (markReviewed || deleteAction) && (
-      <CommentItemActions className="ml-auto">
-        {markReviewed}
-        {deleteAction}
+    const canMarkReviewed = Boolean(onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed');
+    const canDelete = Boolean(onRequestDelete && feedbackId);
+    const actions = feedbackId && (canMarkReviewed || canDelete) && (
+      <CommentItemActions>
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button size="icon-sm" variant="ghost" aria-label="Feedback actions">
+                <EllipsisIcon />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="end">
+            {canMarkReviewed && (
+              <DropdownMenu.Item
+                disabled={pendingFeedbackId === feedbackId}
+                onSelect={() => onMarkReviewed?.(feedbackId)}
+              >
+                <Icon size="sm">
+                  <ClipboardCheck />
+                </Icon>
+                Mark reviewed
+              </DropdownMenu.Item>
+            )}
+            {canDelete && (
+              <DropdownMenu.Item disabled={isDeleting} onSelect={() => onRequestDelete?.(feedbackId)}>
+                <Icon size="sm">
+                  <Trash2 />
+                </Icon>
+                Delete feedback
+              </DropdownMenu.Item>
+            )}
+          </DropdownMenu.Content>
+        </DropdownMenu>
       </CommentItemActions>
     );
     const body = <CommentItemBody>{formatBody(fb)}</CommentItemBody>;
@@ -194,9 +207,11 @@ export function FeedbackThread({
   };
 
   return (
-    <Comment variant={variant} className="min-h-0 gap-4 px-3">
-      <CommentComposer
+    <Comment variant={variant} className="min-h-0 gap-3">
+      {/* Same size/variant as the timeline search field so switching tabs doesn't shift the layout. */}
+      <form
         aria-label="Leave feedback"
+        className="flex w-full items-center gap-2"
         onSubmit={async event => {
           event.preventDefault();
           if (sendBlocked) return;
@@ -208,15 +223,20 @@ export function FeedbackThread({
           }
         }}
       >
-        <CommentComposerInput
-          aria-label="Leave feedback"
-          placeholder="Leave feedback..."
-          value={text}
-          onChange={event => setText(event.target.value)}
-        >
-          <CommentComposerSend aria-label="Send feedback" disabled={sendBlocked} />
-        </CommentComposerInput>
-      </CommentComposer>
+        <InputGroup size="sm" variant="outline">
+          <InputGroupInput
+            aria-label="Leave feedback"
+            placeholder="Leave feedback..."
+            value={text}
+            onChange={event => setText(event.target.value)}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton type="submit" aria-label="Send feedback" disabled={sendBlocked}>
+              <ArrowUp />
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </form>
 
       <div className="min-h-0 overflow-y-auto">
         {isLoadingFeedbackData ? (

@@ -4,7 +4,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Switch } from './switch';
 
-// Base UI synthesizes PointerEvents, which this jsdom version does not implement.
+// Base UI's Switch synthesizes a PointerEvent on click, which jsdom does not
+// implement. Polyfill it with the available MouseEvent constructor.
 beforeAll(() => {
   if (typeof window.PointerEvent === 'undefined') {
     window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
@@ -67,6 +68,7 @@ describe('Switch', () => {
     expect(switchEl.getAttribute('aria-checked')).toBe('true');
 
     fireEvent.click(switchEl);
+    // Controlled: state only changes if the consumer updates `checked`.
     expect(switchEl.getAttribute('aria-checked')).toBe('true');
     expect(onCheckedChange).toHaveBeenCalledWith(false, expect.anything());
   });
@@ -86,7 +88,7 @@ describe('Switch', () => {
 
     expect(iconEl).toBeDefined();
     expect(iconEl?.getAttribute('aria-hidden')).toBe('true');
-    expect(iconEl?.className).toContain('group-data-[checked]/switch:text-neutral6');
+    expect(iconEl?.className).toContain('group-data-[checked]/switch:text-foreground');
     expect(screen.getByTestId('switch-icon')).toBeDefined();
   });
 
@@ -118,9 +120,10 @@ describe('Switch', () => {
 
     const switchEl = screen.getByRole('switch');
     const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
-    expect(switchEl.className).toContain('data-[checked]:bg-neutral6');
+    expect(switchEl.className).toContain('data-[checked]:bg-foreground');
     expect(switchEl.className).toContain('border-0');
     expect(switchEl.className).not.toContain('overflow-hidden');
+    expect(switchEl.className).toContain('focus-visible:outline-foreground/45');
     expect(switchEl.className).not.toContain('active:scale');
     expect(switchEl.className).not.toContain('hover:scale');
     expect(switchEl.className).not.toContain('transition-[background-color,scale]');

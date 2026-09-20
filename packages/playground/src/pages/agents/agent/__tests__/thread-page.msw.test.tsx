@@ -6,8 +6,9 @@ import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import AgentSession from '../session';
 import AgentThread from '../thread';
 import {
   preferenceModelProviders,
@@ -19,12 +20,7 @@ import {
 } from './fixtures/thread-preferences';
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { AgentLayout } from '@/domains/agents/agent-layout';
-import {
-  emptyThreadTracesList,
-  threadTracesList,
-  traceASpans,
-  traceBSpans,
-} from '@/domains/traces/components/__tests__/fixtures/thread-traces';
+import { emptyThreadTracesList } from '@/domains/traces/components/__tests__/fixtures/thread-traces';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
@@ -147,6 +143,7 @@ const LocationProbe = () => {
 const buildRouter = (initialEntry: string) =>
   createMemoryRouter(
     [
+      { path: '/agents', element: <LocationProbe /> },
       {
         // Mirrors App.tsx: the thread page is a child of the agent tabs layout.
         path: '/agents/:agentId',
@@ -164,6 +161,7 @@ const buildRouter = (initialEntry: string) =>
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
           { path: 'threads', loader: agentThreadsIndexLoader },
           { path: 'threads/:threadId', element: <AgentThread /> },
+          { path: 'session/:threadId', element: <AgentSession /> },
         ],
       },
     ],
@@ -693,12 +691,11 @@ describe('Standalone thread page', () => {
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 
-  it('does not render the "Show thread traces" switch nor fetch traces on /new', async () => {
+  it('does not fetch traces on /new', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.queryByRole('switch', { name: 'Show thread traces' })).toBeNull();
     expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
@@ -803,62 +800,6 @@ describe('Standalone thread page', () => {
     });
   });
 
-  describe('with ?variant=advanced', () => {
-    const installTraceHandlers = () => {
-      server.use(
-        http.get(`${BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(threadTracesList)),
-        http.get(`${BASE_URL}/api/observability/traces`, () => HttpResponse.json(threadTracesList)),
-        http.get(`${BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
-          HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans),
-        ),
-      );
-    };
-
-    it('renders the thread as its traces instead of the chat', async () => {
-      installHandlers();
-      installTraceHandlers();
-      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}?variant=advanced`);
-
-      expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
-      expect(await screen.findByText('Chef agent run')).not.toBeNull();
-      expect(screen.queryByText('Tonight we cook carbonara.')).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Traces' })).toBeNull();
-    });
-
-    it('still renders the chat for a new thread', async () => {
-      installHandlers();
-      installTraceHandlers();
-      renderAt(`/agents/${AGENT_ID}/threads/new?variant=advanced`);
-
-      expect(await screen.findByText('Sushi ideas')).not.toBeNull();
-      expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
-      expect(screen.queryByRole('switch', { name: 'Show thread traces' })).toBeNull();
-    });
-
-    it('is toggled from the "Show thread traces" switch in the tab bar', async () => {
-      installHandlers();
-      installTraceHandlers();
-      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
-
-      const toggle = await screen.findByRole('switch', { name: 'Show thread traces' });
-      expect(toggle.getAttribute('aria-checked')).toBe('false');
-
-      fireEvent.click(toggle);
-      await waitFor(() =>
-        expect(screen.getByTestId('location-probe').textContent).toBe(
-          `/agents/${AGENT_ID}/threads/${THREAD_ID}?variant=advanced`,
-        ),
-      );
-      expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
-
-      fireEvent.click(screen.getByRole('switch', { name: 'Show thread traces' }));
-      await waitFor(() =>
-        expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`),
-      );
-      expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
-    });
-  });
-
   describe('when a thread has saved model preferences', () => {
     it('retains real composer edits through the first send, navigation, and reload', async () => {
       installHandlers();
@@ -932,6 +873,49 @@ describe('Standalone thread page', () => {
           modelSettings: expect.objectContaining({ temperature: 0.2 }),
         }),
       );
+    });
+  });
+
+  describe('when the current agent no longer exists', () => {
+    beforeEach(() => {
+      const missingAgent = () => HttpResponse.json({ error: 'Agent not found' }, { status: 404 });
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/config`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, missingAgent),
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, missingAgent),
+      );
+    });
+
+    it.each(['threads', 'session'])('replaces cached %s chat data with actionable recovery', async route => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+          HttpResponse.json({ error: 'Agent not found' }, { status: 404 }),
+        ),
+      );
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(['agent', AGENT_ID, {}], agentResponse);
+      renderAt(`/agents/${AGENT_ID}/${route}/${THREAD_ID}`, queryClient);
+
+      expect(await screen.findByText('Agent not found')).not.toBeNull();
+      expect(screen.getByText(/may have been renamed or removed/)).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
+      expect(screen.getByRole('link', { name: 'Choose agent' })).not.toBeNull();
+      expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
+    });
+
+    it('lets the user leave the dead chat and choose an agent', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+          HttpResponse.json({ error: 'Agent not found' }, { status: 404 }),
+        ),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      fireEvent.click(await screen.findByRole('link', { name: 'Choose agent' }));
+      await waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe('/agents'));
     });
   });
 

@@ -7,7 +7,7 @@ description: "Browse DigitalOcean model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/digitalocean.svg" alt="DigitalOcean logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DigitalOcean
 
-Access 96 DigitalOcean models through Mastra's model router. Authentication is handled automatically using the `DIGITALOCEAN_ACCESS_TOKEN` environment variable.
+Access 97 DigitalOcean models through Mastra's model router. Authentication is handled automatically using the `DIGITALOCEAN_ACCESS_TOKEN` environment variable.
 
 Learn more in the [DigitalOcean documentation](https://docs.digitalocean.com/products/gradient-ai-platform/details/models/).
 
@@ -370,6 +370,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.96
   },
   {
+    "model": "digitalocean/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "digitalocean/e5-large-v2",
     "imageInput": false,
     "audioInput": false,
@@ -558,8 +570,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": 0.2,
-    "outputCost": 0.696
+    "inputCost": 0.25,
+    "outputCost": 0.87
   },
   {
     "model": "digitalocean/llama3-8b-instruct",

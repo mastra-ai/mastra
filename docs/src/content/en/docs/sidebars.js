@@ -367,20 +367,9 @@ const sidebars = {
           },
           items: [
             {
-              type: 'category',
-              label: 'Tools & MCP',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'connections/mcp',
-                  label: 'MCP',
-                },
-                {
-                  type: 'doc',
-                  id: 'connections/connect-mcp-client',
-                  label: 'Connect your MCP client to Mastra (draft)',
-                },
-              ],
+              type: 'doc',
+              id: 'connections/mcp',
+              label: 'MCP',
             },
             {
               type: 'doc',
@@ -746,6 +735,14 @@ const sidebars = {
               id: 'guides/streaming',
               label: 'Streaming',
             },
+            {
+              type: 'doc',
+              id: 'guides/build-an-eval-loop',
+              label: 'Build an eval loop',
+              customProps: {
+                tags: ['new'],
+              },
+            },
           ],
         },
       ],
@@ -769,6 +766,11 @@ const sidebars = {
     },
     {
       type: 'doc',
+      id: 'mastra-platform/system-environment-variables',
+      label: 'System environment variables',
+    },
+    {
+      type: 'doc',
       id: 'mastra-platform/regions',
       label: 'Regions',
     },
@@ -776,6 +778,14 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/observability',
       label: 'Observability',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/alerts',
+      label: 'Alerts',
+      customProps: {
+        tags: ['new'],
+      },
     },
     {
       type: 'doc',

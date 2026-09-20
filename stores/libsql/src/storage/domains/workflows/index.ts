@@ -405,6 +405,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     page,
     perPage,
     resourceId,
+    threadId,
     status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
@@ -439,6 +440,18 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         } else {
           this.logger.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
+      }
+
+      if (threadId) {
+        // The thread id lives inside the snapshot JSON, in one of two layouts. This mirrors
+        // the canonical extraction in `@mastra/core` (`getSnapshotMemoryInfo`) and must stay
+        // in lockstep with it — otherwise rows the caller would match get wrongly excluded:
+        // 1. agentic-loop: under a dynamic suspended-step key, hence the json_each() scan
+        // 2. durable loop: under the serialized workflow input at a fixed path
+        conditions.push(
+          `(EXISTS (SELECT 1 FROM json_each(snapshot, '$.context') AS je WHERE json_extract(je.value, '$.status') = 'suspended' AND json_extract(je.value, '$.suspendPayload.__streamState.messageList.memoryInfo.threadId') = ?) OR json_extract(snapshot, '$.context.input.messageListState.memoryInfo.threadId') = ?)`,
+        );
+        args.push(threadId, threadId);
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

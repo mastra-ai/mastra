@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
+import { ScrollArea } from '../ScrollArea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
 
 const meta: Meta<typeof Collapsible> = {
@@ -113,5 +114,30 @@ export const MultipleCollapsibles: Story = {
         </CollapsibleContent>
       </Collapsible>
     </div>
+  ),
+};
+
+export const FillsConstrainedPanel: Story = {
+  render: () => (
+    <Collapsible
+      defaultOpen
+      className="border-border1 bg-surface2 flex h-64 w-[350px] flex-col overflow-hidden rounded-md border"
+    >
+      <CollapsibleTrigger className="text-neutral6 text-ui-md flex w-full shrink-0 items-center justify-between px-4 py-2 font-medium">
+        Recent runs
+        <ChevronDown className="size-4" />
+      </CollapsibleTrigger>
+      <CollapsibleContent fill className="flex min-h-0 flex-col">
+        <ScrollArea className="border-border1 min-h-0 flex-1 border-t">
+          <ul className="divide-border1 divide-y">
+            {Array.from({ length: 20 }, (_, index) => (
+              <li key={index} className="text-neutral5 text-ui-md px-4 py-2">
+                Run {index + 1}
+              </li>
+            ))}
+          </ul>
+        </ScrollArea>
+      </CollapsibleContent>
+    </Collapsible>
   ),
 };
