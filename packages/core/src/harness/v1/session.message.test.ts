@@ -14,7 +14,7 @@ import { z } from 'zod';
 
 import { Agent } from '../../agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import { HarnessStorageAdmissionConflictError } from '../../storage/domains/harness';
+import { HarnessStorageAdmissionConflictError, harnessTerminalIntentId } from '../../storage/domains/harness';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 
@@ -361,6 +361,63 @@ describe('Session.message() — default path', () => {
     expect(first.text).toBe('hello back');
     expect(second.text).toBe('hello back');
     expect(agent.calls).toHaveLength(1);
+  });
+
+  it('commits the caller seed, canonical result, and exact terminal intent through one native handoff', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const finalizerCalls: Array<{ seed: unknown; finalizerId: string; finalizerVersion: string }> = [];
+    const { harness, agent } = setupHarness({
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async input => {
+              finalizerCalls.push({
+                seed: input.seed,
+                finalizerId: input.finalizerId,
+                finalizerVersion: input.finalizerVersion,
+              });
+              return {
+                projectionKind: 'chat.summary',
+                projectionId: 'response-1',
+                payload: { seed: input.seed, terminalStatus: input.result.status },
+              };
+            },
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const seed = { collector: { responseId: 'response-1' }, schemaVersion: 2 };
+    const result = await session.message({
+      content: 'native terminal',
+      admissionId: 'native-terminal-admission',
+      executionAuthorityGrant: { key: 'usage-claim-1', generation: 7 },
+      terminalAdmissionSeed: seed,
+    });
+
+    expect(result.text).toBe('hello back');
+    expect(agent.calls).toHaveLength(1);
+    expect(finalizerCalls).toEqual([{ seed, finalizerId: 'doxa.chat', finalizerVersion: '2026-09-20' }]);
+    const intent = await storage.loadTerminalIntent({
+      harnessName: 'default',
+      intentId: harnessTerminalIntentId('native-terminal-admission'),
+    });
+    expect(intent).toMatchObject({
+      projection: {
+        projectionKind: 'chat.summary',
+        projectionId: 'response-1',
+        payload: { seed, terminalStatus: 'completed' },
+      },
+    });
+    expect(intent).toBeDefined();
+    await expect(session.lookupMessageResult(intent!.signalId)).resolves.toMatchObject({ status: 'completed' });
   });
 
   it('binds logical identity to the admitted message hash', async () => {
