@@ -1249,7 +1249,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
 
       it('preserves the first same-id attachment without overwriting', async () => {
         if (!harness) return;
-        await harness.saveAttachment({
+        const first = await harness.saveAttachment({
           sessionId: 'session-1',
           attachmentId: 'a1',
           name: 'first.txt',
@@ -1266,9 +1266,17 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
             source: 'preupload',
             data: new Uint8Array([2, 3]),
           })
-          .catch(error => {
-            expect(error?.code).toBe('harness.storage.attachment_conflict');
-          });
+          .then(
+            duplicate => {
+              // Adapters that tolerate duplicates must return the first
+              // save's identity, never the conflicting payload's.
+              expect(duplicate.sha256).toBe(first.sha256);
+              expect(duplicate.bytes).toBe(first.bytes);
+            },
+            error => {
+              expect(error?.code).toBe('harness.storage.attachment_conflict');
+            },
+          );
         const loaded = await harness.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' });
         expect(loaded?.name).toBe('first.txt');
         expect(Array.from(loaded?.data ?? [])).toEqual([1]);

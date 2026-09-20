@@ -404,10 +404,10 @@ export function assertHarnessAttachmentOwnerScope(owner: HarnessAttachmentOwnerS
 
 function normalizeOwner(owner: HarnessAttachmentOwnerScope): HarnessAttachmentOwnerScope {
   assertObject(owner, 'owner');
-  assertSafeText(owner.harnessName, 'owner.harnessName', MAX_SCOPE_COMPONENT_LENGTH);
-  assertSafeText(owner.sessionId, 'owner.sessionId', MAX_SCOPE_COMPONENT_LENGTH);
-  assertSafeText(owner.attachmentId, 'owner.attachmentId', MAX_SCOPE_COMPONENT_LENGTH);
-  assertSafeText(owner.incarnation, 'owner.incarnation', MAX_SCOPE_COMPONENT_LENGTH);
+  assertScopeComponent(owner.harnessName, 'owner.harnessName');
+  assertScopeComponent(owner.sessionId, 'owner.sessionId');
+  assertScopeComponent(owner.attachmentId, 'owner.attachmentId');
+  assertScopeComponent(owner.incarnation, 'owner.incarnation');
   return {
     harnessName: owner.harnessName,
     sessionId: owner.sessionId,
@@ -425,6 +425,23 @@ function normalizeSha256(value: string): string {
 
 function assertObject(value: unknown, field: string): asserts value is object {
   if (typeof value !== 'object' || value === null) {
+    throw new HarnessAttachmentByteOwnerInvalidInputError(field);
+  }
+}
+
+function assertScopeComponent(value: unknown, field: string): asserts value is string {
+  assertSafeText(value, field, MAX_SCOPE_COMPONENT_LENGTH);
+  // Components are URI-encoded into the derived reference, so reject values
+  // whose encoding throws (lone surrogates) or expands past the component
+  // bound — otherwise save would succeed while the derived reference exceeds
+  // the blobRef limit load and delete enforce, leaving bytes unaddressable.
+  let encoded: string;
+  try {
+    encoded = encodeSegment(value);
+  } catch {
+    throw new HarnessAttachmentByteOwnerInvalidInputError(field);
+  }
+  if (encoded.length > MAX_SCOPE_COMPONENT_LENGTH) {
     throw new HarnessAttachmentByteOwnerInvalidInputError(field);
   }
 }

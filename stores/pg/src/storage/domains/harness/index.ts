@@ -783,6 +783,14 @@ export class HarnessPG extends HarnessStorage {
       schema: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENT_OPERATIONS],
       compositePrimaryKey: attachmentOperationsConfig?.compositePrimaryKey,
     });
+    // PUT/DELETE inserts rely on ON CONFLICT over this exact scope tuple, so
+    // the unique index is correctness-critical rather than an optional
+    // performance index: create it even when skipDefaultIndexes is set. It
+    // stays in getDefaultIndexDefs so exported DDL still carries it.
+    const operationsScopeIndex = HarnessPG.getDefaultIndexDefs(this.#schemaPrefix()).find(
+      def => def.table === TABLE_HARNESS_ATTACHMENT_OPERATIONS && def.unique === true,
+    );
+    if (operationsScopeIndex) await this.#db.createIndex(operationsScopeIndex);
     await this.#ensureMessageResultsTable();
     await this.#ensureSessionEventsTable();
     await this.#ensureWorkspaceActionsTable();
@@ -856,7 +864,16 @@ export class HarnessPG extends HarnessStorage {
     // first external metadata commit can succeed. Legacy rows remain untouched
     // and require an explicit import/fence before they can be loaded.
     if (!this.#db.isExternalSchemaMode()) {
-      await this.#client.execute(`ALTER TABLE ${TABLE_HARNESS_ATTACHMENTS} ALTER COLUMN data_b64 DROP NOT NULL`);
+      // DROP NOT NULL still takes AccessExclusiveLock on an already-nullable
+      // column, so only alter when the catalog says the column is required.
+      const nullable = await this.#client.execute({
+        sql: `SELECT is_nullable FROM information_schema.columns
+              WHERE table_schema = ? AND table_name = ? AND column_name = ?`,
+        args: [this.#schema, TABLE_HARNESS_ATTACHMENTS, 'data_b64'],
+      });
+      if (nullable.rows[0]?.is_nullable === 'NO') {
+        await this.#client.execute(`ALTER TABLE ${TABLE_HARNESS_ATTACHMENTS} ALTER COLUMN data_b64 DROP NOT NULL`);
+      }
     }
     await this.#backfillHarnessNamespace();
     await this.#backfillPendingResumeExpiry();
@@ -2225,6 +2242,21 @@ export class HarnessPG extends HarnessStorage {
                 WHERE harness_name = ? AND session_id = ?`,
           args: [namespace, sessionId],
         });
+        // A deleteAttachment call may already have removed a metadata row
+        // while its external cleanup stayed unresolved. Collect those durable
+        // intents before staging new ones — a successful session delete must
+        // not abandon outstanding deletes just because the row is gone. This
+        // runs before the staging loop so freshly staged ops are not
+        // collected twice.
+        const outstandingDeletes = await tx.execute({
+          sql: `SELECT id
+                FROM ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
+                WHERE harness_name = ? AND session_id = ? AND kind = ?
+                  AND status NOT IN (?, ?)
+                ORDER BY created_at ASC, id ASC`,
+          args: [namespace, sessionId, 'delete', 'completed', 'cleaned'],
+        });
+        for (const row of outstandingDeletes.rows) attachmentCleanupOperationIds.push(String(row.id));
         const attachments = await tx.execute({
           sql: `SELECT * FROM ${TABLE_HARNESS_ATTACHMENTS}
                 WHERE harness_name = ? AND session_id = ? FOR UPDATE`,
@@ -4056,7 +4088,10 @@ export class HarnessPG extends HarnessStorage {
     }
     const { operation, claimId } = claim;
     if (!operation || operation.blobRef === undefined) {
-      await this.#markAttachmentOperationUnknown(operationId);
+      // The claim just taken makes the row 'claimed', so the transition must
+      // carry claimId — without it the update cannot match and the operation
+      // would spin claim/abandon instead of becoming unknown.
+      await this.#markAttachmentOperationUnknown(operationId, operation?.blobRef, claimId);
       if (throwOnUnknown)
         throw new HarnessStorageAttachmentPendingError(operation?.sessionId ?? '', operation?.attachmentId ?? '');
       return false;
@@ -9230,6 +9265,21 @@ function rowToAttachmentSemantic(row: Record<string, unknown>): AttachmentSemant
   return semantic;
 }
 
+// Attachment rows persist semantic exploded into typed columns with 'file'
+// as the kind default, so a retry must be compared against the same
+// normalized shape — otherwise omitting kind on an identical request reads
+// back as a conflict.
+function normalizeAttachmentSemantic(semantic: AttachmentSemanticMetadata | undefined): AttachmentSemanticMetadata {
+  const normalized: AttachmentSemanticMetadata = { kind: toAttachmentKind(semantic?.kind) };
+  if (semantic?.primitiveType != null) normalized.primitiveType = semantic.primitiveType;
+  if (semantic?.elementType != null) normalized.elementType = semantic.elementType;
+  if (semantic?.renderer != null) normalized.renderer = semantic.renderer;
+  if (semantic?.schemaId != null) normalized.schemaId = semantic.schemaId;
+  if (semantic?.metadata != null) normalized.metadata = semantic.metadata;
+  if (semantic?.object != null) normalized.object = semantic.object;
+  return normalized;
+}
+
 function rowToAttachmentOperation(row: Record<string, unknown>): PgAttachmentOperation {
   return {
     id: String(row.id),
@@ -9275,7 +9325,7 @@ function attachmentRowMatchesInput(
     Number(row.size_bytes) === input.bytes &&
     String(row.sha256) === input.sha256 &&
     String(row.session_incarnation ?? '') === input.incarnation &&
-    stableJson(rowToAttachmentSemantic(row)) === stableJson(input.semantic ?? { kind: 'file' })
+    stableJson(rowToAttachmentSemantic(row)) === stableJson(normalizeAttachmentSemantic(input.semantic))
   );
 }
 

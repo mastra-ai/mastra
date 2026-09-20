@@ -530,7 +530,10 @@ describe('HarnessPG native external attachment ownership', () => {
       initialLease: { ownerId: 'unsafe-owner', ttlMs: 60_000 },
     });
     const data = new TextEncoder().encode('unsafe identity');
-    for (const attachmentId of ['bad\nid', 'x'.repeat(600)]) {
+    // A lone surrogate breaks URI-encoding of the derived reference, and a
+    // multibyte id near the component bound expands past the encoded bound —
+    // either would persist an operation the owner can never address.
+    for (const attachmentId of ['bad\nid', 'x'.repeat(600), 'a\ud800', '汉'.repeat(500)]) {
       await expect(
         harness.saveAttachment({
           sessionId: session.id,
@@ -612,5 +615,105 @@ describe('HarnessPG native external attachment ownership', () => {
     );
     expect(finished.status).toBe('completed');
     await expect(harness.loadAttachment({ sessionId: session.id, attachmentId: 'stale-claim' })).resolves.toBeNull();
+  });
+
+  it('resumes an outstanding external delete when the session is deleted', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-orphan-delete',
+      resourceId: 'orphan-resource',
+      threadId: 'orphan-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'orphan-owner', ttlMs: 60_000 },
+    });
+    await harness.saveAttachment({
+      sessionId: session.id,
+      attachmentId: 'orphan',
+      name: 'orphan.txt',
+      mimeType: 'text/plain',
+      source: 'inline',
+      data: new TextEncoder().encode('orphan delete'),
+    });
+    // The first external delete resolves ambiguously: the metadata row is
+    // committed gone while the operation stays recoverable.
+    owner.unknownDeleteOnce = true;
+    await expect(harness.deleteAttachment({ sessionId: session.id, attachmentId: 'orphan' })).rejects.toBeInstanceOf(
+      HarnessStorageAttachmentPendingError,
+    );
+    // Session deletion must resume that intent instead of reporting success
+    // while external bytes remain.
+    await expect(harness.deleteSession({ sessionId: session.id })).resolves.toBeUndefined();
+    const operation = await store.db.one<{ status: string }>(
+      `SELECT status FROM "${schemaName}"."mastra_harness_attachment_operations"
+       WHERE kind = 'delete' AND session_id = $1 AND attachment_id = $2`,
+      [session.id, 'orphan'],
+    );
+    expect(operation.status).toBe('completed');
+  });
+
+  it('keeps identical saves idempotent when semantic defaults are persisted', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-semantic-retry',
+      resourceId: 'semantic-resource',
+      threadId: 'semantic-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'semantic-owner', ttlMs: 60_000 },
+    });
+    const input = {
+      sessionId: session.id,
+      attachmentId: 'semantic-retry',
+      name: 'semantic.txt',
+      mimeType: 'text/plain',
+      source: 'inline' as const,
+      data: new TextEncoder().encode('semantic retry'),
+      semantic: { metadata: { label: 'a' } },
+    };
+    await expect(harness.saveAttachment(input)).resolves.toMatchObject({ attachmentId: 'semantic-retry' });
+    // The stored row carries kind: 'file'; the same logical request must not
+    // conflict just because the caller omitted the default.
+    await expect(harness.saveAttachment(input)).resolves.toMatchObject({ attachmentId: 'semantic-retry' });
+  });
+
+  it('saves attachments when optional default indexes are skipped', async () => {
+    const altSchema = `pf4267_noidx_${randomUUID().replaceAll('-', '_')}`;
+    const altStore = new PostgresStore({
+      ...TEST_CONFIG,
+      id: 'pg-harness-native-attachment-noidx',
+      schemaName: altSchema,
+      enabledDomains: ['harness'],
+      sessionRecordProjection: { enabled: true, maxAttempts: 1, maxPendingIntents: 20 },
+      attachmentByteOwner: new UnknownDeleteOnceOwner(),
+      skipDefaultIndexes: true,
+    });
+    try {
+      await altStore.init();
+      const altHarness = altStore.stores.harness!;
+      const session = createSampleSessionRecord({
+        id: 'noidx-session',
+        resourceId: 'noidx-resource',
+        threadId: 'noidx-thread',
+      });
+      await altHarness.createOrLoadActiveSession(session, {
+        initialLease: { ownerId: 'noidx-owner', ttlMs: 60_000 },
+      });
+      // The ON CONFLICT scope uniqueness is correctness-critical, not an
+      // optional index: saving must work even without default indexes.
+      await expect(
+        altHarness.saveAttachment({
+          sessionId: session.id,
+          attachmentId: 'noidx-attachment',
+          name: 'noidx.txt',
+          mimeType: 'text/plain',
+          source: 'inline',
+          data: new TextEncoder().encode('no default indexes'),
+        }),
+      ).resolves.toMatchObject({ attachmentId: 'noidx-attachment' });
+    } finally {
+      await altStore.db.none(`DROP SCHEMA IF EXISTS "${altSchema}" CASCADE`).catch(() => {});
+      await altStore.close();
+    }
   });
 });

@@ -3,14 +3,16 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import {
-  HarnessAttachmentByteOwner,
   HarnessAttachmentByteOwnerConflictError,
   HarnessAttachmentByteOwnerIntegrityError,
   HarnessAttachmentByteOwnerInvalidInputError,
   HarnessAttachmentByteOwnerLimitError,
+  InMemoryHarnessAttachmentByteOwner,
+} from './attachment-byte-owner';
+import type {
+  HarnessAttachmentByteOwner,
   HarnessAttachmentByteOwnerLoadInput,
   HarnessAttachmentByteOwnerSaveInput,
-  InMemoryHarnessAttachmentByteOwner,
   InMemoryHarnessAttachmentObject,
 } from './attachment-byte-owner';
 
