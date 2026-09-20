@@ -16,6 +16,10 @@ function actorUsername(context: Pick<FactoryGitLabRuleContext, 'actor'>): string
   return context.actor.type === 'gitlab' ? context.actor.username : undefined;
 }
 
+function trustedGitLabActor(context: Pick<FactoryGitLabRuleContext, 'actor'>): boolean {
+  return context.actor.type === 'gitlab' && context.actor.trusted;
+}
+
 function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: string): boolean {
   if (!createdAt) return false;
   const sourceCreatedAt = Date.parse(createdAt);
@@ -45,7 +49,9 @@ function issueOpened(context: FactoryGitLabRuleContext) {
         : {}),
       authorTrusted: context.issue.authorTrusted,
       autoStartCandidate:
-        context.issue.authorTrusted && createdAfterFactory(context.issue.createdAt, context.factory.createdAt),
+        trustedGitLabActor(context) &&
+        context.issue.authorTrusted &&
+        createdAfterFactory(context.issue.createdAt, context.factory.createdAt),
       assignees: context.issue.assignees ?? [],
       labels: context.issue.labels ?? [],
       labelColors: context.issue.labelColors ?? {},
@@ -99,7 +105,7 @@ function materializeMergeRequest(context: FactoryGitLabRuleContext) {
       factoryAuthored: context.mergeRequest.factoryAuthored,
       authorTrusted: context.mergeRequest.authorTrusted,
       autoStartCandidate:
-        (context.mergeRequest.authorTrusted || context.mergeRequest.factoryAuthored) &&
+        ((trustedGitLabActor(context) && context.mergeRequest.authorTrusted) || context.mergeRequest.factoryAuthored) &&
         createdAfterFactory(context.mergeRequest.createdAt, context.factory.createdAt),
       state: context.mergeRequest.state,
       draft: context.mergeRequest.draft,

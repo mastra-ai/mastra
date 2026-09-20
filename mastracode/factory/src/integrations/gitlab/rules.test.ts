@@ -275,7 +275,7 @@ describe('GitLabRules', () => {
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       {
         actor: { username: 'external-editor', trusted: false },
-        decision: { metadata: { author: 'maintainer', authorTrusted: true } },
+        decision: { metadata: { author: 'maintainer', authorTrusted: true, autoStartCandidate: false } },
       },
     ]);
   });
@@ -333,6 +333,30 @@ describe('GitLabRules', () => {
     expect(gitlab.getWorkItemAuthorUsername).not.toHaveBeenCalled();
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { metadata: { author: 'maintainer', authorTrusted: true } } },
+    ]);
+  });
+  it('does not auto-start a trusted MR author when an untrusted actor sends the webhook', async () => {
+    const { seeded, project, gitlab, service } = await setup();
+    vi.mocked(gitlab.getProjectMemberAccessLevel).mockImplementation(async (_connectionId, _projectId, username) =>
+      username === 'maintainer' ? 40 : 10,
+    );
+    const event = mergeRequestOpened('mr-untrusted-actor');
+    const { author: _author, ...attributes } = event.payload.object_attributes;
+    await expect(service.ingest({
+      ...event,
+      payload: {
+        ...event.payload,
+        user_username: 'external-editor',
+        user: { id: 8, username: 'external-editor' },
+        object_attributes: { ...attributes, author_id: 7 },
+      },
+    })).resolves.toEqual({ status: 'committed' });
+    expect(gitlab.getWorkItemAuthorUsername).toHaveBeenCalledWith('direct', PROJECT_ID, 'merge_request', 17);
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      {
+        actor: { username: 'external-editor', trusted: false },
+        decision: { metadata: { author: 'maintainer', authorTrusted: true, autoStartCandidate: false } },
+      },
     ]);
   });
   it('does not trust a merge-request author merely because the webhook sender is trusted', async () => {
