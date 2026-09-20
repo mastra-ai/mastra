@@ -151,33 +151,38 @@ describe('KnowledgeImportersSection', () => {
   });
 
   describe('feature on with existing connections', () => {
-    it('shows the account label when Notion has one active connection', async () => {
+    it('shows the account label and no Connect button when Notion has one active connection', async () => {
       useFeaturesHandler(true);
       useConnectionHandlers({
         notion: [{ id: 'notion-1', integrationId: 'notion', status: 'active', accountLabel: 'acme-workspace' }],
       });
       renderSection();
 
-      // Notion row exposes the account label as its description AND in the
-      // per-connection list — matching both is intentional (label under the
-      // provider name, listed connection below).
-      const labelMatches = await screen.findAllByText('acme-workspace');
-      expect(labelMatches.length).toBeGreaterThanOrEqual(1);
+      // Notion row lists the account label. That's the only signal — no
+      // "Connected" pill, no redundant status copy.
+      expect(await screen.findByText('acme-workspace')).toBeInTheDocument();
+      // With an active connection there is no per-card Connect button — the
+      // presence of a listed account is what conveys the connected state.
+      expect(screen.queryByRole('button', { name: 'Connect Notion' })).toBeNull();
       // Other providers unaffected.
       expect(await screen.findByRole('button', { name: 'Connect Confluence' })).toBeInTheDocument();
     });
 
-    it('surfaces "Needs reauthorization" when a Zendesk connection is stale', async () => {
+    it('lists a stale Zendesk connection with a Reconnect button and no Connect fallback', async () => {
       useFeaturesHandler(true);
       useConnectionHandlers({
         zendesk: [{ id: 'zd-1', integrationId: 'zendesk', status: 'needs_reauth', accountLabel: 'acme.zendesk.com' }],
       });
       renderSection();
 
-      // The reconnect state surfaces prominently in the per-connection list.
-      expect(await screen.findByText(/Needs reauthorization/i)).toBeInTheDocument();
-      // The connection is still listed by its account label.
+      // The stale connection is listed by its account label — no explicit
+      // "Needs reauthorization" copy on the card; the Reconnect action is
+      // the signal.
       expect(await screen.findByText('acme.zendesk.com')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /Reconnect/i })).toBeInTheDocument();
+      // No Connect Zendesk button because the provider is already connected
+      // (even if the connection needs reauthorization).
+      expect(screen.queryByRole('button', { name: 'Connect Zendesk' })).toBeNull();
     });
   });
 
