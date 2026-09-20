@@ -1,8 +1,21 @@
 import { parseMemoryRequestContext } from '@mastra/core/memory';
+import { convertSchemaToZod } from '@mastra/schema-compat';
+import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import { z } from 'zod';
 
 import { Extractor } from './extractor';
 import type { ExtractorRuntimeContext } from './extractor';
+
+function toExtractorSchema(schema: unknown): z.ZodType<Record<string, unknown>> {
+  if (typeof schema === 'object' && schema !== null && '_zod' in schema) {
+    return schema as z.ZodType<Record<string, unknown>>;
+  }
+
+  const jsonSchema = standardSchemaToJSONSchema(toStandardSchema(schema as never));
+  return convertSchemaToZod(jsonSchema as Parameters<typeof convertSchemaToZod>[0]) as z.ZodType<
+    Record<string, unknown>
+  >;
+}
 
 async function getWorkingMemoryDetails(context: ExtractorRuntimeContext): Promise<{
   template?: string;
@@ -68,7 +81,15 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
       instructions: async context => buildWorkingMemoryInstructions(await getWorkingMemoryDetails(context)),
       schema: async context => {
         const details = await getWorkingMemoryDetails(context);
-        return details.usesSchema ? z.union([z.record(z.string(), z.unknown()), z.null()]) : undefined;
+        const memoryConfig = parseMemoryRequestContext(context.requestContext)?.memoryConfig;
+        const config = context.memory!.getMergedThreadConfig(memoryConfig ?? {});
+        const workingMemorySchema = config.workingMemory?.schema;
+        if (!details.usesSchema || !workingMemorySchema) {
+          return undefined;
+        }
+
+        const schema = toExtractorSchema(workingMemorySchema);
+        return z.union([schema, z.null()]) as z.ZodType<string | Record<string, unknown> | null>;
       },
       onExtracted: async ({ current, memory, threadId, resourceId, requestContext }) => {
         const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;

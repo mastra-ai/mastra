@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { z as z3 } from 'zod/v3';
 
 import { composeObservationExtractors, composeReflectionExtractors } from '../built-in-extractors';
 import {
@@ -275,7 +276,17 @@ describe('Extractor', () => {
 
   it('replaces JSON working memory from the working memory extractor', async () => {
     const memory = {
-      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getMergedThreadConfig: vi.fn(() => ({
+        workingMemory: {
+          enabled: true,
+          schema: {
+            type: 'object',
+            properties: { location: { type: 'string' } },
+            required: ['location'],
+            additionalProperties: false,
+          },
+        },
+      })),
       getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
       getWorkingMemory: vi.fn(async () => '{"name":"Tyler","likes":["dogs"]}'),
       updateWorkingMemory: vi.fn(async () => undefined),
@@ -311,6 +322,71 @@ describe('Extractor', () => {
     });
     expect(result.values).toEqual({ 'working-memory': { location: 'Toronto' } });
     expect(buildThreadMetadataFromExtractedValues([resolved!], result.values)).toEqual({});
+  });
+
+  it('normalizes Zod v3 working memory schemas for extraction', async () => {
+    const schema = z3.strictObject({ status: z3.enum(['active', 'paused']) });
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{}' })),
+      getWorkingMemory: vi.fn(async () => '{"status":"active"}'),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    } as any;
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(resolved?.schema.safeParse({ status: 'active' }).success).toBe(true);
+    expect(resolved?.schema.safeParse({ status: 'invalid' }).success).toBe(false);
+  });
+
+  it('rejects invalid JSON working memory before persistence', async () => {
+    const schema = z.strictObject({
+      preferredColor: z.enum(['blue', 'green']),
+      budget: z.number().nullable(),
+    });
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{}' })),
+      getWorkingMemory: vi.fn(async () => '{"preferredColor":"blue","budget":100}'),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    } as any;
+    const extractor = new WorkingMemoryExtractor();
+    const [resolved] = await resolveExtractors([extractor], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const stream = vi.fn().mockResolvedValue({
+      object: Promise.resolve({
+        'working-memory': { preferredColor: 'red', budget: 200 },
+      }),
+    });
+
+    const extraction = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [resolved!],
+    });
+
+    expect(extraction.values).toEqual({});
+    expect(extraction.failures).toHaveLength(1);
+    expect(extraction.failures[0]?.slug).toBe('working-memory');
+
+    await applyExtractorHooks({
+      source: 'observer',
+      extractors: [resolved!],
+      values: extraction.values,
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
   });
 
   it('skips JSON working memory updates when the extractor returns null', async () => {
