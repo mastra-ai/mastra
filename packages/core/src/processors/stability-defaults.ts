@@ -1,7 +1,7 @@
-import type { ErrorProcessorOrWorkflow } from './index';
 import { PrefillErrorHandler } from './prefill-error-handler';
 import { ProviderHistoryCompat } from './provider-history-compat';
 import { isBadRequestError, StreamErrorRetryProcessor } from './stream-error-retry-processor';
+import type { ErrorProcessorOrWorkflow } from './index';
 
 /**
  * Retry policy for transient network resets (e.g. provider sockets dropping
@@ -65,6 +65,14 @@ export const STABILITY_ERROR_PROCESSOR_IDS = [
  * - transient stream/connection failures — including a bare `500`/`isRetryable`
  *   error that would otherwise surface as an empty response.
  *
+ * The retry processor keeps `retryUnknownErrors` off. Transient failures carry
+ * provider `isRetryable` metadata or match the built-in matchers, so the three
+ * classes above still recover, while a deterministic failure — a rejected
+ * structured-output attempt, an invalid request, a validation error — is not
+ * replayed twice with a 3s delay before the caller sees it. Pass a
+ * `StreamErrorRetryProcessor({ retryUnknownErrors: true })` in
+ * `errorProcessors` to opt back in.
+ *
  * A caller-supplied processor whose id matches one of these keeps its place at
  * that id's position; `errorProcessors: []` opts out entirely.
  *
@@ -76,7 +84,7 @@ export function defaultStabilityErrorProcessors(): ErrorProcessorOrWorkflow[] {
     new ProviderHistoryCompat(),
     new PrefillErrorHandler(),
     new StreamErrorRetryProcessor({
-      retryUnknownErrors: true,
+      retryUnknownErrors: false,
       maxRetries: 2,
       delayMs: 3000,
       matchers: [
