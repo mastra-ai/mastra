@@ -392,6 +392,16 @@ function normalizeCancelInput(input: HarnessAttachmentByteOwnerCancelInput): {
   };
 }
 
+/**
+ * Validates the owner-scope fields a byte owner will be asked to address.
+ * Native storage adapters call this before persisting a durable upload or
+ * cleanup operation so an identity the owner contract can never address fails
+ * fast instead of wedging a ledger row that reconciliation cannot resolve.
+ */
+export function assertHarnessAttachmentOwnerScope(owner: HarnessAttachmentOwnerScope): void {
+  normalizeOwner(owner);
+}
+
 function normalizeOwner(owner: HarnessAttachmentOwnerScope): HarnessAttachmentOwnerScope {
   assertObject(owner, 'owner');
   assertSafeText(owner.harnessName, 'owner.harnessName', MAX_SCOPE_COMPONENT_LENGTH);

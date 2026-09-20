@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { createSampleSessionRecord } from '@internal/storage-test-utils';
 import {
+  HarnessAttachmentByteOwnerInvalidInputError,
   HarnessStorageAttachmentConflictError,
   HarnessStorageAttachmentInUseError,
   HarnessStorageAttachmentPendingError,
@@ -29,9 +30,14 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
   #saveStarted: (() => void) | undefined;
   #saveRelease: (() => void) | undefined;
   #saveStartedPromise: Promise<void> | undefined;
-  #deleteStarted: (() => void) | undefined;
-  #deleteRelease: (() => void) | undefined;
-  #deleteStartedPromise: Promise<void> | undefined;
+  #deleteGates: {
+    markStarted: () => void;
+    started: Promise<void>;
+    released: Promise<void>;
+    markReleased: () => void;
+    startedFired: boolean;
+    releasedFired: boolean;
+  }[] = [];
   #cancelStarted: (() => void) | undefined;
   #cancelRelease: (() => void) | undefined;
   #cancelStartedPromise: Promise<void> | undefined;
@@ -56,19 +62,33 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
   }
 
   pauseNextDelete(): void {
-    this.#deleteStartedPromise = new Promise(resolve => {
-      this.#deleteStarted = resolve;
-    });
-    this.#deleteRelease = undefined;
+    let start!: () => void;
+    let release!: () => void;
+    const gate = {
+      started: new Promise<void>(resolve => (start = resolve)),
+      released: new Promise<void>(resolve => (release = resolve)),
+      startedFired: false,
+      releasedFired: false,
+      markStarted() {
+        gate.startedFired = true;
+        start();
+      },
+      markReleased() {
+        gate.releasedFired = true;
+        release();
+      },
+    };
+    this.#deleteGates.push(gate);
   }
 
   async waitForDeleteStarted(): Promise<void> {
-    await this.#deleteStartedPromise;
+    const gate = this.#deleteGates.find(g => !g.startedFired);
+    if (!gate) throw new Error('no paused delete is armed');
+    await gate.started;
   }
 
   releaseDelete(): void {
-    this.#deleteRelease?.();
-    this.#deleteRelease = undefined;
+    this.#deleteGates.find(g => g.startedFired && !g.releasedFired)?.markReleased();
   }
 
   pauseNextCancel(): void {
@@ -113,12 +133,10 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
   }
 
   async delete(input: HarnessAttachmentByteOwnerDeleteInput): Promise<HarnessAttachmentByteOwnerDeleteResult> {
-    if (this.#deleteStarted !== undefined) {
-      this.#deleteStarted();
-      this.#deleteStarted = undefined;
-      await new Promise<void>(resolve => {
-        this.#deleteRelease = resolve;
-      });
+    const gate = this.#deleteGates.find(g => !g.startedFired);
+    if (gate) {
+      gate.markStarted();
+      await gate.released;
     }
     if (this.unknownDeleteOnce) {
       this.unknownDeleteOnce = false;
@@ -499,5 +517,100 @@ describe('HarnessPG native external attachment ownership', () => {
       pending: 0,
     });
     await expect(harness.deleteSession({ sessionId: session.id })).resolves.toBeUndefined();
+  });
+
+  it('rejects owner-unaddressable attachment identities without persisting an operation', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-attachment-unsafe',
+      resourceId: 'unsafe-resource',
+      threadId: 'unsafe-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'unsafe-owner', ttlMs: 60_000 },
+    });
+    const data = new TextEncoder().encode('unsafe identity');
+    for (const attachmentId of ['bad\nid', 'x'.repeat(600)]) {
+      await expect(
+        harness.saveAttachment({
+          sessionId: session.id,
+          attachmentId,
+          name: 'unsafe.txt',
+          mimeType: 'text/plain',
+          source: 'inline',
+          data,
+        }),
+      ).rejects.toBeInstanceOf(HarnessAttachmentByteOwnerInvalidInputError);
+    }
+    const operations = await store.db.any(
+      `SELECT id FROM "${schemaName}"."mastra_harness_attachment_operations" WHERE session_id = $1`,
+      [session.id],
+    );
+    expect(operations).toHaveLength(0);
+    // No durable operation exists, so teardown is not fenced by it.
+    await expect(harness.deleteSession({ sessionId: session.id })).resolves.toBeUndefined();
+  });
+
+  it('keeps a fresher delete claim when a stale claimant reports unknown', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-attachment-claim',
+      resourceId: 'claim-resource',
+      threadId: 'claim-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'claim-owner', ttlMs: 60_000 },
+    });
+    await harness.saveAttachment({
+      sessionId: session.id,
+      attachmentId: 'stale-claim',
+      name: 'stale.txt',
+      mimeType: 'text/plain',
+      source: 'inline',
+      data: new TextEncoder().encode('stale claim'),
+    });
+
+    owner.pauseNextDelete();
+    const firstDelete = harness.deleteAttachment({ sessionId: session.id, attachmentId: 'stale-claim' });
+    await owner.waitForDeleteStarted();
+    // Age the first claim out so a second reconciler legitimately reclaims it.
+    await store.db.none(
+      `UPDATE "${schemaName}"."mastra_harness_attachment_operations"
+       SET claim_expires_at = 0 WHERE kind = 'delete' AND attachment_id = $1`,
+      ['stale-claim'],
+    );
+    owner.pauseNextDelete();
+    const secondSweep = harness.reconcileAttachmentOperations({ now: Date.now() + 61_000 });
+    await owner.waitForDeleteStarted();
+    const liveClaim = await store.db.one<{ status: string; claim_id: string | null }>(
+      `SELECT status, claim_id FROM "${schemaName}"."mastra_harness_attachment_operations"
+       WHERE kind = 'delete' AND attachment_id = $1`,
+      ['stale-claim'],
+    );
+    expect(liveClaim.status).toBe('claimed');
+    expect(liveClaim.claim_id).not.toBeNull();
+
+    // The expired claimant now resolves as unknown; it must not clear the
+    // fresher claim or reset the operation underneath it.
+    owner.unknownDeleteOnce = true;
+    owner.releaseDelete();
+    await expect(firstDelete).rejects.toBeInstanceOf(HarnessStorageAttachmentPendingError);
+    const afterStale = await store.db.one<{ status: string; claim_id: string | null }>(
+      `SELECT status, claim_id FROM "${schemaName}"."mastra_harness_attachment_operations"
+       WHERE kind = 'delete' AND attachment_id = $1`,
+      ['stale-claim'],
+    );
+    expect(afterStale.status).toBe('claimed');
+    expect(afterStale.claim_id).toBe(liveClaim.claim_id);
+
+    owner.releaseDelete();
+    await expect(secondSweep).resolves.toMatchObject({ processed: 1, pending: 0 });
+    const finished = await store.db.one<{ status: string }>(
+      `SELECT status FROM "${schemaName}"."mastra_harness_attachment_operations"
+       WHERE kind = 'delete' AND attachment_id = $1`,
+      ['stale-claim'],
+    );
+    expect(finished.status).toBe('completed');
+    await expect(harness.loadAttachment({ sessionId: session.id, attachmentId: 'stale-claim' })).resolves.toBeNull();
   });
 });

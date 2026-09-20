@@ -65,6 +65,7 @@ import {
   projectHarnessSessionRecordProjectionFence,
   walkPlanTaskSubtree,
   HarnessAttachmentByteOwnerIntegrityError,
+  assertHarnessAttachmentOwnerScope,
 } from '@mastra/core/storage';
 import type {
   AcquireSessionLeaseInput,
@@ -2991,6 +2992,10 @@ export class HarnessPG extends HarnessStorage {
     const reservation = await this.#client.transaction('write');
     try {
       incarnation = await this.#attachmentSessionIncarnationTx(reservation, namespace, sessionId);
+      // Reject identities the byte-owner contract can never address before a
+      // durable PUT exists; otherwise the operation could never reconcile and
+      // would fence session deletion forever.
+      assertHarnessAttachmentOwnerScope({ harnessName: namespace, sessionId, attachmentId, incarnation });
       const existingResult = await reservation.execute({
         sql: `SELECT *
               FROM ${TABLE_HARNESS_ATTACHMENTS}
@@ -3794,6 +3799,15 @@ export class HarnessPG extends HarnessStorage {
       blobRef: string;
     },
   ): Promise<PgAttachmentOperation> {
+    // Same pre-flight as the PUT path: a stored identity the byte-owner
+    // contract cannot address must fail here rather than persist a cleanup
+    // operation that can never reconcile.
+    assertHarnessAttachmentOwnerScope({
+      harnessName: input.namespace,
+      sessionId: input.sessionId,
+      attachmentId: input.attachmentId,
+      incarnation: input.incarnation,
+    });
     const existing = await this.#loadAttachmentOperationTx(
       tx,
       input.namespace,
@@ -3885,10 +3899,16 @@ export class HarnessPG extends HarnessStorage {
   }
 
   async #markAttachmentOperationUnknown(operationId: string, blobRef?: string, claimId?: string): Promise<void> {
+    // A caller holding an expired claim must not clear a fresher claim: the
+    // first disjunct excludes every claimed row, the second admits only this
+    // exact claim. Terminal transitions stay claim-gated either way, but
+    // without the exclusion a stale holder would silently discard live work.
     const claimCondition =
-      claimId === undefined ? 'status NOT IN (?, ?, ?)' : '(status NOT IN (?, ?) OR (status = ? AND claim_id = ?))';
+      claimId === undefined ? 'status NOT IN (?, ?, ?)' : '(status NOT IN (?, ?, ?) OR (status = ? AND claim_id = ?))';
     const claimArgs =
-      claimId === undefined ? ['completed', 'cleaned', 'claimed'] : ['completed', 'cleaned', 'claimed', claimId];
+      claimId === undefined
+        ? ['completed', 'cleaned', 'claimed']
+        : ['completed', 'cleaned', 'claimed', 'claimed', claimId];
     await this.#client.execute({
       sql: `UPDATE ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
             SET status = ?, blob_ref = COALESCE(?, blob_ref), claim_id = NULL,
