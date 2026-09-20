@@ -101,7 +101,7 @@ function mergeRequestNote(deliveryId = 'delivery-mr-note') {
 }
 
 async function setup(
-  options: { selected?: boolean; accessLevel?: number; duplicateInstallation?: boolean; installationHost?: string } = {},
+  options: { selected?: boolean; accessLevel?: number; duplicateInstallation?: boolean; installationHost?: string; platformOnly?: boolean } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
   const sourceControl = seeded.sourceControl.forIntegration('gitlab');
@@ -143,7 +143,7 @@ async function setup(
     });
   }
 
-  await link('direct');
+  await link(options.platformOnly ? 'platform-connection' : 'direct');
   if (options.duplicateInstallation) await link('platform-connection');
   await seeded.intake.saveConfig({
     orgId: 'org-1',
@@ -167,6 +167,9 @@ async function setup(
     rules: resolveGitLabRules(),
     getProjectMemberAccessLevel: vi.fn().mockResolvedValue(options.accessLevel ?? 40),
     getWorkItemAuthorUsername: vi.fn().mockResolvedValue('maintainer'),
+    resolveActiveConnectionForHost: vi.fn().mockImplementation(async (connectionId: string, host: string) =>
+      options.platformOnly && host === 'gitlab.example.com' ? 'direct' : connectionId,
+    ),
   };
   const service = new GitLabRules({
     gitlab,
@@ -234,6 +237,19 @@ describe('GitLabRules', () => {
     await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
     expect(gitlab.getProjectMemberAccessLevel).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a same-host direct token for trusted webhook actors on a Platform-era link', async () => {
+    const { seeded, project, gitlab, service } = await setup({ platformOnly: true });
+    vi.mocked(gitlab.getProjectMemberAccessLevel).mockImplementation(async connectionId => {
+      if (connectionId !== 'direct') throw new Error('Platform credential is unavailable');
+      return 40;
+    });
+    await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
+    expect(gitlab.getProjectMemberAccessLevel).toHaveBeenCalledWith('direct', PROJECT_ID, 'maintainer');
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { actor: { trusted: true }, decision: { metadata: { authorTrusted: true, autoStartCandidate: true } } },
+    ]);
   });
 
   it('fails actor trust closed when GitLab membership cannot be resolved', async () => {

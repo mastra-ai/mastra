@@ -126,6 +126,7 @@ async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
 
 export interface GitLabRulesIntegration {
   readonly rules: GitLabEventRules;
+  resolveActiveConnectionForHost?(storedConnectionId: string, host: string): Promise<string>;
   getProjectMemberAccessLevel(connectionId: string, projectId: string, username: string): Promise<number | undefined>;
   getWorkItemAuthorUsername(
     connectionId: string,
@@ -232,6 +233,16 @@ export class GitLabRules {
     const board = this.options.boards.get(binding.board ?? 'work');
     if (!board) return { status: 'ignored' };
 
+    const connectionIds = [
+      ...new Set(
+        await Promise.all(
+          target.connectionIds.map(connectionId =>
+            this.options.gitlab.resolveActiveConnectionForHost?.(connectionId, host) ?? connectionId,
+          ),
+        ),
+      ),
+    ];
+
     const attributes = object(parsed.payload.object_attributes);
     const issue = parsed.event === 'Note Hook' ? object(parsed.payload.issue) : attributes;
     const mergeRequest = parsed.event === 'Note Hook' ? object(parsed.payload.merge_request) : attributes;
@@ -259,7 +270,7 @@ export class GitLabRules {
             Object.values(item.sessions).some(session => session.branch === headBranch),
         )
       : undefined;
-    const actorTrusted = await this.#trusted(target.connectionIds, String(projectId), username);
+    const actorTrusted = await this.#trusted(connectionIds, String(projectId), username);
     const eventUserId = number(object(parsed.payload.user)?.id) ?? number(parsed.payload.user_id);
     const resolveAuthor = async (
       item: Record<string, unknown> | undefined,
@@ -270,7 +281,7 @@ export class GitLabRules {
       const embedded = string(object(item.author)?.username);
       if (embedded) return embedded;
       if (eventUserId && eventUserId === number(item.author_id)) return username;
-      for (const connectionId of target.connectionIds) {
+      for (const connectionId of connectionIds) {
         try {
           const resolved = await this.options.gitlab.getWorkItemAuthorUsername(
             connectionId,
@@ -293,7 +304,7 @@ export class GitLabRules {
       if (!author) return false;
       return author === username
         ? actorTrusted
-        : this.#trusted(target.connectionIds, String(projectId), author);
+        : this.#trusted(connectionIds, String(projectId), author);
     };
     const [issueAuthorTrusted, mergeRequestAuthorTrusted] = await Promise.all([
       authorTrusted(issueAuthor),
