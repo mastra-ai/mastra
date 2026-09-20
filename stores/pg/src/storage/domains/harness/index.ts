@@ -20,6 +20,11 @@ import {
   HarnessStoragePlanTaskVersionConflictError,
   HarnessStorageProviderCallbackBindingTransitionError,
   HarnessStorageSessionNotFoundError,
+  HarnessStorageSessionRecordProjectionUnsupportedError,
+  HarnessStorageSessionProjectionBackpressureError,
+  HarnessStorageSessionProjectionClaimConflictError,
+  HarnessStorageSessionProjectionIncarnationError,
+  HarnessStorageSessionProjectionIdentityError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
   HarnessStorageWakeupClaimConflictError,
@@ -36,6 +41,9 @@ import {
   TABLE_HARNESS_OPERATION_TOMBSTONES,
   TABLE_HARNESS_PLAN_TASKS,
   TABLE_HARNESS_RUN_SUMMARIES,
+  TABLE_HARNESS_SESSION_PROJECTION_FENCES,
+  TABLE_HARNESS_SESSION_PROJECTION_INTENTS,
+  TABLE_HARNESS_SESSION_PROJECTION_PRESSURE,
   TABLE_HARNESS_PROVIDER_CALLBACK_BINDINGS,
   TABLE_HARNESS_SESSION_EVENTS,
   TABLE_HARNESS_SESSIONS,
@@ -48,6 +56,8 @@ import {
   decodePlanTaskCursor,
   encodePlanTaskCursor,
   normalizePendingInteractionDueScanInput,
+  buildHarnessSessionRecordProjectionIntent,
+  projectHarnessSessionRecordProjectionFence,
   walkPlanTaskSubtree,
 } from '@mastra/core/storage';
 import type {
@@ -136,6 +146,15 @@ import type {
   CompareAndSwapSignalTerminalInput,
   CompareAndSwapSignalTerminalResult,
   WriteMessageResultEvidenceResult,
+  AckSessionRecordProjectionInput,
+  AckSessionRecordProjectionResult,
+  ClaimSessionRecordProjectionIntentsInput,
+  FailSessionRecordProjectionInput,
+  HarnessSessionRecordProjectionFence,
+  HarnessSessionRecordProjectionIntent,
+  RenewSessionRecordProjectionClaimInput,
+  SessionRecordProjectionQueuePressure,
+  SessionRecordProjectionQueuePressureInput,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
@@ -166,6 +185,9 @@ const HARNESS_TABLE_NAMES = [
   TABLE_HARNESS_WORKSPACE_ACTIONS,
   TABLE_HARNESS_PLAN_TASKS,
   TABLE_HARNESS_RUN_SUMMARIES,
+  TABLE_HARNESS_SESSION_PROJECTION_INTENTS,
+  TABLE_HARNESS_SESSION_PROJECTION_FENCES,
+  TABLE_HARNESS_SESSION_PROJECTION_PRESSURE,
 ] as const;
 
 class PgHarnessClient {
@@ -528,6 +550,17 @@ function harnessIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
       table: TABLE_HARNESS_PLAN_TASKS,
       columns: ['harness_name', 'session_id', 'idempotency_key'],
     },
+    {
+      name: harnessIndexName(schemaPrefix, 'idx_harness_session_projection_claim'),
+      table: TABLE_HARNESS_SESSION_PROJECTION_INTENTS,
+      columns: ['harness_name', 'status', 'next_attempt_at', 'created_at'],
+    },
+    {
+      name: harnessIndexName(schemaPrefix, 'idx_harness_session_projection_order'),
+      table: TABLE_HARNESS_SESSION_PROJECTION_INTENTS,
+      columns: ['harness_name', 'session_id', 'session_incarnation', 'revision'],
+      unique: true,
+    },
   ];
 }
 
@@ -590,17 +623,25 @@ export class HarnessPG extends HarnessStorage {
     TABLE_HARNESS_WORKSPACE_ACTIONS,
     TABLE_HARNESS_PLAN_TASKS,
     TABLE_HARNESS_RUN_SUMMARIES,
+    TABLE_HARNESS_SESSION_PROJECTION_INTENTS,
+    TABLE_HARNESS_SESSION_PROJECTION_FENCES,
+    TABLE_HARNESS_SESSION_PROJECTION_PRESSURE,
   ] as const;
 
   constructor(config: PgDomainConfig & { harnessName?: string }) {
-    super();
-    const { client, schemaName, disableInit, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    const resolved = resolvePgConfig(config);
+    super({ sessionRecordProjection: resolved.sessionRecordProjection });
+    const { client, schemaName, disableInit, skipDefaultIndexes, indexes } = resolved;
     this.#client = new PgHarnessClient(client, schemaName);
     this.#harnessName = config.harnessName ?? 'default';
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (HarnessPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
     this.#db = new PgDB({ client, schemaName, disableInit, skipDefaultIndexes });
+  }
+
+  override get supportsSessionRecordProjection(): boolean {
+    return this.sessionRecordProjection.enabled;
   }
 
   static getDefaultIndexDefs(schemaPrefix: string) {
@@ -636,6 +677,24 @@ export class HarnessPG extends HarnessStorage {
       tableName: TABLE_HARNESS_SESSIONS,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
       compositePrimaryKey: sessionsConfig?.compositePrimaryKey,
+    });
+    const projectionIntentsConfig = TABLE_CONFIGS[TABLE_HARNESS_SESSION_PROJECTION_INTENTS];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_SESSION_PROJECTION_INTENTS,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSION_PROJECTION_INTENTS],
+      compositePrimaryKey: projectionIntentsConfig?.compositePrimaryKey,
+    });
+    const projectionFencesConfig = TABLE_CONFIGS[TABLE_HARNESS_SESSION_PROJECTION_FENCES];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_SESSION_PROJECTION_FENCES,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSION_PROJECTION_FENCES],
+      compositePrimaryKey: projectionFencesConfig?.compositePrimaryKey,
+    });
+    const projectionPressureConfig = TABLE_CONFIGS[TABLE_HARNESS_SESSION_PROJECTION_PRESSURE];
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_SESSION_PROJECTION_PRESSURE,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSION_PROJECTION_PRESSURE],
+      compositePrimaryKey: projectionPressureConfig?.compositePrimaryKey,
     });
     const attachmentsConfig = TABLE_CONFIGS[TABLE_HARNESS_ATTACHMENTS];
     await this.#db.createTable({
@@ -677,6 +736,7 @@ export class HarnessPG extends HarnessStorage {
       schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
       ifNotExists: [
         'harness_name',
+        'session_incarnation',
         'subagent_depth',
         'subagent_type_id',
         'subagent_tool_allowlist_scoped',
@@ -781,6 +841,9 @@ export class HarnessPG extends HarnessStorage {
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_CHANNEL_OUTBOX}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_WAKEUPS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSION_PROJECTION_INTENTS}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSION_PROJECTION_FENCES}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSION_PROJECTION_PRESSURE}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSIONS}`);
   }
 
@@ -1079,6 +1142,9 @@ export class HarnessPG extends HarnessStorage {
   }
 
   async saveSession(record: SessionRecord, opts: SaveSessionOptions): Promise<SaveSessionResult> {
+    if (this.sessionRecordProjection.enabled) {
+      return this.#saveSessionWithProjection(record, opts);
+    }
     const harnessName = this.#resolveHarnessName(opts.harnessName ?? record.harnessName);
     const namespacedRecord: SessionRecord = { ...record, harnessName };
     const nextVersion = opts.ifVersion + 1;
@@ -1180,6 +1246,9 @@ export class HarnessPG extends HarnessStorage {
     opts: SaveSessionOptions,
     references: SaveAttachmentReferenceInput[],
   ): Promise<SaveSessionResult> {
+    if (this.sessionRecordProjection.enabled) {
+      return this.#saveSessionWithProjectionAndAttachmentReferences(record, opts, references);
+    }
     if (opts.ifVersion === 0) {
       throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, 0);
     }
@@ -1258,6 +1327,408 @@ export class HarnessPG extends HarnessStorage {
     }
   }
 
+  async #saveSessionWithProjection(record: SessionRecord, opts: SaveSessionOptions): Promise<SaveSessionResult> {
+    const harnessName = this.#resolveHarnessName(opts.harnessName ?? record.harnessName);
+    if (opts.ifVersion === 0) {
+      await this.#renewLocalThreadDeleteFence(record.threadId);
+      if (this.#localThreadDeleteFences.has(record.threadId)) {
+        throw new HarnessStorageThreadDeleteFenceConflictError(record.threadId);
+      }
+    }
+    const tx = await this.#client.transaction('write');
+    try {
+      const now = Date.now();
+      if (opts.ifVersion === 0) {
+        const fence = await tx.execute({
+          sql: `SELECT thread_id FROM ${TABLE_HARNESS_THREAD_DELETE_FENCES}
+                WHERE thread_id = ? AND expires_at > ? LIMIT 1`,
+          args: [record.threadId, now],
+        });
+        if (fence.rows[0]) throw new HarnessStorageThreadDeleteFenceConflictError(record.threadId);
+        const sessionIncarnation = randomUUID();
+        const namespacedRecord: SessionRecord = { ...record, harnessName, sessionIncarnation };
+        const cols = sessionColumnValues(namespacedRecord, 1);
+        await tx.execute({
+          sql: `INSERT INTO ${TABLE_HARNESS_SESSIONS} (${cols.names.join(', ')}) VALUES (${cols.names.map(() => '?').join(', ')})`,
+          args: cols.values,
+        });
+        const intent = this.#buildProjectionIntent(namespacedRecord, sessionIncarnation, 1, now);
+        await this.#upsertProjectionFenceTx(
+          tx,
+          projectHarnessSessionRecordProjectionFence(namespacedRecord, {
+            sessionIncarnation,
+            state: 'active',
+            revision: 1,
+            updatedAt: now,
+          }),
+        );
+        await this.#insertProjectionIntentTx(tx, intent);
+        await this.#reserveProjectionCapacityTx(tx, intent);
+        await tx.commit();
+        return { version: 1 };
+      }
+
+      const existingResult = await tx.execute({
+        sql: `SELECT * FROM ${TABLE_HARNESS_SESSIONS} WHERE harness_name = ? AND id = ? FOR UPDATE`,
+        args: [harnessName, record.id],
+      });
+      const existingRow = existingResult.rows[0] as Record<string, unknown> | undefined;
+      if (!existingRow) {
+        throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, 0);
+      }
+      const existing = rowToSession(existingRow);
+      assertPgSessionLease(existing, opts.ownerId);
+      if (existing.version !== opts.ifVersion) {
+        throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, existing.version);
+      }
+      const sessionIncarnation = requirePgProjectionIncarnation(existing);
+      if (record.sessionIncarnation !== undefined && record.sessionIncarnation !== sessionIncarnation) {
+        throw new HarnessStorageSessionProjectionIncarnationError(record.id);
+      }
+      if (record.resourceId !== existing.resourceId) {
+        throw new HarnessStorageSessionProjectionIdentityError(record.id, 'resourceId');
+      }
+      if (record.threadId !== existing.threadId) {
+        throw new HarnessStorageSessionProjectionIdentityError(record.id, 'threadId');
+      }
+      const nextVersion = opts.ifVersion + 1;
+      const namespacedRecord: SessionRecord = { ...record, harnessName, sessionIncarnation };
+      const cols = sessionColumnValues(namespacedRecord, nextVersion);
+      const updateNames = cols.names.filter(
+        n => n !== 'owner_id' && n !== 'lease_expires_at' && n !== 'id' && n !== 'harness_name',
+      );
+      const updateValues = updateNames.map(n => cols.values[cols.names.indexOf(n)]);
+      const updateResult = await tx.execute({
+        sql: `UPDATE ${TABLE_HARNESS_SESSIONS}
+              SET ${updateNames.map(n => `${n} = ?`).join(', ')}
+              WHERE harness_name = ? AND id = ? AND version = ?
+                AND (owner_id IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= ? OR owner_id = ?)`,
+        args: [...updateValues, harnessName, record.id, opts.ifVersion, now, opts.ownerId],
+      });
+      if (updateResult.rowsAffected === 0) {
+        throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, existing.version);
+      }
+      const intent = this.#buildProjectionIntent(namespacedRecord, sessionIncarnation, nextVersion, now);
+      await this.#upsertProjectionFenceTx(
+        tx,
+        projectHarnessSessionRecordProjectionFence(namespacedRecord, {
+          sessionIncarnation,
+          state: 'active',
+          revision: nextVersion,
+          updatedAt: now,
+        }),
+      );
+      await this.#insertProjectionIntentTx(tx, intent);
+      await this.#reserveProjectionCapacityTx(tx, intent);
+      await tx.commit();
+      return { version: nextVersion };
+    } catch (err) {
+      if (!tx.closed) await tx.rollback();
+      if (opts.ifVersion === 0 && isUniqueConstraintError(err)) {
+        const existing = await this.loadSession({ harnessName, sessionId: record.id });
+        const active = await this.loadSessionByThread({
+          harnessName,
+          resourceId: record.resourceId,
+          threadId: record.threadId,
+        });
+        throw new HarnessStorageVersionConflictError(
+          record.id,
+          opts.ifVersion,
+          existing?.version ?? active?.version ?? 0,
+        );
+      }
+      throw err;
+    }
+  }
+
+  async #saveSessionWithProjectionAndAttachmentReferences(
+    record: SessionRecord,
+    opts: SaveSessionOptions,
+    references: SaveAttachmentReferenceInput[],
+  ): Promise<SaveSessionResult> {
+    if (opts.ifVersion === 0) throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, 0);
+    const harnessName = this.#resolveHarnessName(opts.harnessName ?? record.harnessName);
+    const tx = await this.#client.transaction('write');
+    try {
+      const now = Date.now();
+      const existingResult = await tx.execute({
+        sql: `SELECT * FROM ${TABLE_HARNESS_SESSIONS} WHERE harness_name = ? AND id = ? FOR UPDATE`,
+        args: [harnessName, record.id],
+      });
+      const existingRow = existingResult.rows[0] as Record<string, unknown> | undefined;
+      if (!existingRow) throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, 0);
+      const existing = rowToSession(existingRow);
+      assertPgSessionLease(existing, opts.ownerId);
+      if (existing.version !== opts.ifVersion) {
+        throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, existing.version);
+      }
+      const sessionIncarnation = requirePgProjectionIncarnation(existing);
+      if (record.sessionIncarnation !== undefined && record.sessionIncarnation !== sessionIncarnation) {
+        throw new HarnessStorageSessionProjectionIncarnationError(record.id);
+      }
+      if (record.resourceId !== existing.resourceId) {
+        throw new HarnessStorageSessionProjectionIdentityError(record.id, 'resourceId');
+      }
+      if (record.threadId !== existing.threadId) {
+        throw new HarnessStorageSessionProjectionIdentityError(record.id, 'threadId');
+      }
+      const nextVersion = opts.ifVersion + 1;
+      const namespacedRecord: SessionRecord = { ...record, harnessName, sessionIncarnation };
+      const cols = sessionColumnValues(namespacedRecord, nextVersion);
+      const updateNames = cols.names.filter(
+        n => n !== 'owner_id' && n !== 'lease_expires_at' && n !== 'id' && n !== 'harness_name',
+      );
+      const updateValues = updateNames.map(n => cols.values[cols.names.indexOf(n)]);
+      const updateResult = await tx.execute({
+        sql: `UPDATE ${TABLE_HARNESS_SESSIONS}
+              SET ${updateNames.map(n => `${n} = ?`).join(', ')}
+              WHERE harness_name = ? AND id = ? AND version = ?
+                AND (owner_id IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= ? OR owner_id = ?)`,
+        args: [...updateValues, harnessName, record.id, opts.ifVersion, now, opts.ownerId],
+      });
+      if (updateResult.rowsAffected === 0)
+        throw new HarnessStorageVersionConflictError(record.id, opts.ifVersion, existing.version);
+
+      for (const ref of references) {
+        if (ref.harnessName !== undefined && this.#resolveHarnessName(ref.harnessName) !== harnessName) {
+          throw new HarnessStorageAttachmentUnavailableError(ref.sessionId, ref.attachmentId);
+        }
+        const attachment = await tx.execute({
+          sql: `SELECT attachment_id FROM ${TABLE_HARNESS_ATTACHMENTS}
+                WHERE harness_name = ? AND session_id = ? AND attachment_id = ?
+                LIMIT 1 FOR KEY SHARE`,
+          args: [harnessName, ref.sessionId, ref.attachmentId],
+        });
+        if (attachment.rows.length === 0)
+          throw new HarnessStorageAttachmentUnavailableError(ref.sessionId, ref.attachmentId);
+        await tx.execute({
+          sql: `INSERT INTO ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
+                (harness_name, session_id, attachment_id, source, source_id, retained_until, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (harness_name, session_id, attachment_id, source, source_id) DO UPDATE SET retained_until = excluded.retained_until`,
+          args: [
+            harnessName,
+            ref.sessionId,
+            ref.attachmentId,
+            ref.source,
+            ref.sourceId,
+            ref.retainedUntil ?? null,
+            now,
+          ],
+        });
+      }
+
+      const intent = this.#buildProjectionIntent(namespacedRecord, sessionIncarnation, nextVersion, now);
+      await this.#upsertProjectionFenceTx(
+        tx,
+        projectHarnessSessionRecordProjectionFence(namespacedRecord, {
+          sessionIncarnation,
+          state: 'active',
+          revision: nextVersion,
+          updatedAt: now,
+        }),
+      );
+      await this.#insertProjectionIntentTx(tx, intent);
+      await this.#reserveProjectionCapacityTx(tx, intent);
+      await tx.commit();
+      return { version: nextVersion };
+    } catch (err) {
+      if (!tx.closed) await tx.rollback();
+      throw err;
+    }
+  }
+
+  #buildProjectionIntent(record: SessionRecord, sessionIncarnation: string, revision: number, createdAt: number) {
+    return buildHarnessSessionRecordProjectionIntent(record, {
+      sessionIncarnation,
+      revision,
+      createdAt,
+      maxPayloadBytes: this.sessionRecordProjection.maxPayloadBytes,
+    });
+  }
+
+  /**
+   * Reserve the namespace quota as the final mutation before commit. Producers
+   * already hold the session/fence/intent locks, matching ack/fail/delete's
+   * fence -> intent -> pressure order while keeping the namespace lock short.
+   */
+  async #reserveProjectionCapacityTx(tx: PgHarnessClient, intent: HarnessSessionRecordProjectionIntent): Promise<void> {
+    if (
+      intent.payloadBytes > this.sessionRecordProjection.maxPendingBytes ||
+      this.sessionRecordProjection.maxPendingIntents < 1
+    ) {
+      throw new HarnessStorageSessionProjectionBackpressureError(0, 0);
+    }
+    const result = await tx.execute({
+      sql: `INSERT INTO ${TABLE_HARNESS_SESSION_PROJECTION_PRESSURE}
+              (harness_name, pending_intents, pending_bytes, updated_at)
+            VALUES (?, 1, ?, ?)
+            ON CONFLICT (harness_name) DO UPDATE SET
+              pending_intents = ${TABLE_HARNESS_SESSION_PROJECTION_PRESSURE}.pending_intents + 1,
+              pending_bytes = ${TABLE_HARNESS_SESSION_PROJECTION_PRESSURE}.pending_bytes + excluded.pending_bytes,
+              updated_at = excluded.updated_at
+            WHERE ${TABLE_HARNESS_SESSION_PROJECTION_PRESSURE}.pending_intents + 1 <= ?
+              AND ${TABLE_HARNESS_SESSION_PROJECTION_PRESSURE}.pending_bytes + excluded.pending_bytes <= ?
+            RETURNING pending_intents, pending_bytes`,
+      args: [
+        intent.harnessName,
+        intent.payloadBytes,
+        intent.createdAt,
+        this.sessionRecordProjection.maxPendingIntents,
+        this.sessionRecordProjection.maxPendingBytes,
+      ],
+    });
+    if (result.rows.length === 0) {
+      const pressure = await this.#loadProjectionPressureTx(tx, intent.harnessName);
+      throw new HarnessStorageSessionProjectionBackpressureError(
+        pressure?.pendingIntents ?? 0,
+        pressure?.pendingBytes ?? 0,
+      );
+    }
+  }
+
+  async #releaseProjectionCapacityTx(
+    tx: PgHarnessClient,
+    intent: HarnessSessionRecordProjectionIntent,
+    updatedAt: number,
+  ): Promise<void> {
+    await tx.execute({
+      sql: `UPDATE ${TABLE_HARNESS_SESSION_PROJECTION_PRESSURE}
+            SET pending_intents = GREATEST(pending_intents - 1, 0),
+                pending_bytes = GREATEST(pending_bytes - ?, 0),
+                updated_at = ?
+            WHERE harness_name = ?`,
+      args: [intent.payloadBytes, updatedAt, intent.harnessName],
+    });
+  }
+
+  async #releaseProjectionCapacityValuesTx(
+    tx: PgHarnessClient,
+    harnessName: string,
+    pendingIntents: number,
+    pendingBytes: number,
+    updatedAt: number,
+  ): Promise<void> {
+    if (pendingIntents === 0 && pendingBytes === 0) return;
+    await tx.execute({
+      sql: `UPDATE ${TABLE_HARNESS_SESSION_PROJECTION_PRESSURE}
+            SET pending_intents = GREATEST(pending_intents - ?, 0),
+                pending_bytes = GREATEST(pending_bytes - ?, 0),
+                updated_at = ?
+            WHERE harness_name = ?`,
+      args: [pendingIntents, pendingBytes, updatedAt, harnessName],
+    });
+  }
+
+  async #loadProjectionPressureTx(
+    tx: PgHarnessClient,
+    harnessName: string,
+  ): Promise<{ pendingIntents: number; pendingBytes: number } | undefined> {
+    const result = await tx.execute({
+      sql: `SELECT pending_intents, pending_bytes
+            FROM ${TABLE_HARNESS_SESSION_PROJECTION_PRESSURE}
+            WHERE harness_name = ?`,
+      args: [harnessName],
+    });
+    const row = result.rows[0] as Record<string, unknown> | undefined;
+    if (!row) return undefined;
+    return { pendingIntents: Number(row.pending_intents), pendingBytes: Number(row.pending_bytes) };
+  }
+
+  async #retireProjectionIntentsTx(
+    tx: PgHarnessClient,
+    harnessName: string,
+    sessionId: string,
+    sessionIncarnation: string,
+    updatedAt: number,
+  ): Promise<{ pendingIntents: number; pendingBytes: number }> {
+    const result = await tx.execute({
+      sql: `UPDATE ${TABLE_HARNESS_SESSION_PROJECTION_INTENTS}
+            SET status = ?, dead_at = ?, failed_at = ?, claim_id = NULL, claim_expires_at = NULL,
+                next_attempt_at = NULL, last_error = ?, updated_at = ?
+            WHERE harness_name = ? AND session_id = ? AND session_incarnation = ?
+              AND status IN (?, ?, ?)
+            RETURNING payload_bytes`,
+      args: [
+        'dead',
+        updatedAt,
+        updatedAt,
+        JSON.stringify({ code: 'session_projection.deleted', message: 'Session lifetime was deleted' }),
+        updatedAt,
+        harnessName,
+        sessionId,
+        sessionIncarnation,
+        'pending',
+        'claimed',
+        'failed',
+      ],
+    });
+    const pendingBytes = result.rows.reduce(
+      (total, row) => total + Number((row as Record<string, unknown>).payload_bytes ?? 0),
+      0,
+    );
+    return { pendingIntents: result.rows.length, pendingBytes };
+  }
+
+  async #upsertProjectionFenceTx(tx: PgHarnessClient, fence: HarnessSessionRecordProjectionFence): Promise<void> {
+    await tx.execute({
+      sql: `INSERT INTO ${TABLE_HARNESS_SESSION_PROJECTION_FENCES}
+              (harness_name, session_id, session_incarnation, resource_id, thread_id, revision, state, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (harness_name, session_id) DO UPDATE SET
+              session_incarnation = excluded.session_incarnation,
+              resource_id = excluded.resource_id,
+              thread_id = excluded.thread_id,
+              revision = excluded.revision,
+              state = excluded.state,
+              updated_at = excluded.updated_at`,
+      args: [
+        fence.harnessName,
+        fence.sessionId,
+        fence.sessionIncarnation,
+        fence.resourceId,
+        fence.threadId,
+        fence.revision,
+        fence.state,
+        fence.updatedAt,
+      ],
+    });
+  }
+
+  async #insertProjectionIntentTx(tx: PgHarnessClient, intent: HarnessSessionRecordProjectionIntent): Promise<void> {
+    await tx.execute({
+      sql: `INSERT INTO ${TABLE_HARNESS_SESSION_PROJECTION_INTENTS}
+              (id, operation_id, harness_name, session_id, session_incarnation, resource_id, thread_id, revision,
+               payload_digest, payload_bytes, payload, status, attempts, claim_id, claim_expires_at, next_attempt_at,
+               applied_at, failed_at, dead_at, last_error, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        intent.id,
+        intent.operationId,
+        intent.harnessName,
+        intent.sessionId,
+        intent.sessionIncarnation,
+        intent.resourceId,
+        intent.threadId,
+        intent.revision,
+        intent.payloadDigest,
+        intent.payloadBytes,
+        JSON.stringify(intent.payload),
+        intent.status,
+        intent.attempts,
+        intent.claimId ?? null,
+        intent.claimExpiresAt ?? null,
+        intent.nextAttemptAt ?? null,
+        intent.appliedAt ?? null,
+        intent.failedAt ?? null,
+        intent.deadAt ?? null,
+        intent.lastError ? JSON.stringify(intent.lastError) : null,
+        intent.createdAt,
+        intent.updatedAt,
+      ],
+    });
+  }
+
   async #throwSaveSessionConflict(record: SessionRecord, opts: SaveSessionOptions): Promise<never> {
     const existing = await this.loadSession({ harnessName: record.harnessName, sessionId: record.id });
     if (!existing) {
@@ -1309,11 +1780,24 @@ export class HarnessPG extends HarnessStorage {
         sql: `SELECT * FROM ${TABLE_HARNESS_SESSIONS}
               WHERE harness_name = ? AND resource_id = ? AND thread_id = ?
               ORDER BY last_activity_at DESC
-              LIMIT 1`,
+              LIMIT 1
+              FOR UPDATE`,
         args: [harnessName, record.resourceId, record.threadId],
       });
       const activeRow = active.rows[0];
       if (activeRow) {
+        if (this.sessionRecordProjection.enabled) {
+          const existing = rowToSession(activeRow as Record<string, unknown>);
+          const incarnation = requirePgProjectionIncarnation(existing);
+          const fenceResult = await tx.execute({
+            sql: `SELECT harness_name, session_id, session_incarnation, resource_id, thread_id, revision, state
+                  FROM ${TABLE_HARNESS_SESSION_PROJECTION_FENCES}
+                  WHERE harness_name = ? AND session_id = ? FOR UPDATE`,
+            args: [harnessName, existing.id],
+          });
+          const projectionFence = rowToProjectionFence(fenceResult.rows[0] as Record<string, unknown> | undefined);
+          assertPgProjectionFence(projectionFence, existing, incarnation, 'active');
+        }
         await tx.commit();
         const existing = rowToSession(activeRow as Record<string, unknown>);
         return {
@@ -1365,9 +1849,11 @@ export class HarnessPG extends HarnessStorage {
       }
 
       const expiresAt = storageNow + opts.initialLease.ttlMs;
+      const sessionIncarnation = this.sessionRecordProjection.enabled ? randomUUID() : undefined;
       const namespacedRecord: SessionRecord = {
         ...record,
         harnessName,
+        ...(sessionIncarnation !== undefined ? { sessionIncarnation } : {}),
         ownerId: opts.initialLease.ownerId,
         leaseExpiresAt: expiresAt,
       };
@@ -1378,6 +1864,20 @@ export class HarnessPG extends HarnessStorage {
               VALUES (${cols.names.map(() => '?').join(', ')})`,
         args: cols.values,
       });
+      if (sessionIncarnation !== undefined) {
+        const intent = this.#buildProjectionIntent(namespacedRecord, sessionIncarnation, 1, storageNow);
+        await this.#upsertProjectionFenceTx(
+          tx,
+          projectHarnessSessionRecordProjectionFence(namespacedRecord, {
+            sessionIncarnation,
+            state: 'active',
+            revision: 1,
+            updatedAt: storageNow,
+          }),
+        );
+        await this.#insertProjectionIntentTx(tx, intent);
+        await this.#reserveProjectionCapacityTx(tx, intent);
+      }
       await tx.commit();
       const created = rowToSession(Object.fromEntries(cols.names.map((name, index) => [name, cols.values[index]])));
       return {
@@ -1397,6 +1897,20 @@ export class HarnessPG extends HarnessStorage {
           threadId: record.threadId,
         });
         if (active) {
+          if (this.sessionRecordProjection.enabled) {
+            const incarnation = requirePgProjectionIncarnation(active);
+            const fenceResult = await this.#client.execute({
+              sql: `SELECT * FROM ${TABLE_HARNESS_SESSION_PROJECTION_FENCES}
+                    WHERE harness_name = ? AND session_id = ?`,
+              args: [harnessName, active.id],
+            });
+            assertPgProjectionFence(
+              rowToProjectionFence(fenceResult.rows[0] as Record<string, unknown> | undefined),
+              active,
+              incarnation,
+              'active',
+            );
+          }
           return {
             record: active,
             created: false,
@@ -1427,14 +1941,21 @@ export class HarnessPG extends HarnessStorage {
     const tx = await this.#client.transaction('write');
     const deleteCandidates = new Map<
       string,
-      { namespace: string; sessionId: string; resourceId: string; threadId: string }
+      {
+        namespace: string;
+        sessionId: string;
+        resourceId: string;
+        threadId: string;
+        version: number;
+        sessionIncarnation?: string;
+      }
     >();
     try {
       for (const opts of sessions) {
         const { sessionId } = opts;
         const namespace = this.#resolveHarnessName(opts.harnessName);
         const existing = await tx.execute({
-          sql: `SELECT version, resource_id, thread_id, parent_session_id, created_at, closed_at
+          sql: `SELECT version, session_incarnation, resource_id, thread_id, parent_session_id, created_at, closed_at
 	                FROM ${TABLE_HARNESS_SESSIONS}
 	                WHERE harness_name = ? AND id = ?
 	                LIMIT 1
@@ -1454,15 +1975,53 @@ export class HarnessPG extends HarnessStorage {
             record.version,
           );
         }
+        const sessionIncarnation =
+          existingRow.session_incarnation == null ? undefined : String(existingRow.session_incarnation);
+        if (this.sessionRecordProjection.enabled) {
+          if (sessionIncarnation === undefined || sessionIncarnation.length === 0) {
+            throw new HarnessStorageSessionProjectionIncarnationError(sessionId);
+          }
+          const fenceResult = await tx.execute({
+            sql: `SELECT harness_name, session_id, session_incarnation, resource_id, thread_id, revision, state
+                  FROM ${TABLE_HARNESS_SESSION_PROJECTION_FENCES}
+                  WHERE harness_name = ? AND session_id = ? FOR UPDATE`,
+            args: [namespace, sessionId],
+          });
+          const projectionFence = rowToProjectionFence(fenceResult.rows[0] as Record<string, unknown> | undefined);
+          assertPgProjectionFenceValues(
+            projectionFence,
+            namespace,
+            sessionId,
+            sessionIncarnation,
+            record.resourceId,
+            record.threadId,
+            record.version,
+            'active',
+          );
+        }
         deleteCandidates.set(`${namespace}\u0000${sessionId}`, {
           namespace,
           sessionId,
           resourceId: record.resourceId,
           threadId: record.threadId,
+          version: record.version,
+          ...(sessionIncarnation !== undefined ? { sessionIncarnation } : {}),
         });
       }
 
-      for (const { namespace, sessionId, resourceId, threadId } of deleteCandidates.values()) {
+      const retiredProjectionCapacity = new Map<string, { pendingIntents: number; pendingBytes: number }>();
+      for (const {
+        namespace,
+        sessionId,
+        resourceId,
+        threadId,
+        version,
+        sessionIncarnation,
+      } of deleteCandidates.values()) {
+        let retired: { pendingIntents: number; pendingBytes: number } | undefined;
+        if (this.sessionRecordProjection.enabled && sessionIncarnation !== undefined) {
+          retired = await this.#retireProjectionIntentsTx(tx, namespace, sessionId, sessionIncarnation, Date.now());
+        }
         const result = await tx.execute({
           sql: `DELETE FROM ${TABLE_HARNESS_SESSIONS}
                 WHERE harness_name = ? AND id = ?`,
@@ -1486,6 +2045,14 @@ export class HarnessPG extends HarnessStorage {
                 WHERE harness_name = ? AND session_id = ?`,
           args: [namespace, sessionId],
         });
+        if (this.sessionRecordProjection.enabled && sessionIncarnation !== undefined) {
+          await tx.execute({
+            sql: `UPDATE ${TABLE_HARNESS_SESSION_PROJECTION_FENCES}
+                  SET state = ?, revision = ?, updated_at = ?
+                  WHERE harness_name = ? AND session_id = ? AND session_incarnation = ?`,
+            args: ['deleted', version, Date.now(), namespace, sessionId, sessionIncarnation],
+          });
+        }
         await tx.execute({
           sql: `DELETE FROM ${TABLE_HARNESS_WORKSPACE_ACTIONS}
                 WHERE harness_name = ? AND session_id = ?`,
@@ -1523,6 +2090,28 @@ export class HarnessPG extends HarnessStorage {
                   )`,
           args: [namespace, sessionId],
         });
+        if (retired !== undefined) {
+          const previous = retiredProjectionCapacity.get(namespace) ?? { pendingIntents: 0, pendingBytes: 0 };
+          previous.pendingIntents += retired.pendingIntents;
+          previous.pendingBytes += retired.pendingBytes;
+          retiredProjectionCapacity.set(namespace, previous);
+        }
+      }
+
+      // Keep the pressure row lock after attachment cleanup. A concurrent
+      // save that references one of these attachments may hold a key-share
+      // lock while reserving its own projection capacity; releasing here
+      // avoids a pressure-before-attachment cycle.
+      for (const [namespace, capacity] of [...retiredProjectionCapacity.entries()].sort(([left], [right]) =>
+        left < right ? -1 : left > right ? 1 : 0,
+      )) {
+        await this.#releaseProjectionCapacityValuesTx(
+          tx,
+          namespace,
+          capacity.pendingIntents,
+          capacity.pendingBytes,
+          Date.now(),
+        );
       }
 
       await tx.commit();
@@ -1530,6 +2119,474 @@ export class HarnessPG extends HarnessStorage {
       if (!tx.closed) await tx.rollback();
       throw err;
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Native session record projection
+  // -------------------------------------------------------------------------
+
+  async claimSessionRecordProjectionIntents(
+    input: ClaimSessionRecordProjectionIntentsInput,
+  ): Promise<HarnessSessionRecordProjectionIntent[]> {
+    this.assertProjectionEnabled();
+    assertPgProjectionClaimInput(input);
+    const namespace = this.#resolveHarnessName(input.harnessName);
+    const tx = await this.#client.transaction('write');
+    try {
+      const maxAttempts = this.sessionRecordProjection.maxAttempts;
+      const commonClaimConditions = [
+        'i.harness_name = ?',
+        'f.harness_name = i.harness_name',
+        'f.session_id = i.session_id',
+        "f.state = 'active'",
+        'f.session_incarnation = i.session_incarnation',
+        'f.resource_id = i.resource_id',
+        'f.thread_id = i.thread_id',
+      ];
+      const normalClaimConditions = [
+        `i.attempts < ${maxAttempts}`,
+        'i.status IN (?, ?, ?)',
+        '(i.status <> ? OR i.claim_expires_at <= ?)',
+        '(i.status NOT IN (?, ?) OR i.next_attempt_at IS NULL OR i.next_attempt_at <= ?)',
+        `NOT EXISTS (
+           SELECT 1 FROM ${TABLE_HARNESS_SESSION_PROJECTION_INTENTS} predecessor
+           WHERE predecessor.harness_name = i.harness_name
+             AND predecessor.session_id = i.session_id
+             AND predecessor.session_incarnation = i.session_incarnation
+             AND predecessor.revision < i.revision
+             AND predecessor.status IN (?, ?, ?)
+         )`,
+      ];
+      const exhaustedClaimConditions = [
+        `i.attempts >= ${maxAttempts}`,
+        'i.status IN (?, ?, ?)',
+        '(i.status <> ? OR i.claim_expires_at <= ?)',
+      ];
+      const claimConditions = [
+        ...commonClaimConditions,
+        `((${normalClaimConditions.join(' AND ')}) OR (${exhaustedClaimConditions.join(' AND ')}))`,
+      ];
+      const claimArgs: (string | number)[] = [
+        namespace,
+        'pending',
+        'claimed',
+        'failed',
+        'claimed',
+        input.now,
+        'pending',
+        'failed',
+        input.now,
+        'pending',
+        'claimed',
+        'failed',
+        'pending',
+        'claimed',
+        'failed',
+        'claimed',
+        input.now,
+      ];
+      if (input.resourceId !== undefined) {
+        claimConditions.push('i.resource_id = ?');
+        claimArgs.push(input.resourceId);
+      }
+      if (input.sessionId !== undefined) {
+        claimConditions.push('i.session_id = ?');
+        claimArgs.push(input.sessionId);
+      }
+      // Lock only the bounded set of eligible fences first. All other
+      // projection mutators use fence -> intent ordering, so a claim cannot
+      // participate in an intent -> fence cycle. The second statement
+      // rechecks every predicate while taking the intent locks and therefore
+      // remains correct if a row changed before this transaction acquired its
+      // fence lock.
+      const candidates = await tx.execute({
+        sql: `SELECT i.id
+              FROM ${TABLE_HARNESS_SESSION_PROJECTION_FENCES} f
+              JOIN ${TABLE_HARNESS_SESSION_PROJECTION_INTENTS} i
+                ON i.harness_name = f.harness_name AND i.session_id = f.session_id
+              WHERE ${claimConditions.join(' AND ')}
+              ORDER BY i.created_at ASC, i.revision ASC, i.operation_id ASC
+              LIMIT ?
+              FOR UPDATE OF f SKIP LOCKED`,
+        args: [...claimArgs, input.limit],
+      });
+      const candidateIds = (candidates.rows as Record<string, unknown>[]).map(row => String(row.id));
+      if (candidateIds.length === 0) {
+        await tx.commit();
+        return [];
+      }
+
+      const updateConditions = [
+        ...commonClaimConditions,
+        `i.id IN (${candidateIds.map(() => '?').join(', ')})`,
+        `((${normalClaimConditions.join(' AND ')}) OR (${exhaustedClaimConditions.join(' AND ')}))`,
+      ];
+      const updateArgs: (string | number)[] = [
+        namespace,
+        ...candidateIds,
+        'pending',
+        'claimed',
+        'failed',
+        'claimed',
+        input.now,
+        'pending',
+        'failed',
+        input.now,
+        'pending',
+        'claimed',
+        'failed',
+        'pending',
+        'claimed',
+        'failed',
+        'claimed',
+        input.now,
+      ];
+      if (input.resourceId !== undefined) {
+        updateConditions.push('i.resource_id = ?');
+        updateArgs.push(input.resourceId);
+      }
+      if (input.sessionId !== undefined) {
+        updateConditions.push('i.session_id = ?');
+        updateArgs.push(input.sessionId);
+      }
+      const claimedRows = await tx.execute({
+        sql: `UPDATE ${TABLE_HARNESS_SESSION_PROJECTION_INTENTS} i
+              SET status = CASE WHEN i.attempts >= ${maxAttempts} THEN ? ELSE ? END,
+                  attempts = CASE WHEN i.attempts >= ${maxAttempts} THEN i.attempts ELSE i.attempts + 1 END,
+                  claim_id = CASE WHEN i.attempts >= ${maxAttempts} THEN NULL ELSE ? END,
+                  claim_expires_at = CASE WHEN i.attempts >= ${maxAttempts} THEN NULL ELSE CAST(? AS bigint) END,
+                  dead_at = CASE WHEN i.attempts >= ${maxAttempts} THEN CAST(? AS bigint) ELSE i.dead_at END,
+                  failed_at = CASE WHEN i.attempts >= ${maxAttempts} THEN CAST(? AS bigint) ELSE i.failed_at END,
+                  next_attempt_at = CASE WHEN i.attempts >= ${maxAttempts} THEN NULL ELSE i.next_attempt_at END,
+                  last_error = CASE WHEN i.attempts >= ${maxAttempts} THEN CAST(? AS jsonb) ELSE i.last_error END,
+                  updated_at = ?
+              FROM ${TABLE_HARNESS_SESSION_PROJECTION_FENCES} f
+              WHERE ${updateConditions.join(' AND ')}
+              RETURNING i.*`,
+        args: [
+          'dead',
+          'claimed',
+          input.claimId,
+          input.now + input.claimTtlMs,
+          input.now,
+          input.now,
+          JSON.stringify({ code: 'session_projection.max_attempts', message: 'Maximum projection attempts reached' }),
+          input.now,
+          ...updateArgs,
+        ],
+      });
+      const updatedIntents = (claimedRows.rows as Record<string, unknown>[]).map(row => rowToProjectionIntent(row));
+      const deadIntents = updatedIntents.filter(intent => intent.status === 'dead');
+      if (deadIntents.length > 0) {
+        await this.#releaseProjectionCapacityValuesTx(
+          tx,
+          namespace,
+          deadIntents.length,
+          deadIntents.reduce((total, intent) => total + intent.payloadBytes, 0),
+          input.now,
+        );
+      }
+      const claimedById = new Map(
+        updatedIntents
+          .filter(
+            (intent): intent is HarnessSessionRecordProjectionIntent & { status: 'claimed' } =>
+              intent.status === 'claimed',
+          )
+          .map(intent => [intent.id, intent] as const),
+      );
+      const claimed = candidateIds.flatMap(id => {
+        const intent = claimedById.get(id);
+        return intent === undefined ? [] : [intent];
+      });
+      await tx.commit();
+      return claimed;
+    } catch (err) {
+      if (!tx.closed) await tx.rollback();
+      throw err;
+    }
+  }
+
+  async renewSessionRecordProjectionClaim(
+    input: RenewSessionRecordProjectionClaimInput,
+  ): Promise<{ claimExpiresAt: number; storageNow: number }> {
+    this.assertProjectionEnabled();
+    assertPgProjectionRenewInput(input);
+    const tx = await this.#client.transaction('write');
+    try {
+      const namespace = this.#resolveHarnessName(input.harnessName);
+      const fence = await this.#loadProjectionFenceTx(tx, namespace, input.sessionId);
+      const intent = await this.#loadProjectionIntentTx(tx, namespace, input.operationId);
+      assertPgProjectionIntentIdentity(
+        intent,
+        input.sessionId,
+        input.sessionIncarnation,
+        input.revision,
+        input.payloadDigest,
+      );
+      if (!pgProjectionFenceMatches(fence, intent, 'active')) {
+        throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId);
+      }
+      if (
+        intent.status !== 'claimed' ||
+        intent.claimId !== input.claimId ||
+        (intent.claimExpiresAt ?? 0) <= input.now
+      ) {
+        throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId, input.claimId);
+      }
+      const expiresAt = input.now + input.claimTtlMs;
+      await tx.execute({
+        sql: `UPDATE ${TABLE_HARNESS_SESSION_PROJECTION_INTENTS}
+              SET claim_expires_at = ?, updated_at = ? WHERE id = ? AND claim_id = ?`,
+        args: [expiresAt, input.now, intent.id, input.claimId],
+      });
+      await tx.commit();
+      return { claimExpiresAt: expiresAt, storageNow: input.now };
+    } catch (err) {
+      if (!tx.closed) await tx.rollback();
+      throw err;
+    }
+  }
+
+  async ackSessionRecordProjection(input: AckSessionRecordProjectionInput): Promise<AckSessionRecordProjectionResult> {
+    this.assertProjectionEnabled();
+    assertPgProjectionAckInput(input);
+    const acknowledgedAt = input.acknowledgedAt ?? Date.now();
+    const tx = await this.#client.transaction('write');
+    try {
+      const namespace = this.#resolveHarnessName(input.harnessName);
+      const fence = await this.#loadProjectionFenceTx(tx, namespace, input.sessionId);
+      const intent = await this.#loadProjectionIntentTx(tx, namespace, input.operationId);
+      assertPgProjectionIntentIdentity(
+        intent,
+        input.sessionId,
+        input.sessionIncarnation,
+        input.revision,
+        input.payloadDigest,
+      );
+      if (!pgProjectionFenceMatches(fence, intent, 'active')) {
+        await this.#markProjectionDeadTx(
+          tx,
+          intent,
+          acknowledgedAt,
+          'session_projection.fenced',
+          'Session projection lifetime is fenced',
+        );
+        await tx.commit();
+        return projectionAckResult(intent, 'fenced');
+      }
+      if (intent.status === 'applied') {
+        await tx.commit();
+        return projectionAckResult(intent, 'duplicate');
+      }
+      if (
+        intent.status !== 'claimed' ||
+        intent.claimId !== input.claimId ||
+        (intent.claimExpiresAt ?? 0) <= acknowledgedAt
+      ) {
+        throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId, input.claimId);
+      }
+      await tx.execute({
+        sql: `UPDATE ${
+          TABLE_HARNESS_SESSION_PROJECTION_INTENTS
+        } SET status = ?, applied_at = ?, claim_id = NULL, claim_expires_at = NULL, next_attempt_at = NULL, updated_at = ?
+          WHERE id = ? AND status = ? AND claim_id = ?`,
+        args: ['applied', acknowledgedAt, acknowledgedAt, intent.id, 'claimed', input.claimId],
+      });
+      await this.#releaseProjectionCapacityTx(tx, intent, acknowledgedAt);
+      await tx.commit();
+      return projectionAckResult({ ...intent, status: 'applied', appliedAt: acknowledgedAt }, 'applied');
+    } catch (err) {
+      if (!tx.closed) await tx.rollback();
+      throw err;
+    }
+  }
+
+  async failSessionRecordProjection(
+    input: FailSessionRecordProjectionInput,
+  ): Promise<HarnessSessionRecordProjectionIntent> {
+    this.assertProjectionEnabled();
+    assertPgProjectionFailInput(input);
+    const failedAt = input.failedAt ?? Date.now();
+    const tx = await this.#client.transaction('write');
+    try {
+      const namespace = this.#resolveHarnessName(input.harnessName);
+      const fence = await this.#loadProjectionFenceTx(tx, namespace, input.sessionId);
+      const intent = await this.#loadProjectionIntentTx(tx, namespace, input.operationId);
+      assertPgProjectionIntentIdentity(
+        intent,
+        input.sessionId,
+        input.sessionIncarnation,
+        input.revision,
+        input.payloadDigest,
+      );
+      if (!pgProjectionFenceMatches(fence, intent, 'active')) {
+        throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId);
+      }
+      if (intent.status !== 'claimed' || intent.claimId !== input.claimId || (intent.claimExpiresAt ?? 0) <= failedAt) {
+        throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId, input.claimId);
+      }
+      const terminal =
+        input.dead === true ||
+        input.error.retryable === false ||
+        intent.attempts >= this.sessionRecordProjection.maxAttempts;
+      const status = terminal ? 'dead' : 'failed';
+      const nextAttemptAt = terminal ? null : (input.retryAt ?? failedAt);
+      await tx.execute({
+        sql: `UPDATE ${
+          TABLE_HARNESS_SESSION_PROJECTION_INTENTS
+        } SET status = ?, failed_at = ?, dead_at = ?, next_attempt_at = ?, claim_id = NULL, claim_expires_at = NULL,
+              last_error = ?, updated_at = ? WHERE id = ? AND status = ? AND claim_id = ?`,
+        args: [
+          status,
+          failedAt,
+          terminal ? failedAt : null,
+          nextAttemptAt,
+          JSON.stringify(input.error),
+          failedAt,
+          intent.id,
+          'claimed',
+          input.claimId,
+        ],
+      });
+      if (terminal) await this.#releaseProjectionCapacityTx(tx, intent, failedAt);
+      await tx.commit();
+      return {
+        ...intent,
+        status,
+        failedAt,
+        deadAt: terminal ? failedAt : undefined,
+        nextAttemptAt: terminal ? undefined : (input.retryAt ?? failedAt),
+        claimId: undefined,
+        claimExpiresAt: undefined,
+        lastError: { ...input.error },
+        updatedAt: failedAt,
+      };
+    } catch (err) {
+      if (!tx.closed) await tx.rollback();
+      throw err;
+    }
+  }
+
+  async getSessionRecordProjectionQueuePressure(
+    input: SessionRecordProjectionQueuePressureInput,
+  ): Promise<SessionRecordProjectionQueuePressure> {
+    this.assertProjectionEnabled();
+    const namespace = this.#resolveHarnessName(input.harnessName);
+    const namespacePressure =
+      input.resourceId === undefined && input.sessionId === undefined
+        ? await this.#loadProjectionPressureTx(this.#client, namespace)
+        : undefined;
+    const conditions = ['harness_name = ?'];
+    const args: (string | number)[] = [namespace];
+    if (input.resourceId !== undefined) {
+      conditions.push('resource_id = ?');
+      args.push(input.resourceId);
+    }
+    if (input.sessionId !== undefined) {
+      conditions.push('session_id = ?');
+      args.push(input.sessionId);
+    }
+    const result = await this.#client.execute({
+      sql: `SELECT status, COUNT(*) AS count, COALESCE(SUM(payload_bytes), 0) AS payload_bytes,
+                   MIN(created_at) FILTER (WHERE status IN ('pending', 'claimed', 'failed')) AS oldest_pending_at
+            FROM ${TABLE_HARNESS_SESSION_PROJECTION_INTENTS}
+            WHERE ${conditions.join(' AND ')} GROUP BY status`,
+      args,
+    });
+    let pendingIntents = namespacePressure?.pendingIntents ?? 0;
+    let pendingBytes = namespacePressure?.pendingBytes ?? 0;
+    let claimedIntents = 0;
+    let failedIntents = 0;
+    let deadIntents = 0;
+    let appliedIntents = 0;
+    let oldestPendingAt: number | undefined;
+    for (const row of result.rows as Record<string, unknown>[]) {
+      const status = String(row.status);
+      const count = Number(row.count);
+      const bytes = Number(row.payload_bytes ?? 0);
+      if (status === 'pending' || status === 'claimed' || status === 'failed') {
+        if (namespacePressure === undefined) {
+          pendingIntents += count;
+          pendingBytes += bytes;
+        }
+        if (status === 'claimed') claimedIntents = count;
+        if (status === 'failed') failedIntents = count;
+        const oldest = row.oldest_pending_at == null ? undefined : Number(row.oldest_pending_at);
+        if (oldest !== undefined)
+          oldestPendingAt = oldestPendingAt === undefined ? oldest : Math.min(oldestPendingAt, oldest);
+      } else if (status === 'dead') {
+        deadIntents = count;
+      } else if (status === 'applied') {
+        appliedIntents = count;
+      }
+    }
+    return {
+      pendingIntents,
+      pendingBytes,
+      claimedIntents,
+      failedIntents,
+      deadIntents,
+      appliedIntents,
+      ...(oldestPendingAt !== undefined ? { oldestPendingAt } : {}),
+      maxPendingIntents: this.sessionRecordProjection.maxPendingIntents,
+      maxPendingBytes: this.sessionRecordProjection.maxPendingBytes,
+      overLimit:
+        pendingIntents >= this.sessionRecordProjection.maxPendingIntents ||
+        pendingBytes >= this.sessionRecordProjection.maxPendingBytes,
+    };
+  }
+
+  private assertProjectionEnabled(): void {
+    if (!this.sessionRecordProjection.enabled) {
+      throw new HarnessStorageSessionRecordProjectionUnsupportedError();
+    }
+  }
+
+  async #loadProjectionIntentTx(
+    tx: PgHarnessClient,
+    harnessName: string,
+    operationId: string,
+  ): Promise<HarnessSessionRecordProjectionIntent> {
+    const result = await tx.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_SESSION_PROJECTION_INTENTS}
+            WHERE id = ? AND harness_name = ? FOR UPDATE`,
+      args: [operationId, harnessName],
+    });
+    const row = result.rows[0] as Record<string, unknown> | undefined;
+    if (!row) throw new HarnessStorageSessionProjectionClaimConflictError(operationId);
+    return rowToProjectionIntent(row);
+  }
+
+  async #loadProjectionFenceTx(
+    tx: PgHarnessClient,
+    harnessName: string,
+    sessionId: string,
+  ): Promise<HarnessSessionRecordProjectionFence | undefined> {
+    const result = await tx.execute({
+      sql: `SELECT * FROM ${
+        TABLE_HARNESS_SESSION_PROJECTION_FENCES
+      } WHERE harness_name = ? AND session_id = ? FOR UPDATE`,
+      args: [harnessName, sessionId],
+    });
+    return rowToProjectionFence(result.rows[0] as Record<string, unknown> | undefined);
+  }
+
+  async #markProjectionDeadTx(
+    tx: PgHarnessClient,
+    intent: HarnessSessionRecordProjectionIntent,
+    now: number,
+    code: string,
+    message: string,
+  ): Promise<void> {
+    if (intent.status === 'applied' || intent.status === 'dead') return;
+    await tx.execute({
+      sql: `UPDATE ${
+        TABLE_HARNESS_SESSION_PROJECTION_INTENTS
+      } SET status = ?, dead_at = ?, failed_at = ?, claim_id = NULL, claim_expires_at = NULL,
+            next_attempt_at = NULL, last_error = ?, updated_at = ? WHERE id = ?`,
+      args: ['dead', now, now, JSON.stringify({ code, message }), now, intent.id],
+    });
+    await this.#releaseProjectionCapacityTx(tx, intent, now);
   }
 
   // -------------------------------------------------------------------------
@@ -5771,6 +6828,7 @@ export class HarnessPG extends HarnessStorage {
 const SESSION_COLUMN_NAMES = [
   'harness_name',
   'id',
+  'session_incarnation',
   'resource_id',
   'thread_id',
   'parent_session_id',
@@ -5892,6 +6950,7 @@ function sessionColumnValues(record: SessionRecord, version: number): { names: s
   const values = [
     record.harnessName,
     record.id,
+    record.sessionIncarnation ?? null,
     record.resourceId,
     record.threadId,
     record.parentSessionId ?? null,
@@ -6762,6 +7821,7 @@ function rowToSession(row: Record<string, unknown>): SessionRecord {
   return {
     harnessName: String(row.harness_name ?? 'default'),
     id: String(row.id),
+    sessionIncarnation: row.session_incarnation != null ? String(row.session_incarnation) : undefined,
     resourceId: String(row.resource_id),
     threadId: String(row.thread_id),
     parentSessionId: row.parent_session_id != null ? String(row.parent_session_id) : undefined,
@@ -6800,6 +7860,218 @@ function rowToSession(row: Record<string, unknown>): SessionRecord {
     leaseExpiresAt: row.lease_expires_at != null ? Number(row.lease_expires_at) : undefined,
     cancelRequest: parseJson(row.cancel_request) ?? undefined,
   };
+}
+
+function rowToProjectionIntent(row: Record<string, unknown>): HarnessSessionRecordProjectionIntent {
+  return {
+    id: String(row.id),
+    operationId: String(row.operation_id),
+    harnessName: String(row.harness_name),
+    sessionId: String(row.session_id),
+    sessionIncarnation: String(row.session_incarnation),
+    resourceId: String(row.resource_id),
+    threadId: String(row.thread_id),
+    revision: Number(row.revision),
+    payloadDigest: String(row.payload_digest),
+    payloadBytes: Number(row.payload_bytes),
+    payload: parseJson(row.payload),
+    status: String(row.status) as HarnessSessionRecordProjectionIntent['status'],
+    attempts: Number(row.attempts),
+    claimId: row.claim_id == null ? undefined : String(row.claim_id),
+    claimExpiresAt: row.claim_expires_at == null ? undefined : Number(row.claim_expires_at),
+    nextAttemptAt: row.next_attempt_at == null ? undefined : Number(row.next_attempt_at),
+    appliedAt: row.applied_at == null ? undefined : Number(row.applied_at),
+    failedAt: row.failed_at == null ? undefined : Number(row.failed_at),
+    deadAt: row.dead_at == null ? undefined : Number(row.dead_at),
+    lastError: parseJson(row.last_error) ?? undefined,
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+  };
+}
+
+function rowToProjectionFence(
+  row: Record<string, unknown> | undefined,
+): HarnessSessionRecordProjectionFence | undefined {
+  if (!row) return undefined;
+  return {
+    harnessName: String(row.harness_name),
+    sessionId: String(row.session_id),
+    sessionIncarnation: String(row.session_incarnation),
+    resourceId: String(row.resource_id),
+    threadId: String(row.thread_id),
+    revision: Number(row.revision),
+    state: String(row.state) as HarnessSessionRecordProjectionFence['state'],
+    updatedAt: Number(row.updated_at),
+  };
+}
+
+function requirePgProjectionIncarnation(record: SessionRecord): string {
+  if (record.sessionIncarnation === undefined || record.sessionIncarnation.length === 0) {
+    throw new HarnessStorageSessionProjectionIncarnationError(record.id);
+  }
+  return record.sessionIncarnation;
+}
+
+function assertPgSessionLease(record: SessionRecord, ownerId: string): void {
+  const now = Date.now();
+  const leaseHeld =
+    record.ownerId !== undefined &&
+    record.leaseExpiresAt !== undefined &&
+    record.leaseExpiresAt > now &&
+    record.ownerId !== ownerId;
+  if (leaseHeld) {
+    throw new HarnessStorageLeaseConflictError(record.id, record.ownerId!, record.leaseExpiresAt!);
+  }
+}
+
+function assertPgProjectionFence(
+  fence: HarnessSessionRecordProjectionFence | undefined,
+  record: SessionRecord,
+  incarnation: string,
+  state: 'active' | 'deleted',
+): void {
+  assertPgProjectionFenceValues(
+    fence,
+    record.harnessName,
+    record.id,
+    incarnation,
+    record.resourceId,
+    record.threadId,
+    record.version,
+    state,
+  );
+}
+
+function assertPgProjectionFenceValues(
+  fence: HarnessSessionRecordProjectionFence | undefined,
+  harnessName: string,
+  sessionId: string,
+  sessionIncarnation: string,
+  resourceId: string,
+  threadId: string,
+  revision: number,
+  state: 'active' | 'deleted',
+): void {
+  if (
+    fence === undefined ||
+    fence.harnessName !== harnessName ||
+    fence.sessionId !== sessionId ||
+    fence.sessionIncarnation !== sessionIncarnation ||
+    fence.resourceId !== resourceId ||
+    fence.threadId !== threadId ||
+    fence.revision !== revision ||
+    fence.state !== state
+  ) {
+    throw new HarnessStorageSessionProjectionIncarnationError(sessionId);
+  }
+}
+
+function pgProjectionFenceMatches(
+  fence: HarnessSessionRecordProjectionFence | undefined,
+  intent: HarnessSessionRecordProjectionIntent,
+  state: 'active' | 'deleted',
+): boolean {
+  return (
+    fence !== undefined &&
+    fence.state === state &&
+    fence.sessionIncarnation === intent.sessionIncarnation &&
+    fence.resourceId === intent.resourceId &&
+    fence.threadId === intent.threadId &&
+    fence.revision >= intent.revision
+  );
+}
+
+function assertPgProjectionIntentIdentity(
+  intent: HarnessSessionRecordProjectionIntent,
+  sessionId: string,
+  sessionIncarnation: string,
+  revision: number,
+  payloadDigest: string,
+): void {
+  if (
+    intent.sessionId !== sessionId ||
+    intent.sessionIncarnation !== sessionIncarnation ||
+    intent.revision !== revision ||
+    intent.payloadDigest !== payloadDigest
+  ) {
+    throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId);
+  }
+}
+
+function projectionAckResult(
+  intent: HarnessSessionRecordProjectionIntent,
+  status: AckSessionRecordProjectionResult['status'],
+): AckSessionRecordProjectionResult {
+  return {
+    status,
+    operationId: intent.operationId,
+    sessionId: intent.sessionId,
+    sessionIncarnation: intent.sessionIncarnation,
+    revision: intent.revision,
+    payloadDigest: intent.payloadDigest,
+  };
+}
+
+function assertPgProjectionClaimInput(input: ClaimSessionRecordProjectionIntentsInput): void {
+  if (input.claimId.length === 0 || !Number.isSafeInteger(input.limit) || input.limit <= 0) {
+    throw new RangeError('Session projection claim requires a non-empty claim id and positive limit');
+  }
+  if (
+    !Number.isSafeInteger(input.now) ||
+    input.now < 0 ||
+    !Number.isSafeInteger(input.claimTtlMs) ||
+    input.claimTtlMs <= 0
+  ) {
+    throw new RangeError('Session projection claim timestamps must be positive safe integers');
+  }
+}
+
+function assertPgProjectionRenewInput(input: RenewSessionRecordProjectionClaimInput): void {
+  if (
+    input.operationId.length === 0 ||
+    input.claimId.length === 0 ||
+    input.sessionIncarnation.length === 0 ||
+    input.payloadDigest.length === 0 ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision <= 0 ||
+    !Number.isSafeInteger(input.now) ||
+    input.now < 0 ||
+    !Number.isSafeInteger(input.claimTtlMs) ||
+    input.claimTtlMs <= 0
+  ) {
+    throw new RangeError('Session projection claim renewal input is invalid');
+  }
+}
+
+function assertPgProjectionAckInput(input: AckSessionRecordProjectionInput): void {
+  if (
+    input.operationId.length === 0 ||
+    input.claimId.length === 0 ||
+    input.sessionIncarnation.length === 0 ||
+    input.payloadDigest.length === 0 ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision <= 0 ||
+    (input.acknowledgedAt !== undefined && (!Number.isSafeInteger(input.acknowledgedAt) || input.acknowledgedAt < 0))
+  ) {
+    throw new RangeError('Session projection acknowledgement input is invalid');
+  }
+}
+
+function assertPgProjectionFailInput(input: FailSessionRecordProjectionInput): void {
+  if (
+    input.operationId.length === 0 ||
+    input.claimId.length === 0 ||
+    input.sessionIncarnation.length === 0 ||
+    input.payloadDigest.length === 0 ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision <= 0 ||
+    (input.failedAt !== undefined && (!Number.isSafeInteger(input.failedAt) || input.failedAt < 0)) ||
+    (input.retryAt !== undefined && (!Number.isSafeInteger(input.retryAt) || input.retryAt < 0)) ||
+    input.error.code.length === 0 ||
+    input.error.message.length === 0
+  ) {
+    throw new RangeError('Session projection failure input is invalid');
+  }
 }
 
 function rowToSummary(row: Record<string, unknown>): SessionSummary {

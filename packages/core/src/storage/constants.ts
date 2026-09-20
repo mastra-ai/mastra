@@ -66,6 +66,9 @@ export const TABLE_HARNESS_WAKEUPS = 'mastra_harness_wakeups';
 export const TABLE_HARNESS_WORKSPACE_ACTIONS = 'mastra_harness_workspace_actions';
 export const TABLE_HARNESS_PLAN_TASKS = 'mastra_harness_plan_tasks';
 export const TABLE_HARNESS_RUN_SUMMARIES = 'mastra_harness_run_summaries';
+export const TABLE_HARNESS_SESSION_PROJECTION_INTENTS = 'mastra_harness_session_projection_intents';
+export const TABLE_HARNESS_SESSION_PROJECTION_FENCES = 'mastra_harness_session_projection_fences';
+export const TABLE_HARNESS_SESSION_PROJECTION_PRESSURE = 'mastra_harness_session_projection_pressure';
 // Tool provider connections
 export const TABLE_TOOL_PROVIDER_CONNECTIONS = 'mastra_tool_provider_connections';
 
@@ -135,6 +138,9 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_WORKSPACE_ACTIONS
   | typeof TABLE_HARNESS_PLAN_TASKS
   | typeof TABLE_HARNESS_RUN_SUMMARIES
+  | typeof TABLE_HARNESS_SESSION_PROJECTION_INTENTS
+  | typeof TABLE_HARNESS_SESSION_PROJECTION_FENCES
+  | typeof TABLE_HARNESS_SESSION_PROJECTION_PRESSURE
   | typeof TABLE_TOOL_PROVIDER_CONNECTIONS
   | typeof TABLE_NOTIFICATIONS
   | typeof TABLE_THREAD_STATE
@@ -924,6 +930,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_HARNESS_SESSIONS]: {
     harness_name: { type: 'text', nullable: false },
     id: { type: 'text', nullable: false },
+    session_incarnation: { type: 'text', nullable: true },
     resource_id: { type: 'text', nullable: false },
     thread_id: { type: 'text', nullable: false },
     parent_session_id: { type: 'text', nullable: true },
@@ -961,6 +968,46 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     owner_id: { type: 'text', nullable: true },
     lease_expires_at: { type: 'bigint', nullable: true },
     cancel_request: { type: 'jsonb', nullable: true },
+  },
+  [TABLE_HARNESS_SESSION_PROJECTION_INTENTS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    operation_id: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    session_incarnation: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    revision: { type: 'integer', nullable: false },
+    payload_digest: { type: 'text', nullable: false },
+    payload_bytes: { type: 'bigint', nullable: false },
+    payload: { type: 'jsonb', nullable: false },
+    status: { type: 'text', nullable: false },
+    attempts: { type: 'integer', nullable: false },
+    claim_id: { type: 'text', nullable: true },
+    claim_expires_at: { type: 'bigint', nullable: true },
+    next_attempt_at: { type: 'bigint', nullable: true },
+    applied_at: { type: 'bigint', nullable: true },
+    failed_at: { type: 'bigint', nullable: true },
+    dead_at: { type: 'bigint', nullable: true },
+    last_error: { type: 'jsonb', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_SESSION_PROJECTION_FENCES]: {
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    session_incarnation: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    revision: { type: 'integer', nullable: false },
+    state: { type: 'text', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_SESSION_PROJECTION_PRESSURE]: {
+    harness_name: { type: 'text', nullable: false, primaryKey: true },
+    pending_intents: { type: 'integer', nullable: false },
+    pending_bytes: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
   },
   // Harness attachments. Bytes are stored as base64 in `data_b64` because
   // the shared `StorageColumn['type']` union does not yet include `blob`.
@@ -1360,6 +1407,16 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_HARNESS_SESSIONS]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
     compositePrimaryKey: ['harness_name', 'id'],
+  },
+  [TABLE_HARNESS_SESSION_PROJECTION_INTENTS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_SESSION_PROJECTION_INTENTS],
+  },
+  [TABLE_HARNESS_SESSION_PROJECTION_FENCES]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_SESSION_PROJECTION_FENCES],
+    compositePrimaryKey: ['harness_name', 'session_id'],
+  },
+  [TABLE_HARNESS_SESSION_PROJECTION_PRESSURE]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_SESSION_PROJECTION_PRESSURE],
   },
   [TABLE_HARNESS_ATTACHMENTS]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENTS],

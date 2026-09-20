@@ -145,7 +145,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
 
       const indexes = harness.getDefaultIndexDefinitions();
 
-      expect(indexes.length).toBe(34);
+      expect(indexes.length).toBe(36);
       expect(indexes).toContainEqual({
         name: 'test_schema_idx_harness_sessions_active_key',
         table: TABLE_HARNESS_SESSIONS,
@@ -249,7 +249,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
         observability.getDefaultIndexDefinitions().length +
         harness.getDefaultIndexDefinitions().length;
 
-      expect(totalIndexes).toBe(47);
+      expect(totalIndexes).toBe(49);
     });
   });
 });

@@ -388,6 +388,13 @@ export interface SessionRecord {
   id: string;
   resourceId: string;
   threadId: string;
+  /**
+   * Storage-assigned lifetime identity used by the native durable projection
+   * fence. Callers must not choose or rotate this value; adapters assign it
+   * only when the session row is first created and preserve it for the row's
+   * entire lifetime.
+   */
+  sessionIncarnation?: string;
   parentSessionId?: string;
 
   /**
@@ -536,6 +543,202 @@ export interface SessionRecord {
     /** Free-form actor label, for example an A2A task id or route id. */
     requestedBy?: string;
   };
+}
+
+/** The schema identity for the first native durable session projection. */
+export const HARNESS_SESSION_RECORD_POST_IMAGE_SCHEMA = 'session_record_post_image' as const;
+export const HARNESS_SESSION_RECORD_POST_IMAGE_SCHEMA_VERSION = 1 as const;
+
+/**
+ * Configuration for the opt-in native record post-image capability. The
+ * capability is disabled by default so adapters without the external schema
+ * cannot claim atomic projection durability accidentally.
+ */
+export interface HarnessSessionRecordProjectionConfig {
+  enabled?: boolean;
+  /** Maximum UTF-8 bytes in one serialized post-image payload. */
+  maxPayloadBytes?: number;
+  /** Maximum delivery attempts before the intent is dead-lettered. */
+  maxAttempts?: number;
+  /** Maximum unsettled intents retained for this adapter namespace. */
+  maxPendingIntents?: number;
+  /** Maximum UTF-8 bytes retained by unsettled intents in this namespace. */
+  maxPendingBytes?: number;
+}
+
+export type HarnessSessionRecordProjectionOption = boolean | HarnessSessionRecordProjectionConfig;
+
+export type HarnessSessionRecordProjectionLifecycle = 'active' | 'closing' | 'closed';
+
+/** Privacy-safe pending-interaction subset; raw suspend payloads are excluded. */
+export interface HarnessSessionRecordProjectionPendingResume {
+  kind: PendingResume['kind'];
+  itemId?: string;
+  runId: string;
+  toolCallId: string;
+  toolName?: string;
+  source: PendingResume['source'];
+  subagentToolCallId?: string;
+  requestedAt: number;
+  expiresAt: number;
+  queuedItemId?: string;
+  originSignalId?: string;
+  modeId?: string;
+  resumedAt?: number;
+  resumeRecoveryAt?: number;
+}
+
+/** Bounded operational run subset retained for restart/read-model recovery. */
+export interface HarnessSessionRecordProjectionRun {
+  runId: string;
+  status: HarnessRunStatus;
+  modeId: string;
+  modelId: string;
+  startedAt: number;
+  updatedAt: number;
+  terminalAt?: number;
+  finishReason?: string;
+}
+
+/**
+ * Deterministic, bounded, record-derived payload for the native consumer.
+ * Deliberately excludes state, workspace, permission/grant data, receipts,
+ * OM configuration, raw queue items, raw tool/model payloads, and assistant
+ * draft text. Live drafts remain owned by the display and transcript lanes.
+ */
+export interface HarnessSessionRecordPostImage {
+  schema: typeof HARNESS_SESSION_RECORD_POST_IMAGE_SCHEMA;
+  schemaVersion: typeof HARNESS_SESSION_RECORD_POST_IMAGE_SCHEMA_VERSION;
+  sessionId: string;
+  threadId: string;
+  resourceId: string;
+  parentSessionId?: string;
+  modeId: string;
+  modelId: string;
+  createdAt: number;
+  lastActivityAt: number;
+  lifecycle: HarnessSessionRecordProjectionLifecycle;
+  tokenUsage: TokenUsage;
+  queueDepth: number;
+  pendingResume?: HarnessSessionRecordProjectionPendingResume;
+  currentRun?: HarnessSessionRecordProjectionRun;
+}
+
+export type HarnessSessionRecordProjectionStatus = 'pending' | 'claimed' | 'applied' | 'failed' | 'dead';
+
+/** One atomically committed session post-image delivery intent. */
+export interface HarnessSessionRecordProjectionIntent {
+  id: string;
+  operationId: string;
+  harnessName: string;
+  sessionId: string;
+  sessionIncarnation: string;
+  resourceId: string;
+  threadId: string;
+  revision: number;
+  payloadDigest: string;
+  payloadBytes: number;
+  payload: HarnessSessionRecordPostImage;
+  status: HarnessSessionRecordProjectionStatus;
+  attempts: number;
+  claimId?: string;
+  claimExpiresAt?: number;
+  nextAttemptAt?: number;
+  appliedAt?: number;
+  failedAt?: number;
+  deadAt?: number;
+  lastError?: { code: string; message: string; retryable?: boolean };
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Current lifetime fence for a session id, retained across hard deletion. */
+export interface HarnessSessionRecordProjectionFence {
+  harnessName: string;
+  sessionId: string;
+  sessionIncarnation: string;
+  resourceId: string;
+  threadId: string;
+  revision: number;
+  state: 'active' | 'deleted';
+  updatedAt: number;
+}
+
+export interface ClaimSessionRecordProjectionIntentsInput {
+  harnessName?: string;
+  resourceId?: string;
+  sessionId?: string;
+  claimId: string;
+  limit: number;
+  now: number;
+  claimTtlMs: number;
+}
+
+export interface RenewSessionRecordProjectionClaimInput {
+  harnessName?: string;
+  operationId: string;
+  sessionId: string;
+  sessionIncarnation: string;
+  revision: number;
+  payloadDigest: string;
+  claimId: string;
+  now: number;
+  claimTtlMs: number;
+}
+
+export type SessionRecordProjectionAckStatus = 'applied' | 'duplicate' | 'fenced';
+
+export interface AckSessionRecordProjectionInput {
+  harnessName?: string;
+  operationId: string;
+  sessionId: string;
+  sessionIncarnation: string;
+  revision: number;
+  payloadDigest: string;
+  claimId: string;
+  acknowledgedAt?: number;
+}
+
+export interface AckSessionRecordProjectionResult {
+  status: SessionRecordProjectionAckStatus;
+  operationId: string;
+  sessionId: string;
+  sessionIncarnation: string;
+  revision: number;
+  payloadDigest: string;
+}
+
+export interface FailSessionRecordProjectionInput {
+  harnessName?: string;
+  operationId: string;
+  sessionId: string;
+  sessionIncarnation: string;
+  revision: number;
+  payloadDigest: string;
+  claimId: string;
+  failedAt?: number;
+  retryAt?: number;
+  dead?: boolean;
+  error: { code: string; message: string; retryable?: boolean };
+}
+
+export interface SessionRecordProjectionQueuePressureInput {
+  harnessName?: string;
+  resourceId?: string;
+  sessionId?: string;
+}
+
+export interface SessionRecordProjectionQueuePressure {
+  pendingIntents: number;
+  pendingBytes: number;
+  claimedIntents: number;
+  failedIntents: number;
+  deadIntents: number;
+  appliedIntents: number;
+  oldestPendingAt?: number;
+  maxPendingIntents: number;
+  maxPendingBytes: number;
+  overLimit: boolean;
 }
 
 /** §5.1e — lifecycle status of a `HarnessRunOperationalState`. */

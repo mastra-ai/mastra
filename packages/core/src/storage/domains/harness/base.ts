@@ -1,6 +1,12 @@
 import { StorageDomain } from '../base';
+import {
+  normalizeHarnessSessionRecordProjectionConfig,
+  type NormalizedHarnessSessionRecordProjectionConfig,
+} from './session-record-projection';
 import type {
   AcquireSessionLeaseInput,
+  AckSessionRecordProjectionInput,
+  AckSessionRecordProjectionResult,
   AgentSignalResultEvidence,
   AgentSignalDispatchState,
   AppendWorkspaceActionJournalEntryResult,
@@ -42,11 +48,14 @@ import type {
   CreateOrLoadHarnessWakeupItemResult,
   CreateOrLoadActiveSessionOptions,
   CreateOrLoadActiveSessionResult,
+  ClaimSessionRecordProjectionIntentsInput,
   DeleteSessionOptions,
   EnqueueChannelOutboxResult,
   HarnessRowErrorCode,
   HarnessSessionEventRecord,
   HarnessSessionEventReplayState,
+  HarnessSessionRecordProjectionOption,
+  HarnessSessionRecordProjectionIntent,
   HarnessWakeupClaimStatus,
   HarnessWakeupInitialClaim,
   HarnessWakeupItem,
@@ -66,11 +75,15 @@ import type {
   ResolveProviderCallbackBindingResult,
   RenewSessionLeaseInput,
   RenewSessionLeaseSubtreeInput,
+  RenewSessionRecordProjectionClaimInput,
   SaveAttachmentInput,
   SaveAttachmentReferenceInput,
   SaveAttachmentResult,
   SaveSessionOptions,
   SaveSessionResult,
+  FailSessionRecordProjectionInput,
+  SessionRecordProjectionQueuePressure,
+  SessionRecordProjectionQueuePressureInput,
   SessionLeaseResult,
   SubtreeSessionLeaseResult,
   SessionRecord,
@@ -453,6 +466,55 @@ export class HarnessStorageChannelBindingUnsupportedError extends HarnessStorage
   }
 }
 
+export class HarnessStorageSessionRecordProjectionUnsupportedError extends HarnessStorageDomainError {
+  readonly name = 'HarnessStorageSessionRecordProjectionUnsupportedError';
+  readonly code = 'harness.storage.session_record_projection_unsupported' as const;
+  constructor() {
+    super('HarnessStorage session record projection must be implemented by this storage adapter');
+  }
+}
+
+export class HarnessStorageSessionProjectionIncarnationError extends HarnessStorageDomainError {
+  readonly name = 'HarnessStorageSessionProjectionIncarnationError';
+  readonly code = 'harness.storage.session_record_projection_incarnation_invalid' as const;
+  constructor(public readonly sessionId: string) {
+    super(`Session "${sessionId}" has no valid durable projection incarnation`);
+  }
+}
+
+export class HarnessStorageSessionProjectionIdentityError extends HarnessStorageDomainError {
+  readonly name = 'HarnessStorageSessionProjectionIdentityError';
+  readonly code = 'harness.storage.session_record_projection_identity_invalid' as const;
+  constructor(
+    public readonly sessionId: string,
+    public readonly field: 'resourceId' | 'threadId',
+  ) {
+    super(`Session "${sessionId}" cannot change its projection ${field} within one incarnation`);
+  }
+}
+
+export class HarnessStorageSessionProjectionClaimConflictError extends HarnessStorageDomainError {
+  readonly name = 'HarnessStorageSessionProjectionClaimConflictError';
+  readonly code = 'harness.storage.session_record_projection_claim_conflict' as const;
+  constructor(
+    public readonly operationId: string,
+    public readonly claimId?: string,
+  ) {
+    super(`Session projection intent "${operationId}" is not held by claim "${claimId ?? '<none>'}"`);
+  }
+}
+
+export class HarnessStorageSessionProjectionBackpressureError extends HarnessStorageDomainError {
+  readonly name = 'HarnessStorageSessionProjectionBackpressureError';
+  readonly code = 'harness.storage.session_record_projection_backpressure' as const;
+  constructor(
+    public readonly pendingIntents: number,
+    public readonly pendingBytes: number,
+  ) {
+    super('Session record projection queue is at its configured capacity');
+  }
+}
+
 /**
  * Thrown when a write would leave two `active` bindings for the same platform
  * conversation tuple (§5.2h: active rows are unique at storage level). Create or
@@ -638,15 +700,22 @@ export class HarnessStorageWakeupTransitionError extends HarnessStorageDomainErr
  * `MemoryStorage`. The harness layer composes the two.
  */
 export abstract class HarnessStorage extends StorageDomain {
+  protected readonly sessionRecordProjection: NormalizedHarnessSessionRecordProjectionConfig;
+
   get supportsAtomicDeleteSessions(): boolean {
     return this.deleteSessions !== HarnessStorage.prototype.deleteSessions;
   }
 
-  constructor() {
+  get supportsSessionRecordProjection(): boolean {
+    return false;
+  }
+
+  constructor(options: { sessionRecordProjection?: HarnessSessionRecordProjectionOption } = {}) {
     super({
       component: 'STORAGE',
       name: 'HARNESS',
     });
+    this.sessionRecordProjection = normalizeHarnessSessionRecordProjectionConfig(options.sessionRecordProjection);
   }
 
   // -------------------------------------------------------------------------
@@ -809,6 +878,38 @@ export abstract class HarnessStorage extends StorageDomain {
     for (const session of opts.sessions) {
       await this.deleteSession(session);
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Native session record projection
+  // -------------------------------------------------------------------------
+
+  async claimSessionRecordProjectionIntents(
+    _input: ClaimSessionRecordProjectionIntentsInput,
+  ): Promise<HarnessSessionRecordProjectionIntent[]> {
+    throw new HarnessStorageSessionRecordProjectionUnsupportedError();
+  }
+
+  async renewSessionRecordProjectionClaim(
+    _input: RenewSessionRecordProjectionClaimInput,
+  ): Promise<{ claimExpiresAt: number; storageNow: number }> {
+    throw new HarnessStorageSessionRecordProjectionUnsupportedError();
+  }
+
+  async ackSessionRecordProjection(_input: AckSessionRecordProjectionInput): Promise<AckSessionRecordProjectionResult> {
+    throw new HarnessStorageSessionRecordProjectionUnsupportedError();
+  }
+
+  async failSessionRecordProjection(
+    _input: FailSessionRecordProjectionInput,
+  ): Promise<HarnessSessionRecordProjectionIntent> {
+    throw new HarnessStorageSessionRecordProjectionUnsupportedError();
+  }
+
+  async getSessionRecordProjectionQueuePressure(
+    _input: SessionRecordProjectionQueuePressureInput,
+  ): Promise<SessionRecordProjectionQueuePressure> {
+    throw new HarnessStorageSessionRecordProjectionUnsupportedError();
   }
 
   // -------------------------------------------------------------------------

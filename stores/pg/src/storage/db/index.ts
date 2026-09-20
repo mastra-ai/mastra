@@ -15,6 +15,7 @@ import type {
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
+  HarnessSessionRecordProjectionOption,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
@@ -55,6 +56,7 @@ export interface PgDomainClientConfig {
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
   indexes?: CreateIndexOptions[];
+  sessionRecordProjection?: HarnessSessionRecordProjectionOption;
 }
 
 /**
@@ -76,6 +78,7 @@ export interface PgDomainPoolConfig {
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
   indexes?: CreateIndexOptions[];
+  sessionRecordProjection?: HarnessSessionRecordProjectionOption;
 }
 
 /**
@@ -93,6 +96,7 @@ export type PgDomainRestConfig = {
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
   indexes?: CreateIndexOptions[];
+  sessionRecordProjection?: HarnessSessionRecordProjectionOption;
 } & (
   | {
       host: string;
@@ -119,6 +123,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
   disableInit?: boolean;
   skipDefaultIndexes?: boolean;
   indexes?: CreateIndexOptions[];
+  sessionRecordProjection?: HarnessSessionRecordProjectionOption;
 } {
   // Existing client
   if ('client' in config) {
@@ -129,6 +134,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
       disableInit: config.disableInit,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
+      sessionRecordProjection: config.sessionRecordProjection,
     };
   }
 
@@ -142,6 +148,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
       disableInit: config.disableInit,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
+      sessionRecordProjection: config.sessionRecordProjection,
     };
   }
 
@@ -181,6 +188,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
     disableInit: config.disableInit,
     skipDefaultIndexes: config.skipDefaultIndexes,
     indexes: config.indexes,
+    sessionRecordProjection: config.sessionRecordProjection,
   };
 }
 

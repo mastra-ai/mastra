@@ -22,6 +22,11 @@ import {
   HarnessStoragePlanTaskVersionConflictError,
   HarnessStorageProviderCallbackBindingTransitionError,
   HarnessStorageSessionNotFoundError,
+  HarnessStorageSessionRecordProjectionUnsupportedError,
+  HarnessStorageSessionProjectionBackpressureError,
+  HarnessStorageSessionProjectionClaimConflictError,
+  HarnessStorageSessionProjectionIncarnationError,
+  HarnessStorageSessionProjectionIdentityError,
   HarnessStorageThreadDeleteFenceConflictError,
   HarnessStorageVersionConflictError,
   HarnessStorageWakeupClaimConflictError,
@@ -44,6 +49,10 @@ import {
   planTaskAfterCursor,
   walkPlanTaskSubtree,
 } from './plan-task-helpers';
+import {
+  buildHarnessSessionRecordProjectionIntent,
+  projectHarnessSessionRecordProjectionFence,
+} from './session-record-projection';
 import type {
   AcquireSessionLeaseInput,
   AgentSignalResultEvidence,
@@ -92,6 +101,8 @@ import type {
   DeleteSessionOptions,
   HarnessSessionEventRecord,
   HarnessSessionEventReplayState,
+  HarnessSessionRecordProjectionIntent,
+  HarnessSessionRecordProjectionOption,
   HarnessWakeupClaimStatus,
   HarnessWakeupItem,
   ListActiveSessionsByThreadInput,
@@ -120,6 +131,13 @@ import type {
   SessionLeaseResult,
   SubtreeSessionLeaseResult,
   SessionRecord,
+  AckSessionRecordProjectionInput,
+  AckSessionRecordProjectionResult,
+  ClaimSessionRecordProjectionIntentsInput,
+  FailSessionRecordProjectionInput,
+  RenewSessionRecordProjectionClaimInput,
+  SessionRecordProjectionQueuePressure,
+  SessionRecordProjectionQueuePressureInput,
   SessionSummary,
   PendingInteractionExpiryGeneration,
   ThreadDeleteFenceLease,
@@ -141,10 +159,22 @@ export class InMemoryHarness extends HarnessStorage {
   private readonly harnessName: string;
   private readonly compactionLocks = new Map<string, Promise<void>>();
 
-  constructor({ db, harnessName = 'default' }: { db: InMemoryDB; harnessName?: string }) {
-    super();
+  constructor({
+    db,
+    harnessName = 'default',
+    sessionRecordProjection,
+  }: {
+    db: InMemoryDB;
+    harnessName?: string;
+    sessionRecordProjection?: HarnessSessionRecordProjectionOption;
+  }) {
+    super({ sessionRecordProjection });
     this.db = db;
     this.harnessName = harnessName;
+  }
+
+  override get supportsSessionRecordProjection(): boolean {
+    return this.sessionRecordProjection.enabled;
   }
 
   // -------------------------------------------------------------------------
@@ -363,16 +393,22 @@ export class InMemoryHarness extends HarnessStorage {
     }
 
     const nextVersion = opts.ifVersion + 1;
+    const sessionIncarnation = this.projectionSessionIncarnation(record, existing);
     const stored: SessionRecord = {
       ...record,
       harnessName,
+      ...(sessionIncarnation !== undefined ? { sessionIncarnation } : {}),
       version: nextVersion,
       // Preserve current lease metadata — `saveSession` does not mutate it.
       ownerId: existing?.ownerId,
       leaseExpiresAt: existing?.leaseExpiresAt,
     };
 
+    const projection = this.prepareProjectionWrite(stored, sessionIncarnation, nextVersion);
+    if (projection !== undefined) this.assertProjectionCapacity(projection.intent);
+
     this.db.harnessSessions.set(sessionKey(harnessName, record.id), cloneSessionRecord(stored));
+    if (projection !== undefined) this.commitProjectionWrite(projection);
     return { version: nextVersion };
   }
 
@@ -404,13 +440,17 @@ export class InMemoryHarness extends HarnessStorage {
     }
 
     const nextVersion = opts.ifVersion + 1;
+    const sessionIncarnation = this.projectionSessionIncarnation(record, existing);
     const stored: SessionRecord = {
       ...record,
       harnessName,
+      ...(sessionIncarnation !== undefined ? { sessionIncarnation } : {}),
       version: nextVersion,
       ownerId: existing.ownerId,
       leaseExpiresAt: existing.leaseExpiresAt,
     };
+    const projection = this.prepareProjectionWrite(stored, sessionIncarnation, nextVersion);
+    if (projection !== undefined) this.assertProjectionCapacity(projection.intent);
     this.db.harnessSessions.set(sessionKey(harnessName, record.id), cloneSessionRecord(stored));
     for (const ref of references) {
       this.db.harnessAttachmentReferences.set(attachmentReferenceKey({ ...ref, harnessName }), {
@@ -419,6 +459,7 @@ export class InMemoryHarness extends HarnessStorage {
         ...(ref.retainedUntil !== undefined ? { retainedUntil: ref.retainedUntil } : {}),
       });
     }
+    if (projection !== undefined) this.commitProjectionWrite(projection);
     return { version: nextVersion };
   }
 
@@ -440,6 +481,10 @@ export class InMemoryHarness extends HarnessStorage {
       // the (harnessName, resourceId, threadId) key. Return it as the current
       // owner so the caller reopens it (closed) or fails new work (closing)
       // rather than creating a second active owner behind it.
+      if (this.sessionRecordProjection.enabled) {
+        this.assertProjectionIncarnation(existing);
+        this.assertProjectionFence(existing, 'active', existing.version);
+      }
       return {
         record: cloneSessionRecord(existing),
         created: false,
@@ -475,14 +520,19 @@ export class InMemoryHarness extends HarnessStorage {
     }
 
     const expiresAt = storageNow + opts.initialLease.ttlMs;
+    const sessionIncarnation = this.sessionRecordProjection.enabled ? randomUUID() : undefined;
     const stored: SessionRecord = {
       ...record,
       harnessName: namespace,
+      ...(sessionIncarnation !== undefined ? { sessionIncarnation } : {}),
       version: 1,
       ownerId: opts.initialLease.ownerId,
       leaseExpiresAt: expiresAt,
     };
+    const projection = this.prepareProjectionWrite(stored, sessionIncarnation, 1, storageNow);
+    if (projection !== undefined) this.assertProjectionCapacity(projection.intent);
     this.db.harnessSessions.set(key, cloneSessionRecord(stored));
+    if (projection !== undefined) this.commitProjectionWrite(projection);
     return {
       record: cloneSessionRecord(stored),
       created: true,
@@ -505,11 +555,52 @@ export class InMemoryHarness extends HarnessStorage {
       const existing = this.db.harnessSessions.get(sessionKey(namespace, sessionId));
       if (!existing) continue;
       assertDeleteGuard(existing, opts);
+      if (this.sessionRecordProjection.enabled) {
+        this.assertProjectionIncarnation(existing);
+        this.assertProjectionFence(existing, 'active', existing.version);
+      }
       existingSessions.set(sessionKey(namespace, sessionId), { namespace, sessionId, record: existing });
     }
 
     for (const { namespace, sessionId } of existingSessions.values()) {
       this.db.harnessSessions.delete(sessionKey(namespace, sessionId));
+    }
+
+    for (const { namespace, sessionId, record } of existingSessions.values()) {
+      if (this.sessionRecordProjection.enabled) {
+        this.assertProjectionIncarnation(record);
+        this.db.harnessSessionRecordProjectionFences.set(
+          projectionFenceKey(namespace, sessionId),
+          projectHarnessSessionRecordProjectionFence(record, {
+            sessionIncarnation: record.sessionIncarnation!,
+            state: 'deleted',
+            revision: record.version,
+            updatedAt: Date.now(),
+          }),
+        );
+        for (const intent of this.db.harnessSessionRecordProjectionIntents.values()) {
+          if (
+            intent.harnessName !== namespace ||
+            intent.sessionId !== sessionId ||
+            intent.sessionIncarnation !== record.sessionIncarnation ||
+            intent.status === 'applied' ||
+            intent.status === 'dead'
+          ) {
+            continue;
+          }
+          intent.status = 'dead';
+          intent.deadAt = Date.now();
+          intent.failedAt = intent.deadAt;
+          intent.claimId = undefined;
+          intent.claimExpiresAt = undefined;
+          intent.nextAttemptAt = undefined;
+          intent.updatedAt = intent.deadAt;
+          intent.lastError = {
+            code: 'session_projection.deleted',
+            message: 'Session lifetime was deleted',
+          };
+        }
+      }
     }
 
     for (const { namespace, sessionId, record } of existingSessions.values()) {
@@ -519,6 +610,339 @@ export class InMemoryHarness extends HarnessStorage {
         resourceId: record.resourceId,
         threadId: record.threadId,
       });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Native session record projection
+  // -------------------------------------------------------------------------
+
+  async claimSessionRecordProjectionIntents(
+    input: ClaimSessionRecordProjectionIntentsInput,
+  ): Promise<HarnessSessionRecordProjectionIntent[]> {
+    this.assertProjectionEnabled();
+    assertProjectionClaimInput(input);
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    const candidates = [...this.db.harnessSessionRecordProjectionIntents.values()]
+      .filter(intent => {
+        if (intent.harnessName !== namespace) return false;
+        if (input.resourceId !== undefined && intent.resourceId !== input.resourceId) return false;
+        if (input.sessionId !== undefined && intent.sessionId !== input.sessionId) return false;
+        if (intent.status === 'applied' || intent.status === 'dead') return false;
+        if (intent.attempts >= this.sessionRecordProjection.maxAttempts) return true;
+        if (intent.status === 'claimed' && (intent.claimExpiresAt ?? 0) > input.now) return false;
+        if (intent.status === 'pending' || intent.status === 'failed') {
+          return (intent.nextAttemptAt ?? intent.createdAt) <= input.now;
+        }
+        return true;
+      })
+      .sort(
+        (left, right) =>
+          left.createdAt - right.createdAt ||
+          left.revision - right.revision ||
+          compareStrings(left.operationId, right.operationId),
+      );
+
+    const claimed: HarnessSessionRecordProjectionIntent[] = [];
+    for (const candidate of candidates) {
+      const current = this.db.harnessSessionRecordProjectionIntents.get(candidate.id);
+      if (!current || current.status === 'applied' || current.status === 'dead') continue;
+      if (current.status === 'claimed' && (current.claimExpiresAt ?? 0) > input.now) continue;
+      if (current.attempts >= this.sessionRecordProjection.maxAttempts) {
+        current.status = 'dead';
+        current.deadAt = input.now;
+        current.failedAt = input.now;
+        current.claimId = undefined;
+        current.claimExpiresAt = undefined;
+        current.nextAttemptAt = undefined;
+        current.updatedAt = input.now;
+        current.lastError = { code: 'session_projection.max_attempts', message: 'Maximum projection attempts reached' };
+        continue;
+      }
+      const fence = this.db.harnessSessionRecordProjectionFences.get(
+        projectionFenceKey(current.harnessName, current.sessionId),
+      );
+      if (!projectionFenceMatches(fence, current, 'active')) {
+        current.status = 'dead';
+        current.deadAt = input.now;
+        current.updatedAt = input.now;
+        current.lastError = { code: 'session_projection.fenced', message: 'Session projection lifetime is fenced' };
+        continue;
+      }
+      if (hasProjectionPredecessor(this.db.harnessSessionRecordProjectionIntents, current)) continue;
+      if (
+        (current.status === 'pending' || current.status === 'failed') &&
+        (current.nextAttemptAt ?? current.createdAt) > input.now
+      ) {
+        continue;
+      }
+      current.status = 'claimed';
+      current.attempts += 1;
+      current.claimId = input.claimId;
+      current.claimExpiresAt = input.now + input.claimTtlMs;
+      current.updatedAt = input.now;
+      claimed.push(cloneJson(current));
+      if (claimed.length >= input.limit) break;
+    }
+    return claimed;
+  }
+
+  async renewSessionRecordProjectionClaim(
+    input: RenewSessionRecordProjectionClaimInput,
+  ): Promise<{ claimExpiresAt: number; storageNow: number }> {
+    this.assertProjectionEnabled();
+    assertProjectionRenewInput(input);
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    const intent = this.findProjectionIntent(input.operationId, namespace);
+    this.assertProjectionIntentIdentity(
+      intent,
+      input.sessionId,
+      input.sessionIncarnation,
+      input.revision,
+      input.payloadDigest,
+    );
+    const fence = this.db.harnessSessionRecordProjectionFences.get(
+      projectionFenceKey(intent.harnessName, intent.sessionId),
+    );
+    if (!projectionFenceMatches(fence, intent, 'active'))
+      throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId);
+    if (intent.status !== 'claimed' || intent.claimId !== input.claimId || (intent.claimExpiresAt ?? 0) <= input.now) {
+      throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId, input.claimId);
+    }
+    intent.claimExpiresAt = input.now + input.claimTtlMs;
+    intent.updatedAt = input.now;
+    return { claimExpiresAt: intent.claimExpiresAt, storageNow: input.now };
+  }
+
+  async ackSessionRecordProjection(input: AckSessionRecordProjectionInput): Promise<AckSessionRecordProjectionResult> {
+    this.assertProjectionEnabled();
+    assertProjectionAckInput(input);
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    const intent = this.findProjectionIntent(input.operationId, namespace);
+    this.assertProjectionIntentIdentity(
+      intent,
+      input.sessionId,
+      input.sessionIncarnation,
+      input.revision,
+      input.payloadDigest,
+    );
+    const fence = this.db.harnessSessionRecordProjectionFences.get(
+      projectionFenceKey(intent.harnessName, intent.sessionId),
+    );
+    if (!projectionFenceMatches(fence, intent, 'active')) {
+      return projectionAckResult(intent, 'fenced');
+    }
+    if (intent.status === 'applied') return projectionAckResult(intent, 'duplicate');
+    const acknowledgedAt = input.acknowledgedAt ?? Date.now();
+    if (
+      intent.status !== 'claimed' ||
+      intent.claimId !== input.claimId ||
+      (intent.claimExpiresAt ?? 0) <= acknowledgedAt
+    ) {
+      throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId, input.claimId);
+    }
+    intent.status = 'applied';
+    intent.appliedAt = acknowledgedAt;
+    intent.claimId = undefined;
+    intent.claimExpiresAt = undefined;
+    intent.nextAttemptAt = undefined;
+    intent.updatedAt = acknowledgedAt;
+    return projectionAckResult(intent, 'applied');
+  }
+
+  async failSessionRecordProjection(
+    input: FailSessionRecordProjectionInput,
+  ): Promise<HarnessSessionRecordProjectionIntent> {
+    this.assertProjectionEnabled();
+    assertProjectionFailInput(input);
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    const intent = this.findProjectionIntent(input.operationId, namespace);
+    this.assertProjectionIntentIdentity(
+      intent,
+      input.sessionId,
+      input.sessionIncarnation,
+      input.revision,
+      input.payloadDigest,
+    );
+    const fence = this.db.harnessSessionRecordProjectionFences.get(
+      projectionFenceKey(intent.harnessName, intent.sessionId),
+    );
+    if (!projectionFenceMatches(fence, intent, 'active'))
+      throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId);
+    const failedAt = input.failedAt ?? Date.now();
+    if (intent.status !== 'claimed' || intent.claimId !== input.claimId || (intent.claimExpiresAt ?? 0) <= failedAt) {
+      throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId, input.claimId);
+    }
+    const terminal =
+      input.dead === true ||
+      input.error.retryable === false ||
+      intent.attempts >= this.sessionRecordProjection.maxAttempts;
+    intent.status = terminal ? 'dead' : 'failed';
+    intent.failedAt = failedAt;
+    intent.deadAt = terminal ? failedAt : undefined;
+    intent.nextAttemptAt = terminal ? undefined : (input.retryAt ?? failedAt);
+    intent.claimId = undefined;
+    intent.claimExpiresAt = undefined;
+    intent.lastError = { ...input.error };
+    intent.updatedAt = failedAt;
+    return cloneJson(intent);
+  }
+
+  async getSessionRecordProjectionQueuePressure(
+    input: SessionRecordProjectionQueuePressureInput,
+  ): Promise<SessionRecordProjectionQueuePressure> {
+    this.assertProjectionEnabled();
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    const intents = [...this.db.harnessSessionRecordProjectionIntents.values()].filter(
+      intent =>
+        intent.harnessName === namespace &&
+        (input.resourceId === undefined || intent.resourceId === input.resourceId) &&
+        (input.sessionId === undefined || intent.sessionId === input.sessionId),
+    );
+    const pending = intents.filter(
+      intent => intent.status === 'pending' || intent.status === 'claimed' || intent.status === 'failed',
+    );
+    const pendingIntents = pending.length;
+    const pendingBytes = pending.reduce((total, intent) => total + intent.payloadBytes, 0);
+    return {
+      pendingIntents,
+      pendingBytes,
+      claimedIntents: intents.filter(intent => intent.status === 'claimed').length,
+      failedIntents: intents.filter(intent => intent.status === 'failed').length,
+      deadIntents: intents.filter(intent => intent.status === 'dead').length,
+      appliedIntents: intents.filter(intent => intent.status === 'applied').length,
+      oldestPendingAt: pending.length > 0 ? Math.min(...pending.map(intent => intent.createdAt)) : undefined,
+      maxPendingIntents: this.sessionRecordProjection.maxPendingIntents,
+      maxPendingBytes: this.sessionRecordProjection.maxPendingBytes,
+      overLimit:
+        pendingIntents >= this.sessionRecordProjection.maxPendingIntents ||
+        pendingBytes >= this.sessionRecordProjection.maxPendingBytes,
+    };
+  }
+
+  private assertProjectionEnabled(): void {
+    if (!this.sessionRecordProjection.enabled) {
+      throw new HarnessStorageSessionRecordProjectionUnsupportedError();
+    }
+  }
+
+  private assertProjectionIncarnation(
+    record: SessionRecord,
+  ): asserts record is SessionRecord & { sessionIncarnation: string } {
+    if (record.sessionIncarnation === undefined || record.sessionIncarnation.length === 0) {
+      throw new HarnessStorageSessionProjectionIncarnationError(record.id);
+    }
+  }
+
+  private projectionSessionIncarnation(record: SessionRecord, existing: SessionRecord | undefined): string | undefined {
+    if (!this.sessionRecordProjection.enabled) return record.sessionIncarnation;
+    if (existing !== undefined) {
+      this.assertProjectionIncarnation(existing);
+      if (record.sessionIncarnation !== undefined && record.sessionIncarnation !== existing.sessionIncarnation) {
+        throw new HarnessStorageSessionProjectionIncarnationError(record.id);
+      }
+      if (record.resourceId !== existing.resourceId) {
+        throw new HarnessStorageSessionProjectionIdentityError(record.id, 'resourceId');
+      }
+      if (record.threadId !== existing.threadId) {
+        throw new HarnessStorageSessionProjectionIdentityError(record.id, 'threadId');
+      }
+      return existing.sessionIncarnation;
+    }
+    return randomUUID();
+  }
+
+  private prepareProjectionWrite(
+    record: SessionRecord,
+    sessionIncarnation: string | undefined,
+    revision: number,
+    createdAt = Date.now(),
+  ):
+    | {
+        intent: HarnessSessionRecordProjectionIntent;
+        fence: ReturnType<typeof projectHarnessSessionRecordProjectionFence>;
+      }
+    | undefined {
+    if (!this.sessionRecordProjection.enabled || sessionIncarnation === undefined) return undefined;
+    const intent = buildHarnessSessionRecordProjectionIntent(record, {
+      sessionIncarnation,
+      revision,
+      createdAt,
+      maxPayloadBytes: this.sessionRecordProjection.maxPayloadBytes,
+    });
+    return {
+      intent,
+      fence: projectHarnessSessionRecordProjectionFence(record, {
+        sessionIncarnation,
+        state: 'active',
+        revision,
+        updatedAt: createdAt,
+      }),
+    };
+  }
+
+  private assertProjectionCapacity(intent: HarnessSessionRecordProjectionIntent): void {
+    let count = 0;
+    let bytes = 0;
+    for (const existing of this.db.harnessSessionRecordProjectionIntents.values()) {
+      if (existing.harnessName !== intent.harnessName) continue;
+      if (existing.status !== 'pending' && existing.status !== 'claimed' && existing.status !== 'failed') continue;
+      count += 1;
+      bytes += existing.payloadBytes;
+    }
+    if (
+      count + 1 > this.sessionRecordProjection.maxPendingIntents ||
+      bytes + intent.payloadBytes > this.sessionRecordProjection.maxPendingBytes
+    ) {
+      throw new HarnessStorageSessionProjectionBackpressureError(count, bytes);
+    }
+  }
+
+  private commitProjectionWrite(projection: {
+    intent: HarnessSessionRecordProjectionIntent;
+    fence: ReturnType<typeof projectHarnessSessionRecordProjectionFence>;
+  }): void {
+    this.db.harnessSessionRecordProjectionFences.set(
+      projectionFenceKey(projection.fence.harnessName, projection.fence.sessionId),
+      projection.fence,
+    );
+    this.db.harnessSessionRecordProjectionIntents.set(projection.intent.id, projection.intent);
+  }
+
+  private assertProjectionFence(record: SessionRecord, state: 'active' | 'deleted', revision: number): void {
+    const fence = this.db.harnessSessionRecordProjectionFences.get(projectionFenceKey(record.harnessName, record.id));
+    if (
+      !fence ||
+      fence.state !== state ||
+      fence.sessionIncarnation !== record.sessionIncarnation ||
+      fence.revision !== revision
+    ) {
+      throw new HarnessStorageSessionProjectionIncarnationError(record.id);
+    }
+  }
+
+  private findProjectionIntent(operationId: string, harnessName: string): HarnessSessionRecordProjectionIntent {
+    const intent = this.db.harnessSessionRecordProjectionIntents.get(operationId);
+    if (!intent || intent.harnessName !== harnessName) {
+      throw new HarnessStorageSessionProjectionClaimConflictError(operationId);
+    }
+    return intent;
+  }
+
+  private assertProjectionIntentIdentity(
+    intent: HarnessSessionRecordProjectionIntent,
+    sessionId: string,
+    sessionIncarnation: string,
+    revision: number,
+    payloadDigest: string,
+  ): void {
+    if (
+      intent.sessionId !== sessionId ||
+      intent.sessionIncarnation !== sessionIncarnation ||
+      intent.revision !== revision ||
+      intent.payloadDigest !== payloadDigest
+    ) {
+      throw new HarnessStorageSessionProjectionClaimConflictError(intent.operationId);
     }
   }
 
@@ -3270,6 +3694,8 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessMessageResultEvidence.clear();
     this.db.harnessOperationTombstones.clear();
     this.db.harnessSessionEvents.clear();
+    this.db.harnessSessionRecordProjectionIntents.clear();
+    this.db.harnessSessionRecordProjectionFences.clear();
     this.db.harnessWorkspaceActionJournal.clear();
     this.db.harnessChannelInbox.clear();
     this.db.harnessProviderCallbackBindings.clear();
@@ -3294,6 +3720,119 @@ export class InMemoryHarness extends HarnessStorage {
  */
 function sessionKey(harnessName: string, sessionId: string): string {
   return `${harnessName}\u0000${sessionId}`;
+}
+
+function projectionFenceKey(harnessName: string, sessionId: string): string {
+  return sessionKey(harnessName, sessionId);
+}
+
+function projectionFenceMatches(
+  fence: ReturnType<typeof projectHarnessSessionRecordProjectionFence> | undefined,
+  intent: HarnessSessionRecordProjectionIntent,
+  state: 'active' | 'deleted',
+): boolean {
+  return (
+    fence !== undefined &&
+    fence.state === state &&
+    fence.sessionIncarnation === intent.sessionIncarnation &&
+    fence.resourceId === intent.resourceId &&
+    fence.threadId === intent.threadId &&
+    fence.revision >= intent.revision
+  );
+}
+
+function hasProjectionPredecessor(
+  intents: Map<string, HarnessSessionRecordProjectionIntent>,
+  candidate: HarnessSessionRecordProjectionIntent,
+): boolean {
+  for (const predecessor of intents.values()) {
+    if (
+      predecessor.harnessName === candidate.harnessName &&
+      predecessor.sessionId === candidate.sessionId &&
+      predecessor.sessionIncarnation === candidate.sessionIncarnation &&
+      predecessor.revision < candidate.revision &&
+      (predecessor.status === 'pending' || predecessor.status === 'claimed' || predecessor.status === 'failed')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function projectionAckResult(
+  intent: HarnessSessionRecordProjectionIntent,
+  status: AckSessionRecordProjectionResult['status'],
+): AckSessionRecordProjectionResult {
+  return {
+    status,
+    operationId: intent.operationId,
+    sessionId: intent.sessionId,
+    sessionIncarnation: intent.sessionIncarnation,
+    revision: intent.revision,
+    payloadDigest: intent.payloadDigest,
+  };
+}
+
+function assertProjectionClaimInput(input: ClaimSessionRecordProjectionIntentsInput): void {
+  if (input.claimId.length === 0 || !Number.isSafeInteger(input.limit) || input.limit <= 0) {
+    throw new RangeError('Session projection claim requires a non-empty claim id and positive limit');
+  }
+  if (
+    !Number.isSafeInteger(input.now) ||
+    input.now < 0 ||
+    !Number.isSafeInteger(input.claimTtlMs) ||
+    input.claimTtlMs <= 0
+  ) {
+    throw new RangeError('Session projection claim timestamps must be positive safe integers');
+  }
+}
+
+function assertProjectionRenewInput(input: RenewSessionRecordProjectionClaimInput): void {
+  if (
+    input.operationId.length === 0 ||
+    input.claimId.length === 0 ||
+    input.sessionIncarnation.length === 0 ||
+    input.payloadDigest.length === 0 ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision <= 0 ||
+    !Number.isSafeInteger(input.now) ||
+    input.now < 0 ||
+    !Number.isSafeInteger(input.claimTtlMs) ||
+    input.claimTtlMs <= 0
+  ) {
+    throw new RangeError('Session projection claim renewal input is invalid');
+  }
+}
+
+function assertProjectionAckInput(input: AckSessionRecordProjectionInput): void {
+  if (
+    input.operationId.length === 0 ||
+    input.claimId.length === 0 ||
+    input.sessionIncarnation.length === 0 ||
+    input.payloadDigest.length === 0 ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision <= 0 ||
+    (input.acknowledgedAt !== undefined && (!Number.isSafeInteger(input.acknowledgedAt) || input.acknowledgedAt < 0))
+  ) {
+    throw new RangeError('Session projection acknowledgement input is invalid');
+  }
+}
+
+function assertProjectionFailInput(input: FailSessionRecordProjectionInput): void {
+  if (
+    input.operationId.length === 0 ||
+    input.claimId.length === 0 ||
+    input.sessionIncarnation.length === 0 ||
+    input.payloadDigest.length === 0 ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision <= 0 ||
+    (input.failedAt !== undefined && (!Number.isSafeInteger(input.failedAt) || input.failedAt < 0)) ||
+    (input.retryAt !== undefined && (!Number.isSafeInteger(input.retryAt) || input.retryAt < 0)) ||
+    input.error.code.length === 0 ||
+    input.error.message.length === 0
+  ) {
+    throw new RangeError('Session projection failure input is invalid');
+  }
 }
 
 function attachmentKey(harnessName: string, ownerSessionId: string, attachmentId: string): string {

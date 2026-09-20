@@ -1,6 +1,6 @@
 import type { ConnectionOptions } from 'node:tls';
 import { DOMAIN_KEYS } from '@mastra/core/storage';
-import type { CreateIndexOptions, RetentionConfig } from '@mastra/core/storage';
+import type { CreateIndexOptions, HarnessSessionRecordProjectionOption, RetentionConfig } from '@mastra/core/storage';
 import type { ClientConfig, Pool, PoolConfig } from 'pg';
 
 export type PostgresDomainKey = (typeof DOMAIN_KEYS)[number];
@@ -69,6 +69,8 @@ export interface PostgresBaseConfig {
    * apply them. See {@link RetentionConfig}.
    */
   retention?: RetentionConfig;
+  /** Opt in to atomic native Harness session record post-image intents. */
+  sessionRecordProjection?: HarnessSessionRecordProjectionOption;
 }
 
 /**

@@ -44,6 +44,8 @@ import type {
   HarnessProviderCallbackBinding,
   HarnessWakeupItem,
   HarnessSessionEventRecord,
+  HarnessSessionRecordProjectionFence,
+  HarnessSessionRecordProjectionIntent,
   WorkspaceActionJournalEntry,
   OperationAdmissionTombstone,
   SessionRecord,
@@ -271,6 +273,8 @@ export class InMemoryDB {
   readonly harnessMessageResultEvidence = new Map<string, AgentSignalResultEvidence>();
   readonly harnessOperationTombstones = new Map<string, OperationAdmissionTombstone>();
   readonly harnessSessionEvents = new Map<string, HarnessSessionEventRecord>();
+  readonly harnessSessionRecordProjectionIntents = new Map<string, HarnessSessionRecordProjectionIntent>();
+  readonly harnessSessionRecordProjectionFences = new Map<string, HarnessSessionRecordProjectionFence>();
   readonly harnessWorkspaceActionJournal = new Map<string, WorkspaceActionJournalEntry>();
   readonly harnessChannelBindings = new Map<string, ChannelBinding>();
   readonly harnessChannelInbox = new Map<string, ChannelInboxItem>();
@@ -363,6 +367,8 @@ export class InMemoryDB {
     this.harnessMessageResultEvidence.clear();
     this.harnessOperationTombstones.clear();
     this.harnessSessionEvents.clear();
+    this.harnessSessionRecordProjectionIntents.clear();
+    this.harnessSessionRecordProjectionFences.clear();
     this.harnessWorkspaceActionJournal.clear();
     this.harnessChannelBindings.clear();
     this.harnessChannelInbox.clear();
