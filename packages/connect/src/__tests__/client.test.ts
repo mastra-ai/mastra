@@ -189,7 +189,15 @@ describe('listIntegrations', () => {
     );
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
 
-    await expect(listIntegrations(client)).resolves.toEqual([{ id: 'catalog-mcp', capabilities: { mcp: true } }]);
+    await expect(listIntegrations(client)).resolves.toEqual([
+      {
+        id: 'catalog-mcp',
+        provider: 'generic',
+        displayName: 'Catalog MCP',
+        logoUrl: null,
+        capabilities: { mcp: true },
+      },
+    ]);
     expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/integrations');
   });
 
