@@ -109,11 +109,13 @@ async function fixture(integrationId = 'gitlab') {
     replyToId: null,
   }));
   const resolveReviewThread = vi.fn(async () => undefined);
+  const listReviews = vi.fn(async () => ({ reviews: [], nextCursor: null }));
   const versionControl = {
     getRepositoryTarget,
     createPullRequest,
     createReviewComment,
     resolveReviewThread,
+    listReviews,
   } as unknown as VersionControl;
   const emitAgent = vi.fn(async () => undefined);
   const audit = { emitAgent } as unknown as AuditAgentEmitter;
@@ -123,6 +125,7 @@ async function fixture(integrationId = 'gitlab') {
     createPullRequest,
     createReviewComment,
     resolveReviewThread,
+    listReviews,
     getRepositoryTarget,
     audit,
     emitAgent,
@@ -130,6 +133,28 @@ async function fixture(integrationId = 'gitlab') {
 }
 
 describe('createSourceControlTools', () => {
+  it('lists reviews through the active repository connection without exposing provider credentials', async () => {
+    const setup = await fixture();
+    const tools = createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+
+    await expect(
+      (tools.source_control_list_change_request_reviews!.execute as any)({ changeRequestId: 17 }),
+    ).resolves.toEqual({
+      reviews: [],
+      nextCursor: null,
+    });
+    expect(setup.listReviews).toHaveBeenCalledWith({
+      connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
+      sourceId: 'acme/repo',
+      actingUserId: 'user-1',
+      pullRequestId: '17',
+    });
+  });
+
   it('creates a change request only for the active persisted session target', async () => {
     const setup = await fixture();
     const tools = createSourceControlTools({

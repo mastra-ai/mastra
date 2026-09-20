@@ -56,7 +56,7 @@ async function reviewArguments(headBranch: string): Promise<string> {
 describe('reviewBoard', () => {
   it('names a GitLab merge request and points its kickoff at provider-neutral review tools', async () => {
     const decision = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(gitlabReviewContext());
-    expect(decision).toMatchObject({ type: 'invokeSkill', role: 'review', skillName: 'factory-review' });
+    expect(decision).toMatchObject({ type: 'invokeSkill', role: 'review', skillName: 'factory-gitlab-review' });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected review invocation.');
     expect(decision.arguments).toContain('GitLab merge request !5');
     expect(decision.arguments).toContain('source_control_get_change_request');
@@ -79,7 +79,7 @@ describe('reviewBoard', () => {
     );
     expect(resumed).toMatchObject({
       type: 'invokeSkill',
-      skillName: 'factory-review',
+      skillName: 'factory-gitlab-review',
       cancelInFlight: true,
       resume: true,
     });
@@ -87,7 +87,7 @@ describe('reviewBoard', () => {
     const rereview = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(
       gitlabReviewContext('factory/gitlab-mr-head', 'done'),
     );
-    expect(rereview).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview' });
+    expect(rereview).toMatchObject({ type: 'invokeSkill', skillName: 'factory-gitlab-rereview' });
     expect(rereview).not.toHaveProperty('resume');
   });
 

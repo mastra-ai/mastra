@@ -185,6 +185,19 @@ export function createSourceControlTools({
         });
       },
     }),
+    source_control_list_change_request_reviews: createTool({
+      id: 'source_control_list_change_request_reviews',
+      description: 'List submitted reviews and approvals on a pull request or merge request in the active repository.',
+      inputSchema: changeRequestSchema.extend({ cursor: z.string().trim().min(1).optional() }),
+      execute: async input => {
+        const target = await withTarget();
+        return target.provider.versionControl.listReviews({
+          ...(await reference(target)),
+          pullRequestId: changeRequestId(input.changeRequestId),
+          ...(input.cursor !== undefined ? { cursor: input.cursor } : {}),
+        });
+      },
+    }),
     source_control_create_change_request: createTool({
       id: 'source_control_create_change_request',
       description:

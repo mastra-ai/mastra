@@ -68,9 +68,16 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
   // The re-review skill only applies when a prior review pass actually completed
   // (the card is returning from `done`). A cancelled first-time review that
   // re-enters Review from `review` itself still has no prior pass to reconcile —
-  // it gets the regular factory-review skill.
+  // it gets the regular provider-specific review skill.
   const priorReviewCompleted = context.fromStage === 'done';
-  const skillName = priorReviewCompleted ? 'factory-rereview' : 'factory-review';
+  const isGitlab = context.item.source === 'gitlab-pr';
+  const skillName = isGitlab
+    ? priorReviewCompleted
+      ? 'factory-gitlab-rereview'
+      : 'factory-gitlab-review'
+    : priorReviewCompleted
+      ? 'factory-rereview'
+      : 'factory-review';
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:${skillName}`,

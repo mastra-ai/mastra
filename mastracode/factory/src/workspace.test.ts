@@ -327,6 +327,8 @@ describe('bundled Factory skill assets', () => {
     expect(assetNames).toEqual([
       'configure-factory-rules',
       'factory-complete-issue',
+      'factory-gitlab-rereview',
+      'factory-gitlab-review',
       'factory-plan',
       'factory-rereview',
       'factory-review',
@@ -335,6 +337,18 @@ describe('bundled Factory skill assets', () => {
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
     );
+  });
+
+  it('bundles GitLab review instructions that use the scoped provider tools', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    for (const name of ['factory-gitlab-review', 'factory-gitlab-rereview']) {
+      const instructions = await fs.readFile(path.join(assetRoot, name, 'SKILL.md'), 'utf8');
+      expect(instructions).toContain('source_control_get_change_request');
+      expect(instructions).toContain('source_control_list_change_request_reviews');
+      expect(instructions).toContain('source_control_review_change_request');
+      expect(instructions).toContain('factory_transition_work_item');
+      expect(instructions).not.toMatch(/`gh pr |`glab mr /);
+    }
   });
 
   it('uses work-item-specific artifact paths for Factory handoffs', async () => {
@@ -2332,6 +2346,8 @@ describe('FactorySkillSource layering', () => {
     expect(names).toEqual([
       'configure-factory-rules',
       'factory-complete-issue',
+      'factory-gitlab-rereview',
+      'factory-gitlab-review',
       'factory-plan',
       'factory-rereview',
       'factory-review',
