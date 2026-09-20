@@ -134,153 +134,158 @@ export interface MastraCodeState {
   };
 }
 
-export const stateSchema = z.object({
-  // Session-scoped selection.
-  // validates state against this schema, so they MUST be declared here — Zod
-  // strips unknown keys on parse, which would otherwise silently discard the
-  // seeded model and leave the controller with no model selected.
-  currentModelId: z.string().optional(),
-  modeId: z.string().optional(),
-  activeModelPackId: z.string().nullable().optional(),
-  subagentModelId: z.string().optional(),
-  projectPath: z.string().optional(),
-  projectName: z.string().optional(),
-  factoryProjectId: z.string().optional(),
-  factoryOrgId: z.string().optional(),
-  factoryOrgUnresolved: z.boolean().optional(),
-  projectRepositoryId: z.string().optional(),
-  branch: z.string().optional(),
-  // Session operates on an untrusted checkout — suppress AGENTS.md ingestion.
-  untrustedCheckout: z.boolean().optional(),
-  // Trusted ref to serve instruction files from on untrusted checkouts.
-  baseRef: z.string().optional(),
-  // Skip the operator machine's home-directory instruction files.
-  skipGlobalInstructions: z.boolean().optional(),
-  configDir: z.string().default(DEFAULT_CONFIG_DIR),
-  homeDir: z.string().optional(),
-  gitBranch: z.string().optional(),
-  lastCommand: z.string().optional(),
-  // Observational Memory model settings. Concrete IDs are legacy/explicit
-  // compatibility fields; fresh sessions preserve auto selection intent.
-  observerModelId: z.string().optional(),
-  reflectorModelId: z.string().optional(),
-  observerModelSelection: z.string().optional(),
-  reflectorModelSelection: z.string().optional(),
-  // Observational Memory threshold settings
-  observationThreshold: z.number().default(30_000),
-  reflectionThreshold: z.number().default(40_000),
-  // Whether observations and reflections use the terse caveman-style instruction.
-  // Off by default — caveman style is opt-in via `/om` settings; observers and
-  // reflectors fall back to their built-in (prose) behavior unless enabled.
-  cavemanObservations: z.boolean().default(false),
-  // Whether OM forwards image/file attachment parts to the Observer LLM.
-  // 'auto' (default) checks the provider capabilities registry to decide.
-  // true/false forces the setting regardless of model capabilities.
-  observeAttachments: z.union([z.literal('auto'), z.boolean()]).default('auto'),
-  // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
-  omScope: z.enum(['thread', 'resource']).optional(),
-  // Thinking level for model reasoning effort. Optional: absent means "no
-  // session override" — the effective level is resolved from settings
-  // (per-mode defaults, then the global preference) at request time.
-  thinkingLevel: z.preprocess(value => (value === null ? undefined : value), z.enum(THINKING_LEVEL_VALUES).optional()),
-  // YOLO mode — auto-approve all tool calls
-  yolo: z.boolean().default(false),
-  // Permission rules — per-category and per-tool approval policies
-  permissionRules: z
-    .object({
-      categories: z.record(z.string(), z.enum(['allow', 'ask', 'deny'])).default({}),
-      tools: z.record(z.string(), z.enum(['allow', 'ask', 'deny'])).default({}),
-    })
-    .default({ categories: {}, tools: {} }),
-  // Smart editing mode — use AST-based analysis for code edits
-  smartEditing: z.boolean().default(true),
-  // Notification mode — alert when TUI needs user attention
-  notifications: z.enum(['bell', 'system', 'both', 'off']).default('off'),
-  // Task list (ephemeral per-thread, cleared on thread switch/creation)
-  tasks: z
-    .array(
-      z.object({
-        id: z.string().optional(),
-        content: z.string(),
-        status: z.enum(['pending', 'in_progress', 'completed']),
-        activeForm: z.string(),
-      }),
-    )
-    .default([]),
-  // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
-  sandboxAllowedPaths: z.array(z.string()).default([]),
-  // Pending pack hop written by the account-rotation processor on a cascade
-  // hop; the TUI consumes it on `state_changed` to apply thread stickiness,
-  // then clears it back to null. Must be declared — Zod strips unknown keys.
-  mastracodePendingPackFallback: z
-    .object({
-      fromPackId: z.string(),
-      toPackId: z.string(),
-      toModelId: z.string(),
-      threadId: z.string().optional(),
-      reason: z.enum(['pool-exhausted', 'persistent-outage']),
-      at: z.string(),
-    })
-    .nullish(),
-  // Asset directories contributed by active plugins.
-  pluginSkillPaths: z.array(z.string()).default([]),
-  pluginCommandPaths: z.array(z.string()).default([]),
-  pluginInstructions: z.array(z.string()).default([]),
-  // Active plan (set when a plan is approved in Plan mode)
-  activePlan: z
-    .object({
-      title: z.string(),
-      plan: z.string(),
-      approvedAt: z.string(),
-    })
-    .nullable()
-    .default(null),
-  // Active browser settings (tracks what's actually running vs. what's in the settings file)
-  activeBrowserSettings: z
-    .object({
-      enabled: z.boolean(),
-      provider: z.enum(['stagehand', 'agent-browser']),
-      headless: z.boolean().optional(),
-      viewport: z
-        .union([
-          z.object({
-            width: z.number(),
-            height: z.number(),
-          }),
-          z.literal('window'),
-        ])
-        .optional(),
-      cdpUrl: z.string().optional(),
-      profile: z.string().optional(),
-      executablePath: z.string().optional(),
-      scope: z.enum(['shared', 'thread']).optional(),
-      stagehand: z
-        .object({
-          env: z.enum(['LOCAL', 'BROWSERBASE']),
-          projectId: z.string().optional(),
-          model: z.string().optional(),
-          preserveUserDataDir: z.boolean().optional(),
-        })
-        .optional(),
-      agentBrowser: z
-        .object({
-          storageState: z.string().optional(),
-        })
-        .optional(),
-    })
-    .optional(),
-  // Model the active Stagehand browser was created with. Resolved once at
-  // launch so /browser status reports what is really running even if the
-  // user signs in/out of Codex afterwards.
-  activeBrowserModel: z
-    .object({
-      modelName: z.string().optional(),
-      source: z.enum(['settings', 'chat-model', 'codex-oauth', 'stagehand-default']),
-      viaCodexOAuth: z.boolean(),
-    })
-    .optional(),
-}).transform(state => ({
-  ...state,
-  observerModelSelection: state.observerModelSelection ?? state.observerModelId ?? 'auto',
-  reflectorModelSelection: state.reflectorModelSelection ?? state.reflectorModelId ?? 'auto',
-}));
+export const stateSchema = z
+  .object({
+    // Session-scoped selection.
+    // validates state against this schema, so they MUST be declared here — Zod
+    // strips unknown keys on parse, which would otherwise silently discard the
+    // seeded model and leave the controller with no model selected.
+    currentModelId: z.string().optional(),
+    modeId: z.string().optional(),
+    activeModelPackId: z.string().nullable().optional(),
+    subagentModelId: z.string().optional(),
+    projectPath: z.string().optional(),
+    projectName: z.string().optional(),
+    factoryProjectId: z.string().optional(),
+    factoryOrgId: z.string().optional(),
+    factoryOrgUnresolved: z.boolean().optional(),
+    projectRepositoryId: z.string().optional(),
+    branch: z.string().optional(),
+    // Session operates on an untrusted checkout — suppress AGENTS.md ingestion.
+    untrustedCheckout: z.boolean().optional(),
+    // Trusted ref to serve instruction files from on untrusted checkouts.
+    baseRef: z.string().optional(),
+    // Skip the operator machine's home-directory instruction files.
+    skipGlobalInstructions: z.boolean().optional(),
+    configDir: z.string().default(DEFAULT_CONFIG_DIR),
+    homeDir: z.string().optional(),
+    gitBranch: z.string().optional(),
+    lastCommand: z.string().optional(),
+    // Observational Memory model settings. Concrete IDs are legacy/explicit
+    // compatibility fields; fresh sessions preserve auto selection intent.
+    observerModelId: z.string().optional(),
+    reflectorModelId: z.string().optional(),
+    observerModelSelection: z.string().optional(),
+    reflectorModelSelection: z.string().optional(),
+    // Observational Memory threshold settings
+    observationThreshold: z.number().default(30_000),
+    reflectionThreshold: z.number().default(40_000),
+    // Whether observations and reflections use the terse caveman-style instruction.
+    // Off by default — caveman style is opt-in via `/om` settings; observers and
+    // reflectors fall back to their built-in (prose) behavior unless enabled.
+    cavemanObservations: z.boolean().default(false),
+    // Whether OM forwards image/file attachment parts to the Observer LLM.
+    // 'auto' (default) checks the provider capabilities registry to decide.
+    // true/false forces the setting regardless of model capabilities.
+    observeAttachments: z.union([z.literal('auto'), z.boolean()]).default('auto'),
+    // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
+    omScope: z.enum(['thread', 'resource']).optional(),
+    // Thinking level for model reasoning effort. Optional: absent means "no
+    // session override" — the effective level is resolved from settings
+    // (per-mode defaults, then the global preference) at request time.
+    thinkingLevel: z.preprocess(
+      value => (value === null ? undefined : value),
+      z.enum(THINKING_LEVEL_VALUES).optional(),
+    ),
+    // YOLO mode — auto-approve all tool calls
+    yolo: z.boolean().default(false),
+    // Permission rules — per-category and per-tool approval policies
+    permissionRules: z
+      .object({
+        categories: z.record(z.string(), z.enum(['allow', 'ask', 'deny'])).default({}),
+        tools: z.record(z.string(), z.enum(['allow', 'ask', 'deny'])).default({}),
+      })
+      .default({ categories: {}, tools: {} }),
+    // Smart editing mode — use AST-based analysis for code edits
+    smartEditing: z.boolean().default(true),
+    // Notification mode — alert when TUI needs user attention
+    notifications: z.enum(['bell', 'system', 'both', 'off']).default('off'),
+    // Task list (ephemeral per-thread, cleared on thread switch/creation)
+    tasks: z
+      .array(
+        z.object({
+          id: z.string().optional(),
+          content: z.string(),
+          status: z.enum(['pending', 'in_progress', 'completed']),
+          activeForm: z.string(),
+        }),
+      )
+      .default([]),
+    // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
+    sandboxAllowedPaths: z.array(z.string()).default([]),
+    // Pending pack hop written by the account-rotation processor on a cascade
+    // hop; the TUI consumes it on `state_changed` to apply thread stickiness,
+    // then clears it back to null. Must be declared — Zod strips unknown keys.
+    mastracodePendingPackFallback: z
+      .object({
+        fromPackId: z.string(),
+        toPackId: z.string(),
+        toModelId: z.string(),
+        threadId: z.string().optional(),
+        reason: z.enum(['pool-exhausted', 'persistent-outage']),
+        at: z.string(),
+      })
+      .nullish(),
+    // Asset directories contributed by active plugins.
+    pluginSkillPaths: z.array(z.string()).default([]),
+    pluginCommandPaths: z.array(z.string()).default([]),
+    pluginInstructions: z.array(z.string()).default([]),
+    // Active plan (set when a plan is approved in Plan mode)
+    activePlan: z
+      .object({
+        title: z.string(),
+        plan: z.string(),
+        approvedAt: z.string(),
+      })
+      .nullable()
+      .default(null),
+    // Active browser settings (tracks what's actually running vs. what's in the settings file)
+    activeBrowserSettings: z
+      .object({
+        enabled: z.boolean(),
+        provider: z.enum(['stagehand', 'agent-browser']),
+        headless: z.boolean().optional(),
+        viewport: z
+          .union([
+            z.object({
+              width: z.number(),
+              height: z.number(),
+            }),
+            z.literal('window'),
+          ])
+          .optional(),
+        cdpUrl: z.string().optional(),
+        profile: z.string().optional(),
+        executablePath: z.string().optional(),
+        scope: z.enum(['shared', 'thread']).optional(),
+        stagehand: z
+          .object({
+            env: z.enum(['LOCAL', 'BROWSERBASE']),
+            projectId: z.string().optional(),
+            model: z.string().optional(),
+            preserveUserDataDir: z.boolean().optional(),
+          })
+          .optional(),
+        agentBrowser: z
+          .object({
+            storageState: z.string().optional(),
+          })
+          .optional(),
+      })
+      .optional(),
+    // Model the active Stagehand browser was created with. Resolved once at
+    // launch so /browser status reports what is really running even if the
+    // user signs in/out of Codex afterwards.
+    activeBrowserModel: z
+      .object({
+        modelName: z.string().optional(),
+        source: z.enum(['settings', 'chat-model', 'codex-oauth', 'stagehand-default']),
+        viaCodexOAuth: z.boolean(),
+      })
+      .optional(),
+  })
+  .transform(state => ({
+    ...state,
+    observerModelSelection: state.observerModelSelection ?? state.observerModelId ?? 'auto',
+    reflectorModelSelection: state.reflectorModelSelection ?? state.reflectorModelId ?? 'auto',
+  }));

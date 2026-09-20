@@ -72,7 +72,10 @@ describe('web OM config routes', () => {
     const putRes = await put('/web/config/om/observer/model', { modelId: 'anthropic/claude-fable-5' });
     expect(putRes.status).toBe(200);
     const { config } = await putRes.json();
-    expect(config.observer).toMatchObject({ model: 'anthropic/claude-fable-5', effectiveModelId: 'anthropic/claude-fable-5' });
+    expect(config.observer).toMatchObject({
+      model: 'anthropic/claude-fable-5',
+      effectiveModelId: 'anthropic/claude-fable-5',
+    });
 
     const stored = await memorySettings.get({ orgId: 'local', userId: 'local' });
     expect(stored).toMatchObject({ observerModelId: 'anthropic/claude-fable-5', reflectorModelId: null });
@@ -90,5 +93,4 @@ describe('web OM config routes', () => {
     const stored = await memorySettings.get({ orgId: 'local', userId: 'local' });
     expect(stored?.observerModelId).toBeNull();
   });
-
 });
