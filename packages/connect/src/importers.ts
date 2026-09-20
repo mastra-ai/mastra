@@ -5,6 +5,7 @@ import { listProjectConnections, proxyRequest, resolveClient } from './client.js
 import { MastraConnectError } from './errors.js';
 import type { ImporterAccess, ImporterProviderRegistration, ImporterProxyRequest } from './importer-registry.js';
 import { IMPORTERS } from './importer-registry.js';
+import './providers/importers.js';
 
 export interface ImportersIntegrationOptions {
   /** Pin a specific connection id (bypasses env-var fallback and single-active-connection resolution). */
