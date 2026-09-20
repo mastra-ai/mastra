@@ -200,6 +200,13 @@ export type AgentUpdateThreadPeerOptions = {
 export type AgentThreadPeerAdvertisement = AgentThreadPeerInfo & {
   sourceId: string;
   discoveredAt: Date;
+  /**
+   * True when the agent that ran this discovery published the advertisement
+   * itself, so it names one of that agent's own threads rather than a peer's.
+   * Discovery answers with the caller's own advertisements alongside peer
+   * responses; callers listing peers for a human use this to exclude their own.
+   */
+  selfAdvertised?: boolean;
 };
 
 export type DiscoverAgentThreadPeersOptions = {

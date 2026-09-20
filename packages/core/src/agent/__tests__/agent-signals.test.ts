@@ -2747,6 +2747,46 @@ describe('Agent signals', () => {
     claim.unsubscribe();
   });
 
+  it('marks the discovering agent own advertisements and leaves sibling agents discoverable', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const sessionAgent = new Agent({
+      id: 'session-peer-agent',
+      name: 'Session Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('session response'),
+      pubsub,
+    });
+    const siblingAgent = new Agent({
+      id: 'sibling-peer-agent',
+      name: 'Sibling Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sibling response'),
+      pubsub,
+    });
+
+    const sessionClaim = await sessionAgent.claimThreadOwnership({
+      resourceId: 'shared-peer-resource',
+      threadId: 'session-peer-thread',
+      peer: { label: 'Session' },
+    });
+    const siblingClaim = await siblingAgent.claimThreadOwnership({
+      resourceId: 'shared-peer-resource',
+      threadId: 'sibling-peer-thread',
+      peer: { label: 'Sibling' },
+    });
+
+    const peers = await sessionAgent.discoverThreadPeers({ timeoutMs: 10 });
+    const byId = new Map(peers.map(peer => [peer.id, peer]));
+
+    // Both advertisements live in one process-wide runtime, but only the caller's
+    // own thread is the caller's own — a sibling agent is a peer it can address.
+    expect(byId.get('session-peer-agent:shared-peer-resource:session-peer-thread')?.selfAdvertised).toBe(true);
+    expect(byId.get('sibling-peer-agent:shared-peer-resource:sibling-peer-thread')?.selfAdvertised).toBeUndefined();
+
+    sessionClaim.unsubscribe();
+    siblingClaim.unsubscribe();
+  });
+
   it('releases claimed ownership and peer advertisements when reset for tests', async () => {
     const ownerAgent = new Agent({
       id: 'reset-owner-agent',

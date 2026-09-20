@@ -1018,6 +1018,7 @@ export class AgentThreadStreamRuntime {
   async discoverThreadPeers(
     options: DiscoverAgentThreadPeersOptions = {},
     pubsub?: PubSub,
+    callerAgent?: Agent<any, any, any, any>,
   ): Promise<AgentThreadPeerAdvertisement[]> {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const state = this.#getState(resolvedPubSub);
@@ -1027,7 +1028,17 @@ export class AgentThreadStreamRuntime {
     const discoveredAt = new Date();
 
     for (const peer of state.advertisedThreadPeers.values()) {
-      peers.set(peer.id, { ...toPublicThreadPeer(peer), discoveredAt });
+      // This runtime is shared by every agent in the process, so the advertisements
+      // here include sibling agents' claims — those are real peers to the caller and
+      // stay. Only the caller's own claim is marked, so a caller can tell its own
+      // threads apart from peers'.
+      const owner = state.claimedThreadOwners.get(this.#threadKey(peer.resourceId, peer.threadId));
+      const selfAdvertised = callerAgent !== undefined && owner?.agent === callerAgent;
+      peers.set(peer.id, {
+        ...toPublicThreadPeer(peer),
+        discoveredAt,
+        ...(selfAdvertised ? { selfAdvertised: true } : {}),
+      });
     }
 
     await new Promise<void>(resolve => {
