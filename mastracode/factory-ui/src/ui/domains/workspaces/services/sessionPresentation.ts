@@ -3,7 +3,8 @@ import { isPullRequestSource } from '../../factory/services/workItems';
 import { USER_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
 
-const REVIEW_BRANCH_PREFIX = 'factory/pr-';
+const GITHUB_REVIEW_BRANCH = /^factory\/pr-([1-9]\d*)$/;
+const GITLAB_REVIEW_BRANCH = /^factory\/gitlab-mr-([1-9]\d*)-[a-z0-9]+$/;
 
 export interface SessionOwnerDetails {
   name: string;
@@ -33,15 +34,15 @@ export function getSessionOwnerDetails(
 
 export function getFactorySessionKind(session: FactoryUserSession, workItem: WorkItem | undefined): 'work' | 'review' {
   if (workItem && isPullRequestSource(workItem.source)) return 'review';
-  if (!workItem && session.branch.startsWith(REVIEW_BRANCH_PREFIX)) return 'review';
+  if (!workItem && getReviewBranchIdentifier(session.branch)) return 'review';
   return 'work';
 }
 
 export function getReviewBranchIdentifier(branch: string): string | undefined {
-  if (!branch.startsWith(REVIEW_BRANCH_PREFIX)) return undefined;
-  const number = branch.slice(REVIEW_BRANCH_PREFIX.length);
-  if (!/^\d+$/.test(number)) return undefined;
-  return `#${number}`;
+  const github = GITHUB_REVIEW_BRANCH.exec(branch);
+  if (github) return `#${github[1]}`;
+  const gitlab = GITLAB_REVIEW_BRANCH.exec(branch);
+  return gitlab ? `!${gitlab[1]}` : undefined;
 }
 
 export function isAutomaticUserSessionBranch(session: FactoryUserSession): boolean {
