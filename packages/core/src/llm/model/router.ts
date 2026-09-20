@@ -212,13 +212,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
 
   /** @internal */
   __getReusableRouterId(): string | undefined {
-    if (
-      this.hasCustomGateways ||
-      this.config.url ||
-      this.config.apiKey ||
-      this.config.headers ||
-      this.config.api
-    ) {
+    if (this.hasCustomGateways || this.config.url || this.config.apiKey || this.config.headers || this.config.api) {
       return undefined;
     }
     return this.config.routerId;

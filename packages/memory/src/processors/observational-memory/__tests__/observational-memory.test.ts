@@ -4,6 +4,7 @@ import { Agent, MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '@mastra/core/memory';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { createSkill } from '@mastra/core/skills';
@@ -139,7 +140,6 @@ import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
 import { DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS, formatToolResultForObserver } from '../tool-result-helpers';
 import type { ActivationTTL } from '../types';
-import { ModelRouterLanguageModel } from '@mastra/core/llm';
 
 // =============================================================================
 // Test Helpers
@@ -3753,7 +3753,10 @@ describe('Observer Agent Helpers', () => {
       const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
       const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
       const requestContext = new RequestContext();
-      requestContext.set('MastraMemory', { thread: { id: 'thread-router-model' }, resourceId: 'resource-router-model' });
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-router-model' },
+        resourceId: 'resource-router-model',
+      });
       const state: Record<string, unknown> = {};
 
       await processor.processInputStep({
@@ -3820,7 +3823,10 @@ describe('Observer Agent Helpers', () => {
       const state: Record<string, unknown> = {};
 
       await processor.processInputStep({
-        messageList: new MessageList({ threadId: 'thread-configured-router', resourceId: 'resource-configured-router' }),
+        messageList: new MessageList({
+          threadId: 'thread-configured-router',
+          resourceId: 'resource-configured-router',
+        }),
         messages: [],
         requestContext,
         stepNumber: 0,
@@ -3892,7 +3898,11 @@ describe('Observer Agent Helpers', () => {
         content: [{ type: 'text' as const, text: '<observations>\n- Runtime auto resolved\n</observations>' }],
         warnings: [],
       }));
-      const actorModel = createStreamCapableMockModel({ provider: 'custom-gateway', modelId: 'runtime-model', doGenerate });
+      const actorModel = createStreamCapableMockModel({
+        provider: 'custom-gateway',
+        modelId: 'runtime-model',
+        doGenerate,
+      });
       const storage = createInMemoryStorage();
       const om = new ObservationalMemory({
         storage,

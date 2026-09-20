@@ -434,6 +434,7 @@ async function resolveModelDefaultsContext({
 export interface OMRoleConfigInfo {
   model: 'auto' | string;
   effectiveModelId: string;
+  effectiveModelSource: 'explicit' | 'live-session' | 'configured-default';
   providerStatus: 'available' | 'unavailable';
 }
 
@@ -486,11 +487,13 @@ function modelProvider(modelId: string): string {
 function roleConfig(
   model: OMRoleConfigInfo['model'],
   effectiveModelId: string,
+  autoModelSource: 'live-session' | 'configured-default',
   availableProviders: ReadonlySet<string>,
 ): OMRoleConfigInfo {
   return {
     model,
     effectiveModelId,
+    effectiveModelSource: model === 'auto' ? autoModelSource : 'explicit',
     providerStatus: availableProviders.has(modelProvider(effectiveModelId)) ? 'available' : 'unavailable',
   };
 }
@@ -498,14 +501,15 @@ function roleConfig(
 function readStoredOMConfig(
   record: MemorySettingsRecord | null,
   currentModelId: string | undefined,
+  autoModelSource: 'live-session' | 'configured-default',
   availableProviders: ReadonlySet<string>,
 ): OMConfigInfo {
   const autoModelId = resolveAutoOMModelId(currentModelId);
   const observerModelId = record?.observerModelId ?? autoModelId;
   const reflectorModelId = record?.reflectorModelId ?? autoModelId;
   return {
-    observer: roleConfig(record?.observerModelId ?? 'auto', observerModelId, availableProviders),
-    reflector: roleConfig(record?.reflectorModelId ?? 'auto', reflectorModelId, availableProviders),
+    observer: roleConfig(record?.observerModelId ?? 'auto', observerModelId, autoModelSource, availableProviders),
+    reflector: roleConfig(record?.reflectorModelId ?? 'auto', reflectorModelId, autoModelSource, availableProviders),
     observerModelId,
     reflectorModelId,
     observationThreshold: record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
@@ -1193,7 +1197,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const availableProviders = await resolveOMResponseContext(loose(c));
             return c.json({
               ok: true,
-              config: readStoredOMConfig(record, await factoryOmFallback(factoryProjectId), availableProviders),
+              config: readStoredOMConfig(
+                record,
+                await factoryOmFallback(factoryProjectId),
+                'configured-default',
+                availableProviders,
+              ),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1226,8 +1235,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const fallback = await factoryOmFallback(factoryProjectId);
             const availableProviders = await resolveOMResponseContext(loose(c));
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const sessionModelId = session?.model.get();
             return c.json({
-              config: readStoredOMConfig(record, session?.model.get() || fallback, availableProviders),
+              config: readStoredOMConfig(
+                record,
+                sessionModelId || fallback,
+                sessionModelId ? 'live-session' : 'configured-default',
+                availableProviders,
+              ),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1276,9 +1291,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             });
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const sessionModelId = session?.model.get();
             const config = readStoredOMConfig(
               record,
-              session?.model.get() || (await factoryOmFallback(factoryProjectId)),
+              sessionModelId || (await factoryOmFallback(factoryProjectId)),
+              sessionModelId ? 'live-session' : 'configured-default',
               availableProviders,
             );
             return c.json({ ok: true, config });
@@ -1334,9 +1351,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             });
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const sessionModelId = session?.model.get();
             const config = readStoredOMConfig(
               record,
-              session?.model.get() || (await factoryOmFallback(factoryProjectId)),
+              sessionModelId || (await factoryOmFallback(factoryProjectId)),
+              sessionModelId ? 'live-session' : 'configured-default',
               availableProviders,
             );
             return c.json({ ok: true, config });
@@ -1377,9 +1396,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             await persistMemorySettings(context, { observeAttachments: value });
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const sessionModelId = session?.model.get();
             const config = readStoredOMConfig(
               record,
-              session?.model.get() || (await factoryOmFallback(factoryProjectId)),
+              sessionModelId || (await factoryOmFallback(factoryProjectId)),
+              sessionModelId ? 'live-session' : 'configured-default',
               availableProviders,
             );
             return c.json({ ok: true, config });

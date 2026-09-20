@@ -28,11 +28,13 @@ const baseConfig: OMConfigInfo = {
   observer: {
     model: 'openai/observer-x',
     effectiveModelId: 'openai/observer-x',
+    effectiveModelSource: 'explicit',
     providerStatus: 'available',
   },
   reflector: {
     model: 'openai/reflector-x',
     effectiveModelId: 'openai/reflector-x',
+    effectiveModelSource: 'explicit',
     providerStatus: 'available',
   },
   observerModelId: 'openai/observer-x',
@@ -69,6 +71,7 @@ describe('OMSection', () => {
             reflector: {
               model: 'google/gemini-3.5-flash',
               effectiveModelId: 'google/gemini-3.5-flash',
+              effectiveModelSource: 'explicit',
               providerStatus: 'unavailable',
             },
             reflectorModelId: 'google/gemini-3.5-flash',
@@ -94,6 +97,7 @@ describe('OMSection', () => {
       observer: {
         model: 'auto',
         effectiveModelId: 'openai/gpt-5.4-mini',
+        effectiveModelSource: 'configured-default',
         providerStatus: 'available',
       },
       observerModelId: 'openai/gpt-5.4-mini',
@@ -109,6 +113,7 @@ describe('OMSection', () => {
             reflector: {
               model: 'auto',
               effectiveModelId: 'openai/gpt-5.4-mini',
+              effectiveModelSource: 'configured-default',
               providerStatus: 'available',
             },
             reflectorModelId: 'openai/gpt-5.4-mini',
@@ -124,7 +129,7 @@ describe('OMSection', () => {
     const [observerTrigger, reflectorTrigger] = screen.getAllByRole('combobox');
     const observerAuto = screen.getByRole('button', { name: 'Use automatic observer model' });
     const reflectorAuto = screen.getByRole('button', { name: 'Use automatic reflector model' });
-    expect(observerAuto).toHaveTextContent('Auto (openai/gpt-5.4-mini)');
+    expect(observerAuto).toHaveTextContent('Auto (configured default: openai/gpt-5.4-mini)');
     expect(reflectorAuto).toHaveTextContent('Auto');
     expect(observerAuto).toHaveAttribute('aria-pressed', 'true');
     expect(reflectorAuto).toHaveAttribute('aria-pressed', 'false');

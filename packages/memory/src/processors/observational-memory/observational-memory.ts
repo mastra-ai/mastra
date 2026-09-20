@@ -95,7 +95,7 @@ export function buildMessageRange(messages: MastraDBMessage[]): string {
  * Low-cost model `'auto'` resolves to, per actor provider.
  *
  * Google is the one entry that is not a literal: it reuses this package's own
- * default observation model, which is newer than the consumer-side Gemini pack
+ * default observation model. The consumer-side Gemini pack differs
  * (`mastracode/sdk/src/onboarding/packs.ts` resolves `google/gemini-3.5-flash`).
  * The two tables are intentionally separate — `@mastra/memory` cannot import
  * from a consumer — so a Google de-duplication pass has to edit both.

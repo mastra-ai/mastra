@@ -4,6 +4,7 @@ export const omGlobalSettingsPersistenceScenario: McE2eScenario = {
   name: 'om-global-settings-persistence',
   description: 'Verify /om changes persist to global settings and current thread metadata through the real TUI.',
   testName: 'persists OM caveman and attachment settings globally and on the active thread',
+  disableMemory: false,
   useOpenAIModel: true,
   aimockFixture: 'om-global-settings-persistence.json',
   async run({ terminal, runtime }) {

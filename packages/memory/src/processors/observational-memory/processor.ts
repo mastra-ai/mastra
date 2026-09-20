@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { MemoryRunState } from '@mastra/core/memory';
 import type { MemoryOperationAttributes, ObservabilityContext } from '@mastra/core/observability';
@@ -19,7 +20,6 @@ import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
-import { ModelRouterLanguageModel } from '@mastra/core/llm';
 
 /**
  * Coerce a shared `state.__omTurn` value to a usable live turn.
