@@ -77,6 +77,15 @@ importers({
 
 Parameterized `access` keys (containing `$`, like `resource:$projectId`) grant authority over every scope the pattern matches but are not destinations themselves — only resolved `scopes` and concrete `access` keys are synced. A concrete key alongside a `scopes` function keeps syncing as a static destination on every run. If the `scopes` function throws, the run proceeds with the last successfully resolved set (or the static destinations only) and retries at the next fire.
 
+The `scopes` function receives `{ connection }` — the platform connection the importer is bound to — so different connections of the same provider can resolve different destination sets (per-connection routing):
+
+```typescript
+const scopes = async ({ connection }) => {
+  const selection = await loadRoutingFor(connection.id)
+  return selection.map(projectId => `resource:${projectId}`)
+}
+```
+
 ## Credential model
 
 All provider HTTP goes through `proxyRequest` against the platform's connection proxy. Importer code never sees access tokens or API keys, and the proxy enforces per-connection authorization. This is the same guarantee that applies to `connect()` tools — importers just use the client layer directly instead of exposing tools to a model.
@@ -133,6 +142,8 @@ The following forms are all supported:
 When the Factory auto-constructs with `importers()` and you did not pass `importersOptions.integrations`, every catalogue provider defaults to per-project destinations: scopes are resolved from the Factory project inventory at each cron fire (`resource:<projectId>` per project), so newly created projects start syncing without a restart. Document sources (Notion, Confluence) default to the `owner` role; ticket and transcript sources (Jira, Linear, Zendesk, Fireflies) default to `edit`. Hosts that construct `Knowledge` themselves can reuse the same topology via `factoryProjectScopes(storage)` from `@mastra/factory`.
 
 The default resolver enumerates projects across every org in the storage backend — the platform connection feeding the importers is deployment-level, so in a multi-org deployment its content lands in all orgs' projects. Pass your own `importersOptions.integrations` with an org-filtered `scopes` resolver when you need a tenant boundary.
+
+Each connection can also be routed to a subset of projects. The Knowledge settings section shows a per-connection "Sync to" control (all projects by default, or a selected list), persisted through `PUT /web/integrations/platform/:provider/connections/:connectionId/routing`. The default resolver honors the stored selection on its next cron fire: a selected-mode connection resolves only its chosen projects (intersected with the live inventory, so deleted projects drop out silently), while unrouted connections keep syncing everywhere.
 
 The presence of a `Knowledge` instance on the Factory — auto-constructed or user-supplied — is what flips the `/web/config/features` `knowledge` flag on. That flag drives both the Knowledge page in Factory's SPA and the Knowledge Importers settings section, where users can connect Notion, Confluence, Linear, Zendesk, or Fireflies through the same Nango-backed OAuth flow the Factory already uses for Jira and incident.io. A newly-connected provider starts syncing on the next importer tick without a Factory restart.
 
