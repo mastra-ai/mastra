@@ -126,6 +126,53 @@ describe('importers() resolver', () => {
     ).toThrow(MastraConnectError);
   });
 
+  it('threads a dynamic scopes resolver through to the provider context', async () => {
+    const notion = installImporter('notion', 'MASTRA_NOTION_CONNECTION_ID');
+    const scopes = async () => ['resource:one', 'resource:two'];
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const resolver = importers({
+      ...options,
+      integrations: { notion: { access: { 'resource:$projectId': 'owner' }, scopes } },
+    });
+    await resolver();
+    expect(notion.createImporterSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ access: { 'resource:$projectId': 'owner' }, scopes }),
+    );
+  });
+
+  it('throws at call time when dynamic scopes are set without an explicit access map', () => {
+    installImporter('notion', 'MASTRA_NOTION_CONNECTION_ID');
+    expect(() =>
+      importers({
+        projectId: 'proj_1',
+        client: { accessToken: TOKEN, baseUrl: 'https://x.test', fetch: (async () => new Response()) as never },
+        integrations: { notion: { scopes: async () => ['resource:one'] } },
+      }),
+    ).toThrow(/requires an explicit 'access' map/);
+  });
+
+  it('throws at call time when access only has parameterized scopes and no scopes resolver', () => {
+    installImporter('notion', 'MASTRA_NOTION_CONNECTION_ID');
+    expect(() =>
+      importers({
+        projectId: 'proj_1',
+        client: { accessToken: TOKEN, baseUrl: 'https://x.test', fetch: (async () => new Response()) as never },
+        integrations: { notion: { access: { 'resource:$projectId': 'owner' } } },
+      }),
+    ).toThrow(/only has parameterized scopes/);
+  });
+
+  it('throws at call time when scopes is not a function', () => {
+    installImporter('notion', 'MASTRA_NOTION_CONNECTION_ID');
+    expect(() =>
+      importers({
+        projectId: 'proj_1',
+        client: { accessToken: TOKEN, baseUrl: 'https://x.test', fetch: (async () => new Response()) as never },
+        integrations: { notion: { access: { 'org:acme': 'owner' }, scopes: ['resource:one'] as never } },
+      }),
+    ).toThrow(/scopes must be a function/);
+  });
+
   it('throws at call time when integrations reference an unknown provider', () => {
     installImporter('notion', 'MASTRA_NOTION_CONNECTION_ID');
     expect(() =>

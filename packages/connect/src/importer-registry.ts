@@ -10,6 +10,13 @@ export type ImporterProxyResponse = unknown;
 /** Scope-address → role map importers are granted by the host. */
 export type ImporterAccess = Readonly<Record<string, 'owner' | 'edit'>>;
 
+/**
+ * Resolves the current set of destination scope addresses at cron-fire time,
+ * e.g. one `resource:<projectId>` per active project. Pair with a parameterized
+ * `access` map (`{ 'resource:$projectId': 'owner' }`) so resolved scopes are writable.
+ */
+export type ImporterScopesResolver = () => readonly string[] | Promise<readonly string[]>;
+
 export interface ImporterProviderContext {
   connection: ProjectConnection;
   /** Authenticated fetch through the platform proxy, bound to this connection. */
@@ -18,6 +25,8 @@ export interface ImporterProviderContext {
   access: ImporterAccess;
   /** Cron schedule from host config (provider default otherwise). */
   schedule: string;
+  /** Dynamic destination scopes from host config; unioned with concrete `access` keys. */
+  scopes?: ImporterScopesResolver;
 }
 
 /**

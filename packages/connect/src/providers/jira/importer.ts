@@ -6,6 +6,7 @@ import {
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
+  importerCronTrigger,
   readWatermark,
   writeWatermark,
 } from '../../importer-runtime.js';
@@ -59,10 +60,7 @@ function createJiraImporter(ctx: ImporterProviderContext) {
     id: 'jira',
     access: ctx.access,
     triggers: {
-      cron: {
-        schedule: ctx.schedule,
-        bindings: Object.keys(ctx.access).map(scope => ({ source: `jira:${ctx.connection.id}`, scope })),
-      },
+      cron: importerCronTrigger(`jira:${ctx.connection.id}`, ctx),
     },
     handler: async (context: {
       signal: AbortSignal;
