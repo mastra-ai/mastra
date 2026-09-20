@@ -59,11 +59,9 @@ export function seedProviderOMDefault(providerId: string): OMPack | undefined {
 /**
  * Apply a role-specific OM model override to an in-memory `GlobalSettings`.
  *
- * When switching `activeOmPackId` from a built-in pack to `'custom'` we also
- * snapshot the *other* role's currently-resolved model into its override
- * field. Without this, the other role would silently lose its model on next
- * startup because `resolveOmRoleModel` would no longer resolve it from the
- * (now-overridden) pack.
+ * Role intent outranks the pack in `resolveOmRoleModel`, so `activeOmPackId` is
+ * deliberately left alone: the other role keeps resolving from its built-in
+ * pack instead of being dragged along by this role's choice.
  *
  * Exported for unit testing; `persistOmRoleOverride` is the disk-backed wrapper.
  */
@@ -71,7 +69,6 @@ export function applyOmRoleOverride(
   settings: GlobalSettings,
   role: 'observer' | 'reflector',
   modelId: string,
-  _otherRoleCurrentModelId?: string | null,
 ): void {
   if (role === 'observer') {
     settings.models.observerModelOverride = modelId;
@@ -80,8 +77,6 @@ export function applyOmRoleOverride(
     settings.models.reflectorModelOverride = modelId;
     settings.models.reflectorModelSelection = modelId;
   }
-
-  settings.models.activeOmPackId = 'custom';
 }
 
 /** Reset one persisted OM role to dynamic auto selection without touching the other role. */
@@ -93,8 +88,6 @@ export function applyOmRoleAuto(settings: GlobalSettings, role: 'observer' | 're
     settings.models.reflectorModelOverride = null;
     settings.models.reflectorModelSelection = 'auto';
   }
-
-  settings.models.activeOmPackId = 'custom';
 }
 
 export function persistOmObserveAttachments(value: 'auto' | boolean): void {
