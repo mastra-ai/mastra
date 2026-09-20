@@ -51,8 +51,8 @@ function crashResumedContext(
 
 async function prepareBoundItem(
   storage: WorkItemsStorage,
-  source: 'github-issue' | 'github-pr' = 'github-issue',
-  role: 'triage' | 'work' | 'plan' | 'review' = source === 'github-pr' ? 'review' : 'work',
+  source: 'github-issue' | 'github-pr' | 'gitlab-pr' = 'github-issue',
+  role: 'triage' | 'work' | 'plan' | 'review' = source.endsWith('-pr') ? 'review' : 'work',
 ) {
   return storage.prepareRunStart({
     orgId: 'org-1',
@@ -61,8 +61,8 @@ async function prepareBoundItem(
     workItem: {
       input: {
         externalSource: {
-          integrationId: 'github',
-          type: source === 'github-pr' ? 'pull-request' : 'issue',
+          integrationId: source.startsWith('gitlab-') ? 'gitlab' : 'github',
+          type: source.endsWith('-pr') ? 'pull-request' : 'issue',
           externalId: `${source}:1`,
         },
         title: 'Factory item',
@@ -634,42 +634,45 @@ describe('factory_transition_work_item', () => {
     expect(transition).toHaveBeenCalledWith(expect.objectContaining({ board: 'review', workItemId: review.item.id }));
   });
 
-  it('recovers a review binding after crash-resume wipes session state and heals the security posture', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepareBoundItem(storage, 'github-pr');
-    const transition = vi.fn(async () => ({ status: 'accepted' as const }));
-    const setState = vi.fn(async () => {});
-    const context = crashResumedContext(setState);
-    const sessions = {
-      getBySessionId: vi.fn(async () => ({ orgId: 'org-1', projectRepositoryId: 'repo-1', baseBranch: 'main' })),
-    };
+  it.each(['github-pr', 'gitlab-pr'] as const)(
+    'recovers a %s review binding after crash-resume wipes session state and heals the security posture',
+    async source => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBoundItem(storage, source);
+      const transition = vi.fn(async () => ({ status: 'accepted' as const }));
+      const setState = vi.fn(async () => {});
+      const context = crashResumedContext(setState);
+      const sessions = {
+        getBySessionId: vi.fn(async () => ({ orgId: 'org-1', projectRepositoryId: 'repo-1', baseBranch: 'main' })),
+      };
 
-    const tools = await createFactoryTransitionTools({
-      requestContext: context,
-      storage,
-      transitionService: { transition } as never,
-      sessions,
-    });
+      const tools = await createFactoryTransitionTools({
+        requestContext: context,
+        storage,
+        transitionService: { transition } as never,
+        sessions,
+      });
 
-    expect(tools).toHaveProperty('factory_transition_work_item');
-    expect(sessions.getBySessionId).toHaveBeenCalledWith('resource-1');
-    expect(setState).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      factoryOrgId: 'org-1',
-      projectRepositoryId: 'repo-1',
-      untrustedCheckout: true,
-      baseRef: 'main',
-    });
+      expect(tools).toHaveProperty('factory_transition_work_item');
+      expect(sessions.getBySessionId).toHaveBeenCalledWith('resource-1');
+      expect(setState).toHaveBeenCalledWith({
+        factoryProjectId: PROJECT_ID,
+        factoryOrgId: 'org-1',
+        projectRepositoryId: 'repo-1',
+        untrustedCheckout: true,
+        baseRef: 'main',
+      });
 
-    await execute(tools.factory_transition_work_item as ExecutableTool, context, {
-      stage: 'review',
-      expectedRevision: prepared.item.revision,
-      rationale: 'Review complete.',
-    });
-    expect(transition).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: prepared.item.id }),
-    );
-  });
+      await execute(tools.factory_transition_work_item as ExecutableTool, context, {
+        stage: 'review',
+        expectedRevision: prepared.item.revision,
+        rationale: 'Review complete.',
+      });
+      expect(transition).toHaveBeenCalledWith(
+        expect.objectContaining({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: prepared.item.id }),
+      );
+    },
+  );
 
   it('keeps untrustedCheckout on recovered review bindings when enrichment lookups fail', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
