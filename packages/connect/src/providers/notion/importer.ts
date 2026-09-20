@@ -3,18 +3,22 @@ import { z } from 'zod';
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
 import {
   boundText,
+  clearHighWater,
   clearResumeCursor,
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
+  readHighWater,
   readResumeCursor,
   readWatermark,
+  writeHighWater,
   writeResumeCursor,
   writeWatermark,
 } from '../../importer-runtime.js';
 
 const NOTION_WATERMARK_KEY = 'notion:watermark';
 const NOTION_RESUME_CURSOR_KEY = 'notion:resume-cursor';
+const NOTION_HIGH_WATER_KEY = 'notion:high-water';
 
 const richTextItemSchema = z.object({
   plain_text: z.string().default(''),
@@ -120,6 +124,7 @@ function createNotionImporter(ctx: ImporterProviderContext) {
     }) => {
       const previousWatermark = await readWatermark(context.state, NOTION_WATERMARK_KEY);
       const resumeCursor = await readResumeCursor(context.state, NOTION_RESUME_CURSOR_KEY);
+      const persistedHighWater = await readHighWater(context.state, NOTION_HIGH_WATER_KEY);
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
@@ -132,6 +137,11 @@ function createNotionImporter(ctx: ImporterProviderContext) {
       let nextCursorAfterLastPage: string | undefined;
       let drainedFully = false;
       let recordsCollected = 0;
+      // Track the newest timestamp actually observed in the API response, before any ASC sort.
+      // When a drain run follows one or more cap-truncated runs, `lastProcessed` (max of this
+      // run's collected only) is OLDER than the previous run's items. Seed from the persisted
+      // high-water so the drain run can write the true high across the multi-run backfill.
+      let newestObserved: string | undefined = persistedHighWater;
       pager: for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
         if (context.signal.aborted) break;
         const body: Record<string, unknown> = {
@@ -141,6 +151,7 @@ function createNotionImporter(ctx: ImporterProviderContext) {
         if (cursor) body.start_cursor = cursor;
         const parsed = searchResponseSchema.parse(await ctx.request({ method: 'POST', path: 'v1/search', body }));
         for (const result of parsed.results) {
+          if (!newestObserved || result.last_edited_time > newestObserved) newestObserved = result.last_edited_time;
           if (previousWatermark !== undefined && result.last_edited_time < previousWatermark) {
             // Sorted descending — anything past this is already imported.
             drainedFully = true;
@@ -149,7 +160,13 @@ function createNotionImporter(ctx: ImporterProviderContext) {
           collected.push(result);
           recordsCollected++;
           if (recordsCollected >= DEFAULT_MAX_RECORDS_PER_RUN) {
-            nextCursorAfterLastPage = parsed.next_cursor && parsed.has_more ? parsed.next_cursor : undefined;
+            if (parsed.next_cursor && parsed.has_more) {
+              nextCursorAfterLastPage = parsed.next_cursor;
+            } else {
+              // Cap tripped on the final page — no cursor to resume with, but the source
+              // is exhausted. Treat as drained so the watermark can still advance.
+              drainedFully = true;
+            }
             break pager;
           }
         }
@@ -209,16 +226,25 @@ function createNotionImporter(ctx: ImporterProviderContext) {
       }
 
       // Single trailing checkpoint — advance watermark only after every mutation committed.
-      // If we drained fully (walked back to previousWatermark or exhausted the source), the
-      // newest processed timestamp is a safe boundary and we clear any resume cursor.
-      // If we bailed on maxPages/maxRecords, we leave the watermark low and persist the
-      // pagination cursor so the next run resumes further into the tail instead of restarting
-      // from the newest page and re-hitting the same bound forever.
-      if (drainedFully && lastProcessed) {
-        await writeWatermark(context.state, NOTION_WATERMARK_KEY, lastProcessed);
+      // On drain: the correct watermark is the newest timestamp EVER observed across the
+      // multi-run backfill — not `lastProcessed` (this run's newest), because a drain that
+      // resumed from a cursor only saw the older tail. Use max(previousWatermark, newestObserved).
+      // Also clear the resume cursor. Clear FIRST so a failure between the two leaves state
+      // consistent (cursor gone, watermark old — next run does a clean restart).
+      // On truncation: persist the cursor so the next run resumes deeper into the tail.
+      if (drainedFully && (lastProcessed || newestObserved)) {
+        const candidate =
+          newestObserved && (!previousWatermark || newestObserved > previousWatermark)
+            ? newestObserved
+            : previousWatermark;
+        // Clear the resume/high-water first so a failed watermark write still leaves the
+        // per-backfill state consistent (next run does a clean restart from the newest edge).
         await clearResumeCursor(context.state, NOTION_RESUME_CURSOR_KEY);
+        await clearHighWater(context.state, NOTION_HIGH_WATER_KEY);
+        if (candidate) await writeWatermark(context.state, NOTION_WATERMARK_KEY, candidate);
       } else if (!drainedFully && nextCursorAfterLastPage) {
         await writeResumeCursor(context.state, NOTION_RESUME_CURSOR_KEY, nextCursorAfterLastPage);
+        if (newestObserved) await writeHighWater(context.state, NOTION_HIGH_WATER_KEY, newestObserved);
       }
     },
   };

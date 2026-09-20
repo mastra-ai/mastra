@@ -3,18 +3,22 @@ import { z } from 'zod';
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
 import {
   boundText,
+  clearHighWater,
   clearResumeCursor,
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
+  readHighWater,
   readResumeCursor,
   readWatermark,
+  writeHighWater,
   writeResumeCursor,
   writeWatermark,
 } from '../../importer-runtime.js';
 
 const LINEAR_WATERMARK_KEY = 'linear:watermark';
 const LINEAR_RESUME_CURSOR_KEY = 'linear:resume-cursor';
+const LINEAR_HIGH_WATER_KEY = 'linear:high-water';
 
 const issueSchema = z.object({
   id: z.string(),
@@ -79,6 +83,7 @@ function createLinearImporter(ctx: ImporterProviderContext) {
     }) => {
       const previousWatermark = await readWatermark(context.state, LINEAR_WATERMARK_KEY);
       const resumeCursor = await readResumeCursor(context.state, LINEAR_RESUME_CURSOR_KEY);
+      const persistedHighWater = await readHighWater(context.state, LINEAR_HIGH_WATER_KEY);
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
@@ -90,6 +95,10 @@ function createLinearImporter(ctx: ImporterProviderContext) {
       let cursor: string | undefined = resumeCursor;
       let nextCursorAfterLastPage: string | undefined;
       let drainedFully = false;
+      // Track the newest timestamp across the raw API responses, before ASC sort — needed to
+      // prevent the watermark regressing on a drain run that resumed from a cursor. Seeded
+      // from the persisted high-water so the drain writes the true high across the backfill.
+      let newestObserved: string | undefined = persistedHighWater;
       for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
         if (context.signal.aborted) break;
         const variables: Record<string, unknown> = { after: cursor };
@@ -101,7 +110,10 @@ function createLinearImporter(ctx: ImporterProviderContext) {
             body: { query: ISSUES_QUERY, variables },
           }),
         );
-        for (const issue of parsed.data.issues.nodes) collected.push(issue);
+        for (const issue of parsed.data.issues.nodes) {
+          if (!newestObserved || issue.updatedAt > newestObserved) newestObserved = issue.updatedAt;
+          collected.push(issue);
+        }
         if (!parsed.data.issues.pageInfo.hasNextPage || !parsed.data.issues.pageInfo.endCursor) {
           drainedFully = true;
           break;
@@ -161,11 +173,17 @@ function createLinearImporter(ctx: ImporterProviderContext) {
         lastProcessed = issue.updatedAt;
       }
 
-      if (drainedFully && lastProcessed) {
-        await writeWatermark(context.state, LINEAR_WATERMARK_KEY, lastProcessed);
+      if (drainedFully && (lastProcessed || newestObserved)) {
+        const candidate =
+          newestObserved && (!previousWatermark || newestObserved > previousWatermark)
+            ? newestObserved
+            : previousWatermark;
         await clearResumeCursor(context.state, LINEAR_RESUME_CURSOR_KEY);
+        await clearHighWater(context.state, LINEAR_HIGH_WATER_KEY);
+        if (candidate) await writeWatermark(context.state, LINEAR_WATERMARK_KEY, candidate);
       } else if (!drainedFully && nextCursorAfterLastPage) {
         await writeResumeCursor(context.state, LINEAR_RESUME_CURSOR_KEY, nextCursorAfterLastPage);
+        if (newestObserved) await writeHighWater(context.state, LINEAR_HIGH_WATER_KEY, newestObserved);
       }
     },
   };

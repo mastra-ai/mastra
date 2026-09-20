@@ -70,7 +70,7 @@ Every importer is written for at-least-once execution:
 - Date-based watermarks (Notion, Confluence, Jira, Linear, Fireflies) re-process the boundary timestamp inclusively.
 - Zendesk's `after_cursor` is opaque — importers store it verbatim, never parse it.
 - Every run is bounded: at most 50 HTTP pages and 500 records per invocation, and every handler honors `context.signal` for cancellation.
-- Descending walkers (Notion, Linear, Fireflies) persist a resume cursor alongside the watermark. When a run hits the per-run bound before draining back to the previous watermark, the next scheduled run resumes deeper into the tail instead of restarting from the newest page — so an initial backfill larger than one bounded run still converges. Once the walk exhausts pagination, the watermark advances and the resume cursor is cleared.
+- Descending walkers (Notion, Linear, Fireflies) persist a resume cursor alongside the watermark. When a run hits the per-run bound before draining back to the previous watermark, the next scheduled run resumes deeper into the tail instead of restarting from the newest page — so an initial backfill larger than one bounded run still converges. During the multi-run backfill the walker also persists the newest timestamp it observed on the first-fetched page, so the final drain run (which by construction only sees older items via its resume cursor) still writes the correct high-water watermark rather than regressing it to the older tail. Once the walk exhausts pagination, the watermark advances, and both the resume cursor and the high-water candidate are cleared.
 
 ## Cache and revalidation
 

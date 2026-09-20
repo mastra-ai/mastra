@@ -208,6 +208,8 @@ describe('fireflies importer', () => {
     expect(requestsUsed).toBe(20);
 
     // Run 2: a small partial page signals end — watermark advances, resume cursor cleared.
+    // Watermark must reflect HIGH-WATER across both runs — run 1 processed items in 2026-09,
+    // run 2 processed a single item in 2026-07. Watermark must stay in 2026-09, not regress.
     request.mockResolvedValueOnce(
       transcriptsResponse([{ id: 't-B0', title: 'B0', date: '2026-07-15T00:00:00Z', overview: 'oB' }]),
     );
@@ -216,7 +218,8 @@ describe('fireflies importer', () => {
       body: { variables: { skip: number } };
     };
     expect(secondCall.body.variables.skip).toBe(resumeSkip);
-    expect(await state.get('fireflies:watermark')).toBe(JSON.stringify({ watermark: '2026-07-15T00:00:00Z' }));
+    const storedWatermark = JSON.parse((await state.get('fireflies:watermark'))!).watermark as string;
+    expect(storedWatermark.startsWith('2026-09')).toBe(true);
     expect(await state.get('fireflies:resume-cursor')).toBe(JSON.stringify({ cursor: '' }));
   });
 
