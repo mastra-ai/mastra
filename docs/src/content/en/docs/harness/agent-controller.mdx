@@ -240,7 +240,7 @@ const controller = new AgentController({
 Reset one role to automatic selection without changing the other:
 
 ```typescript
-await session.om.observer.switchModel({ model: 'auto' })
+await session.om.observer.switchModel({ modelId: 'auto' })
 ```
 
 If the resolver returns `undefined` or throws, the role uses its concrete `defaultObserverModelId` or `defaultReflectorModelId` fallback. See the [`Session` Observational Memory API](/reference/agent-controller/session#observational-memory) for explicit selection.

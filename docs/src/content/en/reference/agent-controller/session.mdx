@@ -599,14 +599,14 @@ const observationThreshold = session.om.observer.threshold()
 const reflectionThreshold = session.om.reflector.threshold()
 ```
 
-### `session.om.observer.switchModel({ model })` / `session.om.reflector.switchModel({ model })`
+### `session.om.observer.switchModel({ modelId })` / `session.om.reflector.switchModel({ modelId })`
 
 Switch one role between automatic and explicit selection. Pass `'auto'` to follow the active main model, or pass a concrete model ID to pin the role. Automatic selection clears the role's stale concrete model ID. The other role is unchanged. The emitted `om_model_changed` event continues to contain the effective concrete `modelId`.
 
 ```typescript
-await session.om.observer.switchModel({ model: 'auto' })
+await session.om.observer.switchModel({ modelId: 'auto' })
 await session.om.reflector.switchModel({
-  model: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
 })
 ```
 
