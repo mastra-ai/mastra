@@ -2017,7 +2017,11 @@ export class HarnessPG extends HarnessStorage {
               VALUES (${cols.names.map(() => '?').join(', ')})`,
         args: cols.values,
       });
-      if (sessionIncarnation !== undefined) {
+      // The incarnation is also the attachment byte-owner scope, so it exists
+      // whenever an owner is configured; projection intents and capacity only
+      // drain under the projection pipeline, so writing them while it is
+      // disabled would consume quota that is never released.
+      if (sessionIncarnation !== undefined && this.sessionRecordProjection.enabled) {
         const intent = this.#buildProjectionIntent(namespacedRecord, sessionIncarnation, 1, storageNow);
         await this.#upsertProjectionFenceTx(
           tx,

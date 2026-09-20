@@ -1465,4 +1465,46 @@ describe('HarnessPG native external attachment ownership', () => {
     );
     expect(operation.status).toBe('cleaned');
   });
+
+  it('does not spend projection quota when only the attachment byte owner is configured', async () => {
+    const offSchema = `pf4267_proj_off_${randomUUID().replaceAll('-', '_')}`;
+    const offStore = new PostgresStore({
+      ...TEST_CONFIG,
+      id: 'pg-harness-native-attachment-projection-off-store',
+      schemaName: offSchema,
+      enabledDomains: ['harness'],
+      sessionRecordProjection: { enabled: false, maxAttempts: 1, maxPendingIntents: 1 },
+      attachmentByteOwner: new InMemoryHarnessAttachmentByteOwner({ providerId: 'native-integration-test' }),
+    });
+    try {
+      await offStore.init();
+      const harness = offStore.stores.harness!;
+      // Quota 1: two sessions would deadlock creation if attachment-owner
+      // incarnations still wrote undrainable projection intents.
+      for (const id of ['off-one', 'off-two']) {
+        await harness.createOrLoadActiveSession(
+          createSampleSessionRecord({ id, resourceId: `${id}-resource`, threadId: `${id}-thread` }),
+          { initialLease: { ownerId: 'off-owner', ttlMs: 60_000 } },
+        );
+      }
+      const intents = await offStore.db.one<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM "${offSchema}"."mastra_harness_session_projection_intents"`,
+      );
+      expect(intents.count).toBe('0');
+      // The incarnation still scopes the external bytes, so attachments work.
+      await expect(
+        harness.saveAttachment({
+          sessionId: 'off-one',
+          attachmentId: 'off-attachment',
+          name: 'off.txt',
+          mimeType: 'text/plain',
+          source: 'inline',
+          data: new TextEncoder().encode('projection off'),
+        }),
+      ).resolves.toMatchObject({ attachmentId: 'off-attachment' });
+    } finally {
+      await offStore.db.none(`DROP SCHEMA IF EXISTS "${offSchema}" CASCADE`).catch(() => {});
+      await offStore.close();
+    }
+  });
 });

@@ -811,7 +811,10 @@ export class InMemoryHarness extends HarnessStorage {
       failedIntents: intents.filter(intent => intent.status === 'failed').length,
       deadIntents: intents.filter(intent => intent.status === 'dead').length,
       appliedIntents: intents.filter(intent => intent.status === 'applied').length,
-      oldestPendingAt: pending.length > 0 ? Math.min(...pending.map(intent => intent.createdAt)) : undefined,
+      oldestPendingAt:
+        pending.length > 0
+          ? pending.reduce((min, intent) => Math.min(min, intent.createdAt), Number.POSITIVE_INFINITY)
+          : undefined,
       maxPendingIntents: this.sessionRecordProjection.maxPendingIntents,
       maxPendingBytes: this.sessionRecordProjection.maxPendingBytes,
       overLimit:
