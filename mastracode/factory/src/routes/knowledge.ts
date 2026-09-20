@@ -391,8 +391,14 @@ function isKnowledgeHandle(value: string | undefined): boolean {
 
 interface ResolvedView {
   projectId: string;
-  /** Factory project display name — shown in place of the resource scope's raw UUID-derived name. */
+  /** Factory project display name — shown in place of the project scope's raw UUID-derived name. */
   projectName: string;
+  /**
+   * The scope node resolved from `resource:${projectId}` — the project scope
+   * itself. Distinct from `resourceScopeId`, which hosts may alias to the
+   * profile's root scope (e.g. an org-rooted project view).
+   */
+  projectScopeId: string;
   knowledge: Knowledge;
   store: KnowledgeStorage;
   view: 'project' | 'thread';
@@ -968,6 +974,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         curationScopeIds: profile.curationScopeIds,
         orgScopeId,
         resourceScopeId: profile.rootScopeId,
+        projectScopeId: resourceScopeId,
         pinScopes: [{ level: 'resource', scopeId: profile.rootScopeId }],
       };
     }
@@ -990,6 +997,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       curationScopeIds: profile.curationScopeIds,
       orgScopeId,
       resourceScopeId,
+      projectScopeId: resourceScopeId,
       threadScopeId,
       pinScopes: [
         { level: 'resource', scopeId: resourceScopeId },
@@ -1066,12 +1074,14 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   }
 
   /**
-   * The resource scope's stored name defaults to its address tail — the raw
-   * project UUID. Substitute the Factory project's display name at read time
-   * so renames stay live without rewriting stored scope nodes.
+   * Built-in identity scopes store their address tail as their name — the raw
+   * project UUID and org id. Substitute readable labels at read time so
+   * project renames stay live without rewriting stored scope nodes.
    */
   #scopeDisplayName(view: ResolvedView, node: KnowledgeNode): string {
-    return node.id === view.resourceScopeId ? view.projectName : node.name;
+    if (node.id === view.projectScopeId) return view.projectName;
+    if (node.id === view.orgScopeId) return 'Organization';
+    return node.name;
   }
 
   #scopeTreeNode(

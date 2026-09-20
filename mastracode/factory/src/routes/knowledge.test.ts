@@ -582,6 +582,27 @@ describe('KnowledgeRoutes', () => {
     expect(searchBody.results.some(result => result.type === 'scope' && result.name === 'Graph project')).toBe(true);
   });
 
+  // Regression: hosts may alias the profile root to the org scope (the
+  // Shipyard project view is org-rooted). The first substitution keyed off
+  // resourceScopeId — which is the ROOT alias — so it renamed the org scope
+  // to the project name while the actual project scope kept its UUID.
+  it('labels org and project scopes in an org-rooted profile', async () => {
+    const h = await createHarness({
+      accessProfile: async ({ builtInScopes }) => ({
+        id: 'org-rooted',
+        rootScopeAddress: builtInScopes.org.address,
+        baselineScopes: [builtInScopes.org, builtInScopes.resource],
+        vouchedScopeAddresses: [builtInScopes.org.address, builtInScopes.resource.address],
+      }),
+    });
+
+    const scopeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const scopeBody = (await scopeResponse.json()) as KnowledgeScopeTreePayload;
+    expect(scopeBody.scope.name).toBe('Organization');
+    expect(scopeBody.children.map(child => child.name)).toContain('Graph project');
+    expect(JSON.stringify(scopeBody)).not.toContain(h.projectId);
+  });
+
   it('renders a selected structural scope as the root of its bounded member lens', async () => {
     const h = await createHarness();
     const projectScopeId = h.projectScope.at(-1)!;
@@ -686,7 +707,8 @@ describe('KnowledgeRoutes', () => {
     expect(status).toBe(200);
     expect(body.view).toBe('thread');
     expect(body.nodes.map(node => node.id)).toEqual([threadEntity.id, orgEntity.id]);
-    expect(body.nodes.find(node => node.id === orgEntity.id)?.boundary?.scope.name).toBe('org-1');
+    // The org identity scope renders its readable label, not the raw org id.
+    expect(body.nodes.find(node => node.id === orgEntity.id)?.boundary?.scope.name).toBe('Organization');
     expect(body.edges).toEqual([
       expect.objectContaining({ source: threadEntity.id, target: orgEntity.id, type: 'wikilink', boundary: true }),
     ]);
