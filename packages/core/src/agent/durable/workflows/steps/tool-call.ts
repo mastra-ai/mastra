@@ -30,8 +30,18 @@ import {
   parseToolApprovalDecision,
   parseToolApprovalGrant,
 } from '../../../tool-call-identity';
-import { TOOL_PERMISSION_POLICY_KEY, TOOL_PERMISSION_POLICY_REQUIRED_KEY } from '../../../tool-permission-prefilter';
-import type { ToolPermissionDecision, ToolPermissionPolicy } from '../../../tool-permission-prefilter';
+import {
+  ON_BEFORE_TOOL_EXECUTION_KEY,
+  ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY,
+  TOOL_PERMISSION_DENIED_ERROR_NAME,
+  TOOL_PERMISSION_POLICY_KEY,
+  TOOL_PERMISSION_POLICY_REQUIRED_KEY,
+} from '../../../tool-permission-prefilter';
+import type {
+  BeforeToolExecutionHook,
+  ToolPermissionDecision,
+  ToolPermissionPolicy,
+} from '../../../tool-permission-prefilter';
 import { createToolSurfaceFence, materializeToolSurfaceFence } from '../../../tool-surface-fence';
 import { ensureRemoteAbortListener } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
@@ -1010,16 +1020,32 @@ export function createDurableToolCallStep(options: CreateDurableToolCallStepOpti
           : typeof registryPermissionPolicy === 'function'
             ? (registryPermissionPolicy as ToolPermissionPolicy)
             : undefined;
+      // The revalidation hook resolves through the same request→registry
+      // fallback, INDEPENDENTLY of the policy: a hook-only configuration must
+      // still find the registry-held closure when a transported context
+      // arrives with functions stripped.
+      const requestOnBeforeToolExecution = requestContext?.get?.(ON_BEFORE_TOOL_EXECUTION_KEY);
+      const registryOnBeforeToolExecution = !isAuthenticatedResume
+        ? registryEntry?.requestContext?.get(ON_BEFORE_TOOL_EXECUTION_KEY)
+        : undefined;
+      const onBeforeToolExecution =
+        typeof requestOnBeforeToolExecution === 'function'
+          ? (requestOnBeforeToolExecution as BeforeToolExecutionHook)
+          : typeof registryOnBeforeToolExecution === 'function'
+            ? (registryOnBeforeToolExecution as BeforeToolExecutionHook)
+            : undefined;
       const permissionContext =
-        typeof requestPermissionPolicy === 'function'
+        typeof requestPermissionPolicy === 'function' || typeof requestOnBeforeToolExecution === 'function'
           ? requestContext
-          : typeof registryPermissionPolicy === 'function'
+          : typeof registryPermissionPolicy === 'function' || typeof registryOnBeforeToolExecution === 'function'
             ? registryEntry?.requestContext
             : requestContext;
       const toolPermissionDecisions: ToolPermissionDecision[] = [];
+      let snapshotPolicyDecision: ToolPermissionDecision | undefined;
       if (permissionPolicy) {
         try {
-          toolPermissionDecisions.push(normalizeToolPermissionDecision(await permissionPolicy(toolName)));
+          snapshotPolicyDecision = normalizeToolPermissionDecision(await permissionPolicy(toolName));
+          toolPermissionDecisions.push(snapshotPolicyDecision);
         } catch {
           toolPermissionDecisions.push('deny');
         }
@@ -1042,6 +1068,51 @@ export function createDurableToolCallStep(options: CreateDurableToolCallStepOpti
         } catch {
           toolPermissionDecisions.push('deny');
         }
+      }
+      // §4.2e per-tool revalidation — the harness `sessions.onBeforeToolExecution`
+      // hook is threaded on the request context (a session-bound closure, not
+      // durable state, so it only survives in-process replay like the policy
+      // resolver). Throwing or an unrecognized decision fails closed as `deny`.
+      if (typeof onBeforeToolExecution === 'function') {
+        try {
+          const beforeDecision = await onBeforeToolExecution({
+            toolName,
+            toolCallId: metadataToolCallId,
+            args,
+            isResume: isAuthenticatedResume,
+            policyDecision: snapshotPolicyDecision,
+          });
+          if (beforeDecision !== undefined && beforeDecision !== 'allow') {
+            toolPermissionDecisions.push('deny');
+          }
+        } catch {
+          toolPermissionDecisions.push('deny');
+        }
+      } else if (
+        agentOptions.onBeforeToolExecutionRequired === true ||
+        requestContext?.get?.(ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY) === true ||
+        registryEntry?.requestContext?.get?.(ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY) === true
+      ) {
+        // A hook that was threaded at turn-build cannot be reconstructed on this
+        // context (transported or restored request context, cold worker). Like
+        // `permissionPolicyRequired` below, that is an authorization failure,
+        // not an implicit allow.
+        toolPermissionDecisions.push('deny');
+      }
+      // The awaited hook can span real I/O (e.g. a grant-store read). A run
+      // aborted inside that window must not proceed to approval or dispatch —
+      // mirror the in-flight abort outcome (an error result; the loop's abort
+      // arbitration stops the iteration with finishReason 'abort').
+      if (registryEntry?.abortSignal?.aborted) {
+        return {
+          ...typedInput,
+          args,
+          ...resumeTarget,
+          error: serializeError(
+            (registryEntry.abortSignal as AbortSignal & { reason?: unknown }).reason ??
+              new DOMException('The operation was aborted.', 'AbortError'),
+          ),
+        };
       }
       if (
         toolPermissionDecisions.length === 0 &&
@@ -1538,6 +1609,45 @@ export function createDurableToolCallStep(options: CreateDurableToolCallStepOpti
               context: {
                 executor: {
                   execute: async (taskArgs: any, taskContext: any) => {
+                    // Every attempt is a fresh side-effect boundary: the gate
+                    // above ran only before dispatch, so retries must revalidate
+                    // or a mid-flight grant revocation never takes effect. A
+                    // denial throws TOOL_PERMISSION_DENIED_ERROR_NAME, which the
+                    // bg-task workflow classifies as non-retryable.
+                    if (typeof onBeforeToolExecution === 'function') {
+                      let attemptDecision: 'allow' | 'deny' | void;
+                      try {
+                        attemptDecision = await onBeforeToolExecution({
+                          toolName,
+                          toolCallId: metadataToolCallId,
+                          args: taskArgs,
+                          isResume: taskContext?.resumeData !== undefined || isAuthenticatedResume,
+                          policyDecision: snapshotPolicyDecision,
+                        });
+                      } catch {
+                        attemptDecision = 'deny';
+                      }
+                      if (registryEntry?.abortSignal?.aborted || taskContext?.abortSignal?.aborted) {
+                        throw (
+                          (
+                            (taskContext?.abortSignal ?? registryEntry?.abortSignal) as
+                              | (AbortSignal & { reason?: unknown })
+                              | undefined
+                          )?.reason ?? new DOMException('The operation was aborted.', 'AbortError')
+                        );
+                      }
+                      if (attemptDecision !== undefined && attemptDecision !== 'allow') {
+                        notifyToolDenied(permissionContext, {
+                          toolName,
+                          stage: 'action',
+                          toolCallId,
+                        });
+                        throw Object.assign(
+                          new Error(`Tool "${toolName}" was denied by the pre-execution permission hook.`),
+                          { name: TOOL_PERMISSION_DENIED_ERROR_NAME },
+                        );
+                      }
+                    }
                     return tool.execute!(taskArgs, {
                       ...toolOptions,
                       ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),

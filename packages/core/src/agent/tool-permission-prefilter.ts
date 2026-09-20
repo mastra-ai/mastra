@@ -21,6 +21,56 @@ export const TOOL_PERMISSION_POLICY_STABLE_KEY = '__mastra_toolPermissionPolicyS
 export type ToolPermissionDecision = 'allow' | 'ask' | 'deny';
 export type ToolPermissionPolicy = (toolName: string) => ToolPermissionDecision;
 
+/**
+ * Awaited per-tool hook consulted at the action-time gate on every tool call,
+ * AFTER the synchronous snapshot policy above resolves. Unlike the snapshot
+ * resolver this hook may perform IO (e.g. re-reading a durable grant store)
+ * and its decision applies to the specific call about to execute. Throwing
+ * or returning an unrecognized decision fails closed as `deny`.
+ */
+export const ON_BEFORE_TOOL_EXECUTION_KEY = '__mastra_onBeforeToolExecution';
+/**
+ * JSON-safe durable marker mirroring {@link TOOL_PERMISSION_POLICY_REQUIRED_KEY}:
+ * records only that an authoritative `onBeforeToolExecution` hook was threaded
+ * for this turn. The hook closure itself never survives transport or cold
+ * recovery; when this marker is present without the function, the action-time
+ * gate must fail closed as `deny` rather than skip revalidation.
+ */
+export const ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY = '__mastra_onBeforeToolExecutionRequired';
+
+/**
+ * `error.name` marking an action-time authorization denial raised inside a
+ * background task attempt. The background-task workflow classifies it as
+ * non-retryable by name — `instanceof` does not survive task-context
+ * boundaries, and retrying a revoked grant could not succeed anyway.
+ */
+export const TOOL_PERMISSION_DENIED_ERROR_NAME = 'ToolPermissionDeniedError';
+
+export interface BeforeToolExecutionInput {
+  /** Name of the tool about to execute. */
+  toolName: string;
+  /** Provider tool-call id when known. */
+  toolCallId?: string;
+  /** Arguments the tool will receive. */
+  args?: unknown;
+  /** True when this call resumes a parked suspension/approval. */
+  isResume?: boolean;
+  /**
+   * The synchronous snapshot policy's verdict for this tool when the §4.2e
+   * gate is engaged — lets the hook skip work when the snapshot already
+   * resolves `ask`/`deny` (no grant-derived authorization to revalidate).
+   */
+  policyDecision?: ToolPermissionDecision;
+}
+
+/**
+ * Return `'deny'` to block the call through the auditable action-time denied
+ * path; `'allow'` or `void` leaves authorization to the normal gates.
+ */
+export type BeforeToolExecutionHook = (
+  input: BeforeToolExecutionInput,
+) => 'allow' | 'deny' | void | Promise<'allow' | 'deny' | void>;
+
 const DEFAULT_RUN_KEY = '__default__';
 const MAX_RETAINED_RUNS_PER_CONTEXT = 64;
 const MAX_RETAINED_DENIED_TOOL_NAMES = 10_000;

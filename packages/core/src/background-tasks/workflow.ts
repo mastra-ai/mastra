@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TOOL_PERMISSION_DENIED_ERROR_NAME } from '../agent/tool-permission-prefilter';
 import { InternalSpans } from '../observability';
 import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
@@ -288,7 +289,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           error?.message?.startsWith('Task timed out after ')
         ) {
           outcome = 'timed_out';
-        } else if (error?.name === 'FGADeniedError') {
+        } else if (error?.name === 'FGADeniedError' || error?.name === TOOL_PERMISSION_DENIED_ERROR_NAME) {
           // Authorization denials are non-retryable — retrying cannot succeed
           // and would just burn attempts before surfacing the denial.
           outcome = 'failed';

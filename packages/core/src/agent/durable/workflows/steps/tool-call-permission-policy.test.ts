@@ -4,7 +4,12 @@ import { RequestContext } from '../../../../request-context';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { MessageList } from '../../../message-list';
 import { createToolCallIdentityDigest } from '../../../tool-call-identity';
-import { TOOL_PERMISSION_POLICY_KEY, TOOL_PERMISSION_POLICY_REQUIRED_KEY } from '../../../tool-permission-prefilter';
+import {
+  ON_BEFORE_TOOL_EXECUTION_KEY,
+  ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY,
+  TOOL_PERMISSION_POLICY_KEY,
+  TOOL_PERMISSION_POLICY_REQUIRED_KEY,
+} from '../../../tool-permission-prefilter';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
 import { createDurableToolCallStep } from './tool-call';
@@ -33,12 +38,12 @@ const TOOL_NAME = 'write_file';
 const TOOL_CALL_ID = 'permission-policy-call';
 const TOOL_ARGS = { path: 'paper.tex' };
 
-function initData(permissionPolicyRequired?: boolean) {
+function initData(options?: { permissionPolicyRequired?: boolean; onBeforeToolExecutionRequired?: boolean }) {
   return {
     runId: RUN_ID,
     runtimeBindingId: RUNTIME_BINDING_ID,
     agentId: 'permission-agent',
-    options: { permissionPolicyRequired },
+    options: { ...options },
     toolsMetadata: [],
     messageListState: new MessageList().serialize(),
     state: {},
@@ -87,6 +92,7 @@ function toolSuspensionEnvelope(approval?: { id: string; approved: boolean; reas
 function executeStep(options: {
   requestContext?: RequestContext;
   permissionPolicyRequired?: boolean;
+  onBeforeToolExecutionRequired?: boolean;
   resumeData?: unknown;
   suspendData?: unknown;
   suspend?: ReturnType<typeof vi.fn>;
@@ -100,7 +106,11 @@ function executeStep(options: {
     resumeData: options.resumeData,
     suspendData: options.suspendData,
     requestContext: options.requestContext ?? new RequestContext(),
-    getInitData: () => initData(options.permissionPolicyRequired),
+    getInitData: () =>
+      initData({
+        permissionPolicyRequired: options.permissionPolicyRequired,
+        onBeforeToolExecutionRequired: options.onBeforeToolExecutionRequired,
+      }),
     [PUBSUB_SYMBOL]: { publish: vi.fn() },
   });
 }
@@ -369,5 +379,103 @@ describe('durable tool-call per-tool permission policy', () => {
 
     expect(result.result).toEqual({ ok: true });
     expect(toolExecute).toHaveBeenCalledOnce();
+  });
+
+  it('consults the onBeforeToolExecution hook on the request context and honors its deny', async () => {
+    const toolExecute = installTool();
+    const requestContext = new RequestContext();
+    const hook = vi.fn().mockResolvedValue('deny');
+    requestContext.set(ON_BEFORE_TOOL_EXECUTION_KEY, hook);
+
+    const result = await executeStep({ requestContext });
+
+    expect(result).toMatchObject({ disposition: 'denied' });
+    expect(hook).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: TOOL_NAME, toolCallId: TOOL_CALL_ID, args: TOOL_ARGS, isResume: false }),
+    );
+    expect(toolExecute).not.toHaveBeenCalled();
+  });
+
+  it('lets the tool execute when the onBeforeToolExecution hook allows', async () => {
+    const toolExecute = installTool();
+    const requestContext = new RequestContext();
+    requestContext.set(ON_BEFORE_TOOL_EXECUTION_KEY, vi.fn().mockResolvedValue('allow'));
+
+    const result = await executeStep({ requestContext });
+
+    expect(result.result).toEqual({ ok: true });
+    expect(toolExecute).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when the onBeforeToolExecution hook throws', async () => {
+    const toolExecute = installTool();
+    const requestContext = new RequestContext();
+    requestContext.set(ON_BEFORE_TOOL_EXECUTION_KEY, vi.fn().mockRejectedValue(new Error('grant store down')));
+
+    const result = await executeStep({ requestContext });
+
+    expect(result).toMatchObject({ disposition: 'denied' });
+    expect(toolExecute).not.toHaveBeenCalled();
+  });
+
+  it('finds the hook on the registry context when the transported request context lost the function', async () => {
+    // Hook-only configuration: no policy resolver anywhere. The request context
+    // arrives post-transport with functions stripped; the live closure survives
+    // only on the pinned registry entry.
+    const toolExecute = installTool();
+    const registryContext = new RequestContext();
+    const hook = vi.fn().mockResolvedValue('deny');
+    registryContext.set(ON_BEFORE_TOOL_EXECUTION_KEY, hook);
+    globalRunRegistry.get(RUN_ID)!.requestContext = registryContext;
+
+    const result = await executeStep({ requestContext: new RequestContext() });
+
+    expect(result).toMatchObject({ disposition: 'denied' });
+    expect(hook).toHaveBeenCalledOnce();
+    expect(toolExecute).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on a cold worker when a required hook cannot be reconstructed', async () => {
+    const toolExecute = installTool();
+
+    const result = await executeStep({ onBeforeToolExecutionRequired: true });
+
+    expect(result).toMatchObject({ disposition: 'denied' });
+    expect(toolExecute).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a durable context marker requires a missing hook', async () => {
+    const toolExecute = installTool();
+    const requestContext = new RequestContext();
+    requestContext.set(ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY, true);
+
+    const result = await executeStep({ requestContext });
+
+    expect(result).toMatchObject({ disposition: 'denied' });
+    expect(toolExecute).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch the tool when the run aborts while the awaited hook runs', async () => {
+    // The hook can span real I/O; an abort landing inside that window must
+    // still stop the call even when the hook resolves 'allow'. Mirrors the
+    // in-flight-abort outcome: an error result the loop arbitration ends.
+    const toolExecute = installTool();
+    // Real entries pair the signal with its controller (durable-agent registers
+    // both); without `abortController`, `ensureRemoteAbortListener` swaps in a
+    // fresh signal before the hook runs and the test-attached one detaches.
+    const controller = new AbortController();
+    const entry = globalRunRegistry.get(RUN_ID)!;
+    entry.abortController = controller;
+    entry.abortSignal = controller.signal;
+    const requestContext = new RequestContext();
+    requestContext.set(ON_BEFORE_TOOL_EXECUTION_KEY, async () => {
+      controller.abort();
+      return 'allow';
+    });
+
+    const result = await executeStep({ requestContext });
+
+    expect(toolExecute).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ error: expect.objectContaining({ name: 'AbortError' }) });
   });
 });

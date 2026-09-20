@@ -5,6 +5,11 @@ import type { Mock } from 'vitest';
 import { z } from 'zod/v4';
 import { MessageList } from '../../../agent/message-list';
 import { createToolCallIdentityDigest } from '../../../agent/tool-call-identity';
+import {
+  ON_BEFORE_TOOL_EXECUTION_KEY,
+  ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY,
+  TOOL_PERMISSION_DENIED_ERROR_NAME,
+} from '../../../agent/tool-permission-prefilter';
 import { RequestContext } from '../../../request-context';
 import { toStandardSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
@@ -5625,5 +5630,104 @@ describe('createToolCallStep malformed JSON args (issue #9815)', () => {
     // Should return a descriptive error
     expect(result.error).toBeDefined();
     expect(result.error.message).toMatch(/invalid|malformed|json|args|arguments/i);
+  });
+});
+
+describe('createToolCallStep onBeforeToolExecution boundaries', () => {
+  it('does not dispatch the tool when the request aborts while the awaited hook runs', async () => {
+    const abortController = new AbortController();
+    const toolExecute = vi.fn().mockResolvedValue({ wrote: true });
+    const requestContext = new RequestContext();
+    requestContext.set(ON_BEFORE_TOOL_EXECUTION_KEY, async () => {
+      abortController.abort();
+      return 'allow';
+    });
+
+    const step = createToolCallStep({
+      tools: { write_file: { execute: toolExecute } } as any,
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'run-abort-gate',
+      streamState: { serialize: () => ({}) } as any,
+      options: { abortSignal: abortController.signal },
+    } as any);
+
+    const result = await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        requestContext,
+        inputData: { toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.txt' } },
+      }),
+    );
+
+    expect(toolExecute).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ aborted: true });
+  });
+
+  it('revalidates on each background attempt; a mid-flight revocation denies the retry', async () => {
+    let granted = true;
+    const hookInputs: Array<{ toolName?: string; isResume?: boolean }> = [];
+    const requestContext = new RequestContext();
+    requestContext.set(ON_BEFORE_TOOL_EXECUTION_KEY, async (input: any) => {
+      hookInputs.push(input);
+      return granted ? 'allow' : 'deny';
+    });
+    requestContext.set(ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY, true);
+
+    const toolExecute = vi.fn(async () => {
+      // The grant is revoked while attempt 1 is in flight; attempt 1 then fails.
+      granted = false;
+      throw new Error('transient failure');
+    });
+    let bgContext: any;
+    const backgroundTaskManager = {
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        bgContext = context;
+        return { task: { id: 'task-1' }, fallbackToSync: false };
+      }),
+      registerTaskContext: vi.fn(),
+      resume: vi.fn(),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+    };
+    const step = createToolCallStep({
+      tools: {
+        write_file: {
+          backgroundConfig: { enabled: true, maxRetries: 1 },
+          execute: toolExecute,
+        },
+      } as any,
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'run-bg-gate',
+      streamState: { serialize: () => ({}) } as any,
+      requestContext,
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        requestContext,
+        inputData: { toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.txt' } },
+      }),
+    );
+    expect(bgContext?.executor?.execute).toBeTypeOf('function');
+
+    // Attempt 1 — revalidated (grant still held), executes, fails transiently.
+    await expect(bgContext.executor.execute({ path: 'a.txt' })).rejects.toThrow('transient failure');
+    expect(toolExecute).toHaveBeenCalledTimes(1);
+
+    // Attempt 2 — grant revoked in between: revalidation denies before any
+    // side effect, with the name the bg-task workflow classifies non-retryable.
+    await expect(bgContext.executor.execute({ path: 'a.txt' })).rejects.toMatchObject({
+      name: TOOL_PERMISSION_DENIED_ERROR_NAME,
+    });
+    expect(toolExecute).toHaveBeenCalledTimes(1);
+    // Dispatch gate + attempt 1 + attempt 2.
+    expect(hookInputs).toHaveLength(3);
   });
 });

@@ -34,7 +34,7 @@ import type { MastraDBMessage, MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal } from '../signals';
-import { TOOL_PERMISSION_POLICY_KEY } from '../tool-permission-prefilter';
+import { ON_BEFORE_TOOL_EXECUTION_KEY, TOOL_PERMISSION_POLICY_KEY } from '../tool-permission-prefilter';
 import {
   clearToolSurfaceFence,
   createToolSurfaceFence,
@@ -993,6 +993,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         // must be reconstructed by the trusted resume caller. A cold worker
         // that cannot recover it denies at the action boundary.
         permissionPolicyRequired: typeof requestContext.get(TOOL_PERMISSION_POLICY_KEY) === 'function',
+        // Same shadow for the awaited per-tool revalidation hook: the closure
+        // never serializes, so a cold worker that cannot reconstruct it must
+        // deny rather than skip revalidation.
+        onBeforeToolExecutionRequired: typeof requestContext.get(ON_BEFORE_TOOL_EXECUTION_KEY) === 'function',
         toolCallConcurrency: execOptions?.toolCallConcurrency,
         autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
         maxProcessorRetries: execOptions?.maxProcessorRetries,

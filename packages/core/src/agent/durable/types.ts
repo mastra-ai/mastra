@@ -226,6 +226,13 @@ export interface SerializableDurableOptions {
    * fail closed when they cannot.
    */
   permissionPolicyRequired?: boolean;
+  /**
+   * A host installed an awaited `onBeforeToolExecution` revalidation hook for
+   * this execution. The closure is deliberately not serialized. Durable
+   * action/resume steps must find a freshly reconstructed hook when this
+   * marker is true and fail closed when they cannot.
+   */
+  onBeforeToolExecutionRequired?: boolean;
   /** Concurrency limit / strategy for parallel tool calls (JSON-safe union) */
   toolCallConcurrency?: ToolCallConcurrency;
   /** Whether to auto-resume suspended tools */

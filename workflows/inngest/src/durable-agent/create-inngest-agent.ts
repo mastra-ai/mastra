@@ -47,6 +47,8 @@ import {
   deleteBoundRunRegistryEntry as deleteCoreBoundRunRegistryEntry,
   getBoundRunRegistryEntry,
   globalRunRegistry,
+  ON_BEFORE_TOOL_EXECUTION_KEY,
+  ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY,
   TOOL_PERMISSION_POLICY_KEY,
   TOOL_PERMISSION_POLICY_REQUIRED_KEY,
   snapshotDurableRequestContextEntries,
@@ -801,6 +803,17 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         typeof persistedEntries === 'object' &&
         !Array.isArray(persistedEntries) &&
         (persistedEntries as Record<string, unknown>)[TOOL_PERMISSION_POLICY_REQUIRED_KEY] === true);
+    // Same monotonic marker for the awaited revalidation hook: its closure
+    // never survives this transport, so the requirement must cross as data or
+    // a resumed worker would execute without revalidation.
+    const liveOnBeforeToolExecution = input?.get(ON_BEFORE_TOOL_EXECUTION_KEY);
+    const hookRequired =
+      typeof liveOnBeforeToolExecution === 'function' ||
+      input?.get(ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY) === true ||
+      (persistedEntries !== null &&
+        typeof persistedEntries === 'object' &&
+        !Array.isArray(persistedEntries) &&
+        (persistedEntries as Record<string, unknown>)[ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY] === true);
     const persistedDurableEntries = snapshotDurableRequestContextEntries(
       requestContextFromEntries(persistedEntries),
       durableRequestContextKeys,
@@ -810,11 +823,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       ...(persistedDurableEntries ?? {}),
       ...(freshDurableEntries ?? {}),
     };
-    if (Object.keys(durableEntries).length === 0 && !policyRequired) return undefined;
+    if (Object.keys(durableEntries).length === 0 && !policyRequired && !hookRequired) return undefined;
 
     const transported = requestContextFromEntries(durableEntries);
     if (policyRequired) {
       transported.set(TOOL_PERMISSION_POLICY_REQUIRED_KEY, true);
+    }
+    if (hookRequired) {
+      transported.set(ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY, true);
     }
     return transported;
   }
