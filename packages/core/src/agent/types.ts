@@ -441,6 +441,12 @@ export interface AgentThreadIdentityOptions {
 }
 
 /** @experimental Agent signals are experimental and may change in a future release. */
+export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
+  /** Abort only if this run is still the thread's active run. */
+  expectedRunId?: string;
+}
+
+/** @experimental Agent signals are experimental and may change in a future release. */
 export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
   /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
   hideSignals?: boolean | AgentSignalType[];

@@ -160,6 +160,13 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface AbortAgentThreadParams extends SubscribeAgentThreadParams {
+  expectedRunId?: string;
+}
+
 export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
 
 /**

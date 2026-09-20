@@ -208,6 +208,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "expectedRunId",
       "resourceId",
       "threadId"
     ],

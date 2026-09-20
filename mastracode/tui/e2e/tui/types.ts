@@ -6,6 +6,8 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 export type ScenarioName =
   | 'startup'
   | 'abort-followup'
+  | 'account-rotation'
+  | 'account-routing-targeted'
   | 'branch-context-long-name'
   | 'active-signal-followup'
   | 'agent-connections-expected-reply-watchdog'
@@ -69,6 +71,7 @@ export type ScenarioName =
   | 'goal-fresh-thread-persistence'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
+  | 'goal-max-runs-ends-goal'
   | 'goal-resume-single-render'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'

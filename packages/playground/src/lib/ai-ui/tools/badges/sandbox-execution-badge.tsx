@@ -199,7 +199,16 @@ export const SandboxExecutionBadge = ({
 
   // Exit chunk scoped to this tool call
   const exitChunk = dataParts.find(chunk => chunk.name === 'sandbox-exit' && chunk.data?.toolCallId === toolCallId) as
-    | { name: string; data: { exitCode: number; success: boolean; executionTimeMs?: number; killed?: boolean } }
+    | {
+        name: string;
+        data: {
+          exitCode: number;
+          success: boolean;
+          executionTimeMs?: number;
+          killed?: boolean;
+          timedOut?: boolean;
+        };
+      }
     | undefined;
 
   // Streaming is complete if we have exit chunk or a final result

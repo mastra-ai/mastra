@@ -463,6 +463,7 @@ function createGenerateResult({
     },
     totalUsage: EMPTY_USAGE,
     object: undefined,
+    usedFallbackValue: false,
     error: undefined,
     tripwire: undefined,
     traceId: undefined,

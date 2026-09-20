@@ -142,8 +142,19 @@ export type RunEvalsResult = {
   scores: Record<string, any>;
   summary: {
     totalItems: number;
+    /**
+     * Number of runs each scorer or gate declared not scorable, keyed by
+     * scorer/gate id. Those runs are left out of `scores`, gate and threshold
+     * averages, and the verdict. Present only when at least one run was
+     * declared not scorable.
+     */
+    notScorable?: Record<string, number>;
   };
-  /** Present when `gates` or threshold-bearing scorers (top-level or per-turn) are provided. */
+  /**
+   * Present when at least one configured gate or threshold (top-level or
+   * per-turn) produced a numeric result. Omitted when none did, including
+   * when every assertion returned `notScorable()`.
+   */
   verdict?: EvalVerdict;
   /** Per-gate results (averaged across all data items). */
   gateResults?: GateResult[];
@@ -329,6 +340,13 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
   // Per-turn assertion results, collected per data item then aggregated by turn index.
   const perItemTurnResults: ItemTurnResults[] = [];
 
+  // Runs a scorer or gate declared not scorable, keyed by id. They are left
+  // out of every average and the verdict, and reported in `summary`.
+  const notScorableCounts: Record<string, number> = {};
+  const countNotScorable = (id: string) => {
+    notScorableCounts[id] = (notScorableCounts[id] ?? 0) + 1;
+  };
+
   // Get storage from target's Mastra instance if available
   // Agent uses getMastraInstance(), Workflow uses .mastra getter
   const mastra = (target as any).getMastraInstance?.() || (target as any).mastra;
@@ -372,7 +390,11 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
               targetTraceId: targetResult.traceId,
               targetSpanId: targetResult.spanId,
             });
-            gateScoresByGateId[gate.id]!.push(gateScore.score as number);
+            if (gateScore.notScorable) {
+              countNotScorable(gate.id);
+            } else {
+              gateScoresByGateId[gate.id]!.push(gateScore.score as number);
+            }
           } catch (error) {
             // Gate failure = score 0. The contract stays, but the cause is
             // logged so a broken scorer is distinguishable from a real 0.
@@ -385,7 +407,8 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
       const scorerResults = await runScorers(bareScorers, targetResult, item, storage);
       scoreAccumulator.addScores(scorerResults);
 
-      // Track threshold scores
+      // Track threshold scores. A not-scorable result has no `score` key and
+      // is left out of the threshold average.
       for (const [scorerId] of thresholdMap) {
         const result = scorerResults[scorerId];
         if (result && typeof result === 'object' && 'score' in result) {
@@ -401,8 +424,9 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
         for (let ti = 0; ti < turns.length; ti++) {
           const record = perTurn[ti];
           if (!record) continue;
-          const { rawResults, ...scored } = await scoreTurn(turns[ti]!, record, item, storage, mastra);
+          const { rawResults, notScorable, ...scored } = await scoreTurn(turns[ti]!, record, item, storage, mastra);
           itemTurnResults.push({ index: ti, ...scored });
+          notScorable.forEach(countNotScorable);
 
           if (storage) {
             for (const [scorerId, scoreResult] of Object.entries(rawResults)) {
@@ -452,10 +476,15 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
     { concurrency },
   );
 
+  for (const [scorerId, count] of Object.entries(scoreAccumulator.getNotScorableCounts())) {
+    notScorableCounts[scorerId] = (notScorableCounts[scorerId] ?? 0) + count;
+  }
+
   const result: RunEvalsResult = {
     scores: scoreAccumulator.getAverageScores(),
     summary: {
       totalItems,
+      ...(Object.keys(notScorableCounts).length > 0 ? { notScorable: notScorableCounts } : {}),
     },
   };
 
@@ -465,46 +494,61 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
     result.turnResults = turnAggregate.turnResults;
   }
 
-  // Compute verdict if gates or thresholds are present (top-level or per-turn)
+  // Compute gate/threshold results. Verdict is set only when at least one
+  // assertion produced a numeric score (skip ≠ pass and skip ≠ fail).
   const hasGates = !!gates && gates.length > 0;
   const hasThresholds = thresholdMap.size > 0;
   const hasTurnGates = turnAggregate?.hasTurnGates ?? false;
   const hasTurnThresholds = turnAggregate?.hasTurnThresholds ?? false;
 
-  if (hasGates || hasThresholds || hasTurnGates || hasTurnThresholds) {
-    // Compute gate results
-    let allGatesPassed = true;
-    if (hasGates) {
-      result.gateResults = [];
-      for (const gate of gates) {
-        const scores = gateScoresByGateId[gate.id]!;
-        const avgScore = average(scores);
-        const passed = avgScore >= 1.0;
-        if (!passed) allGatesPassed = false;
-        result.gateResults.push({ id: gate.id, passed, score: avgScore });
-      }
-    }
+  let allGatesPassed = true;
+  let allThresholdsPassed = true;
 
-    // Compute threshold results
-    let allThresholdsPassed = true;
-    if (hasThresholds) {
-      result.thresholdResults = [];
-      for (const [scorerId, threshold] of thresholdMap) {
-        const scores = thresholdScoresByScorerID[scorerId]!;
-        const averageScore = average(scores);
-        const passed = checkThresholdPassed(averageScore, threshold);
-        if (!passed) allThresholdsPassed = false;
-        result.thresholdResults.push({ id: scorerId, passed, averageScore, threshold });
-      }
+  if (hasGates) {
+    const gateResults: GateResult[] = [];
+    for (const gate of gates) {
+      const scores = gateScoresByGateId[gate.id]!;
+      // A gate that declared every run not scorable has no evidence either
+      // way. It is reported in `summary.notScorable` and left out of the verdict.
+      if (scores.length === 0 && notScorableCounts[gate.id]) continue;
+      const avgScore = average(scores);
+      const passed = avgScore >= 1.0;
+      if (!passed) allGatesPassed = false;
+      gateResults.push({ id: gate.id, passed, score: avgScore });
     }
+    if (gateResults.length > 0) result.gateResults = gateResults;
+  }
 
-    // Fold per-turn gate/threshold outcomes into the overall verdict.
-    if (turnAggregate) {
-      if (!turnAggregate.turnGatesPassed) allGatesPassed = false;
-      if (!turnAggregate.turnThresholdsPassed) allThresholdsPassed = false;
+  if (hasThresholds) {
+    const thresholdResults: Array<{
+      id: string;
+      passed: boolean;
+      averageScore: number;
+      threshold: ThresholdConfig;
+    }> = [];
+    for (const [scorerId, threshold] of thresholdMap) {
+      const scores = thresholdScoresByScorerID[scorerId]!;
+      if (scores.length === 0 && notScorableCounts[scorerId]) continue;
+      const averageScore = average(scores);
+      const passed = checkThresholdPassed(averageScore, threshold);
+      if (!passed) allThresholdsPassed = false;
+      thresholdResults.push({ id: scorerId, passed, averageScore, threshold });
     }
+    if (thresholdResults.length > 0) result.thresholdResults = thresholdResults;
+  }
 
-    // Determine verdict
+  if (turnAggregate) {
+    if (hasTurnGates && !turnAggregate.turnGatesPassed) allGatesPassed = false;
+    if (hasTurnThresholds && !turnAggregate.turnThresholdsPassed) allThresholdsPassed = false;
+  }
+
+  const hasNumericAssertions =
+    (result.gateResults?.length ?? 0) > 0 ||
+    (result.thresholdResults?.length ?? 0) > 0 ||
+    hasTurnGates ||
+    hasTurnThresholds;
+
+  if (hasNumericAssertions) {
     if (!allGatesPassed) {
       result.verdict = 'failed';
     } else if (!allThresholdsPassed) {
@@ -561,6 +605,8 @@ function average(scores: number[]): number {
 /**
  * Scores a single turn against only its own input/output. Gates that throw score 0
  * (consistent with top-level gate handling); per-turn scorer errors propagate.
+ * Gates and scorers that declare the turn not scorable are listed in
+ * `notScorable` and contribute nothing else.
  */
 async function scoreTurn(
   turn: EvalTurn,
@@ -568,11 +614,12 @@ async function scoreTurn(
   item: RunEvalsDataItem<any>,
   storage?: MastraCompositeStore,
   mastra?: any,
-): Promise<Omit<ScoredTurn, 'index'> & { rawResults: Record<string, any> }> {
+): Promise<Omit<ScoredTurn, 'index'> & { rawResults: Record<string, any>; notScorable: string[] }> {
   const gates: Array<{ id: string; score: number }> = [];
   const thresholds: Array<{ id: string; score: number; threshold: ThresholdConfig }> = [];
   const scores: Array<{ id: string; score: number }> = [];
   const rawResults: Record<string, any> = {};
+  const notScorable: string[] = [];
 
   if (turn.gates) {
     // Same trajectory contract as the top-level gate loop above.
@@ -598,6 +645,10 @@ async function scoreTurn(
           targetTraceId: record.traceId,
           targetSpanId: record.spanId,
         });
+        if (gateScore.notScorable) {
+          notScorable.push(gate.id);
+          continue;
+        }
         score = gateScore.score as number;
         rawResults[gate.id] = gateScore;
       } catch (error) {
@@ -622,6 +673,10 @@ async function scoreTurn(
         targetTraceId: record.traceId,
         targetSpanId: record.spanId,
       });
+      if (scoreResult.notScorable) {
+        notScorable.push(scorer.id);
+        continue;
+      }
       const score = scoreResult.score as number;
       scores.push({ id: scorer.id, score });
       rawResults[scorer.id] = scoreResult;
@@ -632,7 +687,7 @@ async function scoreTurn(
     }
   }
 
-  return { gates, thresholds, scores, rawResults };
+  return { gates, thresholds, scores, rawResults, notScorable };
 }
 
 /** Aggregates per-item turn results by turn index, averaging scores across items. */
