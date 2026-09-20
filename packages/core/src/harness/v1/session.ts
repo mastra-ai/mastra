@@ -378,7 +378,9 @@ type MessageAdmissionHashes = {
 };
 
 type QueueResumeRecoveryResult =
-  { status: 'none' } | { status: 'completed'; result: AgentResult } | { status: 'stale' };
+  | { status: 'none' }
+  | { status: 'completed'; result: AgentResult }
+  | { status: 'stale' };
 
 type ResumeResponseMode = 'agent-result' | 'inbox-receipt';
 type InboxReceiptResponseOptions = Extract<InboxResponseOptions, { responseId: string }>;
@@ -4008,6 +4010,26 @@ export class Session {
     return this._state !== 'deleted' && !(err instanceof HarnessSessionDeletedError);
   }
 
+  /**
+   * An opted-in native terminal turn has no provider-shaped failure boundary
+   * before the durable terminal receipt. A provider/collector/storage failure
+   * therefore remains indeterminate until native reconciliation; it must not
+   * escape as a normal provider failure that a caller could refund.
+   */
+  private _terminalFailure(
+    err: unknown,
+    onFailure?: (error: HarnessTerminalHandoffError) => void,
+  ): HarnessTerminalHandoffError {
+    if (err instanceof HarnessTerminalHandoffError) return err;
+    const pending = new HarnessTerminalFinalizationPendingError(Date.now() + 1_000, err);
+    try {
+      onFailure?.(pending);
+    } catch {
+      // Failure observers cannot change the durable terminal winner.
+    }
+    return pending;
+  }
+
   private async _withActiveDeletedWaiter<T>(fn: (activeTurnWaiter: Promise<never>) => Promise<T>): Promise<T> {
     const activeTurnWaiter = this._createActiveTurnWaiter();
     void activeTurnWaiter.promise.catch(() => {});
@@ -4431,7 +4453,8 @@ export class Session {
    * `_internalAwaitFlushChain()` so shutdown and tests can act on it. */
   private _pendingTokenUsageFlushError: unknown;
   private _pendingDurableTurnFlushError:
-    { error: unknown; pendingResume?: { runId: string; toolCallId: string } } | undefined;
+    | { error: unknown; pendingResume?: { runId: string; toolCallId: string } }
+    | undefined;
 
   /**
    * True while a turn (message or queued) is in flight against the agent.
@@ -7977,7 +8000,7 @@ export class Session {
         nativeAccepted = true;
       }
     } catch (err) {
-      let thrown = err;
+      let thrown: unknown = terminalIdentity ? this._terminalFailure(err, opts.onTerminalCommitError) : err;
       if (
         err instanceof NativeSignalAcceptanceTimeoutError &&
         nativeDispatchStarted &&
@@ -8078,18 +8101,19 @@ export class Session {
     // reservation is the durable admission barrier.
 
     const failDispatchedMessageTurn = async (err: unknown) => {
-      turnAbortController.abort(err);
+      const failure = terminalIdentity ? this._terminalFailure(err, opts.onTerminalCommitError) : err;
+      turnAbortController.abort(failure);
       finishOwnedMessageTurn();
-      rejectMessageAdmissionStart(err);
+      rejectMessageAdmissionStart(failure);
       void completion.catch(() => {});
       const waiter = this._runCompletionPromises.get(signal.runId);
       this._runCompletionPromises.delete(signal.runId);
-      this._rememberCompletedRun(signal.runId, { ok: false, err });
-      waiter?.reject(err);
+      this._rememberCompletedRun(signal.runId, { ok: false, err: failure });
+      waiter?.reject(failure);
       if (
         admissionIdentity !== undefined &&
         terminalIdentity === undefined &&
-        this._shouldWriteTurnFailureEvidence(err)
+        this._shouldWriteTurnFailureEvidence(failure)
       ) {
         this._writeMessageResultEvidenceBestEffortInBackground(
           {
@@ -8099,7 +8123,7 @@ export class Session {
             modeId: effectiveModeId,
             modelId: effectiveModelId,
             operationKind: 'message',
-            error: projectHarnessPublicError(err),
+            error: projectHarnessPublicError(failure),
             admissionId: opts.admissionId!,
             admissionHash: admissionHash!,
           },
@@ -8142,16 +8166,17 @@ export class Session {
                 delay(MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS).then(() => undefined),
               ])) as MastraModelOutput<unknown> | undefined);
         } catch (err) {
+          const failure = terminalIdentity ? this._terminalFailure(err, opts.onTerminalCommitError) : err;
           finishOwnedMessageTurn();
           void completion.catch(() => {});
           const waiter = this._runCompletionPromises.get(signal.runId);
           this._runCompletionPromises.delete(signal.runId);
-          this._rememberCompletedRun(signal.runId, { ok: false, err });
-          waiter?.reject(err);
+          this._rememberCompletedRun(signal.runId, { ok: false, err: failure });
+          waiter?.reject(failure);
           if (
             admissionIdentity !== undefined &&
             terminalIdentity === undefined &&
-            this._shouldWriteTurnFailureEvidence(err)
+            this._shouldWriteTurnFailureEvidence(failure)
           ) {
             this._writeMessageResultEvidenceBestEffortInBackground(
               {
@@ -8161,7 +8186,7 @@ export class Session {
                 modeId: effectiveModeId,
                 modelId: effectiveModelId,
                 operationKind: 'message',
-                error: projectHarnessPublicError(err),
+                error: projectHarnessPublicError(failure),
                 admissionId: opts.admissionId!,
                 admissionHash: admissionHash!,
               },
@@ -8173,26 +8198,28 @@ export class Session {
           // §13.3f.1 — message({ stream: true }) is a public §4.2b boundary; the
           // run-output wait can reject with a raw provider/runtime error. Redact
           // before rejecting the caller (internal waiters keep the raw err).
-          throw redactPublicBoundaryRejection(err);
+          throw redactPublicBoundaryRejection(failure);
         }
       }
       if (!out) {
         const err = new HarnessConfigError('message()', 'agent did not register a run for the dispatched signal');
+        const failure = terminalIdentity ? this._terminalFailure(err, opts.onTerminalCommitError) : err;
         // Drop the completion waiter so duplicate retries do not treat an
         // unregistered run as live forever.
-        await failDispatchedMessageTurn(err);
+        await failDispatchedMessageTurn(failure);
         // §13.3f.1 — public §4.2b boundary. `err` here is a construction-safe
         // HarnessConfigError, so the wrap is a pass-through; applied for parity
         // with the other stream-setup throws.
-        throw redactPublicBoundaryRejection(err);
+        throw redactPublicBoundaryRejection(failure);
       }
       try {
         await awaitPendingMessageEvidence();
       } catch (err) {
-        await failDispatchedMessageTurn(err);
+        const failure = terminalIdentity ? this._terminalFailure(err, opts.onTerminalCommitError) : err;
+        await failDispatchedMessageTurn(failure);
         // §13.3f.1 — public §4.2b boundary; the pending-evidence wait can reject
         // with a raw storage error. Redact before rejecting the caller.
-        throw redactPublicBoundaryRejection(err);
+        throw redactPublicBoundaryRejection(failure);
       }
       reportAdmissionPhase('output_registered');
       let streamCompletedEvidenceWriteFailed = false;
@@ -8255,11 +8282,15 @@ export class Session {
           await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
         })
         .catch(err => {
+          const failure =
+            terminalIdentity !== undefined && !streamAgentEndEmitted
+              ? this._terminalFailure(err, opts.onTerminalCommitError)
+              : err;
           if (
             admissionIdentity !== undefined &&
             !streamCompletedEvidenceWriteFailed &&
             terminalIdentity === undefined &&
-            this._shouldWriteTurnFailureEvidence(err)
+            this._shouldWriteTurnFailureEvidence(failure)
           ) {
             void this._writeMessageResultEvidence(
               {
@@ -8269,7 +8300,7 @@ export class Session {
                 modeId: effectiveModeId,
                 modelId: effectiveModelId,
                 operationKind: 'message',
-                error: projectHarnessPublicError(err),
+                error: projectHarnessPublicError(failure),
                 admissionId: opts.admissionId!,
                 admissionHash: admissionHash!,
               },
@@ -8277,7 +8308,7 @@ export class Session {
             ).catch(() => {});
           }
           if (!streamAgentEndEmitted) {
-            if (terminalIdentity !== undefined && err instanceof HarnessTerminalHandoffError) {
+            if (terminalIdentity !== undefined) {
               // Provider EOF is not native terminal settlement. Surface the
               // typed handoff result separately so Doxa can retain an
               // indeterminate/pending operation instead of refunding or
@@ -8286,7 +8317,7 @@ export class Session {
                 type: 'error',
                 runId: signal.runId,
                 signalId: signal.signal.id,
-                error: projectHarnessPublicError(err),
+                error: projectHarnessPublicError(failure),
               });
             }
             this._emitTurnEvent({
@@ -8374,18 +8405,22 @@ export class Session {
       await Promise.race([this._runGoalJudge(full, false), activeTurnWaiter.promise]);
       return full;
     } catch (err) {
+      const failure =
+        terminalIdentity !== undefined && !agentEndEmitted
+          ? this._terminalFailure(err, opts.onTerminalCommitError)
+          : err;
       if (!streamStarted) {
         void completion.catch(() => {});
         const waiter = this._runCompletionPromises.get(signal.runId);
         this._runCompletionPromises.delete(signal.runId);
-        this._rememberCompletedRun(signal.runId, { ok: false, err });
-        waiter?.reject(err);
+        this._rememberCompletedRun(signal.runId, { ok: false, err: failure });
+        waiter?.reject(failure);
       }
       if (
         admissionIdentity !== undefined &&
         !completedEvidenceWriteFailed &&
         terminalIdentity === undefined &&
-        this._shouldWriteTurnFailureEvidence(err)
+        this._shouldWriteTurnFailureEvidence(failure)
       ) {
         await Promise.race([
           this._writeMessageResultEvidence(
@@ -8396,7 +8431,7 @@ export class Session {
               modeId: effectiveModeId,
               modelId: effectiveModelId,
               operationKind: 'message',
-              error: projectHarnessPublicError(err),
+              error: projectHarnessPublicError(failure),
               admissionId: opts.admissionId!,
               admissionHash: admissionHash!,
             },
@@ -8406,7 +8441,7 @@ export class Session {
         ]);
       }
       if (!agentEndEmitted) {
-        if (terminalIdentity !== undefined && err instanceof HarnessTerminalHandoffError) {
+        if (terminalIdentity !== undefined) {
           // Keep the native commit barrier observable independently of the
           // provider's terminal event. Canonical evidence remains pending
           // until a later native receipt/reconciliation wins.
@@ -8414,7 +8449,7 @@ export class Session {
             type: 'error',
             runId: signal.runId,
             signalId: signal.signal.id,
-            error: projectHarnessPublicError(err),
+            error: projectHarnessPublicError(failure),
           });
         }
         this._emitTurnEvent({
@@ -8430,7 +8465,7 @@ export class Session {
       // local-only); Harness-own errors pass through with their typed message.
       // The wire/event/durable surfaces are unchanged (they already project via
       // `projectHarnessPublicError`, which maps both shapes to `harness.internal`).
-      throw redactPublicBoundaryRejection(err);
+      throw redactPublicBoundaryRejection(failure);
     } finally {
       if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
       finishOwnedMessageTurn();
