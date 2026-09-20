@@ -32,15 +32,15 @@ function jqlDateLiteral(watermark: string): string {
 }
 
 const issueSchema = z.object({
-  id: z.string().optional(),
+  id: z.string().nullish(),
   key: z.string(),
-  self: z.string().optional(),
+  self: z.string().nullish(),
   fields: z
     .object({
       summary: z.string().nullish(),
       description: z.string().nullish(),
-      status: z.object({ name: z.string().optional() }).nullish(),
-      project: z.object({ key: z.string().optional(), name: z.string().optional() }).nullish(),
+      status: z.object({ name: z.string().nullish() }).nullish(),
+      project: z.object({ key: z.string().nullish(), name: z.string().nullish() }).nullish(),
       updated: z.string(),
     })
     .passthrough(),
@@ -48,9 +48,9 @@ const issueSchema = z.object({
 
 const searchResponseSchema = z.object({
   issues: z.array(issueSchema),
-  startAt: z.number().optional(),
-  maxResults: z.number().optional(),
-  total: z.number().optional(),
+  startAt: z.number().nullish(),
+  maxResults: z.number().nullish(),
+  total: z.number().nullish(),
 });
 
 type JiraIssue = z.infer<typeof issueSchema>;
