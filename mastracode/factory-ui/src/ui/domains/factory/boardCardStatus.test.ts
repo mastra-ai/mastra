@@ -97,6 +97,8 @@ describe('boardCardStatus', () => {
     const sync = (source: FactoryDecisionSummary['source']) =>
       boardCardStatus({ decision: decision({ type: 'upsertLinkedWorkItem', source, status: 'pending', attempts: 0 }) });
     expect(sync('github-issue')).toEqual({ kind: 'busy', label: 'Syncing GitHub issue…' });
+    expect(sync('gitlab-issue')).toEqual({ kind: 'busy', label: 'Syncing GitLab issue…' });
+    expect(sync('gitlab-pr')).toEqual({ kind: 'busy', label: 'Syncing GitLab merge request…' });
     expect(sync('linear-issue')).toEqual({ kind: 'busy', label: 'Syncing Linear issue…' });
   });
 

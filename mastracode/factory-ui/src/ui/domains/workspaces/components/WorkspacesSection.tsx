@@ -19,6 +19,7 @@ import { githubNumberForItem, pullRequestStatusForItem } from '../../factory/boa
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { relatedWorkItemIndex, relationshipLabel } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
+import { isPullRequestSource } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/user-sessions';
@@ -92,9 +93,9 @@ export function WorkspacesSection() {
   );
   const relatedItemsFor = relatedWorkItemIndex(allWorkItems);
   const latestPullRequestFor = (item: WorkItem) => {
-    if (item.source === 'github-pr') return item;
+    if (isPullRequestSource(item.source)) return item;
     return relatedItemsFor(item)
-      .filter(related => related.source === 'github-pr')
+      .filter(related => isPullRequestSource(related.source))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
   };
 

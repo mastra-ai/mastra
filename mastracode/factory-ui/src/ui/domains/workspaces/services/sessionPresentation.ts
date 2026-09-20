@@ -1,4 +1,5 @@
 import type { WorkItem } from '../../factory/services/workItems';
+import { isPullRequestSource } from '../../factory/services/workItems';
 import { USER_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
 
@@ -31,7 +32,7 @@ export function getSessionOwnerDetails(
 }
 
 export function getFactorySessionKind(session: FactoryUserSession, workItem: WorkItem | undefined): 'work' | 'review' {
-  if (workItem?.source === 'github-pr') return 'review';
+  if (workItem && isPullRequestSource(workItem.source)) return 'review';
   if (!workItem && session.branch.startsWith(REVIEW_BRANCH_PREFIX)) return 'review';
   return 'work';
 }
