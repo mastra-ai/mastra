@@ -13,7 +13,15 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab';
+export type PlatformConnectProviderId =
+  | 'jira'
+  | 'incident-io'
+  | 'gitlab'
+  | 'notion'
+  | 'confluence'
+  | 'linear'
+  | 'zendesk'
+  | 'fireflies';
 
 /** How the provider authorizes: OAuth consent popup or an API-key form. */
 export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
@@ -28,7 +36,27 @@ export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, Platf
   jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
   'incident-io': { id: 'incident-io', displayName: 'incident.io', authKind: 'apiKey' },
   gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
+  notion: { id: 'notion', displayName: 'Notion', authKind: 'oauth' },
+  confluence: { id: 'confluence', displayName: 'Confluence', authKind: 'oauth' },
+  linear: { id: 'linear', displayName: 'Linear', authKind: 'oauth' },
+  zendesk: { id: 'zendesk', displayName: 'Zendesk', authKind: 'oauth' },
+  fireflies: { id: 'fireflies', displayName: 'Fireflies', authKind: 'oauth' },
 };
+
+/**
+ * Subset of {@link PlatformConnectProviderId} that Factory's Knowledge
+ * Importers settings section exposes. `jira` is intentionally excluded — it's
+ * already surfaced via the intake/general Connections section, so listing it
+ * twice would confuse the connection-state semantics (one connection powering
+ * two features).
+ */
+export const KNOWLEDGE_IMPORTER_PROVIDER_IDS: readonly PlatformConnectProviderId[] = [
+  'notion',
+  'confluence',
+  'linear',
+  'zendesk',
+  'fireflies',
+];
 
 export interface PlatformProviderConnection {
   id: string;
