@@ -41,6 +41,15 @@ export const server = setupServer(
   http.get('*/web/integrations/platform/:provider/connections', () =>
     HttpResponse.json({ error: 'not_found' }, { status: 404 }),
   ),
+  // Ambient platform integration catalog. A deployment without Platform
+  // credentials doesn't mount the catalog route at all — 404 mirrors that
+  // reality so the `usePlatformCatalogQuery` retry-off gate hides logo
+  // errors as expected. Tests that assert logo/display-name plumbing must
+  // override this with `server.use(...)` — anything else means a real
+  // catalog regression would silently pass with an "empty catalog" default.
+  http.get('*/web/integrations/platform/catalog', () =>
+    HttpResponse.json({ error: 'not_found' }, { status: 404 }),
+  ),
   // Ambient GitHub label routing (read by every board's intake feed); label-routing
   // tests override it with `server.use(...)`.
   http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),

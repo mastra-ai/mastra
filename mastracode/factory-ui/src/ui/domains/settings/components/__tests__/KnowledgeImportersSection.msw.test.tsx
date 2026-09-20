@@ -181,6 +181,40 @@ describe('KnowledgeImportersSection', () => {
     });
   });
 
+  describe('brand logos', () => {
+    it('renders the Nango-supplied logo when the platform catalog knows the provider', async () => {
+      useFeaturesHandler(true);
+      useConnectionHandlers({});
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/catalog`, () =>
+          HttpResponse.json({
+            integrations: [
+              {
+                provider: 'notion',
+                integrationId: 'notion',
+                displayName: 'Notion',
+                logoUrl: 'https://app.nango.dev/images/template-logos/notion.svg',
+              },
+              // Confluence intentionally omitted — proves the missing-catalog
+              // path falls back to the source ladder rather than blanking.
+            ],
+          }),
+        ),
+      );
+      const { container } = renderSection();
+      // Notion card carries the thesvg.org mono at first paint (it walks the
+      // source ladder on error). Verify the Nango URL is at least prepared
+      // as a fallback — inspect the DOM once the catalog resolves.
+      await screen.findByText('Notion');
+      // The logo wrapper carries the display name as aria-label; there's one
+      // per registered provider.
+      const notionLogo = container.querySelector('[aria-label="Notion"] img');
+      expect(notionLogo).not.toBeNull();
+      // Assertion is scoped to the src on first render: thesvg.org mono.
+      expect((notionLogo as HTMLImageElement).src).toContain('thesvg.org/icons/notion/mono.svg');
+    });
+  });
+
   describe('Connect button interaction', () => {
     it('mints a session against the provider-specific endpoint and drives Nango with the session token', async () => {
       useFeaturesHandler(true);

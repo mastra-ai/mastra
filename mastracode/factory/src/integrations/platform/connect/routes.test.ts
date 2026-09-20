@@ -144,6 +144,113 @@ describe('platform connect routes', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  describe('/web/integrations/platform/catalog', () => {
+    it('projects one row per registered provider and merges Platform catalog metadata', async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
+        json({
+          integrations: [
+            {
+              id: 'notion',
+              provider: 'notion',
+              displayName: 'Notion',
+              logoUrl: 'https://app.nango.dev/images/template-logos/notion.svg',
+            },
+            {
+              id: 'jira',
+              provider: 'jira',
+              displayName: 'Atlassian Jira',
+              logoUrl: 'https://app.nango.dev/images/template-logos/jira.svg',
+            },
+            // Extra Platform entries the SPA doesn't need are ignored.
+            { id: 'github', displayName: 'GitHub' },
+          ],
+        }),
+      );
+      const app = buildApp(org1(), fetchImpl);
+
+      const response = await app.request('/web/integrations/platform/catalog');
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      const rows = body.integrations as Array<Record<string, unknown>>;
+      // One row per registered SPA provider, including the ones the Platform
+      // doesn't yet know about (fireflies, zendesk, etc. — logoUrl: null).
+      expect(new Set(rows.map(r => r.provider))).toEqual(
+        new Set(['jira', 'incident-io', 'notion', 'confluence', 'linear', 'zendesk', 'fireflies']),
+      );
+      expect(rows.find(r => r.provider === 'notion')).toMatchObject({
+        integrationId: 'notion',
+        displayName: 'Notion',
+        logoUrl: 'https://app.nango.dev/images/template-logos/notion.svg',
+      });
+      expect(rows.find(r => r.provider === 'fireflies')).toMatchObject({
+        integrationId: 'fireflies',
+        displayName: null,
+        logoUrl: null,
+      });
+    });
+
+    it('caches the catalog for reuse within the TTL window', async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ integrations: [] }));
+      const app = buildApp(org1(), fetchImpl);
+      await app.request('/web/integrations/platform/catalog');
+      await app.request('/web/integrations/platform/catalog');
+      // /v2/integrations should only be hit once thanks to the module-level cache.
+      const catalogCalls = fetchImpl.mock.calls.filter(([input]) => String(input).endsWith('/v2/integrations'));
+      expect(catalogCalls).toHaveLength(1);
+    });
+
+    it('rejects signed-out callers and personal accounts before touching Platform', async () => {
+      const fetchImpl = vi.fn<typeof fetch>();
+      const signedOut = buildApp(null, fetchImpl);
+      expect((await signedOut.request('/web/integrations/platform/catalog')).status).toBe(401);
+
+      const personal = buildApp({ workosId: 'u1' }, fetchImpl);
+      expect((await personal.request('/web/integrations/platform/catalog')).status).toBe(403);
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('serves the stale snapshot to every concurrent caller when a refresh fails', async () => {
+      // First fetch succeeds → cache populated. Freeze time so the TTL doesn't
+      // rescue us. Advance past the TTL, then fail every subsequent Platform
+      // call: every concurrent caller must see the stale snapshot (not the
+      // raw rejection) — the fix for the reviewer's "second caller bypasses
+      // stale-fallback" defect.
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        // First call: seed the cache.
+        .mockResolvedValueOnce(json({ integrations: [{ id: 'notion', displayName: 'Notion', logoUrl: null }] }))
+        // Subsequent calls: fail. Multiple concurrent callers should each
+        // still receive the previously-cached snapshot, not the raw 500.
+        .mockResolvedValue(json({ detail: 'boom' }, 500));
+      const app = buildApp(org1(), fetchImpl);
+
+      const seed = await app.request('/web/integrations/platform/catalog');
+      expect(seed.status).toBe(200);
+      const seeded = (await seed.json()).integrations as Array<Record<string, unknown>>;
+      const seededNotion = seeded.find(r => r.provider === 'notion');
+      expect(seededNotion?.displayName).toBe('Notion');
+
+      // Fast-forward beyond TTL to force a refresh, then fire two concurrent
+      // catalog requests. Both must resolve with the stale snapshot.
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(Date.now() + 6 * 60_000);
+        const [a, b] = await Promise.all([
+          app.request('/web/integrations/platform/catalog'),
+          app.request('/web/integrations/platform/catalog'),
+        ]);
+        expect(a.status).toBe(200);
+        expect(b.status).toBe(200);
+        const rowsA = (await a.json()).integrations as Array<Record<string, unknown>>;
+        const rowsB = (await b.json()).integrations as Array<Record<string, unknown>>;
+        expect(rowsA.find(r => r.provider === 'notion')?.displayName).toBe('Notion');
+        expect(rowsB.find(r => r.provider === 'notion')?.displayName).toBe('Notion');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it('maps platform conflicts and forbidden responses instead of returning 502', async () => {
     const conflictFetch = vi
       .fn<typeof fetch>()

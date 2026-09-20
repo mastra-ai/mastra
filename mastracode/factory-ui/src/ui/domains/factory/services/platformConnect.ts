@@ -128,6 +128,32 @@ export function isPlatformConnectUnavailableError(error: unknown): boolean {
   return status === 403 || status === 404;
 }
 
+/**
+ * A single row from the Platform integration catalog, projected to the SPA's
+ * provider slug. `logoUrl` is the Nango-served template logo URL if the
+ * Platform catalog knows about this integration, otherwise `null`.
+ */
+export interface PlatformCatalogEntry {
+  provider: PlatformConnectProviderId;
+  integrationId: string;
+  displayName: string | null;
+  logoUrl: string | null;
+}
+
+/**
+ * Load the Platform integration catalog. Returns one row per registered
+ * connect provider — the server projects `PLATFORM_CONNECT_PROVIDERS` onto
+ * the Platform's `/v2/integrations` response so the SPA never has to
+ * discover slugs of its own.
+ */
+export async function listPlatformCatalog(baseUrl: string): Promise<PlatformCatalogEntry[]> {
+  const { integrations } = await requestJson<{ integrations: PlatformCatalogEntry[] }>(
+    baseUrl,
+    `/web/integrations/platform/catalog`,
+  );
+  return integrations;
+}
+
 /** List the org's Platform connections for one provider (all auth variants). */
 export async function listPlatformConnections(
   baseUrl: string,

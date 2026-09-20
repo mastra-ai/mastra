@@ -71,6 +71,27 @@ interface PlatformSessionResponse {
   expiresAt: string;
 }
 
+/**
+ * Shape of a single Platform integration catalog entry. We only extract the
+ * fields the SPA cares about (display metadata + logo). Other fields the
+ * Platform may return are ignored on purpose so a Platform release that adds
+ * fields doesn't break the Factory read.
+ */
+interface PlatformCatalogEntry {
+  id: string;
+  provider?: string | null;
+  displayName?: string | null;
+  logoUrl?: string | null;
+}
+
+/** SPA-facing catalog row — one per registered `PLATFORM_CONNECT_PROVIDERS`. */
+export interface PlatformCatalogRow {
+  provider: string;
+  integrationId: string;
+  displayName: string | null;
+  logoUrl: string | null;
+}
+
 export interface BuildPlatformConnectRoutesOptions {
   auth: RouteAuth;
   client: PlatformApiClient;
@@ -121,10 +142,83 @@ function platformError(c: RouteContext, err: unknown) {
  * Build the `/web/integrations/platform/*` routes. Callers only mount these
  * when Platform machine credentials are configured.
  */
+/**
+ * Time-to-live for the in-process catalog snapshot. Five minutes is plenty
+ * — the Nango-backed catalog changes only when Mastra's own Platform team
+ * adds an integration, and rebuilding the snapshot only involves one HTTP
+ * hop; on error we serve the stale snapshot to keep the SPA rendering.
+ */
+const CATALOG_CACHE_TTL_MS = 5 * 60_000;
+
+/**
+ * Build the catalog snapshot: fetch `/v2/integrations`, index it, and
+ * project one row per registered SPA provider so a Platform response that
+ * omits an entry we've registered still yields a row (with `null` logo).
+ */
+async function buildCatalogSnapshot(client: PlatformApiClient): Promise<PlatformCatalogRow[]> {
+  const result = await client.request<{ integrations: PlatformCatalogEntry[] }>('GET', '/v2/integrations');
+  const byId = new Map(result.integrations.map(entry => [entry.id, entry] as const));
+  return Object.entries(PLATFORM_CONNECT_PROVIDERS).map(([spaSlug, provider]) => {
+    const entry = byId.get(provider.integrationId);
+    return {
+      provider: spaSlug,
+      integrationId: provider.integrationId,
+      displayName: entry?.displayName ?? null,
+      logoUrl: entry?.logoUrl ?? null,
+    };
+  });
+}
+
 export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOptions): ApiRoute[] {
   const { auth, client } = options;
 
+  let cache: { rows: PlatformCatalogRow[]; fetchedAt: number } | null = null;
+  /** In-flight request de-duplication so a burst of card renders shares one call. */
+  let inflight: Promise<PlatformCatalogRow[]> | null = null;
+
+  async function loadCatalog(): Promise<PlatformCatalogRow[]> {
+    const now = Date.now();
+    if (cache && now - cache.fetchedAt < CATALOG_CACHE_TTL_MS) return cache.rows;
+    // De-duplicate concurrent misses so a burst of card renders shares one
+    // Platform fetch _and_ one stale-on-failure guard. The wrapped promise
+    // is what every caller awaits, so a rejection is transparently mapped
+    // to the stale snapshot for all of them (not just the first arrival).
+    if (!inflight) {
+      inflight = (async () => {
+        try {
+          const rows = await buildCatalogSnapshot(client);
+          cache = { rows, fetchedAt: Date.now() };
+          return rows;
+        } catch (err) {
+          // Serve stale data on failure so the SPA doesn't blank the section
+          // when the Platform catalog service is briefly unreachable.
+          if (cache) return cache.rows;
+          throw err;
+        } finally {
+          inflight = null;
+        }
+      })();
+    }
+    return inflight;
+  }
+
   return [
+    registerApiRoute('/web/integrations/platform/catalog', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async rawContext => {
+        const c = loose(rawContext);
+        const resolved = await resolveOrgTenant(c, auth);
+        if ('response' in resolved) return resolved.response;
+        try {
+          const rows = await loadCatalog();
+          c.header('Cache-Control', 'private, max-age=60');
+          return c.json({ integrations: rows });
+        } catch (err) {
+          return platformError(c, err);
+        }
+      },
+    }),
     registerApiRoute('/web/integrations/platform/:provider/connections', {
       method: 'GET',
       requiresAuth: false,

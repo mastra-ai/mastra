@@ -199,6 +199,18 @@ export const integrationCatalogEntrySchema = z.object({
   capabilities: z.object({
     mcp: z.boolean().optional(),
   }),
+  /**
+   * Optional metadata surfaced by newer Platform versions. Kept lenient
+   * (`.nullish()`) so older Platform deployments that return only
+   * `{ id, capabilities }` still parse cleanly.
+   *
+   * `displayName` and `provider` are typically the human-readable name and
+   * the Nango template slug; `logoUrl` is a stable CDN URL to the Nango
+   * template logo.
+   */
+  displayName: z.string().nullish(),
+  provider: z.string().nullish(),
+  logoUrl: z.string().nullish(),
 });
 
 export type IntegrationCatalogEntry = z.infer<typeof integrationCatalogEntrySchema>;
