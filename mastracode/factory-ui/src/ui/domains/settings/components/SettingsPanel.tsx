@@ -1,12 +1,13 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useEffect } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, Navigate, useLocation, useParams } from 'react-router';
 import { Brain } from 'lucide-react';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
+import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useSettingsSection } from '../hooks/useSettingsSection';
@@ -29,6 +30,7 @@ import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
+import { KnowledgeSection } from './KnowledgeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
@@ -100,6 +102,7 @@ export function SettingsPanel() {
         )}
         {section === 'repositories' && <RepositoriesSection />}
         {section === 'intake' && <IntakeSection />}
+        {section === 'knowledge' && <KnowledgeSettingsRoute factoryId={factoryId} />}
         {section === 'models' && (
           <ModelsSettingsSection models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
         )}
@@ -130,6 +133,22 @@ interface ModelsSettingsSectionProps {
   models: AvailableModelOption[];
   settings: AgentControllerSessionSettings | null;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
+}
+
+/**
+ * Renders the Knowledge settings page, or bounces to Preferences (the
+ * always-available Sources landing) when the server doesn't advertise the
+ * knowledge feature. The nav item is hidden in that case too, so this
+ * redirect only fires for deep-linked URLs or bookmarked routes after a
+ * deploy flipped the flag off.
+ */
+function KnowledgeSettingsRoute({ factoryId }: { factoryId: string | undefined }) {
+  const features = useServerFeatures();
+  if (features.isPending || !factoryId) return null;
+  if (!features.data?.knowledge) {
+    return <Navigate to={settingsSectionPath(factoryId, 'preferences')} replace />;
+  }
+  return <KnowledgeSection />;
 }
 
 interface MemorySettingsSectionProps {
