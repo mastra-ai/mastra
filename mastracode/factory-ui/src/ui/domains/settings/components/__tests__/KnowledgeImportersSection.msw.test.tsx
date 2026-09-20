@@ -332,6 +332,28 @@ describe('KnowledgeImportersSection', () => {
       expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
     });
 
+    it('offers a retry instead of hiding when the routing load fails transiently', async () => {
+      useFeaturesHandler(true);
+      notionConnected();
+      useProjectsHandler();
+      let failures = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/notion/connections/notion-1/routing`, () => {
+          failures += 1;
+          if (failures === 1) return HttpResponse.json({ error: 'platform_request_failed' }, { status: 502 });
+          return HttpResponse.json({ routing: { mode: 'all', projectIds: [] } });
+        }),
+      );
+      renderSection();
+
+      // A 5xx is a blip, not "feature absent" — the control degrades to a
+      // retry affordance instead of vanishing.
+      expect(await screen.findByText(/Couldn't load sync destinations/)).toBeInTheDocument();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: 'Retry' }));
+      expect(await screen.findByText('Syncs to all projects')).toBeInTheDocument();
+    });
+
     it('hides the routing control entirely when the server mounts no routing routes', async () => {
       useFeaturesHandler(true);
       notionConnected();
