@@ -48,6 +48,7 @@ function issueOpened(context: FactoryGitLabRuleContext) {
         context.issue.authorTrusted && createdAfterFactory(context.issue.createdAt, context.factory.createdAt),
       assignees: context.issue.assignees ?? [],
       labels: context.issue.labels ?? [],
+      labelColors: context.issue.labelColors ?? {},
     },
   } as const;
 }

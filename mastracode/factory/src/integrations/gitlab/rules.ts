@@ -56,6 +56,18 @@ function labelNames(value: unknown): string[] {
   });
 }
 
+function labelColors(value: unknown): Record<string, string> {
+  if (!Array.isArray(value)) return {};
+  return Object.fromEntries(
+    value.flatMap(entry => {
+      const label = object(entry);
+      const name = string(label?.title) ?? string(label?.name);
+      const color = string(label?.color);
+      return name && color ? [[name, color]] : [];
+    }),
+  );
+}
+
 function eventName(parsed: ParsedGitLabWebhook): FactoryGitLabEventName | undefined {
   const attributes = object(parsed.payload.object_attributes);
   const action = string(attributes?.action)?.toLowerCase();
@@ -391,6 +403,7 @@ export class GitLabRules {
               ...(string(input.issue?.updated_at) ? { updatedAt: string(input.issue?.updated_at) } : {}),
               assignees: usernames(input.issue?.assignees),
               labels: labelNames(input.issue?.labels ?? input.parsed.payload.labels),
+              labelColors: labelColors(input.issue?.labels ?? input.parsed.payload.labels),
               state: string(input.issue?.state) === 'closed' ? ('closed' as const) : ('open' as const),
               ...(issueAuthor ? { author: issueAuthor } : {}),
               authorTrusted: input.issueAuthorTrusted,

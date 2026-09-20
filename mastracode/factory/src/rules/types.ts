@@ -335,6 +335,7 @@ export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
     updatedAt?: string;
     assignees?: string[];
     labels?: string[];
+    labelColors?: Record<string, string>;
     state?: 'open' | 'closed';
     author?: string;
     authorTrusted: boolean;
