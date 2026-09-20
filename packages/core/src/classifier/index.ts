@@ -1,3 +1,4 @@
+import { retryWithExponentialBackoff } from '@ai-sdk/provider-utils-v7';
 import {
   APICallError,
   Experimental_EvaluationUnsupportedQuestionTypeError as EvaluationUnsupportedQuestionTypeError,
@@ -9,7 +10,6 @@ import {
   type SharedV4ProviderOptions,
   type SharedV4Warning,
 } from '@ai-sdk/provider-v7';
-import { retryWithExponentialBackoff } from '@ai-sdk/provider-utils-v7';
 
 import { SpanType } from '../observability/types';
 import { resolveCurrentSpan } from '../observability/utils';

@@ -28,7 +28,7 @@ expectTypeOf(configuredResult.answers.route).toEqualTypeOf<ChoiceAnswer<'support
 expectTypeOf(configuredResult.answers.quality).toEqualTypeOf<ScoreAnswer>();
 expectTypeOf(configuredResult.answers.unsafe).toEqualTypeOf<BooleanAnswer>();
 // @ts-expect-error configured classifiers cannot receive per-call questions
-configured.evaluate({ state: 'content', questions: { unsafe: { type: 'boolean' } } });
+void configured.evaluate({ state: 'content', questions: { unsafe: { type: 'boolean' } } });
 
 const perCall = new Classifier({ id: 'per-call', model });
 const perCallResult = await perCall.evaluate({
@@ -42,4 +42,4 @@ const perCallResult = await perCall.evaluate({
 });
 expectTypeOf(perCallResult.answers.route).toEqualTypeOf<ChoiceAnswer<'docs' | 'support'>>();
 // @ts-expect-error per-call classifiers require questions
-perCall.evaluate({ state: 'content' });
+void perCall.evaluate({ state: 'content' });
