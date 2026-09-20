@@ -56,9 +56,7 @@ describe('session thread advertisement', () => {
     session.thread.detachFromCurrent();
     const secondThread = await session.thread.create();
 
-    await expect
-      .poll(advertisedThreads, { timeout: 5_000 })
-      .toEqual([firstThread.id, secondThread.id].sort());
+    await expect.poll(advertisedThreads, { timeout: 5_000 }).toEqual([firstThread.id, secondThread.id].sort());
   }, 30_000);
 
   it('delivers a wake signal to a thread the session has moved away from', async () => {
