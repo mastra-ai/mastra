@@ -136,6 +136,26 @@ function providerFromParam(c: RouteContext): PlatformConnectProvider | null {
   return provider ? (PLATFORM_CONNECT_PROVIDERS[provider] ?? null) : null;
 }
 
+/**
+ * Ownership guard shared by the routing and reconnect-session routes: the
+ * connection must exist and belong to this provider's integration ids so one
+ * provider's page can neither read nor mutate another provider's connection
+ * state through this route family. Nonexistent connections resolve `null`
+ * (callers answer 404) instead of leaking a default.
+ */
+async function findOwnedConnection(
+  client: PlatformApiClient,
+  provider: PlatformConnectProvider,
+  connectionId: string,
+): Promise<PlatformConnectionRow | null> {
+  const listed = await client.request<{ connections: PlatformConnectionRow[] }>('GET', '/v2/connections');
+  return (
+    listed.connections.find(
+      candidate => candidate.id === connectionId && provider.connectionIntegrationIds.includes(candidate.integrationId),
+    ) ?? null
+  );
+}
+
 function platformError(c: RouteContext, err: unknown) {
   if (err instanceof PlatformApiError) {
     if (err.status === 409) {
@@ -284,13 +304,19 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
               if ('response' in resolved) return resolved.response;
               const connectionId = c.req.param('connectionId');
               if (!connectionId) return c.json({ error: 'connection_required' }, 400);
-              await routing.ensureReady();
-              const record = await routing.get(connectionId);
-              return c.json({
-                routing: record
-                  ? { mode: record.mode, projectIds: record.projectIds }
-                  : { mode: 'all', projectIds: [] },
-              });
+              try {
+                const connection = await findOwnedConnection(client, provider, connectionId);
+                if (!connection) return c.json({ error: 'connection_not_found' }, 404);
+                await routing.ensureReady();
+                const record = await routing.get(connectionId);
+                return c.json({
+                  routing: record
+                    ? { mode: record.mode, projectIds: record.projectIds }
+                    : { mode: 'all', projectIds: [] },
+                });
+              } catch (err) {
+                return platformError(c, err);
+              }
             },
           }),
           registerApiRoute('/web/integrations/platform/:provider/connections/:connectionId/routing', {
@@ -323,6 +349,15 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
                   );
                 }
                 projectIds = [...new Set(raw as string[])];
+                // "Sync nowhere" is not a routing state — an empty selection
+                // would silently stop the sync. The UI blocks this too;
+                // disconnect the provider to stop importing entirely.
+                if (projectIds.length === 0) {
+                  return c.json(
+                    { error: 'empty_selection', message: 'Select at least one project, or use mode "all".' },
+                    400,
+                  );
+                }
                 if (projects) {
                   await projects.ensureReady();
                   const known = new Set((await projects.list({ orgId: resolved.tenant.orgId })).map(p => p.id));
@@ -337,18 +372,7 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
               }
 
               try {
-                // Same ownership guard as reconnect-session: the connection
-                // must belong to this provider's integration ids so one
-                // provider's page cannot re-route another provider's sync.
-                const listed = await client.request<{ connections: PlatformConnectionRow[] }>(
-                  'GET',
-                  '/v2/connections',
-                );
-                const connection = listed.connections.find(
-                  candidate =>
-                    candidate.id === connectionId &&
-                    provider.connectionIntegrationIds.includes(candidate.integrationId),
-                );
+                const connection = await findOwnedConnection(client, provider, connectionId);
                 if (!connection) return c.json({ error: 'connection_not_found' }, 404);
                 await routing.ensureReady();
                 const record = await routing.set({
@@ -378,14 +402,7 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
         const connectionId = c.req.param('connectionId');
         if (!connectionId) return c.json({ error: 'connection_required' }, 400);
         try {
-          // Confirm the connection belongs to this provider before minting so
-          // one provider's page cannot reconnect a different provider's
-          // connection through this route family.
-          const listed = await client.request<{ connections: PlatformConnectionRow[] }>('GET', '/v2/connections');
-          const connection = listed.connections.find(
-            candidate =>
-              candidate.id === connectionId && provider.connectionIntegrationIds.includes(candidate.integrationId),
-          );
+          const connection = await findOwnedConnection(client, provider, connectionId);
           if (!connection) return c.json({ error: 'connection_not_found' }, 404);
           const session = await client.request<PlatformSessionResponse>(
             'POST',

@@ -286,6 +286,52 @@ describe('KnowledgeImportersSection', () => {
       expect(await screen.findByText('Syncs to 1 of 2 projects')).toBeInTheDocument();
     });
 
+    it('keeps the editor open with an error message when the routing save fails', async () => {
+      useFeaturesHandler(true);
+      notionConnected();
+      useProjectsHandler();
+      useRoutingHandlers({ mode: 'all', projectIds: [] });
+      server.use(
+        http.put(`${TEST_BASE_URL}/web/integrations/platform/notion/connections/notion-1/routing`, () =>
+          HttpResponse.json({ error: 'platform_request_failed' }, { status: 502 }),
+        ),
+      );
+      renderSection();
+
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: 'Change' }));
+      await user.click(await screen.findByRole('checkbox', { name: /All projects/i }));
+      await user.click(await screen.findByRole('checkbox', { name: 'Alpha' }));
+      await user.click(await screen.findByRole('button', { name: 'Save' }));
+
+      // The editor stays open with the failure surfaced; the stored summary
+      // is untouched.
+      expect(await screen.findByText(/Couldn't save routing/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+
+      // Reopening the editor after cancel clears the stale error.
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      await user.click(await screen.findByRole('button', { name: 'Change' }));
+      expect(screen.queryByText(/Couldn't save routing/)).toBeNull();
+    });
+
+    it('disables Save while the selection is empty — sync-nowhere is not a valid state', async () => {
+      useFeaturesHandler(true);
+      notionConnected();
+      useProjectsHandler();
+      useRoutingHandlers({ mode: 'all', projectIds: [] });
+      renderSection();
+
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: 'Change' }));
+      // Unchecking All projects with nothing selected leaves Save disabled.
+      await user.click(await screen.findByRole('checkbox', { name: /All projects/i }));
+      expect(await screen.findByRole('button', { name: 'Save' })).toBeDisabled();
+      // Picking any project enables it again.
+      await user.click(await screen.findByRole('checkbox', { name: 'Beta' }));
+      expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    });
+
     it('hides the routing control entirely when the server mounts no routing routes', async () => {
       useFeaturesHandler(true);
       notionConnected();

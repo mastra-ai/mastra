@@ -142,11 +142,40 @@ describe('platform connect routes', () => {
 
     it('defaults to mode all when no routing was ever saved', async () => {
       const { routing } = routingFixtures();
-      const app = buildApp(org1(), vi.fn<typeof fetch>(), { routing });
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(listWithNotion);
+      const app = buildApp(org1(), fetchImpl, { routing });
 
       const response = await app.request('/web/integrations/platform/notion/connections/conn-notion/routing');
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({ routing: { mode: 'all', projectIds: [] } });
+    });
+
+    it('answers 404 on GET for a nonexistent or unowned connection instead of leaking a default', async () => {
+      const { routing } = routingFixtures();
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(listWithNotion);
+      const app = buildApp(org1(), fetchImpl, { routing });
+
+      // Nonexistent connection: not in the platform's connection list.
+      const ghost = await app.request('/web/integrations/platform/notion/connections/conn-ghost/routing');
+      expect(ghost.status).toBe(404);
+      // Cross-provider read: linear's page must not see notion's routing.
+      const cross = await app.request('/web/integrations/platform/linear/connections/conn-notion/routing');
+      expect(cross.status).toBe(404);
+      await expect(cross.json()).resolves.toEqual({ error: 'connection_not_found' });
+    });
+
+    it('rejects a selected mode with an empty project selection', async () => {
+      const { routing } = routingFixtures();
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(listWithNotion);
+      const app = buildApp(org1(), fetchImpl, { routing });
+
+      const response = await app.request('/web/integrations/platform/notion/connections/conn-notion/routing', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mode: 'selected', projectIds: [] }),
+      });
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({ error: 'empty_selection' });
     });
 
     it('round-trips a selected-projects routing through PUT and GET', async () => {
