@@ -1,5 +1,9 @@
 import { StorageDomain } from '../base';
 import {
+  normalizeHarnessSessionRecordProjectionConfig,
+  type NormalizedHarnessSessionRecordProjectionConfig,
+} from './session-record-projection';
+import {
   HarnessTerminalHandoffUnsupportedError,
   normalizeHarnessTerminalHandoffOption as normalizeTerminalHandoff,
   type HarnessTerminalAckReceipt,
@@ -20,10 +24,6 @@ import {
   type HarnessTerminalRenewReceipt,
   type NormalizedHarnessTerminalHandoffOption,
 } from './terminal-handoff';
-import {
-  normalizeHarnessSessionRecordProjectionConfig,
-  type NormalizedHarnessSessionRecordProjectionConfig,
-} from './session-record-projection';
 import type {
   AcquireSessionLeaseInput,
   AckSessionRecordProjectionInput,

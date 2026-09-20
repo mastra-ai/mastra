@@ -50,6 +50,10 @@ import {
   walkPlanTaskSubtree,
 } from './plan-task-helpers';
 import {
+  buildHarnessSessionRecordProjectionIntent,
+  projectHarnessSessionRecordProjectionFence,
+} from './session-record-projection';
+import {
   HarnessTerminalHandoffClaimConflictError,
   HarnessTerminalHandoffFencedError,
   HarnessTerminalHandoffIdentityConflictError,
@@ -87,10 +91,6 @@ import type {
   HarnessTerminalRenewReceipt,
   HarnessTerminalResult,
 } from './terminal-handoff';
-import {
-  buildHarnessSessionRecordProjectionIntent,
-  projectHarnessSessionRecordProjectionFence,
-} from './session-record-projection';
 import type {
   AcquireSessionLeaseInput,
   AgentSignalResultEvidence,

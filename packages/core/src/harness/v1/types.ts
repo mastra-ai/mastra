@@ -892,16 +892,12 @@ export interface HarnessActionCatalogMcpServerSource {
 }
 
 export type HarnessActionCatalogSource =
-  | HarnessActionCatalogSkillSource
-  | HarnessActionCatalogMcpServerSource
-  | HarnessActionCatalogMcpToolSource;
+  HarnessActionCatalogSkillSource | HarnessActionCatalogMcpServerSource | HarnessActionCatalogMcpToolSource;
 
 export type HarnessActionCatalogEntryStatus = 'available' | 'unavailable' | 'auth_required' | 'permission_denied';
 
 export type HarnessActionCatalogUnavailableReason =
-  | 'mcp_tool_catalog_failed'
-  | 'mcp_tool_catalog_timeout'
-  | 'mcp_tool_catalog_retry_suppressed';
+  'mcp_tool_catalog_failed' | 'mcp_tool_catalog_timeout' | 'mcp_tool_catalog_retry_suppressed';
 
 /**
  * Read-only action catalog entry for desktop hosts.
@@ -1896,9 +1892,7 @@ export interface ElementAttachmentUploadOptions {
 }
 
 export type AttachmentUploadOptions =
-  | FileAttachmentUploadOptions
-  | PrimitiveAttachmentUploadOptions
-  | ElementAttachmentUploadOptions;
+  FileAttachmentUploadOptions | PrimitiveAttachmentUploadOptions | ElementAttachmentUploadOptions;
 
 export interface AttachmentDeleteOptions {
   attachmentId: string;
@@ -2055,9 +2049,7 @@ export interface MessageOptionsStructured<S extends z.ZodTypeAny> extends Messag
 }
 
 export type MessageOptions<S extends z.ZodTypeAny = z.ZodTypeAny> =
-  | MessageOptionsDefault
-  | MessageOptionsStream
-  | MessageOptionsStructured<S>;
+  MessageOptionsDefault | MessageOptionsStream | MessageOptionsStructured<S>;
 
 /**
  * Result returned by `message()` in its default (non-streaming, non-typed)
