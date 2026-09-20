@@ -1,12 +1,20 @@
 import type { TextPart } from '@internal/ai-sdk-v4';
+import { stepCountIs } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, mockId, mockValues } from '@internal/ai-sdk-v5/test';
 import { estimateTokenCount } from 'tokenx';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod/v4';
 
+import { Mastra } from '../..';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { MessageList } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { EventEmitterPubSub } from '../../events';
 import type { IMastraLogger } from '../../logger';
+import { loop } from '../../loop/loop';
+import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import { ProcessorRunner } from '../../processors/runner';
+import { InMemoryStore } from '../../storage';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 
@@ -1792,5 +1800,132 @@ describe('TokenLimiterProcessor', () => {
       // Newest message should be preserved
       expect(messagesAfter.some(m => m.id === 'user-2')).toBe(true);
     });
+  });
+});
+
+describe('integration: multi-step agent loop with TokenLimiterProcessor', () => {
+  let mastra: Mastra;
+
+  beforeEach(async () => {
+    mastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub: new EventEmitterPubSub(),
+    });
+    await mastra.startWorkers();
+  });
+
+  afterEach(async () => {
+    await mastra.stopWorkers();
+  });
+
+  it('should keep the tool call and its result in the next model prompt when the result exceeds the budget', async () => {
+    const stepPrompts: any[] = [];
+    let responseCount = 0;
+
+    const messageList = new MessageList();
+    messageList.add(
+      {
+        id: 'msg-user',
+        role: 'user',
+        content: [{ type: 'text', text: 'How many rules do I have?' }],
+      },
+      'input',
+    );
+
+    const result = await loop({
+      methodType: 'stream',
+      runId: 'test-tokenlimiter-integration',
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: new MastraLanguageModelV2Mock({
+            doStream: async ({ prompt }: { prompt: unknown }) => {
+              stepPrompts.push(prompt);
+
+              switch (responseCount++) {
+                case 0:
+                  return {
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'resp-0',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(0),
+                      },
+                      {
+                        type: 'tool-call',
+                        id: 'call-rules-1',
+                        toolCallId: 'call-rules-1',
+                        toolName: 'listRules',
+                        input: '{}',
+                      },
+                      {
+                        type: 'finish',
+                        finishReason: 'tool-calls',
+                        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                      },
+                    ]),
+                  };
+                case 1:
+                  return {
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'resp-1',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(1000),
+                      },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: 'You have 200 rules.' },
+                      { type: 'text-end', id: 'text-1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: { inputTokens: 10, outputTokens: 8, totalTokens: 18 },
+                      },
+                    ]),
+                  };
+                default:
+                  throw new Error(`Unexpected response count: ${responseCount}`);
+              }
+            },
+          }),
+        },
+      ],
+      inputProcessors: [new TokenLimiterProcessor({ limit: 500 })],
+      tools: {
+        listRules: {
+          inputSchema: z.object({}),
+          execute: async () => ({
+            rules: Array.from({ length: 200 }, (_, index) => `Rule number ${index} for the living room`),
+          }),
+        },
+      },
+      messageList,
+      stopWhen: stepCountIs(4),
+      _internal: {
+        now: mockValues(0, 100, 500, 600, 1000),
+        generateId: mockId({ prefix: 'id' }),
+      },
+      agentId: 'test-agent',
+      mastra,
+    });
+
+    await result.consumeStream();
+
+    expect(stepPrompts).toHaveLength(2);
+
+    const nextPromptParts = (stepPrompts[1] as any[]).flatMap((message: any) =>
+      Array.isArray(message.content) ? message.content : [],
+    );
+
+    expect(nextPromptParts.some((part: any) => part.type === 'tool-call' && part.toolCallId === 'call-rules-1')).toBe(
+      true,
+    );
+    expect(nextPromptParts.some((part: any) => part.type === 'tool-result' && part.toolCallId === 'call-rules-1')).toBe(
+      true,
+    );
   });
 });

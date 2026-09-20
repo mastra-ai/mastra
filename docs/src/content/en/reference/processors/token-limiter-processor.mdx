@@ -159,7 +159,7 @@ When used as an input processor (both `processInput` and `processInputStep`), `T
 
 - **Empty messages**: If there are no messages to process, a TripWire is thrown because you can't send an LLM request with no messages.
 - **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you can't send an LLM request with only system messages and no user/assistant messages.
-- **No messages fit**: If no message fits within the remaining budget, a TripWire is thrown rather than sending a request with system messages only.
+- **No messages fit**: If no message fits within the remaining budget, a TripWire is thrown rather than sending a request with system messages only. This case cannot happen while the current run holds tool calls or results, because those are always kept (see below).
 
 Tool calls and their results produced by the current run are never trimmed, so the agent loop keeps the tool traffic it needs for the next step and that traffic is still saved to memory. They are counted against the budget first, and older messages are trimmed to make room. If they exceed the budget on their own they are still kept, and every older message is trimmed.
 
