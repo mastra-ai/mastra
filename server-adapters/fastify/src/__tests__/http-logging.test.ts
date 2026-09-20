@@ -1,4 +1,4 @@
-import { createHttpLoggingTestSuite } from '@internal/server-adapter-test-utils';
+import { createHttpLoggingTestSuite } from '@mastra/server-adapters-test-suite';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import { describe, afterEach } from 'vitest';

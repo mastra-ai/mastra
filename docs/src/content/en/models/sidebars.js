@@ -161,6 +161,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ainetcafe',
+          label: 'ainetcafe',
+        },
+        {
+          type: 'doc',
           id: 'providers/aixy',
           label: 'Aixy',
         },
@@ -486,6 +491,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/inco',
+          label: 'Inco',
+        },
+        {
+          type: 'doc',
           id: 'providers/infer',
           label: 'Infer by Flow7',
         },
@@ -536,8 +546,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/kimi-for-coding',
-          label: 'Kimi For Coding',
+          id: 'providers/kimi-code-plan-global',
+          label: 'Kimi For Coding (kimi.ai)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kimi-code-plan-cn',
+          label: 'Kimi For Coding (kimi.com)',
         },
         {
           type: 'doc',
@@ -616,23 +631,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/minimax-cn',
+          label: 'MiniMax (minimax.cn)',
+        },
+        {
+          type: 'doc',
           id: 'providers/minimax',
           label: 'MiniMax (minimax.io)',
         },
         {
           type: 'doc',
-          id: 'providers/minimax-cn',
-          label: 'MiniMax (minimaxi.com)',
+          id: 'providers/minimax-cn-coding-plan',
+          label: 'MiniMax Token Plan (minimax.cn)',
         },
         {
           type: 'doc',
           id: 'providers/minimax-coding-plan',
           label: 'MiniMax Token Plan (minimax.io)',
-        },
-        {
-          type: 'doc',
-          id: 'providers/minimax-cn-coding-plan',
-          label: 'MiniMax Token Plan (minimaxi.com)',
         },
         {
           type: 'doc',

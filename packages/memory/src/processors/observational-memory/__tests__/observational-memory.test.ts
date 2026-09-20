@@ -4508,6 +4508,7 @@ _range: \`ignored-by-reconciler\`_
 
       const result = parseReflectorOutput(output, sourceObservations);
 
+      const sourceRange = parseObservationGroups(sourceObservations)[0]!.range;
       expect(result.observations)
         .toBe(`<observation-group id="message-saving-debug" range="7250b0a4-9d0a-4504-99ff-35762ec557a5:a172fe73-2e02-4d19-9b68-8025a50f1b95" kind="reflection">
 Date: Mar 25, 2026
@@ -4527,6 +4528,11 @@ Date: Mar 25, 2026
 * 🟡 Investigation centered on savePerStep and finish-time assembly.`,
         },
       ]);
+
+      // The bloated legacy range must come back as one compact segment, not the 64-segment list.
+      const compactedRange = parseObservationGroups(result.observations)[0]!.range;
+      expect(compactedRange).not.toContain(',');
+      expect(compactedRange.length).toBeLessThan(sourceRange.length / 10);
     });
 
     it('should extract continuation hint from XML suggested-response tag', () => {

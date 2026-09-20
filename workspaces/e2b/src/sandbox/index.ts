@@ -260,7 +260,9 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     super({
       ...options,
       name: 'E2BSandbox',
-      processes: new E2BProcessManager(),
+      processes: new E2BProcessManager({
+        defaultTimeout: options.timeout ?? 300_000,
+      }),
     });
 
     this.id = options.id ?? this.generateId();

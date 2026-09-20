@@ -1,6 +1,6 @@
 {
   "name": "@mastra/elysia",
-  "version": "0.1.8-alpha.2",
+  "version": "0.1.8-alpha.9",
   "description": "Mastra Elysia adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -35,7 +35,7 @@
     "@elysiajs/cors": "^1.4.1",
     "@elysiajs/openapi": "^1.4.14",
     "@internal/lint": "workspace:*",
-    "@internal/server-adapter-test-utils": "workspace:*",
+    "@mastra/server-adapters-test-suite": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

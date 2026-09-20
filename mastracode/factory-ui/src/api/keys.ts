@@ -45,6 +45,21 @@ export const queryKeys = {
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueId: string | undefined) =>
     ['linear', 'issue', factoryProjectId ?? null, identifier ?? null, issueId ?? null] as const,
+  jiraStatus: () => ['jira', 'status'] as const,
+  platformConnections: (provider: string) => ['platform-connections', provider] as const,
+  jiraProjects: () => ['jira', 'projects'] as const,
+  jiraIssuesAll: () => ['jira', 'issues'] as const,
+  jiraIssues: (factoryProjectId: string | undefined) =>
+    [...queryKeys.jiraIssuesAll(), factoryProjectId ?? null] as const,
+  jiraIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueRef: string | undefined) =>
+    ['jira', 'issue', factoryProjectId ?? null, identifier ?? null, issueRef ?? null] as const,
+  incidentioSources: () => ['incidentio', 'sources'] as const,
+  incidentioStatus: () => ['incidentio', 'status'] as const,
+  incidentioIssuesAll: () => ['incidentio', 'issues'] as const,
+  incidentioIssues: (factoryProjectId: string | undefined) =>
+    [...queryKeys.incidentioIssuesAll(), factoryProjectId ?? null] as const,
+  incidentioIssue: (factoryProjectId: string | undefined, issueRef: string | undefined) =>
+    ['incidentio', 'issue', factoryProjectId ?? null, issueRef ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeLabelRoutes: (factoryProjectId: string | undefined) =>

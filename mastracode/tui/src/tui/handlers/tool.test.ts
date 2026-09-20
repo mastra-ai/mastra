@@ -2,6 +2,7 @@ import { Container } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 
 import type { TUIState } from '../state.js';
 import {
@@ -16,7 +17,9 @@ import type { EventHandlerContext } from './types.js';
 async function flushParser(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
-  await new Promise(resolve => setTimeout(resolve, 100));
+  // Streamed args are applied by the render scheduler's coalesce timer, so the
+  // wait must exceed it (`handlers/__tests__/tool.test.ts` does the same).
+  await new Promise(resolve => setTimeout(resolve, DEFAULT_RENDER_COALESCE_MS + 20));
 }
 
 function visibleChildren(ctx: EventHandlerContext) {
@@ -32,6 +35,7 @@ function createToolHandlerContext(): EventHandlerContext {
   const session = { displayState: { get: vi.fn(() => ({ toolInputBuffers: new Map() })) } };
   const state = {
     chatContainer,
+    options: {},
     ui: { requestRender: vi.fn() },
     terminal: { columns: 100 },
     pendingTools: new Map(),
@@ -57,6 +61,33 @@ function createToolHandlerContext(): EventHandlerContext {
     },
   } as EventHandlerContext;
 }
+
+describe('background placeholder opt-in', () => {
+  it.each([undefined, false, true])('interprets ordinary tool placeholders only when enabled is true (%s)', enabled => {
+    const ctx = createToolHandlerContext();
+    ctx.state.options.backgroundToolsEnabled = enabled;
+    handleToolStart(ctx, 'collision', 'execute_command', { command: 'printf demo' });
+    handleToolEnd(ctx, 'collision', 'Background task started. Task ID: visible-demo-123', false);
+    expect(ctx.state.pendingTools.has('collision')).toBe(enabled === true);
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n')).includes('background · visible-demo-123')).toBe(
+      enabled === true,
+    );
+  });
+
+  it.each([undefined, false, true])('interprets plugin placeholders only when enabled is true (%s)', enabled => {
+    const ctx = createToolHandlerContext();
+    ctx.state.options.backgroundToolsEnabled = enabled;
+    ctx.state.pluginManager = {
+      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+    } as unknown as TUIState['pluginManager'];
+    handleToolStart(ctx, 'collision', 'mastra_expert', { question: 'demo' });
+    handleToolEnd(ctx, 'collision', 'Background task started. Task ID: visible-demo-123', false);
+    expect(ctx.state.pendingSubagents.has('collision')).toBe(enabled === true);
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n')).includes('background · visible-demo-123')).toBe(
+      enabled === true,
+    );
+  });
+});
 
 describe('task tool rendering', () => {
   afterEach(() => {

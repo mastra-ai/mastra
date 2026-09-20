@@ -9,8 +9,8 @@
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/provider": "^2.0.0",
     "@mastra/auth-auth0": "latest",
-    "@mastra/auth-clerk": "latest",
     "@mastra/auth-better-auth": "latest",
+    "@mastra/auth-clerk": "latest",
     "@mastra/auth-cloud": "latest",
     "@mastra/auth-okta": "latest",
     "@mastra/auth-studio": "latest",
@@ -36,7 +36,7 @@
     "fetch-to-node": "^2.1.0",
     "mastra": "latest",
     "typescript": "^5.9.3",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "pnpm": {
     "packageExtensions": {

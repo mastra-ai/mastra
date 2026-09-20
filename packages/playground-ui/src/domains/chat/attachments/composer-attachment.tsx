@@ -16,7 +16,7 @@ export function ComposerAttachment({ name, children, onRemove, variant = 'thumbn
   return (
     <div
       className={cn(
-        'pointer-coarse:flex pointer-coarse:items-center pointer-coarse:gap-1 relative shrink-0',
+        'relative shrink-0 pointer-coarse:flex pointer-coarse:items-center pointer-coarse:gap-1',
         !isThumbnail && 'flex items-center gap-1',
       )}
       title={name}
@@ -24,7 +24,7 @@ export function ComposerAttachment({ name, children, onRemove, variant = 'thumbn
       <div
         className={cn(
           isThumbnail &&
-            'border-border1 bg-surface3 size-14 shrink-0 overflow-hidden rounded-md border [&_img]:size-full [&_img]:object-cover',
+            'size-14 shrink-0 overflow-hidden rounded-md border border-border1 bg-surface3 [&_img]:size-full [&_img]:object-cover',
         )}
       >
         {children}
@@ -38,7 +38,7 @@ export function ComposerAttachment({ name, children, onRemove, variant = 'thumbn
         onClick={onRemove}
         className={cn(
           'bg-surface3 pointer-coarse:min-h-11 pointer-coarse:min-w-11',
-          isThumbnail && 'pointer-coarse:static absolute -top-2 -right-2 rounded-full',
+          isThumbnail && 'absolute -top-2 -right-2 rounded-full pointer-coarse:static',
         )}
       >
         <X />

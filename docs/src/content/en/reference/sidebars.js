@@ -299,6 +299,7 @@ const sidebars = {
         { type: 'doc', id: 'evals/create-scorer', label: 'createScorer()' },
         { type: 'doc', id: 'evals/filter-run', label: 'filterRun()' },
         { type: 'doc', id: 'evals/mastra-scorer', label: 'MastraScorer' },
+        { type: 'doc', id: 'evals/not-scorable', label: 'notScorable()' },
         { type: 'doc', id: 'evals/checks', label: 'Quick Checks' },
         { type: 'doc', id: 'evals/run-evals', label: 'runEvals()' },
         { type: 'doc', id: 'evals/scorer-utils', label: 'Scorer Utils' },
@@ -428,6 +429,11 @@ const sidebars = {
       label: 'Migrations',
       collapsed: true,
       items: [
+        {
+          type: 'doc',
+          id: 'migrations/mcp-v2',
+          label: '@mastra/mcp v1 to v2',
+        },
         {
           type: 'doc',
           id: 'migrations/agentnetwork',
@@ -882,6 +888,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'vectors/s3vectors', label: 'Amazon S3 Vector Store' },
         { type: 'doc', id: 'vectors/astra', label: 'Astra Vector Store' },
+        { type: 'doc', id: 'vectors/azure-ai-search', label: 'Azure AI Search Vector Store' },
         { type: 'doc', id: 'vectors/chroma', label: 'Chroma Vector Store' },
         { type: 'doc', id: 'vectors/vectorize', label: 'Cloudflare Vector Store' },
         { type: 'doc', id: 'vectors/convex', label: 'Convex Vector Store' },

@@ -43,6 +43,10 @@ import type {
   ListTracesLightResponse,
   TraceQueryRequest,
   TraceQueryResponse,
+  GetTraceQueryFieldsArgs,
+  GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesArgs,
+  GetTraceQueryValuesResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -1125,6 +1129,22 @@ export class MastraClient extends BaseResource {
   /** Queries completed logical traces using recursive trace and related-record predicates. */
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.observability.queryTraces(params);
+  }
+
+  /** Returns canonical and observed fields available to the advanced trace-query grammar. */
+  getTraceQueryFields(
+    params: GetTraceQueryFieldsArgs,
+    options?: { signal?: AbortSignal },
+  ): Promise<GetTraceQueryFieldsResponse> {
+    return this.observability.getTraceQueryFields(params, options);
+  }
+
+  /** Returns bounded string suggestions for one eligible trace-query field. */
+  getTraceQueryValues(
+    params: GetTraceQueryValuesArgs,
+    options?: { signal?: AbortSignal },
+  ): Promise<GetTraceQueryValuesResponse> {
+    return this.observability.getTraceQueryValues(params, options);
   }
 
   /** Queries thread identities using eligible-trace and cross-trace predicates. */

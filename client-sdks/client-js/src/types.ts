@@ -160,6 +160,13 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface AbortAgentThreadParams extends SubscribeAgentThreadParams {
+  expectedRunId?: string;
+}
+
 export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
 
 /**
@@ -195,6 +202,10 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
+  /** Overrides the client's configured retry count for this request. */
+  retries?: number;
+  /** Per-request abort signal. Merged with the client-wide `abortSignal` from `ClientOptions`. */
+  signal?: AbortSignal;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
 }
@@ -390,10 +401,7 @@ export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined =
   clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<
-    AgentGenerateOptions<any>,
-    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
-  >
+  Omit<AgentGenerateOptions<any>, 'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools'>
 >;
 
 export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -406,10 +414,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<
-    AgentStreamOptions<any>,
-    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
-  >
+  Omit<AgentStreamOptions<any>, 'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools'>
 >;
 
 export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
@@ -424,11 +429,13 @@ export type StreamParamsBase<OUTPUT = undefined> = {
   requestContext?: RequestContext;
   clientTools?: ToolsInput;
   clientToolsResolver?: ClientToolsResolver;
+  /**
+   * Per-call abort signal. Aborting it (or cancelling the returned stream) aborts the
+   * underlying request and stops any client-tool continuations.
+   */
+  abortSignal?: AbortSignal;
 } & WithoutMethods<
-  Omit<
-    AgentExecutionOptions<OUTPUT>,
-    'model' | 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
-  >
+  Omit<AgentExecutionOptions<OUTPUT>, 'model' | 'requestContext' | 'clientTools' | 'options' | 'structuredOutput'>
 >;
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
@@ -464,8 +471,12 @@ export type ListWorkflowRunsResponse = Omit<WorkflowRunsRouteResponse, 'runs'> &
 };
 export type WorkflowRunCounts = GeneratedResponse<'GET /workflows/run-counts'>[string];
 export type ListWorkflowRunCountsResponse = GeneratedResponse<'GET /workflows/run-counts'>;
-export type GetWorkflowRunByIdResponse = GeneratedResponse<'GET /workflows/:workflowId/runs/:runId'> &
-  Serialized<WorkflowState>;
+export type GetWorkflowRunByIdResponse = Omit<
+  GeneratedResponse<'GET /workflows/:workflowId/runs/:runId'>,
+  'serializedStepGraph'
+> &
+  Omit<Serialized<WorkflowState>, 'serializedStepGraph'> &
+  Pick<WorkflowState, 'serializedStepGraph'>;
 
 export type ListDynamicWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
 export type ListDynamicWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
@@ -800,8 +811,12 @@ export interface SemanticRecallConfig {
 export type TitleGenerationConfig =
   | boolean
   | {
-      model: string; // Model ID in format provider/model-name
+      model?: string; // Model ID in format provider/model-name; defaults to the agent's own model
       instructions?: string;
+      /** Minimum number of thread messages required before a title is generated */
+      minMessages?: number;
+      /** Emit the generated title as a transient `data-thread-title` chunk on the run stream, before `finish` */
+      emitEvent?: boolean;
     };
 
 /**

@@ -20,7 +20,9 @@ import {
   WorkflowRunProvider,
   WorkflowSelectedStepProvider,
   WorkflowStepDetailProvider,
+  useWorkflowStepDetail,
 } from '@/domains/workflows';
+import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
 import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
 import { useWorkflow } from '@/hooks';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
@@ -134,24 +136,35 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   return (
     <>
       <div className="flex items-center gap-2 pb-2">
-        <Button icon={<WorkflowIcon />} as={Link} href={`/workflows/${workflowId}/graph`}>
+        <Button icon={<WorkflowIcon />} render={<Link href={`/workflows/${workflowId}/graph`} />}>
           Go to workflow
         </Button>
         {runId && (
-          <Button icon={<Eye />} as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
+          <Button icon={<Eye />} render={<Link href={`/workflows/${workflowId}/graph/${runId}`} />}>
             See run
           </Button>
         )}
       </div>
 
-      <div className="h-[60vh] w-full overflow-hidden rounded-md">
-        <WorkflowSelectedStepProvider>
-          <WorkflowStepDetailProvider>
+      <WorkflowSelectedStepProvider>
+        <WorkflowStepDetailProvider>
+          <div className="h-[60vh] w-full overflow-hidden rounded-md">
             <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
-          </WorkflowStepDetailProvider>
-        </WorkflowSelectedStepProvider>
-      </div>
+          </div>
+          <WorkflowBadgeStepDetail />
+        </WorkflowStepDetailProvider>
+      </WorkflowSelectedStepProvider>
     </>
+  );
+};
+
+const WorkflowBadgeStepDetail = () => {
+  const { stepDetail } = useWorkflowStepDetail();
+  if (!stepDetail) return null;
+  return (
+    <div className="border-border1 bg-surface2 mt-2 flex max-h-[60vh] flex-col overflow-hidden rounded-md border">
+      <WorkflowStepDetailContent />
+    </div>
   );
 };
 

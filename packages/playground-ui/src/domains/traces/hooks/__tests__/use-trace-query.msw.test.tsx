@@ -6,7 +6,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { getTraceQueryNextPageParam, useTraceQuery } from '../use-trace-query';
 import type { TraceQueryArgs } from '../use-trace-query';
 import { firstTraceQueryPage, lastTraceQueryPage } from './fixtures/trace-query';
@@ -34,6 +34,13 @@ afterEach(() => {
 afterAll(() => server.close());
 
 describe('useTraceQuery', () => {
+  describe('when defining caller-owned query arguments', () => {
+    it('excludes both pagination modes owned by the cursor hook', () => {
+      expectTypeOf<TraceQueryArgs>().not.toHaveProperty('page');
+      expectTypeOf<TraceQueryArgs>().not.toHaveProperty('pagination');
+    });
+  });
+
   describe('when fetching the first page', () => {
     it('posts the query with the default limit and exposes traces and the next-page state', async () => {
       const requests: unknown[] = [];

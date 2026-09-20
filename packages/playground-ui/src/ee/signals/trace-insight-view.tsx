@@ -21,7 +21,12 @@ export function TraceInsightView({ traceId, onBack }: TraceInsightViewProps) {
         <Button icon={<ChevronLeft />} variant="outline" size="sm" onClick={onBack}>
           Back to examples
         </Button>
-        <Button icon={<TraceIcon />} as={LinkComponent} href={getTraceHref(traceId)} variant="outline" size="sm">
+        <Button
+          icon={<TraceIcon />}
+          render={<LinkComponent href={getTraceHref(traceId)} />}
+          variant="outline"
+          size="sm"
+        >
           Open full trace
         </Button>
       </div>

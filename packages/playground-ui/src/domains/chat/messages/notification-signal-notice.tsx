@@ -1,10 +1,6 @@
-import { Bell } from 'lucide-react';
-
-import { getNotificationNoticeVariant } from './notification-signal-notice-variant';
 import { formatSignalValue, getNotificationMetadata, signalContentsToText } from './signal-data';
 import type { SignalData } from './signal-data';
-import { Badge } from '@/ds/components/Badge';
-import { Notice } from '@/ds/components/Notice';
+import { ChatNotification } from '@/ds/components/ai/chat-event';
 
 export type NotificationSignalNoticeProps = {
   signal: SignalData;
@@ -26,29 +22,14 @@ export const NotificationSignalNotice = ({ signal }: NotificationSignalNoticePro
   const pending = formatSignalValue(notification?.pending) ?? formatSignalValue(signal.attributes?.pending);
   const status = notification?.status ?? formatSignalValue(signal.attributes?.status);
   const text = signalContentsToText(signal.contents);
-  const pendingLabel = pending ? `${pending} pending` : undefined;
-  const hasMetadata = Boolean(priority || status || pendingLabel);
-  const hasText = text.length > 0;
-
   return (
-    <Notice
-      variant={getNotificationNoticeVariant(priority)}
-      title={getNotificationTitle(signal)}
-      icon={<Bell />}
-      className="my-2 max-w-[80%]"
-    >
-      {hasMetadata || hasText ? (
-        <div className="flex flex-col gap-2">
-          {hasMetadata ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {priority ? <Badge size="xs">{priority}</Badge> : null}
-              {status ? <Badge size="xs">{status}</Badge> : null}
-              {pendingLabel ? <Badge size="xs">{pendingLabel}</Badge> : null}
-            </div>
-          ) : null}
-          {hasText ? <Notice.Message className="break-words whitespace-pre-wrap">{text}</Notice.Message> : null}
-        </div>
-      ) : null}
-    </Notice>
+    <ChatNotification
+      variant="notice"
+      label={getNotificationTitle(signal)}
+      message={text}
+      priority={priority}
+      status={status}
+      pending={pending}
+    />
   );
 };

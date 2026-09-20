@@ -41,6 +41,10 @@ interface SkillSearchEngine {
   clear(): void;
 }
 
+interface RemovableSkillSearchEngine extends SkillSearchEngine {
+  remove(id: string): Promise<void>;
+}
+
 interface InternalSkill extends Skill {
   /** Content for BM25 indexing (instructions + all references) */
   indexableContent: string;
@@ -49,6 +53,9 @@ interface InternalSkill extends Skill {
 interface SharedSearchState {
   documentIds: Set<string>;
 }
+
+/** @internal Prefix of every search document ID owned by a request-scoped skills view. */
+export const SKILL_SCOPE_DOCUMENT_PREFIX = 'skill-scope:';
 
 // =============================================================================
 // WorkspaceSkillsImpl
@@ -84,6 +91,16 @@ export interface WorkspaceSkillsImplConfig {
   searchNamespace?: string;
   /** @internal Search document registry shared by request-scoped views. */
   sharedSearchState?: SharedSearchState;
+  /**
+   * @internal Called before this view re-indexes after `releaseSearchIndex()`,
+   * so the owner can re-admit it into its bounded cache first.
+   */
+  onIndexReadmit?: () => Promise<void>;
+  /**
+   * @internal Called when this view's last in-flight index-dependent operation
+   * finishes, so the owner can evict it if the cache is over its bound.
+   */
+  onIndexIdle?: () => Promise<void>;
 }
 
 /**
@@ -98,6 +115,15 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #checkSkillFileMtime: boolean;
   readonly #searchNamespace?: string;
   readonly #sharedSearchState: SharedSearchState;
+  readonly #onIndexReadmit?: () => Promise<void>;
+  readonly #onIndexIdle?: () => Promise<void>;
+
+  /** Search documents were released by the owner; re-index on next search use. */
+  #indexReleased = false;
+  #readmitPromise: Promise<void> | null = null;
+  /** Index-dependent operations currently in flight on this view. */
+  #inFlight = 0;
+  readonly #resolvedChildren = new Set<WorkspaceSkillsImpl>();
 
   /** Request-scoped views for dynamic resolvers, cached by request and canonical path set. */
   readonly #scopedByRequest = new WeakMap<object, Promise<WorkspaceSkills>>();
@@ -147,6 +173,84 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#checkSkillFileMtime = config.checkSkillFileMtime ?? false;
     this.#searchNamespace = config.searchNamespace;
     this.#sharedSearchState = config.sharedSearchState ?? { documentIds: new Set() };
+    this.#onIndexReadmit = config.onIndexReadmit;
+    this.#onIndexIdle = config.onIndexIdle;
+  }
+
+  /**
+   * @internal True while this view (or a path-scoped child) is inside an
+   * index-dependent operation. Owners must not release a busy view's index.
+   */
+  get isIndexBusy(): boolean {
+    if (this.#inFlight > 0) return true;
+    for (const child of this.#resolvedChildren) {
+      if (child.isIndexBusy) return true;
+    }
+    return false;
+  }
+
+  async #withIndexPinned<T>(fn: () => Promise<T>): Promise<T> {
+    this.#inFlight++;
+    try {
+      return await fn();
+    } finally {
+      this.#inFlight--;
+      if (this.#inFlight === 0) {
+        await this.#onIndexIdle?.();
+      }
+    }
+  }
+
+  /**
+   * @internal Drop every search document this view (and its path-scoped
+   * children) indexed. The catalog stays intact; the next search-dependent
+   * operation re-admits the view via `onIndexReadmit` and re-indexes.
+   */
+  async releaseSearchIndex(): Promise<void> {
+    if (!this.#searchEngine) return;
+    this.#indexReleased = true;
+    for (const candidates of this.#skills.values()) {
+      for (const skill of candidates) {
+        await this.#removeSkillFromIndex(skill);
+      }
+    }
+    for (const child of this.#resolvedChildren) {
+      await child.releaseSearchIndex();
+    }
+  }
+
+  /**
+   * Re-index the current catalog if the search documents were released.
+   * Returns true when a re-index happened (the index is then fully current).
+   */
+  async #readmitIndexIfReleased(): Promise<boolean> {
+    if (!this.#indexReleased || !this.#searchEngine) return false;
+    this.#readmitPromise ??= (async () => {
+      // Clear before admitting so an eviction that lands while admission is in
+      // flight is not overwritten and short-circuits the loop below.
+      this.#indexReleased = false;
+      await this.#onIndexReadmit?.();
+      for (const candidates of this.#skills.values()) {
+        for (const skill of candidates) {
+          if (this.#indexReleased) break;
+          await this.#indexSkill(skill);
+        }
+      }
+      // Evicted again while re-indexing: a skill that was mid-index when
+      // release ran may have landed after release removed it. Sweep so the
+      // evicted namespace holds no documents.
+      if (this.#indexReleased) {
+        for (const candidates of this.#skills.values()) {
+          for (const skill of candidates) {
+            await this.#removeSkillFromIndex(skill);
+          }
+        }
+      }
+    })().finally(() => {
+      this.#readmitPromise = null;
+    });
+    await this.#readmitPromise;
+    return true;
   }
 
   async getScoped(context?: SkillsContext): Promise<WorkspaceSkills> {
@@ -176,18 +280,24 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const cached = this.#scopedByPaths.get(key);
     if (cached) return cached;
 
-    const scoped = Promise.resolve<WorkspaceSkills>(
-      new WorkspaceSkillsImpl({
-        source: this.#source,
-        skills: paths,
-        searchEngine: this.#searchEngine,
-        validateOnLoad: this.#validateOnLoad,
-        assertAvailable: this.#assertAvailable,
-        checkSkillFileMtime: this.#checkSkillFileMtime,
-        searchNamespace: encodeURIComponent(key),
-        sharedSearchState: this.#sharedSearchState,
-      }),
-    );
+    const child = new WorkspaceSkillsImpl({
+      source: this.#source,
+      skills: paths,
+      searchEngine: this.#searchEngine,
+      validateOnLoad: this.#validateOnLoad,
+      assertAvailable: this.#assertAvailable,
+      checkSkillFileMtime: this.#checkSkillFileMtime,
+      // Nest under this instance's namespace so views built for different
+      // resolved sources never share search documents for the same path set.
+      searchNamespace: this.#searchNamespace
+        ? `${this.#searchNamespace}/${encodeURIComponent(key)}`
+        : encodeURIComponent(key),
+      sharedSearchState: this.#sharedSearchState,
+      onIndexReadmit: this.#onIndexReadmit,
+      onIndexIdle: this.#onIndexIdle,
+    });
+    this.#resolvedChildren.add(child);
+    const scoped = Promise.resolve<WorkspaceSkills>(child);
     this.#scopedByPaths.set(key, scoped);
     return scoped;
   }
@@ -385,7 +495,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (this.#refreshPromise) {
       return this.#refreshPromise;
     }
-    const inFlight = this.#doRefresh().finally(() => {
+    const inFlight = this.#withIndexPinned(() => this.#doRefresh()).finally(() => {
       // Rejection path only; the success path already cleared it.
       if (this.#refreshPromise === inFlight) {
         this.#refreshPromise = null;
@@ -444,6 +554,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     oldSkills: Map<string, InternalSkill[]>,
     newSkills: Map<string, InternalSkill[]>,
   ): Promise<void> {
+    // A released view re-indexes the whole (already swapped) catalog instead.
+    if (await this.#readmitIndexIfReleased()) return;
+
     const flatten = (map: Map<string, InternalSkill[]>): Map<string, InternalSkill> => {
       const byPath = new Map<string, InternalSkill>();
       for (const candidates of map.values()) {
@@ -517,6 +630,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async addSkill(skillPath: string): Promise<void> {
     await this.#ensureInitialized();
+    return this.#withIndexPinned(() => this.#doAddSkill(skillPath));
+  }
+
+  async #doAddSkill(skillPath: string): Promise<void> {
+    await this.#readmitIndexIfReleased();
 
     // Determine SKILL.md path and dirName
     let skillFilePath: string;
@@ -606,6 +724,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       // Fall back to simple text matching if no search engine
       return this.#simpleSearch(query, options);
     }
+    return this.#withIndexPinned(() => this.#indexedSearch(query, options));
+  }
+
+  async #indexedSearch(query: string, options: SkillSearchOptions): Promise<SkillSearchResult[]> {
+    await this.#readmitIndexIfReleased();
 
     const { topK = 5, minScore, skillNames, includeReferences = true, mode } = options;
 
@@ -621,7 +744,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const expandedTopK = Math.max(skillNames ? topK * 3 : topK, totalIndexedDocuments);
 
     // Delegate to SearchEngine
-    const searchResults = await this.#searchEngine.search(query, {
+    const searchResults = await this.#searchEngine!.search(query, {
       topK: expandedTopK,
       minScore,
       mode,
@@ -1327,7 +1450,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   #searchDocumentId(skillPath: string, source: string): string {
     const id = `skill:${skillPath}:${source}`;
-    return this.#searchNamespace ? `skill-scope:${this.#searchNamespace}:${id}` : id;
+    return this.#searchNamespace ? `${SKILL_SCOPE_DOCUMENT_PREFIX}${this.#searchNamespace}:${id}` : id;
   }
 
   /**
@@ -1366,7 +1489,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Index a skill for search
    */
   async #indexSkill(skill: InternalSkill): Promise<void> {
-    if (!this.#searchEngine) return;
+    // A released view must not write under its namespace until re-admitted;
+    // an in-flight reconcile racing an eviction would otherwise leak documents.
+    if (!this.#searchEngine || this.#indexReleased) return;
 
     // Index the main skill instructions
     const skillDocumentId = this.#searchDocumentId(skill.path, 'SKILL.md');
@@ -1404,6 +1529,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         }
       }),
     );
+
+    // Released while the writes above were in flight: take them back out so
+    // the evicted namespace holds nothing.
+    if (this.#indexReleased) {
+      await this.#removeSkillFromIndex(skill);
+    }
   }
 
   /**
@@ -1504,6 +1635,199 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   #getParentPath(path: string): string {
     const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
     return lastSlash > 0 ? path.substring(0, lastSlash) : '/';
+  }
+}
+
+// =============================================================================
+// ResolvedSourceWorkspaceSkills
+// =============================================================================
+
+/**
+ * Resolves the skill source per request (e.g. from a dynamic workspace
+ * filesystem resolver).
+ */
+export type SkillSourceResolver = (context: SkillsContext) => Promise<SkillSourceInterface> | SkillSourceInterface;
+
+export interface ResolvedSourceWorkspaceSkillsConfig extends Omit<
+  WorkspaceSkillsImplConfig,
+  'source' | 'searchEngine' | 'searchNamespace' | 'sharedSearchState'
+> {
+  /** Resolves the skill source for a request. */
+  source: SkillSourceResolver;
+  /** Search engine whose documents can be removed when a resolved source is evicted. */
+  searchEngine?: RemovableSkillSearchEngine;
+  /**
+   * Maximum number of resolved sources to keep discovery caches and search
+   * documents for. Least-recently-used sources beyond this are evicted and
+   * their search documents removed. Defaults to 16.
+   */
+  maxCachedSources?: number;
+}
+
+const DEFAULT_MAX_CACHED_SOURCES = 16;
+let nextResolvedSkillsOwnerId = 0;
+
+/**
+ * WorkspaceSkills backed by a per-request skill source.
+ *
+ * `getScoped()` resolves the source for the request and returns a
+ * `WorkspaceSkillsImpl` bound to it. Views are cached per resolved source
+ * instance and per request context. Sources are keyed by object identity only
+ * (never by a user-supplied `id`) so two tenants can never share a view by
+ * accident. Each source gets its own search namespace so same-named skills
+ * from different sources never bleed into each other's search results.
+ *
+ * The per-source cache is a bounded LRU: when a source is evicted, every
+ * document it indexed into the shared search engine is removed, so a resolver
+ * that returns a new filesystem on every request cannot grow the index
+ * without bound. An evicted view that is still in use re-admits itself (and
+ * re-indexes) on its next search, so callers never observe missing results.
+ * Resolvers that return a stable instance per tenant keep that tenant's
+ * discovery cache warm across requests.
+ *
+ * Calls made directly on this instance (without `getScoped`) resolve the
+ * source with an empty context, mirroring how workspace tools resolve the
+ * filesystem when no request context is available.
+ */
+export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
+  readonly #resolver: SkillSourceResolver;
+  readonly #config: Omit<ResolvedSourceWorkspaceSkillsConfig, 'source' | 'maxCachedSources'>;
+  readonly #maxCachedSources: number;
+  readonly #ownerId = nextResolvedSkillsOwnerId++;
+  readonly #sharedSearchState: SharedSearchState = { documentIds: new Set() };
+
+  readonly #scopedByRequest = new WeakMap<object, Promise<WorkspaceSkills>>();
+  /** Map insertion order doubles as LRU order; hits re-insert. */
+  readonly #bySource = new Map<SkillSourceInterface, WorkspaceSkillsImpl>();
+  #nextSourceId = 0;
+
+  constructor(config: ResolvedSourceWorkspaceSkillsConfig) {
+    const { source, maxCachedSources, ...rest } = config;
+    this.#resolver = source;
+    this.#config = rest;
+    if (rest.searchEngine && typeof rest.searchEngine.remove !== 'function') {
+      throw new TypeError('ResolvedSourceWorkspaceSkills searchEngine must implement remove()');
+    }
+    if (maxCachedSources !== undefined && (!Number.isSafeInteger(maxCachedSources) || maxCachedSources < 1)) {
+      throw new RangeError(`maxCachedSources must be a positive integer, received ${String(maxCachedSources)}`);
+    }
+    this.#maxCachedSources = maxCachedSources ?? DEFAULT_MAX_CACHED_SOURCES;
+  }
+
+  async getScoped(context?: SkillsContext): Promise<WorkspaceSkills> {
+    const requestContext = context?.requestContext;
+    if (requestContext && typeof requestContext === 'object') {
+      const cached = this.#scopedByRequest.get(requestContext);
+      if (cached) return cached;
+
+      const scoped = this.#createScoped(context).catch(error => {
+        this.#scopedByRequest.delete(requestContext);
+        throw error;
+      });
+      this.#scopedByRequest.set(requestContext, scoped);
+      return scoped;
+    }
+
+    return this.#createScoped(context ?? {});
+  }
+
+  async #createScoped(context: SkillsContext): Promise<WorkspaceSkills> {
+    const source = await this.#resolver(context);
+
+    let impl = this.#bySource.get(source);
+    if (impl) {
+      await this.#admit(source, impl);
+    } else {
+      impl = new WorkspaceSkillsImpl({
+        ...this.#config,
+        source,
+        searchNamespace: `owner-${this.#ownerId}/source-${this.#nextSourceId++}`,
+        sharedSearchState: this.#sharedSearchState,
+        // A view evicted from the LRU may still be held by a caller (or by a
+        // request-context cache). When it next needs its search documents it
+        // re-admits itself here before re-indexing, so the bound still holds
+        // and live views never silently lose search.
+        onIndexReadmit: () => this.#admit(source, impl!),
+        onIndexIdle: () => this.#trimOverflow(),
+      });
+      await this.#admit(source, impl);
+    }
+
+    return impl.getScoped(context);
+  }
+
+  /**
+   * Insert or bump a source to most-recently-used, evicting overflow.
+   *
+   * Only idle views are evicted: a view inside an in-flight search/refresh
+   * keeps its documents until it finishes, so concurrent live views beyond the
+   * bound still return results. The cache may therefore briefly exceed
+   * `maxCachedSources` under concurrency; it settles back on the next admit.
+   */
+  async #admit(source: SkillSourceInterface, impl: WorkspaceSkillsImpl): Promise<void> {
+    this.#bySource.delete(source);
+    this.#bySource.set(source, impl);
+    await this.#trimOverflow(impl);
+  }
+
+  /** Release least-recently-used idle views until the cache is within bound. */
+  async #trimOverflow(keep?: WorkspaceSkillsImpl): Promise<void> {
+    let overflow = this.#bySource.size - this.#maxCachedSources;
+    for (const [candidateSource, candidate] of [...this.#bySource]) {
+      if (overflow <= 0) break;
+      if (candidate === keep || candidate.isIndexBusy) continue;
+      this.#bySource.delete(candidateSource);
+      overflow--;
+      await candidate.releaseSearchIndex();
+    }
+  }
+
+  async list(): Promise<SkillMetadata[]> {
+    return (await this.getScoped()).list();
+  }
+
+  async get(name: string): Promise<Skill | null> {
+    return (await this.getScoped()).get(name);
+  }
+
+  async has(name: string): Promise<boolean> {
+    return (await this.getScoped()).has(name);
+  }
+
+  async refresh(): Promise<void> {
+    return (await this.getScoped()).refresh();
+  }
+
+  async maybeRefresh(context?: SkillsContext): Promise<void> {
+    return (await this.getScoped(context)).maybeRefresh(context);
+  }
+
+  async search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]> {
+    return (await this.getScoped()).search(query, options);
+  }
+
+  async getReference(skillName: string, referencePath: string): Promise<string | null> {
+    return (await this.getScoped()).getReference(skillName, referencePath);
+  }
+
+  async getScript(skillName: string, scriptPath: string): Promise<string | null> {
+    return (await this.getScoped()).getScript(skillName, scriptPath);
+  }
+
+  async getAsset(skillName: string, assetPath: string): Promise<Buffer | null> {
+    return (await this.getScoped()).getAsset(skillName, assetPath);
+  }
+
+  async listReferences(skillName: string): Promise<string[]> {
+    return (await this.getScoped()).listReferences(skillName);
+  }
+
+  async listScripts(skillName: string): Promise<string[]> {
+    return (await this.getScoped()).listScripts(skillName);
+  }
+
+  async listAssets(skillName: string): Promise<string[]> {
+    return (await this.getScoped()).listAssets(skillName);
   }
 }
 

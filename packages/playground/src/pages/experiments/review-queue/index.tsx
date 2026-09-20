@@ -78,7 +78,6 @@ function ReviewQueuePage() {
         targetType={targetType}
         targetId={targetId}
         featuredItemId={featuredResultId}
-        detailPanelVariant="overlay"
         toolbarStart={
           <>
             <TargetFilter
@@ -99,7 +98,7 @@ function ReviewQueuePage() {
         }
         toolbarEnd={
           selectedId ? (
-            <Button as={Link} href={paths.experimentLink(selectedId)} icon={<ArrowUpRight />}>
+            <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<ArrowUpRight />}>
               See experiment
             </Button>
           ) : undefined

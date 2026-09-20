@@ -779,7 +779,9 @@ export const subscribeAgentThreadBodySchema = z.object({
   threadId: z.string(),
 });
 
-export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema;
+export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema.extend({
+  expectedRunId: z.string().optional(),
+});
 
 export const sendToolApprovalBodySchema = z.object({
   resourceId: z.string(),

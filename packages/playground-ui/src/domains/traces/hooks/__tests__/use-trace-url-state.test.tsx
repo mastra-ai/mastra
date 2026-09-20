@@ -331,6 +331,48 @@ describe('useTraceUrlState.handleDateChange', () => {
   });
 });
 
+describe('useTraceUrlState.handleDateRangeChange', () => {
+  it('writes both ends of a custom range in a single URL update', () => {
+    render(<Harness initial="datePreset=custom" />);
+
+    act(() => api.handleDateRangeChange(new Date('2026-06-05T08:30:00.000Z'), new Date('2026-06-06T08:30:00.000Z')));
+
+    expect(setSpy).toHaveBeenCalledTimes(1);
+    const p = paramsNow();
+    expect(p.get('dateFrom')).toBe('2026-06-05T08:30:00.000Z');
+    expect(p.get('dateTo')).toBe('2026-06-06T08:30:00.000Z');
+  });
+
+  it('clears an end that is taken away', () => {
+    render(<Harness initial="datePreset=custom&dateFrom=2026-06-01T00:00:00.000Z&dateTo=2026-06-02T00:00:00.000Z" />);
+
+    act(() => api.handleDateRangeChange(new Date('2026-06-05T08:30:00.000Z'), undefined));
+
+    const p = paramsNow();
+    expect(p.get('dateFrom')).toBe('2026-06-05T08:30:00.000Z');
+    expect(p.get('dateTo')).toBeNull();
+  });
+
+  it('ignores the picker while a rolling preset is in effect', () => {
+    render(<Harness initial="datePreset=last-7d" />);
+
+    act(() => api.handleDateRangeChange(new Date('2026-06-05T08:30:00.000Z'), undefined));
+
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it('drops the selection along with the new range', () => {
+    render(<Harness initial="datePreset=custom&traceId=t1&spanId=s1&tab=feedback" />);
+
+    act(() => api.handleDateRangeChange(new Date('2026-06-05T08:30:00.000Z'), undefined));
+
+    const p = paramsNow();
+    expect(p.get('traceId')).toBeNull();
+    expect(p.get('spanId')).toBeNull();
+    expect(p.get('tab')).toBeNull();
+  });
+});
+
 describe('useTraceUrlState selection state', () => {
   it('reads the selection out of the URL', () => {
     render(<Harness initial="traceId=t1&spanId=s1&anchorSpanId=a1&tab=feedback&scoreId=sc1" />);
@@ -455,6 +497,31 @@ describe('useTraceUrlState.handleSpanChange', () => {
     act(() => api.handleSpanChange('s2'));
 
     expect(paramsNow().get('anchorSpanId')).toBe('a1');
+  });
+});
+
+describe('useTraceUrlState.handleSpanViewChange', () => {
+  it('defaults to the tree view when the param is absent or unknown', () => {
+    render(<Harness initial="traceId=t1&spanView=nope" />);
+
+    expect(api.spanViewParam).toBe('tree');
+  });
+
+  it('stores the timeline view in the URL', () => {
+    render(<Harness initial="traceId=t1" />);
+
+    act(() => api.handleSpanViewChange('timeline'));
+
+    expect(paramsNow().get('spanView')).toBe('timeline');
+    expect(api.spanViewParam).toBe('timeline');
+  });
+
+  it('drops the param when going back to the tree view', () => {
+    render(<Harness initial="traceId=t1&spanView=timeline" />);
+
+    act(() => api.handleSpanViewChange('tree'));
+
+    expect(paramsNow().get('spanView')).toBeNull();
   });
 });
 
