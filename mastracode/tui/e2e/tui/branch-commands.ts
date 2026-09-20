@@ -44,7 +44,7 @@ values
 
     // /branch: confirm, name the branch, land on the branch view.
     terminal.submit('/branch');
-    await runtime.waitForScreenText(/Branch the current thread from this point/i, terminal);
+    await runtime.waitForScreenText(/Branch from "Seeded assistant answer/i, terminal);
     terminal.write('\r');
     await runtime.waitForScreenText(/Give the branch a name/i, terminal);
     terminal.write('E2E branch child');
