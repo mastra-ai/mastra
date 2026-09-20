@@ -667,7 +667,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
             factoryProjectId: request.factoryProjectId,
             sessionId: request.sessionId,
           }),
-        deps.domains.memorySettings,
         deps.domains.intake,
       )
     : undefined;
@@ -730,7 +729,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       auth: deps.auth,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
-      memorySettings: deps.domains.memorySettings,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
     ...new SkillRoutes({

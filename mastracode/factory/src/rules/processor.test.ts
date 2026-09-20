@@ -137,7 +137,8 @@ describe('FactoryPhaseStateProcessor', () => {
     await prepare(storage);
     const loadMemorySettings = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -161,7 +162,8 @@ describe('FactoryPhaseStateProcessor', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const loadMemorySettings = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -177,7 +179,8 @@ describe('FactoryPhaseStateProcessor', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const loadMemorySettings = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -201,7 +204,8 @@ describe('FactoryPhaseStateProcessor', () => {
     await prepare(storage);
     const loadMemorySettings = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -232,7 +236,8 @@ describe('FactoryPhaseStateProcessor', () => {
     await prepare(storage);
     const loadMemorySettings = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -262,7 +267,8 @@ describe('FactoryPhaseStateProcessor', () => {
     await prepare(storage);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const processor = new FactoryPhaseStateProcessor({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
       storage,
       loadMemorySettings: vi.fn(async () => {
         throw new Error('storage unavailable');

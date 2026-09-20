@@ -89,16 +89,13 @@ function resolveOmRoleModelForRequest(
   const factorySettings = getFactoryMemorySettings(requestContext);
 
   // The configured settings file, not the default one: a caller that points the
-  // agent at another settings path must get the same pack/override resolution
-  // for observational memory as it does for the main model. Factory settings
-  // remain DB-authoritative and intentionally bypass host settings overrides.
-  const settings = loadSettings(settingsPath);
+  // agent at another settings path must get the same override resolution for
+  // observational memory as it does for the main model. Factory settings remain
+  // DB-authoritative, and hosts that disable the settings seed never read it.
+  const settings =
+    factorySettings === undefined && !options?.disableSettingsOmSeed ? loadSettings(settingsPath) : undefined;
   const roleOverride =
-    factorySettings === undefined
-      ? role === 'observer'
-        ? settings.models?.observerModelOverride
-        : settings.models?.reflectorModelOverride
-      : undefined;
+    role === 'observer' ? settings?.models?.observerModelOverride : settings?.models?.reflectorModelOverride;
   const factoryModelId = factorySettings?.[`${role}ModelId`];
   const selection: unknown =
     factorySettings !== undefined ? (factoryModelId ?? 'auto') : state?.[`${role}ModelSelection`];

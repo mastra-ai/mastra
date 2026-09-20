@@ -237,7 +237,6 @@ describe('hydrateFactorySession', () => {
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
-      factoryProjectId: 'proj-1',
       defaultModelId: 'anthropic/claude-opus-5',
     });
 
@@ -256,7 +255,7 @@ describe('hydrateFactorySession', () => {
   it('leaves the session on its default model when the project has none', async () => {
     const { session, double } = createSessionDouble();
 
-    await hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1' });
+    await hydrateFactorySession(session, { orgId: 'org-1' });
 
     expect(double.model.switch).not.toHaveBeenCalled();
     expect(double.subagents.model.set).not.toHaveBeenCalled();
@@ -268,7 +267,7 @@ describe('hydrateFactorySession', () => {
   it('marks the session unresolved when the caller has no organization', async () => {
     const { session, double } = createSessionDouble();
 
-    await hydrateFactorySession(session, { orgId: '  ', factoryProjectId: 'proj-1' });
+    await hydrateFactorySession(session, { orgId: '  ' });
 
     expect(double.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
     expect(double.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
@@ -280,7 +279,7 @@ describe('hydrateFactorySession', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await expect(
-      hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1', defaultModelId: 'openai/retired' }),
+      hydrateFactorySession(session, { orgId: 'org-1', defaultModelId: 'openai/retired' }),
     ).resolves.toBeUndefined();
 
     expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default model', {
@@ -297,7 +296,6 @@ describe('hydrateFactorySession', () => {
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
-      factoryProjectId: 'proj-1',
       defaultModelId: 'openai/gpt-5.6',
     });
 

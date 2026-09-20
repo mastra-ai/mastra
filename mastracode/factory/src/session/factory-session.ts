@@ -319,13 +319,12 @@ export async function ensureFactorySourceSession(
 
 export interface HydrateFactorySessionArgs {
   orgId: string;
-  factoryProjectId?: string;
   /** The factory project's default model. Without it the session keeps the SDK's built-in mode default. */
   defaultModelId?: string;
 }
 
 /**
- * Apply a factory project's configuration to a session on every run.
+ * Apply a factory project's main model to a session on every run.
  *
  * The model switch is best-effort. A retired model id must not sink a run that
  * is otherwise ready — the session simply keeps the default it was created with,

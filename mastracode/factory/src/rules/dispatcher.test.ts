@@ -1730,7 +1730,6 @@ describe('FactoryDecisionDispatcher', () => {
         lastError: expect.stringContaining('observation retry failed after 400 attempts'),
       });
     });
-
   });
 
   it('appends the work item feed to the invokeSkill kickoff', async () => {
