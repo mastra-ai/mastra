@@ -93,6 +93,7 @@ import {
 import {
   WorkflowSnapshotHandoffFenceError,
   compareWorkflowSnapshotHandoffCursors,
+  materializeWorkflowSnapshotHandoffSnapshot,
   validateWorkflowSnapshotHandoffFence,
   validateWorkflowSnapshotHandoffLimit,
   workflowSnapshotHandoffCanonicalStatesEqual,
@@ -299,7 +300,8 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
       Object.defineProperty(out, 'stack', { value: value.stack, writable: true, configurable: true });
     }
     const toJSONDescriptor = Object.getOwnPropertyDescriptor(value, 'toJSON');
-    if (typeof toJSONDescriptor?.value === 'function') {
+    const copiedToJSON = typeof toJSONDescriptor?.value === 'function';
+    if (copiedToJSON) {
       Object.defineProperty(out, 'toJSON', {
         ...toJSONDescriptor,
         value: toJSONDescriptor.value,
@@ -313,6 +315,7 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
       defineEnumerableRunDataProperty(outRecord, 'cause', deepCloneForRun(value.cause, seen));
     }
     for (const key of Object.keys(value)) {
+      if (copiedToJSON && key === 'toJSON') continue;
       defineEnumerableRunDataProperty(outRecord, key, deepCloneForRun(errRecord[key], seen));
     }
     return out;
@@ -340,12 +343,21 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
   const out: Record<string, unknown> =
     proto === Object.prototype ? {} : (Object.create(proto) as Record<string, unknown>);
   seen.set(value, out);
+  const toJSONDescriptor = Object.getOwnPropertyDescriptor(value, 'toJSON');
+  const copiedToJSON = typeof toJSONDescriptor?.value === 'function';
+  if (copiedToJSON) {
+    Object.defineProperty(out, 'toJSON', {
+      ...toJSONDescriptor,
+      value: toJSONDescriptor.value,
+    });
+  }
   // `Object.keys` includes keys whose value is `undefined`, so explicitly-undefined
   // properties are preserved (unlike a JSON round-trip). Define each key as an
   // own data property instead of assigning through the destination prototype:
   // assignment to `__proto__` would otherwise invoke Object.prototype's legacy
   // setter and silently lose the workflow step slot during a clone.
   for (const key of Object.keys(value as object)) {
+    if (copiedToJSON && key === 'toJSON') continue;
     defineEnumerableRunDataProperty(out, key, deepCloneForRun((value as Record<string, unknown>)[key], seen));
   }
   return out;
@@ -417,7 +429,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return {
       kind: 'present',
       ...(run.resourceId === undefined ? {} : { resourceId: run.resourceId }),
-      snapshot: cloneRunData(snapshot),
+      snapshot: materializeWorkflowSnapshotHandoffSnapshot(snapshot),
     };
   }
 
@@ -1451,7 +1463,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       runId: input.runId,
       status: 'pending',
       ...(input.resourceId === undefined ? {} : { resourceId: input.resourceId }),
-      snapshot: cloneRunData(input.snapshot),
+      snapshot: materializeWorkflowSnapshotHandoffSnapshot(input.snapshot),
       mutationFence: input.mutationFence,
       createdAt: now,
       updatedAt: now,
@@ -1484,7 +1496,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const updated: WorkflowSnapshotHandoffRecord = {
       ...existing,
       ...(input.resourceId === undefined ? { resourceId: undefined } : { resourceId: input.resourceId }),
-      snapshot: cloneRunData(input.snapshot),
+      snapshot: materializeWorkflowSnapshotHandoffSnapshot(input.snapshot),
       updatedAt: Date.now(),
     };
     this.db.workflowSnapshotHandoffs.set(key, updated);
@@ -1513,7 +1525,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       ...existing,
       status: 'completed',
       ...(input.resourceId === undefined ? { resourceId: undefined } : { resourceId: input.resourceId }),
-      snapshot: cloneRunData(input.snapshot),
+      snapshot: materializeWorkflowSnapshotHandoffSnapshot(input.snapshot),
       updatedAt: now,
       completedAt: now,
     };

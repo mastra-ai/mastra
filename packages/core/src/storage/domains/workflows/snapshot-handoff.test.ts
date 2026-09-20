@@ -167,5 +167,14 @@ describe('workflow snapshot handoff', () => {
         snapshot: snapshot(runId, 'success'),
       }),
     ).resolves.toMatchObject({ status: 'completed' });
+
+    const bareErrorInput = {
+      ...input,
+      workflowName: 'bare-error-workflow',
+      runId: 'bare-error-run',
+      snapshot: snapshot('bare-error-run', 'failed', { error: new Error('plain error') }),
+    };
+    await expect(workflows.claimWorkflowSnapshotHandoff(bareErrorInput)).resolves.toMatchObject({ status: 'created' });
+    await expect(workflows.claimWorkflowSnapshotHandoff(bareErrorInput)).resolves.toMatchObject({ status: 'existing' });
   });
 });

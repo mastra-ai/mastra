@@ -247,6 +247,19 @@ describe('cloneRunData', () => {
     expect(out.stack).toBe(src.stack);
   });
 
+  it('clones a frozen enumerable toJSON method without redefining it', () => {
+    const src = new Error('frozen-toJSON');
+    Object.defineProperty(src, 'toJSON', {
+      value: () => ({ message: 'frozen-toJSON' }),
+      enumerable: true,
+      configurable: false,
+      writable: false,
+    });
+    Object.freeze(src);
+    const out = cloneRunData(src);
+    expect(JSON.stringify(out)).toBe('{"message":"frozen-toJSON"}');
+  });
+
   // ── ArrayBuffer / TypedArrays / DataView ────────────────────────────
 
   it('clones ArrayBuffer', () => {

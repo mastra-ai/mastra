@@ -37,8 +37,26 @@ function sortCanonicalJson(value: unknown): unknown {
 }
 
 function canonicalize(value: unknown): unknown {
-  const serialized = JSON.stringify(value);
+  const serialized = JSON.stringify(value, (_key, nestedValue: unknown) => {
+    if (nestedValue instanceof Error && typeof (nestedValue as { toJSON?: unknown }).toJSON !== 'function') {
+      return Object.fromEntries(
+        Object.entries(nestedValue).filter(([key]) => !['cause', 'message', 'name', 'stack'].includes(key)),
+      );
+    }
+    return nestedValue;
+  });
   return serialized === undefined ? undefined : sortCanonicalJson(JSON.parse(serialized));
+}
+
+/** Materializes a handoff snapshot using the JSON representation persisted by durable adapters. */
+export function materializeWorkflowSnapshotHandoffSnapshot(snapshot: WorkflowRunState): WorkflowRunState {
+  const serialized = JSON.stringify(snapshot);
+  if (serialized === undefined) throw new TypeError('Workflow snapshot handoff snapshot must be JSON-serializable');
+  const materialized: unknown = JSON.parse(serialized);
+  if (!materialized || typeof materialized !== 'object' || Array.isArray(materialized)) {
+    throw new TypeError('Workflow snapshot handoff snapshot must be a JSON object');
+  }
+  return materialized as WorkflowRunState;
 }
 
 /** Compares the JSON-native snapshot representation independent of key order. */
