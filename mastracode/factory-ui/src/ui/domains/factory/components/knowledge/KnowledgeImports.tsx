@@ -1,23 +1,46 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Unplug } from 'lucide-react';
 import { useState } from 'react';
+import { Link, useParams } from 'react-router';
 
 import {
   useKnowledgeImporters,
   useKnowledgeImportRun,
   useKnowledgeImportRuns,
 } from '../../../../../hooks/useKnowledgeImports';
+import { settingsSectionPath } from '../../../settings/settingsSections';
 import type {
   KnowledgeImporterSummary,
   KnowledgeImportRun,
   KnowledgeImportStatus,
   KnowledgeImportTrigger,
 } from '../../services/knowledge-imports';
+import { PLATFORM_CONNECT_PROVIDERS } from '../../services/platformConnect';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
+
+/**
+ * Human-readable label for an importer id. Platform-connect importers use the
+ * machine id shape `connect:<provider>:<connectionId>` — surface the provider
+ * display name instead. When one provider has several connections, a short
+ * connection-id tail disambiguates them. Non-connect importer ids (e.g. the
+ * GitHub demo importer) pass through unchanged.
+ */
+function importerLabel(id: string, all: KnowledgeImporterSummary[]): string {
+  const match = /^connect:([^:]+):(.+)$/.exec(id);
+  if (!match) return id;
+  const [, slug, connectionId] = match;
+  const displayName =
+    (PLATFORM_CONNECT_PROVIDERS as Record<string, { displayName: string } | undefined>)[slug!]?.displayName ?? slug!;
+  const siblings = all.filter(entry => entry.id.startsWith(`connect:${slug}:`));
+  if (siblings.length <= 1) return displayName;
+  return `${displayName} · …${connectionId!.slice(-4)}`;
+}
 
 function elapsed(run: KnowledgeImportRun): string {
   if (!run.startedAt) return 'Not started';
@@ -309,14 +332,24 @@ export function KnowledgeImports({
 }) {
   const importers = useKnowledgeImporters(factoryProjectId, threadId);
   const [requestedImporterId, setRequestedImporterId] = useState<string | undefined>(initialImporterId);
+  const { factoryId } = useParams<{ factoryId: string }>();
   if (!factoryProjectId) return null;
   if (importers.isPending) return <SkeletonRows label="Loading knowledge importers" rows={5} />;
   if (importers.isError) return <Notice variant="destructive">{importers.error.message}</Notice>;
   if (importers.data.importers.length === 0) {
     return (
-      <Txt as="p" variant="ui-md" className="text-icon3">
-        No knowledge importers are registered.
-      </Txt>
+      <EmptyState
+        iconSlot={<Unplug aria-hidden />}
+        titleSlot="No knowledge sources yet"
+        descriptionSlot="Connect a source like Notion, Linear, or Confluence and its imports will show up here."
+        actionSlot={
+          factoryId ? (
+            <Button size="sm" render={<Link to={settingsSectionPath(factoryId, 'knowledge')} />}>
+              Connect a source
+            </Button>
+          ) : undefined
+        }
+      />
     );
   }
 
@@ -328,12 +361,12 @@ export function KnowledgeImports({
       <div className="flex items-center gap-3">
         <Select value={importer.id} onValueChange={setRequestedImporterId}>
           <SelectTrigger size="sm" aria-label="Knowledge importer" className="w-64">
-            {importer.id}
+            {importerLabel(importer.id, importers.data.importers)}
           </SelectTrigger>
           <SelectContent>
             {importers.data.importers.map(entry => (
               <SelectItem key={entry.id} value={entry.id}>
-                {entry.id}
+                {importerLabel(entry.id, importers.data.importers)}
               </SelectItem>
             ))}
           </SelectContent>

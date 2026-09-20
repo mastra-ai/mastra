@@ -715,6 +715,54 @@ describe('KnowledgePage', () => {
     }
   });
 
+  it('offers a Connect-a-source path when no importers are registered', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json({ importers: [] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    // A dead-end "No knowledge importers are registered." is exactly what we
+    // don't want — the empty state names the fix and links to it.
+    expect(await screen.findByText('No knowledge sources yet')).toBeInTheDocument();
+    const cta = screen.getByRole('link', { name: 'Connect a source' });
+    expect(cta).toHaveAttribute('href', `/factories/${FACTORY_ID}/settings/knowledge`);
+  });
+
+  it('labels platform-connect importers by provider name, never the machine id', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json({
+          importers: [
+            {
+              id: 'connect:notion:conn-abc123',
+              importKind: 'static',
+              triggers: ['cron'],
+              bindings: [{ source: 'notion:workspace', binding: 'kh_binding' }],
+            },
+          ],
+        }),
+      ),
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/runs`,
+        () => HttpResponse.json({ runs: [] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    // The picker shows the provider's display name; the machine id shape
+    // `connect:<provider>:<connectionId>` never reaches the DOM.
+    expect(await screen.findByText('Notion')).toBeInTheDocument();
+    expect(screen.queryByText('connect:notion:conn-abc123')).toBeNull();
+  });
+
   it('explains when relationship data reached a terminal server bound', async () => {
     stubKnowledgeRoute({
       ...graphFixture,
