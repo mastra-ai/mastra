@@ -181,7 +181,8 @@ describe('notion importer', () => {
 
     // Second run: return a huge single page that exceeds DEFAULT_MAX_RECORDS_PER_RUN (500) without
     // crossing the watermark, then a `has_more: true` cursor. The record cap should trigger before
-    // the walk reaches previousWatermark — meaning we did NOT drain, so watermark must stay.
+    // the walk reaches previousWatermark — meaning we did NOT drain, so watermark must stay and
+    // the pagination cursor must be persisted so the next run resumes deeper into the tail.
     const bigPage = Array.from({ length: 501 }, (_, i) => ({
       id: `p${i + 1}`,
       title: `Page ${i + 1}`,
@@ -191,6 +192,39 @@ describe('notion importer', () => {
     await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
     // Watermark should still be the seeded value; not advanced past the un-fetched tail.
     expect(await state.get('notion:watermark')).toBe(seededWatermark);
+    // Resume cursor persisted so the next run continues from where we stopped.
+    expect(await state.get('notion:resume-cursor')).toBe(JSON.stringify({ cursor: 'cursor-1' }));
+  });
+
+  it('converges initial backfill by resuming from a persisted cursor and clearing it when drained', async () => {
+    // Reproduces the previous stall: with no watermark and >500 records available, the naive
+    // strategy of "don't advance watermark on truncation" would loop forever fetching the same
+    // newest page. The resume cursor pushes each run further into the tail until the source
+    // exhausts pagination, at which point the watermark advances and the cursor is cleared.
+    const { ctx, request, importer, state } = makeContext();
+
+    // Run 1: 501 pages on the first page, has_more with cursor-A. Bails on record cap, no watermark yet.
+    const pageA = Array.from({ length: 501 }, (_, i) => ({
+      id: `pA${i}`,
+      title: `A${i}`,
+      lastEditedTime: `2026-09-30T${String(i % 24).padStart(2, '0')}:00:00Z`,
+    }));
+    request.mockResolvedValueOnce(searchResponse(pageA, 'cursor-A'));
+    await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
+    expect(await state.get('notion:watermark')).toBeUndefined();
+    expect(await state.get('notion:resume-cursor')).toBe(JSON.stringify({ cursor: 'cursor-A' }));
+
+    // Run 2: resumes from cursor-A. This time the source returns a partial page (< page_size),
+    // so we drain. Watermark advances and cursor is cleared.
+    const pageB = [{ id: 'pB0', title: 'B0', lastEditedTime: '2026-08-15T00:00:00Z' }];
+    request.mockResolvedValueOnce(searchResponse(pageB));
+    await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
+    // The second call passed cursor-A as start_cursor.
+    const secondCall = request.mock.calls[1]![0]!;
+    expect(secondCall.body).toMatchObject({ start_cursor: 'cursor-A' });
+    // Now drained: watermark = newest processed in this run; resume cursor cleared.
+    expect(await state.get('notion:watermark')).toBe(JSON.stringify({ watermark: '2026-08-15T00:00:00Z' }));
+    expect(await state.get('notion:resume-cursor')).toBe(JSON.stringify({ cursor: '' }));
   });
 
   it('rejects malformed payloads via zod so the run fails and the watermark is preserved', async () => {

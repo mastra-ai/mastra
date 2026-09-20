@@ -33,6 +33,41 @@ export async function writeWatermark(state: KnowledgeImporterState, key: string,
   await state.set(key, JSON.stringify({ watermark }));
 }
 
+const resumeCursorSchema = z.object({ cursor: z.string() });
+
+/**
+ * Reads a durable pagination resume cursor written by a descending walker that
+ * truncated on a bound. Returns `undefined` when unset (initial run, or the
+ * previous run drained fully and cleared the cursor). An empty stored cursor
+ * (persisted by `clearResumeCursor`) is treated as unset.
+ */
+export async function readResumeCursor(state: KnowledgeImporterState, key: string): Promise<string | undefined> {
+  const raw = await state.get(key);
+  if (raw === undefined) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Knowledge importer state '${key}' is not valid JSON`);
+  }
+  const cursor = resumeCursorSchema.parse(parsed).cursor;
+  return cursor === '' ? undefined : cursor;
+}
+
+/** Persist a pagination resume cursor. Callers write when a DESC walk truncates on a bound. */
+export async function writeResumeCursor(state: KnowledgeImporterState, key: string, cursor: string): Promise<void> {
+  await state.set(key, JSON.stringify({ cursor }));
+}
+
+/**
+ * Mark the resume cursor as cleared. The state key is set to an empty cursor
+ * (the `KnowledgeImporterState` contract has no `delete`), which `readResumeCursor`
+ * treats as unset.
+ */
+export async function clearResumeCursor(state: KnowledgeImporterState, key: string): Promise<void> {
+  await state.set(key, JSON.stringify({ cursor: '' }));
+}
+
 /**
  * Deterministic UUID-shaped record id derived from arbitrary content. Two calls
  * with the same content produce the same id, so idempotent appends dedupe

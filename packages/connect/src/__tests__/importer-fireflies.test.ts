@@ -164,7 +164,8 @@ describe('fireflies importer', () => {
     expect(seededWatermark).toBe(JSON.stringify({ watermark: '2026-08-01T00:00:00Z' }));
 
     // Second run: return 501 transcripts across full pages (limit = 25). The record cap trips
-    // before a partial page signals end — watermark must stay at the seeded value.
+    // before a partial page signals end — watermark must stay at the seeded value and skip must
+    // be persisted so the next run resumes deeper into the tail.
     const fullPages = Array.from({ length: 21 }, (_, page) =>
       Array.from({ length: 25 }, (_, j) => ({
         id: `t-${page}-${j}`,
@@ -176,6 +177,47 @@ describe('fireflies importer', () => {
     for (const page of fullPages) request.mockResolvedValueOnce(transcriptsResponse(page));
     await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
     expect(await state.get('fireflies:watermark')).toBe(seededWatermark);
+    // Persisted skip is the offset after all full pages we processed. 20 full pages × 25 = 500,
+    // and the 21st page pushes recordsCollected past 500 so the loop breaks before advancing skip.
+    // We assert it's non-zero and non-empty — the next run will resume mid-backfill.
+    const stored = await state.get('fireflies:resume-cursor');
+    expect(stored).toBeDefined();
+    const cursor = JSON.parse(stored!).cursor as string;
+    expect(Number(cursor)).toBeGreaterThan(0);
+  });
+
+  it('converges initial backfill by resuming from a persisted skip and clearing it when drained', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    // Run 1: no watermark, 20 full pages of 25 items each. After 20 iters collected = 500 and the
+    // record cap trips, so exactly 20 requests are consumed and skip is persisted at 500.
+    const fullPages = Array.from({ length: 20 }, (_, page) =>
+      Array.from({ length: 25 }, (_, j) => ({
+        id: `t-A-${page}-${j}`,
+        title: `A${page}-${j}`,
+        date: `2026-09-${String((page % 30) + 1).padStart(2, '0')}T00:00:00Z`,
+        overview: `oA-${page}-${j}`,
+      })),
+    );
+    for (const page of fullPages) request.mockResolvedValueOnce(transcriptsResponse(page));
+    await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
+    expect(await state.get('fireflies:watermark')).toBeUndefined();
+    const resumeStored = await state.get('fireflies:resume-cursor');
+    const resumeSkip = Number(JSON.parse(resumeStored!).cursor);
+    expect(resumeSkip).toBeGreaterThan(0);
+    const requestsUsed = request.mock.calls.length;
+    expect(requestsUsed).toBe(20);
+
+    // Run 2: a small partial page signals end — watermark advances, resume cursor cleared.
+    request.mockResolvedValueOnce(
+      transcriptsResponse([{ id: 't-B0', title: 'B0', date: '2026-07-15T00:00:00Z', overview: 'oB' }]),
+    );
+    await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
+    const secondCall = request.mock.calls[requestsUsed]![0]! as {
+      body: { variables: { skip: number } };
+    };
+    expect(secondCall.body.variables.skip).toBe(resumeSkip);
+    expect(await state.get('fireflies:watermark')).toBe(JSON.stringify({ watermark: '2026-07-15T00:00:00Z' }));
+    expect(await state.get('fireflies:resume-cursor')).toBe(JSON.stringify({ cursor: '' }));
   });
 
   it('rejects malformed payloads via zod', async () => {

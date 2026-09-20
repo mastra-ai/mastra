@@ -3,14 +3,18 @@ import { z } from 'zod';
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
 import {
   boundText,
+  clearResumeCursor,
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
+  readResumeCursor,
   readWatermark,
+  writeResumeCursor,
   writeWatermark,
 } from '../../importer-runtime.js';
 
 const LINEAR_WATERMARK_KEY = 'linear:watermark';
+const LINEAR_RESUME_CURSOR_KEY = 'linear:resume-cursor';
 
 const issueSchema = z.object({
   id: z.string(),
@@ -74,15 +78,17 @@ function createLinearImporter(ctx: ImporterProviderContext) {
       importer: () => Promise<import('@mastra/core/knowledge').StaticKnowledgeImporterOperations>;
     }) => {
       const previousWatermark = await readWatermark(context.state, LINEAR_WATERMARK_KEY);
+      const resumeCursor = await readResumeCursor(context.state, LINEAR_RESUME_CURSOR_KEY);
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
-      // Linear's default orderBy: updatedAt walks newest→oldest. Truncation on
-      // maxPages/maxRecords means the OLDER tail wasn't fetched — advance the watermark
-      // only when the source exhausted pagination (hasNextPage = false); otherwise
-      // leave it so a subsequent run refetches this window and continues toward the tail.
+      // Linear's default orderBy: updatedAt walks newest→oldest. On truncation
+      // (maxPages/maxRecords) we persist endCursor so the next run resumes further into
+      // the tail. Only when the source exhausts pagination do we advance the watermark
+      // and clear the resume cursor.
       const collected: LinearIssue[] = [];
-      let cursor: string | undefined;
+      let cursor: string | undefined = resumeCursor;
+      let nextCursorAfterLastPage: string | undefined;
       let drainedFully = false;
       for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
         if (context.signal.aborted) break;
@@ -101,9 +107,9 @@ function createLinearImporter(ctx: ImporterProviderContext) {
           break;
         }
         cursor = parsed.data.issues.pageInfo.endCursor;
+        nextCursorAfterLastPage = parsed.data.issues.pageInfo.endCursor;
         if (collected.length >= DEFAULT_MAX_RECORDS_PER_RUN) break;
       }
-      if (previousWatermark === undefined && collected.length === 0) drainedFully = true;
 
       // Oldest-first so a mid-run failure leaves the watermark low.
       collected.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
@@ -157,6 +163,9 @@ function createLinearImporter(ctx: ImporterProviderContext) {
 
       if (drainedFully && lastProcessed) {
         await writeWatermark(context.state, LINEAR_WATERMARK_KEY, lastProcessed);
+        await clearResumeCursor(context.state, LINEAR_RESUME_CURSOR_KEY);
+      } else if (!drainedFully && nextCursorAfterLastPage) {
+        await writeResumeCursor(context.state, LINEAR_RESUME_CURSOR_KEY, nextCursorAfterLastPage);
       }
     },
   };

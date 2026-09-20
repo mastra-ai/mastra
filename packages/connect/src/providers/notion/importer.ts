@@ -3,14 +3,18 @@ import { z } from 'zod';
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
 import {
   boundText,
+  clearResumeCursor,
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
+  readResumeCursor,
   readWatermark,
+  writeResumeCursor,
   writeWatermark,
 } from '../../importer-runtime.js';
 
 const NOTION_WATERMARK_KEY = 'notion:watermark';
+const NOTION_RESUME_CURSOR_KEY = 'notion:resume-cursor';
 
 const richTextItemSchema = z.object({
   plain_text: z.string().default(''),
@@ -115,15 +119,17 @@ function createNotionImporter(ctx: ImporterProviderContext) {
       importer: () => Promise<import('@mastra/core/knowledge').StaticKnowledgeImporterOperations>;
     }) => {
       const previousWatermark = await readWatermark(context.state, NOTION_WATERMARK_KEY);
+      const resumeCursor = await readResumeCursor(context.state, NOTION_RESUME_CURSOR_KEY);
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
       // Search sorts newest-first; walk pages until we cross the watermark or exhaust the source.
-      // If we hit maxPages/maxRecords before crossing the watermark, `drainedFully` is false and
-      // we advance to the OLDEST processed rather than the newest — otherwise the un-fetched
-      // older tail would be skipped forever.
+      // On truncation (maxPages/maxRecords) we persist the next_cursor so the following run resumes
+      // where we stopped — critical for initial backfills larger than one bounded run can drain.
       const collected: NotionSearchResult[] = [];
-      let cursor: string | undefined;
+      // Resume mid-backfill if the previous run left a cursor; otherwise start from the newest.
+      let cursor: string | undefined = resumeCursor;
+      let nextCursorAfterLastPage: string | undefined;
       let drainedFully = false;
       let recordsCollected = 0;
       pager: for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
@@ -142,16 +148,18 @@ function createNotionImporter(ctx: ImporterProviderContext) {
           }
           collected.push(result);
           recordsCollected++;
-          if (recordsCollected >= DEFAULT_MAX_RECORDS_PER_RUN) break pager;
+          if (recordsCollected >= DEFAULT_MAX_RECORDS_PER_RUN) {
+            nextCursorAfterLastPage = parsed.next_cursor && parsed.has_more ? parsed.next_cursor : undefined;
+            break pager;
+          }
         }
         if (!parsed.has_more || !parsed.next_cursor) {
           drainedFully = true;
           break;
         }
         cursor = parsed.next_cursor;
+        nextCursorAfterLastPage = parsed.next_cursor;
       }
-      // First-ever run: if nothing was collected, treat as drained.
-      if (previousWatermark === undefined && collected.length === 0) drainedFully = true;
 
       // Process oldest-first so a mid-run failure leaves the watermark low.
       collected.sort((a, b) => a.last_edited_time.localeCompare(b.last_edited_time));
@@ -202,12 +210,15 @@ function createNotionImporter(ctx: ImporterProviderContext) {
 
       // Single trailing checkpoint — advance watermark only after every mutation committed.
       // If we drained fully (walked back to previousWatermark or exhausted the source), the
-      // newest processed timestamp is a safe boundary. If we bailed on maxPages/maxRecords,
-      // the un-fetched tail is OLDER than everything collected — keep the watermark where it
-      // was so a subsequent run refetches this window (idempotent via contentRecordId) and
-      // continues toward the older tail.
+      // newest processed timestamp is a safe boundary and we clear any resume cursor.
+      // If we bailed on maxPages/maxRecords, we leave the watermark low and persist the
+      // pagination cursor so the next run resumes further into the tail instead of restarting
+      // from the newest page and re-hitting the same bound forever.
       if (drainedFully && lastProcessed) {
         await writeWatermark(context.state, NOTION_WATERMARK_KEY, lastProcessed);
+        await clearResumeCursor(context.state, NOTION_RESUME_CURSOR_KEY);
+      } else if (!drainedFully && nextCursorAfterLastPage) {
+        await writeResumeCursor(context.state, NOTION_RESUME_CURSOR_KEY, nextCursorAfterLastPage);
       }
     },
   };
