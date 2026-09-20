@@ -8,3 +8,23 @@ export type { ProviderToolsOptions, ProxyToolConfig, ProxyToolContext } from './
 export { defineProxyTool, resolveConnectionId, applyAllowTools } from './toolset.js';
 export { PROVIDERS, findRegistration } from './registry.js';
 export type { ProviderRegistration } from './registry.js';
+export { importers } from './importers.js';
+export type { ImportersOptions, ImportersIntegrationOptions, ImportersResolver } from './importers.js';
+export { IMPORTERS, findImporterRegistration } from './importer-registry.js';
+export type {
+  ImporterAccess,
+  ImporterProviderContext,
+  ImporterProviderRegistration,
+  ImporterProxyRequest,
+  ImporterProxyResponse,
+} from './importer-registry.js';
+export {
+  DEFAULT_MAX_PAGES_PER_RUN,
+  DEFAULT_MAX_RECORDS_PER_RUN,
+  MAX_RECORD_TEXT,
+  boundText,
+  contentRecordId,
+  readWatermark,
+  walkPages,
+  writeWatermark,
+} from './importer-runtime.js';
