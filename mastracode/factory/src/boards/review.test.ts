@@ -54,6 +54,10 @@ async function reviewArguments(headBranch: string): Promise<string> {
 }
 
 describe('reviewBoard', () => {
+  it('allows a reviewed MR or PR to be canceled when closed without merging', () => {
+    expect(reviewBoard.phases.done.outcomes.closed).toBe('canceled');
+    expect(reviewBoard.phases.canceled.outcomes.reviewRequested).toBe('review');
+  });
   it('names a GitLab merge request and points its kickoff at provider-neutral review tools', async () => {
     const decision = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(gitlabReviewContext());
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'review', skillName: 'factory-gitlab-review' });
