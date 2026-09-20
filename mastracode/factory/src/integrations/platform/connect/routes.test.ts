@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { PlatformApiClient } from '../api-client.js';
-import { buildPlatformConnectRoutes } from './routes.js';
+import { buildPlatformConnectRoutes, PLATFORM_CONNECT_PROVIDERS } from './routes.js';
 
 const SESSION = {
   connectionId: 'conn-new',
@@ -43,6 +43,23 @@ function buildApp(user: TestAuthUser | null, fetchImpl: typeof fetch, options: {
 }
 
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
+
+describe('PLATFORM_CONNECT_PROVIDERS registry', () => {
+  it.each([
+    ['jira', 'jira'],
+    ['incident-io', 'incident-io'],
+    ['notion', 'notion'],
+    ['confluence', 'confluence'],
+    ['linear', 'linear'],
+    ['zendesk', 'zendesk'],
+    ['fireflies', 'fireflies'],
+  ])('registers %s → integrationId %s with matching connectionIntegrationIds', (slug, integrationId) => {
+    const entry = PLATFORM_CONNECT_PROVIDERS[slug];
+    expect(entry).toBeDefined();
+    expect(entry.integrationId).toBe(integrationId);
+    expect(entry.connectionIntegrationIds).toContain(integrationId);
+  });
+});
 
 describe('platform connect routes', () => {
   it('lists Jira connections and hides other providers', async () => {
@@ -106,9 +123,9 @@ describe('platform connect routes', () => {
   it('rejects unknown providers, signed-out callers, and personal accounts', async () => {
     const fetchImpl = vi.fn<typeof fetch>();
     const app = buildApp(org1(), fetchImpl);
-    expect((await app.request('/web/integrations/platform/notion/connect-session', { method: 'POST' })).status).toBe(
-      404,
-    );
+    expect(
+      (await app.request('/web/integrations/platform/unknown-provider/connect-session', { method: 'POST' })).status,
+    ).toBe(404);
 
     const signedOut = buildApp(null, fetchImpl);
     expect(
