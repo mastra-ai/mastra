@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import {
   boundText,
+  clearResumeCursor,
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   MAX_RECORD_TEXT,
+  readResumeCursor,
   readWatermark,
   walkPages,
+  writeResumeCursor,
   writeWatermark,
 } from '../importer-runtime.js';
 import { createFakeState } from './fixtures/importer-harness.js';
@@ -28,6 +31,22 @@ describe('importer-runtime helpers', () => {
 
       const wrongShape = createFakeState({ w: JSON.stringify({ mark: '1' }) });
       await expect(readWatermark(wrongShape, 'w')).rejects.toThrow();
+    });
+  });
+
+  describe('resume cursor', () => {
+    it('round-trips through durable state, treats a cleared cursor as unset, and rejects malformed state', async () => {
+      const state = createFakeState();
+      expect(await readResumeCursor(state, 'c')).toBeUndefined();
+      await writeResumeCursor(state, 'c', 'cursor-abc');
+      expect(await readResumeCursor(state, 'c')).toBe('cursor-abc');
+      await clearResumeCursor(state, 'c');
+      // Cleared is persisted as an empty cursor and readResumeCursor treats it as unset.
+      expect(state.entries.get('c')).toBe(JSON.stringify({ cursor: '' }));
+      expect(await readResumeCursor(state, 'c')).toBeUndefined();
+
+      const bad = createFakeState({ c: 'not-json' });
+      await expect(readResumeCursor(bad, 'c')).rejects.toThrow(/not valid JSON/);
     });
   });
 

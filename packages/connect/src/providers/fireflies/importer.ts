@@ -3,14 +3,18 @@ import { z } from 'zod';
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
 import {
   boundText,
+  clearResumeCursor,
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
+  readResumeCursor,
   readWatermark,
+  writeResumeCursor,
   writeWatermark,
 } from '../../importer-runtime.js';
 
 const FIREFLIES_WATERMARK_KEY = 'fireflies:watermark';
+const FIREFLIES_RESUME_CURSOR_KEY = 'fireflies:resume-cursor';
 
 const summarySchema = z
   .object({
@@ -91,15 +95,19 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
       importer: () => Promise<import('@mastra/core/knowledge').StaticKnowledgeImporterOperations>;
     }) => {
       const previousWatermark = await readWatermark(context.state, FIREFLIES_WATERMARK_KEY);
+      const resumeCursor = await readResumeCursor(context.state, FIREFLIES_RESUME_CURSOR_KEY);
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
       // Fireflies GraphQL doesn't guarantee ordering across pages, so we can't safely advance
       // the watermark unless the source told us it was done (partial page = end). If we hit
-      // maxPages/maxRecords instead, we don't know what's in the un-fetched tail — leave the
-      // watermark where it was and let a subsequent run refetch and continue.
+      // maxPages/maxRecords instead, we persist the skip offset so the next run resumes
+      // further into the tail — otherwise a backfill larger than one bounded run would
+      // never converge. Skip-based pagination is inherently best-effort under concurrent
+      // writes; content-hashed record ids provide the safety net.
       const collected: FirefliesTranscript[] = [];
-      let skip = 0;
+      const parsedResume = resumeCursor ? Number.parseInt(resumeCursor, 10) : NaN;
+      let skip = Number.isFinite(parsedResume) && parsedResume >= 0 ? parsedResume : 0;
       const limit = 25;
       let drainedFully = false;
       for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
@@ -121,7 +129,6 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
         skip += parsed.data.transcripts.length;
         if (collected.length >= DEFAULT_MAX_RECORDS_PER_RUN) break;
       }
-      if (previousWatermark === undefined && collected.length === 0) drainedFully = true;
 
       // Oldest-first so a mid-run failure leaves the watermark low.
       collected.sort((a, b) => {
@@ -169,6 +176,9 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
 
       if (drainedFully && lastProcessed) {
         await writeWatermark(context.state, FIREFLIES_WATERMARK_KEY, lastProcessed);
+        await clearResumeCursor(context.state, FIREFLIES_RESUME_CURSOR_KEY);
+      } else if (!drainedFully) {
+        await writeResumeCursor(context.state, FIREFLIES_RESUME_CURSOR_KEY, String(skip));
       }
     },
   };

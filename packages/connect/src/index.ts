@@ -23,8 +23,11 @@ export {
   DEFAULT_MAX_RECORDS_PER_RUN,
   MAX_RECORD_TEXT,
   boundText,
+  clearResumeCursor,
   contentRecordId,
+  readResumeCursor,
   readWatermark,
   walkPages,
+  writeResumeCursor,
   writeWatermark,
 } from './importer-runtime.js';

@@ -168,7 +168,8 @@ describe('linear importer', () => {
     expect(seededWatermark).toBe(JSON.stringify({ watermark: '2026-08-01T00:00:00Z' }));
 
     // Second run: return one page that already exceeds DEFAULT_MAX_RECORDS_PER_RUN and signals
-    // hasNextPage: true. The record cap trips before the source exhausts — watermark must stay.
+    // hasNextPage: true. The record cap trips before the source exhausts — watermark must stay
+    // and the endCursor must be persisted so the next run resumes deeper into the tail.
     const bigNodes = Array.from({ length: 501 }, (_, i) => ({
       id: `i${i + 1}`,
       title: `Issue ${i + 1}`,
@@ -177,6 +178,29 @@ describe('linear importer', () => {
     request.mockResolvedValueOnce(issuesResponse(bigNodes, 'cursor-1'));
     await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
     expect(await state.get('linear:watermark')).toBe(seededWatermark);
+    expect(await state.get('linear:resume-cursor')).toBe(JSON.stringify({ cursor: 'cursor-1' }));
+  });
+
+  it('converges initial backfill by resuming from a persisted cursor and clearing it when drained', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    // Run 1: 501 issues on one page with hasNextPage=true. No prior watermark. Bails on record cap.
+    const pageA = Array.from({ length: 501 }, (_, i) => ({
+      id: `iA${i}`,
+      title: `A${i}`,
+      updatedAt: `2026-09-30T${String(i % 24).padStart(2, '0')}:00:00Z`,
+    }));
+    request.mockResolvedValueOnce(issuesResponse(pageA, 'cursor-A'));
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+    expect(await state.get('linear:watermark')).toBeUndefined();
+    expect(await state.get('linear:resume-cursor')).toBe(JSON.stringify({ cursor: 'cursor-A' }));
+
+    // Run 2: resumes from cursor-A, source exhausts pagination this time (no endCursor).
+    request.mockResolvedValueOnce(issuesResponse([{ id: 'iB0', title: 'B0', updatedAt: '2026-08-15T00:00:00Z' }]));
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+    const secondCall = request.mock.calls[1]![0]! as { body: { variables: { after?: string } } };
+    expect(secondCall.body.variables.after).toBe('cursor-A');
+    expect(await state.get('linear:watermark')).toBe(JSON.stringify({ watermark: '2026-08-15T00:00:00Z' }));
+    expect(await state.get('linear:resume-cursor')).toBe(JSON.stringify({ cursor: '' }));
   });
 
   it('rejects malformed payloads via zod', async () => {
