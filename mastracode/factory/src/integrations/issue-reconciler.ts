@@ -57,9 +57,28 @@ export type IssueReconciler<TScope = void> = TScope extends void
 function sameValue(left: unknown, right: unknown): boolean {
   if (Array.isArray(right)) {
     if (!Array.isArray(left)) return right.length === 0;
-    const leftStrings = left.filter((value): value is string => typeof value === 'string').slice().sort();
-    const rightStrings = right.filter((value): value is string => typeof value === 'string').slice().sort();
-    return leftStrings.length === rightStrings.length && leftStrings.every((value, index) => value === rightStrings[index]);
+    const leftStrings = left
+      .filter((value): value is string => typeof value === 'string')
+      .slice()
+      .sort();
+    const rightStrings = right
+      .filter((value): value is string => typeof value === 'string')
+      .slice()
+      .sort();
+    return (
+      leftStrings.length === rightStrings.length && leftStrings.every((value, index) => value === rightStrings[index])
+    );
+  }
+  if (right !== null && typeof right === 'object') {
+    if (left === null || typeof left !== 'object' || Array.isArray(left)) return false;
+    const leftRecord = left as Record<string, unknown>;
+    const rightRecord = right as Record<string, unknown>;
+    const leftKeys = Object.keys(leftRecord);
+    const rightKeys = Object.keys(rightRecord);
+    return (
+      leftKeys.length === rightKeys.length &&
+      rightKeys.every(key => Object.hasOwn(leftRecord, key) && sameValue(leftRecord[key], rightRecord[key]))
+    );
   }
   return left === right;
 }
@@ -90,9 +109,7 @@ function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId
   );
 }
 
-export function createIssueReconciler<TScope = void>(
-  options: IssueReconcilerOptions<TScope>,
-): IssueReconciler<TScope> {
+export function createIssueReconciler<TScope = void>(options: IssueReconcilerOptions<TScope>): IssueReconciler<TScope> {
   const run = async (scope?: IssueReconcileScope<TScope>): Promise<IssueReconcileSummary> => {
     const summary: IssueReconcileSummary = {
       projects: 0,
