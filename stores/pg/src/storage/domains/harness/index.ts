@@ -191,6 +191,7 @@ import type {
   HarnessTerminalRenewReceipt,
   HarnessTerminalResult,
   HarnessTerminalProjection,
+  HarnessTerminalAdmissionRecord,
   AckSessionRecordProjectionInput,
   AckSessionRecordProjectionResult,
   ClaimSessionRecordProjectionIntentsInput,
