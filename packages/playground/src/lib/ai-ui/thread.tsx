@@ -4,7 +4,7 @@ import type { AgentChatThreadInput } from '@mastra/playground-ui/domains/agents/
 import { ChatMessagesLoadingSkeleton } from '@mastra/playground-ui/domains/agents/chat/agent-loading-skeletons';
 import { Thread as BaseThread } from '@mastra/playground-ui/domains/agents/chat/thread';
 import type { ThreadProps } from '@mastra/playground-ui/domains/agents/chat/thread';
-import { useChatMessages } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { useChatMessages, useChatRunning } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { BranchForkMarker } from '@mastra/playground-ui/domains/chat/messages/branch-fork-marker';
 import { BranchFromMessageAction } from '@mastra/playground-ui/domains/chat/messages/branch-from-message-action';
 import { buildBranchForkMarkers } from '@mastra/playground-ui/domains/chat/messages/build-branch-fork-markers';
@@ -62,6 +62,7 @@ function StudioThreadFeatures({
   const readAloud = useReadAloud(props.agentId, requestContext, {
     onError: error => toast.error(error instanceof Error ? error.message : 'Voice generation failed.'),
   });
+  const { isRunning } = useChatRunning();
   const voiceCall = useVoiceCall({
     agentId: props.agentId,
     threadId: props.threadId,
@@ -81,6 +82,13 @@ function StudioThreadFeatures({
   );
   const branchMarkers = buildBranchForkMarkers(branchLineage);
 
+  // Only persisted messages have UUID ids; the chat accumulator renders
+  // streamed messages under synthetic ids (e.g. `text-<runId>-<ts>`) that the
+  // server cannot fork at. Hide the action while streaming and on synthetic
+  // ids rather than failing the branch with a 404.
+  const PERSISTED_MESSAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const canBranchMessage = (messageId: string) => canBranch && !isRunning && PERSISTED_MESSAGE_ID.test(messageId);
+
   const handleBranchFromMessage = async (messageId: string) => {
     if (!props.agentId || !props.threadId) return;
     const result = await branchThread({
@@ -93,11 +101,20 @@ function StudioThreadFeatures({
     }
   };
 
+  // Only persisted messages have UUID ids; the chat accumulator renders
+  // streamed messages under synthetic ids that the server cannot fork at.
+  const PERSISTED_MESSAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const canBranchMessage = (messageId: string) => canBranch && !isRunning && PERSISTED_MESSAGE_ID.test(messageId);
+
   const renderMessageFooter = (message: MastraDBMessage) =>
-    canBranch ? (
+    canBranchMessage(message.id) ? (
       <BranchFromMessageAction
         disabled={isBranching}
-        onBranch={() => void handleBranchFromMessage(message.id)}
+        onBranch={() => {
+          handleBranchFromMessage(message.id).catch(() =>
+            toast.error('Failed to branch thread'),
+          );
+        }}
       />
     ) : null;
 

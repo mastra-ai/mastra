@@ -150,4 +150,27 @@ test.describe('Thread branching', () => {
       await expect(page).toHaveURL(new RegExp(`/threads/${branchThreadId}$`));
     });
   });
+
+  test.describe('when the streamed reply is still rendered under a synthetic client id', () => {
+    test('does not offer branching on the synthetic message block', async () => {
+      await page.goto('/agents/weather-agent/chat/new');
+      await sendMessage(page, USER_MESSAGE);
+      await expect(assistantReply(page)).toBeVisible();
+
+      // Streamed blocks keep accumulator ids (text-*/start-*) that the server
+      // cannot fork at; the branch action must stay hidden on any message block
+      // whose id is not a persisted UUID.
+      const branchActionOnSyntheticBlock = await page.evaluate(() => {
+        const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        return Array.from(document.querySelectorAll('[data-message-id]'))
+          .filter(element => !uuid.test(element.getAttribute('data-message-id') ?? ''))
+          .some(element =>
+            Array.from(element.querySelectorAll('button')).some(
+              button => button.getAttribute('aria-label') === 'Branch from here',
+            ),
+          );
+      });
+      expect(branchActionOnSyntheticBlock).toBe(false);
+    });
+  });
 });
