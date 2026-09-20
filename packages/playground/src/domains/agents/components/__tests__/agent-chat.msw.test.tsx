@@ -1,3 +1,4 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -7,14 +8,13 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AgentChat } from '../agent-chat';
+import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
-import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
+import { emptyMcpServers, memoryDisabled, v2Agent } from '@/lib/ai-ui/__tests__/fixtures/agent';
 import { server } from '@/test/msw-server';
 
-import { emptyMcpServers, memoryDisabled, v2Agent } from '@/lib/ai-ui/__tests__/fixtures/agent';
-import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -59,9 +59,7 @@ const Wrapper = ({ children, threadId = 'thread-1' }: { children: ReactNode; thr
           <BrowserSessionProvider agentId="agent-1" threadId={threadId} enabled={false}>
             <WorkingMemoryProvider agentId="agent-1" threadId={threadId} resourceId="agent-1">
               <AgentSettingsProvider>
-                <ThreadInputProvider>
-                  {children}
-                </ThreadInputProvider>
+                <ThreadInputProvider>{children}</ThreadInputProvider>
               </AgentSettingsProvider>
             </WorkingMemoryProvider>
           </BrowserSessionProvider>
@@ -119,7 +117,7 @@ describe('AgentChat Pagination (useAgentMessages)', () => {
           supportsMemory={true}
           isNewThread={false}
         />
-      </Wrapper>
+      </Wrapper>,
     );
 
     // Initial load should display page 0
@@ -131,32 +129,28 @@ describe('AgentChat Pagination (useAgentMessages)', () => {
     // We shouldn't see page 1 yet
     expect(screen.queryByText('message 0')).toBeNull();
 
-    // Trigger loading previous (mock reaching scroll start)
     const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
-    expect(viewport).toBeTruthy();
+    if (!viewport) throw new Error('message scroller viewport not rendered');
+
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 400 });
 
     await act(async () => {
-      // Dispatch scroll event on the viewport to trigger `onReachStart` of react-scroll-to-bottom
-      if (viewport) {
-        Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 0 });
-        fireEvent.scroll(viewport);
-      }
+      viewport.scrollTop = 300;
+      fireEvent.scroll(viewport);
+      viewport.scrollTop = 0;
+      fireEvent.scroll(viewport);
     });
 
-    // Wait for the new messages to render
     await waitFor(() => {
       expect(screen.getByText('message 0')).toBeTruthy();
       expect(screen.getByText('message 1')).toBeTruthy();
     });
 
-    // Assert chronological ordering in the DOM output
-    const allMessageElements = document.querySelectorAll('[data-message-id]');
-    const messageTexts = Array.from(allMessageElements).map(
-      el => el.getAttribute('data-message-id')?.replace('m-', '')
+    const rendered = Array.from(document.querySelectorAll('[data-slot="message-scroller-item"]')).map(item =>
+      item.getAttribute('data-message-id')?.replace('m-', ''),
     );
-    
-    // Older page should appear BEFORE newer page!
-    // And within each page, older message should appear before newer message!
-    expect(messageTexts).toEqual(['message 0', 'message 1', 'message 2', 'message 3']);
+
+    expect(rendered).toEqual(['message 0', 'message 1', 'message 2', 'message 3']);
   });
 });

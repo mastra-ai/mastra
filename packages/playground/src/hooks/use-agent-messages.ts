@@ -16,7 +16,7 @@ export const useAgentMessages = ({ threadId, agentId, memory }: UseAgentMessages
   const { requestContext } = usePlaygroundStore();
 
   return useInfiniteQuery({
-    queryKey: ['memory', 'messages', threadId, agentId, 'requestContext'],
+    queryKey: ['memory', 'messages', threadId, agentId, requestContext],
     queryFn: async ({ pageParam }) => {
       if (!threadId) return null;
       return client.listThreadMessages(threadId, {
@@ -33,6 +33,8 @@ export const useAgentMessages = ({ threadId, agentId, memory }: UseAgentMessages
       if (!firstPage?.hasMore) return undefined;
       return (firstPageParam as number) + 1;
     },
+    // Nothing calls fetchNextPage; this walks a refetch back down the loaded pages
+    // (2 → 1 → 0), so dropping it would collapse the cache to the oldest page.
     getNextPageParam: (_lastPage, _allPages, lastPageParam) => {
       if (typeof lastPageParam === 'number' && lastPageParam > 0) {
         return lastPageParam - 1;

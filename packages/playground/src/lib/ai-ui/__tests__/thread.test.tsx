@@ -293,7 +293,7 @@ describe('Thread', () => {
 
       // The live messages should still be visible
       expect(screen.getByText('live question', { selector: 'p' })).toBeTruthy();
-      
+
       // The skeleton for fetching older messages should be rendered
       const skeletonColumn = screen.getByLabelText('Loading older messages');
       expect(skeletonColumn).toBeTruthy();

@@ -337,11 +337,16 @@ export function MessageScrollerProvider({
 
   const notifyScroll = React.useCallback(() => {
     const wasScrollable = Boolean(viewportElement && viewportElement.scrollHeight > viewportElement.clientHeight);
+    const readerWentBack = Boolean(viewportElement && viewportElement.scrollTop < lastScrollTopRef.current);
     updateScrollable({ fromScroll: true });
     updateVisibility();
     if (!viewportElement) return;
 
-    if (atEndRef.current && wasScrollable) reachStartArmedRef.current = true;
+    // Only a reader moving backwards asks for older history. A mount sitting at
+    // scrollTop 0 before the default scroll lands never moved, and a transcript
+    // that opens above its bottom — a last turn taller than the viewport — must
+    // not have to travel to the end first.
+    if (readerWentBack && wasScrollable) reachStartArmedRef.current = true;
 
     if (!reachStartArmedRef.current) return;
     if (!wasScrollable) return;

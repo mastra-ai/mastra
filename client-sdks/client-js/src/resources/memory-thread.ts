@@ -15,6 +15,32 @@ import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
 /**
+ * Serializes the message-listing filters both memory message routes accept. The network route
+ * takes the same filters under a different path, so the two callers share one serializer.
+ */
+export const memoryMessagesQuery = ({
+  agentId,
+  resourceId,
+  page,
+  perPage,
+  orderBy,
+  filter,
+  include,
+  includeSystemReminders,
+}: ListMemoryThreadMessagesParams): URLSearchParams => {
+  const query = new URLSearchParams();
+  if (agentId) query.set('agentId', agentId);
+  if (resourceId) query.set('resourceId', resourceId);
+  if (page !== undefined) query.set('page', String(page));
+  if (perPage !== undefined) query.set('perPage', String(perPage));
+  if (orderBy) query.set('orderBy', JSON.stringify(orderBy));
+  if (filter) query.set('filter', JSON.stringify(filter));
+  if (include) query.set('include', JSON.stringify(include));
+  if (includeSystemReminders !== undefined) query.set('includeSystemReminders', String(includeSystemReminders));
+  return query;
+};
+
+/**
  * MemoryThread resource for interacting with memory threads.
  *
  * `agentId` is optional for read operations (`get`, `listMessages`) — when omitted the server
@@ -110,21 +136,8 @@ export class MemoryThread extends BaseResource {
       requestContext?: RequestContext | Record<string, any>;
     } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
-    const { page, perPage, orderBy, filter, include, resourceId, requestContext, includeSystemReminders } = params;
-    const queryParams: Record<string, string> = {};
-
-    if (this.agentId) queryParams.agentId = this.agentId;
-    if (resourceId) queryParams.resourceId = resourceId;
-    if (page !== undefined) queryParams.page = String(page);
-    if (perPage !== undefined) queryParams.perPage = String(perPage);
-    if (orderBy) queryParams.orderBy = JSON.stringify(orderBy);
-    if (filter) queryParams.filter = JSON.stringify(filter);
-    if (include) queryParams.include = JSON.stringify(include);
-    if (includeSystemReminders !== undefined) queryParams.includeSystemReminders = String(includeSystemReminders);
-
-    const query = new URLSearchParams(queryParams);
-    const queryString = query.toString();
-    const url = `/memory/threads/${this.threadId}/messages${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`;
+    const query = memoryMessagesQuery({ ...params, agentId: params.agentId ?? this.agentId }).toString();
+    const url = `/memory/threads/${this.threadId}/messages${query ? `?${query}` : ''}${requestContextQueryString(params.requestContext, query ? '&' : '?')}`;
     return this.request(url);
   }
 
@@ -197,9 +210,7 @@ export class MemoryThread extends BaseResource {
  */
 function normalizeWriteOpts(
   opts:
-    | { agentId?: string; requestContext?: RequestContext | Record<string, any> }
-    | RequestContext
-    | Record<string, any>,
+    { agentId?: string; requestContext?: RequestContext | Record<string, any> } | RequestContext | Record<string, any>,
 ): { agentId?: string; requestContext?: RequestContext | Record<string, any> } {
   if (!opts || typeof opts !== 'object') return {};
   if ('agentId' in opts || 'requestContext' in opts) {

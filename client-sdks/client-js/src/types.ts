@@ -339,13 +339,15 @@ export type ResponsesStreamEvent =
   | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {
-  [K in keyof T as T[K] extends (...args: any[]) => any
-    ? never
-    : T[K] extends { (): any }
+  [
+    K in keyof T as T[K] extends (...args: any[]) => any
       ? never
-      : T[K] extends undefined | ((...args: any[]) => any)
+      : T[K] extends { (): any }
         ? never
-        : K]: T[K];
+        : T[K] extends undefined | ((...args: any[]) => any)
+          ? never
+          : K
+  ]: T[K];
 };
 
 export type NetworkStreamParams<OUTPUT = undefined> = {
@@ -483,12 +485,7 @@ export type ListDynamicWorkflowsResponse = GeneratedResponse<'GET /stored/workfl
 export type UpsertDynamicWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
 export type UpsertDynamicWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
 type DynamicWorkflowDefinitionField =
-  | 'description'
-  | 'inputSchema'
-  | 'outputSchema'
-  | 'stateSchema'
-  | 'requestContextSchema'
-  | 'graph';
+  'description' | 'inputSchema' | 'outputSchema' | 'stateSchema' | 'requestContextSchema' | 'graph';
 export type DynamicWorkflowDefinition = Omit<
   GeneratedResponse<'GET /stored/workflows/:dynamicWorkflowId'>,
   DynamicWorkflowDefinitionField
@@ -555,15 +552,8 @@ export type UpdateMemoryThreadParams = Omit<
     agentId?: string;
   };
 
-export type ListMemoryThreadMessagesParams = Omit<
-  GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/messages'>>,
-  'perPage'
-> &
+export type ListMemoryThreadMessagesParams = GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/messages'>> &
   RequestContextOptions & {
-    /** Number of messages per page, or `false` for an unpaged result. */
-    perPage?: number | false;
-    /** Optional agent ID. When provided, uses the agent's memory endpoint. */
-    agentId?: string;
     /** Optional network ID. When provided, uses the network memory endpoint. */
     networkId?: string;
   };
@@ -571,14 +561,6 @@ export type ListMemoryThreadMessagesParams = Omit<
 /** The route schema intentionally keeps persisted message payloads opaque. */
 export type ListMemoryThreadMessagesResponse = GeneratedResponse<'GET /memory/threads/:threadId/messages'> & {
   messages: MastraDBMessage[];
-  /** Total number of messages in the thread (server-side). Present on local-memory paths; absent on gateway. */
-  total?: number;
-  /** 0-based page index that was returned. */
-  page?: number;
-  /** Number of messages per page, or `false` for an unpaged result. */
-  perPage?: number | false;
-  /** Whether there are older messages on a subsequent page. */
-  hasMore?: boolean;
 };
 
 export type CloneMemoryThreadParams = Omit<
@@ -1912,11 +1894,7 @@ export type ToolProviderHealthResponse = GeneratedResponse<'GET /tool-providers/
  * Distinct from ProcessorPhase which uses the short/unprefixed form for processor endpoints.
  */
 export type ProcessorProviderPhase =
-  | 'processInput'
-  | 'processInputStep'
-  | 'processOutputStream'
-  | 'processOutputResult'
-  | 'processOutputStep';
+  'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep';
 
 export interface ProcessorProviderInfo {
   id: string;
@@ -2215,13 +2193,7 @@ export interface DeletePromptBlockVersionResponse {
 }
 
 export type BackgroundTaskStatus =
-  | 'pending'
-  | 'running'
-  | 'suspended'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
+  'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
 
 export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
 
@@ -2286,14 +2258,7 @@ export type WorkflowSchedule = Extract<
 export type ScheduleResponse = AgentSchedule | WorkflowSchedule;
 
 export type ScheduleTriggerOutcome =
-  | 'published'
-  | 'succeeded'
-  | 'delivered'
-  | 'persisted'
-  | 'discarded'
-  | 'skipped'
-  | 'aborted'
-  | 'failed';
+  'published' | 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
 
 export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 

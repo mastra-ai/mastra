@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import {
   Agent,
   MemoryThread,
+  memoryMessagesQuery,
   Tool,
   Processor,
   Workflow,
@@ -432,25 +433,14 @@ export class MastraClient extends BaseResource {
     threadId: string,
     opts: ListMemoryThreadMessagesParams = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
-    const params = new URLSearchParams();
-    if (opts.agentId) params.set('agentId', opts.agentId);
-    if (opts.page !== undefined) params.set('page', String(opts.page));
-    if (opts.perPage !== undefined) params.set('perPage', String(opts.perPage));
-    if (opts.orderBy) params.set('orderBy', JSON.stringify(opts.orderBy));
-    if (opts.includeSystemReminders !== undefined)
-      params.set('includeSystemReminders', String(opts.includeSystemReminders));
-
-    const qs = params.toString();
-    const sep = qs ? '&' : '?';
-
-    let url = '';
     if (opts.networkId) {
-      const networkQs = `networkId=${opts.networkId}${qs ? `&${qs}` : ''}`;
-      url = `/memory/network/threads/${threadId}/messages?${networkQs}${requestContextQueryString(opts.requestContext, '&')}`;
-    } else {
-      url = `/memory/threads/${threadId}/messages${qs ? `?${qs}` : ''}${requestContextQueryString(opts.requestContext, sep)}`;
+      const query = memoryMessagesQuery(opts);
+      query.set('networkId', opts.networkId);
+      return this.request(
+        `/memory/network/threads/${threadId}/messages?${query.toString()}${requestContextQueryString(opts.requestContext, '&')}`,
+      );
     }
-    return this.request(url);
+    return this.getMemoryThread({ threadId, agentId: opts.agentId }).listMessages(opts);
   }
 
   public deleteThread(
