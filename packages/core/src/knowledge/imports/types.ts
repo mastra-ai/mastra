@@ -83,6 +83,11 @@ export interface KnowledgeImporterDefinition<TPayload = unknown> {
   readonly handler: KnowledgeImporterHandler<TPayload>;
 }
 
+/** Resolves the current set of importer definitions, e.g. from live platform connections. */
+export type KnowledgeImporterResolver = () => Promise<readonly KnowledgeImporterDefinition[]>;
+
+export type KnowledgeImportersInput = readonly KnowledgeImporterDefinition[] | KnowledgeImporterResolver;
+
 export interface KnowledgeImporterRegistrationContext<TPayload = unknown> {
   readonly importerId: string;
   readonly access?: KnowledgeImporterAccess;

@@ -52,7 +52,7 @@ export class KnowledgeImporterRunner {
   readonly #knowledge: Knowledge;
   readonly #workerId = randomUUID();
   readonly #drains = new Map<string, Promise<void>>();
-  readonly #cronJobs: Cron[] = [];
+  readonly #cronJobs = new Map<string, Cron[]>();
   readonly #activeControllers = new Map<string, AbortController>();
   #recoveryTimer?: ReturnType<typeof setInterval>;
   #recoveryPromise?: Promise<void>;
@@ -65,8 +65,10 @@ export class KnowledgeImporterRunner {
 
   schedule<TPayload>(importer: KnowledgeImporterHandle<TPayload>): void {
     if (!this.#started || !this.#accepting || !importer.triggers.cron) return;
+    if (this.#cronJobs.has(importer.importerId)) return;
+    const jobs: Cron[] = [];
     for (const expression of cronExpressions(importer.triggers.cron)) {
-      this.#cronJobs.push(
+      jobs.push(
         new Cron(expression, () => {
           for (const binding of importer.triggers.cron!.bindings) {
             void this.enqueue(importer, binding, undefined, 'cron').catch(() => undefined);
@@ -74,6 +76,22 @@ export class KnowledgeImporterRunner {
         }),
       );
     }
+    this.#cronJobs.set(importer.importerId, jobs);
+  }
+
+  unschedule(importerId: string): void {
+    const jobs = this.#cronJobs.get(importerId);
+    if (!jobs) return;
+    jobs.forEach(job => job.stop());
+    this.#cronJobs.delete(importerId);
+  }
+
+  hasActiveRuns(importerId: string): boolean {
+    for (const key of this.#drains.keys()) {
+      const [drainImporterId] = JSON.parse(key) as [string, string];
+      if (drainImporterId === importerId) return true;
+    }
+    return false;
   }
 
   async start(): Promise<void> {
@@ -118,7 +136,8 @@ export class KnowledgeImporterRunner {
   async shutdown(): Promise<void> {
     if (!this.#accepting) return;
     this.#accepting = false;
-    this.#cronJobs.splice(0).forEach(job => job.stop());
+    this.#cronJobs.forEach(jobs => jobs.forEach(job => job.stop()));
+    this.#cronJobs.clear();
     if (this.#recoveryTimer) clearInterval(this.#recoveryTimer);
     this.#activeControllers.forEach(controller => controller.abort(new Error('Knowledge importer is shutting down')));
     const drains = Promise.allSettled([
@@ -319,6 +338,7 @@ export class KnowledgeImporterRunner {
   }
 
   async #recoverAndDrain(): Promise<void> {
+    await this.#knowledge.reconcileImportersInternal();
     const storage = await this.#knowledge.getStorageInternal();
     const staleBefore = new Date(Date.now() - LEASE_TIMEOUT_MS);
     for (const importer of this.#knowledge.listImporters()) {

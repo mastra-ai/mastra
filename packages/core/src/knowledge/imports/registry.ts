@@ -207,6 +207,10 @@ export class KnowledgeImporterRegistry {
     return this.#byId.get(id);
   }
 
+  remove(id: string): void {
+    this.#byId.delete(id);
+  }
+
   list(): KnowledgeImporterHandle[] {
     return [...this.#byId.values()];
   }
