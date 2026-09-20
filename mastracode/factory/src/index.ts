@@ -19,6 +19,7 @@ export type {
   WorkBoardPhase,
 } from './boards/index.js';
 export { MastraFactory } from './factory.js';
+export { factoryProjectScopes, withProjectScopedIntegrations } from './knowledge/project-scopes.js';
 export type { MastraArgs, MastraFactoryConfig, MastraFactorySandboxConfig, FactorySandboxStart } from './factory.js';
 export type { FactorySandboxContext, SessionSetupGate, SessionSetupRun } from './sandbox/session-sandbox.js';
 export { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';

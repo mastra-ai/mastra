@@ -22,6 +22,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Knowledge } from '@mastra/core/knowledge';
 import type { MaterializeKnowledgeScopeInput } from '@mastra/core/knowledge';
+import { importers as platformImporters } from '@mastra/connect';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
@@ -32,7 +33,7 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
-import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
+import { createFactorySecretEncryption, factoryProjectScopes, MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
 import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
@@ -286,11 +287,50 @@ const demoRepositoryMatch = /^([^/]+)\/([^/]+)$/.exec(demoRepository);
 if (demoKnowledgeEnabled && !demoRepositoryMatch) {
   throw new Error('MASTRACODE_DEMO_GITHUB_REPOSITORY must use the form owner/repository.');
 }
+// If the platform env is present, wire the six Connect importers (Notion,
+// Confluence, Jira, Linear, Zendesk, Fireflies) into the demo Knowledge.
+// Every provider syncs into the project-level resource scope. Missing
+// connections warn-and-skip inside `importers()` — safe to leave enabled
+// unconditionally.
+const platformImportersEnabled = Boolean(
+  (process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim()) &&
+    process.env.MASTRA_PROJECT_ID?.trim(),
+);
+// Factory's `/knowledge/importers` route filters bindings by
+// `resource:${factoryProjectId}` — the Factory project's own UUID (the one
+// in the URL). Destination scopes are resolved dynamically at each cron
+// fire via `factoryProjectScopes(storage)`: one `resource:<projectId>` per
+// Factory project, so every project's Importers tab sees the bindings and
+// new projects start syncing without a restart. The parameterized access
+// grant (`resource:$projectId`) makes each resolved scope writable.
+const demoImportersResolver = (() => {
+  if (!demoKnowledgeEnabled || !platformImportersEnabled) return undefined;
+  const scopes = factoryProjectScopes(storage);
+  const integrationConfig = (role: 'owner' | 'edit') =>
+    ({ access: { 'resource:$projectId': role }, scopes }) as const;
+  try {
+    return platformImporters({
+      integrations: {
+        notion: integrationConfig('owner'),
+        confluence: integrationConfig('owner'),
+        jira: integrationConfig('edit'),
+        linear: integrationConfig('edit'),
+        zendesk: integrationConfig('edit'),
+        fireflies: integrationConfig('edit'),
+      },
+    });
+  } catch (error) {
+    console.warn('[demo-knowledge] Skipping Connect importers:', error instanceof Error ? error.message : error);
+    return undefined;
+  }
+})();
+
 const demoKnowledge = demoKnowledgeEnabled
   ? new Knowledge({
       id: 'mastra',
       description: 'Local Factory demo knowledge imported from the latest GitHub pull requests.',
       storage: storage.getMastraStorage(),
+      ...(demoImportersResolver ? { importers: demoImportersResolver } : {}),
     })
   : undefined;
 const demoImportRuns = new Map<string, Promise<void>>();
@@ -677,6 +717,19 @@ export const factory = new MastraFactory({
             contextualScopeAddress: builtInScopes.resource.address,
             parameters: { repository: demoRepository },
           };
+          // Materialize the parent scopes (org → resource) in dependency
+          // order BEFORE returning the profile. Factory's own pass over the
+          // profile fans out `materializeScope` calls concurrently across the
+          // whole scope set, so if `resource:<projectId>` doesn't already
+          // exist the demo's `resource:*:github:*` child would race its
+          // parent and fail with "Knowledge parent scope does not exist".
+          // Idempotent on subsequent visits.
+          if (!(await knowledge.resolveScopeAddress(builtInScopes.org.address))) {
+            await knowledge.materializeScope(builtInScopes.org);
+          }
+          if (!(await knowledge.resolveScopeAddress(builtInScopes.resource.address))) {
+            await knowledge.materializeScope(builtInScopes.resource);
+          }
           await configureDemoKnowledgeProject({
             knowledge,
             projectId,

@@ -25,6 +25,7 @@
   "dependencies": {
     "@mastra/auth-workos": "link:../../auth/workos",
     "@mastra/code-sdk": "link:../sdk",
+    "@mastra/connect": "link:../../packages/connect",
     "@mastra/core": "link:../../packages/core",
     "@mastra/factory": "link:../factory",
     "@mastra/libsql": "link:../../stores/libsql",
