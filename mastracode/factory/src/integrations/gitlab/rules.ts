@@ -480,6 +480,7 @@ export class GitLabRules {
               assignees: usernames(input.parsed.payload.assignees ?? input.mergeRequest?.assignees),
               reviewers: usernames(input.parsed.payload.reviewers ?? input.mergeRequest?.reviewers),
               labels: labelNames(input.mergeRequest?.labels ?? input.parsed.payload.labels),
+              labelColors: labelColors(input.mergeRequest?.labels ?? input.parsed.payload.labels),
               ...(mergeRequestAuthor ? { author: mergeRequestAuthor } : {}),
               authorTrusted: input.mergeRequestAuthorTrusted,
               factoryAuthored: input.factoryAuthored,

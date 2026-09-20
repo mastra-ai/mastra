@@ -113,6 +113,7 @@ function materializeMergeRequest(context: FactoryGitLabRuleContext) {
       assignees: context.mergeRequest.assignees ?? [],
       requestedReviewers: context.mergeRequest.reviewers ?? [],
       labels: context.mergeRequest.labels ?? [],
+      labelColors: context.mergeRequest.labelColors ?? {},
       headBranch: context.mergeRequest.headBranch,
       baseBranch: context.mergeRequest.baseBranch,
       ...(context.mergeRequest.author ? { author: context.mergeRequest.author } : {}),

@@ -360,6 +360,7 @@ export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
     assignees?: string[];
     reviewers?: string[];
     labels?: string[];
+    labelColors?: Record<string, string>;
     author?: string;
     authorTrusted: boolean;
     factoryAuthored: boolean;

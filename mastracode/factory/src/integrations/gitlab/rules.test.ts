@@ -66,6 +66,7 @@ function mergeRequestOpened(deliveryId = 'delivery-mr-1', author = 'maintainer')
       },
       assignees: [{ username: 'grace' }],
       reviewers: [{ username: 'linus' }],
+      labels: [{ title: 'review-needed', color: '#428BCA' }],
     },
   } as const;
 }
@@ -346,6 +347,8 @@ describe('GitLabRules', () => {
             authorTrusted: true,
             assignees: ['grace'],
             requestedReviewers: ['linus'],
+            labels: ['review-needed'],
+            labelColors: { 'review-needed': '#428BCA' },
             headBranch: 'feature-17',
             baseBranch: 'main',
           },
