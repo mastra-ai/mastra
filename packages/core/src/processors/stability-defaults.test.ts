@@ -129,6 +129,17 @@ describe('default stability StreamErrorRetryProcessor policy', () => {
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 2 }))).resolves.toBeUndefined();
   });
 
+  it('retries an unknown error when the caller opts into `retryUnknownErrors`', async () => {
+    const processor = defaultStabilityErrorProcessors({ retryUnknownErrors: true })[2];
+    const error = new Error('completely unknown failure');
+
+    await expect(
+      (processor as { processAPIError: (args: unknown) => Promise<unknown> }).processAPIError(
+        makeArgs({ error, retryCount: 0 }),
+      ),
+    ).resolves.toEqual({ retry: true });
+  });
+
   it('does not retry an unknown error that is neither retryable nor matched', async () => {
     // The default stays off `retryUnknownErrors` so a deterministic failure —
     // a rejected structured-output attempt, an invalid request, a validation

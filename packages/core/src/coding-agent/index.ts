@@ -134,7 +134,9 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  *   then prefill-error recovery, then catch-all stream retries with specialized
  *   ECONNRESET/bad-request policies. The repairs run before the retry because
  *   error processors short-circuit on the first `retry: true`, and the retry's
- *   bad-request matcher claims the same `400`s they repair.
+ *   bad-request matcher claims the same `400`s they repair. Unlike a bare
+ *   agent's defaults, this stack also retries unmatched errors, which is the
+ *   portable coding agent's long-standing behavior.
  * - `goal.prompt` defaults to {@link DEFAULT_GOAL_JUDGE_PROMPT} when a goal is
  *   configured without one.
  *
@@ -174,16 +176,22 @@ export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
     memory,
     workspace,
     signals: resolvedSignals,
-    // CyberRefusalHandler also sits in the error lane (see defaultErrorProcessors)
-    // for OpenAI refusals; here it catches Anthropic refusals, which finish a
-    // step instead of throwing.
+    // CyberRefusalHandler also sits in the error lane (via outputProcessors,
+    // see below) for OpenAI refusals; here it catches Anthropic refusals, which
+    // finish a step instead of throwing.
     outputProcessors: outputProcessors ?? [new CyberRefusalHandler()],
-    errorProcessors: errorProcessors ?? defaultErrorProcessors(),
+    errorProcessors:
+      errorProcessors ??
+      // Shared stability defaults; a CyberRefusalHandler is appended only when
+      // the caller configured outputProcessors — in that case the default
+      // output-lane handler is not built, so nothing else covers refusals.
+      outputProcessors
+        ? [...defaultStabilityErrorProcessors({ retryUnknownErrors: true }), new CyberRefusalHandler()]
+        : defaultStabilityErrorProcessors({ retryUnknownErrors: true }),
     // Output-step retries only read the raw option; the implicit error-lane cap
     // from `resolveMaxProcessorRetries` never reaches them. Default it here so
     // the default output-lane handler can retry instead of ending as a tripwire.
     maxProcessorRetries: rest.maxProcessorRetries ?? DEFAULT_MAX_PROCESSOR_RETRIES,
-    errorProcessors: errorProcessors ?? defaultStabilityErrorProcessors(),
     ...(resolvedGoal ? { goal: resolvedGoal } : {}),
   });
 }

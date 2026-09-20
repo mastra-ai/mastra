@@ -65,13 +65,14 @@ export const STABILITY_ERROR_PROCESSOR_IDS = [
  * - transient stream/connection failures — including a bare `500`/`isRetryable`
  *   error that would otherwise surface as an empty response.
  *
- * The retry processor keeps `retryUnknownErrors` off. Transient failures carry
- * provider `isRetryable` metadata or match the built-in matchers, so the three
- * classes above still recover, while a deterministic failure — a rejected
- * structured-output attempt, an invalid request, a validation error — is not
- * replayed twice with a 3s delay before the caller sees it. Pass a
- * `StreamErrorRetryProcessor({ retryUnknownErrors: true })` in
- * `errorProcessors` to opt back in.
+ * The retry processor keeps `retryUnknownErrors` off by default. Transient
+ * failures carry provider `isRetryable` metadata or match the built-in matchers,
+ * so the three classes above still recover, while a deterministic failure — a
+ * rejected structured-output attempt, an invalid request, a validation error —
+ * is not replayed twice with a 3s delay before the caller sees it. Pass
+ * `{ retryUnknownErrors: true }` here, or a
+ * `StreamErrorRetryProcessor({ retryUnknownErrors: true })` in `errorProcessors`,
+ * to opt in.
  *
  * A caller-supplied processor whose id matches one of these keeps its place at
  * that id's position; `errorProcessors: []` opts out entirely.
@@ -79,12 +80,21 @@ export const STABILITY_ERROR_PROCESSOR_IDS = [
  * Returns a fresh array of fresh instances on every call — never a shared
  * mutable array.
  */
-export function defaultStabilityErrorProcessors(): ErrorProcessorOrWorkflow[] {
+export function defaultStabilityErrorProcessors(
+  options: {
+    /**
+     * Retry errors that match no matcher and carry no `isRetryable` metadata.
+     * Off by default: it turns one rejected model call into three. Callers that
+     * want it — `createCodingAgent` does, and tests it — opt in.
+     */
+    retryUnknownErrors?: boolean;
+  } = {},
+): ErrorProcessorOrWorkflow[] {
   return [
     new ProviderHistoryCompat(),
     new PrefillErrorHandler(),
     new StreamErrorRetryProcessor({
-      retryUnknownErrors: false,
+      retryUnknownErrors: options.retryUnknownErrors ?? false,
       maxRetries: 2,
       delayMs: 3000,
       matchers: [
