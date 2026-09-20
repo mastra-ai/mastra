@@ -4,11 +4,13 @@ export const omConfig: OMConfigInfo = {
   observer: {
     model: 'p/observer',
     effectiveModelId: 'p/observer',
+    effectiveModelSource: 'explicit',
     providerStatus: 'available',
   },
   reflector: {
     model: 'p/reflector',
     effectiveModelId: 'p/reflector',
+    effectiveModelSource: 'explicit',
     providerStatus: 'available',
   },
   observerModelId: 'p/observer',

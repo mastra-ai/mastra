@@ -995,8 +995,16 @@ describe('OM routes with a tenant', () => {
 
     expect(res.status).toBe(200);
     expect((await res.json()).config).toMatchObject({
-      observer: { model: 'auto', effectiveModelId: 'openai/gpt-5.4-mini' },
-      reflector: { model: 'auto', effectiveModelId: 'openai/gpt-5.4-mini' },
+      observer: {
+        model: 'auto',
+        effectiveModelId: 'openai/gpt-5.4-mini',
+        effectiveModelSource: 'configured-default',
+      },
+      reflector: {
+        model: 'auto',
+        effectiveModelId: 'openai/gpt-5.4-mini',
+        effectiveModelSource: 'configured-default',
+      },
     });
   });
 
@@ -1014,8 +1022,17 @@ describe('OM routes with a tenant', () => {
 
     expect(res.status).toBe(200);
     expect((await res.json()).config).toMatchObject({
-      observer: { model: 'auto', effectiveModelId: 'deepseek/deepseek-v4-flash', providerStatus: 'available' },
-      reflector: { model: 'auto', effectiveModelId: 'deepseek/deepseek-v4-flash' },
+      observer: {
+        model: 'auto',
+        effectiveModelId: 'deepseek/deepseek-v4-flash',
+        effectiveModelSource: 'live-session',
+        providerStatus: 'available',
+      },
+      reflector: {
+        model: 'auto',
+        effectiveModelId: 'deepseek/deepseek-v4-flash',
+        effectiveModelSource: 'live-session',
+      },
     });
   });
 

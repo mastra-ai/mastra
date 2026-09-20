@@ -288,46 +288,52 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
         // the same title in its thread list and active-session chrome. Title
         // generation takes the primary OM model only — its model field does not
         // accept fallback arrays.
-        generateTitle: {
-          model: ({ requestContext }) => {
-            const resolved = getObserverModel({ requestContext });
-            return Array.isArray(resolved) ? resolved[0]!.model : resolved;
-          },
-        },
-        observationalMemory: {
-          enabled: true,
-          temporalMarkers: true,
-          retrieval: vector ? { vector: true } : true,
-          experimental_subconscious: subconsciousAvailable
-            ? new Subconscious({
-                defaultScope: 'resource',
-                maxScope: 'resource',
-                pins: true,
-                ...(isFactory ? { maxSteps: 25 } : {}),
-              })
-            : undefined,
-          scope: omScope,
-          activateAfterIdle: 'auto',
-          activateOnProviderChange: true,
-          observation: {
-            bufferTokens: isResourceScope ? false : 1 / 5,
-            bufferActivation: isResourceScope ? undefined : 2000,
-            model: getObserverModel,
-            messageTokens: obsThreshold,
-            blockAfter: 2,
-            previousObserverTokens: observerPreviousObservationTokens,
-            threadTitle: true,
-            instruction: observerInstruction,
-            observeAttachments,
-          },
-          reflection: {
-            bufferActivation: isResourceScope ? undefined : 1 / 2,
-            blockAfter: 1.1,
-            model: getReflectorModel,
-            observationTokens: refThreshold,
-            instruction: reflectionInstruction,
-          },
-        },
+        generateTitle:
+          process.env.MC_E2E_DISABLE_OBSERVATIONAL_MEMORY === '1'
+            ? false
+            : {
+                model: ({ requestContext }) => {
+                  const resolved = getObserverModel({ requestContext });
+                  return Array.isArray(resolved) ? resolved[0]!.model : resolved;
+                },
+              },
+        observationalMemory:
+          process.env.MC_E2E_DISABLE_OBSERVATIONAL_MEMORY === '1'
+            ? false
+            : {
+                enabled: true,
+                temporalMarkers: true,
+                retrieval: vector ? { vector: true } : true,
+                experimental_subconscious: subconsciousAvailable
+                  ? new Subconscious({
+                      defaultScope: 'resource',
+                      maxScope: 'resource',
+                      pins: true,
+                      ...(isFactory ? { maxSteps: 25 } : {}),
+                    })
+                  : undefined,
+                scope: omScope,
+                activateAfterIdle: 'auto',
+                activateOnProviderChange: true,
+                observation: {
+                  bufferTokens: isResourceScope ? false : 1 / 5,
+                  bufferActivation: isResourceScope ? undefined : 2000,
+                  model: getObserverModel,
+                  messageTokens: obsThreshold,
+                  blockAfter: 2,
+                  previousObserverTokens: observerPreviousObservationTokens,
+                  threadTitle: true,
+                  instruction: observerInstruction,
+                  observeAttachments,
+                },
+                reflection: {
+                  bufferActivation: isResourceScope ? undefined : 1 / 2,
+                  blockAfter: 1.1,
+                  model: getReflectorModel,
+                  observationTokens: refThreshold,
+                  instruction: reflectionInstruction,
+                },
+              },
       },
     });
     cachedMemoryKey = cacheKey;

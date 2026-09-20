@@ -19,7 +19,6 @@ import { Segmented } from './SettingsFields';
 type AttachmentChoice = 'auto' | 'on' | 'off';
 type OMRole = 'observer' | 'reflector';
 
-
 function attachmentToChoice(value: 'auto' | boolean): AttachmentChoice {
   if (value === true) return 'on';
   if (value === false) return 'off';
@@ -159,7 +158,9 @@ export function OMSection({
             disabled={busy || !config}
             onClick={() => resetModel('observer')}
           >
-            {config?.observer.model === 'auto' ? `Auto (${config.observer.effectiveModelId})` : 'Auto'}
+            {config?.observer.model === 'auto'
+              ? `Auto (${config.observer.effectiveModelSource === 'configured-default' ? 'configured default: ' : ''}${config.observer.effectiveModelId})`
+              : 'Auto'}
           </Button>
           <ModelCombobox
             models={models}
@@ -182,7 +183,9 @@ export function OMSection({
             disabled={busy || !config}
             onClick={() => resetModel('reflector')}
           >
-            {config?.reflector.model === 'auto' ? `Auto (${config.reflector.effectiveModelId})` : 'Auto'}
+            {config?.reflector.model === 'auto'
+              ? `Auto (${config.reflector.effectiveModelSource === 'configured-default' ? 'configured default: ' : ''}${config.reflector.effectiveModelId})`
+              : 'Auto'}
           </Button>
           <ModelCombobox
             models={models}

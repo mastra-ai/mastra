@@ -6,6 +6,7 @@ export const omThresholdPersistenceScenario: McE2eScenario = {
   name: 'om-threshold-persistence',
   description: 'Persists OM observation/reflection thresholds globally and on the active thread through the real TUI.',
   testName: 'restores and updates OM threshold settings through /om',
+  disableMemory: false,
   useOpenAIModel: true,
   aimockFixture: 'om-threshold-persistence.json',
   prepare({ appDataDir }) {

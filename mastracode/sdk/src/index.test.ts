@@ -121,11 +121,6 @@ vi.mock('./mcp/index.js', () => ({ createMcpManager: vi.fn() }));
 vi.mock('./onboarding/packs.js', () => ({
   getAvailableModePacks: vi.fn(() => []),
   getAvailableOmPacks: vi.fn(() => []),
-  selectPreferredOMPack: vi.fn(() => undefined),
-}));
-
-vi.mock('./onboarding/om-settings.js', () => ({
-  hasExplicitOMConfiguration: vi.fn(() => false),
 }));
 
 vi.mock('./onboarding/settings.js', () => ({
@@ -341,33 +336,6 @@ describe('settings.json OM seeding', () => {
     } finally {
       vi.mocked(resolveOmRoleModel).mockReturnValue('');
       vi.mocked(loadSettings).mockReturnValue(baseSettings);
-    }
-  });
-
-  it('leaves OM models unset when the user already configured OM', async () => {
-    const { selectPreferredOMPack } = await import('./onboarding/packs.js');
-    const { hasExplicitOMConfiguration } = await import('./onboarding/om-settings.js');
-    const { resolveOmRoleModel } = await import('./onboarding/settings.js');
-    vi.mocked(resolveOmRoleModel).mockReturnValue(null);
-    vi.mocked(hasExplicitOMConfiguration).mockReturnValue(true);
-    vi.mocked(selectPreferredOMPack).mockReturnValue({
-      id: 'openai',
-      name: 'OpenAI Mini',
-      description: 'Via Codex subscription',
-      modelId: 'openai/gpt-5.4-mini',
-    });
-    const { createMastraCode } = await import('./index.js');
-
-    try {
-      await createMastraCode({ cwd: '/tmp/project-explicit-om' });
-
-      expect(controllerInitialStates).toHaveLength(1);
-      expect(controllerInitialStates[0]!.observerModelId).toBeUndefined();
-      expect(controllerInitialStates[0]!.reflectorModelId).toBeUndefined();
-    } finally {
-      vi.mocked(resolveOmRoleModel).mockReturnValue('');
-      vi.mocked(hasExplicitOMConfiguration).mockReturnValue(false);
-      vi.mocked(selectPreferredOMPack).mockReturnValue(undefined);
     }
   });
 

@@ -124,7 +124,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'model',
             type: "'auto' | string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]",
             description:
-              "Model for the Observer agent. Use `'auto'` to select from the calling agent's effective model provider on each observation. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.",
+              "Model for the Observer agent. With `'auto'`, each observation uses the Gemini default when `GOOGLE_GENERATIVE_AI_API_KEY` is set, otherwise a low-cost model for the calling agent's effective provider, then the calling model or configured model instance. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.",
             isOptional: true,
           },
           {
@@ -300,7 +300,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'model',
             type: "'auto' | string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]",
             description:
-              "Model for the Reflector agent. Use `'auto'` to select from the calling agent's effective model provider on each reflection. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.",
+              "Model for the Reflector agent. With `'auto'`, each reflection uses the Gemini default when `GOOGLE_GENERATIVE_AI_API_KEY` is set, otherwise a low-cost model for the calling agent's effective provider, then the calling model or configured model instance. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.",
             isOptional: true,
           },
           {

@@ -122,6 +122,7 @@ describe('useUpdateOMModel', () => {
               observer: {
                 model: 'p/new-observer',
                 effectiveModelId: 'p/new-observer',
+                effectiveModelSource: 'explicit',
                 providerStatus: 'available',
               },
               observerModelId: 'p/new-observer',
@@ -159,6 +160,7 @@ describe('useUpdateOMModel', () => {
               reflector: {
                 model: 'auto',
                 effectiveModelId: 'openai/gpt-5.4-mini',
+                effectiveModelSource: 'live-session',
                 providerStatus: 'available',
               },
               reflectorModelId: 'openai/gpt-5.4-mini',
@@ -182,6 +184,7 @@ describe('useUpdateOMModel', () => {
       expect(result.current.query.data?.config.reflector).toEqual({
         model: 'auto',
         effectiveModelId: 'openai/gpt-5.4-mini',
+        effectiveModelSource: 'live-session',
         providerStatus: 'available',
       });
     });
