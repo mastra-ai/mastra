@@ -107,8 +107,22 @@ export class KnowledgeImporterRunner {
       if (!Array.isArray(result)) {
         throw new Error('Knowledge importer cron resolveBindings must return an array of bindings');
       }
-      resolved = result;
-      this.#lastResolvedBindings.set(importer.importerId, result);
+      // Validate before caching so a fallback fire never re-logs an invalid
+      // entry the resolver produced on an earlier fire.
+      const valid: KnowledgeImporterBindingInput[] = [];
+      for (const binding of result) {
+        try {
+          knowledgeImporterBindingKey(binding);
+          valid.push(binding);
+        } catch (error) {
+          this.#knowledge.warnInternal(
+            `Knowledge importer ${importer.importerId} cron resolveBindings produced an invalid binding; skipping it`,
+            { error },
+          );
+        }
+      }
+      resolved = valid;
+      this.#lastResolvedBindings.set(importer.importerId, valid);
     } catch (error) {
       const lastGood = this.#lastResolvedBindings.get(importer.importerId);
       this.#knowledge.warnInternal(
@@ -123,16 +137,7 @@ export class KnowledgeImporterRunner {
 
     const byKey = new Map<string, KnowledgeImporterBindingInput>();
     for (const binding of staticBindings) byKey.set(knowledgeImporterBindingKey(binding), binding);
-    for (const binding of resolved) {
-      try {
-        byKey.set(knowledgeImporterBindingKey(binding), binding);
-      } catch (error) {
-        this.#knowledge.warnInternal(
-          `Knowledge importer ${importer.importerId} cron resolveBindings produced an invalid binding; skipping it`,
-          { error },
-        );
-      }
-    }
+    for (const binding of resolved) byKey.set(knowledgeImporterBindingKey(binding), binding);
     return [...byKey.values()];
   }
 
@@ -196,6 +201,7 @@ export class KnowledgeImporterRunner {
     this.#accepting = false;
     this.#cronJobs.forEach(jobs => jobs.forEach(job => job.stop()));
     this.#cronJobs.clear();
+    this.#lastResolvedBindings.clear();
     if (this.#recoveryTimer) clearInterval(this.#recoveryTimer);
     this.#activeControllers.forEach(controller => controller.abort(new Error('Knowledge importer is shutting down')));
     const drains = Promise.allSettled([
