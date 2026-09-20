@@ -6,7 +6,7 @@ import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
  * default when no row exists) syncs into every Factory project; `'selected'`
  * restricts the sync to the listed project ids. One row per connection —
  * platform connection ids are globally unique, so the connection id alone
- * keys the row; `org_id` is kept for tenancy-scoped listing and audit.
+ * keys the row; `org_id` is kept for audit.
  */
 export interface KnowledgeImporterRoutingRecord {
   orgId: string;

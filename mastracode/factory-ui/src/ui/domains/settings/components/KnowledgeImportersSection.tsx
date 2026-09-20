@@ -80,11 +80,11 @@ function ConnectionRoutingControl({
   const [draftAll, setDraftAll] = useState(true);
   const [draftIds, setDraftIds] = useState<ReadonlySet<string>>(new Set());
 
-  // Routing routes only mount when the Factory wires the routing storage
-  // domain — on an older server the query 403/404s and the control hides
-  // entirely rather than advertising a dead Change button. A transient
-  // failure (5xx, network) gets a retry instead, so a blip doesn't silently
-  // hide where the connection syncs to.
+  // A 403/404 means the feature isn't offered for this connection — an
+  // older server without the routing routes, or a connection this provider
+  // doesn't own — so the control hides rather than advertising a dead
+  // Change button. A transient failure (5xx, network) gets a retry instead,
+  // so a blip doesn't silently hide where the connection syncs to.
   if (routingQuery.isError && isPlatformConnectUnavailableError(routingQuery.error)) return null;
   if (routingQuery.isError) {
     return (

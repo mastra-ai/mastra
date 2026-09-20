@@ -606,6 +606,7 @@ describe('MastraFactory.prepare', () => {
       'queue-health',
       'integrations',
       'projects',
+      'importer-routing',
       'filesystem',
       'source-control',
       'channel-identity',
