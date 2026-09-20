@@ -38,8 +38,21 @@ export interface ImporterProviderRegistration {
   createImporter: (ctx: ImporterProviderContext) => KnowledgeImporterDefinition;
 }
 
-/** Providers with shipped knowledge importers. Filled by the per-provider importer modules. */
+/**
+ * Providers with shipped knowledge importers, in alphabetical order by
+ * integration id. Populated by the per-provider `importer.ts` modules via
+ * `registerImporterProvider()` during module load (matches the `PROVIDERS`
+ * barrel pattern in `providers/index.ts`).
+ */
 export const IMPORTERS: readonly ImporterProviderRegistration[] = [];
+
+/** @internal Provider-module registration; not for host consumption. */
+export function registerImporterProvider(registration: ImporterProviderRegistration): void {
+  const list = IMPORTERS as ImporterProviderRegistration[];
+  if (list.some(p => p.integrationId === registration.integrationId)) return;
+  list.push(registration);
+  list.sort((a, b) => a.integrationId.localeCompare(b.integrationId));
+}
 
 export function findImporterRegistration(integrationId: string): ImporterProviderRegistration | undefined {
   return IMPORTERS.find(p => p.integrationId === integrationId);
