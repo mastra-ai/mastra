@@ -22,11 +22,14 @@
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
+import { importers as importersFromConnect } from '@mastra/connect';
+import type { ImportersOptions } from '@mastra/connect';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
-import type { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge } from '@mastra/core/knowledge';
+import type { KnowledgeImportersInput } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
@@ -183,9 +186,30 @@ export interface MastraFactoryConfig {
   vector?: MastraVector;
   /**
    * Host-owned Knowledge runtime. Factory registers this exact instance under `key` and uses that
-   * key for its read surfaces. Omitted leaves Mastra Code's experimental default wiring in place.
+   * key for its read surfaces. Omitted lets Factory auto-construct one from {@link importers}.
    */
   knowledge?: { key: string; instance: Knowledge };
+  /**
+   * Controls Factory's auto-constructed Knowledge instance (only consulted when
+   * {@link knowledge} is omitted).
+   *
+   * - An array of `KnowledgeImporterDefinition` or an async resolver → wire
+   *   those importers into a freshly-constructed `Knowledge({ id: 'factory' })`.
+   * - `false` → never auto-construct (explicit opt-out even if platform env is
+   *   present).
+   * - Omitted → Factory will call `importers()` from `@mastra/connect` if both
+   *   `MASTRA_PLATFORM_ACCESS_TOKEN` (or `_SECRET_KEY`) and `MASTRA_PROJECT_ID`
+   *   are set; otherwise it skips auto-construction silently. As a dev
+   *   override, `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1` allows auto-construction
+   *   with an empty importer set (no live syncs, but the routes work).
+   */
+  importers?: KnowledgeImportersInput | false;
+  /**
+   * Passed straight to `importers()` when Factory auto-constructs (i.e. only
+   * consulted when {@link knowledge} and {@link importers} are both omitted and
+   * platform env is present). Ignored otherwise.
+   */
+  importersOptions?: Omit<ImportersOptions, 'client'>;
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -415,6 +439,66 @@ function invalidSandboxOptionMessage(option: unknown): string {
     }
   }
   return lines.join('\n');
+}
+
+/**
+ * Resolve the effective `Knowledge` instance for a Factory:
+ *
+ * 1. If the host passed `knowledge`, use it verbatim (fully-owned mode).
+ * 2. Else if `importers: false`, skip auto-construction (explicit opt-out).
+ * 3. Else auto-construct `new Knowledge({ id: 'factory', storage, importers })`
+ *    with the effective importer input:
+ *    - `importers` if the host set it explicitly (array or resolver);
+ *    - otherwise `importers()` from `@mastra/connect` when both platform env
+ *      vars are present (`MASTRA_PLATFORM_ACCESS_TOKEN` or `_SECRET_KEY`, and
+ *      `MASTRA_PROJECT_ID`);
+ *    - otherwise `[]` when `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1` is set
+ *      (dev override — routes work, no live syncs);
+ *    - otherwise `undefined` → no auto-construction.
+ *
+ * Any throw from `importers()` (missing project id, credential resolution, …)
+ * is swallowed with a single console warning — Factory boot must survive a
+ * misconfigured platform env.
+ */
+function resolveEffectiveKnowledge(input: {
+  knowledge: { key: string; instance: Knowledge } | undefined;
+  importers: KnowledgeImportersInput | false | undefined;
+  importersOptions: Omit<ImportersOptions, 'client'> | undefined;
+  storage: FactoryStorage;
+}): { key: string; instance: Knowledge } | undefined {
+  if (input.knowledge) return input.knowledge;
+  if (input.importers === false) return undefined;
+
+  const platformEnvPresent = Boolean(
+    (process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim()) &&
+    process.env.MASTRA_PROJECT_ID?.trim(),
+  );
+  const subconsciousOverride = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+
+  let effectiveImporters: KnowledgeImportersInput | undefined;
+  if (input.importers !== undefined) {
+    effectiveImporters = input.importers;
+  } else if (platformEnvPresent) {
+    try {
+      effectiveImporters = importersFromConnect(input.importersOptions);
+    } catch (error) {
+      console.warn('[factory:knowledge] Skipping auto-construction — importers() failed:', error);
+      return undefined;
+    }
+  } else if (subconsciousOverride) {
+    effectiveImporters = [];
+  } else {
+    return undefined;
+  }
+
+  return {
+    key: 'factory',
+    instance: new Knowledge({
+      id: 'factory',
+      storage: input.storage.getMastraStorage(),
+      importers: effectiveImporters,
+    }),
+  };
 }
 
 export class MastraFactory {
@@ -720,8 +804,13 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
-    const knowledgeEnabled =
-      this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const effectiveKnowledge = resolveEffectiveKnowledge({
+      knowledge: this.#config.knowledge,
+      importers: this.#config.importers,
+      importersOptions: this.#config.importersOptions,
+      storage,
+    });
+    const knowledgeEnabled = Boolean(effectiveKnowledge);
     const deploymentOrganizationId = process.env.MASTRACODE_DEPLOYMENT_ORGANIZATION_ID?.trim() || undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
@@ -1153,7 +1242,7 @@ export class MastraFactory {
         },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-        ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
+        ...(effectiveKnowledge ? { knowledge: effectiveKnowledge } : {}),
         // The environment signal tells the agent which repositories its
         // sandbox holds and where; the phase signal, when work items are on,
         // comes after it.
@@ -1390,7 +1479,7 @@ export class MastraFactory {
             knowledgeEnabled,
             deploymentOrganizationId,
             deploymentModelProviders,
-            knowledgeKey: this.#config.knowledge?.key,
+            knowledgeKey: effectiveKnowledge?.key,
             configVersion,
             boardRegistry: this.#boards,
             factoryTransitionService: transitionService,
