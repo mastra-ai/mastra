@@ -97,9 +97,20 @@ function normalizeCron(cron: KnowledgeImporterTriggers['cron']): KnowledgeImport
   if (!cron || typeof cron !== 'object' || Array.isArray(cron)) {
     throw new Error('Knowledge importer cron trigger must be an object');
   }
+  if (cron.resolveBindings !== undefined && typeof cron.resolveBindings !== 'function') {
+    throw new Error('Knowledge importer cron resolveBindings must be a function');
+  }
+  // With a resolver, static bindings become optional — an absent/empty list means the
+  // resolver is the sole enumeration. Without one, the existing non-empty rule holds.
+  const noStatic = cron.bindings === undefined || (Array.isArray(cron.bindings) && cron.bindings.length === 0);
+  const bindings =
+    noStatic && cron.resolveBindings
+      ? (Object.freeze([]) as readonly KnowledgeImporterBindingInput[])
+      : normalizeBindings(cron.bindings, 'cron');
   return Object.freeze({
     schedule: normalizeSchedule(cron.schedule),
-    bindings: normalizeBindings(cron.bindings, 'cron'),
+    bindings,
+    ...(cron.resolveBindings ? { resolveBindings: cron.resolveBindings } : {}),
   });
 }
 

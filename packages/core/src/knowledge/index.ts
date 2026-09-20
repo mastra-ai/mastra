@@ -712,6 +712,11 @@ export class Knowledge extends MastraBase {
     return this.#getStorage().then(storage => storage.getScopeAddress(address));
   }
 
+  /** @internal Logging access for the importer runner (base logger is protected). */
+  warnInternal(message: string, meta?: Record<string, unknown>): void {
+    this.logger.warn(message, meta);
+  }
+
   registerImporter<TPayload = unknown>(definition: KnowledgeImporterDefinition<TPayload>) {
     return this.#registerImporter(definition, 'manual');
   }
