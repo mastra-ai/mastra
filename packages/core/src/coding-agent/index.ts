@@ -55,7 +55,9 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  *   then prefill-error recovery, then catch-all stream retries with specialized
  *   ECONNRESET/bad-request policies. The repairs run before the retry because
  *   error processors short-circuit on the first `retry: true`, and the retry's
- *   bad-request matcher claims the same `400`s they repair.
+ *   bad-request matcher claims the same `400`s they repair. Unlike a bare
+ *   agent's defaults, this stack also retries unmatched errors, which is the
+ *   portable coding agent's long-standing behavior.
  * - `goal.prompt` defaults to {@link DEFAULT_GOAL_JUDGE_PROMPT} when a goal is
  *   configured without one.
  *
@@ -95,7 +97,7 @@ export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
     memory,
     workspace,
     signals: resolvedSignals,
-    errorProcessors: errorProcessors ?? defaultStabilityErrorProcessors(),
+    errorProcessors: errorProcessors ?? defaultStabilityErrorProcessors({ retryUnknownErrors: true }),
     ...(resolvedGoal ? { goal: resolvedGoal } : {}),
   });
 }
