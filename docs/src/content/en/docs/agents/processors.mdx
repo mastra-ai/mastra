@@ -480,7 +480,9 @@ See the [`ToolSearchProcessor` reference](/reference/processors/tool-search-proc
 
 Handles provider-specific history incompatibilities when agents reuse messages across model providers. It can rewrite the outbound LLM request before the provider call, or recover from known provider API errors and retry.
 
-Add `ProviderHistoryCompat` explicitly when you need provider history compatibility rules, reactive API error recovery, custom compatibility rules, or predictable processor ordering. For Azure OpenAI agents that use observational memory, the processor rewrites `<system-reminder>` wrappers in outbound prompts to avoid content moderation refusals. Stored history remains unchanged.
+Mastra adds it to every agent's `errorProcessors` by default. Supply your own instance when you need custom compatibility rules or a predictable position in the list. For Azure OpenAI agents that use observational memory, the processor rewrites `<system-reminder>` wrappers in outbound prompts to avoid content moderation refusals. Stored history remains unchanged.
+
+The built-in Anthropic tool-call ID rule rewrites IDs that fall outside Anthropic's `^[a-zA-Z0-9_-]+$` pattern in the outbound request only, on both the call and its paired result, so pairing survives. Persisted history keeps the original IDs, and the reactive recovery that used to repair them after a failed call is deprecated.
 
 See the [`ProviderHistoryCompat` reference](/reference/processors/provider-history-compat) for setup, built-in rules, and custom rule options.
 

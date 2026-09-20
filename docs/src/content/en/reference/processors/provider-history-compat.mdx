@@ -103,16 +103,18 @@ Registering in `errorProcessors` alone, as the example above does, covers both h
 
 | Rule | Provider | Timing | Behavior |
 | - | - | - | - |
-| `anthropic-tool-id-format` | Anthropic | Reactive API error recovery | Rewrites tool call IDs that contain characters outside `[a-zA-Z0-9_-]` and retries the request. |
+| `anthropic-tool-id-format` | Anthropic | Preemptive prompt rewrite | Rewrites tool call IDs that contain characters outside `[a-zA-Z0-9_-]` in the outbound prompt, on both the call and its result. A sanitized ID that would collide with one already in the prompt gets a `_2`, `_3`, … suffix. The provider's rejection never fires, and persisted history keeps the original IDs. The reactive fallback is deprecated. |
 | `cerebras-strip-reasoning-content` | Cerebras | Preemptive prompt rewrite | Removes assistant `reasoning` parts from the outbound prompt so they're not serialized as unsupported `reasoning_content` fields. |
 | `anthropic-strip-foreign-reasoning-content` | Anthropic | Preemptive prompt rewrite | Removes non-Anthropic assistant `reasoning` parts from the outbound prompt. Anthropic-native thinking history is preserved. |
 | `anthropic-strip-foreign-signed-reasoning` | Anthropic-compatible | Preemptive prompt rewrite | Drops signed thinking from the outbound prompt when its origin turn was stamped with a different provider (for example Kimi For Coding ↔ `__GATEWAY_ANTHROPIC_MODEL_SONNET__`), since the receiving provider can't verify another provider's signature. Turns emptied of all content by the drop are removed from the prompt. Unstamped history is left untouched. |
 | `azure-system-reminder-transform` | Azure OpenAI | Preemptive prompt rewrite | Renames `<system-reminder>` wrappers in user text and system instructions to `<memory-context>` for the outbound request. Stored history remains unchanged. |
 | `openai-orphan-item-id` | OpenAI, Azure OpenAI (Responses) | Reactive API error recovery | Recovers history that OpenAI rejects with `Item 'msg_…' of type 'message' was provided without its required 'reasoning' item`. Drops the Responses `itemId` from every item-bearing part of an assistant message that carries one but has no `reasoning` part, so the message replays by value instead of as an unsatisfiable `item_reference`, and retries. The repair is applied to the in-memory list for the current turn. |
 
-Preemptive rules run through `processLLMRequest` after Mastra converts messages to the model prompt format and before the prompt is sent to the provider. These rewrites affect only the current provider call.
+Preemptive rules run through `processLLMRequest` after Mastra converts messages to the model prompt format and before the prompt is sent to the provider. These rewrites affect only the current provider call. Persisted history is never changed, so the IDs and content in memory and in the Studio stay exactly as written.
 
 Reactive rules run through `processAPIError` after a provider rejection. They can update the persisted `messageList` and request a retry.
+
+`anthropic-tool-id-format` implements both. Its preemptive hook normally prevents the rejection from happening at all, which leaves the reactive hook dormant. See [Tool call ID repair is prompt-scoped](#tool-call-id-repair-is-prompt-scoped) below.
 
 ## `CompatRule`
 
@@ -210,7 +212,28 @@ export const agent = new Agent({
 })
 ```
 
-Use `applyToPrompt` for provider-specific rewrites that shouldn't be saved to memory. Use `fix` with `errorPatterns` when the provider rejects persisted message history and the repaired history should be reused on future turns.
+Use `applyToPrompt` for provider-specific rewrites that shouldn't be saved to memory. This is what new rules should normally reach for, and it's the hook the built-in rules use. Use `fix` with `errorPatterns` only when the repaired history must persist and be reused on future turns, and when the provider can't be stopped from rejecting the request up front.
+
+## Tool call ID repair is prompt-scoped
+
+Anthropic enforces `^[a-zA-Z0-9_-]+$` on `tool_use.id`. A tool call whose ID came from another provider, containing `.` or `:`, is rejected, so the rule sanitizes those IDs in the outbound request:
+
+```typescript oxfmt:false
+// What the provider receives
+tool_use.id: 'call_abc_1'
+// What stays in memory, in the returned messages, and in the Studio
+toolCallId: 'call.abc:1'
+```
+
+Both the `tool-call` and its paired `tool-result` are rewritten from the same map, so call/result pairing survives the rewrite. Replacement IDs are assigned in encounter order and never collide with an ID the prompt already carries: if `a.b` sanitizes to `a_b` and the prompt already has an `a_b`, the rewritten ID becomes `a_b_2`.
+
+Because nothing is persisted, a caller that reuses the same message list in a later turn sees the original IDs again, and the repair runs again on that request. If you need the sanitized IDs written back to storage, supply a custom rule that implements `fix` instead.
+
+### Deprecated reactive recovery
+
+The rule's `errorPatterns` and `fix` hooks are deprecated. They remain as a dormant fallback for placements where the prompt lane can't see the request (for example a `CompatRule` applied outside the agent's prompt path), and they're the only repair available once a provider has already rejected the call. They'll be removed in a future major release.
+
+`fix` on the `CompatRule` interface itself isn't deprecated. Custom rules legitimately use the reactive hook, and the two hooks can be combined on one rule.
 
 ## Related
 
