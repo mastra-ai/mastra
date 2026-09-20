@@ -31,8 +31,8 @@ function reviewContext(headBranch: string, fromStage = 'intake'): FactoryStageRu
   };
 }
 
-function gitlabReviewContext(): FactoryStageRuleContext {
-  const context = reviewContext('factory/gitlab-mr-head');
+function gitlabReviewContext(headBranch = 'factory/gitlab-mr-head', fromStage = 'intake'): FactoryStageRuleContext {
+  const context = reviewContext(headBranch, fromStage);
   return {
     ...context,
     source: 'gitlabPullRequest',
@@ -41,7 +41,7 @@ function gitlabReviewContext(): FactoryStageRuleContext {
       source: 'gitlab-pr',
       sourceKey: 'gitlab-mr:encoded',
       url: 'https://gitlab.com/acme/app/-/merge_requests/5',
-      metadata: { gitlabMergeRequestIid: 5, headBranch: 'factory/gitlab-mr-head' },
+      metadata: { gitlabMergeRequestIid: 5, headBranch },
     },
   };
 }
@@ -62,6 +62,33 @@ describe('reviewBoard', () => {
     expect(decision.arguments).toContain('source_control_get_change_request');
     expect(decision.arguments).toContain('untrusted MR metadata');
     expect(decision.arguments).not.toContain('gh pr');
+  });
+
+  it('does not interpolate an unsafe GitLab head branch into a shell refresh hint', async () => {
+    const hostileBranch = 'feat/`run-untrusted-command`';
+    const decision = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(gitlabReviewContext(hostileBranch));
+    expect(decision).toMatchObject({ type: 'invokeSkill' });
+    if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected review invocation.');
+    expect(decision.arguments).not.toContain(hostileBranch);
+    expect(decision.arguments).not.toContain('git fetch --filter=blob:none origin feat/');
+  });
+
+  it('reuses a GitLab review session on same-stage re-entry and starts a fresh re-review after done', async () => {
+    const resumed = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(
+      gitlabReviewContext('factory/gitlab-mr-head', 'review'),
+    );
+    expect(resumed).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-review',
+      cancelInFlight: true,
+      resume: true,
+    });
+
+    const rereview = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(
+      gitlabReviewContext('factory/gitlab-mr-head', 'done'),
+    );
+    expect(rereview).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview' });
+    expect(rereview).not.toHaveProperty('resume');
   });
 
   it('labels valid head-branch metadata as untrusted serialized data', async () => {
