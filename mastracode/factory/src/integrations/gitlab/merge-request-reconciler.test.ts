@@ -19,9 +19,11 @@ const MERGE_REQUEST_SOURCE = `gitlab-pr:${Buffer.from(
 
 describe('GitLab merge-request reconciler', () => {
   it.each([
-    { initialStage: 'review', initialState: 'open', merged: true, expectedStage: 'done' },
-    { initialStage: 'review', initialState: 'closed', merged: false, expectedStage: 'canceled' },
-  ])('replays a missed terminal outcome from $initialStage through governed rules', async ({ initialStage, initialState, merged, expectedStage }) => {
+    { initialStage: 'review', initialState: 'open', merged: true, expectedStage: 'done', missingIdentity: false },
+    { initialStage: 'review', initialState: 'closed', merged: false, expectedStage: 'canceled', missingIdentity: false },
+    { initialStage: 'review', initialState: 'open', merged: false, expectedStage: 'canceled', missingIdentity: true },
+    { initialStage: 'done', initialState: 'open', merged: false, expectedStage: 'canceled', missingIdentity: true },
+  ])('replays a missed terminal outcome from $initialStage through governed rules', async ({ initialStage, initialState, merged, expectedStage, missingIdentity }) => {
     const seeded = await createFactoryStorageForTests();
     const sourceControl = seeded.sourceControl.forIntegration('gitlab');
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
@@ -46,14 +48,16 @@ describe('GitLab merge-request reconciler', () => {
       installationId: installation.id,
       createdByUserId: project.createdBy,
     });
-    await sourceControl.projectRepositories.link({
-      orgId: project.orgId,
-      connectionId: connection.id,
-      repositoryId: repository.id,
-      createdByUserId: project.createdBy,
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace',
-    });
+    if (!missingIdentity) {
+      await sourceControl.projectRepositories.link({
+        orgId: project.orgId,
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        createdByUserId: project.createdBy,
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/workspace',
+      });
+    }
     const wrongInstallation = await sourceControl.installations.upsert({
       orgId: project.orgId,
       connectedByUserId: project.createdBy,
@@ -65,7 +69,7 @@ describe('GitLab merge-request reconciler', () => {
       input: {
         installationId: wrongInstallation.id,
         externalId: PROJECT_ID,
-        slug: 'other/app',
+        slug: missingIdentity ? PROJECT_PATH : 'other/app',
         defaultBranch: 'main',
       },
     });
@@ -110,8 +114,7 @@ describe('GitLab merge-request reconciler', () => {
         stages: [initialStage],
         sessions: {},
         metadata: {
-          gitlabHost: HOST,
-          gitlabProjectId: 101,
+          ...(!missingIdentity && { gitlabHost: HOST, gitlabProjectId: 101 }),
           gitlabMergeRequestIid: 17,
           headBranch: 'feature-17',
           baseBranch: 'main',
@@ -150,6 +153,9 @@ describe('GitLab merge-request reconciler', () => {
       rules: resolveGitLabRules(),
       getProjectMemberAccessLevel,
       getWorkItemAuthorUsername: vi.fn().mockResolvedValue('maintainer'),
+      resolveActiveConnectionForHost: vi.fn().mockImplementation(async (connectionId: string) =>
+        missingIdentity ? 'direct' : connectionId,
+      ),
     };
     const context = {
       storage: { projects: seeded.projects, sourceControl, intake: seeded.intake },
@@ -170,7 +176,7 @@ describe('GitLab merge-request reconciler', () => {
         }),
       }),
     );
-    expect(getProjectMemberAccessLevel).toHaveBeenLastCalledWith('direct', PROJECT_ID, 'maintainer');
+    expect(getProjectMemberAccessLevel).toHaveBeenCalledWith('direct', PROJECT_ID, 'maintainer');
     await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
     expect(getPullRequest).toHaveBeenCalledWith({
       connection: { type: 'oauth', accessToken: 'gitlab-connection:direct' },

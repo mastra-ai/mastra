@@ -4,7 +4,7 @@ import type { FactoryProject } from '../../storage/domains/projects/base.js';
 import type { WorkItemRow } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { IssueReconcileSummary } from '../issue-reconciler.js';
-import { gitlabConnection, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
+import { decodeMergeRequestReference, gitlabConnection, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import type { GitLabIntegrationBase } from './integration.js';
 import { attachGitLabRules } from './rules.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
@@ -23,6 +23,26 @@ function normalizeHost(host: string): string {
   return host.trim().toLowerCase().replace(/\.$/, '');
 }
 
+function identityForItem(item: WorkItemRow): { projectId: number; mergeRequestIid: number; host: string } | null {
+  const reference = decodeMergeRequestReference(item.externalSource?.externalId ?? '');
+  if (!reference) return null;
+  const metadataProjectId = numberMetadata(item, 'gitlabProjectId');
+  const metadataMergeRequestIid = numberMetadata(item, 'gitlabMergeRequestIid');
+  const metadataHost = stringMetadata(item, 'gitlabHost');
+  if (
+    (metadataProjectId && metadataProjectId !== reference.projectId) ||
+    (metadataMergeRequestIid && metadataMergeRequestIid !== reference.mergeRequestIid) ||
+    (metadataHost && normalizeHost(metadataHost) !== normalizeHost(reference.host))
+  ) {
+    return null;
+  }
+  return {
+    projectId: reference.projectId,
+    mergeRequestIid: reference.mergeRequestIid,
+    host: normalizeHost(reference.host),
+  };
+}
+
 function projectPathFromUrl(url: string, host: string, mergeRequestIid: number): string | undefined {
   try {
     const parsed = new URL(url);
@@ -35,15 +55,17 @@ function projectPathFromUrl(url: string, host: string, mergeRequestIid: number):
   }
 }
 
-function terminalEvent(item: WorkItemRow, pullRequest: PullRequest): ParsedGitLabWebhook {
-  const projectId = numberMetadata(item, 'gitlabProjectId');
-  const mergeRequestIid = numberMetadata(item, 'gitlabMergeRequestIid');
-  const host = stringMetadata(item, 'gitlabHost');
+function terminalEvent(
+  item: WorkItemRow,
+  pullRequest: PullRequest,
+  identity: { projectId: number; mergeRequestIid: number; host: string },
+): ParsedGitLabWebhook {
+  const { projectId, mergeRequestIid, host } = identity;
   const projectPath =
-    projectId && mergeRequestIid && host && item.externalSource?.url
+    item.externalSource?.url
       ? projectPathFromUrl(item.externalSource.url, host, mergeRequestIid)
       : undefined;
-  if (!projectId || !mergeRequestIid || !host || !projectPath) {
+  if (!projectPath) {
     throw new Error('GitLab merge-request work item is missing canonical reconciliation metadata.');
   }
   const action = pullRequest.merged ? 'merge' : 'close';
@@ -81,6 +103,7 @@ function terminalEvent(item: WorkItemRow, pullRequest: PullRequest): ParsedGitLa
 }
 
 async function connectionForItem(
+  gitlab: Pick<GitLabIntegrationBase, 'resolveActiveConnectionForHost'>,
   context: IntegrationContext,
   project: FactoryProject,
   projectId: string,
@@ -105,7 +128,7 @@ async function connectionForItem(
       typeof installationHost === 'string' &&
       installationHost.trim().toLowerCase().replace(/\.$/, '') === host.trim().toLowerCase().replace(/\.$/, '')
     ) {
-      return key.installationExternalId;
+      return gitlab.resolveActiveConnectionForHost(key.installationExternalId, host);
     }
   }
   return undefined;
@@ -114,7 +137,10 @@ async function connectionForItem(
 export type GitLabMergeRequestReconciler = () => Promise<IssueReconcileSummary>;
 
 export function attachGitLabMergeRequestReconciler(
-  gitlab: Pick<GitLabIntegrationBase, 'versionControl' | 'rules' | 'getProjectMemberAccessLevel' | 'getWorkItemAuthorUsername'>,
+  gitlab: Pick<
+    GitLabIntegrationBase,
+    'versionControl' | 'rules' | 'getProjectMemberAccessLevel' | 'getWorkItemAuthorUsername' | 'resolveActiveConnectionForHost'
+  >,
   context: IntegrationContext,
 ): GitLabMergeRequestReconciler | undefined {
   if (!context.runtime) return undefined;
@@ -152,14 +178,13 @@ export function attachGitLabMergeRequestReconciler(
       for (const item of items) {
         summary.checked += 1;
         try {
-          const projectId = numberMetadata(item, 'gitlabProjectId');
-          const mergeRequestIid = numberMetadata(item, 'gitlabMergeRequestIid');
-          const host = stringMetadata(item, 'gitlabHost');
-          if (!projectId || !mergeRequestIid || !host) {
+          const identity = identityForItem(item);
+          if (!identity) {
             summary.missing += 1;
             continue;
           }
-          const connectionId = await connectionForItem(context, project, String(projectId), host);
+          const { projectId, mergeRequestIid, host } = identity;
+          const connectionId = await connectionForItem(gitlab, context, project, String(projectId), host);
           if (!connectionId) {
             summary.missing += 1;
             continue;
@@ -193,6 +218,9 @@ export function attachGitLabMergeRequestReconciler(
             }
           }
           const desired = {
+            gitlabHost: host,
+            gitlabProjectId: projectId,
+            gitlabMergeRequestIid: mergeRequestIid,
             state: pullRequest.state,
             draft: pullRequest.draft,
             merged: pullRequest.merged,
@@ -214,7 +242,7 @@ export function attachGitLabMergeRequestReconciler(
               current.merged !== pullRequest.merged ||
               !item.stages.includes(pullRequest.merged ? 'done' : 'canceled');
             if (terminalTransition) {
-              await ingest(terminalEvent(item, pullRequest));
+              await ingest(terminalEvent(item, pullRequest, identity));
             }
             if (metadataChanged) {
               await context.runtime!.workItems.update({

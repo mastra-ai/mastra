@@ -71,6 +71,13 @@ interface GitLabIssueReference extends GitLabSourceReference {
   issueIid: number;
 }
 
+export interface GitLabMergeRequestReference {
+  version: 1;
+  host: string;
+  projectId: number;
+  mergeRequestIid: number;
+}
+
 interface GitLabPageCursor {
   source: number;
   page: number;
@@ -87,6 +94,7 @@ const DIRECT_CONNECTION_ID = 'direct';
 const GITLAB_CONNECTION_TOKEN_PREFIX = 'gitlab-connection:';
 const GITLAB_SOURCE_PREFIX = 'gitlab-project:';
 const GITLAB_ISSUE_PREFIX = 'gitlab-issue:';
+const GITLAB_MERGE_REQUEST_PREFIX = 'gitlab-pr:';
 export const GITLAB_TRUSTED_ACCESS_LEVEL = 30;
 // Bound issue detail reads to 2,000 notes. GitLab does not expose truncation through the Intake contract.
 const MAX_NOTES_PAGES = 20;
@@ -332,6 +340,13 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   }
 
   abstract diagnostics(): Record<string, unknown>;
+
+  /** Prefer the configured direct token over an older Platform installation on the same host. */
+  async resolveActiveConnectionForHost(storedConnectionId: string, host: string): Promise<string> {
+    if (this.diagnostics().mode !== 'direct') return storedConnectionId;
+    const [direct] = await this.activeContexts();
+    return direct && normalizeGitLabHost(direct.host) === normalizeGitLabHost(host) ? direct.id : storedConnectionId;
+  }
 
   async #versionControlContext(connection: IntegrationConnection): Promise<GitLabConnectionContext> {
     const connectionId = connectionIdFromConnection(connection);
@@ -765,6 +780,10 @@ export function decodeIssueReference(value: string): GitLabIssueReference | null
   return decodeOpaque(value, GITLAB_ISSUE_PREFIX, isIssueReference);
 }
 
+export function decodeMergeRequestReference(value: string): GitLabMergeRequestReference | null {
+  return decodeOpaque(value, GITLAB_MERGE_REQUEST_PREFIX, isMergeRequestReference);
+}
+
 export function gitlabConnection(connectionId: string): IntegrationConnection {
   return { type: 'oauth', accessToken: `${GITLAB_CONNECTION_TOKEN_PREFIX}${connectionId}` };
 }
@@ -810,6 +829,20 @@ function isIssueReference(value: unknown): value is GitLabIssueReference {
     isSourceReference(value) &&
     Number.isSafeInteger((value as GitLabIssueReference).issueIid) &&
     (value as GitLabIssueReference).issueIid > 0
+  );
+}
+
+function isMergeRequestReference(value: unknown): value is GitLabMergeRequestReference {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const ref = value as Record<string, unknown>;
+  return (
+    ref.version === 1 &&
+    typeof ref.host === 'string' &&
+    normalizeGitLabHost(ref.host).length > 0 &&
+    Number.isSafeInteger(ref.projectId) &&
+    (ref.projectId as number) > 0 &&
+    Number.isSafeInteger(ref.mergeRequestIid) &&
+    (ref.mergeRequestIid as number) > 0
   );
 }
 

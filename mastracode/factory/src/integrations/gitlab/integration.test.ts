@@ -400,6 +400,10 @@ describe('GitLabIntegration', () => {
       cloneUrl: 'https://gitlab.com/mastra/platform.git',
       authorization: { scheme: 'bearer', token: 'group-token', username: 'oauth2' },
     });
+    await expect(gitlab.resolveActiveConnectionForHost('git_platform_connection', 'gitlab.com')).resolves.toBe('direct');
+    await expect(gitlab.resolveActiveConnectionForHost('git_platform_connection', 'gitlab.other.example')).resolves.toBe(
+      'git_platform_connection',
+    );
 
     const otherHost = await storage.installations.upsert({
       orgId: 'org-1', connectedByUserId: 'user-1', externalId: 'git_other_connection',

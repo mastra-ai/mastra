@@ -18,7 +18,7 @@ function json(body: unknown): Response {
 }
 
 describe('GitLab issue reconciler', () => {
-  it('replays a missed issue close through governed GitLab rules exactly once', async () => {
+  it.each([false, true])('replays a missed issue close through governed GitLab rules exactly once (missing identity: %s)', async missingIdentity => {
     const seeded = await createFactoryStorageForTests();
     const sourceControl = seeded.sourceControl.forIntegration('gitlab');
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
@@ -78,9 +78,7 @@ describe('GitLab issue reconciler', () => {
         stages: ['building'],
         sessions: {},
         metadata: {
-          gitlabHost: HOST,
-          gitlabProjectId: 101,
-          gitlabIssueIid: 42,
+          ...(!missingIdentity && { gitlabHost: HOST, gitlabProjectId: 101, gitlabIssueIid: 42 }),
           identifier: `${PROJECT_PATH}#42`,
         },
       },
