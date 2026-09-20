@@ -80,12 +80,6 @@ export class KnowledgeImporterRoutingStorage extends FactoryStorageDomain {
     return row ? toRecord(row) : null;
   }
 
-  /** All routing rows for an org — one SPA fetch covers every provider card. */
-  async list(orgId: string): Promise<KnowledgeImporterRoutingRecord[]> {
-    const rows = await this.#db.findMany<RoutingDbRow>('knowledge_importer_routing', { org_id: orgId });
-    return rows.map(toRecord);
-  }
-
   /** Upsert the connection's routing (concurrent first writes resolved via insert-then-catch). */
   async set(input: {
     orgId: string;
@@ -125,11 +119,5 @@ export class KnowledgeImporterRoutingStorage extends FactoryStorageDomain {
       if (!row) throw error;
       return toRecord(row);
     }
-  }
-
-  /** Remove the connection's routing row. Returns whether a row was deleted. */
-  async delete(connectionId: string): Promise<boolean> {
-    const deleted = await this.#db.deleteMany('knowledge_importer_routing', { connection_id: connectionId });
-    return deleted > 0;
   }
 }

@@ -81,9 +81,23 @@ function ConnectionRoutingControl({
   const [draftIds, setDraftIds] = useState<ReadonlySet<string>>(new Set());
 
   // Routing routes only mount when the Factory wires the routing storage
-  // domain — on an older server the query 404s and the control hides
-  // entirely rather than advertising a dead Change button.
-  if (routingQuery.isError) return null;
+  // domain — on an older server the query 403/404s and the control hides
+  // entirely rather than advertising a dead Change button. A transient
+  // failure (5xx, network) gets a retry instead, so a blip doesn't silently
+  // hide where the connection syncs to.
+  if (routingQuery.isError && isPlatformConnectUnavailableError(routingQuery.error)) return null;
+  if (routingQuery.isError) {
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <Txt as="span" variant="ui-xs" className="text-icon3">
+          Couldn't load sync destinations.
+        </Txt>
+        <Button size="xs" variant="ghost" onClick={() => void routingQuery.refetch()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
   if (routingQuery.isPending) return null;
 
   const routing = routingQuery.data;
@@ -96,6 +110,7 @@ function ConnectionRoutingControl({
       : `Syncs to ${selectedCount} of ${projects.length} project${projects.length === 1 ? '' : 's'}`;
 
   const beginEditing = () => {
+    saveMutation.reset();
     setDraftAll(routing.mode === 'all');
     setDraftIds(new Set(routing.projectIds));
     setEditing(true);
