@@ -167,9 +167,8 @@ describe('KnowledgeImportersSection', () => {
       // Notion row lists the account label. That's the only signal — no
       // "Connected" pill, no redundant status copy.
       expect(await screen.findByText('acme-workspace')).toBeInTheDocument();
-      // And the connection time renders alongside as compact relative text,
-      // clearly labeled so users know what the timestamp means.
-      expect(await screen.findByText('· Connected at: 5m')).toBeInTheDocument();
+      // And the connection time renders alongside as compact relative text.
+      expect(await screen.findByText('· 5m')).toBeInTheDocument();
       // With an active connection there is no per-card Connect button — the
       // presence of a listed account is what conveys the connected state.
       expect(screen.queryByRole('button', { name: 'Connect Notion' })).toBeNull();
@@ -250,8 +249,7 @@ describe('KnowledgeImportersSection', () => {
       useRoutingHandlers({ mode: 'all', projectIds: [] });
       renderSection();
 
-      expect(await screen.findByText('Syncs to all projects')).toBeInTheDocument();
-      expect(await screen.findByRole('button', { name: 'Change' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Sync to: All projects' })).toBeInTheDocument();
     });
 
     it('summarizes a selected-mode connection with its live project count', async () => {
@@ -261,10 +259,10 @@ describe('KnowledgeImportersSection', () => {
       useRoutingHandlers({ mode: 'selected', projectIds: ['p2'] });
       renderSection();
 
-      expect(await screen.findByText('Syncs to 1 of 2 projects')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Sync to: 1 of 2 projects' })).toBeInTheDocument();
     });
 
-    it('saves a project selection through the routing PUT and updates the summary', async () => {
+    it('narrows from all projects with a single toggle saved through the routing PUT', async () => {
       useFeaturesHandler(true);
       notionConnected();
       useProjectsHandler();
@@ -272,21 +270,39 @@ describe('KnowledgeImportersSection', () => {
       renderSection();
 
       const user = userEvent.setup();
-      await user.click(await screen.findByRole('button', { name: 'Change' }));
+      await user.click(await screen.findByRole('button', { name: 'Sync to: All projects' }));
 
-      // Uncheck "All projects" — the per-project list appears.
-      await user.click(await screen.findByRole('checkbox', { name: /All projects/i }));
-      await user.click(await screen.findByRole('checkbox', { name: 'Alpha' }));
-      await user.click(await screen.findByRole('button', { name: 'Save' }));
+      // In all-projects mode every project item shows checked; unchecking
+      // Alpha narrows the selection to everything else, saved immediately.
+      await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Alpha' }));
 
       await waitFor(() => {
-        expect(puts).toEqual([{ mode: 'selected', projectIds: ['p1'] }]);
+        expect(puts).toEqual([{ mode: 'selected', projectIds: ['p2'] }]);
       });
-      // Editor collapses back to the updated summary.
-      expect(await screen.findByText('Syncs to 1 of 2 projects')).toBeInTheDocument();
+      // The trigger summary reflects the saved selection.
+      expect(await screen.findByRole('button', { name: 'Sync to: 1 of 2 projects' })).toBeInTheDocument();
     });
 
-    it('keeps the editor open with an error message when the routing save fails', async () => {
+    it('re-selecting every project collapses the selection back to all-projects mode', async () => {
+      useFeaturesHandler(true);
+      notionConnected();
+      useProjectsHandler();
+      const puts = useRoutingHandlers({ mode: 'selected', projectIds: ['p2'] });
+      renderSection();
+
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: 'Sync to: 1 of 2 projects' }));
+      await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Alpha' }));
+
+      // Both projects selected ≡ all — stored as mode all so future projects
+      // are included automatically.
+      await waitFor(() => {
+        expect(puts).toEqual([{ mode: 'all', projectIds: [] }]);
+      });
+      expect(await screen.findByRole('button', { name: 'Sync to: All projects' })).toBeInTheDocument();
+    });
+
+    it('reverts the summary and raises a toast when the routing save fails', async () => {
       useFeaturesHandler(true);
       notionConnected();
       useProjectsHandler();
@@ -299,37 +315,29 @@ describe('KnowledgeImportersSection', () => {
       renderSection();
 
       const user = userEvent.setup();
-      await user.click(await screen.findByRole('button', { name: 'Change' }));
-      await user.click(await screen.findByRole('checkbox', { name: /All projects/i }));
-      await user.click(await screen.findByRole('checkbox', { name: 'Alpha' }));
-      await user.click(await screen.findByRole('button', { name: 'Save' }));
+      await user.click(await screen.findByRole('button', { name: 'Sync to: All projects' }));
+      await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Alpha' }));
 
-      // The editor stays open with the failure surfaced; the stored summary
-      // is untouched.
-      expect(await screen.findByText(/Couldn't save routing/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
-
-      // Reopening the editor after cancel clears the stale error.
-      await user.click(screen.getByRole('button', { name: 'Cancel' }));
-      await user.click(await screen.findByRole('button', { name: 'Change' }));
-      expect(screen.queryByText(/Couldn't save routing/)).toBeNull();
+      // Failure surfaces as a toast; the stored summary is untouched.
+      expect(await screen.findByText(/Couldn't update sync destinations/)).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Sync to: All projects' })).toBeInTheDocument();
     });
 
-    it('disables Save while the selection is empty — sync-nowhere is not a valid state', async () => {
+    it('refuses to uncheck the last selected project — sync-nowhere is not a valid state', async () => {
       useFeaturesHandler(true);
       notionConnected();
       useProjectsHandler();
-      useRoutingHandlers({ mode: 'all', projectIds: [] });
+      const puts = useRoutingHandlers({ mode: 'selected', projectIds: ['p2'] });
       renderSection();
 
       const user = userEvent.setup();
-      await user.click(await screen.findByRole('button', { name: 'Change' }));
-      // Unchecking All projects with nothing selected leaves Save disabled.
-      await user.click(await screen.findByRole('checkbox', { name: /All projects/i }));
-      expect(await screen.findByRole('button', { name: 'Save' })).toBeDisabled();
-      // Picking any project enables it again.
-      await user.click(await screen.findByRole('checkbox', { name: 'Beta' }));
-      expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+      await user.click(await screen.findByRole('button', { name: 'Sync to: 1 of 2 projects' }));
+      // Beta is the only selected project — unchecking it is a no-op.
+      await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Beta' }));
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(puts).toEqual([]);
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Beta' })).toHaveAttribute('aria-checked', 'true');
     });
 
     it('offers a retry instead of hiding when the routing load fails transiently', async () => {
@@ -351,7 +359,7 @@ describe('KnowledgeImportersSection', () => {
       expect(await screen.findByText(/Couldn't load sync destinations/)).toBeInTheDocument();
       const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: 'Retry' }));
-      expect(await screen.findByText('Syncs to all projects')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Sync to: All projects' })).toBeInTheDocument();
     });
 
     it('hides the routing control entirely when the server mounts no routing routes', async () => {
@@ -363,8 +371,7 @@ describe('KnowledgeImportersSection', () => {
       renderSection();
 
       expect(await screen.findByText('acme-workspace')).toBeInTheDocument();
-      expect(screen.queryByText(/Syncs to/)).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Sync to/ })).toBeNull();
     });
   });
 

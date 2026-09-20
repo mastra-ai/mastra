@@ -2,10 +2,14 @@
  * Knowledge Importers settings section.
  *
  * Renders a card per knowledge-importer provider (Notion, Confluence, Linear,
- * Zendesk, Fireflies) with live connection status and a Connect / Manage
+ * Zendesk, Fireflies) with live connection status and a Connect / Reconnect
  * affordance. Reuses the `ProviderConnectControl` mutation +
  * `@nangohq/frontend` popup driver that Jira and incident.io already use, so
  * OAuth flows behave identically to the intake section.
+ *
+ * Each active connection carries a "Sync to" dropdown that routes its imports
+ * to all Factory projects or an explicit subset. Toggles save immediately
+ * (optimistic, with a toast + revert on failure) — no Save/Cancel choreography.
  *
  * Gated on `useServerFeatures().data?.knowledge === true`, which matches the
  * router-level gate for `KnowledgePage`. When the flag is absent or false the
@@ -19,10 +23,12 @@
  */
 
 import { useMemo, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 
-import { Card } from '@mastra/playground-ui/components/Card';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Card } from '@mastra/playground-ui/components/Card';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
@@ -40,7 +46,11 @@ import {
   KNOWLEDGE_IMPORTER_PROVIDER_IDS,
   PLATFORM_CONNECT_PROVIDERS,
 } from '../../factory/services/platformConnect';
-import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
+import type {
+  KnowledgeImporterRouting,
+  PlatformConnectProviderId,
+  PlatformProviderConnection,
+} from '../../factory/services/platformConnect';
 import { ProviderConnectControl } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -60,199 +70,167 @@ const PROVIDER_DESCRIPTIONS: Record<PlatformConnectProviderId, string> = {
 };
 
 /**
- * Per-connection "Sync to" control. Collapsed it summarizes where the
- * connection's imports land ("Syncs to all projects" / "Syncs to 2 of 5
- * projects") with a Change affordance; expanded it offers an All-projects
- * toggle plus a per-project checkbox list, saved through the routing PUT.
- * The importer picks the change up on its next cron fire — no restart.
+ * Per-connection "Sync to" routing dropdown. The trigger summarizes where the
+ * connection's imports land ("All projects" / "1 of 3 projects"); the menu
+ * offers an "All projects" item plus one checkbox per Factory project.
+ *
+ * Every toggle saves immediately through the routing PUT — optimistically, so
+ * the menu never blocks on the network. A failed save reverts the summary and
+ * raises a toast. The importer picks changes up on its next cron fire.
+ *
+ * Sync-nowhere is not a valid state: unchecking the last selected project is
+ * a no-op (the item stays checked) rather than silently widening back to all
+ * projects.
  */
-function ConnectionRoutingControl({
-  provider,
-  connectionId,
-}: {
-  provider: PlatformConnectProviderId;
-  connectionId: string;
-}) {
+function RoutingMenu({ provider, connectionId }: { provider: PlatformConnectProviderId; connectionId: string }) {
   const routingQuery = useKnowledgeImporterRoutingQuery(provider, connectionId);
   const factoriesQuery = useFactoriesQuery();
   const saveMutation = useSaveKnowledgeImporterRoutingMutation(provider, connectionId);
-  const [editing, setEditing] = useState(false);
-  const [draftAll, setDraftAll] = useState(true);
-  const [draftIds, setDraftIds] = useState<ReadonlySet<string>>(new Set());
+  // While a save is in flight the menu reflects the value being written, not
+  // the (stale) cache. Cleared on settle: success writes the cache via the
+  // mutation hook, failure reverts to the server copy.
+  const [optimistic, setOptimistic] = useState<KnowledgeImporterRouting | null>(null);
 
-  // A 403/404 means the feature isn't offered for this connection — an
-  // older server without the routing routes, or a connection this provider
-  // doesn't own — so the control hides rather than advertising a dead
-  // Change button. A transient failure (5xx, network) gets a retry instead,
-  // so a blip doesn't silently hide where the connection syncs to.
+  // A 403/404 means the feature isn't offered for this connection — an older
+  // server without the routing routes, or a connection this provider doesn't
+  // own — so the control hides rather than advertising a dead dropdown. A
+  // transient failure (5xx, network) gets a retry instead, so a blip doesn't
+  // silently hide where the connection syncs to.
   if (routingQuery.isError && isPlatformConnectUnavailableError(routingQuery.error)) return null;
   if (routingQuery.isError) {
     return (
-      <div className="flex items-center justify-between gap-2">
+      <span className="flex items-center gap-1">
         <Txt as="span" variant="ui-xs" className="text-icon3">
           Couldn't load sync destinations.
         </Txt>
         <Button size="xs" variant="ghost" onClick={() => void routingQuery.refetch()}>
           Retry
         </Button>
-      </div>
+      </span>
     );
   }
   if (routingQuery.isPending) return null;
 
-  const routing = routingQuery.data;
+  const routing = optimistic ?? routingQuery.data;
   const projects = factoriesQuery.data ?? [];
-  const selectedCount =
-    routing.mode === 'all' ? projects.length : projects.filter(p => routing.projectIds.includes(p.id)).length;
-  const summary =
-    routing.mode === 'all'
-      ? 'Syncs to all projects'
-      : `Syncs to ${selectedCount} of ${projects.length} project${projects.length === 1 ? '' : 's'}`;
+  const isAll = routing.mode === 'all';
+  const selectedIds = new Set(isAll ? projects.map(p => p.id) : routing.projectIds);
+  const selectedCount = projects.filter(p => selectedIds.has(p.id)).length;
+  const summary = isAll
+    ? 'All projects'
+    : `${selectedCount} of ${projects.length} project${projects.length === 1 ? '' : 's'}`;
 
-  const beginEditing = () => {
-    saveMutation.reset();
-    setDraftAll(routing.mode === 'all');
-    setDraftIds(new Set(routing.projectIds));
-    setEditing(true);
+  const commit = (next: KnowledgeImporterRouting) => {
+    setOptimistic(next);
+    saveMutation.mutate(next, {
+      onSettled: () => setOptimistic(null),
+      onError: () => toast.error("Couldn't update sync destinations — your previous selection is unchanged."),
+    });
   };
 
-  const save = () => {
-    saveMutation.mutate(
-      draftAll ? { mode: 'all', projectIds: [] } : { mode: 'selected', projectIds: [...draftIds] },
-      { onSuccess: () => setEditing(false) },
-    );
+  const toggleProject = (projectId: string) => {
+    if (isAll) {
+      // Narrowing from "all": everything except the toggled project.
+      const rest = projects.filter(p => p.id !== projectId).map(p => p.id);
+      if (rest.length === 0) return; // sole project — nothing to narrow to
+      commit({ mode: 'selected', projectIds: rest });
+      return;
+    }
+    const next = new Set(routing.projectIds);
+    if (next.has(projectId)) {
+      if (next.size === 1) return; // sync-nowhere is not a valid state
+      next.delete(projectId);
+    } else {
+      next.add(projectId);
+    }
+    // Re-selecting every project is the same as "all" — store it that way so
+    // projects created later are included automatically.
+    if (projects.length > 0 && projects.every(p => next.has(p.id))) {
+      commit({ mode: 'all', projectIds: [] });
+      return;
+    }
+    commit({ mode: 'selected', projectIds: [...next] });
   };
-
-  if (!editing) {
-    return (
-      <div className="flex items-center justify-between gap-2">
-        <Txt as="span" variant="ui-xs" className="text-icon3">
-          {summary}
-        </Txt>
-        <Button size="xs" variant="ghost" onClick={beginEditing}>
-          Change
-        </Button>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex flex-col gap-2">
-      <label className="flex cursor-pointer items-center gap-2">
-        <Checkbox checked={draftAll} onCheckedChange={() => setDraftAll(current => !current)} />
-        <Txt as="span" variant="ui-sm" className="text-icon5">
-          All projects
+    <DropdownMenu>
+      <DropdownMenu.Trigger size="xs" variant="ghost" aria-label={`Sync to: ${summary}`}>
+        <Txt as="span" variant="ui-xs" className="text-icon3">
+          Sync to
         </Txt>
-      </label>
-      {!draftAll && (
-        <ul className="flex flex-col gap-1 pl-1">
-          {projects.map(project => (
-            <li key={project.id}>
-              <label className="flex cursor-pointer items-center gap-2">
-                <Checkbox
-                  checked={draftIds.has(project.id)}
-                  onCheckedChange={() =>
-                    setDraftIds(current => {
-                      const next = new Set(current);
-                      if (next.has(project.id)) next.delete(project.id);
-                      else next.add(project.id);
-                      return next;
-                    })
-                  }
-                />
-                <Txt as="span" variant="ui-sm" className="text-icon5 truncate">
-                  {project.name}
-                </Txt>
-              </label>
-            </li>
-          ))}
-          {projects.length === 0 && (
-            <Txt as="span" variant="ui-xs" className="text-icon3">
-              No projects yet.
-            </Txt>
-          )}
-        </ul>
-      )}
-      {saveMutation.isError && (
-        <Txt as="span" variant="ui-xs" className="text-red-400">
-          Couldn't save routing. Try again.
-        </Txt>
-      )}
-      <div className="flex items-center gap-2">
-        <Button
-          size="xs"
-          onClick={save}
-          disabled={saveMutation.isPending || (!draftAll && draftIds.size === 0)}
+        {summary}
+        <ChevronDown aria-hidden />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end" className="w-56">
+        <DropdownMenu.Label>Sync destinations</DropdownMenu.Label>
+        <DropdownMenu.CheckboxItem
+          checked={isAll}
+          closeOnClick={false}
+          onCheckedChange={() => {
+            if (!isAll) commit({ mode: 'all', projectIds: [] });
+          }}
         >
-          {saveMutation.isPending ? 'Saving…' : 'Save'}
-        </Button>
-        <Button size="xs" variant="ghost" onClick={() => setEditing(false)} disabled={saveMutation.isPending}>
-          Cancel
-        </Button>
-      </div>
-    </div>
+          All projects
+        </DropdownMenu.CheckboxItem>
+        {projects.length > 0 && <DropdownMenu.Separator />}
+        {projects.map(project => (
+          <DropdownMenu.CheckboxItem
+            key={project.id}
+            checked={selectedIds.has(project.id)}
+            closeOnClick={false}
+            onCheckedChange={() => toggleProject(project.id)}
+          >
+            <span className="truncate">{project.name}</span>
+          </DropdownMenu.CheckboxItem>
+        ))}
+      </DropdownMenu.Content>
+    </DropdownMenu>
   );
 }
 
 /**
- * Render the list of active + needs-reauth connections for a provider. The
- * card's connected-vs-not state is conveyed implicitly by the presence of
- * this list (connected) or a bare Connect button (not connected) — no
- * "Not connected" / "Not yet connected" copy on the card itself.
+ * One connection row: status dot, account label, relative connect time on the
+ * left; routing dropdown and (when stale) a Reconnect button on the right.
  *
  * We never surface the raw connection id: if the Platform can't supply an
- * `accountLabel`, we fall back to "Connected by <displayName>". The
- * connection's `connectedAt` timestamp — when present — is rendered as a
- * compact relative time so users can see how fresh each connection is.
+ * `accountLabel`, we fall back to "Connected by <displayName>".
  */
-function ConnectionLabels({
+function ConnectionRow({
   provider,
   displayName,
-  connections,
+  connection,
 }: {
   provider: PlatformConnectProviderId;
   displayName: string;
-  connections: PlatformProviderConnection[];
+  connection: PlatformProviderConnection;
 }) {
+  const needsReauth = connection.status === 'needs_reauth';
+  const label = connection.accountLabel ?? `Connected by ${displayName}`;
+  const connectedAt = connection.connectedAt ? relativeTime(connection.connectedAt) : '';
   return (
-    <ul className="flex flex-col gap-2">
-      {connections.map(connection => {
-        const needsReauth = connection.status === 'needs_reauth';
-        const label = connection.accountLabel ?? `Connected by ${displayName}`;
-        const connectedAt = connection.connectedAt ? relativeTime(connection.connectedAt) : '';
-        return (
-          <li key={connection.id} className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex min-w-0 items-center gap-2">
-                <span
-                  aria-hidden
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${needsReauth ? 'bg-red-400' : 'bg-emerald-400'}`}
-                />
-                <Txt as="span" variant="ui-sm" className="text-icon5 truncate">
-                  {label}
-                </Txt>
-                {connectedAt && (
-                  <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
-                    · Connected at: {connectedAt}
-                  </Txt>
-                )}
-              </span>
-              {needsReauth && (
-                <ProviderConnectControl
-                  provider={provider}
-                  reconnectConnectionId={connection.id}
-                  label="Reconnect"
-                  size="xs"
-                />
-              )}
-            </div>
-            <div className="pl-3.5">
-              <ConnectionRoutingControl provider={provider} connectionId={connection.id} />
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+    <li className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <span className="flex min-w-0 items-center gap-2">
+        <span
+          aria-hidden
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${needsReauth ? 'bg-red-400' : 'bg-emerald-400'}`}
+        />
+        <Txt as="span" variant="ui-sm" className="text-icon5 truncate">
+          {label}
+        </Txt>
+        {connectedAt && (
+          <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
+            · {connectedAt}
+          </Txt>
+        )}
+      </span>
+      <span className="flex shrink-0 items-center gap-1">
+        {needsReauth ? (
+          <ProviderConnectControl provider={provider} reconnectConnectionId={connection.id} label="Reconnect" size="xs" />
+        ) : (
+          <RoutingMenu provider={provider} connectionId={connection.id} />
+        )}
+      </span>
+    </li>
   );
 }
 
@@ -260,9 +238,9 @@ function ConnectionLabels({
  * One card per importer provider — logo, name, description, and either the
  * list of live connections (when connected) or a Connect button (when not).
  * The connection state is conveyed implicitly by the card contents: a card
- * with account labels is a connected card; a card with a Connect button
- * isn't. Each provider fetches independently so a transient failure on one
- * doesn't blank the grid.
+ * with account rows is a connected card; a card with a Connect button isn't.
+ * Each provider fetches independently so a transient failure on one doesn't
+ * blank the grid.
  */
 function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnectProviderId; logoUrl: string | null }) {
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
@@ -278,47 +256,53 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
 
   return (
     <Card className="flex flex-col gap-3 p-4">
-      <header className="flex min-w-0 items-start gap-3">
+      <header className="flex min-w-0 items-center gap-3">
         <IntegrationLogo provider={provider} displayName={meta.displayName} logoUrl={logoUrl ?? undefined} />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <Txt as="h4" variant="ui-md" className="text-icon6 font-semibold">
             {meta.displayName}
           </Txt>
-          <Txt as="p" variant="ui-sm" className="text-icon3 mt-0.5">
-            {description}
-          </Txt>
         </div>
+        {!isLoading && !isError && !isConnected && (
+          <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} size="xs" />
+        )}
       </header>
+      <Txt as="p" variant="ui-xs" className="text-icon3">
+        {description}
+      </Txt>
 
-      <div className="mt-auto border-t border-border1 pt-3">
-        {isLoading && (
+      {isLoading && (
+        <Txt as="span" variant="ui-xs" className="text-icon3 mt-auto border-t border-border1 pt-3">
+          Loading connection status…
+        </Txt>
+      )}
+      {isError && !unavailable && (
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-border1 pt-3">
           <Txt as="span" variant="ui-xs" className="text-icon3">
-            Loading connection status…
+            Couldn't load connections.
           </Txt>
-        )}
-        {isError && !unavailable && (
-          <div className="flex items-center justify-between gap-2">
-            <Txt as="span" variant="ui-xs" className="text-icon3">
-              Couldn't load connections.
-            </Txt>
-            <Button size="xs" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
-              Retry
-            </Button>
-          </div>
-        )}
-        {isError && unavailable && (
-          <Txt as="span" variant="ui-xs" className="text-icon3">
-            Platform connect isn't available in this deployment.
-          </Txt>
-        )}
-        {!isLoading && !isError && (
-          isConnected ? (
-            <ConnectionLabels provider={provider} displayName={meta.displayName} connections={liveConnections} />
-          ) : (
-            <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} size="xs" />
-          )
-        )}
-      </div>
+          <Button size="xs" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
+            Retry
+          </Button>
+        </div>
+      )}
+      {isError && unavailable && (
+        <Txt as="span" variant="ui-xs" className="text-icon3 mt-auto border-t border-border1 pt-3">
+          Platform connect isn't available in this deployment.
+        </Txt>
+      )}
+      {!isLoading && !isError && isConnected && (
+        <ul className="mt-auto flex flex-col gap-1 border-t border-border1 pt-2">
+          {liveConnections.map(connection => (
+            <ConnectionRow
+              key={connection.id}
+              provider={provider}
+              displayName={meta.displayName}
+              connection={connection}
+            />
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }
