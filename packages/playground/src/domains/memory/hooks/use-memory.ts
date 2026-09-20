@@ -4,6 +4,7 @@ import type {
   GetMemoryThreadBranchHistoryResponse,
   ListMemoryThreadBranchesResponse,
 } from '@mastra/client-js';
+import { MastraClientError } from '@mastra/client-js';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -158,11 +159,33 @@ export interface ThreadBranchesInfo {
 
 const NO_BRANCHING: ThreadBranchesInfo = { isSupported: false, parentThread: null, fork: null, branches: [] };
 
-const isBranchingUnsupportedError = (error: unknown): boolean =>
-  error instanceof Error && error.message.includes('BRANCHING_UNSUPPORTED');
+/**
+ * Extracts the server error code from a client error. client-js keeps the
+ * parsed error envelope on `MastraClientError.body` (`{error:{code}}`), which
+ * is more durable than matching the stringified message.
+ */
+const getServerErrorCode = (error: unknown): string | undefined => {
+  if (error instanceof MastraClientError) {
+    const body = error.body;
+    if (body && typeof body === 'object' && 'error' in body) {
+      const code = (body as { error?: { code?: unknown } }).error?.code;
+      if (typeof code === 'string') return code;
+    }
+  }
+  return undefined;
+};
 
-const isBranchThreadNotFoundError = (error: unknown): boolean =>
-  error instanceof Error && error.message.includes('BRANCH_NOT_FOUND');
+const isBranchingUnsupportedError = (error: unknown): boolean => {
+  const code = getServerErrorCode(error);
+  if (code) return code === 'BRANCHING_UNSUPPORTED';
+  return error instanceof Error && error.message.includes('BRANCHING_UNSUPPORTED');
+};
+
+const isBranchThreadNotFoundError = (error: unknown): boolean => {
+  const code = getServerErrorCode(error);
+  if (code) return code === 'BRANCH_NOT_FOUND';
+  return error instanceof Error && error.message.includes('BRANCH_NOT_FOUND');
+};
 
 /**
  * Loads the shared-history lineage of a thread: its parent + own fork metadata

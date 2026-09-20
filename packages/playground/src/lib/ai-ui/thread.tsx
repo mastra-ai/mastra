@@ -163,6 +163,13 @@ export const Thread = ({
   const canBranch = Boolean(agentId && threadId && threadId !== 'new' && branchLineage?.isSupported);
   const branchMarkers = buildBranchForkMarkers(branchLineage);
 
+  // Only persisted messages have UUID ids; the chat accumulator renders
+  // streamed messages under synthetic ids (e.g. `text-<runId>-<ts>`) that the
+  // server cannot fork at. Hide the action while streaming and on synthetic
+  // ids rather than failing the branch with a 404.
+  const PERSISTED_MESSAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const canBranchMessage = (messageId: string) => canBranch && !isRunning && PERSISTED_MESSAGE_ID.test(messageId);
+
   const handleBranchFromMessage = async (messageId: string) => {
     if (!agentId || !threadId) return;
     const result = await branchThread({ threadId, agentId, branchPointMessageId: messageId });
@@ -224,10 +231,13 @@ export const Thread = ({
                                   onReadAloud={readAloud}
                                   onStopSpeaking={stopSpeaking}
                                   footer={
-                                    canBranch ? (
+                                    canBranchMessage(message.id) ? (
                                       <BranchFromMessageAction
                                         disabled={isBranching}
-                                        onBranch={() => void handleBranchFromMessage(message.id)}
+                                        onBranch={() => {
+                                          // Errors surface via the mutation's onError toast.
+                                          handleBranchFromMessage(message.id).catch(() => {});
+                                        }}
                                       />
                                     ) : undefined
                                   }
