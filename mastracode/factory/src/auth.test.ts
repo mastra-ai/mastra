@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  factoryUserOrgId,
   getFactoryAuthOrgId,
   getFactoryAuthUser,
   getFactoryAuthUserId,
@@ -660,6 +661,14 @@ describe('org-tenant identity', () => {
     expect(getFactoryAuthOrgId({ workosId: 'user_1', organizationId: 'org_a' })).toBe('org_a');
     expect(getFactoryAuthOrgId({ workosId: 'user_1' })).toBeUndefined();
     expect(getFactoryAuthOrgId(undefined)).toBeUndefined();
+  });
+
+  it('factoryUserOrgId keys personal users on their own rung, never the shared local scope', () => {
+    expect(factoryUserOrgId({ workosId: 'user_1', organizationId: 'org_a' })).toBe('org_a');
+    expect(factoryUserOrgId({ id: 'user_2' })).toBe('user:user_2');
+    // No user at all means no per-user rung; callers fall back to `local`.
+    expect(factoryUserOrgId(undefined)).toBeUndefined();
+    expect(factoryUserOrgId({ email: 'no-id@example.com' })).toBeUndefined();
   });
 
   it('gate stashes organizationId and factoryAuthTenant returns { orgId, userId }', async () => {

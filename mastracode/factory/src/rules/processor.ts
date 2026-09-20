@@ -8,6 +8,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type {
   ComputeStateSignalArgs,
   ComputeStateSignalResult,
+  ProcessInputArgs,
   ProcessInputStepArgs,
   Processor,
 } from '@mastra/core/processors';
@@ -15,7 +16,7 @@ import type {
 import { boardForWorkItem, resolveBoardToolRule, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
-import { getFactorySessionCoordinates } from './binding-context.js';
+import { findSessionRunBinding, getFactorySessionCoordinates } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { workItemSource } from './types.js';
 import type {
@@ -223,6 +224,8 @@ async function withRuleTimeout<T>(operation: Promise<T>): Promise<T> {
 export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   readonly id = STATE_ID;
   readonly stateId = STATE_ID;
+  /** Request contexts whose caller row is already resolved for this request. */
+  private readonly loadedMemorySettings = new WeakSet<object>();
 
   constructor(
     private readonly options: {
@@ -231,7 +234,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       boards: BoardRegistry;
       loadMemorySettings?: (args: {
         requestContext: ProcessInputStepArgs['requestContext'];
-        binding: FactoryRunBindingRecord;
+        binding: FactoryRunBindingRecord | null;
       }) => Promise<void>;
       transitionService?: Pick<FactoryTransitionService, 'transition'>;
       messageReader?: PersistedMessageReader;
@@ -248,22 +251,68 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     },
   ) {}
 
+  /**
+   * Memory settings are caller state, not run state. Resolve the caller's
+   * authoritative row before any per-step hook runs, so the observers and
+   * reflectors that resolve their model during the step hook — memory's
+   * processors run before configured ones — see the row the settings UI edits.
+   * Doing this in `processInputStep` would be too late: memory's input-step hook
+   * fires first and can already start an observation for the step.
+   */
+  async processInput(args: ProcessInputArgs): Promise<MessageList> {
+    await this.loadCallerMemorySettings(args.requestContext);
+    return args.messageList;
+  }
+
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | undefined> {
     const address = getFactorySessionCoordinates(args.requestContext);
-    if (!address) return;
-    const binding = await this.options.storage.findRunBindingBySession(address);
+    const binding = address ? await this.options.storage.findRunBindingBySession(address) : undefined;
+    // Resumed runs skip the input-processor phase, so re-check here: it is a
+    // no-op once `processInput` already placed the row for this request. Passing
+    // `undefined` (not `null`) keeps the recovery lookup inside the loader, so a
+    // recovered session reaches its project row from this hook too.
+    await this.loadCallerMemorySettings(args.requestContext, binding);
     if (!binding || binding.status !== 'active') return;
-    try {
-      await this.options.loadMemorySettings?.({ requestContext: args.requestContext, binding });
-    } catch (error) {
-      console.warn('[Factory Memory Settings] Failed to load settings for run', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
     const completedToolCallIds = completedStepToolCallIds(args.steps);
     const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
     if (completedMessage) {
       await this.ingestMessages(binding, [completedMessage], completedToolCallIds);
+    }
+  }
+
+  /**
+   * Loads the caller's row once per request. The row is authoritative per run,
+   * not per step, so later steps reuse the value already on the request context
+   * (`undefined` means it has not been loaded yet; `null` means an empty row).
+   *
+   * The WeakSet covers loaders that do not set the context key themselves, so a
+   * request is still loaded once. A failed load is not recorded, so the next
+   * step retries it instead of leaving the run without settings.
+   */
+  private async loadCallerMemorySettings(
+    requestContext: ProcessInputStepArgs['requestContext'] | ProcessInputArgs['requestContext'],
+    binding?: FactoryRunBindingRecord | null,
+  ): Promise<void> {
+    if (!requestContext || !this.options.loadMemorySettings) return;
+    if (requestContext.get('factoryMemorySettings') !== undefined) return;
+    if (this.loadedMemorySettings.has(requestContext)) return;
+    try {
+      let runBinding = binding ?? null;
+      if (binding === undefined) {
+        const address = getFactorySessionCoordinates(requestContext);
+        runBinding = address
+          ? await this.options.storage.findRunBindingBySession(address)
+          : // Crash-recovered sessions come back with empty state, so the binding
+            // table is the last source of the project whose row applies. Without
+            // this the run would silently read the caller's personal row.
+            await findSessionRunBinding(requestContext, this.options.storage);
+      }
+      await this.options.loadMemorySettings({ requestContext, binding: runBinding });
+      this.loadedMemorySettings.add(requestContext);
+    } catch (error) {
+      console.warn('[Factory Memory Settings] Failed to load settings for run', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

@@ -1,106 +1,94 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
+import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { MemorySettingsStorage } from '@mastra/factory/storage/domains/memory-settings/base';
+import { ConfigRoutes } from '@mastra/factory/routes/config';
+import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
-import { applyOmRoleOverride } from '@mastra/code-sdk/onboarding/om-settings';
-import { readOMConfig } from '@mastra/factory/routes/config';
-import type { OMSession } from '@mastra/factory/routes/config';
+import type { RouteAuth } from '@mastra/factory/routes/route';
 
 /**
- * The web settings panel surfaces observational-memory config through the same
- * primitives the TUI's `/om` command uses: the session's observer/reflector
- * model + threshold reads, and GlobalSettings (`settings.json`) for the durable
- * override/threshold/observe-attachments writes. These tests exercise the
- * server-side bridge against a fake session and an isolated settings file so the
- * user's real settings are never touched.
+ * The web settings panel owns observational memory through the real
+ * `/web/config/om` routes, which persist to the app database rather than to
+ * mutable session state. These tests mount the real route module on a Hono app
+ * backed by a real libsql `memory_settings` table and drive it over HTTP, so the
+ * web surface's contract — persisted intent (`model: 'auto'` or a concrete id),
+ * the effective concrete model it resolves to, and provider status — is
+ * asserted end to end.
  */
-describe('web OM config (TUI /om parity)', () => {
-  let tmpDir: string;
 
-  beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'mc-om-'));
-  });
-  afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
-  });
+/** Auth-disabled host: memory settings address the `(local, local)` sentinel row. */
+const localAuth: RouteAuth = {
+  enabled: () => false,
+  ensureUser: async () => undefined,
+  tenant: () => undefined,
+  isOrganizationAdmin: async () => true,
+};
 
-  /** Build a fake session whose OM roles/state mirror a real Session's surface. */
-  function fakeSession(state: Record<string, unknown>): OMSession {
-    return {
-      mode: { get: () => 'build' },
-      model: { switch: async () => {} },
-      subagents: { model: { set: async () => {} } },
-      thread: { getId: () => 't1', setSetting: async () => {}, list: async () => [] },
-      state: { get: () => state, set: async () => {} },
-      om: {
-        observer: {
-          modelId: () => state.observerModelId as string | undefined,
-          threshold: () => state.observationThreshold as number | undefined,
-          switchModel: async () => {},
-        },
-        reflector: {
-          modelId: () => state.reflectorModelId as string | undefined,
-          threshold: () => state.reflectionThreshold as number | undefined,
-          switchModel: async () => {},
-        },
-      },
-    };
-  }
+/** A catalog whose only mode carries a provider that has a built-in low-cost OM pack. */
+const controller = {
+  listAvailableModels: async () => [{ provider: 'anthropic', hasApiKey: true }],
+  listModes: () => [{ id: 'build', defaultModelId: 'anthropic/claude-opus-5' }],
+};
 
-  it('reads OM config from the session, falling back to defaults', () => {
-    // No models/thresholds set → route reports empty model ids and the
-    // `/om` default thresholds, and observe-attachments defaults to 'auto'.
-    const cfg = readOMConfig(fakeSession({}));
-    expect(cfg.observerModelId).toBe('');
-    expect(cfg.reflectorModelId).toBe('');
-    expect(cfg.observationThreshold).toBe(30_000);
-    expect(cfg.reflectionThreshold).toBe(40_000);
-    expect(cfg.observeAttachments).toBe('auto');
+describe('web OM config routes', () => {
+  let storage: LibSQLFactoryStorage;
+  let memorySettings: MemorySettingsStorage;
+  let app: Hono;
+
+  beforeEach(async () => {
+    storage = new LibSQLFactoryStorage({ id: 'web-om-test', url: ':memory:' });
+    memorySettings = storage.registerDomain(new MemorySettingsStorage());
+    await storage.init();
+
+    app = new Hono();
+    for (const route of new ConfigRoutes({ auth: localAuth, controller, memorySettings }).routes()) {
+      if ('handler' in route && route.handler) app.on(route.method, route.path, route.handler as never);
+    }
   });
 
-  it('reflects session state when models/thresholds/attachments are set', () => {
-    const cfg = readOMConfig(
-      fakeSession({
-        observerModelId: 'anthropic/claude-haiku-4-5',
-        reflectorModelId: 'openai/gpt-5.4-mini',
-        observationThreshold: 12_345,
-        reflectionThreshold: 54_321,
-        observeAttachments: false,
-      }),
-    );
-    expect(cfg.observerModelId).toBe('anthropic/claude-haiku-4-5');
-    expect(cfg.reflectorModelId).toBe('openai/gpt-5.4-mini');
-    expect(cfg.observationThreshold).toBe(12_345);
-    expect(cfg.reflectionThreshold).toBe(54_321);
-    expect(cfg.observeAttachments).toBe(false);
+  afterEach(async () => {
+    await storage.close();
   });
 
-  it('persists a role model override and thresholds to settings (what the routes write)', () => {
-    const settingsPath = join(tmpDir, 'settings.json');
-    const settings = loadSettings(settingsPath);
+  const put = (path: string, body: unknown) =>
+    app.request(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
-    // Start on a built-in OM pack so switching one role to a custom model
-    // snapshots the *other* role's resolved model (matching the TUI behavior).
-    settings.models.activeOmPackId = 'anthropic';
+  it('reports an empty row as auto intent with a resolved effective model', async () => {
+    const res = await app.request('/web/config/om');
+    expect(res.status).toBe(200);
+    const { config } = await res.json();
 
-    // The observer-model route applies the same override + snapshots the other
-    // role, then sets thresholds — mirror that sequence and assert the result.
-    applyOmRoleOverride(settings, 'observer', 'anthropic/claude-haiku-4-5', 'openai/gpt-5.4-mini');
-    settings.models.omObservationThreshold = 20_000;
-    settings.models.omReflectionThreshold = 60_000;
-    settings.models.omObserveAttachments = false;
-    saveSettings(settings, settingsPath);
-
-    const reloaded = loadSettings(settingsPath);
-    expect(reloaded.models.observerModelOverride).toBe('anthropic/claude-haiku-4-5');
-    // Switching to a custom override snapshots the other role so it survives.
-    expect(reloaded.models.reflectorModelOverride).toBe('openai/gpt-5.4-mini');
-    expect(reloaded.models.activeOmPackId).toBe('custom');
-    expect(reloaded.models.omObservationThreshold).toBe(20_000);
-    expect(reloaded.models.omReflectionThreshold).toBe(60_000);
-    expect(reloaded.models.omObserveAttachments).toBe(false);
+    // Intent stays `auto`; the effective model follows the factory default's
+    // provider through the shared low-cost OM pack.
+    expect(config.observer).toMatchObject({ model: 'auto', effectiveModelId: 'anthropic/claude-haiku-4-5' });
+    expect(config.reflector).toMatchObject({ model: 'auto', effectiveModelId: 'anthropic/claude-haiku-4-5' });
+    // Deprecated flat aliases mirror the effective model, never the intent.
+    expect(config.observerModelId).toBe('anthropic/claude-haiku-4-5');
+    expect(config.observationThreshold).toBe(30_000);
+    expect(config.observeAttachments).toBe('auto');
   });
+
+  it('persists a concrete model to one role without touching the other', async () => {
+    const putRes = await put('/web/config/om/observer/model', { modelId: 'anthropic/claude-fable-5' });
+    expect(putRes.status).toBe(200);
+    const { config } = await putRes.json();
+    expect(config.observer).toMatchObject({ model: 'anthropic/claude-fable-5', effectiveModelId: 'anthropic/claude-fable-5' });
+
+    const stored = await memorySettings.get({ orgId: 'local', userId: 'local' });
+    expect(stored).toMatchObject({ observerModelId: 'anthropic/claude-fable-5', reflectorModelId: null });
+
+    const read = await (await app.request('/web/config/om')).json();
+    expect(read.config.reflector).toMatchObject({ model: 'auto' });
+  });
+
+  it('round-trips a role back to auto as a null column', async () => {
+    await put('/web/config/om/observer/model', { modelId: 'anthropic/claude-fable-5' });
+    const autoRes = await put('/web/config/om/observer/model', { modelId: 'auto' });
+    expect(autoRes.status).toBe(200);
+    expect((await autoRes.json()).config.observer).toMatchObject({ model: 'auto' });
+
+    const stored = await memorySettings.get({ orgId: 'local', userId: 'local' });
+    expect(stored?.observerModelId).toBeNull();
+  });
+
 });

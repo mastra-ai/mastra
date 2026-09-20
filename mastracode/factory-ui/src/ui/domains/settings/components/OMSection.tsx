@@ -111,12 +111,12 @@ export function OMSection({
   const switchModel = (role: OMRole, modelId: string) => {
     if (!modelId) return;
     const mutation = role === 'observer' ? observerMutation : reflectorMutation;
-    mutation.mutate({ model: modelId });
+    mutation.mutate({ modelId });
   };
 
   const resetModel = (role: OMRole) => {
     const mutation = role === 'observer' ? observerMutation : reflectorMutation;
-    mutation.mutate({ model: 'auto' });
+    mutation.mutate({ modelId: 'auto' });
   };
 
   if (loading) {

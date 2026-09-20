@@ -37,6 +37,7 @@ import {
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
+  factoryUserOrgId,
   getFactoryAuthOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
@@ -71,7 +72,7 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
-import { resolveFactorySessionAddress } from './rules/binding-context.js';
+import { readFactorySessionScope, resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
@@ -110,7 +111,11 @@ import { CustomProvidersStorage } from './storage/domains/custom-providers/base.
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
-import { MemorySettingsStorage, type MemorySettingsRecord } from './storage/domains/memory-settings/base.js';
+import {
+  factoryMemorySettingsUserId,
+  MemorySettingsStorage,
+  type MemorySettingsRecord,
+} from './storage/domains/memory-settings/base.js';
 import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
@@ -828,16 +833,25 @@ export class MastraFactory {
           boards: this.#boards,
           loadMemorySettings: async ({ requestContext, binding }) => {
             if (!requestContext) return;
+            const scope = readFactorySessionScope(requestContext);
             const user = getFactoryAuthUserFromContext(requestContext);
-            let userId = getFactoryAuthUserId(user) ?? (binding.orgId === 'local' ? 'local' : undefined);
-            if (!userId && storage.isDomainReady('source-control')) {
-              const sourceSession = await sourceControlStorage
-                .forIntegration('github')
-                .sessions.getBySessionId(binding.sessionId);
-              userId = sourceSession?.userId;
-            }
-            if (!userId) return;
-            const record = await memorySettingsStorage.get({ orgId: binding.orgId, userId });
+            const callerUserId = getFactoryAuthUserId(user);
+            const callerOrgId = factoryUserOrgId(user);
+            const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
+            // Project-scoped sessions share one row per project, addressed by the
+            // sentinel user id the settings UI picks when it passes a `factoryId`;
+            // unscoped sessions read the caller's own row. Both are rows the
+            // settings UI writes, so intent and the run agree without any session
+            // mutation.
+            const target = factoryProjectId
+              ? {
+                  orgId: binding?.orgId ?? scope?.factoryOrgId ?? callerOrgId ?? 'local',
+                  userId: factoryMemorySettingsUserId(factoryProjectId),
+                }
+              : callerUserId && callerOrgId
+                ? { orgId: callerOrgId, userId: callerUserId }
+                : { orgId: 'local', userId: 'local' };
+            const record = await memorySettingsStorage.get(target);
             requestContext.set('factoryMemorySettings', record satisfies MemorySettingsRecord | null);
           },
           ...(transitionService ? { transitionService } : {}),
