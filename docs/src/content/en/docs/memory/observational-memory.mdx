@@ -119,7 +119,7 @@ It uses background agents for managing memory. When no model is set, the default
 
 ### Automatic models in Mastra Code and Factory
 
-The generic `@mastra/memory` configuration above keeps its concrete default model. Mastra Code and Factory add a separate **Auto** selection for each Observational Memory role.
+Mastra Code and Factory surface the same automatic selection as a per-role **Auto** option in their settings.
 
 An automatic Observer or Reflector follows the active main model provider. Mastra Code uses that provider's built-in low-cost Observational Memory model when one is configured. For custom providers and providers without a built-in choice, it uses the active main model. The effective model is resolved when the role runs, so changing the main model doesn't rewrite the saved automatic selection.
 
