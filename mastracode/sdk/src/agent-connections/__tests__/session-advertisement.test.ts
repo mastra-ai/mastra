@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import { EventEmitterPubSub } from '@mastra/core/events';
+import { InMemoryStore } from '@mastra/core/storage';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -190,5 +191,51 @@ describe('session thread advertisement', () => {
     advertisement.close();
 
     expect(await agent.discoverThreadPeers({ timeoutMs: 500 })).toEqual([]);
+  }, 30_000);
+
+  it('stops advertising a thread once it is deleted', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const resourceId = `session-advertisement-delete-${Date.now()}`;
+    const agent = new Agent({
+      id: 'code-agent',
+      name: 'advertisement-test',
+      instructions: 'advertisement test',
+      model: createMockModel({ mockText: 'ok' }),
+      pubsub,
+    });
+    const controller = new AgentController({
+      id: 'advertisement-controller',
+      resourceId,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      pubsub,
+      // Deleting a thread is a storage-backed operation, and only a real delete
+      // emits the `thread_deleted` event the advertisement releases on.
+      storage: new InMemoryStore(),
+    } as any);
+    await controller.init();
+    const session = await controller.createSession({ id: 'advertisement-session', ownerId: 'owner', resourceId });
+
+    const advertisement = createSessionThreadAdvertisement({
+      session,
+      controller,
+      projectName: 'advertisement-project',
+    });
+    cleanups.push(() => advertisement.close());
+
+    const deletedThread = await session.thread.create({ id: 'deleted-thread' });
+    await advertisement.claim(deletedThread.id);
+    const keptThread = await session.thread.create({ id: 'kept-thread' });
+    await advertisement.claim(keptThread.id);
+
+    const advertisedThreads = async () =>
+      (await agent.discoverThreadPeers({ timeoutMs: 500 })).map(peer => peer.threadId).sort();
+    expect(await advertisedThreads()).toEqual(['deleted-thread', 'kept-thread']);
+
+    // Claims outlive the session's current thread, so deleting a thread has to
+    // release it — otherwise it stays advertised and a peer keeps sending to a
+    // thread that no longer exists.
+    await session.thread.delete({ threadId: deletedThread.id });
+
+    await expect.poll(advertisedThreads, { timeout: 5_000 }).toEqual(['kept-thread']);
   }, 30_000);
 });

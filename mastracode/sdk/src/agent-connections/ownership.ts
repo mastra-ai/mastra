@@ -21,6 +21,7 @@ type ThreadClaimState = {
 
 export function createThreadOwnershipManager(claimThread: (threadId: string) => Promise<ThreadOwnershipClaim>): {
   claim(threadId?: string | null): Promise<boolean>;
+  release(threadId: string): void;
   close(): void;
 } {
   const states = new Map<string, ThreadClaimState>();
@@ -88,6 +89,16 @@ export function createThreadOwnershipManager(claimThread: (threadId: string) => 
       };
       states.set(threadId, state);
       return attemptClaim(threadId, state.generation, true);
+    },
+    release(threadId) {
+      // The thread no longer exists, so its claim has nothing left to answer for.
+      // Dropping the state also makes any in-flight attempt for it unsubscribe
+      // itself instead of retaining a claim for a deleted thread.
+      const state = states.get(threadId);
+      if (!state) return;
+      clearRetry(state);
+      state.claim?.unsubscribe();
+      states.delete(threadId);
     },
     close() {
       closed = true;

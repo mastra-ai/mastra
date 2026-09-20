@@ -100,4 +100,47 @@ describe('createThreadOwnershipManager', () => {
     manager.close();
     expect(unsubscribe).toHaveBeenCalledOnce();
   });
+
+  it('releases a deleted thread without touching the others', async () => {
+    const releases = new Map<string, ReturnType<typeof vi.fn>>();
+    const manager = createThreadOwnershipManager(async threadId => {
+      const unsubscribe = vi.fn();
+      releases.set(threadId, unsubscribe);
+      return { claimed: true, unsubscribe };
+    });
+
+    await expect(manager.claim('thread-1')).resolves.toBe(true);
+    await expect(manager.claim('thread-2')).resolves.toBe(true);
+
+    manager.release('thread-1');
+
+    // A deleted thread has nothing left to answer for; the surviving thread stays
+    // claimed so peers can still reach it.
+    expect(releases.get('thread-1')).toHaveBeenCalledOnce();
+    expect(releases.get('thread-2')).not.toHaveBeenCalled();
+
+    manager.close();
+    expect(releases.get('thread-2')).toHaveBeenCalledOnce();
+    expect(releases.get('thread-1')).toHaveBeenCalledOnce();
+  });
+
+  it('drops a deleted thread whose ownership request is still in flight', async () => {
+    let resolveClaim: ((claim: { claimed: boolean; unsubscribe: () => void }) => void) | undefined;
+    const manager = createThreadOwnershipManager(
+      () =>
+        new Promise(resolve => {
+          resolveClaim = resolve;
+        }),
+    );
+
+    const pending = manager.claim('thread-1');
+    manager.release('thread-1');
+    const unsubscribe = vi.fn();
+    resolveClaim?.({ claimed: true, unsubscribe });
+    await pending;
+
+    // The deletion landed while the claim was in flight, so the late claim must
+    // release itself rather than leave a deleted thread advertised.
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
 });

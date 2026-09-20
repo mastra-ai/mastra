@@ -62,7 +62,12 @@ export function createSessionThreadAdvertisement<TState>(options: {
   const unsubscribeSession = session.subscribe(event => {
     if (event.type === 'thread_changed') void claimThreadOwnership(event.threadId);
     else if (event.type === 'thread_created') void claimThreadOwnership(event.thread.id);
-    else if (event.type === 'thread_title_updated' || event.type === 'om_thread_title_updated') {
+    else if (event.type === 'thread_deleted') {
+      // Claims outlive the session's current thread, so a deleted thread has to be
+      // released explicitly or it stays advertised and a peer keeps sending to it.
+      latestObservedTitles.delete(event.threadId);
+      threadOwnership.release(event.threadId);
+    } else if (event.type === 'thread_title_updated' || event.type === 'om_thread_title_updated') {
       const title = event.type === 'thread_title_updated' ? event.title : event.newTitle;
       const revision = (latestObservedTitles.get(event.threadId)?.revision ?? 0) + 1;
       latestObservedTitles.set(event.threadId, { revision, title });
