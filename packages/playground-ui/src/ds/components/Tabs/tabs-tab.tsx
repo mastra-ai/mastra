@@ -24,6 +24,11 @@ export type TabProps = {
   attention?: boolean;
   disabledTooltip?: React.ReactNode;
   className?: string;
+  /**
+   * Names the tab when `children` carries no text, e.g. an icon-only tab. Without it such a
+   * tab has no accessible name, and its close control reads as a bare "Close".
+   */
+  'aria-label'?: string;
 };
 
 export const Tab = ({
@@ -35,6 +40,7 @@ export const Tab = ({
   disabledTooltip,
   attention = false,
   className,
+  'aria-label': ariaLabel,
 }: TabProps) => {
   const list = useContext(TabListContext);
   const ref = useRef<HTMLDivElement>(null);
@@ -48,7 +54,7 @@ export const Tab = ({
       register({
         value,
         label: children,
-        name: toPlainText(children),
+        name: toPlainText(children) || ariaLabel || '',
         disabled: disabled ?? false,
         width: element.getBoundingClientRect().width,
         element,
@@ -60,7 +66,7 @@ export const Tab = ({
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [register, value, children, disabled, onClick, onClose]);
+  }, [register, value, children, ariaLabel, disabled, onClick, onClose]);
   useEffect(() => () => unregister?.(value), [unregister, value]);
   // The tab renders as a <div>, so the recipe's `disabled:` pseudo never matches; mirror it on the
   // aria/data attributes Base UI sets.
@@ -93,6 +99,7 @@ export const Tab = ({
   const tab = (
     <BaseTabs.Tab
       ref={ref}
+      aria-label={ariaLabel}
       render={<div />}
       nativeButton={false}
       data-overflowed={overflowed || undefined}

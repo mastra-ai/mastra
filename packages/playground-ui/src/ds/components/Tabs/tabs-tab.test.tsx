@@ -507,6 +507,39 @@ describe('Tab', () => {
     expect(tab.className).toContain('text-muted-foreground');
   });
 
+  it('names the close control from the tab text, skipping decorative children', () => {
+    render(
+      <Tabs defaultTab="traces">
+        <TabList>
+          <Tab value="traces" onClose={() => {}}>
+            <svg aria-hidden="true" />
+            Traces
+            <span>248</span>
+          </Tab>
+        </TabList>
+        <TabContent value="traces">Traces content</TabContent>
+      </Tabs>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Close Traces 248' })).toBeDefined();
+  });
+
+  it('names the close control from aria-label when the tab has no text', () => {
+    render(
+      <Tabs defaultTab="settings">
+        <TabList>
+          <Tab value="settings" aria-label="Settings" onClose={() => {}}>
+            <svg aria-hidden="true" />
+          </Tab>
+        </TabList>
+        <TabContent value="settings">Settings content</TabContent>
+      </Tabs>,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Settings' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Close Settings' })).toBeDefined();
+  });
+
   describe('pill-ghost variant', () => {
     it('renders tabs from the shared ghost buttonVariants recipe', () => {
       render(
