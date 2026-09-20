@@ -93,8 +93,8 @@ describe('GitLab issue reconciler', () => {
         return json({ id: 101, path_with_namespace: PROJECT_PATH, default_branch: 'main' });
       }
       if (url.includes('/issues/42/notes')) return json([]);
-      if (url.includes('/issues/42')) {
-        return json({
+      if (url.includes('/issues?iids%5B%5D=42')) {
+        return json([{
           id: 1042,
           iid: 42,
           project_id: 101,
@@ -105,11 +105,11 @@ describe('GitLab issue reconciler', () => {
           author: { name: 'Maintainer', username: 'maintainer' },
           assignee: null,
           assignees: [],
-          labels: ['bug'],
+          labels: [{ name: 'bug', color: '#428BCA' }],
           user_notes_count: 0,
           created_at: '2026-09-01T00:00:00Z',
           updated_at: '2026-09-18T00:00:00Z',
-        });
+        }]);
       }
       if (url.includes('/members/all')) {
         return json([{ id: 7, username: 'maintainer', state: 'active', access_level: accessLevel }]);
@@ -147,6 +147,11 @@ describe('GitLab issue reconciler', () => {
       decision: { type: 'transition', board: 'work', stage: 'done' },
     });
     const [item] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
-    expect(item?.metadata).toMatchObject({ author: 'Maintainer', authorTrusted: false, state: 'closed' });
+    expect(item?.metadata).toMatchObject({
+      author: 'Maintainer',
+      authorTrusted: false,
+      state: 'closed',
+      labelColors: { bug: '#428BCA' },
+    });
   });
 });

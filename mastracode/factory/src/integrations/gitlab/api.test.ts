@@ -101,6 +101,52 @@ describe('GitLabApiClient', () => {
     expect(JSON.parse(String(requestOf(fetchMock, 2).init.body))).toEqual({ state_event: 'close' });
   });
 
+  it('loads issue detail through the IID-filtered list so label colors survive', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      json([
+        {
+          id: 1042,
+          iid: 42,
+          project_id: 10,
+          title: 'A closed issue',
+          description: 'Full description',
+          state: 'closed',
+          web_url: 'https://gitlab.example.com/group/project/-/issues/42',
+          labels: [{ name: 'bug', color: '#428BCA' }],
+          user_notes_count: 2,
+          created_at: '2026-09-01T00:00:00Z',
+          updated_at: '2026-09-02T00:00:00Z',
+        },
+      ]),
+    );
+    const client = new GitLabApiClient({
+      baseUrl: 'https://gitlab.example.com',
+      accessToken: 'group-token',
+      fetchImpl: fetchMock,
+    });
+
+    await expect(client.getIssue('group/project', 42)).resolves.toMatchObject({
+      description: 'Full description',
+      state: 'closed',
+      user_notes_count: 2,
+      labels: ['bug'],
+      labelDetails: [{ name: 'bug', color: '#428BCA' }],
+    });
+    expect(requestOf(fetchMock).url).toBe(
+      'https://gitlab.example.com/api/v4/projects/group%2Fproject/issues?iids%5B%5D=42&state=all&scope=all&with_labels_details=true',
+    );
+  });
+
+  it('reports a missing IID as a not-found error', async () => {
+    const client = new GitLabApiClient({
+      baseUrl: 'https://gitlab.example.com',
+      accessToken: 'group-token',
+      fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(json([])),
+    });
+
+    await expect(client.getIssue('group/project', 42)).rejects.toMatchObject({ status: 404 });
+  });
+
   it('sends merge request, discussion, approval, reviewer, and member requests directly', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(json({})));
     const client = new GitLabApiClient({

@@ -184,6 +184,7 @@ describe('GitLabIntegration', () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(json([issue(10, 42)]))
+      .mockResolvedValueOnce(json([issue(10, 42)]))
       .mockResolvedValueOnce(json({ ...issue(10, 42), state: 'closed' }));
     const gitlab = direct(fetchMock);
     const sourceId = encodeSourceId({ connectionId: 'direct', projectId: '10', projectPath: 'mastra/platform' });
@@ -202,22 +203,22 @@ describe('GitLabIntegration', () => {
       issueId: page.issues[0]!.id,
       state: { kind: 'byType', stateType: 'completed' },
     });
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('/projects/10/issues/42');
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain('/projects/10/issues/42');
   });
 
   it('fetches issue detail, discussion notes, comments, and state changes directly', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(json(issue()))
+      .mockResolvedValueOnce(json([issue()]))
       .mockResolvedValueOnce(
         json([
           { id: 1, body: 'system', author: { username: 'bot' }, created_at: '2026-09-01T01:00:00Z', system: true },
           { id: 2, body: 'ship it', author: { name: 'Lin', username: 'lin' }, created_at: '2026-09-01T02:00:00Z' },
         ]),
       )
-      .mockResolvedValueOnce(json(issue()))
+      .mockResolvedValueOnce(json([issue()]))
       .mockResolvedValueOnce(json({ id: 3, body: 'done', created_at: '2026-09-01T03:00:00Z' }))
-      .mockResolvedValueOnce(json(issue()))
+      .mockResolvedValueOnce(json([issue()]))
       .mockResolvedValueOnce(json({ ...issue(), state: 'closed' }));
     const gitlab = direct(fetchMock);
     const sourceId = encodeSourceId({ connectionId: 'direct', projectId: '10', projectPath: 'mastra/platform' });
@@ -243,6 +244,7 @@ describe('GitLabIntegration', () => {
     expect(detail).toMatchObject({
       identifier: 'mastra/platform#42',
       description: 'The full issue description.',
+      labelColors: { bug: '#d73a4a' },
       comments: [{ author: 'Lin', body: 'ship it' }],
     });
     expect(comment).toEqual({ id: '3', url: 'https://gitlab.com/mastra/platform/-/issues/42#note_3' });
@@ -250,7 +252,7 @@ describe('GitLabIntegration', () => {
   });
 
   it('resolves project-qualified issue shorthand for the read tool', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(json(issue())).mockResolvedValueOnce(json([]));
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(json([issue()])).mockResolvedValueOnce(json([]));
 
     const detail = await direct(fetchMock).intake.getIssue({
       connection: { type: 'oauth', accessToken: 'gitlab-tool' },
@@ -258,7 +260,7 @@ describe('GitLabIntegration', () => {
     });
 
     expect(detail?.identifier).toBe('mastra/platform#42');
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/projects/mastra%2Fplatform/issues/42');
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/projects/mastra%2Fplatform/issues?iids%5B%5D=42');
   });
 
   it('does not resolve an issue URL through a linked repository on another GitLab host', async () => {

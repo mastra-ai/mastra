@@ -252,11 +252,16 @@ export class GitLabApiClient {
   }
 
   async getIssue(projectId: string, issueIid: number): Promise<GitLabIssue> {
-    const issue = await this.#request<GitLabIssueResponse>(
+    // GitLab's single-issue endpoint returns label names even when
+    // with_labels_details is requested. The IID-filtered list endpoint returns
+    // the same issue with label colors, including for closed issues.
+    const issues = await this.#request<GitLabIssueResponse[]>(
       'GET',
-      `/api/v4/projects/${encodeURIComponent(projectId)}/issues/${issueIid}`,
-      { query: { with_labels_details: 'true' } },
+      `/api/v4/projects/${encodeURIComponent(projectId)}/issues`,
+      { query: { 'iids[]': issueIid, state: 'all', scope: 'all', with_labels_details: 'true' } },
     );
+    const issue = issues.find(candidate => candidate.iid === issueIid);
+    if (!issue) throw new GitLabApiError(`GitLab issue ${issueIid} was not found`, 404);
     return normalizeIssue(issue);
   }
 
