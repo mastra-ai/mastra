@@ -47,7 +47,7 @@ import {
 } from '@mastra/observability';
 import { PostgresStore } from '@mastra/pg';
 
-import { createThreadOwnershipManager } from './agent-connections/ownership.js';
+import { createSessionThreadAdvertisement } from './agent-connections/session-advertisement.js';
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
@@ -1348,68 +1348,26 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const sessionPeerCleanup = new WeakMap<Session<MastraCodeState>, () => void>();
   // Thread ownership advertisement is part of experimental cross-agent
-  // communication: without it, sessions never claim or advertise their active
-  // thread to peers.
+  // communication: without it, sessions never claim or advertise their thread to
+  // peers. Every thread a session has loaded stays claimed (see
+  // `createSessionThreadAdvertisement`) so peers that saved it stay connected
+  // after the user moves to another thread.
   if (useCrossAgentSignals) {
     controller.onSessionCreated(
       async session => {
-        const latestObservedTitles = new Map<string, { revision: number; title: string | undefined }>();
-        const threadOwnership = createThreadOwnershipManager(async threadId => {
-          const revisionAtStart = latestObservedTitles.get(threadId)?.revision ?? 0;
-          const thread = await session.thread.getById({ threadId });
-          const agent = controller.getCurrentAgent(session);
-          const claim = await agent.claimThreadOwnership({
-            threadId,
-            resourceId: session.identity.getResourceId(),
-            streamOptions: () => session.machinery.buildStreamOptions({}),
-            peer: {
-              label: project.name,
-              ...(thread?.title ? { title: thread.title } : {}),
-            },
-          });
-          const observedTitle = latestObservedTitles.get(threadId);
-          if (claim.claimed && observedTitle && observedTitle.revision !== revisionAtStart) {
-            agent.updateThreadPeerAdvertisement({
-              resourceId: session.identity.getResourceId(),
-              threadId,
-              peer: { title: observedTitle.title },
-            });
-          }
-          return claim;
+        const advertisement = createSessionThreadAdvertisement({
+          session,
+          controller,
+          projectName: project.name,
         });
-
-        const claimThreadOwnership = async (threadId: string) => {
-          try {
-            await threadOwnership.claim(threadId);
-          } catch (error) {
-            console.error(`Failed to claim cross-agent thread ownership for ${threadId}`, error);
-          }
-        };
-        const unsubscribeSession = session.subscribe(event => {
-          if (event.type === 'thread_changed') void claimThreadOwnership(event.threadId);
-          else if (event.type === 'thread_created') void claimThreadOwnership(event.thread.id);
-          else if (event.type === 'thread_title_updated' || event.type === 'om_thread_title_updated') {
-            const title = event.type === 'thread_title_updated' ? event.title : event.newTitle;
-            const revision = (latestObservedTitles.get(event.threadId)?.revision ?? 0) + 1;
-            latestObservedTitles.set(event.threadId, { revision, title });
-            controller.getCurrentAgent(session).updateThreadPeerAdvertisement({
-              resourceId: session.identity.getResourceId(),
-              threadId: event.threadId,
-              peer: { title },
-            });
-          }
-        });
-        sessionPeerCleanup.set(session, () => {
-          unsubscribeSession();
-          threadOwnership.close();
-        });
+        sessionPeerCleanup.set(session, () => advertisement.close());
         const initialThreadId = session.thread.getId();
         if (initialThreadId) {
           // This listener blocks session creation, so bound the initial claim:
           // an unsettled PubSub subscription must not hang createSession().
           // The claim keeps settling in the background either way.
           await Promise.race([
-            claimThreadOwnership(initialThreadId),
+            advertisement.claim(initialThreadId),
             new Promise<void>(resolve => {
               const timer = setTimeout(resolve, 5_000);
               timer.unref?.();

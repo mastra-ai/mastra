@@ -7310,6 +7310,61 @@ describe('Agent signals', () => {
     followerSubscription.unsubscribe();
   });
 
+  it('keeps a remote owner run alive when a thread teardown aborts locally', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const followerRuntime = new AgentThreadStreamRuntime();
+    const resourceId = 'local-abort-resource';
+    const threadId = 'local-abort-thread';
+    const key = `${resourceId}\u0000${threadId}`;
+    const runId = 'local-abort-run';
+    pubsub.owners.set(key, runId);
+    const ownerSubscription = await ownerRuntime.subscribeToThread(
+      { id: 'local-abort-agent' } as Agent<any, any, any, any>,
+      { resourceId, threadId },
+      pubsub,
+    );
+    const followerSubscription = await followerRuntime.subscribeToThread(
+      { id: 'local-abort-agent' } as Agent<any, any, any, any>,
+      { resourceId, threadId },
+      pubsub,
+    );
+
+    const options = ownerRuntime.prepareRunOptions(
+      { runId, memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    ownerRuntime.registerRun(
+      { id: 'local-abort-agent' } as Agent<any, any, any, any>,
+      {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      options,
+      pubsub,
+    );
+    await pubsub.flush();
+    await waitForCondition(() => followerSubscription.activeRunId() === runId);
+
+    // Unbinding a thread (a follower running `/new`, or a session teardown) stops
+    // this process's own run and must not reach the owner's run over PubSub.
+    const publishedBeforeLocalAbort = pubsub.publishedData.length;
+    expect(followerSubscription.abort({ localOnly: true })).toBe(false);
+    await pubsub.flush();
+    await nextTick();
+    expect(options.abortSignal?.aborted).toBe(false);
+    expect(pubsub.publishedData).toHaveLength(publishedBeforeLocalAbort);
+    expect(pubsub.publishedData.some(data => data?.type === 'run-abort-requested')).toBe(false);
+    // The owner still holds the live lease, so a real abort from this follower
+    // would have been forwarded — the suppression above is what kept it alive.
+    expect(pubsub.owners.get(key)).toBe(runId);
+
+    ownerSubscription.unsubscribe();
+    followerSubscription.unsubscribe();
+  });
+
   it('routes remote abort requests to a parked suspended run on the lease owner', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();

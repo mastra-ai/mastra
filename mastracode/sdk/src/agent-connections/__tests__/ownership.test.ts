@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createThreadOwnershipManager } from '../ownership.js';
 
 describe('createThreadOwnershipManager', () => {
-  it('keeps only the newest claim when async ownership requests resolve out of order', async () => {
+  it('retains every claimed thread when ownership requests resolve out of order', async () => {
     const claims = new Map<string, { resolve: (claim: { claimed: boolean; unsubscribe: () => void }) => void }>();
     const manager = createThreadOwnershipManager(
       threadId =>
@@ -21,11 +21,34 @@ describe('createThreadOwnershipManager', () => {
     claims.get('thread-1')?.resolve({ claimed: true, unsubscribe: releaseFirst });
     await first;
 
-    expect(releaseFirst).toHaveBeenCalledOnce();
+    // Neither thread's claim is dropped: a session that has bound both threads
+    // keeps both addressable by peers.
+    expect(releaseFirst).not.toHaveBeenCalled();
     expect(releaseSecond).not.toHaveBeenCalled();
 
     manager.close();
+    expect(releaseFirst).toHaveBeenCalledOnce();
     expect(releaseSecond).toHaveBeenCalledOnce();
+  });
+
+  it('supersedes only the re-claimed thread', async () => {
+    const releases = new Map<string, ReturnType<typeof vi.fn>>();
+    const manager = createThreadOwnershipManager(async threadId => {
+      const unsubscribe = vi.fn();
+      const key = `${threadId}:${releases.size}`;
+      releases.set(key, unsubscribe);
+      return { claimed: true, unsubscribe };
+    });
+
+    await expect(manager.claim('thread-1')).resolves.toBe(true);
+    await expect(manager.claim('thread-2')).resolves.toBe(true);
+    await expect(manager.claim('thread-1')).resolves.toBe(true);
+
+    // The first claim on thread-1 was replaced by the re-claim; thread-2's claim
+    // is untouched throughout.
+    expect(releases.get('thread-1:0')).toHaveBeenCalledOnce();
+    expect(releases.get('thread-2:1')).not.toHaveBeenCalled();
+    expect(releases.get('thread-1:2')).not.toHaveBeenCalled();
   });
 
   it('does not retain a rejected ownership claim', async () => {
@@ -66,13 +89,15 @@ describe('createThreadOwnershipManager', () => {
     }
   });
 
-  it('releases the current claim immediately when transitioning to no thread', async () => {
+  it('keeps previously claimed threads when handed no thread', async () => {
     const unsubscribe = vi.fn();
     const manager = createThreadOwnershipManager(async () => ({ claimed: true, unsubscribe }));
 
     await expect(manager.claim('thread-1')).resolves.toBe(true);
     await expect(manager.claim(undefined)).resolves.toBe(false);
 
+    expect(unsubscribe).not.toHaveBeenCalled();
+    manager.close();
     expect(unsubscribe).toHaveBeenCalledOnce();
   });
 });

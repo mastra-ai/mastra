@@ -1730,6 +1730,10 @@ export class AgentThreadStreamRuntime {
     if (state.remoteThreadKeysByRunId.get(runId) !== key) return false;
     const streamId = state.activeThreadStreamIds.get(key);
     if (!streamId) return false;
+    // A remote owner's run is only stopped when the abort is meant for it. Thread
+    // lifecycle transitions abort locally on the way out and must not reach across
+    // processes: a follower running `/new` would otherwise kill the owner's run.
+    if (options.localOnly) return false;
     this.#publish(resolvedPubSub, key, { type: 'run-abort-requested', runId, streamId });
     return true;
   }
@@ -3477,7 +3481,8 @@ export class AgentThreadStreamRuntime {
         const record = activeReaderStreamId ? state.threadRunsByStreamId.get(activeReaderStreamId) : undefined;
         return record ? record.streamOptions.requestContext : currentRunRequestContext;
       },
-      abort: () => this.abortThread(options, resolvedPubSub),
+      abort: (abortOptions?: { localOnly?: boolean }) =>
+        this.abortThread(abortOptions?.localOnly ? { ...options, localOnly: true } : options, resolvedPubSub),
       unsubscribe,
       stream: (async function* () {
         try {
