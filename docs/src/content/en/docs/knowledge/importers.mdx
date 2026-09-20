@@ -15,6 +15,17 @@ Register importer bindings in host configuration and map each binding to authori
 
 An import run moves through guarded states such as queued, running, completed, failed, or skipped. Concurrent cron enqueues must produce one active run. Other attempts are skipped rather than racing.
 
+`KnowledgeConfig.importers` accepts either a static array of importer definitions or an async resolver `() => Promise<readonly KnowledgeImporterDefinition[]>`. The runner resolves the resolver at start and again at the top of every scheduling tick: new definition ids get registered, definitions whose ids disappeared get deregistered, and unchanged ids keep their registration and durable cursor state. Manual `registerImporter()` calls are never removed by resolver reconciliation. If the resolver throws on a tick, the previous set stays active so a transient failure never drops running syncs.
+
+```typescript
+new Knowledge({
+  storage,
+  importers: async () => discoverImportersForThisProject(),
+})
+```
+
+This is what `@mastra/connect`'s [`importers()`](/docs/knowledge/connect-importers) returns — connections attached or detached on the platform start or stop syncing without a process restart.
+
 ## Preserve identity
 
 Give every source object a stable external address. Static importer operations resolve and upsert those addresses inside a transaction-bound run. Node merges rebind source addresses to the surviving target, preserving importer idempotency.

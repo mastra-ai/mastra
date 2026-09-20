@@ -1,0 +1,40 @@
+---
+'@mastra/connect': minor
+'@mastra/mcp-docs-server': patch
+'@mastra/client-js': patch
+'@mastra/factory': patch
+'@mastra/clickhouse': patch
+'@mastra/cloudflare': patch
+'@mastra/memory': patch
+'@mastra/server': patch
+'@mastra/code-sdk': patch
+'mastracode': patch
+'@mastra/mongodb': patch
+'@mastra/core': patch
+'@mastra/libsql': patch
+'mastra': patch
+'@mastra/mysql': patch
+'@mastra/turso': patch
+'@mastra/pg': patch
+---
+
+**Added** `importers()` — a live async resolver of Knowledge importer definitions from Mastra Platform connections. Pass it directly to `new Knowledge({ importers })`; connections attached or detached on the platform start or stop syncing without a restart.
+
+Six built-in providers ship in the `IMPORTERS` registry: Notion, Confluence, Jira, Linear, Zendesk, and Fireflies. Each is a deterministic cursor-based sync through the platform proxy (no source credentials in your process), with content-hashed record ids for idempotent re-runs and durable watermark state that only advances after mutations commit.
+
+```typescript
+import { Knowledge } from '@mastra/core/knowledge';
+import { importers } from '@mastra/connect';
+
+new Knowledge({
+  storage,
+  importers: importers({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    integrations: {
+      notion: { scope: 'org:acme' },
+      linear: { scope: 'org:acme:engineering' },
+      fireflies: { scope: 'org:acme' },
+    },
+  }),
+});
+```

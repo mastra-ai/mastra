@@ -1,0 +1,85 @@
+---
+title: 'Connect importers'
+description: 'Sync Notion, Confluence, Zendesk, Linear, Jira, and Fireflies into Knowledge through the Mastra Platform connection proxy.'
+packages:
+  - '@mastra/core'
+  - '@mastra/connect'
+---
+
+# Connect importers
+
+`@mastra/connect` ships a hardcoded set of Knowledge importers for six third-party sources: Notion, Confluence, Zendesk, Linear, Jira, and Fireflies. Each importer runs as a deterministic cursor-based sync through the Mastra Platform HTTP proxy — source credentials never enter your process, and importers do not reuse Connect toolset definitions.
+
+Pass the resolver returned by `importers()` straight to `KnowledgeConfig.importers`. It is a live async resolver: attaching a connection on the platform makes the corresponding importer appear on the next scheduling tick, and detaching one stops it — no process restart.
+
+## Register the resolver
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+import { importers } from '@mastra/connect'
+
+export const knowledge = new Knowledge({
+  id: 'mastra',
+  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  importers: importers({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    integrations: {
+      notion: { scope: 'org:acme' },
+      linear: { scope: 'org:acme:engineering' },
+      fireflies: { scope: 'org:acme' },
+    },
+  }),
+})
+```
+
+Only the providers you list under `integrations` are considered. A provider with no `scope` or `access` throws at `importers()` call time. Per-connection resolution problems — needs-reauth, ambiguous multiple connections without a `connectionId` pin, no active connection — warn and skip so one bad integration never fails the whole set.
+
+## Providers
+
+| `integrationId` | Default schedule | External address | Notes |
+| - | - | - | - |
+| `notion` | `0 * * * *` | `notion:page:<id>`, `notion:database:<id>` | `POST /v1/search` sorted by `last_edited_time`; archived pages remove records under an `owner` binding. |
+| `confluence` | `0 * * * *` | `confluence:page:<id>` | CQL `lastmodified >= "<watermark>"`; storage-format body stripped to plain text. |
+| `jira` | `*/30 * * * *` | `jira:issue:<key>` | JQL `updated >= "<watermark>" ORDER BY updated ASC`. |
+| `linear` | `*/30 * * * *` | `linear:issue:<id>` | GraphQL `issues(filter: { updatedAt: { gte: $watermark } })`; archived issues remove records. |
+| `zendesk` | `*/30 * * * *` | `zendesk:ticket:<id>` | Incremental cursor export (`/api/v2/incremental/tickets/cursor.json`); `after_cursor` stored verbatim. |
+| `fireflies` | `0 */2 * * *` | `fireflies:transcript:<id>` | GraphQL `transcripts(fromDate: $watermark)`; one record per summary facet (overview, action items, keywords) with a `metadata.citation` deep link. |
+
+## Per-integration options
+
+| Field | Purpose |
+| - | - |
+| `scope` | Convenience shorthand for a single-scope `owner` grant. |
+| `access` | Explicit `{ scopeAddress: 'owner' \| 'edit' }` map when you need multiple scopes or non-owner roles. |
+| `connectionId` | Pin a specific connection id when a project has more than one connection for the same provider. |
+| `disabled` | Skip this provider even if a connection exists. |
+| `schedule` | Cron override; defaults to the provider's `defaultSchedule`. |
+
+If a project has multiple active connections for the same provider and no `connectionId` is pinned, `importers()` reads the corresponding environment variable (for example `MASTRA_NOTION_CONNECTION_ID`) and falls back to warn-and-skip when ambiguous.
+
+## Credential model
+
+All provider HTTP goes through `proxyRequest` against the platform's connection proxy. Importer code never sees access tokens or API keys, and the proxy enforces per-connection authorization. This is the same guarantee that applies to `connect()` tools — importers just use the client layer directly instead of exposing tools to a model.
+
+## Delta semantics
+
+Every importer is written for at-least-once execution:
+
+- Cursor or watermark state lives in `context.state` — the importer's durable KV store. It is written exactly once per run, after every mutation for that window has committed. A mid-run failure leaves the watermark low, so the next run replays that window; deterministic record ids keep the replay idempotent.
+- Date-based watermarks (Notion, Confluence, Jira, Linear, Fireflies) re-process the boundary timestamp inclusively.
+- Zendesk's `after_cursor` is opaque — importers store it verbatim, never parse it.
+- Every run is bounded: at most 50 HTTP pages and 500 records per invocation, and every handler honors `context.signal` for cancellation.
+
+## Cache and revalidation
+
+`importers()` snapshots the resolved definitions and revalidates on TTL expiry (`ttlMs`, default `30_000`). Two additional entry points let you drive revalidation yourself:
+
+```typescript
+const resolver = importers({ projectId: 'proj_x', integrations: { notion: { scope: 'org:acme' } } })
+
+resolver.invalidate() // Drop the cached snapshot; next call refetches.
+await resolver.refresh() // Force a refetch now and update the cache.
+```
+
+A platform fetch failure serves the previous good snapshot rather than losing importers mid-run; the failure is logged and enters a short cooldown.

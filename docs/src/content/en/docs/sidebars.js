@@ -258,6 +258,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'knowledge/connect-importers',
+              label: 'Connect importers',
+            },
+            {
+              type: 'doc',
               id: 'knowledge/capture',
               label: 'Capture',
             },
