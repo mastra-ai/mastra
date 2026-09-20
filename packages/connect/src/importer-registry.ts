@@ -10,12 +10,20 @@ export type ImporterProxyResponse = unknown;
 /** Scope-address → role map importers are granted by the host. */
 export type ImporterAccess = Readonly<Record<string, 'owner' | 'edit'>>;
 
+/** Context handed to an {@link ImporterScopesResolver} at each resolution. */
+export interface ImporterScopesContext {
+  /** The platform connection the resolving importer is bound to. */
+  readonly connection: ProjectConnection;
+}
+
 /**
  * Resolves the current set of destination scope addresses at cron-fire time,
- * e.g. one `resource:<projectId>` per active project. Pair with a parameterized
+ * e.g. one `resource:<projectId>` per active project. Receives the importer's
+ * connection so per-connection routing can produce different destinations for
+ * different connections of the same provider. Pair with a parameterized
  * `access` map (`{ 'resource:$projectId': 'owner' }`) so resolved scopes are writable.
  */
-export type ImporterScopesResolver = () => readonly string[] | Promise<readonly string[]>;
+export type ImporterScopesResolver = (context: ImporterScopesContext) => readonly string[] | Promise<readonly string[]>;
 
 export interface ImporterProviderContext {
   connection: ProjectConnection;

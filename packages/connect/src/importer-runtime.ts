@@ -25,21 +25,24 @@ export function isParameterizedScope(scope: string): boolean {
  * keys become static bindings (today's behavior, unchanged); parameterized
  * keys are authority patterns, not destinations, and are excluded. When the
  * host configured dynamic `scopes`, they surface as the trigger's
- * `resolveBindings` — resolved at each fire and unioned with the static set
- * by the core runner.
+ * `resolveBindings` — resolved at each fire (with the importer's connection
+ * as context, enabling per-connection routing) and unioned with the static
+ * set by the core runner.
  */
 export function importerCronTrigger(
   source: string,
-  ctx: Pick<ImporterProviderContext, 'access' | 'schedule' | 'scopes'>,
+  ctx: Pick<ImporterProviderContext, 'access' | 'schedule' | 'scopes' | 'connection'>,
 ): KnowledgeImporterCronTrigger {
   const staticBindings = Object.keys(ctx.access)
     .filter(scope => !isParameterizedScope(scope))
     .map(scope => ({ source, scope }));
-  const scopes = ctx.scopes;
+  const { scopes, connection } = ctx;
   return {
     schedule: ctx.schedule,
     ...(staticBindings.length > 0 ? { bindings: staticBindings } : {}),
-    ...(scopes ? { resolveBindings: async () => (await scopes()).map(scope => ({ source, scope })) } : {}),
+    ...(scopes
+      ? { resolveBindings: async () => (await scopes({ connection })).map(scope => ({ source, scope })) }
+      : {}),
   };
 }
 

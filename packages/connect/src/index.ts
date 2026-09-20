@@ -17,6 +17,7 @@ export type {
   ImporterProviderRegistration,
   ImporterProxyRequest,
   ImporterProxyResponse,
+  ImporterScopesContext,
   ImporterScopesResolver,
 } from './importer-registry.js';
 export {
