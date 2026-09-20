@@ -32,6 +32,7 @@ interface InstallOptions extends ArchitectureOptions {
 }
 
 const PNPM_PATCHES_DIR = 'pnpm-patches';
+const BUN_PATCHES_DIR = 'bun-patches';
 
 const PNPM_CONFIG_KEYS_TO_COPY = new Set([
   'allowBuilds',
@@ -371,6 +372,85 @@ export class Deps extends MastraBase {
     );
   }
 
+  /**
+   * Copies the source workspace's `.yarn/patches/` directory (Yarn Berry) into the output
+   * directory so patches survive the output install. Yarn auto-discovers patches from this
+   * directory and applies them per the lockfile references.
+   */
+  private async copyYarnPatches(dir: string): Promise<void> {
+    const sourcePatchesDir = path.join(this.rootDir, '.yarn', 'patches');
+    if (!fs.existsSync(sourcePatchesDir)) return;
+
+    const outputPatchesDir = path.join(dir, '.yarn', 'patches');
+    await fsPromises.cp(sourcePatchesDir, outputPatchesDir, { recursive: true, errorOnExist: false });
+  }
+
+  /**
+   * Copies the patch files referenced by the source workspace's `patchedDependencies` in
+   * package.json into the output directory and returns the map rewritten to output-relative
+   * paths, so bun patches survive the output install.
+   */
+  private async copyBunPatches(
+    declared: Record<string, string>,
+    sourceRoot: string,
+    dir: string,
+  ): Promise<Record<string, string>> {
+    const rewritten: Record<string, string> = {};
+    const usedFileNames = new Set<string>();
+    const resolvedRoot = path.resolve(sourceRoot);
+
+    for (const [key, declaredPath] of Object.entries(declared)) {
+      const sourcePath = path.resolve(resolvedRoot, declaredPath);
+      if (!sourcePath.startsWith(`${resolvedRoot}${path.sep}`)) {
+        this.logger.warn(`Skipping bun patch for "${key}": patch file is outside the workspace at ${sourcePath}`);
+        continue;
+      }
+      if (!fs.existsSync(sourcePath)) {
+        this.logger.warn(`Skipping bun patch for "${key}": patch file not found at ${sourcePath}`);
+        continue;
+      }
+
+      let fileName = path.basename(sourcePath);
+      if (usedFileNames.has(fileName)) {
+        fileName = `${key.replace(/[^a-zA-Z0-9._-]/g, '_')}-${fileName}`;
+      }
+      usedFileNames.add(fileName);
+
+      await fsPromises.mkdir(path.join(dir, BUN_PATCHES_DIR), { recursive: true });
+      await fsPromises.copyFile(sourcePath, path.join(dir, BUN_PATCHES_DIR, fileName));
+      rewritten[key] = `${BUN_PATCHES_DIR}/${fileName}`;
+    }
+
+    return rewritten;
+  }
+
+  /**
+   * Reads `patchedDependencies` from the source package.json, copies the referenced patch
+   * files into the output directory, and writes the output-relative patch map into the
+   * output's package.json so `bun install` preserves patches in the bundled output.
+   */
+  private async copyBunPatchesToOutput(dir: string): Promise<void> {
+    const sourcePackageJsonPath = path.join(this.rootDir, 'package.json');
+    if (!fs.existsSync(sourcePackageJsonPath)) return;
+
+    const sourcePkg = await readJSON(sourcePackageJsonPath);
+    const patchedDeps = sourcePkg.patchedDependencies as Record<string, string> | undefined;
+    if (!patchedDeps || Object.keys(patchedDeps).length === 0) return;
+
+    const rewritten = await this.copyBunPatches(patchedDeps, this.rootDir, dir);
+    if (Object.keys(rewritten).length === 0) return;
+
+    const outputPackageJsonPath = path.join(dir, 'package.json');
+    let outputPkg: Record<string, unknown>;
+    try {
+      outputPkg = (await readJSON(outputPackageJsonPath)) as Record<string, unknown>;
+    } catch {
+      outputPkg = {};
+    }
+    outputPkg.patchedDependencies = rewritten;
+    await writeJSON(outputPackageJsonPath, outputPkg, { spaces: 2 });
+  }
+
   private getNpmArgs(options: ArchitectureOptions): string[] {
     const args: string[] = [];
     if (options.cpu) args.push(`--cpu=${options.cpu.join(',')}`);
@@ -440,6 +520,10 @@ export class Deps extends MastraBase {
         if (architecture) {
           await this.writeYarnConfig(dir, architecture);
         }
+        await this.copyYarnPatches(dir);
+        break;
+      case 'bun':
+        await this.copyBunPatchesToOutput(dir);
         break;
       case 'npm':
         if (architecture) {

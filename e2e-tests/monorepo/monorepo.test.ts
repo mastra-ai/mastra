@@ -1,8 +1,9 @@
 import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { dirname, join, relative } from 'path';
+import { fileURLToPath } from 'url';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
+import { cp, mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -1509,4 +1510,96 @@ describe.sequential('reproducible bundles', () => {
       timeout,
     );
   });
+});
+
+describe.sequential('bun patched dependencies', () => {
+  it(
+    'keeps source workspace patches applied in the built output',
+    async () => {
+      const registry = inject('registry');
+      const __dirname = dirname(fileURLToPath(import.meta.url));
+      const monorepoPath = join(__dirname, 'template');
+
+      const fixturePath = await mkdtemp(join(tmpdir(), 'mastra-monorepo-bun-patch-'));
+      try {
+        await cp(monorepoPath, fixturePath, { recursive: true });
+        await cp(join(__dirname, '..', '..', 'tsconfig.node.json'), join(fixturePath, 'tsconfig.json'));
+        await writeFile(join(fixturePath, '.npmrc'), 'minimum-release-age=0\n');
+
+        // Convert to bun workspace: remove pnpm-workspace.yaml, add workspaces to package.json
+        await rm(join(fixturePath, 'pnpm-workspace.yaml'));
+
+        const packageJsonPath = join(fixturePath, 'package.json');
+        const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
+        delete packageJson.packageManager;
+        packageJson.workspaces = ['packages/*', 'apps/*'];
+        await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
+
+        // Initial install to set up workspace
+        await execa('bun', ['install'], {
+          cwd: fixturePath,
+          env: { ...process.env, npm_config_registry: registry },
+          timeout: 5 * 60 * 1000,
+        });
+
+        // Create patch
+        await mkdir(join(fixturePath, 'patches'), { recursive: true });
+        await writeFile(
+          join(fixturePath, 'patches', 'unicorn-magic.patch'),
+          [
+            'diff --git a/mastra-patch-marker.txt b/mastra-patch-marker.txt',
+            'new file mode 100644',
+            '--- /dev/null',
+            '+++ b/mastra-patch-marker.txt',
+            '@@ -0,0 +1 @@',
+            '+patched-by-mastra-e2e',
+            '',
+          ].join('\n'),
+        );
+
+        // Add patchedDependencies and re-install to apply patches
+        packageJson.patchedDependencies = {
+          'unicorn-magic@0.4.0': 'patches/unicorn-magic.patch',
+        };
+        await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
+
+        await execa('bun', ['install', '--no-frozen-lockfile'], {
+          cwd: fixturePath,
+          env: { ...process.env, npm_config_registry: registry },
+          timeout: 5 * 60 * 1000,
+        });
+
+        // Build
+        const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+        await rm(outputDir, { recursive: true, force: true });
+
+        const buildResult = await execa('bun', ['run', 'build'], {
+          cwd: join(fixturePath, 'apps', 'custom'),
+          env: process.env,
+          timeout: 5 * 60 * 1000,
+        });
+
+        expect(buildResult.exitCode).toBe(0);
+
+        // Verify patch config is written to output
+        const outputPackageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf8'));
+        expect(outputPackageJson.patchedDependencies).toEqual({
+          'unicorn-magic@0.4.0': 'bun-patches/unicorn-magic.patch',
+        });
+
+        // Verify patch file is copied to output
+        expect(await readFile(join(outputDir, 'bun-patches', 'unicorn-magic.patch'), 'utf8')).toContain(
+          'patched-by-mastra-e2e',
+        );
+
+        // Verify patch is applied in the installed output node_modules
+        expect(
+          await readFile(join(outputDir, 'node_modules', 'unicorn-magic', 'mastra-patch-marker.txt'), 'utf8'),
+        ).toContain('patched-by-mastra-e2e');
+      } finally {
+        await rm(fixturePath, { recursive: true, force: true });
+      }
+    },
+    timeout,
+  );
 });
