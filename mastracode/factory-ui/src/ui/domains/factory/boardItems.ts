@@ -11,6 +11,7 @@ export const SOURCE_LABELS: Record<WorkItemSource, string> = {
   'github-issue': 'Issue',
   'github-pr': 'PR Review',
   'gitlab-issue': 'GitLab',
+  'gitlab-pr': 'MR Review',
   'linear-issue': 'Linear',
   'jira-issue': 'Jira',
   'incidentio-follow-up': 'incident.io',
@@ -41,6 +42,7 @@ export function metadataLabelColors(metadata: Record<string, unknown>): Record<s
 }
 
 export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>): number | undefined {
+  if (item.source !== 'github-issue' && item.source !== 'github-pr') return;
   const metadataKey = item.source === 'github-issue' ? 'githubIssueNumber' : 'githubPullRequestNumber';
   const itemNumber = item.metadata[metadataKey] ?? item.metadata.number;
   if (typeof itemNumber !== 'number' || !Number.isInteger(itemNumber) || itemNumber <= 0) return;
@@ -48,8 +50,10 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>)
 }
 
 export function gitlabIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
-  if (item.source !== 'gitlab-issue' || typeof item.metadata.identifier !== 'string') return;
-  return item.metadata.identifier;
+  if (item.source === 'gitlab-issue' && typeof item.metadata.identifier === 'string') return item.metadata.identifier;
+  if (item.source !== 'gitlab-pr') return;
+  const iid = item.metadata.gitlabMergeRequestIid;
+  return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? `!${iid}` : undefined;
 }
 
 /** The human issue key a Linear card carries (`ENG-123`), when it has one. */
@@ -118,7 +122,7 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
 
 /** Aria label for the icon-only external link next to a card title. */
 export function externalLinkLabel(source: WorkItemSource): string {
-  if (source === 'gitlab-issue') return 'Open in GitLab';
+  if (source === 'gitlab-issue' || source === 'gitlab-pr') return 'Open in GitLab';
   if (source === 'linear-issue') return 'Open in Linear';
   if (source === 'jira-issue') return 'Open in Jira';
   if (source === 'incidentio-follow-up') return 'Open in incident.io';

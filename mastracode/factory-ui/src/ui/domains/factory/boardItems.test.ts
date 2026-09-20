@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { metadataLabelColors, workItemMeta } from './boardItems';
+import { externalLinkLabel, metadataLabelColors, workItemMeta } from './boardItems';
 import type { WorkItem } from './services/workItems';
 
 function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -69,6 +69,13 @@ describe('workItemMeta', () => {
       metadata: { identifier: 'INC-42', author: 'Ada Lovelace', assignee: 'Grace Hopper' },
     });
     expect(workItemMeta(item)).toBe('INC-42 · Grace Hopper · just now');
+  });
+
+  it('names a GitLab merge request by its IID and links to GitLab', () => {
+    expect(workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } }))).toBe(
+      '!5 · Rhys · just now',
+    );
+    expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
   });
 });
 
