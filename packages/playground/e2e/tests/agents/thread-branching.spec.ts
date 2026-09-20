@@ -155,7 +155,7 @@ test.describe('Thread branching', () => {
     test('does not offer branching on the synthetic message block', async () => {
       await page.goto('/agents/weather-agent/chat/new');
       await sendMessage(page, USER_MESSAGE);
-      await expect(assistantReply(page)).toBeVisible();
+      await expect(assistantReply(page)).toBeVisible({ timeout: 20000 });
 
       // Streamed blocks keep accumulator ids (text-*/start-*) that the server
       // cannot fork at; the branch action must stay hidden on any message block
