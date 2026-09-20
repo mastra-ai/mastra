@@ -715,7 +715,9 @@ describe('durable tool-call background revalidation', () => {
     } as any);
 
     let executor: any;
+    let taskSpec: any;
     vi.mocked(createBackgroundTask).mockImplementation((_manager: any, spec: any) => {
+      taskSpec = spec;
       executor = spec.context.executor;
       return {
         dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-bg-gate' }, fallbackToSync: false }),
@@ -730,6 +732,9 @@ describe('durable tool-call background revalidation', () => {
     const result = await executeStep(pubsub, makeInitData());
     expect(result.result).toContain('Background task started');
     expect(executor).toBeDefined();
+    // The hook closure cannot survive recovery — the requirement persists on
+    // the task so a statically-resolved executor fails closed instead.
+    expect(taskSpec?.requiresToolPermissionHook).toBe(true);
 
     // Attempt 1 — revalidated (grant still held), executes, fails transiently.
     await expect(executor.execute({ topic: 'quantum' }, {})).rejects.toThrow('transient failure');

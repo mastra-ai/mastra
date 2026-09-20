@@ -127,10 +127,13 @@ type IterationState = z.infer<typeof iterationStateSchema> & {
 /**
  * Durable-agent wire/function protocol. Function IDs include this version so
  * a pre-policy worker cannot claim an event whose authorization markers it
- * does not understand. Deploy v3 only after in-flight v2 runs have drained,
- * or keep v2 workers available until those runs and suspended snapshots finish.
+ * does not understand. v4 adds the action-time `onBeforeToolExecution`
+ * requirement marker — a v3 worker would ignore it and execute
+ * hook-protected calls without revalidation. Deploy v4 only after in-flight
+ * v3 runs have drained, or keep v3 workers available until those runs and
+ * suspended snapshots finish.
  */
-export const INNGEST_DURABLE_AGENT_PROTOCOL_VERSION = 'v3' as const;
+export const INNGEST_DURABLE_AGENT_PROTOCOL_VERSION = 'v4' as const;
 
 /** Prefix for Inngest engine workflow IDs to avoid collision with other engines and protocol versions. */
 const INNGEST_ENGINE_PREFIX = `inngest:${INNGEST_DURABLE_AGENT_PROTOCOL_VERSION}`;

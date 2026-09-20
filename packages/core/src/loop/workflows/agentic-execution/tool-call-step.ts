@@ -1880,6 +1880,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               timeoutMs: bgResolved.timeoutMs,
               maxRetries: bgResolved.maxRetries,
               runId,
+              // The hook closure cannot survive cross-process dispatch or cold
+              // recovery — persist the requirement so a statically-resolved
+              // executor fails closed instead of skipping revalidation.
+              requiresToolPermissionHook: typeof onBeforeToolExecution === 'function',
               context: {
                 awaited: bgResolved.disposition === 'awaited',
                 // Executor — uses the tool from the current closure
@@ -1905,7 +1909,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                           toolName: inputData.toolName,
                           toolCallId: inputData.toolCallId,
                           args: bgArgs,
-                          isResume: opts?.resumeData !== undefined,
+                          // The step-level resume (approval/suspension) counts
+                          // even when this attempt itself carries no resumeData —
+                          // e.g. an approved call dispatched into background
+                          // execution for the first time.
+                          isResume: isAnyResume || opts?.resumeData !== undefined,
                           policyDecision: toolPermissionPolicy,
                         });
                       } catch {

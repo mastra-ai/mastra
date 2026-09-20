@@ -4,6 +4,7 @@ import type { Mastra } from '..';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
 import { BACKGROUND_TASK_SHUTDOWN_ABORT_MESSAGE } from './shutdown';
+import { BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY } from './types';
 import type {
   BackgroundTask,
   BackgroundTaskManagerConfig,
@@ -451,7 +452,13 @@ export class BackgroundTaskManager {
       status: 'pending',
       toolName: payload.toolName,
       toolCallId: payload.toolCallId,
-      args: payload.args,
+      // The hook requirement persists inside `args` — the only field every
+      // store serializes verbatim — so a foreign worker or recovered run can
+      // tell this call was authorization-gated. run-attempt strips the marker
+      // before the executor sees the args.
+      args: payload.requiresToolPermissionHook
+        ? { ...payload.args, [BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY]: true }
+        : payload.args,
       agentId: payload.agentId,
       threadId: payload.threadId,
       resourceId: payload.resourceId,

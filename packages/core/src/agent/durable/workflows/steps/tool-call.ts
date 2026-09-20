@@ -1606,6 +1606,10 @@ export function createDurableToolCallStep(options: CreateDurableToolCallStepOpti
               runId,
               timeoutMs: bgResolved.timeoutMs,
               maxRetries: bgResolved.maxRetries,
+              // The hook closure cannot survive cross-process dispatch or cold
+              // recovery — persist the requirement so a statically-resolved
+              // executor fails closed instead of skipping revalidation.
+              requiresToolPermissionHook: typeof onBeforeToolExecution === 'function',
               context: {
                 executor: {
                   execute: async (taskArgs: any, taskContext: any) => {

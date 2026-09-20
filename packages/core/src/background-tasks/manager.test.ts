@@ -457,6 +457,56 @@ describe('BackgroundTaskManager', () => {
       expect(result?.error?.message).toContain('No executor');
     });
 
+    it('fails closed when a hook-required task resolves via a static executor', async () => {
+      // Simulates recovery on a foreign worker / after cold restart: the
+      // producer's TaskContext closure is gone, so only the static executor
+      // resolves — but the persisted marker says the call was gated behind an
+      // action-time permission hook that cannot be reconstructed here.
+      const staticExec = vi.fn().mockResolvedValue('ok');
+      manager.registerStaticExecutor('my-tool', { execute: staticExec });
+
+      const { task } = await manager.enqueue({
+        toolName: 'my-tool',
+        toolCallId: 'call-hook-gated',
+        args: { query: 'x' },
+        agentId: 'agent-1',
+        runId: 'run-1',
+        requiresToolPermissionHook: true,
+      });
+
+      await tick();
+
+      const result = await manager.getTask(task.id);
+      expect(result?.status).toBe('failed');
+      expect(result?.error?.message).toContain('permission revalidation hook');
+      expect(staticExec).not.toHaveBeenCalled();
+    });
+
+    it('strips the hook marker and executes via the per-task executor when it survives', async () => {
+      const executeFn = vi.fn().mockResolvedValue({ data: 'ok' });
+
+      const { task } = await manager.enqueue(
+        {
+          toolName: 'my-tool',
+          toolCallId: 'call-hook-gated-local',
+          args: { query: 'x' },
+          agentId: 'agent-1',
+          runId: 'run-1',
+          requiresToolPermissionHook: true,
+        },
+        ctx(executeFn),
+      );
+
+      await tick();
+
+      const result = await manager.getTask(task.id);
+      expect(result?.status).toBe('completed');
+      // The internal marker is stripped before the tool sees its args, but the
+      // persisted record retains it so a later recovery still fails closed.
+      expect(executeFn).toHaveBeenCalledWith({ query: 'x' }, expect.anything());
+      expect(result?.args).toHaveProperty('__mastra_requiresToolPermissionHook', true);
+    });
+
     it('keeps task context when dispatch claim loses to another worker', async () => {
       const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
       const taskId = 'claim-race';

@@ -5730,4 +5730,81 @@ describe('createToolCallStep onBeforeToolExecution boundaries', () => {
     // Dispatch gate + attempt 1 + attempt 2.
     expect(hookInputs).toHaveLength(3);
   });
+
+  it('persists the hook requirement on the task and reports the step-level resume to attempt hooks', async () => {
+    const hookInputs: Array<{ isResume?: boolean }> = [];
+    const requestContext = new RequestContext();
+    requestContext.set(ON_BEFORE_TOOL_EXECUTION_KEY, async (input: any) => {
+      hookInputs.push(input);
+      return 'allow';
+    });
+
+    let bgContext: any;
+    const enqueuePayloads: any[] = [];
+    const backgroundTaskManager = {
+      // No suspended task — this resume turn dispatches a fresh background task.
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+      enqueue: vi.fn(async (payload: any, context: any) => {
+        enqueuePayloads.push(payload);
+        bgContext = context;
+        return { task: { id: 'task-1' }, fallbackToSync: false };
+      }),
+      registerTaskContext: vi.fn(),
+      resume: vi.fn(),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+    };
+    const step = createToolCallStep({
+      tools: {
+        'background-tool': {
+          backgroundConfig: { enabled: true },
+          execute: vi.fn(async () => ({ ok: true })),
+        },
+      } as any,
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState: { serialize: () => ({}) } as any,
+      requestContext,
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        requestContext,
+        resumeData: { answer: 'continue' },
+        suspendData: {
+          toolCallResume: {
+            version: 1,
+            originRunId: 'current-run',
+            stepId: 'toolCallStep',
+            type: 'suspension',
+            toolCallId: 'call-1',
+            toolName: 'background-tool',
+            identityDigest: createToolCallIdentityDigest({
+              toolCallId: 'call-1',
+              toolName: 'background-tool',
+              args: { query: 'customers' },
+            }),
+          },
+        },
+        inputData: { toolCallId: 'call-1', toolName: 'background-tool', args: { query: 'customers' } },
+      }),
+    );
+
+    // The hook closure cannot survive recovery — the requirement persists on
+    // the task so a statically-resolved executor fails closed instead.
+    expect(enqueuePayloads[0]?.requiresToolPermissionHook).toBe(true);
+    expect(bgContext?.executor?.execute).toBeTypeOf('function');
+
+    // First attempt carries no resumeData of its own, but the step-level
+    // suspension resume still reaches the hook.
+    hookInputs.length = 0;
+    await bgContext.executor.execute({ query: 'customers' });
+    expect(hookInputs[0]?.isResume).toBe(true);
+  });
 });

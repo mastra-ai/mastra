@@ -61,6 +61,20 @@ export interface BackgroundTask {
   suspendPayload?: unknown;
 }
 
+/**
+ * Args-embedded marker recording that the producing turn gated this call
+ * behind an awaited action-time permission hook (`sessions.onBeforeToolExecution`).
+ * The hook closure cannot cross process boundaries or survive cold recovery,
+ * so a task carrying this marker may only run through the producer's
+ * per-task `TaskContext` executor (which revalidates on every attempt) —
+ * a statically-resolved executor must fail closed instead of executing on
+ * stale authorization.
+ *
+ * `args` is the only task field every store serializes verbatim, so the
+ * marker rides inside it and is stripped before the executor sees the args.
+ */
+export const BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY = '__mastra_requiresToolPermissionHook';
+
 export type BackgroundTaskOutputChunk = Extract<AgentChunkType, { type: 'tool-output' }>;
 
 export interface BackgroundTaskEvent extends BackgroundTask {
@@ -87,6 +101,13 @@ export interface TaskPayload {
   resourceId?: string;
   timeoutMs?: number;
   maxRetries?: number;
+  /**
+   * Set when the producing turn threaded an action-time permission hook.
+   * Persisted as {@link BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY} inside
+   * `args` so foreign workers and cold recovery fail closed instead of
+   * executing without revalidation.
+   */
+  requiresToolPermissionHook?: boolean;
 }
 
 /**

@@ -33,7 +33,7 @@ const DB_PATH = `/tmp/mastra-resume-ctx-${Date.now()}.db`;
 const DB_URL = `file:${DB_PATH}`;
 const OUT_DIR = mkdtempSync(path.join(tmpdir(), 'resume-ctx-out-'));
 // The fork namespaces durable-agent workflow IDs by protocol version and a per-agent
-// owner hash, so the loop snapshot lives under `inngest:v3:durable-agentic-loop:<hash>`
+// owner hash, so the loop snapshot lives under `inngest:v4:durable-agentic-loop:<hash>`
 // rather than the flat ID. Derive it from the helper `createInngestAgent` itself uses.
 const LOOP_WORKFLOW = createInngestDurableAgenticWorkflowIds(AGENT_ID).AGENTIC_LOOP;
 

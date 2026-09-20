@@ -5,6 +5,7 @@ import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
 import type { BackgroundTaskManager } from './manager';
 import { BACKGROUND_TASK_SHUTDOWN_ABORT_MESSAGE } from './shutdown';
+import { BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY } from './types';
 import type { BackgroundTaskStatus } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
@@ -78,13 +79,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         ctx?.executor ??
         (task.agentId ? manager.getStaticExecutor(`${task.agentId}:${task.toolName}`) : undefined) ??
         manager.getStaticExecutor(task.toolName);
-      if (!executor) {
-        const errorInfo = {
-          message:
-            `No executor registered for tool "${task.toolName}". ` +
-            `Register the tool on Mastra (so workers can resolve it cross-process) ` +
-            `or run the task in the same process as the producer.`,
-        };
+      const failTask = async (errorInfo: { message: string }) => {
         await storage.updateTask(taskId, { status: 'failed', error: errorInfo, completedAt: new Date() });
         const failedTask = await storage.getTask(taskId);
         if (failedTask) {
@@ -93,6 +88,28 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         }
         manager.deregisterTaskContext(taskId);
         return { taskId, done: true };
+      };
+      if (!executor) {
+        return failTask({
+          message:
+            `No executor registered for tool "${task.toolName}". ` +
+            `Register the tool on Mastra (so workers can resolve it cross-process) ` +
+            `or run the task in the same process as the producer.`,
+        });
+      }
+
+      // The producing turn gated this call behind an awaited action-time
+      // permission hook. The hook closure cannot cross process boundaries or
+      // survive cold recovery, so only the producer's per-task TaskContext
+      // executor (which revalidates on every attempt) may run it — a
+      // statically-resolved executor has no way to revalidate the grant and
+      // must fail closed rather than execute on stale authorization.
+      if (task.args?.[BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY] === true && !ctx?.executor) {
+        return failTask({
+          message:
+            `Tool "${task.toolName}" requires an action-time permission revalidation hook ` +
+            `that is not available on this worker; denying execution.`,
+        });
       }
 
       // Throttled progress publisher.
@@ -234,6 +251,8 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       let attemptError: { name?: string; message: string; stack?: string } | undefined;
       try {
         const args = { ...task.args };
+        // Internal enqueue-time marker — never part of the tool's input.
+        delete args[BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY];
         const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
         if (resumeData !== undefined && !args.suspendedToolRunId && typeof suspendedToolRunId === 'string') {
           args.suspendedToolRunId = suspendedToolRunId;
