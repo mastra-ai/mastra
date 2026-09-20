@@ -4,7 +4,7 @@ export const omSettingsScenario: McE2eScenario = {
   name: 'om-settings',
   description: 'Exercise observational memory settings overlay through the real TUI.',
   testName: 'opens OM settings and toggles caveman observations in the real TUI',
-  disableMemory: false,
+  enableObservationalMemory: true,
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Mastra Code|Project:/i, terminal);
