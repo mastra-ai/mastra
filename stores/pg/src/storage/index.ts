@@ -12,7 +12,7 @@ import {
   isPoolConfig,
   isWritePoolConfig,
 } from '../shared/config';
-import type { PostgresDomainKey, PostgresStoreConfig } from '../shared/config';
+import type { PostgresDomainKey, PostgresPoolTimeoutConfig, PostgresStoreConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
 import { PinnedClientAdapter, PoolAdapter, RoutingDbClient } from './client';
 import type { DbClient, PoolClient } from './client';
@@ -56,7 +56,7 @@ type ConnectionStringPoolConfig = {
   ssl?: ConnectionOptions | boolean;
   max?: number;
   idleTimeoutMillis?: number;
-};
+} & PostgresPoolTimeoutConfig;
 
 type HostPoolConfig = {
   host: string;
@@ -67,7 +67,7 @@ type HostPoolConfig = {
   ssl?: ConnectionOptions | boolean;
   max?: number;
   idleTimeoutMillis?: number;
-};
+} & PostgresPoolTimeoutConfig;
 
 function createConnectionStringPool(config: ConnectionStringPoolConfig): Pool {
   return new Pool(
@@ -88,6 +88,14 @@ function createHostPool(config: HostPoolConfig): Pool {
     ssl: config.ssl,
     max: config.max ?? DEFAULT_MAX_CONNECTIONS,
     idleTimeoutMillis: config.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
+    ...(config.connectionTimeoutMillis !== undefined
+      ? { connectionTimeoutMillis: config.connectionTimeoutMillis }
+      : {}),
+    ...(config.statement_timeout !== undefined ? { statement_timeout: config.statement_timeout } : {}),
+    ...(config.lock_timeout !== undefined ? { lock_timeout: config.lock_timeout } : {}),
+    ...(config.idle_in_transaction_session_timeout !== undefined
+      ? { idle_in_transaction_session_timeout: config.idle_in_transaction_session_timeout }
+      : {}),
   });
 }
 
@@ -544,13 +552,13 @@ export class PostgresStore extends MastraCompositeStore {
  */
 export type PostgresStoreVNextObservabilityConfig = (
   | { pool: Pool }
-  | {
+  | ({
       connectionString: string;
       ssl?: ConnectionOptions | boolean;
       max?: number;
       idleTimeoutMillis?: number;
-    }
-  | {
+    } & PostgresPoolTimeoutConfig)
+  | ({
       host: string;
       port?: number;
       database: string;
@@ -559,7 +567,7 @@ export type PostgresStoreVNextObservabilityConfig = (
       ssl?: ConnectionOptions | boolean;
       max?: number;
       idleTimeoutMillis?: number;
-    }
+    } & PostgresPoolTimeoutConfig)
 ) & {
   schemaName?: string;
   partitioning?: VNextPostgresObservabilityConfig['partitioning'];

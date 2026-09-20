@@ -7,6 +7,7 @@ export type {
   ConnectionStringConfig,
   HostConfig,
   PostgresDomainKey,
+  PostgresPoolTimeoutConfig,
   PoolInstanceConfig,
 } from './shared/config';
 export { PGVECTOR_PROMPT } from './vector/prompt';

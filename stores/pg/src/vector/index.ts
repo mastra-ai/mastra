@@ -176,7 +176,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // PostgresStore. See https://github.com/mastra-ai/mastra/issues/17307
         poolConfig = {
           ...buildConnectionStringPoolConfig(config, { max: 20, idleTimeoutMillis: 30000 }),
-          connectionTimeoutMillis: 2000,
+          connectionTimeoutMillis: config.connectionTimeoutMillis ?? 2000,
           ...config.pgPoolOptions,
         };
       } else if (isCloudSqlConfig(config)) {
@@ -197,7 +197,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           ssl: config.ssl,
           max: config.max ?? 20,
           idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
-          connectionTimeoutMillis: 2000,
+          connectionTimeoutMillis: config.connectionTimeoutMillis ?? 2000,
+          ...(config.statement_timeout !== undefined ? { statement_timeout: config.statement_timeout } : {}),
+          ...(config.lock_timeout !== undefined ? { lock_timeout: config.lock_timeout } : {}),
+          ...(config.idle_in_transaction_session_timeout !== undefined
+            ? { idle_in_transaction_session_timeout: config.idle_in_transaction_session_timeout }
+            : {}),
           ...config.pgPoolOptions,
         };
       } else {

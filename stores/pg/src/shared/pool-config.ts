@@ -1,6 +1,7 @@
 import type { ConnectionOptions } from 'node:tls';
 import type { PoolConfig } from 'pg';
 import { parse } from 'pg-connection-string';
+import type { PostgresPoolTimeoutConfig } from './config';
 
 /**
  * Builds the `pg.Pool` options for a connection-string based config.
@@ -28,7 +29,7 @@ export function buildConnectionStringPoolConfig(
     ssl?: ConnectionOptions | boolean;
     max?: number;
     idleTimeoutMillis?: number;
-  },
+  } & PostgresPoolTimeoutConfig,
   defaults: { max: number; idleTimeoutMillis: number },
 ): PoolConfig {
   // `parse` returns ports as strings and may include an `ssl` key derived from
@@ -39,6 +40,14 @@ export function buildConnectionStringPoolConfig(
   return {
     ...parsed,
     ...(config.ssl !== undefined ? { ssl: config.ssl } : {}),
+    ...(config.connectionTimeoutMillis !== undefined
+      ? { connectionTimeoutMillis: config.connectionTimeoutMillis }
+      : {}),
+    ...(config.statement_timeout !== undefined ? { statement_timeout: config.statement_timeout } : {}),
+    ...(config.lock_timeout !== undefined ? { lock_timeout: config.lock_timeout } : {}),
+    ...(config.idle_in_transaction_session_timeout !== undefined
+      ? { idle_in_transaction_session_timeout: config.idle_in_transaction_session_timeout }
+      : {}),
     max: config.max ?? defaults.max,
     idleTimeoutMillis: config.idleTimeoutMillis ?? defaults.idleTimeoutMillis,
   };

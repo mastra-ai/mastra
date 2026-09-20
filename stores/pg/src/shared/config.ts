@@ -6,6 +6,18 @@ import type { ClientConfig, Pool, PoolConfig } from 'pg';
 export type PostgresDomainKey = (typeof DOMAIN_KEYS)[number];
 
 /**
+ * Native node-postgres timeout options supported by internally-owned pools.
+ *
+ * These are kept separate from the base config so supplying a pre-configured
+ * pool never suggests that the store can change that pool's connection
+ * settings after ownership has been handed to the caller.
+ */
+export type PostgresPoolTimeoutConfig = Pick<
+  ClientConfig,
+  'connectionTimeoutMillis' | 'statement_timeout' | 'lock_timeout' | 'idle_in_transaction_session_timeout'
+>;
+
+/**
  * Base configuration options shared across PostgreSQL configs.
  */
 export interface PostgresBaseConfig {
@@ -76,7 +88,7 @@ export interface PostgresBaseConfig {
 /**
  * Connection string configuration.
  */
-export interface ConnectionStringConfig extends PostgresBaseConfig {
+export interface ConnectionStringConfig extends PostgresBaseConfig, PostgresPoolTimeoutConfig {
   connectionString: string;
   ssl?: boolean | ConnectionOptions;
   max?: number;
@@ -86,7 +98,7 @@ export interface ConnectionStringConfig extends PostgresBaseConfig {
 /**
  * Host-based configuration.
  */
-export interface HostConfig extends PostgresBaseConfig {
+export interface HostConfig extends PostgresBaseConfig, PostgresPoolTimeoutConfig {
   host: string;
   port: number;
   database: string;
