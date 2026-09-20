@@ -438,6 +438,67 @@ describe('getDynamicMemory', () => {
     });
   });
 
+  it('applies the Factory row thresholds and observe-attachments over session state', async () => {
+    // Session hydration no longer copies the stored row into session state, so
+    // the request-context row is the only channel that reaches the running
+    // Memory for a Factory run.
+    const state: Record<string, unknown> = {
+      observationThreshold: 99_000,
+      reflectionThreshold: 88_000,
+      observeAttachments: true,
+    };
+    vi.resetModules();
+    memoryConstructorMock.mockClear();
+    getOmScopeMock.mockReturnValue('thread');
+
+    const { getDynamicMemory } = await import('./memory.js');
+    const requestContext = createRequestContext(state);
+    const contextGet = requestContext.get;
+    requestContext.get = vi.fn(key =>
+      key === 'factoryMemorySettings'
+        ? { observationThreshold: 12_000, reflectionThreshold: 16_000, observeAttachments: false }
+        : contextGet(key),
+    );
+
+    const memory = getDynamicMemory({ storage: true } as never, undefined as never)({
+      requestContext: requestContext as never,
+    }) as unknown as { config: MemoryConfig };
+
+    const { observation, reflection } = memory.config.options.observationalMemory;
+    expect(observation.messageTokens).toBe(12_000);
+    expect(observation.observeAttachments).toBe(false);
+    expect(reflection.observationTokens).toBe(16_000);
+    // Session state is untouched: the row is read, never written back.
+    expect(state).toMatchObject({ observationThreshold: 99_000, reflectionThreshold: 88_000 });
+  });
+
+  it('falls back to session state for thresholds but keeps an unset attachment column on Auto', async () => {
+    const state: Record<string, unknown> = {
+      observationThreshold: 99_000,
+      observeAttachments: true,
+    };
+    vi.resetModules();
+    memoryConstructorMock.mockClear();
+    getOmScopeMock.mockReturnValue('thread');
+
+    const { getDynamicMemory } = await import('./memory.js');
+    const requestContext = createRequestContext(state);
+    const contextGet = requestContext.get;
+    requestContext.get = vi.fn(key =>
+      key === 'factoryMemorySettings' ? { observationThreshold: null, observeAttachments: null } : contextGet(key),
+    );
+
+    const memory = getDynamicMemory({ storage: true } as never, undefined as never)({
+      requestContext: requestContext as never,
+    }) as unknown as { config: MemoryConfig };
+
+    const { observation } = memory.config.options.observationalMemory;
+    expect(observation.messageTokens).toBe(99_000);
+    // A null column is Auto, the same value `GET /web/config/om` reports, so the
+    // runtime cannot silently observe attachments while the UI says Auto.
+    expect(observation.observeAttachments).toBe('auto');
+  });
+
   it('resolves auto roles from the active main model on every invocation', async () => {
     const state: Record<string, unknown> = {
       observerModelSelection: 'auto',

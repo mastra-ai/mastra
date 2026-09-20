@@ -15,6 +15,24 @@ import { resolveModel, resolvePackMemoryModelChain } from './model.js';
 import type { PackMemoryModelChainEntry } from './model.js';
 
 /**
+ * The authoritative per-caller Factory memory-settings row, placed on the request
+ * context before Factory's model-dependent processors run. `null` means the row
+ * exists but is empty (every role auto); `undefined` means the run is not
+ * Factory-scoped.
+ */
+interface FactoryMemorySettings {
+  observerModelId: string | null;
+  reflectorModelId: string | null;
+  observationThreshold: number | null;
+  reflectionThreshold: number | null;
+  observeAttachments: 'auto' | boolean | null;
+}
+
+function getFactoryMemorySettings(requestContext: RequestContext): FactoryMemorySettings | null | undefined {
+  return requestContext.get('factoryMemorySettings') as FactoryMemorySettings | null | undefined;
+}
+
+/**
  * Resolve one OM role's model for this invocation. Explicit per-role choices
  * win. Automatic roles follow the active mode pack's memory fallback chain
  * when present, then the low-cost model for the active main-model provider.
@@ -27,10 +45,7 @@ function resolveOmRoleModelForRequest(
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext } as const;
-  const factorySettings = requestContext.get('factoryMemorySettings') as
-    | { observerModelId?: string | null; reflectorModelId?: string | null }
-    | null
-    | undefined;
+  const factorySettings = getFactoryMemorySettings(requestContext);
 
   // The configured settings file, not the default one: a caller that points the
   // agent at another settings path must get the same pack/override resolution
@@ -91,6 +106,9 @@ function resolveOmRoleModelForRequest(
   const currentModelId = controller?.session.modelId || (state?.currentModelId as string | undefined);
   const effectiveModelId = resolveAutoOMModelId(currentModelId);
   requestContext.set(`om.${role}.selectionMode`, 'auto');
+  // These two keys are declared in the span-context allowlist
+  // (`mastracode/sdk/src/index.ts`), so traces can report intent separately from
+  // the effective concrete model without either being mistaken for a model ID.
   requestContext.set(`om.${role}.effectiveModelId`, effectiveModelId);
   return resolveModel(effectiveModelId, resolveOptions);
 }
@@ -221,12 +239,25 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
-    const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
-    const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
+    // The Factory row is authoritative and read per invocation, so a stored
+    // threshold/attachment change reaches the running Memory without a session.
+    const factorySettings = getFactoryMemorySettings(requestContext);
+    const obsThreshold =
+      factorySettings !== undefined
+        ? (factorySettings?.observationThreshold ?? DEFAULT_OBS_THRESHOLD)
+        : (state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD);
+    const refThreshold =
+      factorySettings !== undefined
+        ? (factorySettings?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD)
+        : (state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD);
     const caveman = state?.cavemanObservations ?? false;
 
     const observerPreviousObservationTokens = 1000;
-    const observeAttachments = state?.observeAttachments;
+    // The row is authoritative: an absent value means the user left it on Auto,
+    // which the config API reports as 'auto' and Memory resolves by model
+    // capability.
+    const observeAttachments =
+      factorySettings !== undefined ? (factorySettings?.observeAttachments ?? 'auto') : state?.observeAttachments;
     // Factory sessions get a factory-only Subconscious config, so the cache key
     // carries a factory presence bit to keep the two configs from cross-serving.
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;

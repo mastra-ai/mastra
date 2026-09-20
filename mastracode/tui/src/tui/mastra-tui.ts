@@ -61,7 +61,7 @@ import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { askModalQuestion } from './modal-question.js';
-import { applyOMModelToSession, seedOMDefaultAfterLogin } from './om-defaults.js';
+import { applyOMModelToSession } from './om-defaults.js';
 import type { OnboardingResult } from './onboarding-inline.js';
 import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
@@ -1471,7 +1471,6 @@ export class MastraTUI {
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);
           }
-          await seedOMDefaultAfterLogin(this.state, providerId, message => showInfo(this.state, message));
 
           resolve();
         })
@@ -1627,14 +1626,18 @@ export class MastraTUI {
     // With no reachable provider the OM step only offers an empty custom pack;
     // recording that non-choice would block every later provider-aware seed.
     const omPack = result.omPack.modelId ? result.omPack : undefined;
-    if (omPack) await applyOMModelToSession(this.state, omPack.modelId);
     await this.state.session.state.set({ yolo: result.yolo });
 
     const settings = loadSettings();
+    // Onboarding re-runs on version bumps, so the previous pack choice tells us
+    // whether the user re-affirmed a pack or picked a new one.
+    const previousOmPackId = settings.onboarding.omPackId;
     settings.onboarding.completedAt = new Date().toISOString();
     settings.onboarding.skippedAt = null;
     settings.onboarding.version = ONBOARDING_VERSION;
-    settings.onboarding.omPackId = omPack?.id ?? null;
+    // No reachable provider means the OM step offered nothing to choose; leave
+    // whatever the user already had rather than recording an empty choice.
+    if (omPack) settings.onboarding.omPackId = omPack.id;
 
     const modeDefaults: Record<string, string> = {};
     for (const mode of modes) {
@@ -1674,12 +1677,20 @@ export class MastraTUI {
     // until the next thread sync.
     this.state.fallbackStatus = undefined;
 
-    settings.models.activeOmPackId = omPack?.id ?? null;
-    settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;
-    // Clear any per-role overrides from prior /om use so the newly-selected
-    // pack (or custom modelId above) applies to both observer and reflector.
-    settings.models.observerModelOverride = null;
-    settings.models.reflectorModelOverride = null;
+    if (omPack) {
+      // A re-affirmed pack must not overwrite per-role choices made through
+      // /om; a changed pack is a new explicit choice and pins both roles.
+      if (previousOmPackId !== omPack.id) {
+        await applyOMModelToSession(this.state, omPack.modelId);
+        settings.models.observerModelSelection = omPack.modelId;
+        settings.models.reflectorModelSelection = omPack.modelId;
+      }
+      settings.models.activeOmPackId = omPack.id;
+      settings.models.omModelOverride = omPack.id === 'custom' ? omPack.modelId : null;
+      // The selections above carry the choice now; retire the legacy overrides.
+      settings.models.observerModelOverride = null;
+      settings.models.reflectorModelOverride = null;
+    }
     settings.preferences.yolo = result.yolo;
 
     // Clear any manual subagent overrides so they derive from the active pack

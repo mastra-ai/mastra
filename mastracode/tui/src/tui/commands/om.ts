@@ -14,13 +14,9 @@ import type { SlashCommandContext } from './types.js';
 // onboarding/om-settings.ts so non-TUI surfaces (web routes) can share them.
 export { applyOmRoleAuto, applyOmRoleOverride, persistOmObserveAttachments };
 
-function persistOmRoleOverride(
-  role: 'observer' | 'reflector',
-  modelId: string,
-  otherRoleCurrentModelId: string | null,
-): void {
+function persistOmRoleOverride(role: 'observer' | 'reflector', modelId: string): void {
   const settings = loadSettings();
-  applyOmRoleOverride(settings, role, modelId, otherRoleCurrentModelId);
+  applyOmRoleOverride(settings, role, modelId);
   saveSettings(settings);
 }
 
@@ -79,23 +75,23 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
       {
         onObserverModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-          await ctx.state.session.om.observer.switchModel({ model: model.id });
-          persistOmRoleOverride('observer', model.id, null);
+          await ctx.state.session.om.observer.switchModel({ modelId: model.id });
+          persistOmRoleOverride('observer', model.id);
           ctx.showInfo(`Observer model → ${model.id}`);
         },
         onObserverAuto: async () => {
-          await ctx.state.session.om.observer.switchModel({ model: 'auto' });
+          await ctx.state.session.om.observer.switchModel({ modelId: 'auto' });
           persistOmRoleAuto('observer');
           ctx.showInfo(`Observer model → Auto (${ctx.state.session.om.observer.modelId() ?? 'unavailable'})`);
         },
         onReflectorModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-          await ctx.state.session.om.reflector.switchModel({ model: model.id });
-          persistOmRoleOverride('reflector', model.id, null);
+          await ctx.state.session.om.reflector.switchModel({ modelId: model.id });
+          persistOmRoleOverride('reflector', model.id);
           ctx.showInfo(`Reflector model → ${model.id}`);
         },
         onReflectorAuto: async () => {
-          await ctx.state.session.om.reflector.switchModel({ model: 'auto' });
+          await ctx.state.session.om.reflector.switchModel({ modelId: 'auto' });
           persistOmRoleAuto('reflector');
           ctx.showInfo(`Reflector model → Auto (${ctx.state.session.om.reflector.modelId() ?? 'unavailable'})`);
         },
