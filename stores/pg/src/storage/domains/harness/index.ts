@@ -3170,12 +3170,13 @@ export class HarnessPG extends HarnessStorage {
         throw new HarnessStorageAttachmentConflictError(sessionId, attachmentId);
       }
       if (!currentAttachment) {
-        await commitTx.execute({
+        const insertResult = await commitTx.execute({
           sql: `INSERT INTO ${TABLE_HARNESS_ATTACHMENTS}
                 (harness_name, session_id, attachment_id, name, mime_type, size_bytes, sha256, source,
                  kind, primitive_type, element_type, renderer_json, schema_id, metadata_json, object_json,
                  created_at, data_b64, session_incarnation, blob_ref, put_operation_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+                ON CONFLICT (harness_name, session_id, attachment_id) DO NOTHING`,
           args: [
             namespace,
             sessionId,
@@ -3198,6 +3199,34 @@ export class HarnessPG extends HarnessStorage {
             operation.id,
           ],
         });
+        if (insertResult.rowsAffected === 0) {
+          // A concurrent identical save committed between the earlier FOR
+          // UPDATE read and this insert. Reload the committed row and verify
+          // it carries this operation's identity rather than failing on the
+          // lost insert race.
+          const reloaded = await commitTx.execute({
+            sql: `SELECT * FROM ${TABLE_HARNESS_ATTACHMENTS}
+                  WHERE harness_name = ? AND session_id = ? AND attachment_id = ? FOR UPDATE`,
+            args: [namespace, sessionId, attachmentId],
+          });
+          const committed = reloaded.rows[0];
+          if (
+            !committed ||
+            !attachmentRowMatchesInput(committed, {
+              name,
+              mimeType,
+              source,
+              bytes,
+              sha256,
+              incarnation,
+              semantic,
+            }) ||
+            String(committed.blob_ref ?? '') !== savedBlobRef ||
+            String(committed.put_operation_id ?? '') !== operation.id
+          ) {
+            throw new HarnessStorageAttachmentConflictError(sessionId, attachmentId);
+          }
+        }
       }
       await commitTx.execute({
         sql: `UPDATE ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
@@ -3624,9 +3653,9 @@ export class HarnessPG extends HarnessStorage {
       const operationId = candidate.rows[0]?.id;
       if (operationId === undefined) break;
       if (String(candidate.rows[0]?.kind) === 'put') {
-        await this.#reconcileAttachmentPutOperation(String(operationId));
+        await this.#reconcileAttachmentPutOperation(String(operationId), now);
       } else {
-        await this.#reconcileAttachmentDeleteOperation(String(operationId), false);
+        await this.#reconcileAttachmentDeleteOperation(String(operationId), false, now);
       }
       processed += 1;
     }
@@ -3897,7 +3926,7 @@ export class HarnessPG extends HarnessStorage {
     return operation;
   }
 
-  async #claimAttachmentOperation(operationId: string): Promise<AttachmentOperationClaim> {
+  async #claimAttachmentOperation(operationId: string, eligibleAsOf?: number): Promise<AttachmentOperationClaim> {
     const claimId = randomUUID();
     const now = Date.now();
     const tx = await this.#client.transaction('write');
@@ -3912,6 +3941,15 @@ export class HarnessPG extends HarnessStorage {
         return { state: 'done', operation };
       }
       if (operation.status === 'claimed' && (operation.claimExpiresAt ?? 0) > now) {
+        await tx.commit();
+        return { state: 'busy', operation };
+      }
+      // A retry may have renewed the operation's deferral between the
+      // caller's eligibility select and this row lock. Honor the refreshed
+      // next_attempt_at rather than claiming — and potentially cancelling —
+      // an upload that is actively in flight. Direct callers resuming a
+      // known operation omit the clock: the caller is itself the retry.
+      if (eligibleAsOf !== undefined && (operation.nextAttemptAt ?? 0) > eligibleAsOf) {
         await tx.commit();
         return { state: 'busy', operation };
       }
@@ -4006,8 +4044,8 @@ export class HarnessPG extends HarnessStorage {
     return true;
   }
 
-  async #reconcileAttachmentPutOperation(operationId: string): Promise<boolean> {
-    const claim = await this.#claimAttachmentOperation(operationId);
+  async #reconcileAttachmentPutOperation(operationId: string, eligibleAsOf: number): Promise<boolean> {
+    const claim = await this.#claimAttachmentOperation(operationId, eligibleAsOf);
     if (claim.state === 'done') return true;
     if (claim.state === 'busy') return false;
     const { operation, claimId } = claim;
@@ -4077,8 +4115,12 @@ export class HarnessPG extends HarnessStorage {
     return this.#cancelAttachmentPutOperation(operation, claimId);
   }
 
-  async #reconcileAttachmentDeleteOperation(operationId: string, throwOnUnknown: boolean): Promise<boolean> {
-    const claim = await this.#claimAttachmentOperation(operationId);
+  async #reconcileAttachmentDeleteOperation(
+    operationId: string,
+    throwOnUnknown: boolean,
+    eligibleAsOf?: number,
+  ): Promise<boolean> {
+    const claim = await this.#claimAttachmentOperation(operationId, eligibleAsOf);
     if (claim.state === 'done') return true;
     if (claim.state === 'busy') {
       if (throwOnUnknown) {
@@ -9371,9 +9413,16 @@ function validateAttachmentBlobRef(value: unknown, sessionId: string, attachment
 }
 
 function stableJson(value: unknown): string {
+  if (value === undefined) return 'null';
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (Array.isArray(value)) {
+    // Match JSON.stringify: undefined array elements serialize as null.
+    return `[${value.map(entry => (entry === undefined ? 'null' : stableJson(entry))).join(',')}]`;
+  }
+  // Match JSON.stringify: undefined object properties are omitted, so a
+  // caller-supplied optional key never differs from its persisted form.
   const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, entry]) => entry !== undefined)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`);
   return `{${entries.join(',')}}`;

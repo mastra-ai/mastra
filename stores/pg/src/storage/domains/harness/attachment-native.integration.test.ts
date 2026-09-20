@@ -17,6 +17,7 @@ import type {
   HarnessAttachmentByteOwnerLoadInput,
   HarnessAttachmentByteOwnerSaveInput,
   HarnessAttachmentByteOwnerSaveResult,
+  JsonValue,
 } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -675,6 +676,130 @@ describe('HarnessPG native external attachment ownership', () => {
     // The stored row carries kind: 'file'; the same logical request must not
     // conflict just because the caller omitted the default.
     await expect(harness.saveAttachment(input)).resolves.toMatchObject({ attachmentId: 'semantic-retry' });
+  });
+
+  it('resolves concurrent identical first saves without false failures', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-concurrent-save',
+      resourceId: 'concurrent-resource',
+      threadId: 'concurrent-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'concurrent-owner', ttlMs: 60_000 },
+    });
+    const input = {
+      sessionId: session.id,
+      attachmentId: 'concurrent',
+      name: 'concurrent.txt',
+      mimeType: 'text/plain',
+      source: 'inline' as const,
+      data: new TextEncoder().encode('concurrent save'),
+    };
+    // The losers of the insert race observe the shared operation completed
+    // and must adopt the committed row rather than fail on the unique key.
+    const results = await Promise.allSettled(Array.from({ length: 5 }, () => harness.saveAttachment(input)));
+    for (const result of results) {
+      expect(result.status).toBe('fulfilled');
+    }
+    const loaded = await harness.loadAttachment({ sessionId: session.id, attachmentId: 'concurrent' });
+    expect(loaded?.name).toBe('concurrent.txt');
+  });
+
+  it('keeps identical saves idempotent when optional semantic keys are unset', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-semantic-undefined',
+      resourceId: 'semantic-undefined-resource',
+      threadId: 'semantic-undefined-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'semantic-undefined-owner', ttlMs: 60_000 },
+    });
+    const input = {
+      sessionId: session.id,
+      attachmentId: 'semantic-undefined',
+      name: 'semantic-undefined.txt',
+      mimeType: 'text/plain',
+      source: 'inline' as const,
+      data: new TextEncoder().encode('semantic undefined'),
+      // Persistence drops undefined properties via JSON.stringify; the
+      // retry comparison must apply the same canonicalization.
+      semantic: { metadata: { label: 'a', dropped: undefined } as Record<string, JsonValue> },
+    };
+    await expect(harness.saveAttachment(input)).resolves.toMatchObject({ attachmentId: 'semantic-undefined' });
+    await expect(harness.saveAttachment(input)).resolves.toMatchObject({ attachmentId: 'semantic-undefined' });
+  });
+
+  it('defers to an upload retry that renewed its reservation mid-sweep', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-claim-renewal',
+      resourceId: 'renewal-resource',
+      threadId: 'renewal-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'renewal-owner', ttlMs: 60_000 },
+    });
+    const input = {
+      sessionId: session.id,
+      attachmentId: 'renewed',
+      name: 'renewed.txt',
+      mimeType: 'text/plain',
+      source: 'inline' as const,
+      data: new TextEncoder().encode('renewed upload'),
+    };
+    owner.unknownSaveOnce = true;
+    await expect(harness.saveAttachment(input)).rejects.toBeInstanceOf(HarnessStorageAttachmentPendingError);
+    // Make the failed upload immediately eligible for reconciliation.
+    await store.db.none(
+      `UPDATE "${schemaName}"."mastra_harness_attachment_operations"
+       SET next_attempt_at = 0 WHERE kind = 'put' AND attachment_id = $1`,
+      ['renewed'],
+    );
+
+    // Pause the sweep just after it selects the candidate; meanwhile a retry
+    // reserves the operation and starts a fresh upload, renewing the
+    // deferral. The claim must observe the renewal under the row lock and
+    // leave the operation alone rather than cancelling the active upload.
+    const db = store.db as unknown as { query: (query: unknown, values?: unknown) => Promise<unknown> };
+    const originalQuery = db.query.bind(store.db);
+    let intercept = true;
+    let candidateSelected!: () => void;
+    let resumeClaim!: () => void;
+    const selected = new Promise<void>(resolve => (candidateSelected = resolve));
+    const resume = new Promise<void>(resolve => (resumeClaim = resolve));
+    db.query = async (query: unknown, values?: unknown) => {
+      const result = await originalQuery(query, values);
+      if (intercept && typeof query === 'string' && query.includes('SELECT id, kind')) {
+        intercept = false;
+        candidateSelected();
+        await resume;
+      }
+      return result;
+    };
+    try {
+      const sweep = harness.reconcileAttachmentOperations({ now: Date.now() });
+      await selected;
+      owner.pauseNextSave();
+      const retry = harness.saveAttachment(input);
+      await owner.waitForSaveStarted();
+      resumeClaim();
+      await expect(sweep).resolves.toMatchObject({ processed: 1 });
+      owner.releaseSave();
+      await expect(retry).resolves.toMatchObject({ attachmentId: 'renewed' });
+    } finally {
+      db.query = originalQuery;
+    }
+    const operation = await store.db.one<{ status: string }>(
+      `SELECT status FROM "${schemaName}"."mastra_harness_attachment_operations"
+       WHERE kind = 'put' AND attachment_id = $1`,
+      ['renewed'],
+    );
+    expect(operation.status).toBe('completed');
+    await expect(harness.loadAttachment({ sessionId: session.id, attachmentId: 'renewed' })).resolves.toMatchObject({
+      name: 'renewed.txt',
+    });
   });
 
   it('saves attachments when optional default indexes are skipped', async () => {
