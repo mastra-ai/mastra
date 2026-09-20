@@ -134,6 +134,7 @@ import {
   HarnessQueueFullDroppedError,
   HarnessQueueFullError,
   HarnessQueueItemExpiredError,
+  HarnessQueuedTurnDeferredError,
   HarnessSessionCancelledError,
   HarnessSessionClosedError,
   HarnessSessionCorruptError,
@@ -15465,7 +15466,7 @@ export class Session {
             await this._completeQueuedTurn(head.id, full as AgentResult);
           }
         } catch (err) {
-          if (err instanceof QueueRecoveryPendingError) {
+          if (err instanceof QueueRecoveryPendingError || err instanceof HarnessQueuedTurnDeferredError) {
             this._parkQueuedTurn(head.id, err);
             return;
           }
@@ -15549,6 +15550,23 @@ export class Session {
     ) {
       const recovered = await this._recoverQueuedDispatch(item, currentReceipt, agent, effectiveModeId);
       if (recovered) return recovered;
+    }
+    // §4.2e / pre-drain hook — converge external durable authorization state
+    // onto the live record before a fresh dispatch below. The turn's
+    // permission snapshot is captured at turn-build time from
+    // `this._record.sessionGrants`, so hook mutations made through
+    // `session.permissions.*` are what the snapshot sees. Runs after the
+    // terminal receipt checks AND both recovery branches above so
+    // completed/failed/dead items never pay for reconciliation and a hook
+    // failure cannot discard durable evidence of an already-dispatched turn;
+    // before the `admitting` CAS so a deferred retry does not consume the
+    // receipt's attempt budget.
+    const onBeforeQueuedTurn = this._harness._internalOnBeforeQueuedTurn;
+    if (onBeforeQueuedTurn !== undefined) {
+      // `item` is the live `pendingQueue[0]` object — a hook mutating it (or
+      // nested `attachments`/`requestContext`) would corrupt the persisted
+      // queue entry, and the admission hash is not rechecked before dispatch.
+      await onBeforeQueuedTurn({ session: this, item: structuredClone(item) });
     }
     if (shouldMarkAdmitting) {
       await this._updateQueueAdmissionReceipt(item.id, (receipt, now) => ({
@@ -16669,7 +16687,7 @@ export class Session {
     this._currentQueuedItemId = undefined;
     this._currentQueuedItemSource = undefined;
     this._notifyMaybeIdle();
-    if (err instanceof QueueRecoveryPendingError) {
+    if (err instanceof QueueRecoveryPendingError || err instanceof HarnessQueuedTurnDeferredError) {
       const delayMs = Math.max(0, err.retryAt - Date.now());
       const timer = setTimeout(() => void this._maybeDrainQueue(), delayMs);
       this._unrefQueueTimerIfBackgroundOnly(timer);

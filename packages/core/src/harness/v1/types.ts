@@ -38,12 +38,14 @@ import type {
   JsonValue,
   PendingResume,
   PermissionRules,
+  QueuedItem,
   SessionRecord as StoredSessionRecord,
 } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { GoalEvaluationPayload } from '../../stream/types';
 import type { Workspace } from '../../workspace';
 import type { RequestContextInput } from './request-context-input';
+import type { Session } from './session';
 import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
 
 // ---------------------------------------------------------------------------
@@ -1225,6 +1227,31 @@ export interface HarnessConfigCommon {
      * Defaults to 2 hours.
      */
     idleTimeoutMs?: number;
+
+    /**
+     * Optional pre-drain hook invoked once per queued item AFTER the drain
+     * loop selects it and clears its admission receipt's terminal checks, and
+     * BEFORE the turn's permission rule/grant snapshot is captured for
+     * `_resolveToolPolicy` (§4.2e). Intended for converging external durable
+     * authorization state (for example owner-scoped grant stores) onto the
+     * live session record so a grant revoked or expired after queue admission
+     * cannot ride a stale `sessionGrants` copy into tool execution.
+     *
+     * The hook is awaited before any dispatch path (terminal-evidence
+     * recovery, admitted-dispatch recovery, or fresh admission). It fires on
+     * every drain attempt of the item — including retries after deferral —
+     * so it must be idempotent. Grant mutations made through
+     * `session.permissions.*` commit durably under the session lease and are
+     * visible to the snapshot the same turn builds.
+     *
+     * Fail-closed semantics: throwing `HarnessQueuedTurnDeferredError` parks
+     * the item in place and retries at its `retryAt` without consuming the
+     * receipt's attempt budget; any other error fails the item permanently
+     * via the normal queue-failure path. The hook does not run for
+     * `session.message()` turns or for `completed`/`failed`/`dead` receipts.
+     * When unset, drain behavior is unchanged.
+     */
+    onBeforeQueuedTurn?: (opts: { session: Session; item: QueuedItem }) => Promise<void>;
   };
 
   /**

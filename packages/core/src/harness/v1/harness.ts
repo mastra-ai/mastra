@@ -966,6 +966,12 @@ export class Harness {
   private readonly _queueBackpressure: HarnessQueueBackpressurePolicy;
   /** §10.5: when false, skip persisting transient streaming deltas (text_delta / reasoning_delta / subagent_text_delta / subagent_reasoning_delta). */
   private readonly _persistTransientStreamingEvents: boolean;
+  /**
+   * Optional per-queued-item pre-drain hook (`sessions.onBeforeQueuedTurn`).
+   * Invoked inside `_runQueuedTurn` before the turn's permission snapshot is
+   * captured so integrations can converge durable authorization state.
+   */
+  private readonly _onBeforeQueuedTurn: NonNullable<HarnessConfig['sessions']>['onBeforeQueuedTurn'];
   private readonly _closeTimeoutMs: number;
   private readonly _pendingInteractionTtlMs: number;
   /** Validated per-kind TTL overrides; kinds absent here use the default. */
@@ -1067,6 +1073,7 @@ export class Harness {
     this._lockMode = lockMode;
     // §10.5: default true (persist all events — upstream-safe, backs storage SSE replay).
     this._persistTransientStreamingEvents = config.sessions?.persistTransientStreamingEvents ?? true;
+    this._onBeforeQueuedTurn = config.sessions?.onBeforeQueuedTurn;
     this._lockRenewMs = config.sessions?.lockRenewMs ?? DEFAULT_LEASE_RENEW_MS;
     if (!Number.isInteger(this._lockRenewMs) || this._lockRenewMs < 1 || this._lockRenewMs >= this._leaseTtlMs) {
       throw new HarnessConfigError('sessions.lockRenewMs', 'must be a positive integer less than lockTtlMs');
@@ -7348,6 +7355,11 @@ export class Harness {
   /** @internal — byte cap for an emitted tool/custom-event payload. */
   get _internalMaxEventPayloadBytes(): number | undefined {
     return this._fileConfig.maxEventPayloadBytes;
+  }
+
+  /** @internal — pre-drain hook consulted by `Session._runQueuedTurn` before the permission snapshot. */
+  get _internalOnBeforeQueuedTurn(): NonNullable<HarnessConfig['sessions']>['onBeforeQueuedTurn'] {
+    return this._onBeforeQueuedTurn;
   }
 }
 
