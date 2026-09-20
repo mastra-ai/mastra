@@ -2787,6 +2787,56 @@ describe('Agent signals', () => {
     siblingClaim.unsubscribe();
   });
 
+  it('keeps the own-advertisement mark when another instance answers discovery for the same thread', async () => {
+    const pubsub = new RetainedAsyncCallbackPubSub();
+    const agent = new Agent({
+      id: 'session-peer-agent',
+      name: 'Session Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('session response'),
+      pubsub,
+    });
+
+    const claim = await agent.claimThreadOwnership({
+      resourceId: 'shared-peer-resource',
+      threadId: 'session-peer-thread',
+      peer: { label: 'Session' },
+    });
+
+    // A second live instance with the same thread loaded answers discovery too, and
+    // its reply replaces the local entry with one rebuilt from the wire payload — so
+    // a mark computed only from the local advertisements is lost on that path.
+    const responder: EventCallback = async event => {
+      const data = event.data as any;
+      if (data?.type !== 'thread-peer-request') return;
+      await pubsub.publish(data.replyTopic, {
+        type: 'thread-peer-response',
+        runId: data.requestId,
+        data: {
+          type: 'thread-peer-response',
+          requestId: data.requestId,
+          sourceId: 'other-instance-source',
+          peer: {
+            id: 'session-peer-agent:shared-peer-resource:session-peer-thread',
+            agentId: 'session-peer-agent',
+            resourceId: 'shared-peer-resource',
+            threadId: 'session-peer-thread',
+            label: 'Session',
+          },
+        },
+      });
+    };
+    await pubsub.subscribe('agent.thread-peer-discovery', responder);
+
+    const peers = await agent.discoverThreadPeers({ timeoutMs: 10 });
+    const byId = new Map(peers.map(peer => [peer.id, peer]));
+
+    expect(byId.get('session-peer-agent:shared-peer-resource:session-peer-thread')?.selfAdvertised).toBe(true);
+
+    await pubsub.unsubscribe('agent.thread-peer-discovery', responder);
+    claim.unsubscribe();
+  });
+
   it('releases claimed ownership and peer advertisements when reset for tests', async () => {
     const ownerAgent = new Agent({
       id: 'reset-owner-agent',

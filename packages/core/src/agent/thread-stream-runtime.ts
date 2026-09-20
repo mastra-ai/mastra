@@ -1028,17 +1028,7 @@ export class AgentThreadStreamRuntime {
     const discoveredAt = new Date();
 
     for (const peer of state.advertisedThreadPeers.values()) {
-      // This runtime is shared by every agent in the process, so the advertisements
-      // here include sibling agents' claims — those are real peers to the caller and
-      // stay. Only the caller's own claim is marked, so a caller can tell its own
-      // threads apart from peers'.
-      const owner = state.claimedThreadOwners.get(this.#threadKey(peer.resourceId, peer.threadId));
-      const selfAdvertised = callerAgent !== undefined && owner?.agent === callerAgent;
-      peers.set(peer.id, {
-        ...toPublicThreadPeer(peer),
-        discoveredAt,
-        ...(selfAdvertised ? { selfAdvertised: true } : {}),
-      });
+      peers.set(peer.id, { ...toPublicThreadPeer(peer), discoveredAt });
     }
 
     await new Promise<void>(resolve => {
@@ -1068,6 +1058,18 @@ export class AgentThreadStreamRuntime {
         )
         .catch(() => finish());
     });
+
+    // The mark is applied after every pass that can produce an entry: a reply can
+    // describe a thread this caller already owns — a second live instance with the
+    // same thread loaded answers discovery too, and its reply replaces the local
+    // entry. The runtime is shared by every agent in the process, so the mark is
+    // scoped to the claiming agent: a sibling agent's claim stays a real peer.
+    if (callerAgent !== undefined) {
+      for (const [id, peer] of peers) {
+        const owner = state.claimedThreadOwners.get(this.#threadKey(peer.resourceId, peer.threadId));
+        if (owner?.agent === callerAgent) peers.set(id, { ...peer, selfAdvertised: true });
+      }
+    }
 
     return [...peers.values()].sort((a, b) => a.id.localeCompare(b.id));
   }
