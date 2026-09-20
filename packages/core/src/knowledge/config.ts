@@ -1,6 +1,6 @@
 import type { MastraCompositeStore } from '../storage';
 import type { KnowledgeStructurePlan } from '../storage/domains/knowledge';
-import type { KnowledgeImporterDefinition } from './imports';
+import type { KnowledgeImportersInput } from './imports';
 import type { KnowledgeScopeTypesConfig } from './reconcile';
 
 export interface KnowledgeConfig {
@@ -12,7 +12,7 @@ export interface KnowledgeConfig {
   structure?: KnowledgeStructurePlan;
   /** Lazy scope creation templates keyed by opaque address pattern. */
   scopes?: KnowledgeScopeTypesConfig;
-  /** Registered Knowledge importers. */
-  importers?: readonly KnowledgeImporterDefinition[];
+  /** Registered Knowledge importers, or a resolver re-evaluated on each importer scheduling tick. */
+  importers?: KnowledgeImportersInput;
   storage?: MastraCompositeStore;
 }
