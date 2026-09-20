@@ -31,6 +31,12 @@ import type {
 } from '../types';
 import type { AgentVersion } from './agents';
 import type {
+  HarnessTerminalAdmissionRecord,
+  HarnessTerminalIntent,
+  HarnessTerminalQueuePressure,
+  HarnessTerminalTombstone,
+} from './harness/terminal-handoff';
+import type {
   AgentSignalResultEvidence,
   AttachmentRecord,
   AttachmentReference,
@@ -271,6 +277,13 @@ export class InMemoryDB {
   readonly harnessAttachmentBytes = new Map<string, Uint8Array>();
   readonly harnessAttachmentReferences = new Map<string, AttachmentReference>();
   readonly harnessMessageResultEvidence = new Map<string, AgentSignalResultEvidence>();
+  /** Native chat terminal handoff rows; kept separate from channel/projection intents. */
+  readonly harnessTerminalAdmissions = new Map<string, HarnessTerminalAdmissionRecord>();
+  readonly harnessTerminalIntents = new Map<string, HarnessTerminalIntent>();
+  /** Per-harness bounded pending-intent reservation, updated with intent rows. */
+  readonly harnessTerminalPressure = new Map<string, HarnessTerminalQueuePressure>();
+  /** Grant-key cancellation tombstones survive session delete/recreate. */
+  readonly harnessTerminalTombstones = new Map<string, HarnessTerminalTombstone>();
   readonly harnessOperationTombstones = new Map<string, OperationAdmissionTombstone>();
   readonly harnessSessionEvents = new Map<string, HarnessSessionEventRecord>();
   readonly harnessSessionRecordProjectionIntents = new Map<string, HarnessSessionRecordProjectionIntent>();
@@ -365,6 +378,10 @@ export class InMemoryDB {
     this.harnessAttachmentBytes.clear();
     this.harnessAttachmentReferences.clear();
     this.harnessMessageResultEvidence.clear();
+    this.harnessTerminalAdmissions.clear();
+    this.harnessTerminalIntents.clear();
+    this.harnessTerminalPressure.clear();
+    this.harnessTerminalTombstones.clear();
     this.harnessOperationTombstones.clear();
     this.harnessSessionEvents.clear();
     this.harnessSessionRecordProjectionIntents.clear();

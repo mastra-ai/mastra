@@ -75,6 +75,13 @@ import {
   HarnessStorageLeaseConflictError,
   HarnessStorageSessionEventReplayUnsupportedError,
   HarnessStorageVersionConflictError,
+  HarnessTerminalHandoffError,
+  HarnessTerminalHandoffCancelledError,
+  HarnessTerminalHandoffFencedError,
+  HarnessTerminalHandoffUnsupportedError,
+  HarnessTerminalHandoffValidationError,
+  HarnessTerminalFinalizationPendingError,
+  validateHarnessTerminalExecutionGrant,
 } from '../../storage/domains/harness';
 import type {
   GoalJudgeDecision,
@@ -87,6 +94,9 @@ import type {
   HarnessPlanTaskStatus,
   HarnessRunSummary,
   HarnessStorage,
+  HarnessTerminalFinalizer,
+  HarnessTerminalIdentity,
+  HarnessTerminalResult,
   HarnessStorageAttachmentUnavailableError,
   HarnessRuntimeDependencyRefs,
   InboxResponseReceipt,
@@ -1463,6 +1473,8 @@ export interface SessionInternals {
    * (live subscribers still receive them). Defaults to true.
    */
   persistTransientStreamingEvents?: boolean;
+  /** Opt-in terminal sanitizer; commit remains owned by HarnessStorage. */
+  terminalFinalizer?: HarnessTerminalFinalizer;
 }
 
 function normalizeSessionLogicalMessageIdentity(
@@ -1814,6 +1826,8 @@ export class Session {
   private readonly _messageTokenAccountingRunIds = new Set<string>();
   /** §10.5: when false, transient streaming deltas are not persisted (live-only). */
   private readonly _persistTransientStreamingEvents: boolean;
+  /** Registered opt-in sanitizer for the native terminal transaction. */
+  private readonly _terminalFinalizer?: HarnessTerminalFinalizer;
   private readonly _messageTokenAccountingReservations = new Map<string, Deferred<void>>();
   private readonly _messageAdmissionStarts = new Map<string, MessageAdmissionStart>();
   /** Serializes terminal evidence + event projection for one admitted signal. */
@@ -1893,6 +1907,23 @@ export class Session {
     this._storage = internals.storage;
     this._ownerId = internals.ownerId;
     this._persistTransientStreamingEvents = internals.persistTransientStreamingEvents ?? true;
+    this._terminalFinalizer = internals.terminalFinalizer;
+    if (this._terminalFinalizer !== undefined) {
+      if (!this._storage.supportsTerminalHandoff) {
+        throw new HarnessTerminalHandoffError(
+          'terminal handoff finalizer requires a storage adapter with native terminal support',
+          'harness.terminal_unsupported',
+        );
+      }
+      if (
+        typeof this._terminalFinalizer.id !== 'string' ||
+        this._terminalFinalizer.id.length === 0 ||
+        typeof this._terminalFinalizer.version !== 'string' ||
+        this._terminalFinalizer.version.length === 0
+      ) {
+        throw new HarnessTerminalHandoffValidationError('terminalHandoff.finalizer', 'id and version are required');
+      }
+    }
     this._emitter = new EventEmitter(
       { sessionId: this.id },
       {
@@ -7569,6 +7600,29 @@ export class Session {
     const admissionIdentity =
       opts.admissionId !== undefined ? this._messageAdmissionIdentity(opts.admissionId) : undefined;
 
+    // A registered finalizer is a capability for this Session; the caller
+    // opts a particular turn into the native terminal protocol by supplying
+    // the immutable grant/seed (or a terminal receipt observer). Ordinary
+    // messages keep the existing evidence path. Supplying terminal inputs
+    // without a registered finalizer fails before provider dispatch.
+    const terminalRequested =
+      opts.executionAuthorityGrant !== undefined ||
+      opts.terminalAdmissionSeed !== undefined ||
+      opts.onTerminalCommit !== undefined ||
+      opts.onTerminalCommitError !== undefined;
+    if (terminalRequested && this._terminalFinalizer === undefined) {
+      throw new HarnessTerminalHandoffUnsupportedError();
+    }
+    const terminalIdentity = terminalRequested
+      ? this._prepareTerminalIdentity(admissionIdentity, opts.admissionId, admissionHash, opts.executionAuthorityGrant)
+      : undefined;
+    if (terminalIdentity !== undefined && opts.terminalAdmissionSeed === undefined) {
+      throw new HarnessTerminalHandoffValidationError(
+        'message().terminalAdmissionSeed',
+        'native terminal handoff requires the bounded product/Doxa seed',
+      );
+    }
+
     // Per-turn additionalTools merge with the mode's surface, never replace.
     const toolSurface = this._buildToolSurface(mode, opts.additionalTools);
     reportAdmissionPhase('tool_surface_built');
@@ -7860,6 +7914,9 @@ export class Session {
           admissionStart.reject(conflict);
           throw conflict;
         }
+        if (terminalIdentity !== undefined && this._terminalFinalizer !== undefined) {
+          await this._admitTerminalHandoff(terminalIdentity, opts.terminalAdmissionSeed!, opts.onTerminalCommitError);
+        }
       } catch (err) {
         failOwnedMessageTurnBeforeDispatch(err);
         // §13.3f.1 — message() is a public §4.2b boundary; the admission
@@ -7939,6 +7996,7 @@ export class Session {
       if (
         admissionIdentity !== undefined &&
         admissionHash !== undefined &&
+        terminalIdentity === undefined &&
         (!nativeDispatchStarted || nativeAccepted || nativeRejected)
       ) {
         try {
@@ -8031,7 +8089,11 @@ export class Session {
       this._runCompletionPromises.delete(signal.runId);
       this._rememberCompletedRun(signal.runId, { ok: false, err });
       waiter?.reject(err);
-      if (admissionIdentity !== undefined && this._shouldWriteTurnFailureEvidence(err)) {
+      if (
+        admissionIdentity !== undefined &&
+        terminalIdentity === undefined &&
+        this._shouldWriteTurnFailureEvidence(err)
+      ) {
         this._writeMessageResultEvidenceBestEffortInBackground(
           {
             status: 'failed',
@@ -8089,7 +8151,11 @@ export class Session {
           this._runCompletionPromises.delete(signal.runId);
           this._rememberCompletedRun(signal.runId, { ok: false, err });
           waiter?.reject(err);
-          if (admissionIdentity !== undefined && this._shouldWriteTurnFailureEvidence(err)) {
+          if (
+            admissionIdentity !== undefined &&
+            terminalIdentity === undefined &&
+            this._shouldWriteTurnFailureEvidence(err)
+          ) {
             this._writeMessageResultEvidenceBestEffortInBackground(
               {
                 status: 'failed',
@@ -8157,19 +8223,27 @@ export class Session {
           }
           if (admissionIdentity === undefined) return full;
           await Promise.race([
-            this._writeMessageResultEvidence(
-              {
-                status: 'completed',
-                signalId: signal.signal.id,
-                runId: signal.runId,
-                modeId: effectiveModeId,
-                modelId: effectiveModelId,
-                operationKind: 'message',
-                result: full,
-                admissionId: opts.admissionId!,
-                admissionHash: admissionHash!,
-              },
-              { compatibleAdmissionHashes },
+            (terminalIdentity !== undefined
+              ? this._commitTerminalHandoff(terminalIdentity, full, {
+                  modeId: effectiveModeId,
+                  modelId: effectiveModelId,
+                  onReceipt: opts.onTerminalCommit,
+                  onFailure: opts.onTerminalCommitError,
+                })
+              : this._writeMessageResultEvidence(
+                  {
+                    status: 'completed',
+                    signalId: signal.signal.id,
+                    runId: signal.runId,
+                    modeId: effectiveModeId,
+                    modelId: effectiveModelId,
+                    operationKind: 'message',
+                    result: full,
+                    admissionId: opts.admissionId!,
+                    admissionHash: admissionHash!,
+                  },
+                  { compatibleAdmissionHashes },
+                )
             ).catch(err => {
               streamCompletedEvidenceWriteFailed = true;
               throw err;
@@ -8187,6 +8261,7 @@ export class Session {
           if (
             admissionIdentity !== undefined &&
             !streamCompletedEvidenceWriteFailed &&
+            terminalIdentity === undefined &&
             this._shouldWriteTurnFailureEvidence(err)
           ) {
             void this._writeMessageResultEvidence(
@@ -8205,6 +8280,18 @@ export class Session {
             ).catch(() => {});
           }
           if (!streamAgentEndEmitted) {
+            if (terminalIdentity !== undefined && err instanceof HarnessTerminalHandoffError) {
+              // Provider EOF is not native terminal settlement. Surface the
+              // typed handoff result separately so Doxa can retain an
+              // indeterminate/pending operation instead of refunding or
+              // recording a provider failure from this transport event.
+              this._emitTurnEvent({
+                type: 'error',
+                runId: signal.runId,
+                signalId: signal.signal.id,
+                error: projectHarnessPublicError(err),
+              });
+            }
             this._emitTurnEvent({
               type: 'agent_end',
               finishReason: turnAbortSignal.aborted ? 'aborted' : 'error',
@@ -8254,19 +8341,27 @@ export class Session {
         }
         if (admissionIdentity !== undefined) {
           await Promise.race([
-            this._writeMessageResultEvidenceBestEffort(
-              {
-                status: 'completed',
-                signalId: signal.signal.id,
-                runId: signal.runId,
-                modeId: effectiveModeId,
-                modelId: effectiveModelId,
-                operationKind: 'message',
-                result: full,
-                admissionId: opts.admissionId!,
-                admissionHash: admissionHash!,
-              },
-              { compatibleAdmissionHashes },
+            (terminalIdentity !== undefined
+              ? this._commitTerminalHandoff(terminalIdentity, full, {
+                  modeId: effectiveModeId,
+                  modelId: effectiveModelId,
+                  onReceipt: opts.onTerminalCommit,
+                  onFailure: opts.onTerminalCommitError,
+                })
+              : this._writeMessageResultEvidenceBestEffort(
+                  {
+                    status: 'completed',
+                    signalId: signal.signal.id,
+                    runId: signal.runId,
+                    modeId: effectiveModeId,
+                    modelId: effectiveModelId,
+                    operationKind: 'message',
+                    result: full,
+                    admissionId: opts.admissionId!,
+                    admissionHash: admissionHash!,
+                  },
+                  { compatibleAdmissionHashes },
+                )
             ).catch(err => {
               completedEvidenceWriteFailed = true;
               throw err;
@@ -8292,6 +8387,7 @@ export class Session {
       if (
         admissionIdentity !== undefined &&
         !completedEvidenceWriteFailed &&
+        terminalIdentity === undefined &&
         this._shouldWriteTurnFailureEvidence(err)
       ) {
         await Promise.race([
@@ -8313,6 +8409,17 @@ export class Session {
         ]);
       }
       if (!agentEndEmitted) {
+        if (terminalIdentity !== undefined && err instanceof HarnessTerminalHandoffError) {
+          // Keep the native commit barrier observable independently of the
+          // provider's terminal event. Canonical evidence remains pending
+          // until a later native receipt/reconciliation wins.
+          this._emitTurnEvent({
+            type: 'error',
+            runId: signal.runId,
+            signalId: signal.signal.id,
+            error: projectHarnessPublicError(err),
+          });
+        }
         this._emitTurnEvent({
           type: 'agent_end',
           finishReason: turnAbortSignal.aborted ? 'aborted' : 'error',
@@ -8522,17 +8629,25 @@ export class Session {
               const cached = this._completedRuns.get(runId);
               if (cached?.ok && evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
                 await this._prepareCachedDuplicateMessageCompletion(cached.full, evidence, opts, activeDeleted);
-                await this._writeMessageResultEvidenceBestEffort({
-                  status: 'completed',
-                  signalId: evidence.signalId,
-                  runId,
-                  modeId: duplicateModeId,
-                  modelId: duplicateModelId,
-                  operationKind: 'message',
-                  result: cached.full,
-                  admissionId: evidence.admissionId,
-                  admissionHash: evidence.admissionHash,
-                });
+                const terminalCommitted = await this._commitCachedDuplicateTerminal(
+                  cached.full,
+                  evidence,
+                  opts,
+                  activeDeleted,
+                );
+                if (!terminalCommitted) {
+                  await this._writeMessageResultEvidenceBestEffort({
+                    status: 'completed',
+                    signalId: evidence.signalId,
+                    runId,
+                    modeId: duplicateModeId,
+                    modelId: duplicateModelId,
+                    operationKind: 'message',
+                    result: cached.full,
+                    admissionId: evidence.admissionId,
+                    admissionHash: evidence.admissionHash,
+                  });
+                }
               }
               throw new HarnessValidationError('message().admissionId', 'duplicate stream is no longer live');
             }
@@ -8589,17 +8704,25 @@ export class Session {
             if (!cached.ok) throw cached.err;
             if (evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
               await this._prepareCachedDuplicateMessageCompletion(cached.full, evidence, opts, activeDeleted);
-              await this._writeMessageResultEvidenceBestEffort({
-                status: 'completed',
-                signalId: evidence.signalId,
-                runId,
-                modeId: duplicateModeId,
-                modelId: duplicateModelId,
-                operationKind: 'message',
-                result: cached.full,
-                admissionId: evidence.admissionId,
-                admissionHash: evidence.admissionHash,
-              });
+              const terminalCommitted = await this._commitCachedDuplicateTerminal(
+                cached.full,
+                evidence,
+                opts,
+                activeDeleted,
+              );
+              if (!terminalCommitted) {
+                await this._writeMessageResultEvidenceBestEffort({
+                  status: 'completed',
+                  signalId: evidence.signalId,
+                  runId,
+                  modeId: duplicateModeId,
+                  modelId: duplicateModelId,
+                  operationKind: 'message',
+                  result: cached.full,
+                  admissionId: evidence.admissionId,
+                  admissionHash: evidence.admissionHash,
+                });
+              }
             }
             return cached.full;
           }
@@ -8611,6 +8734,44 @@ export class Session {
       }
       throw new HarnessValidationError('message().admissionId', 'duplicate message result evidence has expired');
     });
+  }
+
+  /**
+   * A retry can recover a completed local run while its durable terminal
+   * admission is still pending. Complete that retry through the same atomic
+   * canonical-evidence + intent transaction; the generic evidence writer is
+   * only valid for turns that did not opt into native terminal handoff.
+   */
+  private async _commitCachedDuplicateTerminal(
+    full: FullOutput<unknown>,
+    evidence: AgentSignalResultEvidence,
+    opts: MessageOptions,
+    activeDeleted?: Promise<never>,
+  ): Promise<boolean> {
+    if (
+      this._terminalFinalizer === undefined ||
+      evidence.admissionId === undefined ||
+      evidence.admissionHash === undefined ||
+      opts.executionAuthorityGrant === undefined
+    ) {
+      return false;
+    }
+    const identity = this._prepareTerminalIdentity(
+      this._messageAdmissionIdentity(evidence.admissionId),
+      evidence.admissionId,
+      evidence.admissionHash,
+      opts.executionAuthorityGrant,
+    );
+    await this._raceActiveTurnWaiter(
+      this._commitTerminalHandoff(identity, full, {
+        modeId: this._messageDuplicateModeId(evidence, opts),
+        modelId: this._messageDuplicateModelId(evidence, opts),
+        onReceipt: opts.onTerminalCommit,
+        onFailure: opts.onTerminalCommitError,
+      }),
+      activeDeleted,
+    );
+    return true;
   }
 
   private async _prepareCachedDuplicateMessageCompletion(
@@ -8707,6 +8868,218 @@ export class Session {
       signalId: `harness-message-${digest.slice(0, 32)}`,
       runId: `harness-message-${digest.slice(32, 64)}`,
     };
+  }
+
+  private _prepareTerminalIdentity(
+    admissionIdentity: MessageAdmissionIdentity | undefined,
+    admissionId: string | undefined,
+    admissionHash: string | undefined,
+    executionGrant: import('../../storage/domains/harness').HarnessTerminalExecutionGrant | undefined,
+  ): HarnessTerminalIdentity {
+    if (admissionIdentity === undefined || admissionId === undefined) {
+      throw new HarnessTerminalHandoffValidationError(
+        'message().admissionId',
+        'native terminal handoff requires an idempotent admission id',
+      );
+    }
+    if (executionGrant === undefined) {
+      throw new HarnessTerminalHandoffValidationError(
+        'message().executionAuthorityGrant',
+        'native terminal handoff requires the immutable execution authority grant',
+      );
+    }
+    if (admissionHash === undefined || admissionHash.length === 0) {
+      throw new HarnessTerminalHandoffValidationError('message().admissionHash', 'is required for terminal handoff');
+    }
+    validateHarnessTerminalExecutionGrant(executionGrant, 'message().executionAuthorityGrant');
+    const sessionIncarnation = this._record.sessionIncarnation;
+    if (sessionIncarnation === undefined || sessionIncarnation.length === 0) {
+      throw new HarnessTerminalHandoffFencedError(this.id);
+    }
+    return {
+      harnessName: this._record.harnessName,
+      sessionId: this.id,
+      resourceId: this.resourceId,
+      threadId: this.threadId,
+      sessionIncarnation,
+      admissionId,
+      admissionHash,
+      signalId: admissionIdentity.signalId,
+      runId: admissionIdentity.runId,
+      executionGrant: { ...executionGrant },
+    };
+  }
+
+  private async _admitTerminalHandoff(
+    identity: HarnessTerminalIdentity,
+    seed: JsonValue,
+    onFailure?: (error: HarnessTerminalHandoffError) => void,
+  ): Promise<void> {
+    const finalizer = this._terminalFinalizer;
+    if (finalizer === undefined) return;
+    const reportFailure = (error: unknown): never => {
+      const terminalError =
+        error instanceof HarnessTerminalHandoffError
+          ? error
+          : new HarnessTerminalFinalizationPendingError(Date.now() + 1_000, error);
+      try {
+        onFailure?.(terminalError);
+      } catch {
+        // Failure observers do not own admission or settlement authority.
+      }
+      throw terminalError;
+    };
+    let receipt: import('../../storage/domains/harness').HarnessTerminalAdmissionReceipt;
+    try {
+      receipt = await this._storage.admitTerminalHandoff({
+        ...identity,
+        finalizerId: finalizer.id,
+        finalizerVersion: finalizer.version,
+        seed,
+      });
+    } catch (error) {
+      return reportFailure(error);
+    }
+    if (receipt.status === 'cancelled') {
+      return reportFailure(new HarnessTerminalHandoffCancelledError(identity.executionGrant.key));
+    }
+    if (receipt.status === 'fenced') {
+      return reportFailure(new HarnessTerminalHandoffFencedError(identity.sessionId));
+    }
+    if (receipt.status === 'conflict') {
+      return reportFailure(
+        new HarnessTerminalHandoffError(
+          'native terminal admission conflicts with an existing grant',
+          'harness.terminal_conflict',
+        ),
+      );
+    }
+    if (receipt.admission.status === 'committed') {
+      return reportFailure(
+        new HarnessTerminalHandoffError(
+          'native terminal admission already committed; reconcile its durable receipt before retrying',
+          'harness.terminal_duplicate',
+        ),
+      );
+    }
+  }
+
+  /**
+   * Runs the registered sanitizer immediately before the native terminal
+   * evidence boundary. The storage adapter commits completed evidence, the
+   * exact projection bytes, and the durable delivery intent together.
+   */
+  private async _commitTerminalHandoff(
+    identity: HarnessTerminalIdentity,
+    full: FullOutput<unknown>,
+    options: {
+      modeId?: string;
+      modelId?: string;
+      onReceipt?: (receipt: import('../../storage/domains/harness').HarnessTerminalCommitReceipt) => void;
+      onFailure?: (error: HarnessTerminalHandoffError) => void;
+    },
+  ): Promise<import('../../storage/domains/harness').HarnessTerminalCommitReceipt> {
+    const finalizer = this._terminalFinalizer;
+    if (finalizer === undefined) {
+      throw new HarnessTerminalHandoffValidationError('terminalHandoff', 'finalizer is not registered');
+    }
+    const reportFailure = (error: unknown): never => {
+      const terminalError =
+        error instanceof HarnessTerminalHandoffError
+          ? error
+          : new HarnessTerminalFinalizationPendingError(Date.now() + 1_000, error);
+      try {
+        options.onFailure?.(terminalError);
+      } catch {
+        // Failure observers are a coordination barrier, not a second commit
+        // authority; a buggy observer must not hide the durable indeterminate
+        // result from the caller/reconciler.
+      }
+      throw terminalError;
+    };
+    let admission;
+    try {
+      admission = await this._storage.loadTerminalAdmission({
+        harnessName: identity.harnessName,
+        sessionId: identity.sessionId,
+        admissionId: identity.admissionId,
+        executionGrant: identity.executionGrant,
+      });
+    } catch (error) {
+      return reportFailure(error);
+    }
+    if (admission === null || admission.status === 'fenced') {
+      return reportFailure(new HarnessTerminalHandoffFencedError(identity.sessionId));
+    }
+    if (admission.status === 'cancelled') {
+      return reportFailure(new HarnessTerminalHandoffCancelledError(identity.executionGrant.key));
+    }
+    const finishReason = typeof full.finishReason === 'string' ? full.finishReason : undefined;
+    const terminalResult: HarnessTerminalResult = {
+      status: finishReason === 'aborted' || finishReason === 'abort' ? 'aborted' : 'completed',
+      runId: identity.runId,
+      ...(finishReason !== undefined ? { finishReason } : {}),
+      completedAt: Date.now(),
+    };
+    let projection: import('../../storage/domains/harness').HarnessTerminalProjection;
+    try {
+      projection = await finalizer.finalize({
+        identity,
+        seed: admission.seed,
+        finalizerId: admission.finalizerId,
+        finalizerVersion: admission.finalizerVersion,
+        result: terminalResult,
+        fullOutput: full,
+      });
+    } catch (error) {
+      return reportFailure(error);
+    }
+    const evidence: AgentSignalResultEvidence = {
+      status: 'completed',
+      signalId: identity.signalId,
+      runId: identity.runId,
+      modeId: options.modeId,
+      modelId: options.modelId,
+      operationKind: 'message',
+      result: full,
+      admissionId: identity.admissionId,
+      admissionHash: identity.admissionHash,
+      harnessName: identity.harnessName,
+      sessionId: identity.sessionId,
+      resourceId: identity.resourceId,
+      threadId: identity.threadId,
+      createdAt: admission.createdAt,
+      updatedAt: Date.now(),
+    };
+    let receipt: import('../../storage/domains/harness').HarnessTerminalCommitReceipt;
+    try {
+      receipt = await this._storage.commitTerminalHandoff({
+        admission: {
+          ...identity,
+          finalizerId: admission.finalizerId,
+          finalizerVersion: admission.finalizerVersion,
+          seed: admission.seed,
+          createdAt: admission.createdAt,
+        },
+        resultEvidence: evidence,
+        terminalResult,
+        projection,
+      });
+    } catch (error) {
+      return reportFailure(error);
+    }
+    if (receipt.status === 'cancelled') {
+      return reportFailure(new HarnessTerminalHandoffCancelledError(identity.executionGrant.key));
+    }
+    if (receipt.status === 'fenced') {
+      return reportFailure(new HarnessTerminalHandoffFencedError(identity.sessionId));
+    }
+    try {
+      options.onReceipt?.(receipt);
+    } catch {
+      // Receipt observers are diagnostics only and cannot change the durable winner.
+    }
+    return receipt;
   }
 
   /**
@@ -9049,6 +9422,12 @@ export class Session {
       ...(opts.modelSettings !== undefined ? { modelSettings: opts.modelSettings } : {}),
       ...(opts.logicalMessageIdentity !== undefined
         ? { logicalMessageIdentity: { ...opts.logicalMessageIdentity } }
+        : {}),
+      ...(opts.executionAuthorityGrant !== undefined
+        ? { executionAuthorityGrant: { ...opts.executionAuthorityGrant } }
+        : {}),
+      ...(opts.terminalAdmissionSeed !== undefined
+        ? { terminalAdmissionSeed: structuredClone(opts.terminalAdmissionSeed) }
         : {}),
       attachments: (opts.attachments ?? []).map(attachment => ({
         attachmentId: attachment.attachmentId,

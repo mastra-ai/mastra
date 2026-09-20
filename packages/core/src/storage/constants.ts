@@ -54,6 +54,10 @@ export const TABLE_HARNESS_ATTACHMENTS = 'mastra_harness_attachments';
 export const TABLE_HARNESS_ATTACHMENT_REFERENCES = 'mastra_harness_attachment_references';
 export const TABLE_HARNESS_ATTACHMENT_OPERATIONS = 'mastra_harness_attachment_operations';
 export const TABLE_HARNESS_MESSAGE_RESULTS = 'mastra_harness_message_results';
+export const TABLE_HARNESS_TERMINAL_ADMISSIONS = 'mastra_harness_terminal_admissions';
+export const TABLE_HARNESS_TERMINAL_INTENTS = 'mastra_harness_terminal_intents';
+export const TABLE_HARNESS_TERMINAL_TOMBSTONES = 'mastra_harness_terminal_tombstones';
+export const TABLE_HARNESS_TERMINAL_PRESSURE = 'mastra_harness_terminal_pressure';
 export const TABLE_HARNESS_OPERATION_TOMBSTONES = 'mastra_harness_operation_tombstones';
 export const TABLE_HARNESS_SESSION_EVENTS = 'mastra_harness_session_events';
 export const TABLE_HARNESS_THREAD_DELETE_FENCES = 'mastra_harness_thread_delete_fences';
@@ -127,6 +131,10 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_ATTACHMENT_REFERENCES
   | typeof TABLE_HARNESS_ATTACHMENT_OPERATIONS
   | typeof TABLE_HARNESS_MESSAGE_RESULTS
+  | typeof TABLE_HARNESS_TERMINAL_ADMISSIONS
+  | typeof TABLE_HARNESS_TERMINAL_INTENTS
+  | typeof TABLE_HARNESS_TERMINAL_TOMBSTONES
+  | typeof TABLE_HARNESS_TERMINAL_PRESSURE
   | typeof TABLE_HARNESS_OPERATION_TOMBSTONES
   | typeof TABLE_HARNESS_SESSION_EVENTS
   | typeof TABLE_HARNESS_THREAD_DELETE_FENCES
@@ -1090,6 +1098,80 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     created_at: { type: 'bigint', nullable: false },
     updated_at: { type: 'bigint', nullable: false },
   },
+  [TABLE_HARNESS_TERMINAL_ADMISSIONS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    session_incarnation: { type: 'text', nullable: false },
+    admission_id: { type: 'text', nullable: false },
+    admission_hash: { type: 'text', nullable: false },
+    signal_id: { type: 'text', nullable: false },
+    run_id: { type: 'text', nullable: false },
+    grant_key: { type: 'text', nullable: false },
+    grant_generation: { type: 'bigint', nullable: false },
+    finalizer_id: { type: 'text', nullable: false },
+    finalizer_version: { type: 'text', nullable: false },
+    seed_json: { type: 'text', nullable: false },
+    seed_bytes: { type: 'integer', nullable: false },
+    seed_hash: { type: 'text', nullable: false },
+    status: { type: 'text', nullable: false },
+    terminal_result_json: { type: 'text', nullable: true },
+    projection_json: { type: 'text', nullable: true },
+    revision: { type: 'bigint', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_TERMINAL_INTENTS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    admission_id: { type: 'text', nullable: false },
+    admission_hash: { type: 'text', nullable: false },
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    session_incarnation: { type: 'text', nullable: false },
+    grant_key: { type: 'text', nullable: false },
+    grant_generation: { type: 'bigint', nullable: false },
+    signal_id: { type: 'text', nullable: false },
+    run_id: { type: 'text', nullable: false },
+    revision: { type: 'bigint', nullable: false },
+    finalizer_id: { type: 'text', nullable: false },
+    finalizer_version: { type: 'text', nullable: false },
+    terminal_result_json: { type: 'text', nullable: false },
+    projection_json: { type: 'text', nullable: false },
+    payload_bytes: { type: 'integer', nullable: false },
+    status: { type: 'text', nullable: false },
+    attempts: { type: 'integer', nullable: false },
+    claim_id: { type: 'text', nullable: true },
+    claim_expires_at: { type: 'bigint', nullable: true },
+    next_attempt_at: { type: 'bigint', nullable: true },
+    last_error_json: { type: 'text', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+    acked_at: { type: 'bigint', nullable: true },
+    dead_at: { type: 'bigint', nullable: true },
+  },
+  [TABLE_HARNESS_TERMINAL_TOMBSTONES]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    grant_key: { type: 'text', nullable: false },
+    grant_generation: { type: 'bigint', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    session_incarnation: { type: 'text', nullable: false },
+    admission_id: { type: 'text', nullable: false },
+    admission_hash: { type: 'text', nullable: false },
+    reason_json: { type: 'text', nullable: false },
+    created_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_TERMINAL_PRESSURE]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    pending_intents: { type: 'bigint', nullable: false },
+    pending_bytes: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
   [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     harness_name: { type: 'text', nullable: false },
@@ -1459,6 +1541,18 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_HARNESS_MESSAGE_RESULTS]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],
+  },
+  [TABLE_HARNESS_TERMINAL_ADMISSIONS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_TERMINAL_ADMISSIONS],
+  },
+  [TABLE_HARNESS_TERMINAL_INTENTS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_TERMINAL_INTENTS],
+  },
+  [TABLE_HARNESS_TERMINAL_TOMBSTONES]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_TERMINAL_TOMBSTONES],
+  },
+  [TABLE_HARNESS_TERMINAL_PRESSURE]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_TERMINAL_PRESSURE],
   },
   [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],
