@@ -84,3 +84,35 @@ await resolver.refresh() // Force a refetch now and update the cache.
 ```
 
 A platform fetch failure serves the previous good snapshot rather than losing importers mid-run; the failure is logged and enters a short cooldown.
+
+## Factory auto-construction
+
+The Factory (`@mastra/factory`) accepts a first-class `importers` config option and auto-constructs the `Knowledge` instance on your behalf when the platform environment is present. In a platform-enabled deployment you do not need to instantiate `Knowledge` yourself:
+
+```typescript title="src/mastra/index.ts"
+import { MastraFactory } from '@mastra/factory'
+
+export const factory = new MastraFactory({
+  storage,
+  // Factory calls importers() from @mastra/connect on your behalf.
+  // Auto-constructs `new Knowledge({ id: 'factory', storage, importers: importers() })`
+  // whenever both MASTRA_PLATFORM_ACCESS_TOKEN (or _SECRET_KEY) and MASTRA_PROJECT_ID
+  // are set. Skipped silently otherwise — local dev boots fine.
+})
+```
+
+The following forms are all supported:
+
+| `FactoryConfig` shape | Behavior |
+| - | - |
+| `knowledge: myOwnKnowledge` | Fully-owned mode — Factory registers your `Knowledge` verbatim; `importers` is ignored. |
+| `importers: importers({ ... })` | Auto-construct with the resolver you configure explicitly (bypasses env auto-detection). |
+| `importers: [customImporter]` | Auto-construct with a static importer array — useful for tests and non-platform hosts. |
+| `importers: false` | Explicit opt-out — no Knowledge is auto-constructed even if the platform env is present. |
+| _(neither field set)_ | Auto-construct when the platform env is present; otherwise skip silently. `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1` enables an empty-importer Knowledge as a dev override. |
+
+The presence of a `Knowledge` instance on the Factory — auto-constructed or user-supplied — is what flips the `/web/config/features` `knowledge` flag on. That flag drives both the Knowledge page in Factory's SPA and the Knowledge Importers settings section, where users can connect Notion, Confluence, Linear, Zendesk, or Fireflies through the same Nango-backed OAuth flow the Factory already uses for Jira and incident.io. A newly-connected provider starts syncing on the next importer tick without a Factory restart.
+
+Auto-construction gives you a `Knowledge` instance with live importers but no access model. Importer-driven ingestion works because each definition carries its own `access` map, but the Knowledge Canvas and Search read routes need a `knowledgeAccessProfile` to serve results — pass `knowledgeAccessProfile` alongside `importers` (or `knowledge`) when you plan to expose the read surfaces.
+
+Jira is registered in Factory's platform-connect provider set as a shared slug: one Jira connection powers both the intake integration and the knowledge importer. To avoid confusion, the Knowledge Importers settings section lists Notion, Confluence, Linear, Zendesk, and Fireflies; Jira stays exposed via the intake connections above.
