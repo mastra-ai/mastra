@@ -67,6 +67,35 @@ function mergeRequestOpened(deliveryId = 'delivery-mr-1', author = 'maintainer')
   } as const;
 }
 
+function mergeRequestNote(deliveryId = 'delivery-mr-note') {
+  return {
+    event: 'Note Hook',
+    deliveryId,
+    instanceHost: 'gitlab.example.com',
+    payload: {
+      user_username: 'maintainer',
+      user: { username: 'maintainer' },
+      project: { id: 101, path_with_namespace: PROJECT_PATH, web_url: 'https://gitlab.example.com/acme/app' },
+      object_attributes: {
+        id: 99,
+        noteable_type: 'MergeRequest',
+        note: 'Please revise this change.',
+        url: 'https://gitlab.example.com/acme/app/-/merge_requests/17#note_99',
+      },
+      merge_request: {
+        id: 170,
+        iid: 17,
+        state: 'opened',
+        title: 'MR 17',
+        url: 'https://gitlab.example.com/acme/app/-/merge_requests/17',
+        source_branch: 'feature-17',
+        target_branch: 'main',
+        author: { username: 'maintainer' },
+      },
+    },
+  } as const;
+}
+
 async function setup(
   options: { selected?: boolean; accessLevel?: number; duplicateInstallation?: boolean; installationHost?: string } = {},
 ) {
@@ -380,6 +409,55 @@ describe('GitLabRules', () => {
         },
       },
     ]);
+  });
+
+  it('routes an MR note only to the Work card authoring its head branch', async () => {
+    const { seeded, project, service } = await setup();
+    const work = (
+      await seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:authoring' },
+          title: 'Authoring work',
+          board: 'work',
+          stages: ['execute'],
+          sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
+          metadata: { authorTrusted: true },
+        },
+      })
+    ).item;
+    await expect(service.ingest(mergeRequestNote())).resolves.toEqual({ status: 'committed' });
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      {
+        workItemId: work.id,
+        decision: {
+          type: 'sendMessage',
+          role: 'work',
+          message: expect.stringContaining('commented on GitLab merge request !17'),
+        },
+      },
+    ]);
+  });
+
+  it('does not route an MR note to an unrelated Work branch', async () => {
+    const { seeded, project, service } = await setup();
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:unrelated' },
+        title: 'Unrelated work',
+        board: 'work',
+        stages: ['execute'],
+        sessions: { work: { sessionId: 'other-session', threadId: 'other-thread', branch: 'other-branch' } },
+        metadata: { authorTrusted: true },
+      },
+    });
+    await expect(service.ingest(mergeRequestNote('delivery-mr-note-unrelated'))).resolves.toEqual({ status: 'committed' });
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
 });
