@@ -111,3 +111,10 @@ export function pullRequestNumberFromBranch(branch: string): number | undefined 
   const match = /^factory\/pr-([1-9]\d*)$/.exec(branch);
   return match ? Number(match[1]) : undefined;
 }
+
+/** The GitLab MR IID encoded in Factory's collision-resistant review branch. */
+export function mergeRequestNumberFromBranch(branch: string): number | undefined {
+  const match = /^factory\/gitlab-mr-([1-9]\d*)-[a-z0-9]{1,12}$/.exec(branch);
+  const number = match ? Number(match[1]) : undefined;
+  return number !== undefined && Number.isSafeInteger(number) ? number : undefined;
+}

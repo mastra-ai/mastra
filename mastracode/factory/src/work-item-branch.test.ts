@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { pullRequestNumberFromBranch, workItemBranch, workItemBranchSource } from './work-item-branch.js';
+import {
+  mergeRequestNumberFromBranch,
+  pullRequestNumberFromBranch,
+  workItemBranch,
+  workItemBranchSource,
+} from './work-item-branch.js';
 
 describe('workItemBranchSource', () => {
   it('maps stored provenance onto the branch vocabulary', () => {
@@ -89,5 +94,15 @@ describe('pullRequestNumberFromBranch', () => {
     expect(pullRequestNumberFromBranch('factory/pr-0')).toBeUndefined();
     expect(pullRequestNumberFromBranch('factory/pr-7x')).toBeUndefined();
     expect(pullRequestNumberFromBranch('feat/pr-7')).toBeUndefined();
+  });
+});
+
+describe('mergeRequestNumberFromBranch', () => {
+  it('accepts only Factory GitLab MR review branches with safe numeric IIDs', () => {
+    expect(mergeRequestNumberFromBranch('factory/gitlab-mr-6-2c3b494988ac')).toBe(6);
+    expect(mergeRequestNumberFromBranch('factory/gitlab-mr-0-2c3b494988ac')).toBeUndefined();
+    expect(mergeRequestNumberFromBranch('factory/gitlab-mr-6')).toBeUndefined();
+    expect(mergeRequestNumberFromBranch('factory/gitlab-mr-6-unsafe!')).toBeUndefined();
+    expect(mergeRequestNumberFromBranch('factory/pr-6')).toBeUndefined();
   });
 });

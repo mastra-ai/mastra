@@ -847,7 +847,7 @@ describe('GitHub session workspace preparation', () => {
       }),
     );
     addProject({ repoFullName: 'acme/platform/app' });
-    addSession({ id: 'session-a' });
+    addSession({ id: 'session-a', branch: 'factory/gitlab-mr-6-2c3b494988ac' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
@@ -869,6 +869,7 @@ describe('GitHub session workspace preparation', () => {
         repoFullName: 'acme/platform/app',
         cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
         authUsername: 'oauth2',
+        mergeRequestNumber: 6,
       }),
     );
     expect(lastGhToken()).toBeUndefined();

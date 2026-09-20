@@ -47,7 +47,7 @@ import type { SourceControlSession, SourceControlStorageHandle } from './storage
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { parseSupervisorResourceId } from './supervisor/session.js';
 import { timedPhase } from './timing.js';
-import { pullRequestNumberFromBranch } from './work-item-branch.js';
+import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -748,6 +748,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         cloneUrl: access.cloneUrl,
         authUsername: access.authorization?.username,
         pullRequestNumber: pullRequestNumberFromBranch(session.branch),
+        mergeRequestNumber: sourceControl.id === 'gitlab' ? mergeRequestNumberFromBranch(session.branch) : undefined,
       });
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather

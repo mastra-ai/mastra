@@ -564,6 +564,29 @@ describe('checkoutSessionBranch', () => {
     expect(sandbox.calls).toContain('git -C /workspace/repo checkout -b factory/pr-42 FETCH_HEAD');
     expect(sandbox.calls).toContain('git -C /workspace/repo config credential.helper !gh auth git-credential');
   });
+
+  it('starts a GitLab merge-request session on the MR head using transient OAuth credentials', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('--is-shallow-repository')) return { exitCode: 0, stdout: 'true\n', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', {
+      ...opts,
+      branch: 'factory/gitlab-mr-6-2c3b494988ac',
+      mergeRequestNumber: 6,
+      cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+      authUsername: 'oauth2',
+    });
+
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch --unshallow --filter=blob:none origin main');
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch --filter=blob:none origin refs/merge-requests/6/head');
+    expect(sandbox.calls).toContain('git -C /workspace/repo checkout -b factory/gitlab-mr-6-2c3b494988ac FETCH_HEAD');
+    expect(sandbox.calls.join('\n')).not.toContain('!gh auth git-credential');
+    expect(sandbox.calls.join('\n')).not.toContain('tok-secret');
+  });
   it('keeps the history fetch plain when the clone is not shallow', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };

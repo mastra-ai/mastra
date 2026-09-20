@@ -442,6 +442,8 @@ export interface SessionBranchOptions {
   authUsername?: string;
   /** A pull-request card's session starts on the PR head instead of the base tip. */
   pullRequestNumber?: number;
+  /** A GitLab merge-request card's session starts on the MR head instead of the base tip. */
+  mergeRequestNumber?: number;
 }
 
 /**
@@ -453,16 +455,21 @@ const GH_CREDENTIAL_HELPER = '!gh auth git-credential';
 async function fetchStartPoint(
   sandbox: ExecutableSandbox,
   workdir: string,
-  { baseBranch, pullRequestNumber }: Pick<SessionBranchOptions, 'baseBranch' | 'pullRequestNumber'>,
+  { baseBranch, pullRequestNumber, mergeRequestNumber }: Pick<SessionBranchOptions, 'baseBranch' | 'pullRequestNumber' | 'mergeRequestNumber'>,
   shallowClone: boolean,
   env: Record<string, string>,
 ): Promise<SandboxCommandResult> {
+  const changeRequestRef = pullRequestNumber !== undefined
+    ? `refs/pull/${pullRequestNumber}/head`
+    : mergeRequestNumber !== undefined
+      ? `refs/merge-requests/${mergeRequestNumber}/head`
+      : undefined;
   const baseArgs = [
     '-C',
     workdir,
     'fetch',
-    ...(pullRequestNumber !== undefined && shallowClone ? ['--unshallow'] : []),
-    ...(pullRequestNumber !== undefined ? ['--filter=blob:none'] : []),
+    ...(changeRequestRef && shallowClone ? ['--unshallow'] : []),
+    ...(changeRequestRef ? ['--filter=blob:none'] : []),
     'origin',
     baseBranch,
   ];
@@ -471,14 +478,14 @@ async function fetchStartPoint(
     timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
     phase: 'branch checkout fetch',
   });
-  if (base.exitCode !== 0 || pullRequestNumber === undefined) return base;
+  if (base.exitCode !== 0 || !changeRequestRef) return base;
   return gitTransfer(
     sandbox,
-    ['-C', workdir, 'fetch', '--filter=blob:none', 'origin', `refs/pull/${pullRequestNumber}/head`],
+    ['-C', workdir, 'fetch', '--filter=blob:none', 'origin', changeRequestRef],
     {
       env,
       timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
-      phase: 'pull request head fetch',
+      phase: 'change request head fetch',
     },
   );
 }
@@ -497,12 +504,14 @@ async function checkoutSessionBranchImpl(
   workdir: string,
   options: SessionBranchOptions,
 ): Promise<void> {
-  const { branch, baseBranch, token, repoFullName, pullRequestNumber, cloneUrl, authUsername } = options;
-  if (!isValidGitRef(branch) || !isValidGitRef(baseBranch)) {
+  const { branch, baseBranch, token, repoFullName, pullRequestNumber, mergeRequestNumber, cloneUrl, authUsername } = options;
+  if (!isValidGitRef(branch) || !isValidGitRef(baseBranch) ||
+      (pullRequestNumber !== undefined && mergeRequestNumber !== undefined) ||
+      (mergeRequestNumber !== undefined && (!Number.isSafeInteger(mergeRequestNumber) || mergeRequestNumber <= 0))) {
     throw new MaterializeError('Refusing to create a session from an invalid branch name.', 'clone-failed');
   }
 
-  const pullRequestSession = pullRequestNumber !== undefined;
+  const changeRequestSession = pullRequestNumber !== undefined || mergeRequestNumber !== undefined;
   // GitHub delegates later authenticated operations to `gh`. Other providers
   // deliberately receive no persistent credential helper. Remove the legacy
   // helper when reopening an older checkout so a stale sandbox cannot retain
@@ -537,7 +546,7 @@ async function checkoutSessionBranchImpl(
   }
 
   const shallowClone =
-    pullRequestSession &&
+    changeRequestSession &&
     (await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--is-shallow-repository'])).stdout.trim() === 'true';
   const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
   const fetch = await fetchStartPoint(sandbox, workdir, options, shallowClone, authEnv);
