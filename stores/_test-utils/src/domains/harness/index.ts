@@ -1,5 +1,6 @@
 import {
   HarnessStorageAdmissionConflictError,
+  HarnessStorageAttachmentConflictError,
   HarnessStorageAttachmentUnavailableError,
   HarnessStorageDeleteGuardConflictError,
   HarnessStorageLeaseConflictError,
@@ -1181,6 +1182,23 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
     });
 
     describe('attachments', () => {
+      const ensureAttachmentSession = async (sessionId: string, harnessName = 'default') => {
+        if (!harness) return;
+        await harness.saveSession(
+          createSampleSessionRecord({
+            id: sessionId,
+            harnessName,
+            resourceId: `attachment-resource-${harnessName}-${sessionId}`,
+            threadId: `attachment-thread-${harnessName}-${sessionId}`,
+          }),
+          { harnessName, ownerId: `attachment-owner-${harnessName}`, ifVersion: 0 },
+        );
+      };
+
+      beforeEach(async () => {
+        await ensureAttachmentSession('session-1');
+      });
+
       it('saves and loads an attachment', async () => {
         if (!harness) return;
         await harness.saveAttachment({
@@ -1205,6 +1223,8 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
 
       it('isolates attachments by sessionId', async () => {
         if (!harness) return;
+        await ensureAttachmentSession('session-a');
+        await ensureAttachmentSession('session-b');
         await harness.saveAttachment({
           sessionId: 'session-a',
           attachmentId: 'shared',
@@ -1228,9 +1248,9 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
         expect(b?.name).toBe('b.txt');
       });
 
-      it('does not overwrite duplicate (session_id, attachment_id)', async () => {
+      it('rejects same-id conflicts without overwriting', async () => {
         if (!harness) return;
-        const saved = await harness.saveAttachment({
+        await harness.saveAttachment({
           sessionId: 'session-1',
           attachmentId: 'a1',
           name: 'first.txt',
@@ -1238,25 +1258,16 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           source: 'preupload',
           data: new Uint8Array([1]),
         });
-        await harness.saveAttachment({
-          sessionId: 'session-1',
-          attachmentId: 'a1',
-          name: 'second.txt',
-          mimeType: 'text/plain',
-          source: 'preupload',
-          data: new Uint8Array([2, 3]),
-        });
-
         await expect(
           harness.saveAttachment({
             sessionId: 'session-1',
             attachmentId: 'a1',
-            name: 'third.txt',
+            name: 'second.txt',
             mimeType: 'text/plain',
             source: 'preupload',
-            data: new Uint8Array([4, 5]),
+            data: new Uint8Array([2, 3]),
           }),
-        ).resolves.toEqual(saved);
+        ).rejects.toBeInstanceOf(HarnessStorageAttachmentConflictError);
 
         const loaded = await harness.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' });
         expect(loaded?.name).toBe('first.txt');
@@ -1265,6 +1276,8 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
 
       it('isolates duplicate attachment ids by harness namespace', async () => {
         if (!harness) return;
+        await ensureAttachmentSession('session-1', 'harness-a');
+        await ensureAttachmentSession('session-1', 'harness-b');
         await harness.saveAttachment({
           sessionId: 'session-1',
           attachmentId: 'a1',
@@ -1400,6 +1413,8 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
 
       it('deletes only attachments for the requested session in deleteAttachmentsForSession', async () => {
         if (!harness) return;
+        await ensureAttachmentSession('session-a');
+        await ensureAttachmentSession('session-b');
         await harness.saveAttachment({
           sessionId: 'session-a',
           attachmentId: 'a1',
@@ -1433,11 +1448,8 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
 
       it('keeps transactional attachment references in the session harness namespace', async () => {
         if (!harness) return;
-        await harness.saveSession(createSampleSessionRecord({ harnessName: 'harness-a', id: 'session-a' }), {
-          harnessName: 'harness-a',
-          ownerId: 'h',
-          ifVersion: 0,
-        });
+        await ensureAttachmentSession('session-a', 'harness-a');
+        await ensureAttachmentSession('session-a', 'harness-b');
         await harness.saveAttachment({
           harnessName: 'harness-b',
           sessionId: 'session-a',

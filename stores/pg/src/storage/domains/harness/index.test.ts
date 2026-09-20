@@ -41,7 +41,6 @@ describe('HarnessPG', () => {
     id: 'pg-harness-attachment-test-store',
     schemaName: attachmentSchemaName,
     enabledDomains: ['harness'],
-    sessionRecordProjection: { enabled: true, maxAttempts: 1, maxPendingIntents: 20 },
     attachmentByteOwner: new InMemoryHarnessAttachmentByteOwner({ providerId: 'pg-test' }),
   });
 

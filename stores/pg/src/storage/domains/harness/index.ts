@@ -1230,7 +1230,12 @@ export class HarnessPG extends HarnessStorage {
       return this.#saveSessionWithProjection(record, opts);
     }
     const harnessName = this.#resolveHarnessName(opts.harnessName ?? record.harnessName);
-    const namespacedRecord: SessionRecord = { ...record, harnessName };
+    const sessionIncarnation = opts.ifVersion === 0 && this.#attachmentByteOwner ? randomUUID() : undefined;
+    const namespacedRecord: SessionRecord = {
+      ...record,
+      harnessName,
+      ...(sessionIncarnation !== undefined ? { sessionIncarnation } : {}),
+    };
     const nextVersion = opts.ifVersion + 1;
     const cols = sessionColumnValues(namespacedRecord, nextVersion);
 
@@ -1284,7 +1289,12 @@ export class HarnessPG extends HarnessStorage {
     // We exclude owner_id and lease_expires_at from the update set — those
     // belong to the lease lifecycle methods.
     const updateNames = cols.names.filter(
-      n => n !== 'owner_id' && n !== 'lease_expires_at' && n !== 'id' && n !== 'harness_name',
+      n =>
+        n !== 'owner_id' &&
+        n !== 'lease_expires_at' &&
+        n !== 'id' &&
+        n !== 'harness_name' &&
+        !(this.#attachmentByteOwner && n === 'session_incarnation'),
     );
     const updateValues = updateNames.map(n => cols.values[cols.names.indexOf(n)]);
 
@@ -1342,7 +1352,12 @@ export class HarnessPG extends HarnessStorage {
     const nextVersion = opts.ifVersion + 1;
     const cols = sessionColumnValues(namespacedRecord, nextVersion);
     const updateNames = cols.names.filter(
-      n => n !== 'owner_id' && n !== 'lease_expires_at' && n !== 'id' && n !== 'harness_name',
+      n =>
+        n !== 'owner_id' &&
+        n !== 'lease_expires_at' &&
+        n !== 'id' &&
+        n !== 'harness_name' &&
+        !(this.#attachmentByteOwner && n === 'session_incarnation'),
     );
     const updateValues = updateNames.map(n => cols.values[cols.names.indexOf(n)]);
     const setClause = updateNames.map(n => `${n} = ?`).join(', ');
@@ -1961,7 +1976,8 @@ export class HarnessPG extends HarnessStorage {
       }
 
       const expiresAt = storageNow + opts.initialLease.ttlMs;
-      const sessionIncarnation = this.sessionRecordProjection.enabled ? randomUUID() : undefined;
+      const sessionIncarnation =
+        this.sessionRecordProjection.enabled || this.#attachmentByteOwner ? randomUUID() : undefined;
       const namespacedRecord: SessionRecord = {
         ...record,
         harnessName,
@@ -2076,7 +2092,21 @@ export class HarnessPG extends HarnessStorage {
           args: [namespace, sessionId],
         });
         const existingRow = existing.rows[0] as Record<string, unknown> | undefined;
-        if (!existingRow) continue;
+        if (!existingRow) {
+          // A previous delete may already have removed native metadata while
+          // its external cleanup was ambiguous. A retry must resume those
+          // durable intents even though the session row is gone.
+          const outstanding = await tx.execute({
+            sql: `SELECT id
+                  FROM ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
+                  WHERE harness_name = ? AND session_id = ? AND kind = ?
+                    AND status NOT IN (?, ?)
+                  ORDER BY created_at ASC, id ASC`,
+            args: [namespace, sessionId, 'delete', 'completed', 'cleaned'],
+          });
+          for (const row of outstanding.rows) attachmentCleanupOperationIds.push(String(row.id));
+          continue;
+        }
 
         const record = rowToDeleteGuardRecord(existingRow);
         const mismatch = getDeleteGuardMismatch(record, opts);
@@ -3372,6 +3402,18 @@ export class HarnessPG extends HarnessStorage {
           args: [namespace, sessionId, String(attachment.attachment_id)],
         });
       }
+      const outstanding = await tx.execute({
+        sql: `SELECT id
+              FROM ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
+              WHERE harness_name = ? AND session_id = ? AND kind = ?
+                AND status NOT IN (?, ?)
+              ORDER BY created_at ASC, id ASC`,
+        args: [namespace, sessionId, 'delete', 'completed', 'cleaned'],
+      });
+      for (const row of outstanding.rows) {
+        const operationId = String(row.id);
+        if (!operationIds.includes(operationId)) operationIds.push(operationId);
+      }
       await tx.commit();
     } catch (err) {
       if (!tx.closed) await tx.rollback();
@@ -3503,37 +3545,42 @@ export class HarnessPG extends HarnessStorage {
    * an explicit native adapter surface: an app may schedule it from its normal
    * maintenance loop without giving the byte owner access to PG metadata.
    */
-  async reconcileAttachmentOperations(options: { limit?: number; now?: number } = {}): Promise<{
+  async reconcileAttachmentOperations(options: { harnessName?: string; limit?: number; now?: number } = {}): Promise<{
     processed: number;
     pending: number;
   }> {
     const requestedLimit = options.limit ?? 25;
     const limit = Number.isSafeInteger(requestedLimit) ? Math.max(1, Math.min(100, requestedLimit)) : 25;
+    const namespace = this.#resolveHarnessName(options.harnessName);
+    const now = options.now ?? Date.now();
     let processed = 0;
     for (;;) {
       if (processed >= limit) break;
       const candidate = await this.#client.execute({
         sql: `SELECT id, kind
               FROM ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
-              WHERE (
-                (kind = ? AND status IN (?, ?, ?))
-                OR (kind = ? AND status IN (?, ?))
-                OR (status = ? AND claim_expires_at <= ?)
-              )
+              WHERE harness_name = ?
+                AND (
+                  (kind = ? AND status IN (?, ?, ?))
+                  OR (kind = ? AND status IN (?, ?, ?))
+                  OR (status = ? AND claim_expires_at <= ?)
+                )
                 AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
               ORDER BY created_at ASC, id ASC
               LIMIT 1`,
         args: [
+          namespace,
           'delete',
           'pending',
           'unknown',
           'cleanup_pending',
           'put',
+          'pending',
           'unknown',
           'cleanup_pending',
           'claimed',
-          options.now ?? Date.now(),
-          options.now ?? Date.now(),
+          now,
+          now,
         ],
       });
       const operationId = candidate.rows[0]?.id;
@@ -3548,8 +3595,8 @@ export class HarnessPG extends HarnessStorage {
     const pending = await this.#client.execute({
       sql: `SELECT COUNT(*)::text AS count
             FROM ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
-            WHERE kind IN (?, ?) AND status NOT IN (?, ?)`,
-      args: ['delete', 'put', 'completed', 'cleaned'],
+            WHERE harness_name = ? AND kind IN (?, ?) AND status NOT IN (?, ?)`,
+      args: [namespace, 'delete', 'put', 'completed', 'cleaned'],
     });
     return { processed, pending: Number(pending.rows[0]?.count ?? 0) };
   }
@@ -3865,14 +3912,40 @@ export class HarnessPG extends HarnessStorage {
     });
   }
 
+  async #cancelAttachmentPutOperation(operation: PgAttachmentOperation, claimId: string): Promise<boolean> {
+    const owner = this.#requireAttachmentByteOwner(operation.sessionId, operation.attachmentId);
+    let outcome: Awaited<ReturnType<HarnessAttachmentByteOwner['cancel']>>;
+    try {
+      outcome = await owner.cancel({
+        owner: {
+          harnessName: operation.harnessName,
+          sessionId: operation.sessionId,
+          attachmentId: operation.attachmentId,
+          incarnation: operation.sessionIncarnation,
+        },
+        operationId: operation.id,
+        expectedBytes: operation.sizeBytes,
+        expectedSha256: operation.sha256,
+      });
+    } catch {
+      await this.#markAttachmentOperationUnknown(operation.id, operation.blobRef);
+      return false;
+    }
+    if (outcome.outcome === 'unknown') {
+      await this.#markAttachmentOperationUnknown(operation.id, operation.blobRef);
+      return false;
+    }
+    await this.#markAttachmentOperationCleaned(operation.id, claimId);
+    return true;
+  }
+
   async #reconcileAttachmentPutOperation(operationId: string): Promise<boolean> {
     const claim = await this.#claimAttachmentOperation(operationId);
     if (claim.state === 'done') return true;
     if (claim.state === 'busy') return false;
     const { operation, claimId } = claim;
     if (operation.blobRef === undefined) {
-      await this.#markAttachmentOperationUnknown(operationId);
-      return false;
+      return this.#cancelAttachmentPutOperation(operation, claimId);
     }
 
     const session = await this.#client.execute({
@@ -3890,15 +3963,11 @@ export class HarnessPG extends HarnessStorage {
       args: [operation.harnessName, operation.sessionId, operation.attachmentId],
     });
 
-    // An active session with no committed metadata may still have a caller
-    // retrying the exact PUT. Leave that identity available for the caller;
-    // orphan cleanup is only safe once the session incarnation is absent.
     const sessionIncarnation = session.rows[0]?.session_incarnation;
     const sameSessionIncarnation =
       sessionIncarnation != null && String(sessionIncarnation) === operation.sessionIncarnation;
     if (sameSessionIncarnation && attachment.rows.length === 0) {
-      await this.#markAttachmentOperationUnknown(operationId, operation.blobRef);
-      return false;
+      return this.#cancelAttachmentPutOperation(operation, claimId);
     }
 
     const owner = this.#requireAttachmentByteOwner(operation.sessionId, operation.attachmentId);
@@ -3910,8 +3979,7 @@ export class HarnessPG extends HarnessStorage {
         String(row.session_incarnation ?? '') !== operation.sessionIncarnation ||
         String(row.blob_ref ?? '') !== operation.blobRef
       ) {
-        await this.#markAttachmentOperationUnknown(operationId, operation.blobRef);
-        return false;
+        return this.#cancelAttachmentPutOperation(operation, claimId);
       }
       let data: Uint8Array | null;
       try {
@@ -3939,29 +4007,7 @@ export class HarnessPG extends HarnessStorage {
       return true;
     }
 
-    let outcome: Awaited<ReturnType<HarnessAttachmentByteOwner['delete']>>;
-    try {
-      outcome = await owner.delete({
-        blobRef: operation.blobRef,
-        owner: {
-          harnessName: operation.harnessName,
-          sessionId: operation.sessionId,
-          attachmentId: operation.attachmentId,
-          incarnation: operation.sessionIncarnation,
-        },
-        expectedBytes: operation.sizeBytes,
-        expectedSha256: operation.sha256,
-      });
-    } catch {
-      await this.#markAttachmentOperationUnknown(operationId, operation.blobRef);
-      return false;
-    }
-    if (outcome.outcome === 'unknown') {
-      await this.#markAttachmentOperationUnknown(operationId, operation.blobRef);
-      return false;
-    }
-    await this.#markAttachmentOperationCleaned(operationId, claimId);
-    return true;
+    return this.#cancelAttachmentPutOperation(operation, claimId);
   }
 
   async #reconcileAttachmentDeleteOperation(operationId: string, throwOnUnknown: boolean): Promise<boolean> {

@@ -9,6 +9,8 @@ import {
 } from '@mastra/core/storage';
 import type {
   HarnessAttachmentByteOwner,
+  HarnessAttachmentByteOwnerCancelInput,
+  HarnessAttachmentByteOwnerCancelResult,
   HarnessAttachmentByteOwnerDeleteInput,
   HarnessAttachmentByteOwnerDeleteResult,
   HarnessAttachmentByteOwnerLoadInput,
@@ -31,6 +33,7 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
   #deleteRelease: (() => void) | undefined;
   #deleteStartedPromise: Promise<void> | undefined;
   unknownSaveOnce = false;
+  failSaveOnce = false;
   unknownDeleteOnce = false;
 
   pauseNextSave(): void {
@@ -66,6 +69,10 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
   }
 
   async save(input: HarnessAttachmentByteOwnerSaveInput): Promise<HarnessAttachmentByteOwnerSaveResult> {
+    if (this.failSaveOnce) {
+      this.failSaveOnce = false;
+      throw new Error('simulated upload failure');
+    }
     const result = await this.#delegate.save(input);
     if (this.#saveStarted !== undefined) {
       this.#saveStarted();
@@ -99,6 +106,10 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
       return { outcome: 'unknown' };
     }
     return this.#delegate.delete(input);
+  }
+
+  cancel(input: HarnessAttachmentByteOwnerCancelInput): Promise<HarnessAttachmentByteOwnerCancelResult> {
+    return this.#delegate.cancel(input);
   }
 }
 
@@ -395,5 +406,34 @@ describe('HarnessPG native external attachment ownership', () => {
         maxBytes: 100 * 1024 * 1024,
       }),
     ).resolves.toBeNull();
+  });
+
+  it('reconciles an abandoned PUT through the typed owner fence before session deletion', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-attachment-abandoned',
+      resourceId: 'abandoned-resource',
+      threadId: 'abandoned-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'abandoned-owner', ttlMs: 60_000 },
+    });
+    owner.failSaveOnce = true;
+    await expect(
+      harness.saveAttachment({
+        sessionId: session.id,
+        attachmentId: 'abandoned',
+        name: 'abandoned.txt',
+        mimeType: 'text/plain',
+        source: 'inline',
+        data: new TextEncoder().encode('abandoned'),
+      }),
+    ).rejects.toBeInstanceOf(HarnessStorageAttachmentPendingError);
+
+    await expect(harness.reconcileAttachmentOperations({ limit: 1, now: Date.now() + 2_000 })).resolves.toMatchObject({
+      processed: 1,
+      pending: 0,
+    });
+    await expect(harness.deleteSession({ sessionId: session.id })).resolves.toBeUndefined();
   });
 });

@@ -67,6 +67,15 @@ export type HarnessAttachmentByteOwnerDeleteResult =
       outcome: 'unknown';
     }>;
 
+export type HarnessAttachmentByteOwnerCancelInput = Readonly<{
+  owner: HarnessAttachmentOwnerScope;
+  operationId: string;
+  expectedBytes: number;
+  expectedSha256: string;
+}>;
+
+export type HarnessAttachmentByteOwnerCancelResult = HarnessAttachmentByteOwnerDeleteResult;
+
 /**
  * External attachment bytes are deliberately separate from native metadata,
  * references, and cleanup intent. A native Harness storage adapter owns the
@@ -76,6 +85,13 @@ export interface HarnessAttachmentByteOwner {
   save(input: HarnessAttachmentByteOwnerSaveInput): Promise<HarnessAttachmentByteOwnerSaveResult>;
   load(input: HarnessAttachmentByteOwnerLoadInput): Promise<Uint8Array | null>;
   delete(input: HarnessAttachmentByteOwnerDeleteInput): Promise<HarnessAttachmentByteOwnerDeleteResult>;
+  /**
+   * Fences an upload operation before removing its deterministic object. A
+   * native reconciler uses this when a PUT has no committed metadata row; the
+   * owner must reject a later save for the same scope and operation id before
+   * it can publish bytes.
+   */
+  cancel(input: HarnessAttachmentByteOwnerCancelInput): Promise<HarnessAttachmentByteOwnerCancelResult>;
 }
 
 export class HarnessAttachmentByteOwnerInvalidInputError extends HarnessStorageDomainError {
@@ -163,6 +179,7 @@ export class InMemoryHarnessAttachmentByteOwner implements HarnessAttachmentByte
   readonly #providerId: string;
   readonly #objects: Map<string, InMemoryHarnessAttachmentObject>;
   readonly #retiredBlobRefs = new Set<string>();
+  readonly #cancelledOperations = new Set<string>();
 
   constructor(options: InMemoryHarnessAttachmentByteOwnerOptions = {}) {
     const providerId = options.providerId ?? 'memory';
@@ -174,6 +191,10 @@ export class InMemoryHarnessAttachmentByteOwner implements HarnessAttachmentByte
   async save(input: HarnessAttachmentByteOwnerSaveInput): Promise<HarnessAttachmentByteOwnerSaveResult> {
     const normalized = normalizeSaveInput(input);
     const blobRef = this.#blobRef(normalized.owner);
+    const operationKey = this.#operationKey(normalized.owner, normalized.operationId);
+    if (this.#cancelledOperations.has(operationKey)) {
+      throw new HarnessAttachmentByteOwnerConflictError();
+    }
     const existing = this.#objects.get(blobRef);
 
     if (existing !== undefined) {
@@ -251,6 +272,33 @@ export class InMemoryHarnessAttachmentByteOwner implements HarnessAttachmentByte
     return { outcome: 'deleted' };
   }
 
+  async cancel(input: HarnessAttachmentByteOwnerCancelInput): Promise<HarnessAttachmentByteOwnerCancelResult> {
+    const normalized = normalizeCancelInput(input);
+    const blobRef = this.#blobRef(normalized.owner);
+    const operationKey = this.#operationKey(normalized.owner, normalized.operationId);
+    if (this.#cancelledOperations.has(operationKey)) {
+      return { outcome: 'already_absent' };
+    }
+    const stored = this.#objects.get(blobRef);
+    if (stored !== undefined) {
+      assertStoredRecordOwner(stored, normalized.owner);
+      if (
+        stored.operationId !== normalized.operationId ||
+        stored.bytes !== normalized.expectedBytes ||
+        stored.sha256 !== normalized.expectedSha256
+      ) {
+        throw new HarnessAttachmentByteOwnerConflictError();
+      }
+      assertStoredRecordIntegrity(stored);
+      this.#objects.delete(blobRef);
+      this.#retiredBlobRefs.add(blobRef);
+      this.#cancelledOperations.add(operationKey);
+      return { outcome: 'deleted' };
+    }
+    this.#cancelledOperations.add(operationKey);
+    return { outcome: 'already_absent' };
+  }
+
   #blobRef(owner: HarnessAttachmentOwnerScope): string {
     return [
       'memory://',
@@ -264,6 +312,10 @@ export class InMemoryHarnessAttachmentByteOwner implements HarnessAttachmentByte
       '/',
       encodeSegment(owner.incarnation),
     ].join('');
+  }
+
+  #operationKey(owner: HarnessAttachmentOwnerScope, operationId: string): string {
+    return `${this.#blobRef(owner)}\u0000${operationId}`;
   }
 }
 
@@ -319,6 +371,24 @@ function normalizeDeleteInput(input: HarnessAttachmentByteOwnerDeleteInput): Nor
     expectedBytes: input.expectedBytes,
     expectedSha256: normalizeSha256(input.expectedSha256),
     maxBytes: Number.MAX_SAFE_INTEGER,
+  };
+}
+
+function normalizeCancelInput(input: HarnessAttachmentByteOwnerCancelInput): {
+  owner: HarnessAttachmentOwnerScope;
+  operationId: string;
+  expectedBytes: number;
+  expectedSha256: string;
+} {
+  assertObject(input, 'input');
+  const owner = normalizeOwner(input.owner);
+  assertSafeText(input.operationId, 'operationId', MAX_OPERATION_ID_LENGTH);
+  assertByteCount(input.expectedBytes, 'expectedBytes');
+  return {
+    owner,
+    operationId: input.operationId,
+    expectedBytes: input.expectedBytes,
+    expectedSha256: normalizeSha256(input.expectedSha256),
   };
 }
 

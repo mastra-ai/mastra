@@ -193,6 +193,7 @@ describe('InMemoryHarnessAttachmentByteOwner', () => {
       },
       load: inputToLoad => cleanOwner.load(inputToLoad),
       delete: inputToDelete => cleanOwner.delete(inputToDelete),
+      cancel: inputToCancel => cleanOwner.cancel(inputToCancel),
     };
     const ambiguousResult = await ambiguousOwner.save(input);
     expect(ambiguousResult.outcome).toBe('unknown');
@@ -200,5 +201,14 @@ describe('InMemoryHarnessAttachmentByteOwner', () => {
       throw new Error('ambiguous save should retain a bounded blob reference');
     }
     await expect(cleanOwner.load(makeLoadInput({ blobRef: ambiguousResult.blobRef }))).resolves.not.toBeNull();
+    await expect(
+      cleanOwner.cancel({
+        owner: input.owner,
+        operationId: input.operationId,
+        expectedBytes: input.expectedBytes,
+        expectedSha256: input.expectedSha256,
+      }),
+    ).resolves.toMatchObject({ outcome: 'deleted' });
+    await expect(cleanOwner.save(input)).rejects.toThrow();
   });
 });

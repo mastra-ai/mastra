@@ -8,7 +8,7 @@ import {
 } from '@internal/storage-test-utils';
 import { Mastra } from '@mastra/core/mastra';
 import { dispatchDueNotifications } from '@mastra/core/notifications';
-import { TABLE_THREADS } from '@mastra/core/storage';
+import { InMemoryHarnessAttachmentByteOwner, TABLE_THREADS } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { Pool } from 'pg';
 import { describe, it, expect, vi } from 'vitest';
@@ -24,8 +24,19 @@ import { PostgresStore } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-createTestSuite(new PostgresStore(TEST_CONFIG));
-createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my_schema' }));
+createTestSuite(
+  new PostgresStore({
+    ...TEST_CONFIG,
+    attachmentByteOwner: new InMemoryHarnessAttachmentByteOwner({ providerId: 'pg-conformance-public' }),
+  }),
+);
+createTestSuite(
+  new PostgresStore({
+    ...TEST_CONFIG,
+    schemaName: 'my_schema',
+    attachmentByteOwner: new InMemoryHarnessAttachmentByteOwner({ providerId: 'pg-conformance-my-schema' }),
+  }),
+);
 
 describe('PostgresStore workspace authorIds filtering', () => {
   it('lists owned and legacy unowned workspaces without returning other authors', async () => {
