@@ -167,8 +167,9 @@ describe('KnowledgeImportersSection', () => {
       // Notion row lists the account label. That's the only signal — no
       // "Connected" pill, no redundant status copy.
       expect(await screen.findByText('acme-workspace')).toBeInTheDocument();
-      // And the connection time renders alongside as compact relative text.
-      expect(await screen.findByText('· 5m')).toBeInTheDocument();
+      // And the connection time renders alongside as compact relative text,
+      // clearly labeled so users know what the timestamp means.
+      expect(await screen.findByText('· Connected at: 5m')).toBeInTheDocument();
       // With an active connection there is no per-card Connect button — the
       // presence of a listed account is what conveys the connected state.
       expect(screen.queryByRole('button', { name: 'Connect Notion' })).toBeNull();
