@@ -7,6 +7,7 @@ import {
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
+  importerCronTrigger,
   MAX_RECORD_TEXT,
   readHighWater,
   readResumeCursor,
@@ -19,6 +20,53 @@ import {
 import { createFakeState } from './fixtures/importer-harness.js';
 
 describe('importer-runtime helpers', () => {
+  describe('importerCronTrigger', () => {
+    it('maps concrete access keys to static bindings with the provider source', () => {
+      const trigger = importerCronTrigger('notion:c1', {
+        access: { 'org:acme': 'owner', 'resource:abc': 'edit' },
+        schedule: '0 * * * *',
+      });
+      expect(trigger.schedule).toBe('0 * * * *');
+      expect(trigger.bindings).toEqual([
+        { source: 'notion:c1', scope: 'org:acme' },
+        { source: 'notion:c1', scope: 'resource:abc' },
+      ]);
+      expect(trigger.resolveBindings).toBeUndefined();
+    });
+
+    it('excludes parameterized access keys from static bindings — they are authority, not destinations', () => {
+      const trigger = importerCronTrigger('linear:c2', {
+        access: { 'resource:$projectId': 'owner', 'org:acme': 'edit' },
+        schedule: '0 * * * *',
+      });
+      expect(trigger.bindings).toEqual([{ source: 'linear:c2', scope: 'org:acme' }]);
+    });
+
+    it('surfaces dynamic scopes as resolveBindings mapped to the provider source', async () => {
+      const trigger = importerCronTrigger('jira:c3', {
+        access: { 'resource:$projectId': 'owner' },
+        schedule: '0 * * * *',
+        scopes: async () => ['resource:one', 'resource:two'],
+      });
+      expect(trigger.bindings).toBeUndefined();
+      expect(trigger.resolveBindings).toBeTypeOf('function');
+      await expect(trigger.resolveBindings!()).resolves.toEqual([
+        { source: 'jira:c3', scope: 'resource:one' },
+        { source: 'jira:c3', scope: 'resource:two' },
+      ]);
+    });
+
+    it('keeps concrete keys as static bindings alongside a dynamic scopes resolver', async () => {
+      const trigger = importerCronTrigger('zendesk:c4', {
+        access: { 'org:acme': 'edit', 'resource:$projectId': 'owner' },
+        schedule: '0 * * * *',
+        scopes: () => ['resource:one'],
+      });
+      expect(trigger.bindings).toEqual([{ source: 'zendesk:c4', scope: 'org:acme' }]);
+      await expect(trigger.resolveBindings!()).resolves.toEqual([{ source: 'zendesk:c4', scope: 'resource:one' }]);
+    });
+  });
+
   describe('watermark', () => {
     it('round-trips through durable state as JSON', async () => {
       const state = createFakeState();

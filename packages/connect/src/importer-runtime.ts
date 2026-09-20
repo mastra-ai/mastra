@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
-import type { KnowledgeImporterState } from '@mastra/core/knowledge';
+import type { KnowledgeImporterCronTrigger, KnowledgeImporterState } from '@mastra/core/knowledge';
 import { z } from 'zod';
+
+import type { ImporterProviderContext } from './importer-registry.js';
 
 /** Maximum records processed per handler invocation. Bounded runs are a hard invariant. */
 export const DEFAULT_MAX_RECORDS_PER_RUN = 500;
@@ -8,6 +10,29 @@ export const DEFAULT_MAX_RECORDS_PER_RUN = 500;
 export const DEFAULT_MAX_PAGES_PER_RUN = 50;
 /** Maximum characters stored in a single record text body. Mirrors Tyler's shipyard importer. */
 export const MAX_RECORD_TEXT = 8000;
+
+/**
+ * Builds the cron trigger every catalogue provider shares. Concrete `access`
+ * keys become static bindings (today's behavior, unchanged); parameterized
+ * keys (containing `$`) are authority patterns, not destinations, and are
+ * excluded. When the host configured dynamic `scopes`, they surface as the
+ * trigger's `resolveBindings` — resolved at each fire and unioned with the
+ * static set by the core runner.
+ */
+export function importerCronTrigger(
+  source: string,
+  ctx: Pick<ImporterProviderContext, 'access' | 'schedule' | 'scopes'>,
+): KnowledgeImporterCronTrigger {
+  const staticBindings = Object.keys(ctx.access)
+    .filter(scope => !scope.includes('$'))
+    .map(scope => ({ source, scope }));
+  const scopes = ctx.scopes;
+  return {
+    schedule: ctx.schedule,
+    ...(staticBindings.length > 0 ? { bindings: staticBindings } : {}),
+    ...(scopes ? { resolveBindings: async () => (await scopes()).map(scope => ({ source, scope })) } : {}),
+  };
+}
 
 const watermarkSchema = z.object({ watermark: z.string() });
 

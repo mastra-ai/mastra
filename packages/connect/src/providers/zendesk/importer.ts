@@ -6,6 +6,7 @@ import {
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
+  importerCronTrigger,
   readWatermark,
   writeWatermark,
 } from '../../importer-runtime.js';
@@ -40,10 +41,7 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
     id: 'zendesk',
     access: ctx.access,
     triggers: {
-      cron: {
-        schedule: ctx.schedule,
-        bindings: Object.keys(ctx.access).map(scope => ({ source: `zendesk:${ctx.connection.id}`, scope })),
-      },
+      cron: importerCronTrigger(`zendesk:${ctx.connection.id}`, ctx),
     },
     handler: async (context: {
       signal: AbortSignal;

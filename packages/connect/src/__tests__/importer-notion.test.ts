@@ -61,6 +61,20 @@ describe('notion importer', () => {
   });
   beforeEach(() => warnSpy?.mockRestore());
 
+  it('exposes dynamic scopes as the cron trigger resolveBindings with the connection-bound source', async () => {
+    const { ctx } = makeContext();
+    const definition = notionImporterRegistration.createImporter({
+      ...ctx,
+      access: { 'resource:$projectId': 'owner' },
+      scopes: async () => ['resource:one', 'resource:two'],
+    });
+    expect(definition.triggers?.cron?.bindings).toBeUndefined();
+    await expect(definition.triggers!.cron!.resolveBindings!()).resolves.toEqual([
+      { source: 'notion:c_notion', scope: 'resource:one' },
+      { source: 'notion:c_notion', scope: 'resource:two' },
+    ]);
+  });
+
   it('first run imports every page as a node with a content-hashed record and advances the watermark', async () => {
     const { ctx, request, importer, state } = makeContext();
     const pages: NotionPageFixture[] = [

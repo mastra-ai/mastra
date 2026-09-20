@@ -3,7 +3,12 @@ import type { KnowledgeImporterDefinition, KnowledgeImporterResolver } from '@ma
 import type { ConnectClientOptions, ProjectConnection, ResolvedClient } from './client.js';
 import { listProjectConnections, proxyRequest, resolveClient } from './client.js';
 import { MastraConnectError } from './errors.js';
-import type { ImporterAccess, ImporterProviderRegistration, ImporterProxyRequest } from './importer-registry.js';
+import type {
+  ImporterAccess,
+  ImporterProviderRegistration,
+  ImporterProxyRequest,
+  ImporterScopesResolver,
+} from './importer-registry.js';
 import { IMPORTERS } from './importer-registry.js';
 import './providers/importers.js';
 
@@ -16,6 +21,14 @@ export interface ImportersIntegrationOptions {
   scope?: string;
   /** Explicit scope → role map. Required if `scope` is not set. */
   access?: ImporterAccess;
+  /**
+   * Dynamic destination scopes, resolved at each cron fire (e.g. one
+   * `resource:<projectId>` per active project). Requires an explicit `access`
+   * map — use parameterized keys (`{ 'resource:$projectId': 'owner' }`) so the
+   * resolved scopes are writable. Concrete `access` keys still sync as static
+   * destinations alongside the dynamic set.
+   */
+  scopes?: ImporterScopesResolver;
   /** Cron override; defaults to the provider's `defaultSchedule`. */
   schedule?: string;
 }
@@ -160,6 +173,9 @@ function buildRequests(integrations: ImportersOptions['integrations']): Normaliz
 }
 
 function resolveAccess(integrationId: string, opts: ImportersIntegrationOptions): ImporterAccess {
+  if (opts.scopes !== undefined && typeof opts.scopes !== 'function') {
+    throw new MastraConnectError('invalid_options', `Importer '${integrationId}' scopes must be a function.`);
+  }
   if (opts.access) {
     const entries = Object.entries(opts.access);
     if (entries.length === 0) {
@@ -168,7 +184,22 @@ function resolveAccess(integrationId: string, opts: ImportersIntegrationOptions)
         `Importer '${integrationId}' access map cannot be empty; provide at least one scope.`,
       );
     }
+    // Parameterized keys are authority patterns, not destinations. Without a
+    // dynamic scopes resolver there must be at least one concrete destination,
+    // or the importer would register with nothing to sync.
+    if (!opts.scopes && entries.every(([scope]) => scope.includes('$'))) {
+      throw new MastraConnectError(
+        'invalid_options',
+        `Importer '${integrationId}' access map only has parameterized scopes; add a concrete scope or a 'scopes' resolver.`,
+      );
+    }
     return Object.freeze(Object.fromEntries(entries));
+  }
+  if (opts.scopes) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Importer '${integrationId}' dynamic 'scopes' requires an explicit 'access' map (e.g. { 'resource:$projectId': 'owner' }).`,
+    );
   }
   const scope = opts.scope?.trim();
   if (!scope) {
@@ -210,6 +241,7 @@ function mapImporters(
           request: (opts: ImporterProxyRequest) => proxyRequest(client, connection.id, opts),
           access: request.access,
           schedule: request.schedule,
+          ...(request.options.scopes ? { scopes: request.options.scopes } : {}),
         });
       } catch (error) {
         console.warn(

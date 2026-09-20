@@ -8,6 +8,7 @@ import {
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
+  importerCronTrigger,
   readHighWater,
   readResumeCursor,
   readWatermark,
@@ -112,10 +113,7 @@ function createNotionImporter(ctx: ImporterProviderContext) {
     id: 'notion',
     access: ctx.access,
     triggers: {
-      cron: {
-        schedule: ctx.schedule,
-        bindings: Object.keys(ctx.access).map(scope => ({ source: `notion:${ctx.connection.id}`, scope })),
-      },
+      cron: importerCronTrigger(`notion:${ctx.connection.id}`, ctx),
     },
     handler: async (context: {
       signal: AbortSignal;
