@@ -10,6 +10,7 @@ import type {
   ImporterScopesResolver,
 } from './importer-registry.js';
 import { IMPORTERS } from './importer-registry.js';
+import { isParameterizedScope } from './importer-runtime.js';
 import './providers/importers.js';
 
 export interface ImportersIntegrationOptions {
@@ -187,7 +188,7 @@ function resolveAccess(integrationId: string, opts: ImportersIntegrationOptions)
     // Parameterized keys are authority patterns, not destinations. Without a
     // dynamic scopes resolver there must be at least one concrete destination,
     // or the importer would register with nothing to sync.
-    if (!opts.scopes && entries.every(([scope]) => scope.includes('$'))) {
+    if (!opts.scopes && entries.every(([scope]) => isParameterizedScope(scope))) {
       throw new MastraConnectError(
         'invalid_options',
         `Importer '${integrationId}' access map only has parameterized scopes; add a concrete scope or a 'scopes' resolver.`,
