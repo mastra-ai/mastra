@@ -4,6 +4,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createEventedWorkflow, createWorkflow } from './create';
+import { isEventedForeachSuspensionResult } from './evented/foreach-suspension';
 import { createStep } from './workflow';
 
 /**
@@ -263,7 +264,18 @@ describe('evented foreach: sparse suspension envelopes', () => {
       expect(started.status).toBe('suspended');
 
       const initial = await readSnapshot(storage, run.runId);
-      expect(Object.keys(initial.foreachOutput)).toEqual(['1', '2']);
+      expect(
+        Object.entries(initial.foreachOutput)
+          .filter(([, result]) => isEventedForeachSuspensionResult(result))
+          .map(([index]) => index),
+      ).toEqual(['1', '2']);
+      expect(initial.foreachOutput['0']).toEqual(
+        expect.objectContaining({
+          status: 'success',
+          output: { name: 'alpha', status: 'suspended', token: 'raw-alpha' },
+          suspendPayload: {},
+        }),
+      );
       expect(initial.foreachOutput['1']).toMatchObject({
         status: 'suspended',
         suspendPayload: { name: 'beta', token: 'pending-beta' },
@@ -284,7 +296,25 @@ describe('evented foreach: sparse suspension envelopes', () => {
       expect(afterBeta.status).toBe('suspended');
 
       const remaining = await readSnapshot(storage, run.runId);
-      expect(Object.keys(remaining.foreachOutput)).toEqual(['2']);
+      expect(
+        Object.entries(remaining.foreachOutput)
+          .filter(([, result]) => isEventedForeachSuspensionResult(result))
+          .map(([index]) => index),
+      ).toEqual(['2']);
+      expect(remaining.foreachOutput['0']).toEqual(
+        expect.objectContaining({
+          status: 'success',
+          output: { name: 'alpha', status: 'suspended', token: 'raw-alpha' },
+          suspendPayload: {},
+        }),
+      );
+      expect(remaining.foreachOutput['1']).toEqual(
+        expect.objectContaining({
+          status: 'success',
+          output: { name: 'beta', status: 'suspended', token: 'approved-beta' },
+          suspendPayload: {},
+        }),
+      );
       expect(remaining.foreachOutput['2']).toMatchObject({
         status: 'suspended',
         suspendPayload: { name: 'gamma', token: 'pending-gamma' },
@@ -474,7 +504,18 @@ describe('evented foreach: sparse suspension envelopes', () => {
       expect(completionEffect.mock.calls).toEqual([['B']]);
 
       const onlyA = await loadSuspension();
-      expect(Object.keys(onlyA.foreachOutput)).toEqual(['0']);
+      expect(
+        Object.entries(onlyA.foreachOutput)
+          .filter(([, result]) => isEventedForeachSuspensionResult(result))
+          .map(([index]) => index),
+      ).toEqual(['0']);
+      expect(onlyA.foreachOutput['1']).toEqual(
+        expect.objectContaining({
+          status: 'success',
+          output: { name: 'B', token: 'completed-B' },
+          suspendPayload: {},
+        }),
+      );
       expect(onlyA.foreachOutput['0']?.suspendPayload).toMatchObject({ name: 'A', token: 'fresh-A' });
       expect(onlyA.snapshot?.resumeLabels).toEqual({
         'finalize-A': { stepId: resuspendStepId, foreachIndex: 0 },
