@@ -52,11 +52,30 @@ Only the providers you list under `integrations` are considered. A provider with
 | - | - |
 | `scope` | Convenience shorthand for a single-scope `owner` grant. |
 | `access` | Explicit `{ scopeAddress: 'owner' \| 'edit' }` map when you need multiple scopes or non-owner roles. |
+| `scopes` | Function returning destination scope addresses, resolved at each cron fire. Requires an explicit `access` map. |
 | `connectionId` | Pin a specific connection id when a project has more than one connection for the same provider. |
 | `disabled` | Skip this provider even if a connection exists. |
 | `schedule` | Cron override; defaults to the provider's `defaultSchedule`. |
 
 If a project has multiple active connections for the same provider and no `connectionId` is pinned, `importers()` reads the corresponding environment variable (for example `MASTRA_NOTION_CONNECTION_ID`) and falls back to warn-and-skip when ambiguous.
+
+### Dynamic destination scopes
+
+When the set of destinations changes at runtime — for example one scope per active project — pass a `scopes` function instead of hardcoding scope addresses. It is resolved at every cron fire, so scopes added or removed after startup take effect on the next run without re-registering the importer:
+
+```typescript
+importers({
+  projectId: 'proj_x',
+  integrations: {
+    notion: {
+      access: { 'resource:$projectId': 'owner' },
+      scopes: async () => (await listActiveProjects()).map(p => `resource:${p.id}`),
+    },
+  },
+})
+```
+
+Parameterized `access` keys (containing `$`, like `resource:$projectId`) grant authority over every scope the pattern matches but are not destinations themselves — only resolved `scopes` and concrete `access` keys are synced. A concrete key alongside a `scopes` function keeps syncing as a static destination on every run. If the `scopes` function throws, the run proceeds with the last successfully resolved set (or the static destinations only) and retries at the next fire.
 
 ## Credential model
 
@@ -110,6 +129,8 @@ The following forms are all supported:
 | `importers: [customImporter]` | Auto-construct with a static importer array — useful for tests and non-platform hosts. |
 | `importers: false` | Explicit opt-out — no Knowledge is auto-constructed even if the platform env is present. |
 | _(neither field set)_ | Auto-construct when the platform env is present; otherwise skip silently. `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1` enables an empty-importer Knowledge as a dev override. |
+
+When the Factory auto-constructs with `importers()` and you did not pass `importersOptions.integrations`, every catalogue provider defaults to per-project destinations: scopes are resolved from the Factory project inventory at each cron fire (`resource:<projectId>` per project), so newly created projects start syncing without a restart. Document sources (Notion, Confluence) default to the `owner` role; ticket and transcript sources (Jira, Linear, Zendesk, Fireflies) default to `edit`. Hosts that construct `Knowledge` themselves can reuse the same topology via `factoryProjectScopes(storage)` from `@mastra/factory`.
 
 The presence of a `Knowledge` instance on the Factory — auto-constructed or user-supplied — is what flips the `/web/config/features` `knowledge` flag on. That flag drives both the Knowledge page in Factory's SPA and the Knowledge Importers settings section, where users can connect Notion, Confluence, Linear, Zendesk, or Fireflies through the same Nango-backed OAuth flow the Factory already uses for Jira and incident.io. A newly-connected provider starts syncing on the next importer tick without a Factory restart.
 
