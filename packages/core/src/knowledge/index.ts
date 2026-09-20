@@ -32,6 +32,7 @@ import {
   KnowledgeImporterRegistry,
   type KnowledgeImporterBindingInput,
   type KnowledgeImporterDefinition,
+  type KnowledgeImporterResolver,
 } from './imports';
 import { KnowledgeImporterRunner } from './imports/runner';
 import {
@@ -59,6 +60,8 @@ export class Knowledge extends MastraBase {
   #scopeTypes?: KnowledgeScopeTypesConfig;
   #importers = new KnowledgeImporterRegistry();
   #importerRunner = new KnowledgeImporterRunner(this, () => this.logger);
+  #importerResolver?: KnowledgeImporterResolver;
+  #importerProvenance = new Map<string, 'config' | 'resolver' | 'manual'>();
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
   #materializePromises = new Map<
     string,
@@ -71,8 +74,12 @@ export class Knowledge extends MastraBase {
     this.description = config.description;
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
-    for (const importer of config.importers ?? []) {
-      this.registerImporter(importer);
+    if (typeof config.importers === 'function') {
+      this.#importerResolver = config.importers;
+    } else {
+      for (const importer of config.importers ?? []) {
+        this.#registerImporter(importer, 'config');
+      }
     }
     this.hasOwnStorage = config.storage !== undefined;
     if (config.storage) {
@@ -304,11 +311,60 @@ export class Knowledge extends MastraBase {
   }
 
   registerImporter<TPayload = unknown>(definition: KnowledgeImporterDefinition<TPayload>) {
+    return this.#registerImporter(definition, 'manual');
+  }
+
+  #registerImporter<TPayload = unknown>(
+    definition: KnowledgeImporterDefinition<TPayload>,
+    provenance: 'config' | 'resolver' | 'manual',
+  ) {
     const handle = this.#importers.register(definition, (binding, payload) =>
       this.runImporter(definition.id, binding, payload, { triggerKind: 'programmatic' }),
     );
+    this.#importerProvenance.set(handle.importerId, provenance);
     this.#importerRunner.schedule(handle);
     return handle;
+  }
+
+  /**
+   * @internal Re-resolves the configured importer resolver and reconciles registrations. Called by
+   * the importer runner at the top of each scheduling tick. Resolver failures keep the previously
+   * resolved set active. Never throws.
+   */
+  async reconcileImportersInternal(): Promise<void> {
+    if (!this.#importerResolver) return;
+    let resolved: readonly KnowledgeImporterDefinition[];
+    try {
+      resolved = await this.#importerResolver();
+      if (!Array.isArray(resolved)) {
+        throw new Error('Knowledge importer resolver must return an array of importer definitions');
+      }
+    } catch (error) {
+      this.logger.warn('Knowledge importer resolver failed; keeping previously resolved importers', { error });
+      return;
+    }
+    const resolvedIds = new Set<string>();
+    for (const definition of resolved) {
+      try {
+        const existing = typeof definition?.id === 'string' ? this.#importers.get(definition.id.trim()) : undefined;
+        const handle = existing ?? this.#registerImporter(definition, 'resolver');
+        resolvedIds.add(handle.importerId);
+        // Re-adding an id whose deferred removal already unscheduled its crons must reschedule them.
+        this.#importerRunner.schedule(handle);
+      } catch (error) {
+        this.logger.warn('Knowledge importer resolver produced an invalid importer definition; skipping it', {
+          error,
+        });
+      }
+    }
+    for (const [id, provenance] of this.#importerProvenance) {
+      if (provenance !== 'resolver' || resolvedIds.has(id)) continue;
+      this.#importerRunner.unschedule(id);
+      // Let in-flight runs finish under their registration; removal retries on a later tick.
+      if (this.#importerRunner.hasActiveRuns(id)) continue;
+      this.#importers.remove(id);
+      this.#importerProvenance.delete(id);
+    }
   }
 
   getImporter(id: string) {

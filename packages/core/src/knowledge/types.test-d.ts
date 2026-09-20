@@ -3,7 +3,11 @@ import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage';
 import {
   Knowledge,
+  type KnowledgeConfig,
+  type KnowledgeImporterDefinition,
   type KnowledgeImporterHandle,
+  type KnowledgeImporterResolver,
+  type KnowledgeImportersInput,
   type StaticKnowledgeImporterOperations,
   type StaticKnowledgeNodeHandle,
 } from './index';
@@ -49,5 +53,18 @@ describe('Knowledge public types', () => {
       },
     });
     expectTypeOf(typedHandle).toEqualTypeOf<KnowledgeImporterHandle<{ eventId: string }>>();
+  });
+
+  it('accepts importer arrays and resolvers in KnowledgeConfig', () => {
+    const definitions: readonly KnowledgeImporterDefinition[] = [{ id: 'static-sync', handler: async () => {} }];
+    const resolver: KnowledgeImporterResolver = async () => definitions;
+
+    expectTypeOf(definitions).toExtend<KnowledgeImportersInput>();
+    expectTypeOf(resolver).toExtend<KnowledgeImportersInput>();
+    expectTypeOf<KnowledgeConfig['importers']>().toEqualTypeOf<KnowledgeImportersInput | undefined>();
+
+    void new Knowledge({ importers: definitions });
+    void new Knowledge({ importers: resolver });
+    void new Knowledge({ importers: async () => [{ id: 'inline-sync', handler: async () => {} }] });
   });
 });
