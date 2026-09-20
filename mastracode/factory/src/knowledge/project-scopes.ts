@@ -1,6 +1,7 @@
 import type { ImportersOptions, ImporterScopesResolver } from '@mastra/connect';
 import type { FactoryStorage } from '@mastra/core/storage';
 
+import type { KnowledgeImporterRoutingStorage } from '../storage/domains/importer-routing/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 
 /**
@@ -8,24 +9,42 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
  * `resource:<projectId>` per project, resolved live at each cron fire so
  * projects created or deleted after startup start/stop syncing automatically.
  *
- * Reads the `projects` storage domain registered by `MastraFactory` during
- * prepare. Resolution before that registration throws — the core importer
- * runner logs the failure, falls back to the last successfully resolved set,
- * and retries on the next fire.
+ * Honors per-connection routing when the `importer-routing` storage domain is
+ * registered: a connection routed to selected projects resolves only those
+ * (intersected with the live inventory, so deleted projects drop out); a
+ * connection with no routing row — or `mode: 'all'` — resolves every project.
  *
- * Enumerates projects across every org in the storage backend — the platform
- * connection feeding the importers is deployment-level, so in a multi-org
- * deployment its content lands in all orgs' projects. Hosts needing an org
- * boundary should pass their own `scopes` resolver filtered accordingly.
+ * Reads storage domains registered by `MastraFactory` during prepare.
+ * Resolution before that registration throws — the core importer runner logs
+ * the failure, falls back to the last successfully resolved set, and retries
+ * on the next fire.
+ *
+ * With `mode: 'all'`, enumerates projects across every org in the storage
+ * backend — the platform connection feeding the importers is deployment-level,
+ * so in a multi-org deployment its content lands in all orgs' projects. Hosts
+ * needing an org boundary should pass their own `scopes` resolver filtered
+ * accordingly (or route each connection to selected projects).
  *
  * Pair with a parameterized access map so every project scope is writable:
  * `{ access: { 'resource:$projectId': 'owner' }, scopes: factoryProjectScopes(storage) }`.
  */
 export function factoryProjectScopes(storage: FactoryStorage): ImporterScopesResolver {
-  return async () => {
+  return async ({ connection }) => {
     const projects = storage.getDomain<FactoryProjectsStorage>('projects');
     await projects.ensureReady();
-    return (await projects.listAll()).map(project => `resource:${project.id}`);
+    const inventory = await projects.listAll();
+
+    if (storage.hasDomain('importer-routing')) {
+      const routing = storage.getDomain<KnowledgeImporterRoutingStorage>('importer-routing');
+      await routing.ensureReady();
+      const record = await routing.get(connection.id);
+      if (record?.mode === 'selected') {
+        const selected = new Set(record.projectIds);
+        return inventory.filter(project => selected.has(project.id)).map(project => `resource:${project.id}`);
+      }
+    }
+
+    return inventory.map(project => `resource:${project.id}`);
   };
 }
 
