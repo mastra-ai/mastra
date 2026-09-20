@@ -691,6 +691,7 @@ describe('addUserMessage', () => {
     // Reminders are registered in `messageComponentsById` before insertion —
     // `render-messages.ts` keys the addUserMessage dedup guard on that map, so
     // an unregistered reminder would double-render on a repeat dispatch.
+    expect(state.messageComponentsById.size).toBe(1);
     expect(state.messageComponentsById.get('__temporal_1')).toBe(state.chatContainer.children[0]);
   });
 
