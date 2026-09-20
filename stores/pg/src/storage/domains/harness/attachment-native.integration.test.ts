@@ -62,6 +62,7 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
   #cancelStarted: (() => void) | undefined;
   #cancelRelease: (() => void) | undefined;
   #cancelStartedPromise: Promise<void> | undefined;
+  #blobRefOverride: string | undefined;
   unknownSaveOnce = false;
   failSaveOnce = false;
   unknownDeleteOnce = false;
@@ -74,9 +75,14 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
     this.#cancelRelease?.();
     this.#cancelRelease = undefined;
     this.#cancelStartedPromise = undefined;
+    this.#blobRefOverride = undefined;
     this.unknownSaveOnce = false;
     this.failSaveOnce = false;
     this.unknownDeleteOnce = false;
+  }
+
+  overrideNextBlobRef(blobRef: string): void {
+    this.#blobRefOverride = blobRef;
   }
 
   pauseNextSave(): void {
@@ -138,6 +144,11 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
       this.unknownSaveOnce = false;
       if (result.outcome === 'unknown') return result;
       return { outcome: 'unknown', blobRef: result.blobRef };
+    }
+    if (this.#blobRefOverride !== undefined) {
+      const blobRef = this.#blobRefOverride;
+      this.#blobRefOverride = undefined;
+      return { ...result, blobRef };
     }
     return result;
   }
@@ -1034,5 +1045,200 @@ describe('HarnessPG native external attachment ownership', () => {
     await expect(harness.loadAttachment({ sessionId: session.id, attachmentId: 'raced' })).resolves.toMatchObject({
       name: 'raced.txt',
     });
+  });
+
+  it('keeps attachment-before-operation lock order when bulk deletion races a save', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-bulk-deadlock',
+      resourceId: 'bulk-deadlock-resource',
+      threadId: 'bulk-deadlock-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'bulk-deadlock-owner', ttlMs: 60_000 },
+    });
+    const input = {
+      sessionId: session.id,
+      attachmentId: 'bulk-race',
+      name: 'bulk-race.txt',
+      mimeType: 'text/plain',
+      source: 'inline' as const,
+      data: new TextEncoder().encode('bulk race'),
+    };
+
+    // deleteAttachmentsForSession used to check pending PUT operations before
+    // locking attachment rows. When that check waits on a committing save,
+    // PostgreSQL retains the operation-row lock even though the rechecked row
+    // no longer qualifies — so the bulk transaction holds an operation lock
+    // while waiting for attachment rows, the inverse of every save path, and
+    // a racing retry deadlocks it (40P01). Drive exactly that interleave.
+    let commitOpReads = 0;
+    let retryStarted = false;
+    let retryRowFired = false;
+    let firstOpHeld!: () => void;
+    let releaseFirstOp!: () => void;
+    let bulkAssertIssued!: () => void;
+    let bulkAssertDone!: () => void;
+    let releaseBulk!: () => void;
+    let retryHasRow!: () => void;
+    const firstHeld = new Promise<void>(resolve => (firstOpHeld = resolve));
+    const firstRelease = new Promise<void>(resolve => (releaseFirstOp = resolve));
+    const assertIssued = new Promise<void>(resolve => (bulkAssertIssued = resolve));
+    const assertDone = new Promise<void>(resolve => (bulkAssertDone = resolve));
+    const bulkGate = new Promise<void>(resolve => (releaseBulk = resolve));
+    const retryRow = new Promise<void>(resolve => (retryHasRow = resolve));
+
+    const db = store.db as unknown as {
+      connect: () => Promise<{
+        query: (query: string, values?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
+        release: () => void;
+      }>;
+    };
+    const originalConnect = db.connect.bind(store.db);
+    db.connect = async () => {
+      const connection = await originalConnect();
+      return {
+        release: connection.release.bind(connection),
+        async query(query: string, values?: unknown[]) {
+          const bulkAssert =
+            query.includes('mastra_harness_attachment_operations') &&
+            query.includes('status NOT IN') &&
+            query.includes('FOR UPDATE');
+          if (bulkAssert) bulkAssertIssued();
+          const result = await connection.query(query, values);
+          if (
+            query.startsWith('SELECT *') &&
+            query.includes('mastra_harness_attachment_operations') &&
+            query.includes('WHERE id = $1 FOR UPDATE')
+          ) {
+            commitOpReads += 1;
+            if (commitOpReads === 1) {
+              firstOpHeld();
+              await firstRelease;
+            }
+          }
+          if (bulkAssert) {
+            bulkAssertDone();
+            await bulkGate;
+          }
+          if (
+            retryStarted &&
+            !retryRowFired &&
+            query.includes('mastra_harness_attachments') &&
+            query.includes('attachment_id') &&
+            query.includes('FOR UPDATE') &&
+            result.rows.length === 1
+          ) {
+            retryRowFired = true;
+            retryHasRow();
+          }
+          return result;
+        },
+      };
+    };
+
+    try {
+      owner.pauseNextSave();
+      const firstSave = harness.saveAttachment(input).catch((error: unknown) => error);
+      await owner.waitForSaveStarted();
+      owner.releaseSave();
+      // The first saver parks inside its commit transaction holding the PUT
+      // operation lock, before the attachment row is inserted.
+      await firstHeld;
+      const bulk = harness.deleteAttachmentsForSession({ sessionId: session.id }).catch((error: unknown) => error);
+      await assertIssued;
+      // First save commits the row and completes the operation; the bulk
+      // check rechecks the now-terminal row but keeps its lock and parks.
+      releaseFirstOp();
+      await expect(firstSave).resolves.toMatchObject({ attachmentId: 'bulk-race' });
+      await assertDone;
+      // The retry's reservation takes the attachment row lock, then needs the
+      // operation row the bulk transaction still holds.
+      retryStarted = true;
+      const retry = harness.saveAttachment(input).catch((error: unknown) => error);
+      await retryRow;
+      releaseBulk();
+
+      await expect(retry).resolves.toMatchObject({ attachmentId: 'bulk-race' });
+      await expect(bulk).resolves.toBeUndefined();
+    } finally {
+      db.connect = originalConnect;
+      releaseFirstOp();
+      releaseBulk();
+      owner.releaseSave();
+    }
+    await expect(harness.loadAttachment({ sessionId: session.id, attachmentId: 'bulk-race' })).resolves.toMatchObject({
+      name: 'bulk-race.txt',
+    });
+  });
+
+  it('persists blob references longer than the B-tree index entry bound', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-long-ref',
+      resourceId: 'long-ref-resource',
+      threadId: 'long-ref-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'long-ref-owner', ttlMs: 60_000 },
+    });
+    // The 4,096-character reference bound exceeds PostgreSQL's ~2,704-byte
+    // B-tree entry limit; the blob_ref index is a hash index so fixed-size
+    // digests are stored instead. The payload must be incompressible —
+    // PostgreSQL compresses index entries, so a repeated character would fit.
+    const incompressible = Array.from({ length: 95 }, () => randomUUID().replaceAll('-', '')).join('');
+    const longRef = `memory://native-integration-test/harness-attachments/${incompressible}`;
+    owner.overrideNextBlobRef(longRef);
+    await expect(
+      harness.saveAttachment({
+        sessionId: session.id,
+        attachmentId: 'long-ref',
+        name: 'long-ref.bin',
+        mimeType: 'application/octet-stream',
+        source: 'inline',
+        data: new Uint8Array([7, 7]),
+      }),
+    ).resolves.toMatchObject({ attachmentId: 'long-ref', bytes: 2 });
+    const row = await store.db.one<{ blob_ref: string }>(
+      `SELECT blob_ref FROM "${schemaName}"."mastra_harness_attachments" WHERE session_id = $1 AND attachment_id = $2`,
+      [session.id, 'long-ref'],
+    );
+    expect(row.blob_ref).toBe(longRef);
+  });
+
+  it('matches an operation retry that spells out the default semantic kind', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-semantic-default',
+      resourceId: 'semantic-default-resource',
+      threadId: 'semantic-default-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'semantic-default-owner', ttlMs: 60_000 },
+    });
+    const data = new Uint8Array([3, 1, 4]);
+    const first = await harness.saveAttachment({
+      sessionId: session.id,
+      attachmentId: 'semantic-default',
+      name: 'semantic.bin',
+      mimeType: 'application/octet-stream',
+      source: 'inline',
+      data,
+      semantic: { metadata: { label: 'x' } },
+    });
+    // Replaying the persisted representation adds the stored kind default;
+    // the operation comparison must normalize it the same way the row
+    // comparison does or the identical retry reads as a conflict.
+    await expect(
+      harness.saveAttachment({
+        sessionId: session.id,
+        attachmentId: 'semantic-default',
+        name: 'semantic.bin',
+        mimeType: 'application/octet-stream',
+        source: 'inline',
+        data,
+        semantic: { kind: 'file', metadata: { label: 'x' } },
+      }),
+    ).resolves.toMatchObject({ attachmentId: 'semantic-default', sha256: first.sha256 });
   });
 });

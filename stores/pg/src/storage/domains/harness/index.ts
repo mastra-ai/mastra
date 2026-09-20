@@ -411,10 +411,16 @@ function harnessIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
       columns: ['harness_name', 'kind', 'status', 'next_attempt_at', 'claim_expires_at', 'created_at'],
     },
     {
+      // blob_ref can run to the 4,096-character reference bound, which exceeds
+      // the B-tree entry limit for incompressible values. A single-column hash
+      // index stores a fixed-size digest per entry (hash indexes do not
+      // support multiple columns) and serves the equality lookups this index
+      // exists for.
       name: harnessIndexName(schemaPrefix, 'idx_harness_attachments_blob_ref'),
       table: TABLE_HARNESS_ATTACHMENTS,
-      columns: ['harness_name', 'blob_ref'],
+      columns: ['blob_ref'],
       where: '"blob_ref" IS NOT NULL',
+      method: 'hash',
     },
     {
       // §4.2f idempotency: loadMessageResultEvidence + compactOperationResultEvidence
@@ -3445,12 +3451,16 @@ export class HarnessPG extends HarnessStorage {
     const tx = await this.#client.transaction('write');
     const operationIds: string[] = [];
     try {
-      await this.#assertNoPendingAttachmentPutsTx(tx, namespace, sessionId);
+      // Attachment rows lock before operation rows, matching the save paths. A
+      // pending-PUT check that waits on a saver's operation lock keeps that
+      // lock after the rechecked row turns terminal, so taking it first
+      // inverts the order and deadlocks a saver waiting on this row set.
       const attachments = await tx.execute({
         sql: `SELECT * FROM ${TABLE_HARNESS_ATTACHMENTS}
               WHERE harness_name = ? AND session_id = ? FOR UPDATE`,
         args: [namespace, sessionId],
       });
+      await this.#assertNoPendingAttachmentPutsTx(tx, namespace, sessionId);
       if (attachments.rows.length > 0)
         this.#requireAttachmentByteOwner(sessionId, String(attachments.rows[0]!.attachment_id));
       for (const attachment of attachments.rows) {
@@ -9451,7 +9461,8 @@ function attachmentOperationMatchesInput(
     operation.source === input.source &&
     operation.sizeBytes === input.bytes &&
     operation.sha256 === input.sha256 &&
-    stableJson(operation.semantic ?? { kind: 'file' }) === stableJson(parseJson(input.semanticJson) ?? { kind: 'file' })
+    stableJson(normalizeAttachmentSemantic(operation.semantic)) ===
+      stableJson(normalizeAttachmentSemantic(parseJson(input.semanticJson) as AttachmentSemanticMetadata | undefined))
   );
 }
 
