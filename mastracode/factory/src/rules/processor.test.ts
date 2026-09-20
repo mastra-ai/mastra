@@ -132,7 +132,7 @@ function stateArgs(context: RequestContext, overrides: Record<string, unknown> =
 }
 
 describe('FactoryPhaseStateProcessor', () => {
-  it('reconciles caller memory settings before each bound model step', async () => {
+  it('reconciles caller memory settings once per request, before the step hooks', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage);
     const loadMemorySettings = vi.fn(async () => undefined);
@@ -143,13 +143,117 @@ describe('FactoryPhaseStateProcessor', () => {
     });
     const context = requestContext();
 
+    await processor.processInput(inputArgs(context, []));
     await processor.processInputStep(inputArgs(context, []));
     await processor.processInputStep(inputArgs(context, []));
 
-    expect(loadMemorySettings).toHaveBeenCalledTimes(2);
+    // Memory's processors run before configured ones, so the row must land in the
+    // input phase: loading during processInputStep would run after an observation
+    // for the step may already have resolved its model.
+    expect(loadMemorySettings).toHaveBeenCalledTimes(1);
     expect(loadMemorySettings).toHaveBeenCalledWith({
       requestContext: context,
       binding: expect.objectContaining({ orgId: 'org-1', role: 'work', resourceId: 'resource-1' }),
+    });
+  });
+
+  it('loads caller memory settings when the session has no active run binding', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const loadMemorySettings = vi.fn(async () => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      loadMemorySettings,
+    });
+
+    // Project-scoped session with no binding row: an interactive Factory session
+    // still reads the shared project row rather than silently keeping whatever
+    // was seeded at session start.
+    await processor.processInputStep(inputArgs(requestContext(), []));
+    expect(loadMemorySettings).toHaveBeenCalledWith({ requestContext: expect.anything(), binding: null });
+  });
+
+  it('loads caller memory settings for a session with no factory project at all', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const loadMemorySettings = vi.fn(async () => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      loadMemorySettings,
+    });
+    const context = new RequestContext();
+    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('controller', {
+      resourceId: 'resource-2',
+      threadId: 'thread-2',
+      scope: '/worktree',
+      state: { thinkingLevel: 'high' },
+      getState: () => ({ thinkingLevel: 'high' }),
+      session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
+    });
+
+    await processor.processInputStep(inputArgs(context, []));
+    expect(loadMemorySettings).toHaveBeenCalledWith({ requestContext: context, binding: null });
+  });
+
+  it('recovers the run binding by thread when a resumed session lost its factory project', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const loadMemorySettings = vi.fn(async () => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      loadMemorySettings,
+    });
+    // A resumed session ("Continue") is recreated with empty controller state, so
+    // the binding table is the only remaining link to the project row. Without
+    // this lookup the run reads the caller's personal row instead.
+    const context = new RequestContext();
+    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('controller', {
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      scope: '/worktree',
+      state: {},
+      getState: () => ({}),
+      session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
+    });
+
+    await processor.processInput(inputArgs(context, []));
+
+    expect(loadMemorySettings).toHaveBeenCalledWith({
+      requestContext: context,
+      binding: expect.objectContaining({ orgId: 'org-1', factoryProjectId: PROJECT_ID, resourceId: 'resource-1' }),
+    });
+  });
+
+  it('recovers the run binding from the step hook too, where resumed runs land', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const loadMemorySettings = vi.fn(async () => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      loadMemorySettings,
+    });
+    // Resumed runs skip the input-processor phase, so the step hook must reach
+    // the same recovery path rather than passing a null binding through.
+    const context = new RequestContext();
+    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('controller', {
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      scope: '/worktree',
+      state: {},
+      getState: () => ({}),
+      session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
+    });
+
+    await processor.processInputStep(inputArgs(context, []));
+
+    expect(loadMemorySettings).toHaveBeenCalledWith({
+      requestContext: context,
+      binding: expect.objectContaining({ orgId: 'org-1', factoryProjectId: PROJECT_ID, resourceId: 'resource-1' }),
     });
   });
 

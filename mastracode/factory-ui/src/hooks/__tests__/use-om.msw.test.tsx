@@ -118,7 +118,7 @@ describe('useUpdateOMModel', () => {
       await waitFor(() => expect(result.current.query.isSuccess).toBe(true));
 
       await act(async () => {
-        await result.current.update.mutateAsync({ model: 'p/new-observer' });
+        await result.current.update.mutateAsync({ modelId: 'p/new-observer' });
       });
       await waitForMutationsIdle(client);
 
@@ -154,11 +154,11 @@ describe('useUpdateOMModel', () => {
 
       await waitFor(() => expect(result.current.query.isSuccess).toBe(true));
       await act(async () => {
-        await result.current.update.mutateAsync({ model: 'auto' });
+        await result.current.update.mutateAsync({ modelId: 'auto' });
       });
       await waitForMutationsIdle(client);
 
-      expect(putBody).toEqual({ resourceId: 'res-1', model: 'auto' });
+      expect(putBody).toEqual({ resourceId: 'res-1', modelId: 'auto' });
       expect(result.current.query.data?.config.reflector).toEqual({
         model: 'auto',
         effectiveModelId: 'openai/gpt-5.4-mini',

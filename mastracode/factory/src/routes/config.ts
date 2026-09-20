@@ -104,7 +104,8 @@ export interface ProviderInfo {
 
 /** Minimal session surface the config routes touch. */
 export interface OMSession {
-  model: { modelId?: string };
+  /** `get()` returns '' when no model is selected, so callers fall back on falsy. */
+  model: { get: () => string };
 }
 
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
@@ -477,7 +478,9 @@ export interface UpdateThinkingConfigResponse {
 }
 
 function modelProvider(modelId: string): string {
-  const normalized = modelId.startsWith('mastracode/') ? modelId.slice('mastracode/'.length) : modelId;
+  // Mirrors the gateway-prefix stripping in the SDK's `resolveAutoOMModelId` so an
+  // effective ID reports the same provider here as it resolved to there.
+  const normalized = modelId.replace(/^mastracode\//, '').replace(/^mastra\//, '');
   return normalized.split('/', 1)[0] ?? '';
 }
 
@@ -1147,11 +1150,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
+      // Provider connection changes reachability, not selection intent, so this
+      // no longer seeds observer/reflector rows from the provider's low-cost
+      // pack: it validates the provider and returns the current config. The
+      // route is kept as a contract for callers that still probe it.
       registerApiRoute('/web/config/om/provider-defaults', {
         method: 'POST',
         requiresAuth: false,
         handler: async c => {
-          let body: { providerId?: unknown; factoryModelId?: unknown; factoryId?: unknown };
+          let body: { providerId?: unknown; factoryId?: unknown };
           try {
             body = await c.req.json();
           } catch {
@@ -1222,7 +1229,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const availableProviders = await resolveOMResponseContext(loose(c));
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
             return c.json({
-              config: readStoredOMConfig(record, session?.model.modelId ?? fallback, availableProviders),
+              config: readStoredOMConfig(record, session?.model.get() || fallback, availableProviders),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1238,7 +1245,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (role !== 'observer' && role !== 'reflector') {
             return c.json({ error: `Unknown OM role "${role}"` }, 400);
           }
-          let body: { resourceId?: unknown; model?: unknown; scope?: unknown; factoryId?: unknown };
+          let body: { resourceId?: unknown; modelId?: unknown; scope?: unknown; factoryId?: unknown };
           try {
             body = await c.req.json();
           } catch {
@@ -1247,12 +1254,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
-          const model = typeof body.model === 'string' ? body.model.trim() : '';
+          const model = typeof body.modelId === 'string' ? body.modelId.trim() : '';
           if (!model) {
-            return c.json({ error: 'model must be a non-empty model ID or auto' }, 400);
+            return c.json({ error: 'Missing required field: modelId' }, 400);
           }
+          // `'auto'` is selection intent, not a model ID: store null so the role
+          // follows the active main model instead of pinning a model named "auto".
           const wantsAuto = model === 'auto';
-          const modelId = wantsAuto ? '' : model;
           const context = await resolveMemorySettingsContext({
             c: loose(c),
             auth,
@@ -1261,16 +1269,18 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
+          // Resolve the response context before persisting: a provider-enumeration
+          // failure must not report 500 for a write that already succeeded.
+          const availableProviders = await resolveOMResponseContext(loose(c));
           try {
             await persistMemorySettings(context, {
-              [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: wantsAuto ? null : modelId,
+              [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: wantsAuto ? null : model,
             });
-            const availableProviders = await resolveOMResponseContext(loose(c));
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
             const config = readStoredOMConfig(
               record,
-              session?.model.modelId ?? (await factoryOmFallback(factoryProjectId)),
+              session?.model.get() || (await factoryOmFallback(factoryProjectId)),
               availableProviders,
             );
             return c.json({ ok: true, config });
@@ -1318,17 +1328,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
+          const availableProviders = await resolveOMResponseContext(loose(c));
           try {
             await persistMemorySettings(context, {
               ...(observation !== undefined ? { observationThreshold: observation } : {}),
               ...(reflection !== undefined ? { reflectionThreshold: reflection } : {}),
             });
-            const availableProviders = await resolveOMResponseContext(loose(c));
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
             const config = readStoredOMConfig(
               record,
-              session?.model.modelId ?? (await factoryOmFallback(factoryProjectId)),
+              session?.model.get() || (await factoryOmFallback(factoryProjectId)),
               availableProviders,
             );
             return c.json({ ok: true, config });
@@ -1364,14 +1374,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
+          const availableProviders = await resolveOMResponseContext(loose(c));
           try {
             await persistMemorySettings(context, { observeAttachments: value });
-            const availableProviders = await resolveOMResponseContext(loose(c));
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
             const config = readStoredOMConfig(
               record,
-              session?.model.modelId ?? (await factoryOmFallback(factoryProjectId)),
+              session?.model.get() || (await factoryOmFallback(factoryProjectId)),
               availableProviders,
             );
             return c.json({ ok: true, config });

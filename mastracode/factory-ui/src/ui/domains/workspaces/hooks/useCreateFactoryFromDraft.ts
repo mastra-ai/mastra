@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useApplyProviderOMDefaults } from '../../../../hooks/use-om';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSaveIntakeBindingMutation, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { fetchIntakeConfig, selectIntakeSource } from '../../factory/services/intake';
@@ -34,7 +33,6 @@ export function useCreateFactoryFromDraft({
   const queryClient = useQueryClient();
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
-  const applyOMDefaults = useApplyProviderOMDefaults();
   const saveIntakeBinding = useSaveIntakeBindingMutation();
   const saveIntakeConfig = useSaveIntakeConfigMutation();
 
@@ -57,7 +55,7 @@ export function useCreateFactoryFromDraft({
   };
 
   return useMutation({
-    mutationFn: async ({ providerId, modelId }: { providerId: string; modelId: string }) => {
+    mutationFn: async ({ modelId }: { providerId: string; modelId: string }) => {
       if (!draft?.name || !draft.repository) throw new Error('Start over from the name step.');
 
       const factory = draft.factoryId
@@ -72,7 +70,6 @@ export function useCreateFactoryFromDraft({
 
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, modelId),
-        applyOMDefaults.mutateAsync({ providerId, factoryModelId: modelId, factoryId: factory.id }),
         draft.linearProjectId
           ? feedProject({ integrationId: 'linear', sourceId: draft.linearProjectId, factoryProjectId: factory.id })
           : undefined,

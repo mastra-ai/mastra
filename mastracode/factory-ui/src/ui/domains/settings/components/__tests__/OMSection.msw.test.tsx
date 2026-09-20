@@ -133,7 +133,7 @@ describe('OMSection', () => {
 
     await user.click(reflectorAuto);
 
-    await waitFor(() => expect(requestBody).toEqual({ model: 'auto' }));
+    await waitFor(() => expect(requestBody).toEqual({ modelId: 'auto' }));
     expect(observerAuto).toHaveAttribute('aria-pressed', 'true');
     expect(reflectorAuto).toHaveAttribute('aria-pressed', 'true');
   });
@@ -207,7 +207,7 @@ describe('OMSection', () => {
     expect(observerTrigger).toBeDefined();
     await pickOption(user, observerTrigger, /openai\/reflector-x/);
 
-    await waitFor(() => expect(requestBody).toEqual({ model: 'openai/reflector-x' }));
+    await waitFor(() => expect(requestBody).toEqual({ modelId: 'openai/reflector-x' }));
   });
 
   it('updates attachment observation', async () => {

@@ -126,7 +126,7 @@ export interface SaveCustomProviderBody {
 
 export interface UpdateOMModelBody {
   resourceId: string;
-  model: 'auto' | string;
+  modelId: string;
 }
 
 export interface UpdateOMThresholdsBody {

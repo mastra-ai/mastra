@@ -24,9 +24,6 @@ function registerPersistenceHandlers(onFactoryModel: (body: unknown) => void) {
       onFactoryModel(await request.json());
       return HttpResponse.json({ project: { id: 'factory-1', name: 'Factory', defaultModelId: 'openai/gpt-5.6-sol' } });
     }),
-    http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () =>
-      HttpResponse.json({ ok: true, config: {} }),
-    ),
   );
 }
 
