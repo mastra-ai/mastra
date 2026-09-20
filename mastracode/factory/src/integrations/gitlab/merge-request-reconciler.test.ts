@@ -18,7 +18,10 @@ const MERGE_REQUEST_SOURCE = `gitlab-pr:${Buffer.from(
 ).toString('base64url')}`;
 
 describe('GitLab merge-request reconciler', () => {
-  it('replays a missed merge through governed GitLab rules exactly once', async () => {
+  it.each([
+    { initialStage: 'review', initialState: 'open', merged: true, expectedStage: 'done' },
+    { initialStage: 'done', initialState: 'closed', merged: false, expectedStage: 'canceled' },
+  ])('replays a missed terminal outcome from $initialStage through governed rules', async ({ initialStage, initialState, merged, expectedStage }) => {
     const seeded = await createFactoryStorageForTests();
     const sourceControl = seeded.sourceControl.forIntegration('gitlab');
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
@@ -104,7 +107,7 @@ describe('GitLab merge-request reconciler', () => {
           url: `https://${HOST}/${PROJECT_PATH}/-/merge_requests/17`,
         },
         title: 'MR 17',
-        stages: ['review'],
+        stages: [initialStage],
         sessions: {},
         metadata: {
           gitlabHost: HOST,
@@ -112,6 +115,8 @@ describe('GitLab merge-request reconciler', () => {
           gitlabMergeRequestIid: 17,
           headBranch: 'feature-17',
           baseBranch: 'main',
+          state: initialState,
+          merged: false,
         },
       },
     });
@@ -127,7 +132,7 @@ describe('GitLab merge-request reconciler', () => {
       body: null,
       state: 'closed',
       draft: false,
-      merged: true,
+      merged,
       mergeable: null,
       baseBranch: 'main',
       headBranch: 'feature-17',
@@ -138,7 +143,7 @@ describe('GitLab merge-request reconciler', () => {
     const getPullRequest = vi
       .fn<VersionControl['getPullRequest']>()
       .mockResolvedValueOnce(closedPullRequest)
-      .mockResolvedValue({ ...closedPullRequest, updatedAt: '2026-09-18T01:00:00Z' });
+      .mockResolvedValue(closedPullRequest);
     const getProjectMemberAccessLevel = vi.fn().mockResolvedValueOnce(40).mockResolvedValue(10);
     const gitlab = {
       versionControl: { getPullRequest } as VersionControl,
@@ -174,9 +179,9 @@ describe('GitLab merge-request reconciler', () => {
     const decisions = await seeded.workItems.listDeferredDecisions(project.orgId, project.id);
     expect(decisions).toHaveLength(1);
     expect(decisions[0]).toMatchObject({
-      decision: { type: 'transition', board: 'review', stage: 'done' },
+      decision: { type: 'transition', board: 'review', stage: expectedStage },
     });
     const [item] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
-    expect(item?.metadata).toMatchObject({ author: 'maintainer', authorTrusted: false, state: 'closed', merged: true });
+    expect(item?.metadata).toMatchObject({ author: 'maintainer', authorTrusted: false, state: 'closed', merged });
   });
 });

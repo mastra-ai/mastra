@@ -136,10 +136,16 @@ export function attachGitLabMergeRequestReconciler(
       const items = (
         await context.runtime!.workItems.list({ orgId: project.orgId, factoryProjectId: project.id })
       ).filter(
-        item =>
-          item.externalSource?.integrationId === 'gitlab' &&
-          item.externalSource.type === 'pull-request' &&
-          workItemPhaseSemantics(boards, item)?.kind !== 'terminal',
+        item => {
+          if (item.externalSource?.integrationId !== 'gitlab' || item.externalSource.type !== 'pull-request') {
+            return false;
+          }
+          if (workItemPhaseSemantics(boards, item)?.kind !== 'terminal') return true;
+          // Done means the review finished, not that the MR was merged. Keep
+          // polling until the provider's terminal outcome and card agree.
+          if (item.metadata?.state !== 'closed') return true;
+          return !item.stages.includes(item.metadata?.merged === true ? 'done' : 'canceled');
+        },
       );
       if (items.length === 0) continue;
       summary.projects += 1;
@@ -203,7 +209,10 @@ export function attachGitLabMergeRequestReconciler(
             ([key, value]) => JSON.stringify(current[key]) === JSON.stringify(value),
           );
           if (pullRequest.state === 'closed') {
-            const terminalTransition = current.state !== 'closed' || current.merged !== pullRequest.merged;
+            const terminalTransition =
+              current.state !== 'closed' ||
+              current.merged !== pullRequest.merged ||
+              !item.stages.includes(pullRequest.merged ? 'done' : 'canceled');
             if (terminalTransition) {
               await ingest(terminalEvent(item, pullRequest));
             }
