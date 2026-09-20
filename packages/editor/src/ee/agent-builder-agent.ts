@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { defaultStabilityErrorProcessors } from '@mastra/core/processors';
+import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '@mastra/core/processors';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 
 import path from 'node:path';
@@ -50,13 +50,19 @@ const workspace = new Workspace({
  *   (anthropic tool-id format, cerebras reasoning-content strip, anthropic
  *   foreign-reasoning strip) so model swaps don't break history.
  *
- * These are the shared stability defaults from `@mastra/core`, so builder agents
- * stay aligned with every other agent instead of carrying their own copy.
+ * Same three processors, same order, as the shared stability defaults in
+ * `@mastra/core/processors`. `createBuilderAgent` doesn't pass a list at all, so
+ * the framework supplies its own tuned instances by default and this constant
+ * exists for callers that want to compose from it.
  *
  * Exported so callers can compose a custom processor list that keeps the
  * subset they want (e.g. `[...DEFAULT_BUILDER_ERROR_PROCESSORS.filter(p => p.id !== 'stream-error-retry-processor'), myCustom]`).
  */
-export const DEFAULT_BUILDER_ERROR_PROCESSORS = defaultStabilityErrorProcessors();
+export const DEFAULT_BUILDER_ERROR_PROCESSORS = [
+  new ProviderHistoryCompat(),
+  new PrefillErrorHandler(),
+  new StreamErrorRetryProcessor(),
+];
 
 export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>): Agent<'builder-agent'> {
   const memory = new Memory();
