@@ -62,6 +62,8 @@ export interface PlatformProviderConnection {
   status: 'active' | 'needs_reauth';
   accountLabel: string | null;
   displayName?: string | null;
+  /** ISO-8601 timestamp when the OAuth connection was minted. */
+  connectedAt?: string | null;
 }
 
 export interface PlatformConnectSession {
