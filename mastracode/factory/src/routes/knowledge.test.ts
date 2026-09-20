@@ -1439,6 +1439,54 @@ describe('KnowledgeRoutes', () => {
     await expect(threadDetail.json()).resolves.toMatchObject({ run: { source: 'calendar:thread' } });
   });
 
+  it('lists an importer with only dynamic bindings before its first run', async () => {
+    let resolveCount = 0;
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        {
+          id: 'connect:notion:conn-1',
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              // Platform importers declare no static bindings — destinations
+              // resolve per Factory project at fire time.
+              resolveBindings: async () => {
+                resolveCount += 1;
+                if (resolveCount > 1) throw new Error('platform unavailable');
+                return [
+                  { source: 'notion:conn-1', scope: `resource:${h.projectId}` },
+                  { source: 'notion:conn-1', scope: 'resource:00000000-0000-4000-8000-000000000099' },
+                ];
+              },
+            },
+          },
+          handler: async () => {},
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+
+    // No runs yet: the importer is listed via its resolved binding, filtered
+    // to this project's scope only.
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.importers).toHaveLength(1);
+    expect(body.importers[0]).toMatchObject({
+      id: 'connect:notion:conn-1',
+      triggers: ['programmatic', 'cron'],
+      bindings: [{ source: 'notion:conn-1' }],
+    });
+    expect(JSON.stringify(body)).not.toContain('00000000-0000-4000-8000-000000000099');
+
+    // Resolution failure degrades to the static (empty) set instead of 500ing.
+    const degraded = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    expect(degraded.status).toBe(200);
+    await expect(degraded.json()).resolves.toEqual({ importers: [] });
+  });
+
   it('applies trigger filters before run pagination', async () => {
     const runtime = new Knowledge({
       id: 'mastra',

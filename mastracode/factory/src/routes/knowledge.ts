@@ -1105,6 +1105,20 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 ...(importer.triggers.cron?.bindings ?? []),
                 ...(importer.triggers.webhook?.bindings ?? []),
               ];
+              // Dynamic destinations (platform importers resolve one binding
+              // per Factory project at each cron fire) don't appear in the
+              // static declaration — resolve them here so a connected
+              // importer is listed before its first run. Resolution failure
+              // degrades to the static set: the list stays useful and the
+              // importer reappears once the resolver recovers.
+              const resolveBindings = importer.triggers.cron?.resolveBindings;
+              if (resolveBindings) {
+                try {
+                  declaredBindings.push(...(await resolveBindings()));
+                } catch {
+                  /* static bindings only */
+                }
+              }
               const bindings = Array.from(
                 new Map(declaredBindings.map(binding => [`${binding.source}\u0000${binding.scope}`, binding])).values(),
               )
