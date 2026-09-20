@@ -2102,6 +2102,7 @@ export class HarnessPG extends HarnessStorage {
         threadId: string;
         version: number;
         sessionIncarnation?: string;
+        attachmentRows: Record<string, unknown>[];
       }
     >();
     try {
@@ -2167,6 +2168,16 @@ export class HarnessPG extends HarnessStorage {
             'active',
           );
         }
+        // Attachment rows lock before operation rows, matching the save and
+        // bulk-delete paths: a pending-PUT check that waits on a saver's
+        // operation lock keeps that lock after the rechecked row turns
+        // terminal, so checking before this select would hold an operation
+        // lock while waiting on attachment rows — the inverse order.
+        const sessionAttachments = await tx.execute({
+          sql: `SELECT * FROM ${TABLE_HARNESS_ATTACHMENTS}
+                WHERE harness_name = ? AND session_id = ? FOR UPDATE`,
+          args: [namespace, sessionId],
+        });
         // A first upload reserves its PUT intent before the external byte
         // owner is called, so the attachment row may not exist yet. Fence the
         // whole session scope before deleting the session; otherwise a late
@@ -2179,6 +2190,7 @@ export class HarnessPG extends HarnessStorage {
           resourceId: record.resourceId,
           threadId: record.threadId,
           version: record.version,
+          attachmentRows: sessionAttachments.rows,
           ...(sessionIncarnation !== undefined ? { sessionIncarnation } : {}),
         });
       }
@@ -2191,6 +2203,7 @@ export class HarnessPG extends HarnessStorage {
         threadId,
         version,
         sessionIncarnation,
+        attachmentRows,
       } of deleteCandidates.values()) {
         let retired: { pendingIntents: number; pendingBytes: number } | undefined;
         if (this.sessionRecordProjection.enabled && sessionIncarnation !== undefined) {
@@ -2263,12 +2276,10 @@ export class HarnessPG extends HarnessStorage {
           args: [namespace, sessionId, 'delete', 'completed', 'cleaned'],
         });
         for (const row of outstandingDeletes.rows) attachmentCleanupOperationIds.push(String(row.id));
-        const attachments = await tx.execute({
-          sql: `SELECT * FROM ${TABLE_HARNESS_ATTACHMENTS}
-                WHERE harness_name = ? AND session_id = ? FOR UPDATE`,
-          args: [namespace, sessionId],
-        });
-        for (const attachment of attachments.rows) {
+        // Attachment rows were locked in the candidate loop before the
+        // pending-PUT assert, and the held session lock prevents concurrent
+        // inserts — the set collected there is complete.
+        for (const attachment of attachmentRows) {
           this.#requireAttachmentByteOwner(sessionId, String(attachment.attachment_id));
           const attachmentId = String(attachment.attachment_id);
           const attachmentIncarnation = requireAttachmentIncarnation(attachment, sessionId, attachmentId);
@@ -4077,23 +4088,39 @@ export class HarnessPG extends HarnessStorage {
         expectedSha256: operation.sha256,
       });
     } catch {
-      await this.#markAttachmentOperationUnknown(operation.id, {
-        blobRef: operation.blobRef,
-        claimId,
-        observedNextAttemptAt: operation.nextAttemptAt,
-      });
+      await this.#deferAttachmentCancelClaim(operation.id, claimId);
       return false;
     }
     if (outcome.outcome === 'unknown') {
-      await this.#markAttachmentOperationUnknown(operation.id, {
-        blobRef: operation.blobRef,
-        claimId,
-        observedNextAttemptAt: operation.nextAttemptAt,
-      });
+      await this.#deferAttachmentCancelClaim(operation.id, claimId);
       return false;
     }
     await this.#markAttachmentOperationCleaned(operation.id, claimId);
     return true;
+  }
+
+  // An ambiguous cancel must not mark the operation 'unknown': the PUT ledger
+  // treats 'unknown' as adoptable, so a retry could complete the row while a
+  // delayed cancellation still lands on the derived blob reference and
+  // deletes its bytes. Renewing the claim keeps the operation fenced —
+  // reservations reject it as in-flight — and lets the sweep re-drive the
+  // idempotent cancel until the owner resolves it.
+  async #deferAttachmentCancelClaim(operationId: string, claimId: string): Promise<void> {
+    const now = Date.now();
+    await this.#client.execute({
+      sql: `UPDATE ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
+            SET claim_expires_at = ?, next_attempt_at = ?, updated_at = ?, last_error = ?
+            WHERE id = ? AND claim_id = ? AND status = ?`,
+      args: [
+        now + 1_000,
+        now + 1_000,
+        now,
+        JSON.stringify({ code: 'cancel_unknown' }),
+        operationId,
+        claimId,
+        'claimed',
+      ],
+    });
   }
 
   async #reconcileAttachmentPutOperation(operationId: string, eligibleAsOf: number): Promise<boolean> {

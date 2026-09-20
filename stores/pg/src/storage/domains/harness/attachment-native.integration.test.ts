@@ -63,9 +63,11 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
   #cancelRelease: (() => void) | undefined;
   #cancelStartedPromise: Promise<void> | undefined;
   #blobRefOverride: string | undefined;
+  #deferredCancels: HarnessAttachmentByteOwnerCancelInput[] = [];
   unknownSaveOnce = false;
   failSaveOnce = false;
   unknownDeleteOnce = false;
+  unknownCancelOnce = false;
 
   reset(): void {
     for (const gate of [...this.#saveGates, ...this.#deleteGates]) gate.markReleased();
@@ -76,9 +78,17 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
     this.#cancelRelease = undefined;
     this.#cancelStartedPromise = undefined;
     this.#blobRefOverride = undefined;
+    this.#deferredCancels = [];
     this.unknownSaveOnce = false;
     this.failSaveOnce = false;
     this.unknownDeleteOnce = false;
+    this.unknownCancelOnce = false;
+  }
+
+  async applyDeferredCancels(): Promise<void> {
+    for (const input of this.#deferredCancels.splice(0)) {
+      await this.#delegate.cancel(input);
+    }
   }
 
   overrideNextBlobRef(blobRef: string): void {
@@ -177,6 +187,11 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
       await new Promise<void>(resolve => {
         this.#cancelRelease = resolve;
       });
+    }
+    if (this.unknownCancelOnce) {
+      this.unknownCancelOnce = false;
+      this.#deferredCancels.push(input);
+      return { outcome: 'unknown' };
     }
     return this.#delegate.cancel(input);
   }
@@ -1172,6 +1187,159 @@ describe('HarnessPG native external attachment ownership', () => {
     });
   });
 
+  it('keeps attachment-before-operation order when session and bulk deletes race', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-delete-race',
+      resourceId: 'delete-race-resource',
+      threadId: 'delete-race-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'delete-race-owner', ttlMs: 60_000 },
+    });
+    await harness.saveAttachment({
+      sessionId: session.id,
+      attachmentId: 'survivor-a',
+      name: 'survivor-a.txt',
+      mimeType: 'text/plain',
+      source: 'inline',
+      data: new TextEncoder().encode('delete race'),
+    });
+
+    // Stage a pending PUT directly, then hold its row lock from a third
+    // transaction mid-transition to 'cleaned' — the reconcile path's exact
+    // shape while a claim is in flight. A FOR UPDATE check that unblocks on
+    // the now-terminal row keeps its lock after the recheck excludes it, so
+    // whichever deletion acquired the operation lock first still holds it
+    // while waiting on the attachment rows the other holds — a deadlock
+    // (40P01) unless every path locks attachments before operations.
+    const opA = await store.db.one<{ harness_name: string; session_incarnation: string }>(
+      `SELECT harness_name, session_incarnation FROM "${schemaName}"."mastra_harness_attachment_operations"
+       WHERE attachment_id = $1`,
+      ['survivor-a'],
+    );
+    const opB = randomUUID();
+    const stagedAt = Date.now();
+    await store.db.none(
+      `INSERT INTO "${schemaName}"."mastra_harness_attachment_operations"
+       (id, harness_name, session_id, attachment_id, session_incarnation, kind, status,
+        name, mime_type, source, size_bytes, sha256, semantic_json, attempts, created_at, updated_at, next_attempt_at)
+       VALUES ($1, $2, $3, $4, $5, 'put', 'pending', 'b.bin', 'application/octet-stream', 'inline', 1,
+               $6, '{"kind":"file"}', 0, $7, $7, $8)`,
+      [
+        opB,
+        opA.harness_name,
+        session.id,
+        'pending-b',
+        opA.session_incarnation,
+        '0'.repeat(64),
+        stagedAt,
+        stagedAt + 60_000,
+      ],
+    );
+
+    const db = store.db as unknown as {
+      connect: () => Promise<{
+        query: (query: string, values?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
+        release: () => void;
+      }>;
+    };
+    const originalConnect = db.connect.bind(store.db);
+    const transitioner = await originalConnect();
+    await transitioner.query('BEGIN');
+    await transitioner.query(
+      `UPDATE "${schemaName}"."mastra_harness_attachment_operations" SET status = 'cleaned', updated_at = $1 WHERE id = $2`,
+      [Date.now(), opB],
+    );
+
+    let d1AssertIssued!: () => void;
+    let d2AttachmentsIssued!: () => void;
+    const d1Assert = new Promise<void>(resolve => (d1AssertIssued = resolve));
+    const d2Attachments = new Promise<void>(resolve => (d2AttachmentsIssued = resolve));
+    db.connect = async () => {
+      const connection = await originalConnect();
+      let kind: 'd1' | 'd2' | undefined;
+      return {
+        release: connection.release.bind(connection),
+        async query(query: string, values?: unknown[]) {
+          if (kind === undefined && query.includes('mastra_harness_sessions') && query.includes('FOR UPDATE')) {
+            kind = 'd1';
+          } else if (
+            kind === undefined &&
+            query.includes('mastra_harness_attachments') &&
+            query.includes('FOR UPDATE') &&
+            !query.includes('attachment_id')
+          ) {
+            kind = 'd2';
+            d2AttachmentsIssued();
+          }
+          if (kind === 'd1' && query.includes('status NOT IN') && query.includes('FOR UPDATE')) {
+            d1AssertIssued();
+          }
+          return connection.query(query, values);
+        },
+      };
+    };
+
+    let transitionerOpen = true;
+    try {
+      const sessionDelete = harness.deleteSession({ sessionId: session.id }).catch((error: unknown) => error);
+      await d1Assert;
+      const bulkDelete = harness
+        .deleteAttachmentsForSession({ sessionId: session.id })
+        .catch((error: unknown) => error);
+      await d2Attachments;
+      // Wait until the bulk delete's pending-PUT check is actually queued on
+      // the transitioner's operation lock before committing it — an issued
+      // query may not have reached the lock manager yet. The first waiter
+      // blocks on the transitioner's xid while holding the arbitration tuple
+      // lock, and the second blocks on that tuple lock, so count backends
+      // lock-waiting inside the pending-PUT check itself. Under the fixed
+      // order the bulk delete instead stays blocked on the attachment rows
+      // the session delete already holds, so only one waiter ever queues.
+      const waitersSql = `SELECT COUNT(*)::text AS n FROM pg_stat_activity
+                          WHERE wait_event_type = 'Lock'
+                            AND query LIKE '%mastra_harness_attachment_operations%'
+                            AND query LIKE '%status NOT IN%'`;
+      for (let i = 0; i < 40; i++) {
+        const { n } = await store.db.one<{ n: string }>(waitersSql);
+        if (Number(n) >= 2) break;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      // Committing the transition lets both pending-PUT checks recheck and
+      // skip the now-cleaned row; whichever acquired it first keeps the lock.
+      await transitioner.query('COMMIT');
+      transitioner.release();
+      transitionerOpen = false;
+
+      // Both metadata deletions commit, but each then reconciles the same
+      // staged cleanup operation — the claim loser legitimately reports the
+      // delete as still pending. Only the inverted-order outcome (40P01) is
+      // the defect under test.
+      for (const outcome of [await sessionDelete, await bulkDelete]) {
+        if (outcome === undefined) continue;
+        expect(outcome).toBeInstanceOf(HarnessStorageAttachmentPendingError);
+        expect((outcome as { code?: string }).code).not.toBe('40P01');
+      }
+    } finally {
+      db.connect = originalConnect;
+      if (transitionerOpen) {
+        await transitioner.query('ROLLBACK').catch(() => {});
+        transitioner.release();
+      }
+    }
+    const remaining = await store.db.one<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM "${schemaName}"."mastra_harness_attachments" WHERE session_id = $1`,
+      [session.id],
+    );
+    expect(remaining.count).toBe('0');
+    const sessions = await store.db.one<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM "${schemaName}"."mastra_harness_sessions" WHERE id = $1`,
+      [session.id],
+    );
+    expect(sessions.count).toBe('0');
+  });
+
   it('persists blob references longer than the B-tree index entry bound', async () => {
     const harness = store.stores.harness!;
     const session = createSampleSessionRecord({
@@ -1240,5 +1408,61 @@ describe('HarnessPG native external attachment ownership', () => {
         semantic: { kind: 'file', metadata: { label: 'x' } },
       }),
     ).resolves.toMatchObject({ attachmentId: 'semantic-default', sha256: first.sha256 });
+  });
+
+  it('fences a retry while an ambiguous cancellation may still land', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-attachment-cancel-fence',
+      resourceId: 'cancel-fence-resource',
+      threadId: 'cancel-fence-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'cancel-fence-owner', ttlMs: 60_000 },
+    });
+    const data = new TextEncoder().encode('cancel fenced bytes');
+    const input = {
+      sessionId: session.id,
+      attachmentId: 'cancel-fenced',
+      name: 'cancel-fenced.txt',
+      mimeType: 'text/plain',
+      source: 'inline' as const,
+      data,
+    };
+
+    // The first upload's outcome is lost: bytes may exist at the derived
+    // reference, but the attachment row never committed.
+    owner.unknownSaveOnce = true;
+    await expect(harness.saveAttachment(input)).rejects.toBeInstanceOf(HarnessStorageAttachmentPendingError);
+
+    // The sweep decides the abandoned PUT must be cancelled, but the owner
+    // cannot say whether the cancellation took effect. The operation must
+    // stay claimed — marking it adoptable would let a retry complete metadata
+    // while the delayed cancellation still deletes the bytes.
+    owner.unknownCancelOnce = true;
+    await harness.reconcileAttachmentOperations({ now: Date.now() + 2_000 });
+    await expect(harness.saveAttachment(input)).rejects.toBeInstanceOf(HarnessStorageAttachmentPendingError);
+
+    // The delayed cancellation lands. Once the deferred claim expires in
+    // real time — claim re-acquisition uses the wall clock — a later sweep
+    // resolves the idempotent cancel to 'cleaned'; the retry reports a
+    // conflict rather than resurrecting the attachment over missing bytes.
+    await owner.applyDeferredCancels();
+    await new Promise(resolve => setTimeout(resolve, 1_100));
+    await harness.reconcileAttachmentOperations({ now: Date.now() + 5_000 });
+    await expect(harness.saveAttachment(input)).rejects.toBeInstanceOf(HarnessStorageAttachmentConflictError);
+
+    const remaining = await store.db.one<{ count: string | number }>(
+      `SELECT COUNT(*) AS count FROM "${schemaName}"."mastra_harness_attachments"
+       WHERE session_id = $1 AND attachment_id = $2`,
+      [session.id, 'cancel-fenced'],
+    );
+    expect(Number(remaining.count)).toBe(0);
+    const operation = await store.db.one<{ status: string }>(
+      `SELECT status FROM "${schemaName}"."mastra_harness_attachment_operations"
+       WHERE kind = 'put' AND session_id = $1 AND attachment_id = $2`,
+      [session.id, 'cancel-fenced'],
+    );
+    expect(operation.status).toBe('cleaned');
   });
 });
