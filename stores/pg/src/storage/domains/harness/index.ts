@@ -669,6 +669,9 @@ export class HarnessPG extends HarnessStorage {
   #workspaceActionsReady: Promise<void> | undefined;
   #planTasksReady: Promise<void> | undefined;
   #runSummariesReady: Promise<void> | undefined;
+  #messageResultsReady: Promise<void> | undefined;
+  #operationTombstonesReady: Promise<void> | undefined;
+  #threadDeleteFencesReady: Promise<void> | undefined;
   #compactionLocks = new Map<string, Promise<void>>();
   #channelBindingIndexesReady: Promise<void> | undefined;
   #providerCallbackBindingIndexesReady: Promise<void> | undefined;
@@ -7627,26 +7630,44 @@ export class HarnessPG extends HarnessStorage {
   }
 
   async #ensureMessageResultsTable(): Promise<void> {
-    const messageResultsConfig = TABLE_CONFIGS[TABLE_HARNESS_MESSAGE_RESULTS];
-    await this.#db.createTable({
-      tableName: TABLE_HARNESS_MESSAGE_RESULTS,
-      schema: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],
-      compositePrimaryKey: messageResultsConfig?.compositePrimaryKey,
+    if (this.#messageResultsReady !== undefined) {
+      return this.#messageResultsReady;
+    }
+    this.#messageResultsReady = (async () => {
+      const messageResultsConfig = TABLE_CONFIGS[TABLE_HARNESS_MESSAGE_RESULTS];
+      await this.#db.createTable({
+        tableName: TABLE_HARNESS_MESSAGE_RESULTS,
+        schema: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],
+        compositePrimaryKey: messageResultsConfig?.compositePrimaryKey,
+      });
+      await this.#db.alterTable({
+        tableName: TABLE_HARNESS_MESSAGE_RESULTS,
+        schema: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],
+        ifNotExists: ['mode_id', 'model_id', 'operation_kind', 'dispatch'],
+      });
+    })().catch(error => {
+      this.#messageResultsReady = undefined;
+      throw error;
     });
-    await this.#db.alterTable({
-      tableName: TABLE_HARNESS_MESSAGE_RESULTS,
-      schema: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],
-      ifNotExists: ['mode_id', 'model_id', 'operation_kind', 'dispatch'],
-    });
+    return this.#messageResultsReady;
   }
 
   async #ensureOperationTombstonesTable(): Promise<void> {
-    const tombstonesConfig = TABLE_CONFIGS[TABLE_HARNESS_OPERATION_TOMBSTONES];
-    await this.#db.createTable({
-      tableName: TABLE_HARNESS_OPERATION_TOMBSTONES,
-      schema: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],
-      compositePrimaryKey: tombstonesConfig?.compositePrimaryKey,
+    if (this.#operationTombstonesReady !== undefined) {
+      return this.#operationTombstonesReady;
+    }
+    this.#operationTombstonesReady = (async () => {
+      const tombstonesConfig = TABLE_CONFIGS[TABLE_HARNESS_OPERATION_TOMBSTONES];
+      await this.#db.createTable({
+        tableName: TABLE_HARNESS_OPERATION_TOMBSTONES,
+        schema: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],
+        compositePrimaryKey: tombstonesConfig?.compositePrimaryKey,
+      });
+    })().catch(error => {
+      this.#operationTombstonesReady = undefined;
+      throw error;
     });
+    return this.#operationTombstonesReady;
   }
 
   async #ensureSessionEventsTable(): Promise<void> {
@@ -7739,17 +7760,26 @@ export class HarnessPG extends HarnessStorage {
   }
 
   async #ensureThreadDeleteFencesTable(): Promise<void> {
-    const threadDeleteFencesConfig = TABLE_CONFIGS[TABLE_HARNESS_THREAD_DELETE_FENCES];
-    await this.#db.createTable({
-      tableName: TABLE_HARNESS_THREAD_DELETE_FENCES,
-      schema: TABLE_SCHEMAS[TABLE_HARNESS_THREAD_DELETE_FENCES],
-      compositePrimaryKey: threadDeleteFencesConfig?.compositePrimaryKey,
+    if (this.#threadDeleteFencesReady !== undefined) {
+      return this.#threadDeleteFencesReady;
+    }
+    this.#threadDeleteFencesReady = (async () => {
+      const threadDeleteFencesConfig = TABLE_CONFIGS[TABLE_HARNESS_THREAD_DELETE_FENCES];
+      await this.#db.createTable({
+        tableName: TABLE_HARNESS_THREAD_DELETE_FENCES,
+        schema: TABLE_SCHEMAS[TABLE_HARNESS_THREAD_DELETE_FENCES],
+        compositePrimaryKey: threadDeleteFencesConfig?.compositePrimaryKey,
+      });
+      await this.#db.alterTable({
+        tableName: TABLE_HARNESS_THREAD_DELETE_FENCES,
+        schema: TABLE_SCHEMAS[TABLE_HARNESS_THREAD_DELETE_FENCES],
+        ifNotExists: ['lease_id'],
+      });
+    })().catch(error => {
+      this.#threadDeleteFencesReady = undefined;
+      throw error;
     });
-    await this.#db.alterTable({
-      tableName: TABLE_HARNESS_THREAD_DELETE_FENCES,
-      schema: TABLE_SCHEMAS[TABLE_HARNESS_THREAD_DELETE_FENCES],
-      ifNotExists: ['lease_id'],
-    });
+    return this.#threadDeleteFencesReady;
   }
 
   async #ensureChannelBindingsTable(): Promise<void> {
