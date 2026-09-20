@@ -346,7 +346,7 @@ function isTransientSignalMessage(message: MastraDBMessage): boolean {
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
 ): NormalizedObservationalMemoryConfig | undefined {
-  if (config === true) return { model: 'google/gemini-2.5-flash' };
+  if (config === true) return { model: 'auto' };
   if (config === false || config === undefined) return undefined;
   if (typeof config === 'object' && config.enabled === false) return undefined;
   return config as NormalizedObservationalMemoryConfig;

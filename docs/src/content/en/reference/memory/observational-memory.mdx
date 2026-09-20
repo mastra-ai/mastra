@@ -122,9 +122,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
+            type: "'auto' | string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]",
             description:
-              'Model for the Observer agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.',
+              "Model for the Observer agent. Use `'auto'` to select from the calling agent's effective model provider on each observation. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.",
             isOptional: true,
           },
           {
@@ -298,9 +298,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
+            type: "'auto' | string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]",
             description:
-              'Model for the Reflector agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.',
+              "Model for the Reflector agent. Use `'auto'` to select from the calling agent's effective model provider on each reflection. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.",
             isOptional: true,
           },
           {

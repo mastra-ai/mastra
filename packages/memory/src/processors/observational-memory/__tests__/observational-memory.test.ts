@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
@@ -138,6 +138,7 @@ import {
 import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
 import { DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS, formatToolResultForObserver } from '../tool-result-helpers';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 
 // =============================================================================
 // Test Helpers
@@ -3556,6 +3557,15 @@ describe('Observer Agent Helpers', () => {
       ).resolves.toMatchObject({ model: 'anthropic/claude-haiku-4-5' });
     });
 
+    it('serializes auto as selection metadata without resolving it as a routed model', async () => {
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      await expect(om.getResolvedConfig()).resolves.toMatchObject({
+        observation: { model: 'auto' },
+        reflection: { model: 'auto' },
+      });
+    });
+
     it('prefers Gemini when the Google API key is configured', async () => {
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key');
       const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
@@ -3579,7 +3589,19 @@ describe('Observer Agent Helpers', () => {
       expect(resolved.model).toBe(actorModel);
     });
 
-    it('preserves an actor model instance instead of replacing it with a native provider model', async () => {
+    it('falls back to the main agent model when no invocation model was captured', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const fallbackModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'manual-fallback' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const mainAgent = { getModel: vi.fn(async () => fallbackModel) };
+
+      const resolved = await (om as any).resolveObservationModel(1, { mainAgent });
+
+      expect(mainAgent.getModel).toHaveBeenCalledOnce();
+      expect(resolved.model).toBe(fallbackModel);
+    });
+
+    it('preserves a built-in actor model instance whose sibling route is not known to be usable', async () => {
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
       const actorModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
       const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
@@ -3589,6 +3611,176 @@ describe('Observer Agent Helpers', () => {
       });
 
       expect(resolved.model).toBe(actorModel);
+    });
+
+    it('maps a plain string-backed router captured by the processor path to its provider low-cost model', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new ModelRouterLanguageModel('openai/gpt-5.5');
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', { thread: { id: 'thread-router-model' }, resourceId: 'resource-router-model' });
+      const state: Record<string, unknown> = {};
+
+      await processor.processInputStep({
+        messageList: new MessageList({ threadId: 'thread-router-model', resourceId: 'resource-router-model' }),
+        messages: [],
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: actorModel,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: state.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-5.4-mini' });
+    });
+
+    it.each([
+      {
+        configuration: 'inline routing credentials',
+        createModel: () =>
+          new ModelRouterLanguageModel({
+            id: 'anthropic/claude-opus-4-6',
+            url: 'https://configured-gateway.example/v1',
+            apiKey: 'inline-test-key',
+          }),
+      },
+      {
+        configuration: 'an explicit API transport',
+        createModel: () => new ModelRouterLanguageModel({ id: 'openai/gpt-5.5', api: 'responses' }),
+      },
+      {
+        configuration: 'a selected custom gateway',
+        createModel: () =>
+          new ModelRouterLanguageModel('anthropic/claude-opus-4-6', [
+            {
+              id: 'test-custom-gateway',
+              name: 'Test custom gateway',
+              handlesModel: (modelId: string) => modelId === 'anthropic/claude-opus-4-6',
+            } as any,
+          ]),
+      },
+      {
+        configuration: 'an older compatible Core router without the provenance accessor',
+        createModel: () => {
+          const model = new ModelRouterLanguageModel('openai/gpt-5.5');
+          Object.defineProperty(model, '__getReusableRouterId', { value: undefined });
+          return model;
+        },
+      },
+    ])('preserves a configured router with $configuration', async ({ createModel }) => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = createModel();
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-configured-router' },
+        resourceId: 'resource-configured-router',
+      });
+      const state: Record<string, unknown> = {};
+
+      await processor.processInputStep({
+        messageList: new MessageList({ threadId: 'thread-configured-router', resourceId: 'resource-configured-router' }),
+        messages: [],
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: actorModel,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: state.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: actorModel });
+    });
+
+    it('preserves configured model instances captured by the processor path across actor changes', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', { thread: { id: 'thread-auto-model' }, resourceId: 'resource-auto-model' });
+      const state: Record<string, unknown> = {};
+
+      await processor.processInputStep({
+        messageList: new MessageList({ threadId: 'thread-auto-model', resourceId: 'resource-auto-model' }),
+        messages: [],
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: actorModel as any,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: state.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: actorModel });
+
+      const nextState: Record<string, unknown> = {};
+      const nextActorModel = new MockLanguageModelV2({ provider: 'openai', modelId: 'gpt-5.5' });
+      await processor.processInputStep({
+        messageList: new MessageList({ threadId: 'thread-auto-model', resourceId: 'resource-auto-model' }),
+        messages: [],
+        requestContext,
+        stepNumber: 1,
+        state: nextState,
+        steps: [],
+        systemMessages: [],
+        model: nextActorModel as any,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: nextState.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: nextActorModel });
+    });
+
+    it('resolves auto before an observer agent invokes the provider', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const doGenerate = vi.fn(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: '<observations>\n- Runtime auto resolved\n</observations>' }],
+        warnings: [],
+      }));
+      const actorModel = createStreamCapableMockModel({ provider: 'custom-gateway', modelId: 'runtime-model', doGenerate });
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        observation: { model: 'auto', messageTokens: 1, bufferTokens: false },
+        reflection: { model: 'auto', observationTokens: 10_000 },
+      });
+      await storage.initializeObservationalMemory({
+        threadId: 'thread-auto-runtime',
+        resourceId: 'resource-auto-runtime',
+        scope: 'resource',
+        config: {},
+      });
+
+      await om.observe({
+        threadId: 'thread-auto-runtime',
+        resourceId: 'resource-auto-runtime',
+        messages: [createTestMessage('Remember this runtime selection', 'user', 'runtime-message')],
+        agent: { getModel: vi.fn(async () => actorModel) } as any,
+      });
+
+      expect(doGenerate).toHaveBeenCalledOnce();
+      expect(actorModel.modelId).toBe('runtime-model');
     });
 
     it('keeps explicit observer and reflector models independent', async () => {

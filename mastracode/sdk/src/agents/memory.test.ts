@@ -669,8 +669,6 @@ describe('pack-driven OM models (A11)', () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',
       activeModelPackId: 'custom:Work',
-      observerModelSelection: 'auto',
-      reflectorModelSelection: 'auto',
       observerModelId: 'google/gemini-3.5-flash',
     });
 
@@ -685,6 +683,35 @@ describe('pack-driven OM models (A11)', () => {
     expect(resolveModelMock).not.toHaveBeenCalled();
   });
 
+  it('resolves explicit auto intent from the active main model instead of a legacy pack chain', async () => {
+    loadSettingsMock.mockReturnValue({ models: { activeModelPackId: 'anthropic' } });
+    resolvePackMemoryModelChainMock.mockReturnValue({ modelId: 'claude-haiku-4-5' });
+    const { config, requestContext } = await createMemoryConfig({
+      projectPath: '/tmp/project',
+      activeModelPackId: 'anthropic',
+      observerModelSelection: 'auto',
+      currentModelId: 'openai/gpt-5.6-sol',
+    });
+
+    expect(config.options.observationalMemory.observation.model({ requestContext })).toEqual({
+      modelId: 'openai/gpt-5.4-mini',
+    });
+    expect(resolvePackMemoryModelChainMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a session role pin ahead of a conflicting settings override', async () => {
+    loadSettingsMock.mockReturnValue({ models: { observerModelOverride: 'openai/gpt-5-mini' } });
+    const { config, requestContext } = await createMemoryConfig({
+      projectPath: '/tmp/project',
+      observerModelSelection: 'anthropic/claude-haiku-4-5',
+      observerModelId: 'anthropic/claude-haiku-4-5',
+    });
+
+    expect(config.options.observationalMemory.observation.model({ requestContext })).toEqual({
+      modelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
   it('lets an explicit role override win over the pack OM chain', async () => {
     loadSettingsMock.mockReturnValue({
       models: { observerModelOverride: 'openai/gpt-5-mini', reflectorModelOverride: null },
@@ -693,8 +720,6 @@ describe('pack-driven OM models (A11)', () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',
       activeModelPackId: 'custom:Work',
-      observerModelSelection: 'auto',
-      reflectorModelSelection: 'auto',
       observerModelId: 'google/gemini-3.5-flash',
       reflectorModelId: 'anthropic/claude-sonnet-4-5',
     });
@@ -725,7 +750,6 @@ describe('pack-driven OM models (A11)', () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',
       activeModelPackId: 'anthropic',
-      observerModelSelection: 'auto',
       observerModelId: 'google/gemini-3.5-flash',
       mastracodePendingPackFallback: {
         fromPackId: 'anthropic',

@@ -34,8 +34,8 @@ function getFactoryMemorySettings(requestContext: RequestContext): FactoryMemory
 
 /**
  * Resolve one OM role's model for this invocation. Explicit per-role choices
- * win. Automatic roles follow the active mode pack's memory fallback chain
- * when present, then the low-cost model for the active main-model provider.
+ * win. Legacy sessions without selection intent retain the active model pack's
+ * memory fallback chain; automatic roles follow the active main-model provider.
  */
 function resolveOmRoleModelForRequest(
   role: 'observer' | 'reflector',
@@ -63,16 +63,13 @@ function resolveOmRoleModelForRequest(
     factorySettings !== undefined ? (factoryModelId ?? 'auto') : state?.[`${role}ModelSelection`];
   const legacyModelId = factorySettings === undefined ? state?.[`${role}ModelId`] : undefined;
   const selectedModelId =
-    roleOverride ??
     (typeof selection === 'string' && selection !== 'auto'
       ? selection
       : selection && typeof selection === 'object' && 'mode' in selection && selection.mode === 'model'
         ? 'modelId' in selection && typeof selection.modelId === 'string'
           ? selection.modelId
           : undefined
-        : !selection
-          ? legacyModelId
-          : undefined);
+        : undefined) ?? (!selection ? roleOverride : undefined);
 
   if (selectedModelId) {
     requestContext.set(`om.${role}.selectionMode`, 'model');
@@ -80,7 +77,7 @@ function resolveOmRoleModelForRequest(
     return resolveModel(selectedModelId, resolveOptions);
   }
 
-  if (factorySettings === undefined) {
+  if (factorySettings === undefined && selection === undefined) {
     const pendingState = state?.mastracodePendingPackFallback as
       | { toPackId?: unknown; threadId?: unknown }
       | null
@@ -104,6 +101,12 @@ function resolveOmRoleModelForRequest(
         return chained;
       }
     }
+  }
+
+  if (!selection && legacyModelId) {
+    requestContext.set(`om.${role}.selectionMode`, 'model');
+    requestContext.set(`om.${role}.effectiveModelId`, legacyModelId);
+    return resolveModel(legacyModelId, resolveOptions);
   }
 
   const currentModelId = controller?.session.modelId || (state?.currentModelId as string | undefined);

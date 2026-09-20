@@ -131,10 +131,12 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   private gateway: MastraModelGatewayInterface;
   private _supportedUrlsPromise: Promise<Record<string, RegExp[]>> | null = null;
   private readonly instanceGatewayCache = createGatewayModelCache();
+  private readonly hasCustomGateways: boolean;
   #lastStreamTransport: StreamTransport | undefined;
   #manager: GatewayManager;
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig, customGateways?: MastraModelGatewayInterface[]) {
+    this.hasCustomGateways = Boolean(customGateways?.length);
     // Normalize config to always have an 'id' field for routing
     let normalizedConfig: {
       id: `${string}/${string}`;
@@ -206,6 +208,20 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         return self._resolveSupportedUrls().then(onfulfilled, onrejected);
       },
     };
+  }
+
+  /** @internal */
+  __getReusableRouterId(): string | undefined {
+    if (
+      this.hasCustomGateways ||
+      this.config.url ||
+      this.config.apiKey ||
+      this.config.headers ||
+      this.config.api
+    ) {
+      return undefined;
+    }
+    return this.config.routerId;
   }
 
   /**

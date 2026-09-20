@@ -1054,8 +1054,10 @@ export class ObservationalMemory {
    */
   async getCompressionStartLevel(requestContext?: RequestContext): Promise<CompressionLevel> {
     try {
-      const resolved = await this.resolveModelContext(this.reflectionConfig.model, requestContext);
-      const modelId = resolved?.modelId ?? '';
+      const modelId =
+        this.reflectionConfig.model === 'auto' && hasGoogleGenerativeAIKey()
+          ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model
+          : ((await this.resolveModelContext(this.reflectionConfig.model, requestContext))?.modelId ?? '');
 
       // gemini-2.5-flash is conservative about compression - start at level 2
       if (modelId.includes('gemini-2.5-flash')) {

@@ -86,7 +86,7 @@ export const agent = new Agent({
   The `resource` identifies the user or entity, while the `thread` identifies the conversation. Reuse both values to continue the same conversation. Observational Memory processes the stored history as it grows and replaces older messages with observations when its activation conditions are met.
 </Inject>
 
-The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `__GATEWAY_GOOGLE_MODEL_FLASH__` by default. To use a different model, pass it in the config object:
+The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses automatic model selection. To use a specific model, pass it in the config object:
 
 ```typescript
 const memory = new Memory({
