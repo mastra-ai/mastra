@@ -33,8 +33,8 @@ export const queryKeys = {
   githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
   githubPull: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
-  githubRepositorySettings: (githubProjectId: string | undefined) =>
-    ['github', 'repository-settings', githubProjectId ?? null] as const,
+  repositorySettings: (projectRepositoryId: string | undefined) =>
+    ['source-control', 'repository-settings', projectRepositoryId ?? null] as const,
   githubCommits: (projectRepositoryId: string | undefined, limit: number) =>
     ['github', 'commits', projectRepositoryId ?? null, limit] as const,
   gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
@@ -46,8 +46,12 @@ export const queryKeys = {
     ['gitlab', 'issue', baseUrl, factoryProjectId ?? null, issueId ?? null] as const,
   gitlabPulls: (baseUrl: string, factoryProjectId: string | undefined, projectRepositoryId: string | undefined) =>
     ['gitlab', 'prs', baseUrl, factoryProjectId ?? null, projectRepositoryId ?? null] as const,
-  gitlabPull: (baseUrl: string, factoryProjectId: string | undefined, projectRepositoryId: string | undefined, number: number | undefined) =>
-    ['gitlab', 'pr', baseUrl, factoryProjectId ?? null, projectRepositoryId ?? null, number ?? null] as const,
+  gitlabPull: (
+    baseUrl: string,
+    factoryProjectId: string | undefined,
+    projectRepositoryId: string | undefined,
+    number: number | undefined,
+  ) => ['gitlab', 'pr', baseUrl, factoryProjectId ?? null, projectRepositoryId ?? null, number ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearTeams: () => ['linear', 'teams'] as const,

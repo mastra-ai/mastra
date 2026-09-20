@@ -86,7 +86,7 @@ describe('Repositories settings', () => {
           ],
         });
       }),
-      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/settings`, () =>
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-1/settings`, () =>
         HttpResponse.json({ setupCommand: null, teardownCommand: null }),
       ),
     );

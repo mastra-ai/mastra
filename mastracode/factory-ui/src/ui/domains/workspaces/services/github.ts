@@ -13,7 +13,7 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-import { postRepositoryGitOp, readJsonOrThrow } from './http';
+import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 import type { GitLabRepository } from '../../factory/services/gitlab';
 
 export interface GithubInstallation {
@@ -540,10 +540,13 @@ export async function fetchRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,
 ): Promise<RepositorySettings> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/settings`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
+  const res = await fetch(
+    `${baseUrl}/web/source-control/projects/${encodeURIComponent(projectRepositoryId)}/settings`,
+    {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    },
+  );
   if (!res.ok) throw new Error(`Failed to load repository settings (${res.status})`);
   return (await res.json()) as RepositorySettings;
 }
@@ -554,5 +557,5 @@ export async function saveRepositorySettings(
   projectRepositoryId: string,
   settings: RepositorySettings,
 ): Promise<RepositorySettings> {
-  return postRepositoryGitOp<RepositorySettings>(baseUrl, projectRepositoryId, 'settings', settings);
+  return postSourceControlRepositoryOp<RepositorySettings>(baseUrl, projectRepositoryId, 'settings', settings);
 }
