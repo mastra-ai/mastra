@@ -225,7 +225,7 @@ export const RequestContextWrapper = ({ children }: { children: ReactNode }) => 
         title="Request context"
         className="mb-5"
         action={
-          <Notice.Button as={Link} to="https://mastra.ai/docs/server/request-context" target="_blank">
+          <Notice.Button render={<Link href="https://mastra.ai/docs/server/request-context" target="_blank" />}>
             <Icon>
               <ExternalLink />
             </Icon>

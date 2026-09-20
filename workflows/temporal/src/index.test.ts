@@ -127,7 +127,9 @@ describe('@mastra/temporal transform exports', () => {
       ]);
     `);
 
-    expect(output).toContain('.parallel(["fetch-weather", "plan-activities"])');
+    expect(output).toContain('id: "fetch-weather"');
+    expect(output).toContain('id: "plan-activities"');
+    expect(output).not.toContain('.parallel(["fetch-weather", "plan-activities"])');
   });
 
   it('removes hoisted createStep declarations and their imports', async () => {

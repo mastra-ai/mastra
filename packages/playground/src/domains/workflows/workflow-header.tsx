@@ -17,18 +17,20 @@ export function WorkflowHeader({ workflowName, workflowId }: { workflowName: str
     <RouteHeaderActions owner="workflow-detail">
       <div className="flex items-center gap-2">
         {scheduleCount > 0 && (
-          <Button as={Link} to={schedulesHref} size="sm" icon={<CalendarClockIcon />}>
+          <Button render={<Link to={schedulesHref} />} size="sm" icon={<CalendarClockIcon />}>
             Schedules ({scheduleCount})
           </Button>
         )}
-        <Button as={Link} to={`/traces?entity=${encodeURIComponent(workflowName)}`} size="sm" icon={<EyeIcon />}>
+        <Button
+          render={<Link to={`/traces?entity=${encodeURIComponent(workflowName)}`} />}
+          size="sm"
+          icon={<EyeIcon />}
+        >
           Traces
         </Button>
         <Button
-          as="a"
-          target="_blank"
-          rel="noopener noreferrer"
-          href="/swagger-ui"
+          render={<a target="_blank" rel="noopener noreferrer" href="/swagger-ui" />}
+
           variant="ghost"
           size="sm"
           icon={<ApiIcon />}

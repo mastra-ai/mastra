@@ -386,15 +386,21 @@ Stopping a durable run through `abortRunStream()` or `abortThreadStream()` requi
 
 Returns: `boolean`. `true` when this process aborted the run locally or can see it executing. The abort request is published either way.
 
-#### `abortThreadStream({ threadId, resourceId? })`
+#### `abortThreadStream({ threadId, resourceId?, expectedRunId? })`
 
 Aborts the active run on a memory thread with the same abort request as `abortRunStream()`. The run is resolved from this process's thread runtime, so it must have been started here or observed through `subscribeToThread()` on this process. The server route `POST /agents/:agentId/threads/abort` uses this method.
 
+Pass `expectedRunId` when the request must only stop a specific run. If another queued run becomes active before the request is handled, the method returns `false` without aborting the successor. Omit `expectedRunId` to abort whichever run is active when the request is handled.
+
 ```typescript
-durableAgent.abortThreadStream({ resourceId: 'user-1', threadId: 'thread-1' })
+const aborted = durableAgent.abortThreadStream({
+  resourceId: 'user-1',
+  threadId: 'thread-1',
+  expectedRunId: runId,
+})
 ```
 
-Returns: `boolean`. `false` when this process has no active run recorded for the thread. No abort request is sent in that case.
+Returns: `boolean`. `false` when this process has no active run recorded for the thread or the active run doesn't match `expectedRunId`. No abort request is sent in either case.
 
 ### Recovery
 

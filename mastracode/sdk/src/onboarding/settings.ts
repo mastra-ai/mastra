@@ -20,6 +20,7 @@ export { isThinkingLevelSetting, THINKING_LEVEL_VALUES } from '../thinking.js';
 export type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
 import { getAppDataDir } from '../utils/project.js';
 import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../voice/stt-registry.js';
+import { pruneUnknownModePackFallbacks, pruneUnknownPackAccountPreferences } from './packs.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
 export interface CustomPack {
@@ -211,6 +212,8 @@ export interface BrowserSettings {
   agentBrowser?: AgentBrowserSettings;
 }
 
+export type PackAccountPreferences = Record<string, Record<string, string>>;
+
 export interface GlobalSettings {
   // Onboarding tracking
   onboarding: {
@@ -233,6 +236,16 @@ export interface GlobalSettings {
     activeModelPackId: string | null;
     /** Per-mode overrides keyed by built-in pack ID. */
     modePackOverrides: Record<string, Record<string, string>>;
+    /**
+     * Fallback pack per pack ID (packId → packId; builtin ids and
+     * "custom:<name>" both allowed). When every account serving a pack's
+     * provider is exhausted — or the provider is persistently down — the turn
+     * hops to the fallback pack's model. Chains are allowed; a cycle is
+     * capped at one revisit per cascade, then the error surfaces.
+     */
+    packFallbacks: Record<string, string>;
+    /** Preferred OAuth account by pack ID and resolved model ID. */
+    packAccountPreferences: Record<string, Record<string, string>>;
     /** Explicit per-mode defaults — used when no activeModelPackId is set. */
     modeDefaults: Record<string, string>;
     /**
@@ -406,6 +419,8 @@ const DEFAULTS: GlobalSettings = {
   models: {
     activeModelPackId: null,
     modePackOverrides: {},
+    packFallbacks: {},
+    packAccountPreferences: {},
     modeDefaults: {},
     modeThinkingDefaults: {},
     activeOmPackId: null,
@@ -499,6 +514,73 @@ function parseModePackOverrides(value: unknown): Record<string, Record<string, s
     if (Object.keys(parsedOverrides).length > 0) result[packId] = parsedOverrides;
   }
   return result;
+}
+
+function parsePackFallbacks(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') return {};
+  const result: Record<string, string> = {};
+  for (const [packId, fallbackId] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof fallbackId === 'string' && fallbackId.length > 0) result[packId] = fallbackId;
+  }
+  return result;
+}
+
+/** Shape-parse + drop entries whose source or target pack no longer exists. */
+function loadPackFallbacks(value: unknown, customModelPacks: Array<{ name: string }>): Record<string, string> {
+  return pruneUnknownModePackFallbacks(parsePackFallbacks(value), customModelPacks);
+}
+
+function parsePackAccountPreferences(value: unknown): Record<string, Record<string, string>> {
+  if (!value || typeof value !== 'object') return {};
+  const result: Record<string, Record<string, string>> = {};
+  for (const [packId, modelPreferences] of Object.entries(value as Record<string, unknown>)) {
+    if (!modelPreferences || typeof modelPreferences !== 'object') continue;
+    const parsed = Object.fromEntries(
+      Object.entries(modelPreferences as Record<string, unknown>).filter(
+        (entry): entry is [string, string] =>
+          entry[0].length > 0 && typeof entry[1] === 'string' && entry[1].length > 0,
+      ),
+    );
+    if (Object.keys(parsed).length > 0) result[packId] = parsed;
+  }
+  return result;
+}
+
+function loadPackAccountPreferences(
+  value: unknown,
+  customModelPacks: CustomPack[],
+  modePackOverrides: Record<string, Record<string, string>>,
+): PackAccountPreferences {
+  return pruneUnknownPackAccountPreferences(parsePackAccountPreferences(value), customModelPacks, modePackOverrides);
+}
+
+/** Move persisted routing choices when re-authentication changes an account instance id. */
+export function migrateAccountPreferences(
+  settings: GlobalSettings,
+  previousAccountId: string,
+  nextAccountId: string,
+): void {
+  if (previousAccountId === nextAccountId) return;
+  for (const modelPreferences of Object.values(settings.models.packAccountPreferences ?? {})) {
+    for (const [modelId, accountInstanceId] of Object.entries(modelPreferences)) {
+      if (accountInstanceId === previousAccountId) modelPreferences[modelId] = nextAccountId;
+    }
+  }
+}
+
+/** Remove persisted routing choices that point at deleted OAuth account instances. */
+export function pruneRemovedAccountPreferences(settings: GlobalSettings, removedAccountIds: Iterable<string>): void {
+  const removed = new Set(removedAccountIds);
+  if (removed.size === 0) return;
+
+  const next: PackAccountPreferences = {};
+  for (const [packId, modelPreferences] of Object.entries(settings.models.packAccountPreferences ?? {})) {
+    const retained = Object.fromEntries(
+      Object.entries(modelPreferences).filter(([, accountInstanceId]) => !removed.has(accountInstanceId)),
+    );
+    if (Object.keys(retained).length > 0) next[packId] = retained;
+  }
+  settings.models.packAccountPreferences = next;
 }
 
 function parseQuietModeMaxToolPreviewLines(value: unknown): number {
@@ -903,7 +985,7 @@ function migrateFromAuth(
 
 function finishAuthMigration(migration: AuthMigration): void {
   try {
-    writeFileSync(migration.authPath, JSON.stringify(migration.authData, null, 2), 'utf-8');
+    writeSettingsRecord(migration.authPath, migration.authData);
   } catch {
     return;
   }
@@ -955,7 +1037,11 @@ export function migrateLegacyVariedPack(settings: GlobalSettings): boolean {
 const settingsRecordSchema = z.record(z.string(), z.json());
 const modelUseCountsSchema = z.record(z.string(), z.number());
 const customModelPacksSchema = z.array(
-  z.object({ name: z.string(), models: z.record(z.string(), z.string()), createdAt: z.string() }),
+  z.object({
+    name: z.string(),
+    models: z.record(z.string(), z.string()),
+    createdAt: z.string().optional().default(''),
+  }),
 );
 const memoryGatewaySchema = z.object({ baseUrl: z.string().optional() });
 const mirrorMetadataSchema = z.object({ version: z.literal(1), baseline: settingsRecordSchema });
@@ -1042,6 +1128,8 @@ function parseSettingsRecord(raw: SettingsRecord): ParsedSettingsRecord {
   const rawStorage = parseNestedSettingsRecord(raw.storage);
   const modelUseCounts = modelUseCountsSchema.safeParse(raw.modelUseCounts);
   const customModelPacks = customModelPacksSchema.safeParse(raw.customModelPacks);
+  const parsedCustomModelPacks = customModelPacks.success ? customModelPacks.data : [];
+  const modePackOverrides = parseModePackOverrides(rawModels?.modePackOverrides);
   const memoryGateway = memoryGatewaySchema.safeParse(raw.memoryGateway);
   const dismissedVersion = z.string().safeParse(raw.updateDismissedVersion);
   const legacyOmModelId = z.string().safeParse(rawModels?.omModelId);
@@ -1051,8 +1139,14 @@ function parseSettingsRecord(raw: SettingsRecord): ParsedSettingsRecord {
     models: {
       ...DEFAULTS.models,
       ...rawModels,
-      modePackOverrides: parseModePackOverrides(rawModels?.modePackOverrides),
+      modePackOverrides,
       modeThinkingDefaults: parseModeThinkingDefaults(rawModels?.modeThinkingDefaults),
+      packFallbacks: loadPackFallbacks(rawModels?.packFallbacks, parsedCustomModelPacks),
+      packAccountPreferences: loadPackAccountPreferences(
+        rawModels?.packAccountPreferences,
+        parsedCustomModelPacks,
+        modePackOverrides,
+      ),
     },
     preferences: parsePreferences(raw.preferences),
     storage: {
@@ -1061,7 +1155,7 @@ function parseSettingsRecord(raw: SettingsRecord): ParsedSettingsRecord {
       libsql: { ...STORAGE_DEFAULTS.libsql, ...parseNestedSettingsRecord(rawStorage?.libsql) },
       pg: { ...STORAGE_DEFAULTS.pg, ...parseNestedSettingsRecord(rawStorage?.pg) },
     },
-    customModelPacks: customModelPacks.success ? customModelPacks.data : [],
+    customModelPacks: parsedCustomModelPacks,
     customProviders: parseCustomProviders(raw.customProviders),
     modelUseCounts: modelUseCounts.success ? modelUseCounts.data : {},
     updateDismissedVersion: dismissedVersion.success ? dismissedVersion.data : null,
@@ -1169,6 +1263,7 @@ export function loadSettings(filePath?: string, configDirName = DEFAULT_CONFIG_D
 }
 
 export const THREAD_ACTIVE_MODEL_PACK_ID_KEY = 'activeModelPackId';
+export const THREAD_FALLBACK_STATUS_KEY = 'mastracodeFallbackStatus';
 
 export interface ThreadSettings {
   activeModelPackId: string | null;
@@ -1257,6 +1352,22 @@ export function resolveModePackModels(
 ): Record<string, string> {
   if (pack.id.startsWith('custom:') || pack.id === 'custom') return pack.models;
   return { ...pack.models, ...settings.models.modePackOverrides?.[pack.id] };
+}
+
+/**
+ * Resolve a session's explicitly active pack when its mode model still matches.
+ * Model matching alone is not pack identity: multiple packs may intentionally
+ * use the same model, and inference would attach an unrelated fallback chain.
+ */
+export function findModePackForModel(
+  settings: GlobalSettings,
+  packs: Array<{ id: string; models: Record<string, string> }>,
+  modelId: string,
+  modeId: string,
+  activePackId: string | undefined,
+): { id: string; models: Record<string, string> } | undefined {
+  const activePack = packs.find(pack => pack.id === activePackId);
+  return activePack && resolveModePackModels(settings, activePack)[modeId] === modelId ? activePack : undefined;
 }
 
 export function resolveModelDefaults(
@@ -1370,7 +1481,7 @@ function splitSettingsRecord(record: SettingsRecord): SplitSettingsRecord {
   return { config, state };
 }
 
-function writeSettingsRecord(filePath: string, value: SettingsRecord): void {
+function writeSettingsRecord(filePath: string, value: unknown): void {
   const dir = dirname(filePath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
   const temporaryPath = `${filePath}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;

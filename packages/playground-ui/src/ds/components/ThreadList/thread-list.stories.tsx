@@ -34,7 +34,7 @@ function ThreadListPreview({ embedded = false }: { embedded?: boolean }) {
   return (
     <div className="h-96 w-80">
       <ThreadList embedded={embedded}>
-        <ThreadListNewItem as="a" href="#new">
+        <ThreadListNewItem render={<a href="#new" />}>
           <PlusIcon />
           New thread
         </ThreadListNewItem>

@@ -11,6 +11,19 @@ describe('package exports', () => {
     }
   });
 
+  it('publishes the lib entrypoint', () => {
+    expect(packageJson.exports['./lib/*']).toEqual({
+      import: {
+        types: './dist/lib/*.d.ts',
+        default: './dist/lib/*.es.js',
+      },
+      require: {
+        types: './dist/lib/*.d.ts',
+        default: './dist/lib/*.cjs.js',
+      },
+    });
+  });
+
   it('publishes the tabbed container layout entrypoint', () => {
     expect(packageJson.exports['./layout/tabbed-container']).toEqual({
       import: {

@@ -56,6 +56,7 @@ export const modelSelectionCancelEnvScenario = {
     await runtime.waitForScreenText(/Custom pack: Cancel Env Selection E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Edit\s+Update this pack/i, terminal, 8_000);
 
+    // Rows: [Activate, Edit, Share, Set subscription routing…, Set fallback…, Delete].
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Edit custom pack: Cancel Env Selection E2E/i, terminal, 8_000);
@@ -82,7 +83,8 @@ export const modelSelectionCancelEnvScenario = {
     await runtime.waitForScreenText(/Edit custom pack: Cancel Env Selection E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/anthropic\/claude-sonnet-4-5/i, terminal, 8_000);
 
-    terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B');
+    // Edit rows: [rename, plan, build, fast, memory, Save] — five downs lands on Save.
+    terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/302ai\/env-precedence-e2e-model/i, terminal, 8_000);
     terminal.write('\x1b');

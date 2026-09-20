@@ -11,6 +11,7 @@ import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { getAppDataDir } from '../utils/project.js';
 import {
   DEFAULT_OAUTH_REDIRECT_URL,
+  MASTRA_CODE_CLIENT_METADATA_URL,
   loadMcpConfig,
   getProjectMcpPath,
   getGlobalMcpPath,
@@ -57,7 +58,8 @@ export interface McpManager {
   /**
    * Run the OAuth authorization-code flow for an HTTP server, then reconnect it.
    * Servers without an `oauth` config are provisioned with a zero-config default
-   * (dynamic client registration). The authorization URL is surfaced through
+   * that identifies Mastra Code by its Client ID Metadata Document. The
+   * authorization URL is surfaced through
    * `onAuthorizationUrl` for the caller to open in a browser.
    *
    * Resolves with the resulting {@link McpServerStatus}: a connected status on
@@ -163,8 +165,9 @@ class FileOAuthStorage implements OAuthStorage {
 }
 
 /**
- * Zero-config OAuth defaults for servers with a bare `url` entry. Dynamic
- * client registration provisions the client, so no `clientId` is needed.
+ * Zero-config OAuth defaults for servers with a bare `url` entry. The client
+ * identifies itself by Mastra Code's Client ID Metadata Document URL, so no
+ * `clientId` is needed.
  */
 const DEFAULT_OAUTH_CONFIG: McpHttpOAuthConfig = { redirectUrl: DEFAULT_OAUTH_REDIRECT_URL };
 
@@ -318,21 +321,29 @@ export function createMcpManager(
     // a concrete URL.
     const redirectUrl = resolveOAuthRedirectUrl(oauth);
 
+    // Without a pre-registered clientId the client is identified by Mastra
+    // Code's Client ID Metadata Document: the document URL is the client_id and
+    // the authorization server fetches it, so nothing is registered per server.
+    const clientInformation = oauth.clientId
+      ? ({
+          client_id: oauth.clientId,
+          ...(oauth.clientSecret ? { client_secret: oauth.clientSecret } : {}),
+        } satisfies OAuthClientInformation)
+      : undefined;
+    const clientMetadataUrl = clientInformation ? undefined : MASTRA_CODE_CLIENT_METADATA_URL;
+
     return new MCPOAuthClientProvider({
       redirectUrl,
       clientMetadata: {
+        ...(clientMetadataUrl ? { client_id: clientMetadataUrl } : {}),
         redirect_uris: [redirectUrl],
-        client_name: oauth.clientName ?? `Mastra Code MCP ${name}`,
+        client_name: oauth.clientName ?? (clientMetadataUrl ? 'Mastra Code' : `Mastra Code MCP ${name}`),
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
         ...(oauth.scopes?.length ? { scope: oauth.scopes.join(' ') } : {}),
       },
-      clientInformation: oauth.clientId
-        ? ({
-            client_id: oauth.clientId,
-            ...(oauth.clientSecret ? { client_secret: oauth.clientSecret } : {}),
-          } satisfies OAuthClientInformation)
-        : undefined,
+      clientInformation,
+      clientMetadataUrl,
       storage: new FileOAuthStorage(getOAuthStoragePath(projectDir, name, cfg)),
       onRedirectToAuthorization: url => {
         authUrlHandlers.get(name)?.(url.toString());
@@ -842,8 +853,8 @@ export function createMcpManager(
       }
 
       // Zero-config provisioning: a bare `url` entry gets a provider with the
-      // default redirect URL the first time the user authenticates. Dynamic
-      // client registration takes care of the client credentials.
+      // default redirect URL the first time the user authenticates. The Client
+      // ID Metadata Document takes care of the client identity.
       //
       // NOTE: `serverDefs[name]` is the same object reference the MCPClient was
       // constructed with, and connectHttp reads `authProvider` live off it at

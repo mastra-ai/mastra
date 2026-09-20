@@ -81,6 +81,10 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 
 `/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to override the current mode with another model from that provider. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
 
+`/models` also configures **fallback packs**: select a pack and choose **Set fallback…** from its action menu. When every account serving the active pack's provider is unavailable, either rate-limited or down after retries, the turn hops to the fallback pack's model for that mode. Fallbacks work for built-in and custom packs, and chains are allowed (A → B → C). Cycles are capped at one revisit per cascade (A → B → A), then the error surfaces. Every hop renders a notice in the transcript and is saved in the thread history. After a hop, the thread stays on the landed pack until you switch back with `/models`. There is no automatic recovery.
+
+When packs define an [observational memory model](#om-model-settings), the same chain also covers observational memory: if the active pack's OM provider is unavailable, the observer and reflector fall back to the next pack's OM model in chain order.
+
 If the selected model needs a provider key, Mastra Code prompts for the key and displays its environment variable name, such as `ANTHROPIC_API_KEY`.
 
 - **Enter a key**: The key is stored in `auth.json` and set in the current process environment. The model becomes available immediately.
@@ -92,15 +96,57 @@ Stored API keys persist across sessions. On the next startup, Mastra Code loads 
 
 ### OAuth login (optional)
 
-If you have an Anthropic Claude Max, OpenAI ChatGPT Plus, or Kimi For Coding subscription, run `/login` to sign in with an account. You can also run `/connect` and select **Sign in with an account**.
+If you have a supported provider account or subscription, run `/login` to sign in. You can also run `/connect` and select **Sign in with an account**.
 
 | Provider | OAuth flow | What you get |
 | - | - | - |
 | **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
+| **GitHub Copilot** | Device code | Access to models available through your Copilot subscription |
 | **Kimi For Coding** | Device code | Access to Kimi For Coding models via your subscription |
+| **xAI** | Device code | Access to Grok models via your xAI account |
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
+
+#### Multiple accounts per provider
+
+You can sign in with more than one account for the same provider — for example, two Claude Max accounts or four Kimi For Coding accounts. Run `/login` and select a provider you are already signed in to: instead of replacing your credentials, Mastra Code opens the account manager for that provider.
+
+The account manager lists every registered account with its label and marks the active one. Selecting an account opens a submenu for it:
+
+- **Set as active** — makes it the active account used for new requests (only shown for accounts that aren't active).
+- **Re-authenticate…** — refreshes the account's credentials by signing in again.
+- **Remove…** — deletes the account (after confirmation).
+
+**Add another account** runs the normal sign-in flow and appends the account, then returns to the manager. The new account is not activated — open its submenu and choose **Set as active** to switch to it.
+
+Exactly one account per provider is active at a time; the others are kept for rotation and switching. After a successful sign-in you can name the account. ChatGPT and xAI accounts pre-fill the account's email, and GitHub Copilot accounts pre-fill the GitHub login when available. `/logout` still signs out of the provider entirely, removing every registered account.
+
+#### Subscription routing by model pack
+
+A model pack can pin a different account for each model. In `/models`, select a pack, choose **Set subscription routing…**, select a model, then select an account. The picker previews the effect before you save it.
+
+A selected account is used **exclusively** for that pack and model. If it cannot serve a request, Mastra Code does not fall back to another subscription on the provider — it moves to the pack's configured fallback chain instead, if one is set. This is what keeps a heavy model from consuming the quota on every subscription you own: pin the heavy model to one account and a lighter model to another, and each subscription's usage is spent only where you intended.
+
+Select **Automatic** to leave the route unpinned — the model then rotates through the provider's accounts (see below).
+
+Preferences belong to the pack and resolved model. Two packs that use the same model can pin different accounts. When a request hops to a fallback pack, that pack's own subscription routing applies.
+
+#### Automatic account rotation
+
+For eligible failures on the active account, Mastra Code automatically rotates to the next account in the pool and retries:
+
+- **Rate limits and quota exhaustion** (HTTP 429, 402, or provider usage-limit errors) rotate immediately.
+- **Auth failures** (HTTP 401/403) first force one token refresh of the current account; if the refreshed token still fails, the pool rotates.
+- **Server errors and network outages** first exhaust the normal transient retry budget; if the provider still can't serve the request, the error surfaces without another account being activated.
+
+Rotation starts on the account the pool is currently on — the account the last rotation left active — and walks the provider's accounts in the order they were added, wrapping once. Each account is tried at most once per request. When every account in the pool has been tried, the error surfaces normally or the request moves to the configured fallback pack. Other errors — malformed requests (HTTP 400 with no provider usage-limit message) and anything unrecognized — never rotate; they surface immediately.
+
+Rotation applies to **Automatic** routes only. A model pinned to a specific account never rotates to a sibling account; its failures go to the pack's fallback chain.
+
+Rotation and transient retries share one retry budget, so after a rotation the remaining accounts may see fewer transient retries each — the next account is always preferred over further retries on a failing one.
+
+Every switch is shown in the transcript as a one-line notice (for example, `Switched Kimi account: Work → Personal (rate limit)`) and is persisted in the thread history, so it also appears when you reopen the thread later. When a request starts on an account that isn't the first one in the pool, a `Starting on …` notice marks that too. When a pinned account can't serve a request, the notice names that account (`Pinned Anthropic account unavailable (pool exhausted)`) rather than reporting the whole pool as unavailable.
 
 When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/connect` or during onboarding, Mastra Code asks how you want to sign in:
 
@@ -682,6 +728,14 @@ Configure the scope through:
 ### OM model settings
 
 The observer and reflector models default to `google/gemini-2.5-flash`. Set them through the `/om` panel or in the controller state.
+
+Custom model packs can carry an optional memory model (stored as `models.memory`). When creating or editing a pack in `/models`, the memory step lets you choose a model or skip it. OM models resolve in this order:
+
+1. Explicit observer/reflector overrides from the `/om` panel
+1. The active pack's OM model, followed by the OM models of its fallback packs in chain order
+1. The standalone OM settings, then the default model
+
+Packs without an OM model keep using your standalone OM configuration unchanged.
 
 ### OM thresholds
 

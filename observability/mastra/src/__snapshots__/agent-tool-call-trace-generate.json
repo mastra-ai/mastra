@@ -190,7 +190,18 @@
               "reasoning": [],
               "sources": [],
               "text": "Mock V2 generate response",
-              "warnings": []
+              "warnings": [],
+              "toolCalls": [
+                {
+                  "toolCallId": "call-calc-1",
+                  "toolName": "calculator",
+                  "args": {
+                    "operation": "add",
+                    "a": 5,
+                    "b": 3
+                  }
+                }
+              ]
             }
           },
           "children": [
@@ -277,7 +288,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["calculator", "apiCall", "workflowExecutor"],
                       "toolChoice": "auto",
                       "usage": {
@@ -495,7 +508,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["calculator", "apiCall", "workflowExecutor"],
                       "toolChoice": "auto",
                       "usage": {

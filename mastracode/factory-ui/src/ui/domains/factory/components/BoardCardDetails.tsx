@@ -2,19 +2,30 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 import { useGitHubIssueDetail, useGitHubPullRequestDetail } from '../../../../hooks/useFactoryData';
+import { useIncidentioIssueDetail } from '../../../../hooks/useIncidentioData';
+import { useJiraIssueDetail } from '../../../../hooks/useJiraData';
 import { useLinearIssueDetail } from '../../../../hooks/useLinearData';
-import { githubNumberForItem, linearIdentifierForItem, linearIssueIdForItem } from '../boardItems';
+import {
+  githubNumberForItem,
+  incidentioIssueRefForItem,
+  jiraIdentifierForItem,
+  jiraIssueRefForItem,
+  linearIdentifierForItem,
+  linearIssueIdForItem,
+} from '../boardItems';
 import type { WorkItem } from '../services/workItems';
 
 /** The card's source and metadata — a work item or an unfiled candidate. */
 type SourceItem = Pick<WorkItem, 'source' | 'metadata'>;
 
-function descriptionSource(item: SourceItem): 'issue' | 'pull' | 'linear' | undefined {
+function descriptionSource(item: SourceItem): 'issue' | 'pull' | 'linear' | 'jira' | 'incidentio' | undefined {
   if (githubNumberForItem(item) !== undefined) {
     if (item.source === 'github-issue') return 'issue';
     if (item.source === 'github-pr') return 'pull';
   }
   if (linearIdentifierForItem(item) !== undefined) return 'linear';
+  if (jiraIdentifierForItem(item) !== undefined && jiraIssueRefForItem(item) !== undefined) return 'jira';
+  if (incidentioIssueRefForItem(item) !== undefined) return 'incidentio';
   return undefined;
 }
 
@@ -27,6 +38,9 @@ export function useSourceDescription(
   const number = githubNumberForItem(item);
   const identifier = linearIdentifierForItem(item);
   const linearIssueId = linearIssueIdForItem(item);
+  const jiraIdentifier = jiraIdentifierForItem(item);
+  const jiraIssueRef = jiraIssueRefForItem(item);
+  const incidentioIssueRef = incidentioIssueRefForItem(item);
   const source = descriptionSource(item);
   const issue = useGitHubIssueDetail(
     source === 'issue' ? projectRepositoryId : undefined,
@@ -41,7 +55,16 @@ export function useSourceDescription(
     source === 'linear' ? identifier : undefined,
     source === 'linear' ? linearIssueId : undefined,
   );
-  return source === undefined ? undefined : { issue, pull, linear }[source];
+  const jira = useJiraIssueDetail(
+    source === 'jira' ? factoryProjectId : undefined,
+    source === 'jira' ? jiraIdentifier : undefined,
+    source === 'jira' ? jiraIssueRef : undefined,
+  );
+  const incidentio = useIncidentioIssueDetail(
+    source === 'incidentio' ? factoryProjectId : undefined,
+    source === 'incidentio' ? incidentioIssueRef : undefined,
+  );
+  return source === undefined ? undefined : { issue, pull, linear, jira, incidentio }[source];
 }
 
 export function CardSourceDescription({

@@ -2,8 +2,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  applyTracePropertyFilterTokens,
   createTraceFilterBarFields,
   filterBarItemsToTraceTokens,
+  getPreservedTraceFilterParams,
+  getTracePropertyFilterTokens,
+  hasAnyTraceFilterParams,
   loadTraceFiltersFromStorage,
   saveTraceFiltersToStorage,
   traceTokensToFilterBarItems,
@@ -78,6 +82,75 @@ describe('createTraceFilterBarFields', () => {
       'threadId',
       'traceId',
     ]);
+  });
+
+  describe('when discovered metadata fields are provided', () => {
+    const suggestions = async () => [{ value: 'eu-west' }];
+    const withMetadata = createTraceFilterBarFields({
+      availableRootEntityNames: [],
+      availableEnvironments: [],
+      metadataFields: [
+        { path: 'metadata.tenant', suggestions },
+        { path: 'metadata.region', suggestions },
+        { path: 'notMetadata', suggestions },
+      ],
+    });
+
+    it('appends them after the fixed fields, sorted by key, labelled without the prefix', () => {
+      const metadataFields = withMetadata.filter(f => f.id.startsWith('metadata.'));
+      expect(metadataFields.map(f => [f.id, f.label])).toEqual([
+        ['metadata.region', 'region'],
+        ['metadata.tenant', 'tenant'],
+      ]);
+      expect(withMetadata.at(-1)?.id).toBe('metadata.tenant');
+    });
+
+    it('wires the lazy suggestions resolver and keeps them free-text', () => {
+      const region = withMetadata.find(f => f.id === 'metadata.region');
+      expect(region?.suggestions).toBe(suggestions);
+      expect(region?.strict).toBeUndefined();
+      expect(region?.operators).toEqual(['is']);
+    });
+
+    it('ignores paths outside the metadata namespace', () => {
+      expect(withMetadata.find(f => f.id === 'notMetadata')).toBeUndefined();
+    });
+  });
+});
+
+describe('metadata filter URL params', () => {
+  it('reads filterMetadata.<key> params as metadata.<key> tokens in insertion order', () => {
+    const params = new URLSearchParams('filterMetadata.region=eu-west&filterTraceId=abc&filterMetadata.tenant=acme');
+
+    expect(getTracePropertyFilterTokens(params)).toEqual([
+      { fieldId: 'metadata.region', value: 'eu-west' },
+      { fieldId: 'traceId', value: 'abc' },
+      { fieldId: 'metadata.tenant', value: 'acme' },
+    ]);
+  });
+
+  it('writes metadata tokens as filterMetadata.<key> params and drops stale ones', () => {
+    const params = new URLSearchParams('filterMetadata.stale=x&status=error');
+
+    applyTracePropertyFilterTokens(params, [{ fieldId: 'metadata.region', value: ' eu-west ' }]);
+
+    expect(params.get('filterMetadata.region')).toBe('eu-west');
+    expect(params.has('filterMetadata.stale')).toBe(false);
+  });
+
+  it('preserves filterMetadata.<key> params for storage persistence', () => {
+    const preserved = getPreservedTraceFilterParams(
+      new URLSearchParams('filterMetadata.region=eu-west&filterMetadata.empty=&page=2'),
+    );
+
+    expect(preserved.get('filterMetadata.region')).toBe('eu-west');
+    expect(preserved.has('filterMetadata.empty')).toBe(false);
+    expect(preserved.has('page')).toBe(false);
+  });
+
+  it('counts a filterMetadata.<key> param as an existing filter so hydration does not re-append it', () => {
+    expect(hasAnyTraceFilterParams(new URLSearchParams('filterMetadata.region=eu-west'))).toBe(true);
+    expect(hasAnyTraceFilterParams(new URLSearchParams('page=2'))).toBe(false);
   });
 });
 

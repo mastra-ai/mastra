@@ -24,6 +24,7 @@ import type { MastraModelConfig } from '../llm/model/shared.types';
 import { createRunScopeKey } from '../mastra/run-scope';
 import type { RunScope } from '../mastra/run-scope';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
+import type { MastraMemory } from '../memory/memory';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -55,6 +56,15 @@ import type {
 } from './types';
 
 export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
+
+/**
+ * Memory the suspended run persisted its messages under, resolved with the
+ * run's own RequestContext while the stream was live. Abort settlement cannot
+ * rebuild that context later (dynamic `memory: ({ requestContext }) => …`
+ * configs would resolve differently against an empty context), so the resolved
+ * instance is retained beside the owning agent for the life of the run scope.
+ */
+export const SUSPENDED_RUN_MEMORY_KEY = createRunScopeKey<MastraMemory>('agent-controller.suspendedRunMemory');
 
 /**
  * Minimal persistence surface the Session uses to read and write per-thread
@@ -513,8 +523,14 @@ export class SessionThread {
 
   /** Read a setting (metadata value) for the active thread. */
   async getSetting({ key }: { key: string }): Promise<unknown> {
-    if (!this.#store || this.#threadId === null) return undefined;
-    return this.#store.getMetadata({ threadId: this.#threadId, key });
+    if (this.#threadId === null) return undefined;
+    return this.getSettingOn({ threadId: this.#threadId, key });
+  }
+
+  /** Read a setting from a specific thread, regardless of the current binding. */
+  async getSettingOn({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {
+    if (!this.#store) return undefined;
+    return this.#store.getMetadata({ threadId, key });
   }
 
   /** Persist a setting (metadata value) for the active thread. */
@@ -1116,6 +1132,10 @@ export interface PendingSuspension {
   runId: string;
   /** The suspended tool's name (e.g. `ask_user`, `submit_plan`). */
   toolName: string;
+  /** The thread the suspended invocation was persisted under. */
+  threadId: string;
+  /** The memory resource the suspended invocation was persisted under. */
+  resourceId: string;
 }
 
 /**
@@ -1134,9 +1154,32 @@ export class SessionSuspensions {
   /** Parked tool calls awaiting a resume, keyed by `toolCallId`. */
   readonly #pending = new Map<string, PendingSuspension>();
 
-  /** Park `toolCallId` as awaiting a resume on `runId` for `toolName`. */
-  register({ toolCallId, runId, toolName }: { toolCallId: string; runId: string; toolName: string }): void {
-    this.#pending.set(toolCallId, { runId, toolName });
+  /**
+   * Park `toolCallId` as awaiting a resume on `runId` for `toolName`, recording
+   * the thread/resource the suspended invocation was persisted under. When the
+   * same tool call is replayed for the same run (e.g. a resumed stream re-emits
+   * the suspension), the original thread/resource binding is preserved so later
+   * settlement still targets where the invocation was first persisted.
+   */
+  register({
+    toolCallId,
+    runId,
+    toolName,
+    threadId,
+    resourceId,
+  }: {
+    toolCallId: string;
+    runId: string;
+    toolName: string;
+    threadId: string;
+    resourceId: string;
+  }): void {
+    const existing = this.#pending.get(toolCallId);
+    if (existing && existing.runId === runId) {
+      this.#pending.set(toolCallId, { ...existing, toolName });
+      return;
+    }
+    this.#pending.set(toolCallId, { runId, toolName, threadId, resourceId });
   }
 
   /** The parked suspension for `toolCallId`, or undefined when none. */
@@ -1175,10 +1218,12 @@ export class SessionSuspensions {
 
   /**
    * Drop all parked suspensions (e.g. on abort or thread switch), returning the
-   * dropped entries so callers can retract the corresponding prompts.
+   * dropped entries — including each suspension's original thread/resource
+   * binding — so callers can retract the corresponding prompts and settle each
+   * invocation where it was persisted.
    */
-  clear(): Array<{ toolCallId: string; toolName: string }> {
-    const dropped = [...this.#pending].map(([toolCallId, { toolName }]) => ({ toolCallId, toolName }));
+  clear(): Array<{ toolCallId: string } & PendingSuspension> {
+    const dropped = [...this.#pending].map(([toolCallId, suspension]) => ({ toolCallId, ...suspension }));
     this.#pending.clear();
     return dropped;
   }
@@ -1965,6 +2010,13 @@ class SessionPermissions {
   }
 }
 
+/**
+ * How long a message submitted right after an abort waits for the aborted run
+ * to finish tearing down before it is dispatched anyway. Real teardown includes
+ * stream cancellation and every output processor; a few seconds is normal.
+ */
+const POST_ABORT_TEARDOWN_TIMEOUT_MS = 30_000;
+
 /** Stamp at submit time: a steer aborts its own run, so the route resolved downstream reads idle. */
 function asInterjection(signal: CreatedAgentSignal): CreatedAgentSignal {
   if (signal.type !== 'user' || signal.attributes?.delivery !== undefined) return signal;
@@ -2121,9 +2173,14 @@ class SessionState<TState = unknown> {
     return defaults as Partial<TState>;
   }
 
-  private async apply(updates: Partial<TState>, persistSetting?: PersistSettingFn): Promise<void> {
+  private async apply(
+    updates: Partial<TState>,
+    persistSetting?: PersistSettingFn,
+    shouldApply?: () => boolean,
+  ): Promise<boolean> {
     const changedKeys = Object.keys(updates as Record<string, unknown>);
     const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
+    let validatedState: TState;
 
     if (this.#schema) {
       const result = await this.#schema['~standard'].validate(newState);
@@ -2131,10 +2188,16 @@ class SessionState<TState = unknown> {
         const messages = result.issues.map(i => i.message).join('; ');
         throw new Error(`Invalid state update: ${messages}`);
       }
-      this.#state = result.value as TState;
+      validatedState = result.value as TState;
     } else {
-      this.#state = newState as TState;
+      validatedState = newState as TState;
     }
+
+    // Re-check after async schema validation, immediately before mutating the
+    // live session. Callers use this to prevent a queued update from crossing
+    // a session/thread ownership boundary while validation was in flight.
+    if (shouldApply && !shouldApply()) return false;
+    this.#state = validatedState;
 
     this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
 
@@ -2152,6 +2215,7 @@ class SessionState<TState = unknown> {
         }
       }
     }
+    return true;
   }
 
   set(updates: Partial<TState>): Promise<void> {
@@ -2159,7 +2223,21 @@ class SessionState<TState = unknown> {
     // Captured now, not at apply time: an update queued behind a thread switch
     // must persist to the thread that was active when the update was requested.
     const persistSetting = this.#capturePersistSetting?.();
-    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, persistSetting));
+    const run = this.#updateQueue.then(async () => {
+      await this.apply(updateSnapshot, persistSetting);
+    });
+    this.#updateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /** Apply an update only while a caller-owned identity still matches. */
+  setIf(updates: Partial<TState>, shouldApply: () => boolean): Promise<boolean> {
+    const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
+    const persistSetting = this.#capturePersistSetting?.();
+    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, persistSetting, shouldApply));
     this.#updateQueue = run.then(
       () => undefined,
       () => undefined,
@@ -3226,7 +3304,8 @@ export class Session<TState = unknown> {
     // Retract the prompts for every parked suspension. Dropping them silently
     // left the UI rendering `ask_user` / `request_access` prompts whose answers
     // could never land, since the run they belong to is gone.
-    for (const { toolCallId, toolName } of this.suspensions.clear()) {
+    const suspendedToolCalls = this.suspensions.clear();
+    for (const { toolCallId, toolName } of suspendedToolCalls) {
       this.emit({ type: 'tool_suspension_cancelled', toolCallId, toolName, reason: ABORTED_BY_USER_REASON });
     }
 
@@ -3237,9 +3316,25 @@ export class Session<TState = unknown> {
     // active or suspended run". Defer both the stream abort and the abort
     // signal to the engine, which fires them once the decline has landed.
     const wasGated = this.approval.isArmed();
-    this.approval.cancel();
     if (wasGated) {
       this.run.requestAbort({ deferSignal: true });
+      if (suspendedToolCalls.length === 0) {
+        this.approval.cancel();
+        return;
+      }
+      void this.runEngine
+        .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
+        .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
+        .finally(() => this.approval.cancel());
+      return;
+    }
+
+    if (suspendedToolCalls.length > 0) {
+      this.run.requestAbort({ deferSignal: true });
+      void this.runEngine
+        .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
+        .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
+        .finally(() => this.completeDeferredAbort());
       return;
     }
 
@@ -3309,9 +3404,10 @@ export class Session<TState = unknown> {
 
   /**
    * Respond to the parked tool-approval gate with the user's decision. A no-op
-   * when nothing is awaiting approval. "always_allow_category" grants the gated
-   * tool's category for the rest of the session (resolved via the injected
-   * {@link setCategoryResolver}) and then approves; "approve"/"decline" release
+   * when nothing is awaiting approval or the run is already aborting.
+   * "always_allow_category" grants the gated tool's category for the rest of
+   * the session (resolved via the injected {@link setCategoryResolver}) and then
+   * approves; "approve"/"decline" release
    * the run as-is.
    */
   respondToToolApproval({
@@ -3325,6 +3421,7 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
   }): void {
+    if (this.run.isAbortRequested()) return;
     this.approval.respond({
       decision,
       toolCallId,
@@ -3381,6 +3478,34 @@ export class Session<TState = unknown> {
     });
 
     return [{ type: 'text', text: content }, ...fileParts];
+  }
+
+  /**
+   * Watch for the live subscription's next teardown (detach or cleanup). The run
+   * engine detaches an aborted subscription only after that run has ended, so
+   * work that must land on a fresh subscription waits for this first. Register
+   * it before awaiting anything, while the aborted handle is still attached.
+   */
+  #watchStreamTeardown(): { wait: (timeoutMs: number) => Promise<void>; cancel: () => void } {
+    const watcher = new AbortController();
+    const teardown = this.stream.waitForTeardown(watcher.signal);
+    return {
+      wait: async timeoutMs => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            teardown,
+            new Promise<void>(resolve => {
+              timer = setTimeout(resolve, timeoutMs);
+            }),
+          ]);
+        } finally {
+          if (timer) clearTimeout(timer);
+          watcher.abort();
+        }
+      },
+      cancel: () => watcher.abort(),
+    };
   }
 
   /**
@@ -3537,6 +3662,10 @@ export class Session<TState = unknown> {
     const submittedAbortRequested = this.run.isAbortRequested();
     const submittedWhileWorking =
       submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
+    // Registered before any await: resolves when the aborted live subscription is
+    // detached, which the run engine does only after that run has ended.
+    const abortedStreamTeardown =
+      submittedAbortRequested && !submittedIsRunning && this.stream.isOpen() ? this.#watchStreamTeardown() : undefined;
     const submitted = createSignal(
       'content' in input
         ? {
@@ -3609,22 +3738,52 @@ export class Session<TState = unknown> {
       // Only do this in the post-abort window (an abort was requested but the
       // run hasn't reset yet) so normal idle signals aren't delayed.
       if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
-        const idle = await this.waitForStreamIdle();
-        // On the normal path the abort teardown detached the live subscription
-        // while we waited, so the handle captured by the earlier
-        // `ensureSubscription` is now dead and re-ensuring genuinely
-        // re-subscribes. But when `waitForStreamIdle` times out the old run is
-        // still finalizing with its subscription live and matching, so
-        // `ensureSubscription` would short-circuit to a no-op and dispatch onto
-        // the still-aborting run. Force teardown of the stale subscription first
-        // so the re-ensure always attaches a fresh one — otherwise the new run
-        // starts with no native subscription and its `agent_start`/`agent_end`
-        // never reach the session, leaving `run.isRunning()` stuck true.
+        // A deferred abort (parked approval gate) streams nothing and only
+        // leaves once the gated call is declined, so the short wait is enough.
+        // A normal abort tears down for real: the model stream has to cancel
+        // and the output processors (memory, billing, ...) still run on the
+        // partial result, which takes longer than a second. Dispatching before
+        // that completes hands the new message to the dying run, which drops
+        // it, so wait for the real teardown before falling back below.
+        const teardownDeadline = Date.now() + POST_ABORT_TEARDOWN_TIMEOUT_MS;
+        const idle = await this.waitForStreamIdle(submittedIsRunning ? undefined : POST_ABORT_TEARDOWN_TIMEOUT_MS);
+        // The stream can read idle before the run engine detaches the aborted
+        // subscription (it detaches, then resets the run). Ensuring the
+        // subscription in that gap reuses the handle about to be detached, and
+        // the new run's events never reach this session: wait for the detach.
+        if (idle && abortedStreamTeardown && this.run.isAbortRequested()) {
+          await abortedStreamTeardown.wait(Math.max(0, teardownDeadline - Date.now()));
+        }
         if (!idle) {
+          // On the normal path the abort teardown detached the live subscription
+          // while we waited, so the handle captured by the earlier
+          // `ensureSubscription` is now dead and re-ensuring genuinely
+          // re-subscribes. But when `waitForStreamIdle` times out the old run is
+          // still finalizing with its subscription live and matching, so
+          // `ensureSubscription` would short-circuit to a no-op and dispatch onto
+          // the still-aborting run. Force teardown of the stale subscription first
+          // so the re-ensure always attaches a fresh one — otherwise the new run
+          // starts with no native subscription and its `agent_start`/`agent_end`
+          // never reach the session, leaving `run.isRunning()` stuck true.
           this.thread.cleanupSubscription();
         }
         await this.thread.ensureSubscription(threadId, agent);
+      } else if (abortedStreamTeardown) {
+        // Stop on a run parked on a tool suspension leaves no run id behind,
+        // but the stopped run's subscription is still attached and is about to
+        // deliver the Stop and detach. Sending on it hands the new run's first
+        // event to the stopped run, which is ended as aborted and detached, so
+        // the new run's end never reaches this session. Wait briefly for that
+        // detach; if it never comes, drop the subscription and the abort state
+        // here. Either way the new run starts on a fresh subscription.
+        await abortedStreamTeardown.wait(1_000);
+        if (this.stream.isOpen() && this.run.isAbortRequested()) {
+          this.thread.cleanupSubscription();
+          this.run.reset();
+        }
+        await this.thread.ensureSubscription(threadId, agent);
       }
+      abortedStreamTeardown?.cancel();
 
       const streamOptions = await this.machinery.buildStreamOptions({
         requestContext: requestContextInput,
