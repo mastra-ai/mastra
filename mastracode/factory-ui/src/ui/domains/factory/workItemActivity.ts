@@ -66,7 +66,10 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
  */
 function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined {
   if (item.source === 'gitlab-issue' || item.source === 'gitlab-pr') {
-    const assignee = metadataString(item.metadata, 'assignee');
+    const assignees = item.metadata.assignees;
+    const assignee =
+      metadataString(item.metadata, 'assignee') ??
+      (Array.isArray(assignees) ? assignees.find(value => typeof value === 'string' && value.trim())?.trim() : undefined);
     return assignee ? { id: `gitlab:${assignee}`, name: assignee } : undefined;
   }
   if (item.source === 'linear-issue') {
