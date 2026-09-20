@@ -17,6 +17,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { RouteAuth } from '../../../routes/route.js';
+import type { KnowledgeImporterRoutingStorage } from '../../../storage/domains/importer-routing/base.js';
+import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import { PlatformApiClient, PlatformApiError } from '../api-client.js';
 
 type RouteContext = Context;
@@ -95,6 +97,14 @@ export interface PlatformCatalogRow {
 export interface BuildPlatformConnectRoutesOptions {
   auth: RouteAuth;
   client: PlatformApiClient;
+  /**
+   * Per-connection knowledge-import routing persistence. When present, the
+   * `GET/PUT .../connections/:connectionId/routing` routes are mounted so the
+   * SPA can direct each connection's imports to all or selected projects.
+   * `projects` validates selected ids against the org's project inventory.
+   */
+  routing?: KnowledgeImporterRoutingStorage;
+  projects?: FactoryProjectsStorage;
 }
 
 async function resolveOrgTenant(
@@ -170,7 +180,7 @@ async function buildCatalogSnapshot(client: PlatformApiClient): Promise<Platform
 }
 
 export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOptions): ApiRoute[] {
-  const { auth, client } = options;
+  const { auth, client, routing, projects } = options;
 
   let cache: { rows: PlatformCatalogRow[]; fetchedAt: number } | null = null;
   /** In-flight request de-duplication so a burst of card renders shares one call. */
@@ -261,6 +271,101 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
         }
       },
     }),
+    ...(routing
+      ? [
+          registerApiRoute('/web/integrations/platform/:provider/connections/:connectionId/routing', {
+            method: 'GET',
+            requiresAuth: false,
+            handler: async rawContext => {
+              const c = loose(rawContext);
+              const provider = providerFromParam(c);
+              if (!provider) return c.json({ error: 'unknown_provider' }, 404);
+              const resolved = await resolveOrgTenant(c, auth);
+              if ('response' in resolved) return resolved.response;
+              const connectionId = c.req.param('connectionId');
+              if (!connectionId) return c.json({ error: 'connection_required' }, 400);
+              await routing.ensureReady();
+              const record = await routing.get(connectionId);
+              return c.json({
+                routing: record
+                  ? { mode: record.mode, projectIds: record.projectIds }
+                  : { mode: 'all', projectIds: [] },
+              });
+            },
+          }),
+          registerApiRoute('/web/integrations/platform/:provider/connections/:connectionId/routing', {
+            method: 'PUT',
+            requiresAuth: false,
+            handler: async rawContext => {
+              const c = loose(rawContext);
+              const provider = providerFromParam(c);
+              if (!provider) return c.json({ error: 'unknown_provider' }, 404);
+              const resolved = await resolveOrgTenant(c, auth);
+              if ('response' in resolved) return resolved.response;
+              const connectionId = c.req.param('connectionId');
+              if (!connectionId) return c.json({ error: 'connection_required' }, 400);
+
+              const body = (await c.req.json().catch(() => null)) as {
+                mode?: unknown;
+                projectIds?: unknown;
+              } | null;
+              const mode = body?.mode;
+              if (mode !== 'all' && mode !== 'selected') {
+                return c.json({ error: 'invalid_mode', message: "mode must be 'all' or 'selected'." }, 400);
+              }
+              let projectIds: string[] = [];
+              if (mode === 'selected') {
+                const raw = body?.projectIds;
+                if (!Array.isArray(raw) || raw.some(id => typeof id !== 'string' || !id.trim())) {
+                  return c.json(
+                    { error: 'invalid_project_ids', message: 'projectIds must be an array of project ids.' },
+                    400,
+                  );
+                }
+                projectIds = [...new Set(raw as string[])];
+                if (projects) {
+                  await projects.ensureReady();
+                  const known = new Set((await projects.list({ orgId: resolved.tenant.orgId })).map(p => p.id));
+                  const unknown = projectIds.filter(id => !known.has(id));
+                  if (unknown.length > 0) {
+                    return c.json(
+                      { error: 'unknown_project', message: `Unknown project id(s): ${unknown.join(', ')}` },
+                      400,
+                    );
+                  }
+                }
+              }
+
+              try {
+                // Same ownership guard as reconnect-session: the connection
+                // must belong to this provider's integration ids so one
+                // provider's page cannot re-route another provider's sync.
+                const listed = await client.request<{ connections: PlatformConnectionRow[] }>(
+                  'GET',
+                  '/v2/connections',
+                );
+                const connection = listed.connections.find(
+                  candidate =>
+                    candidate.id === connectionId &&
+                    provider.connectionIntegrationIds.includes(candidate.integrationId),
+                );
+                if (!connection) return c.json({ error: 'connection_not_found' }, 404);
+                await routing.ensureReady();
+                const record = await routing.set({
+                  orgId: resolved.tenant.orgId,
+                  connectionId,
+                  integrationId: connection.integrationId,
+                  mode,
+                  projectIds,
+                });
+                return c.json({ routing: { mode: record.mode, projectIds: record.projectIds } });
+              } catch (err) {
+                return platformError(c, err);
+              }
+            },
+          }),
+        ]
+      : []),
     registerApiRoute('/web/integrations/platform/:provider/connections/:connectionId/reconnect-session', {
       method: 'POST',
       requiresAuth: false,

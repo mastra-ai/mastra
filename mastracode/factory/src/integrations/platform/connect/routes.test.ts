@@ -1,8 +1,11 @@
+import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
+import { KnowledgeImporterRoutingStorage } from '../../../storage/domains/importer-routing/base.js';
+import { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import { PlatformApiClient } from '../api-client.js';
 import { buildPlatformConnectRoutes, PLATFORM_CONNECT_PROVIDERS } from './routes.js';
 
@@ -22,7 +25,11 @@ function connection(id: string, integrationId: string, status: 'active' | 'needs
   return { id, integrationId, status, accountLabel: `${integrationId}-account`, displayName: null };
 }
 
-function buildApp(user: TestAuthUser | null, fetchImpl: typeof fetch, options: { authEnabled?: boolean } = {}): Hono {
+function buildApp(
+  user: TestAuthUser | null,
+  fetchImpl: typeof fetch,
+  options: { authEnabled?: boolean; routing?: KnowledgeImporterRoutingStorage; projects?: FactoryProjectsStorage } = {},
+): Hono {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -37,9 +44,19 @@ function buildApp(user: TestAuthUser | null, fetchImpl: typeof fetch, options: {
         accessToken: 'platform-secret',
         fetchImpl,
       }),
+      routing: options.routing,
+      projects: options.projects,
     }),
   );
   return app;
+}
+
+/** Real in-memory storage with the routing + projects domains registered. */
+function routingFixtures() {
+  const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'routing-routes-test' });
+  const routing = storage.registerDomain(new KnowledgeImporterRoutingStorage());
+  const projects = storage.registerDomain(new FactoryProjectsStorage());
+  return { storage, routing, projects };
 }
 
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
@@ -118,6 +135,85 @@ describe('platform connect routes', () => {
     );
     expect(crossProvider.status).toBe(404);
     await expect(crossProvider.json()).resolves.toEqual({ error: 'connection_not_found' });
+  });
+
+  describe('per-connection routing', () => {
+    const listWithNotion = async () => json({ connections: [connection('conn-notion', 'notion')] });
+
+    it('defaults to mode all when no routing was ever saved', async () => {
+      const { routing } = routingFixtures();
+      const app = buildApp(org1(), vi.fn<typeof fetch>(), { routing });
+
+      const response = await app.request('/web/integrations/platform/notion/connections/conn-notion/routing');
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ routing: { mode: 'all', projectIds: [] } });
+    });
+
+    it('round-trips a selected-projects routing through PUT and GET', async () => {
+      const { routing, projects } = routingFixtures();
+      await projects.ensureReady();
+      const project = await projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'Alpha' } });
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(listWithNotion);
+      const app = buildApp(org1(), fetchImpl, { routing, projects });
+
+      const put = await app.request('/web/integrations/platform/notion/connections/conn-notion/routing', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mode: 'selected', projectIds: [project.id] }),
+      });
+      expect(put.status).toBe(200);
+      await expect(put.json()).resolves.toEqual({ routing: { mode: 'selected', projectIds: [project.id] } });
+
+      const get = await app.request('/web/integrations/platform/notion/connections/conn-notion/routing');
+      await expect(get.json()).resolves.toEqual({ routing: { mode: 'selected', projectIds: [project.id] } });
+
+      // Switching back to all clears the selection.
+      const reset = await app.request('/web/integrations/platform/notion/connections/conn-notion/routing', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mode: 'all' }),
+      });
+      await expect(reset.json()).resolves.toEqual({ routing: { mode: 'all', projectIds: [] } });
+    });
+
+    it('rejects invalid modes, malformed project ids, and unknown projects', async () => {
+      const { routing, projects } = routingFixtures();
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(listWithNotion);
+      const app = buildApp(org1(), fetchImpl, { routing, projects });
+      const putRouting = (body: unknown) =>
+        app.request('/web/integrations/platform/notion/connections/conn-notion/routing', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+      expect((await putRouting({ mode: 'some' })).status).toBe(400);
+      expect((await putRouting({ mode: 'selected', projectIds: 'p1' })).status).toBe(400);
+      expect((await putRouting({ mode: 'selected', projectIds: [''] })).status).toBe(400);
+      const unknown = await putRouting({ mode: 'selected', projectIds: ['ghost'] });
+      expect(unknown.status).toBe(400);
+      await expect(unknown.json()).resolves.toMatchObject({ error: 'unknown_project' });
+    });
+
+    it('refuses to save routing for a connection another provider owns', async () => {
+      const { routing } = routingFixtures();
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(listWithNotion);
+      const app = buildApp(org1(), fetchImpl, { routing });
+
+      const response = await app.request('/web/integrations/platform/linear/connections/conn-notion/routing', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mode: 'all' }),
+      });
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toEqual({ error: 'connection_not_found' });
+    });
+
+    it('mounts no routing routes when the storage domain is absent', async () => {
+      const app = buildApp(org1(), vi.fn<typeof fetch>());
+      const response = await app.request('/web/integrations/platform/notion/connections/conn-notion/routing');
+      expect(response.status).toBe(404);
+    });
   });
 
   it('rejects unknown providers, signed-out callers, and personal accounts', async () => {

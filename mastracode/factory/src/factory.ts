@@ -109,6 +109,7 @@ import type { WorkItemFeedPublisher } from './storage/domains/comments/feed-sync
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
+import { KnowledgeImporterRoutingStorage } from './storage/domains/importer-routing/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
@@ -548,6 +549,9 @@ export class MastraFactory {
     // default persistence surface for integrations without a bespoke domain.
     const integrationStorage = storage.registerDomain(new IntegrationStorage(secretEncryption));
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
+    // Per-connection knowledge-import routing (all projects vs a selected
+    // subset) — read by the routing routes and the project scopes resolver.
+    const importerRoutingStorage = storage.registerDomain(new KnowledgeImporterRoutingStorage());
     const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
@@ -1160,6 +1164,8 @@ export class MastraFactory {
             ? buildPlatformConnectRoutes({
                 auth: routeAuth,
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+                routing: importerRoutingStorage,
+                projects: factoryProjectsStorage,
               })
             : []),
         ],
