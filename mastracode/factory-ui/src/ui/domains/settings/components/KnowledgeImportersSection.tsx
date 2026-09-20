@@ -90,7 +90,7 @@ function ConnectionLabels({
               </Txt>
               {connectedAt && (
                 <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
-                  · {connectedAt}
+                  · Connected at: {connectedAt}
                 </Txt>
               )}
             </span>
