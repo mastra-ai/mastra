@@ -33,6 +33,7 @@ function issueOpened(deliveryId = 'delivery-1', author = 'maintainer') {
         created_at: '2030-01-01T00:00:00Z',
         author: { username: author },
       },
+      assignees: [{ username: 'grace' }],
       labels: [{ title: 'bug', color: '#428BCA' }],
     },
   } as const;
@@ -63,6 +64,8 @@ function mergeRequestOpened(deliveryId = 'delivery-mr-1', author = 'maintainer')
         target_branch: 'main',
         author: { username: author },
       },
+      assignees: [{ username: 'grace' }],
+      reviewers: [{ username: 'linus' }],
     },
   } as const;
 }
@@ -196,6 +199,7 @@ describe('GitLabRules', () => {
           identifier: 'acme/app#42',
           authorTrusted: true,
           autoStartCandidate: true,
+          assignees: ['grace'],
           labelColors: { bug: '#428BCA' },
         },
       },
@@ -340,6 +344,8 @@ describe('GitLabRules', () => {
             gitlabProjectId: 101,
             gitlabMergeRequestIid: 17,
             authorTrusted: true,
+            assignees: ['grace'],
+            requestedReviewers: ['linus'],
             headBranch: 'feature-17',
             baseBranch: 'main',
           },
