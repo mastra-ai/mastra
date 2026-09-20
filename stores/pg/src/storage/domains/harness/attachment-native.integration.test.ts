@@ -26,19 +26,39 @@ import { TEST_CONFIG } from '../../test-utils';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
+interface OwnerGate {
+  markStarted: () => void;
+  started: Promise<void>;
+  released: Promise<void>;
+  markReleased: () => void;
+  startedFired: boolean;
+  releasedFired: boolean;
+}
+
+function createOwnerGate(): OwnerGate {
+  let start!: () => void;
+  let release!: () => void;
+  const gate = {
+    started: new Promise<void>(resolve => (start = resolve)),
+    released: new Promise<void>(resolve => (release = resolve)),
+    startedFired: false,
+    releasedFired: false,
+    markStarted() {
+      gate.startedFired = true;
+      start();
+    },
+    markReleased() {
+      gate.releasedFired = true;
+      release();
+    },
+  };
+  return gate;
+}
+
 class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
   readonly #delegate = new InMemoryHarnessAttachmentByteOwner({ providerId: 'native-integration-test' });
-  #saveStarted: (() => void) | undefined;
-  #saveRelease: (() => void) | undefined;
-  #saveStartedPromise: Promise<void> | undefined;
-  #deleteGates: {
-    markStarted: () => void;
-    started: Promise<void>;
-    released: Promise<void>;
-    markReleased: () => void;
-    startedFired: boolean;
-    releasedFired: boolean;
-  }[] = [];
+  #saveGates: OwnerGate[] = [];
+  #deleteGates: OwnerGate[] = [];
   #cancelStarted: (() => void) | undefined;
   #cancelRelease: (() => void) | undefined;
   #cancelStartedPromise: Promise<void> | undefined;
@@ -46,40 +66,35 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
   failSaveOnce = false;
   unknownDeleteOnce = false;
 
+  reset(): void {
+    for (const gate of [...this.#saveGates, ...this.#deleteGates]) gate.markReleased();
+    this.#saveGates = [];
+    this.#deleteGates = [];
+    this.#cancelStarted = undefined;
+    this.#cancelRelease?.();
+    this.#cancelRelease = undefined;
+    this.#cancelStartedPromise = undefined;
+    this.unknownSaveOnce = false;
+    this.failSaveOnce = false;
+    this.unknownDeleteOnce = false;
+  }
+
   pauseNextSave(): void {
-    this.#saveStartedPromise = new Promise(resolve => {
-      this.#saveStarted = resolve;
-    });
-    this.#saveRelease = undefined;
+    this.#saveGates.push(createOwnerGate());
   }
 
   async waitForSaveStarted(): Promise<void> {
-    await this.#saveStartedPromise;
+    const gate = this.#saveGates.find(g => !g.startedFired);
+    if (!gate) throw new Error('no paused save is armed');
+    await gate.started;
   }
 
   releaseSave(): void {
-    this.#saveRelease?.();
-    this.#saveRelease = undefined;
+    this.#saveGates.find(g => g.startedFired && !g.releasedFired)?.markReleased();
   }
 
   pauseNextDelete(): void {
-    let start!: () => void;
-    let release!: () => void;
-    const gate = {
-      started: new Promise<void>(resolve => (start = resolve)),
-      released: new Promise<void>(resolve => (release = resolve)),
-      startedFired: false,
-      releasedFired: false,
-      markStarted() {
-        gate.startedFired = true;
-        start();
-      },
-      markReleased() {
-        gate.releasedFired = true;
-        release();
-      },
-    };
-    this.#deleteGates.push(gate);
+    this.#deleteGates.push(createOwnerGate());
   }
 
   async waitForDeleteStarted(): Promise<void> {
@@ -114,12 +129,10 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
       throw new Error('simulated upload failure');
     }
     const result = await this.#delegate.save(input);
-    if (this.#saveStarted !== undefined) {
-      this.#saveStarted();
-      this.#saveStarted = undefined;
-      await new Promise<void>(resolve => {
-        this.#saveRelease = resolve;
-      });
+    const gate = this.#saveGates.find(g => !g.startedFired);
+    if (gate) {
+      gate.markStarted();
+      await gate.released;
     }
     if (this.unknownSaveOnce) {
       this.unknownSaveOnce = false;
@@ -175,6 +188,7 @@ describe('HarnessPG native external attachment ownership', () => {
   });
 
   beforeEach(async () => {
+    owner.reset();
     await store.stores.harness!.dangerouslyClearAll();
   });
 
@@ -840,5 +854,185 @@ describe('HarnessPG native external attachment ownership', () => {
       await altStore.db.none(`DROP SCHEMA IF EXISTS "${altSchema}" CASCADE`).catch(() => {});
       await altStore.close();
     }
+  });
+
+  it('keeps a renewed reservation when an overlapping upload fails late', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-late-failure',
+      resourceId: 'late-failure-resource',
+      threadId: 'late-failure-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'late-failure-owner', ttlMs: 60_000 },
+    });
+    const input = {
+      sessionId: session.id,
+      attachmentId: 'overlapping',
+      name: 'overlapping.txt',
+      mimeType: 'text/plain',
+      source: 'inline' as const,
+      data: new TextEncoder().encode('overlapping upload'),
+    };
+
+    // Park both uploads against the shared operation; the second reservation
+    // renews its deferral while the first upload is still in flight.
+    owner.pauseNextSave();
+    owner.pauseNextSave();
+    owner.unknownSaveOnce = true;
+    const first = harness.saveAttachment(input);
+    await owner.waitForSaveStarted();
+    const second = harness.saveAttachment(input);
+    await owner.waitForSaveStarted();
+
+    // The first attempt reports an ambiguous failure only after the second
+    // renewed the reservation. Its failure transition must not pull the
+    // deadline back underneath the still-running upload — otherwise a sweep
+    // could claim and cancel the operation mid-upload.
+    owner.releaseSave();
+    await expect(first).rejects.toBeInstanceOf(HarnessStorageAttachmentPendingError);
+    const deferred = await store.db.one<{ next_attempt_at: string }>(
+      `SELECT next_attempt_at FROM "${schemaName}"."mastra_harness_attachment_operations"
+       WHERE kind = 'put' AND attachment_id = $1`,
+      ['overlapping'],
+    );
+    expect(Number(deferred.next_attempt_at)).toBeGreaterThan(Date.now() + 30_000);
+    await expect(harness.reconcileAttachmentOperations({ now: Date.now() + 2_000 })).resolves.toMatchObject({
+      processed: 0,
+    });
+
+    owner.releaseSave();
+    await expect(second).resolves.toMatchObject({ attachmentId: 'overlapping' });
+    const operation = await store.db.one<{ status: string }>(
+      `SELECT status FROM "${schemaName}"."mastra_harness_attachment_operations"
+       WHERE kind = 'put' AND attachment_id = $1`,
+      ['overlapping'],
+    );
+    expect(operation.status).toBe('completed');
+    await expect(harness.loadAttachment({ sessionId: session.id, attachmentId: 'overlapping' })).resolves.toMatchObject(
+      { name: 'overlapping.txt' },
+    );
+  });
+
+  it('adopts the committed row when a third identical save races a lost-insert reload', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-deadlock',
+      resourceId: 'deadlock-resource',
+      threadId: 'deadlock-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'deadlock-owner', ttlMs: 60_000 },
+    });
+    const input = {
+      sessionId: session.id,
+      attachmentId: 'raced',
+      name: 'raced.txt',
+      mimeType: 'text/plain',
+      source: 'inline' as const,
+      data: new TextEncoder().encode('raced upload'),
+    };
+
+    // Intercept pooled connections so transaction internals stay observable:
+    // the operation-row FOR UPDATE the commit phase takes, and the attachment
+    // row reads that establish who saw what. This reproduces the three-way
+    // interleave where the loser of a first-save insert race holds the
+    // operation lock while a third saver's reservation holds the attachment
+    // lock — the reload between them must not acquire the attachment lock
+    // again or PostgreSQL reports 40P01.
+    let commitOpReads = 0;
+    let phase: 'start' | 'b-empty' | 'c-holds-row' = 'start';
+    let firstOpHeld!: () => void;
+    let releaseFirstOp!: () => void;
+    let secondOpHeld!: () => void;
+    let releaseSecondOp!: () => void;
+    let bSawEmpty!: () => void;
+    let cHasRow!: () => void;
+    const firstHeld = new Promise<void>(resolve => (firstOpHeld = resolve));
+    const firstRelease = new Promise<void>(resolve => (releaseFirstOp = resolve));
+    const secondHeld = new Promise<void>(resolve => (secondOpHeld = resolve));
+    const secondRelease = new Promise<void>(resolve => (releaseSecondOp = resolve));
+    const bEmpty = new Promise<void>(resolve => (bSawEmpty = resolve));
+    const cRow = new Promise<void>(resolve => (cHasRow = resolve));
+
+    const db = store.db as unknown as {
+      connect: () => Promise<{
+        query: (query: string, values?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
+        release: () => void;
+      }>;
+    };
+    const originalConnect = db.connect.bind(store.db);
+    db.connect = async () => {
+      const connection = await originalConnect();
+      return {
+        release: connection.release.bind(connection),
+        async query(query: string, values?: unknown[]) {
+          const result = await connection.query(query, values);
+          if (
+            query.startsWith('SELECT *') &&
+            query.includes('mastra_harness_attachment_operations') &&
+            query.includes('WHERE id = $1 FOR UPDATE')
+          ) {
+            commitOpReads += 1;
+            if (commitOpReads === 1) {
+              firstOpHeld();
+              await firstRelease;
+            }
+            if (commitOpReads === 2) {
+              secondOpHeld();
+              await secondRelease;
+            }
+          }
+          if (
+            query.startsWith('SELECT *') &&
+            query.includes('mastra_harness_attachments') &&
+            query.includes('FOR UPDATE')
+          ) {
+            if (phase === 'b-empty' && result.rows.length === 0) bSawEmpty();
+            if (phase === 'c-holds-row' && result.rows.length === 1) cHasRow();
+          }
+          return result;
+        },
+      };
+    };
+
+    try {
+      owner.pauseNextSave();
+      owner.pauseNextSave();
+      const firstSave = harness.saveAttachment(input).catch((error: unknown) => error);
+      await owner.waitForSaveStarted();
+      const secondSave = harness.saveAttachment(input).catch((error: unknown) => error);
+      await owner.waitForSaveStarted();
+
+      // First saver commits the row while holding the operation lock.
+      owner.releaseSave();
+      await firstHeld;
+      // Second saver reads the attachment row as absent, then parks on the
+      // operation lock the first saver still holds.
+      phase = 'b-empty';
+      owner.releaseSave();
+      await bEmpty;
+      releaseFirstOp();
+      await expect(firstSave).resolves.toMatchObject({ attachmentId: 'raced' });
+      await secondHeld;
+      // Third saver's reservation takes the attachment row lock — the row now
+      // exists — then waits on the operation lock the second saver holds.
+      phase = 'c-holds-row';
+      const thirdSave = harness.saveAttachment(input).catch((error: unknown) => error);
+      await cRow;
+      releaseSecondOp();
+
+      await expect(secondSave).resolves.toMatchObject({ attachmentId: 'raced' });
+      await expect(thirdSave).resolves.toMatchObject({ attachmentId: 'raced' });
+    } finally {
+      db.connect = originalConnect;
+      releaseFirstOp();
+      releaseSecondOp();
+      owner.releaseSave();
+      owner.releaseSave();
+    }
+    await expect(harness.loadAttachment({ sessionId: session.id, attachmentId: 'raced' })).resolves.toMatchObject({
+      name: 'raced.txt',
+    });
   });
 });

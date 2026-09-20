@@ -3079,7 +3079,9 @@ export class HarnessPG extends HarnessStorage {
         mimeType,
       });
     } catch {
-      await this.#markAttachmentOperationUnknown(operation.id);
+      await this.#markAttachmentOperationUnknown(operation.id, {
+        observedNextAttemptAt: operation.nextAttemptAt,
+      });
       throw new HarnessStorageAttachmentPendingError(sessionId, attachmentId);
     }
     if (saved.outcome === 'unknown') {
@@ -3088,21 +3090,31 @@ export class HarnessPG extends HarnessStorage {
         blobRef =
           saved.blobRef === undefined ? undefined : validateAttachmentBlobRef(saved.blobRef, sessionId, attachmentId);
       } catch {
-        await this.#markAttachmentOperationUnknown(operation.id);
+        await this.#markAttachmentOperationUnknown(operation.id, {
+          observedNextAttemptAt: operation.nextAttemptAt,
+        });
         throw new HarnessStorageAttachmentPendingError(sessionId, attachmentId);
       }
-      await this.#markAttachmentOperationUnknown(operation.id, blobRef);
+      await this.#markAttachmentOperationUnknown(operation.id, {
+        blobRef,
+        observedNextAttemptAt: operation.nextAttemptAt,
+      });
       throw new HarnessStorageAttachmentPendingError(sessionId, attachmentId);
     }
     let savedBlobRef: string;
     try {
       savedBlobRef = validateAttachmentBlobRef(saved.blobRef, sessionId, attachmentId);
     } catch {
-      await this.#markAttachmentOperationUnknown(operation.id);
+      await this.#markAttachmentOperationUnknown(operation.id, {
+        observedNextAttemptAt: operation.nextAttemptAt,
+      });
       throw new HarnessStorageAttachmentPendingError(sessionId, attachmentId);
     }
     if (operation.blobRef !== undefined && operation.blobRef !== savedBlobRef) {
-      await this.#markAttachmentOperationUnknown(operation.id, operation.blobRef);
+      await this.#markAttachmentOperationUnknown(operation.id, {
+        blobRef: operation.blobRef,
+        observedNextAttemptAt: operation.nextAttemptAt,
+      });
       throw new HarnessStorageAttachmentConflictError(sessionId, attachmentId);
     }
 
@@ -3203,10 +3215,15 @@ export class HarnessPG extends HarnessStorage {
           // A concurrent identical save committed between the earlier FOR
           // UPDATE read and this insert. Reload the committed row and verify
           // it carries this operation's identity rather than failing on the
-          // lost insert race.
+          // lost insert race. Plain read: this transaction already holds the
+          // operation lock, and taking the attachment row lock here would
+          // invert the attachment→operation order every other path uses —
+          // a third save mid-reservation deadlocks against it. A concurrent
+          // delete committing in between linearizes as delete-after-save;
+          // its staged operation still reconciles the stored bytes.
           const reloaded = await commitTx.execute({
             sql: `SELECT * FROM ${TABLE_HARNESS_ATTACHMENTS}
-                  WHERE harness_name = ? AND session_id = ? AND attachment_id = ? FOR UPDATE`,
+                  WHERE harness_name = ? AND session_id = ? AND attachment_id = ?`,
             args: [namespace, sessionId, attachmentId],
           });
           const committed = reloaded.rows[0];
@@ -3242,12 +3259,18 @@ export class HarnessPG extends HarnessStorage {
         // The byte owner has already accepted this PUT. Preserve its exact
         // identity in the durable ledger even when metadata lost a same-ID
         // race, so a later reconciler can still make a cleanup decision.
-        await this.#markAttachmentOperationUnknown(operation.id, savedBlobRef);
+        await this.#markAttachmentOperationUnknown(operation.id, {
+          blobRef: savedBlobRef,
+          observedNextAttemptAt: operation.nextAttemptAt,
+        });
         throw err;
       }
       // A commit response/error is ambiguous: the durable operation remains
       // available for an exact retry and is never converted into success.
-      await this.#markAttachmentOperationUnknown(operation.id, savedBlobRef);
+      await this.#markAttachmentOperationUnknown(operation.id, {
+        blobRef: savedBlobRef,
+        observedNextAttemptAt: operation.nextAttemptAt,
+      });
       throw new HarnessStorageAttachmentPendingError(sessionId, attachmentId);
     }
   }
@@ -3968,7 +3991,11 @@ export class HarnessPG extends HarnessStorage {
     }
   }
 
-  async #markAttachmentOperationUnknown(operationId: string, blobRef?: string, claimId?: string): Promise<void> {
+  async #markAttachmentOperationUnknown(
+    operationId: string,
+    options: { blobRef?: string; claimId?: string; observedNextAttemptAt?: number } = {},
+  ): Promise<void> {
+    const { blobRef, claimId, observedNextAttemptAt } = options;
     // A caller holding an expired claim must not clear a fresher claim: the
     // first disjunct excludes every claimed row, the second admits only this
     // exact claim. Terminal transitions stay claim-gated either way, but
@@ -3979,15 +4006,22 @@ export class HarnessPG extends HarnessStorage {
       claimId === undefined
         ? ['completed', 'cleaned', 'claimed']
         : ['completed', 'cleaned', 'claimed', 'claimed', claimId];
+    // Only pull the deferral back to the short retry delay when nothing moved
+    // it past the deadline this attempt observed at reserve/claim time. A
+    // concurrent retry renewing the reservation mid-upload pushes
+    // next_attempt_at forward; a stale failure must not erase that window or
+    // a sweep could cancel the newer upload while it is still running.
     await this.#client.execute({
       sql: `UPDATE ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
             SET status = ?, blob_ref = COALESCE(?, blob_ref), claim_id = NULL,
-                claim_expires_at = NULL, next_attempt_at = ?, updated_at = ?,
-                last_error = ?
+                claim_expires_at = NULL,
+                next_attempt_at = CASE WHEN COALESCE(next_attempt_at, 0) <= ? THEN ? ELSE next_attempt_at END,
+                updated_at = ?, last_error = ?
             WHERE id = ? AND ${claimCondition}`,
       args: [
         'unknown',
         blobRef ?? null,
+        observedNextAttemptAt ?? 0,
         Date.now() + 1_000,
         Date.now(),
         JSON.stringify({ code: 'external_unknown' }),
@@ -4033,11 +4067,19 @@ export class HarnessPG extends HarnessStorage {
         expectedSha256: operation.sha256,
       });
     } catch {
-      await this.#markAttachmentOperationUnknown(operation.id, operation.blobRef, claimId);
+      await this.#markAttachmentOperationUnknown(operation.id, {
+        blobRef: operation.blobRef,
+        claimId,
+        observedNextAttemptAt: operation.nextAttemptAt,
+      });
       return false;
     }
     if (outcome.outcome === 'unknown') {
-      await this.#markAttachmentOperationUnknown(operation.id, operation.blobRef, claimId);
+      await this.#markAttachmentOperationUnknown(operation.id, {
+        blobRef: operation.blobRef,
+        claimId,
+        observedNextAttemptAt: operation.nextAttemptAt,
+      });
       return false;
     }
     await this.#markAttachmentOperationCleaned(operation.id, claimId);
@@ -4101,11 +4143,19 @@ export class HarnessPG extends HarnessStorage {
           maxBytes: DEFAULT_HARNESS_ATTACHMENT_MAX_BYTES,
         });
       } catch {
-        await this.#markAttachmentOperationUnknown(operationId, operation.blobRef, claimId);
+        await this.#markAttachmentOperationUnknown(operationId, {
+          blobRef: operation.blobRef,
+          claimId,
+          observedNextAttemptAt: operation.nextAttemptAt,
+        });
         return false;
       }
       if (data === null || data.byteLength !== operation.sizeBytes || sha256Hex(data) !== operation.sha256) {
-        await this.#markAttachmentOperationUnknown(operationId, operation.blobRef, claimId);
+        await this.#markAttachmentOperationUnknown(operationId, {
+          blobRef: operation.blobRef,
+          claimId,
+          observedNextAttemptAt: operation.nextAttemptAt,
+        });
         return false;
       }
       await this.#markAttachmentOperationCompleted(operationId, claimId);
@@ -4133,7 +4183,11 @@ export class HarnessPG extends HarnessStorage {
       // The claim just taken makes the row 'claimed', so the transition must
       // carry claimId — without it the update cannot match and the operation
       // would spin claim/abandon instead of becoming unknown.
-      await this.#markAttachmentOperationUnknown(operationId, operation?.blobRef, claimId);
+      await this.#markAttachmentOperationUnknown(operationId, {
+        blobRef: operation?.blobRef,
+        claimId,
+        observedNextAttemptAt: operation?.nextAttemptAt,
+      });
       if (throwOnUnknown)
         throw new HarnessStorageAttachmentPendingError(operation?.sessionId ?? '', operation?.attachmentId ?? '');
       return false;
@@ -4153,12 +4207,20 @@ export class HarnessPG extends HarnessStorage {
         expectedSha256: operation.sha256,
       });
     } catch {
-      await this.#markAttachmentOperationUnknown(operationId, operation.blobRef, claimId);
+      await this.#markAttachmentOperationUnknown(operationId, {
+        blobRef: operation.blobRef,
+        claimId,
+        observedNextAttemptAt: operation.nextAttemptAt,
+      });
       if (throwOnUnknown) throw new HarnessStorageAttachmentPendingError(operation.sessionId, operation.attachmentId);
       return false;
     }
     if (outcome.outcome === 'unknown') {
-      await this.#markAttachmentOperationUnknown(operationId, operation.blobRef, claimId);
+      await this.#markAttachmentOperationUnknown(operationId, {
+        blobRef: operation.blobRef,
+        claimId,
+        observedNextAttemptAt: operation.nextAttemptAt,
+      });
       if (throwOnUnknown) throw new HarnessStorageAttachmentPendingError(operation.sessionId, operation.attachmentId);
       return false;
     }
