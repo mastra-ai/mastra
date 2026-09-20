@@ -68,7 +68,6 @@ export function useBoardIntake({
 
   const config = configQuery.data;
   const gitlabStatusQuery = useGitLabStatusQuery(config?.gitlab.enabled ?? false);
-  const linearStatusQuery = useLinearStatusQuery();
   const githubEnabled = config?.github.enabled ?? true;
   const githubSelected = config ? (config.github.sourceIds?.includes(repository.slug) ?? false) : true;
   const gitlabConnected = Boolean(gitlabStatusQuery.data?.enabled && gitlabStatusQuery.data.configured);
@@ -117,7 +116,7 @@ export function useBoardIntake({
   // GitHub issues route by label: a label routed to a board sends its issues
   // there, and Work keeps every unrouted issue. A custom board only offers the
   // GitHub feed when at least one label is routed to it.
-  const labelRoutesQuery = useIntakeLabelRoutesQuery(review ? undefined : factoryProjectId);
+  const labelRoutesQuery = useIntakeLabelRoutesQuery(review || gitlabRepository ? undefined : factoryProjectId);
   const labelRoutes = useMemo(
     () => (labelRoutesQuery.data ?? []).filter(route => route.integrationId === 'github'),
     [labelRoutesQuery.data],
@@ -127,14 +126,15 @@ export function useBoardIntake({
   // flash cards routed elsewhere and a custom board would look empty. A failed
   // load is not "no routes" either, so the feed reports that error instead of
   // classifying every issue as Work.
-  const routesPending = !review && githubEnabled && githubSelected && labelRoutesQuery.isPending;
-  const routesFailed = !review && labelRoutesQuery.isError;
-  const routesSettled = review || labelRoutesQuery.isSuccess;
+  const routesPending = !review && !gitlabRepository && githubEnabled && githubSelected && labelRoutesQuery.isPending;
+  const routesFailed = !review && !gitlabRepository && labelRoutesQuery.isError;
+  const routesSettled = review || gitlabRepository || labelRoutesQuery.isSuccess;
 
   // Work intake owns issues; Review intake owns pull requests. Keeping the
   // feeds on separate routes prevents review-producing PR work from being
   // confused with the Work board's review-receiving lane.
-  const githubIntakeActive = (kind === 'work' || routedHere || routesFailed) && githubEnabled && githubSelected;
+  const githubIntakeActive =
+    !gitlabRepository && (kind === 'work' || routedHere || routesFailed) && githubEnabled && githubSelected;
   const available: IntakeSource[] = review
     ? [gitlabRepository ? 'gitlab-prs' : 'github-prs']
     : [
