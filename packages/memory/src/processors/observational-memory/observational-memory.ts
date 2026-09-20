@@ -92,9 +92,13 @@ export function buildMessageRange(messages: MastraDBMessage[]): string {
 }
 
 /**
- * Returns the unix-ms timestamp of the last non-data part in the last assistant
- * message, representing when the last visible LLM response completed. Used as the
- * last activity time for activateAfterIdle checks.
+ * Low-cost model `'auto'` resolves to, per actor provider.
+ *
+ * Google is the one entry that is not a literal: it reuses this package's own
+ * default observation model, which is newer than the consumer-side Gemini pack
+ * (`mastracode/sdk/src/onboarding/packs.ts` resolves `google/gemini-3.5-flash`).
+ * The two tables are intentionally separate — `@mastra/memory` cannot import
+ * from a consumer — so a Google de-duplication pass has to edit both.
  */
 const AUTO_MODEL_BY_PROVIDER: Record<string, string> = {
   google: OBSERVATIONAL_MEMORY_DEFAULTS.observation.model,
@@ -117,6 +121,11 @@ function hasGoogleGenerativeAIKey(): boolean {
   return typeof process !== 'undefined' && Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
 }
 
+/**
+ * Returns the unix-ms timestamp of the last non-data part in the last assistant
+ * message, representing when the last visible LLM response completed. Used as the
+ * last activity time for activateAfterIdle checks.
+ */
 export function getLastActivityFromMessages(messages?: MastraDBMessage[]): number | undefined {
   if (!messages) return undefined;
 
