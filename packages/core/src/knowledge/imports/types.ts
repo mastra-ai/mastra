@@ -23,9 +23,10 @@ export interface KnowledgeImporterCronTrigger {
   /**
    * Cron-side analog of the webhook trigger's `resolveBinding`: resolves the current
    * binding set at each fire, letting one importer fan out to a dynamic set of scopes.
-   * Resolved bindings are unioned with `bindings`. Resolution failures skip the dynamic
-   * portion of that fire and the next fire retries; pair with a parameterized `access`
-   * map (e.g. `{ 'resource:$projectId': 'owner' }`) so resolved scopes are writable.
+   * Resolved bindings are unioned with `bindings`. A resolution failure falls back to
+   * the last successfully resolved set (static-only before any success) and the next
+   * fire retries; pair with a parameterized `access` map (e.g.
+   * `{ 'resource:$projectId': 'owner' }`) so resolved scopes are writable.
    */
   readonly resolveBindings?: KnowledgeImporterCronBindingsResolver;
 }

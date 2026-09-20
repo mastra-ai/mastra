@@ -169,6 +169,53 @@ describe('Knowledge importer dynamic cron bindings', () => {
     }
   });
 
+  it('falls back to the last successfully resolved set when a later resolution throws', async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const handled: string[] = [];
+      const knowledge = new Knowledge({
+        storage: new InMemoryStore({ id: 'dynamic-bindings-last-good' }),
+        structure,
+        importers: [
+          {
+            id: 'tickets',
+            access: { 'project:$projectId': 'append' },
+            triggers: {
+              cron: {
+                schedule: '* * * * * *',
+                resolveBindings: async () => {
+                  calls += 1;
+                  if (calls > 1) throw new Error('platform unavailable');
+                  return [two];
+                },
+              },
+            },
+            handler: async ctx => {
+              handled.push(ctx.run.binding);
+            },
+          },
+        ],
+      });
+      await knowledge.reconcile();
+      knowledge.__registerMastra({} as never);
+
+      // First fire: resolver succeeds — the dynamic binding runs.
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.waitFor(() => expect(handled).toContain(knowledgeImporterBindingKey(two)));
+      handled.length = 0;
+
+      // Second fire: resolver throws — the last-good set keeps the sync alive
+      // instead of dropping every dynamic destination for the fire.
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.waitFor(() => expect(handled).toContain(knowledgeImporterBindingKey(two)));
+      expect(calls).toBeGreaterThan(1);
+      await knowledge.shutdownImporters();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('skips invalid resolved entries without blocking valid ones', async () => {
     vi.useFakeTimers();
     try {

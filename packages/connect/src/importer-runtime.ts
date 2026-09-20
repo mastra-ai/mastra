@@ -12,19 +12,28 @@ export const DEFAULT_MAX_PAGES_PER_RUN = 50;
 export const MAX_RECORD_TEXT = 8000;
 
 /**
+ * Whether a scope address is a core access pattern — it contains a
+ * `$parameter` segment per core's grammar (`$` followed by a letter). Pattern
+ * keys grant authority over the scopes they match but are not destinations.
+ */
+export function isParameterizedScope(scope: string): boolean {
+  return /\$[A-Za-z]/.test(scope);
+}
+
+/**
  * Builds the cron trigger every catalogue provider shares. Concrete `access`
  * keys become static bindings (today's behavior, unchanged); parameterized
- * keys (containing `$`) are authority patterns, not destinations, and are
- * excluded. When the host configured dynamic `scopes`, they surface as the
- * trigger's `resolveBindings` — resolved at each fire and unioned with the
- * static set by the core runner.
+ * keys are authority patterns, not destinations, and are excluded. When the
+ * host configured dynamic `scopes`, they surface as the trigger's
+ * `resolveBindings` — resolved at each fire and unioned with the static set
+ * by the core runner.
  */
 export function importerCronTrigger(
   source: string,
   ctx: Pick<ImporterProviderContext, 'access' | 'schedule' | 'scopes'>,
 ): KnowledgeImporterCronTrigger {
   const staticBindings = Object.keys(ctx.access)
-    .filter(scope => !scope.includes('$'))
+    .filter(scope => !isParameterizedScope(scope))
     .map(scope => ({ source, scope }));
   const scopes = ctx.scopes;
   return {

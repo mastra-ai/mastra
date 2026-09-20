@@ -42,6 +42,14 @@ describe('importer-runtime helpers', () => {
       expect(trigger.bindings).toEqual([{ source: 'linear:c2', scope: 'org:acme' }]);
     });
 
+    it("only treats core's `$letter` parameter grammar as a pattern — a literal `$` stays a concrete destination", () => {
+      const trigger = importerCronTrigger('notion:c5', {
+        access: { 'org:acme$2026': 'owner', 'resource:$projectId': 'owner' },
+        schedule: '0 * * * *',
+      });
+      expect(trigger.bindings).toEqual([{ source: 'notion:c5', scope: 'org:acme$2026' }]);
+    });
+
     it('surfaces dynamic scopes as resolveBindings mapped to the provider source', async () => {
       const trigger = importerCronTrigger('jira:c3', {
         access: { 'resource:$projectId': 'owner' },

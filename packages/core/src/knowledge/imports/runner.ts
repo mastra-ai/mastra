@@ -54,6 +54,8 @@ export class KnowledgeImporterRunner {
   readonly #drains = new Map<string, Promise<void>>();
   readonly #cronJobs = new Map<string, Cron[]>();
   readonly #activeControllers = new Map<string, AbortController>();
+  /** Last successfully resolved dynamic binding set per importer — the fallback when `resolveBindings` throws. */
+  readonly #lastResolvedBindings = new Map<string, readonly KnowledgeImporterBindingInput[]>();
   #recoveryTimer?: ReturnType<typeof setInterval>;
   #recoveryPromise?: Promise<void>;
   #accepting = true;
@@ -86,9 +88,10 @@ export class KnowledgeImporterRunner {
 
   /**
    * Current cron binding set: the static `bindings` unioned with the trigger's
-   * `resolveBindings` result (deduplicated by binding key). Resolver failures warn and
-   * fall back to the static set only — the next fire retries. Invalid resolved entries
-   * are skipped individually so one bad entry never blocks healthy bindings.
+   * `resolveBindings` result (deduplicated by binding key). A resolver failure warns
+   * and falls back to the last successfully resolved set (static-only before any
+   * success) — the next fire retries. Invalid resolved entries are skipped
+   * individually so one bad entry never blocks healthy bindings.
    */
   async #resolveCronBindings<TPayload>(
     importer: KnowledgeImporterHandle<TPayload>,
@@ -105,12 +108,17 @@ export class KnowledgeImporterRunner {
         throw new Error('Knowledge importer cron resolveBindings must return an array of bindings');
       }
       resolved = result;
+      this.#lastResolvedBindings.set(importer.importerId, result);
     } catch (error) {
+      const lastGood = this.#lastResolvedBindings.get(importer.importerId);
       this.#knowledge.warnInternal(
-        `Knowledge importer ${importer.importerId} cron resolveBindings failed; using static bindings only for this fire`,
+        `Knowledge importer ${importer.importerId} cron resolveBindings failed; using ${
+          lastGood ? 'the last successfully resolved bindings' : 'static bindings only'
+        } for this fire`,
         { error },
       );
-      return staticBindings;
+      resolved = lastGood ?? [];
+      if (resolved.length === 0) return staticBindings;
     }
 
     const byKey = new Map<string, KnowledgeImporterBindingInput>();
@@ -130,6 +138,7 @@ export class KnowledgeImporterRunner {
 
   unschedule(importerId: string): void {
     const jobs = this.#cronJobs.get(importerId);
+    this.#lastResolvedBindings.delete(importerId);
     if (!jobs) return;
     jobs.forEach(job => job.stop());
     this.#cronJobs.delete(importerId);

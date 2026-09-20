@@ -296,13 +296,13 @@ const platformImportersEnabled = Boolean(
   (process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim()) &&
     process.env.MASTRA_PROJECT_ID?.trim(),
 );
-// Factory's `/knowledge/importers` route filters bindings by
-// `resource:${factoryProjectId}` — the Factory project's own UUID (the one
-// in the URL). Destination scopes are resolved dynamically at each cron
-// fire via `factoryProjectScopes(storage)`: one `resource:<projectId>` per
-// Factory project, so every project's Importers tab sees the bindings and
-// new projects start syncing without a restart. The parameterized access
-// grant (`resource:$projectId`) makes each resolved scope writable.
+// Destination scopes are resolved dynamically at each cron fire via
+// `factoryProjectScopes(storage)`: one `resource:<projectId>` per Factory
+// project, so new projects start syncing without a restart. The
+// parameterized access grant (`resource:$projectId`) makes each resolved
+// scope writable. Note the project Importers tab lists an importer's
+// declared static bindings; dynamic destinations surface through the runs
+// they produce rather than as pre-declared binding rows.
 const demoImportersResolver = (() => {
   if (!demoKnowledgeEnabled || !platformImportersEnabled) return undefined;
   const scopes = factoryProjectScopes(storage);
