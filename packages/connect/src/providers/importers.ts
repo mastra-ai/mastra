@@ -5,7 +5,13 @@
 import { registerImporterProvider } from '../importer-registry.js';
 
 import { confluenceImporterRegistration } from './confluence/importer.js';
+import { jiraImporterRegistration } from './jira/importer.js';
+import { linearImporterRegistration } from './linear/importer.js';
 import { notionImporterRegistration } from './notion/importer.js';
+import { zendeskImporterRegistration } from './zendesk/importer.js';
 
 registerImporterProvider(confluenceImporterRegistration);
+registerImporterProvider(jiraImporterRegistration);
+registerImporterProvider(linearImporterRegistration);
 registerImporterProvider(notionImporterRegistration);
+registerImporterProvider(zendeskImporterRegistration);
