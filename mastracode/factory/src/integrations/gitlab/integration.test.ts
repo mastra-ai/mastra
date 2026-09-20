@@ -421,10 +421,11 @@ describe('PlatformGitLabIntegration', () => {
     { name: 'group access token', credential: { type: 'api_key', apiKey: 'group-clone-token' }, token: 'group-clone-token' },
   ])('fetches a fresh $name credential for each repository operation without persisting it', async ({ credential, token }) => {
     let credentialResponse: unknown = credential;
+    let credentialStatus = 200;
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
-      if (url.endsWith('/v2/connections/a1b_mastra/credentials')) return json(credentialResponse);
+      if (url.endsWith('/v2/connections/a1b_mastra/credentials')) return json(credentialResponse, credentialStatus);
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -459,6 +460,10 @@ describe('PlatformGitLabIntegration', () => {
     await expect(gitlab.versionControl.getRepositoryAccess(input)).rejects.toMatchObject<Partial<GitLabApiError>>({
       status: 502,
     });
+    credentialResponse = { message: 'GitLab connection requires reauthorization.' };
+    credentialStatus = 401;
+    await expect(gitlab.versionControl.getRepositoryAccess(input)).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock.mock.calls.every(([url]) => String(url).startsWith('https://integrations.example.com/'))).toBe(true);
   });
 
   it('lists projects only from the explicitly configured Platform connection', async () => {
