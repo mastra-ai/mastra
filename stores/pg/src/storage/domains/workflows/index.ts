@@ -372,6 +372,14 @@ export class WorkflowsPG extends WorkflowsStorage {
     return JSON.parse(sanitizeJsonForPg(JSON.stringify(snapshot))) as WorkflowRunState;
   }
 
+  private materializeWorkflowSnapshotHandoffSnapshot(snapshot: WorkflowRunState): WorkflowRunState {
+    const materialized: unknown = JSON.parse(sanitizeJsonForPg(JSON.stringify(snapshot)));
+    if (!materialized || typeof materialized !== 'object' || Array.isArray(materialized)) {
+      throw new TypeError('Workflow snapshot handoff snapshot must be a JSON object');
+    }
+    return materialized as WorkflowRunState;
+  }
+
   private async mutateWorkflowResume<T extends { status: string }>(
     workflowName: string,
     runId: string,
@@ -4548,40 +4556,42 @@ export class WorkflowsPG extends WorkflowsStorage {
    * pruner.
    */
   private async pruneWorkflowSnapshotsBatch(cutoff: Date | number, limit: number): Promise<number> {
-    return this.#db.client.tx(async t => {
-      let deleted = 0;
-      while (deleted < limit) {
-        const candidates = await t.manyOrNone<{ workflow_name: string; run_id: string }>(
-          `SELECT snapshot.workflow_name, snapshot.run_id
-           FROM ${this.workflowSnapshotTableName()} AS snapshot
-           INNER JOIN ${this.workflowParentRevisionTableName()} AS revision
-             ON revision.workflow_name = snapshot.workflow_name AND revision.run_id = snapshot.run_id
-           WHERE snapshot."updatedAtZ" < $1
-             AND NOT EXISTS (
-               SELECT 1 FROM ${this.workflowSnapshotHandoffTableName()} AS handoff
-               WHERE handoff.workflow_name = snapshot.workflow_name AND handoff.run_id = snapshot.run_id
-             )
-           ORDER BY snapshot."updatedAtZ", snapshot.workflow_name, snapshot.run_id
-           LIMIT $2`,
-          [cutoff, limit - deleted],
-        );
-        if (candidates.length === 0) break;
-        for (const candidate of candidates) {
+    let deleted = 0;
+    while (deleted < limit) {
+      const candidates = await this.#db.client.manyOrNone<{ workflow_name: string; run_id: string }>(
+        `SELECT snapshot.workflow_name, snapshot.run_id
+         FROM ${this.workflowSnapshotTableName()} AS snapshot
+         INNER JOIN ${this.workflowParentRevisionTableName()} AS revision
+           ON revision.workflow_name = snapshot.workflow_name AND revision.run_id = snapshot.run_id
+         WHERE snapshot."updatedAtZ" < $1
+           AND NOT EXISTS (
+             SELECT 1 FROM ${this.workflowSnapshotHandoffTableName()} AS handoff
+             WHERE handoff.workflow_name = snapshot.workflow_name AND handoff.run_id = snapshot.run_id
+           )
+         ORDER BY snapshot."updatedAtZ", snapshot.workflow_name, snapshot.run_id
+         LIMIT $2`,
+        [cutoff, limit - deleted],
+      );
+      if (candidates.length === 0) break;
+      for (const candidate of candidates) {
+        const removed = await this.#db.client.tx(async t => {
           const revision = await this.lockExistingWorkflowParentRevision(t, candidate.workflow_name, candidate.run_id);
-          if (!revision) continue;
-          if (await this.lockWorkflowSnapshotHandoff(t, candidate.workflow_name, candidate.run_id)) continue;
+          if (!revision) return false;
+          if (await this.lockWorkflowSnapshotHandoff(t, candidate.workflow_name, candidate.run_id)) return false;
           const result = await t.query(
             `DELETE FROM ${this.workflowSnapshotTableName()}
              WHERE workflow_name = $1 AND run_id = $2 AND "updatedAtZ" < $3`,
             [candidate.workflow_name, candidate.run_id, cutoff],
           );
-          if ((result.rowCount ?? 0) !== 1) continue;
+          if ((result.rowCount ?? 0) !== 1) return false;
           await this.bumpWorkflowParentRevision(t, candidate.workflow_name, candidate.run_id, revision.generation);
-          deleted++;
-        }
+          return true;
+        });
+        if (removed) deleted++;
+        if (deleted >= limit) break;
       }
-      return deleted;
-    });
+    }
+    return deleted;
   }
 
   /** Delete workflow run snapshots older than the `workflowSnapshot` policy's `maxAge`, batched. */
@@ -4990,6 +5000,14 @@ export class WorkflowsPG extends WorkflowsStorage {
   ): Promise<ClaimWorkflowSnapshotHandoffResult> {
     validateWorkflowSnapshotHandoffFence(input.mutationFence);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(input.snapshot));
+    const materializedSnapshot = JSON.parse(serializedSnapshot) as WorkflowRunState;
+    const expectedCanonical =
+      input.expectedCanonical.kind === 'present'
+        ? {
+            ...input.expectedCanonical,
+            snapshot: this.materializeWorkflowSnapshotHandoffSnapshot(input.expectedCanonical.snapshot),
+          }
+        : input.expectedCanonical;
     return this.#db.client.tx(async t => {
       const revision = await this.lockWorkflowParentRevisionForSnapshotHandoff(t, input.workflowName, input.runId);
       const observedCanonical = await this.lockWorkflowSnapshotHandoffCanonicalState(
@@ -4997,7 +5015,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         input.workflowName,
         input.runId,
       );
-      if (!workflowSnapshotHandoffCanonicalStatesEqual(input.expectedCanonical, observedCanonical)) {
+      if (!workflowSnapshotHandoffCanonicalStatesEqual(expectedCanonical, observedCanonical)) {
         await this.deleteProvisionalWorkflowParentRevision(t, input.workflowName, input.runId, revision.created, 1);
         return { status: 'conflict', observedCanonical };
       }
@@ -5006,7 +5024,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         const same =
           existing.mutationFence === input.mutationFence &&
           existing.resourceId === input.resourceId &&
-          workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.snapshot);
+          workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
         if (existing.status === 'completed' && existing.mutationFence !== input.mutationFence) {
           return { status: 'conflict', record: existing };
         }
@@ -5034,7 +5052,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           runId: input.runId,
           status: 'pending',
           ...(input.resourceId === undefined ? {} : { resourceId: input.resourceId }),
-          snapshot: JSON.parse(serializedSnapshot) as WorkflowRunState,
+          snapshot: materializedSnapshot,
           mutationFence: input.mutationFence,
           createdAt: now,
           updatedAt: now,
@@ -5048,6 +5066,8 @@ export class WorkflowsPG extends WorkflowsStorage {
   ): Promise<TransitionWorkflowSnapshotHandoffResult> {
     validateWorkflowSnapshotHandoffFence(input.mutationFence);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(input.snapshot));
+    const materializedSnapshot = JSON.parse(serializedSnapshot) as WorkflowRunState;
+    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.expectedSnapshot);
     return this.#db.client.tx(async t => {
       await this.lockExistingWorkflowParentRevision(t, input.workflowName, input.runId);
       const existing = await this.lockWorkflowSnapshotHandoff(t, input.workflowName, input.runId);
@@ -5060,11 +5080,11 @@ export class WorkflowsPG extends WorkflowsStorage {
       const expectedMatches =
         existing.mutationFence === input.mutationFence &&
         existing.resourceId === input.expectedResourceId &&
-        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.expectedSnapshot);
+        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
       if (!expectedMatches) return { status: 'conflict', record: existing };
       const sameReplacement =
         existing.resourceId === input.resourceId &&
-        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.snapshot);
+        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
       if (sameReplacement) return { status: 'existing', record: existing };
       const clock = await t.one<{ now_ms: string }>(
         `SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`,
@@ -5082,7 +5102,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         record: {
           ...existing,
           ...(input.resourceId === undefined ? { resourceId: undefined } : { resourceId: input.resourceId }),
-          snapshot: JSON.parse(serializedSnapshot) as WorkflowRunState,
+          snapshot: materializedSnapshot,
           updatedAt: now,
         },
       };
@@ -5094,6 +5114,8 @@ export class WorkflowsPG extends WorkflowsStorage {
   ): Promise<CompleteWorkflowSnapshotHandoffResult> {
     validateWorkflowSnapshotHandoffFence(input.mutationFence);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(input.snapshot));
+    const materializedSnapshot = JSON.parse(serializedSnapshot) as WorkflowRunState;
+    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.expectedSnapshot);
     return this.#db.client.tx(async t => {
       await this.lockExistingWorkflowParentRevision(t, input.workflowName, input.runId);
       const existing = await this.lockWorkflowSnapshotHandoff(t, input.workflowName, input.runId);
@@ -5106,7 +5128,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const expectedMatches =
         existing.mutationFence === input.mutationFence &&
         existing.resourceId === input.expectedResourceId &&
-        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.expectedSnapshot);
+        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
       if (!expectedMatches) return { status: 'conflict', record: existing };
       const clock = await t.one<{ now_ms: string }>(
         `SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`,
@@ -5125,7 +5147,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           ...existing,
           status: 'completed',
           ...(input.resourceId === undefined ? { resourceId: undefined } : { resourceId: input.resourceId }),
-          snapshot: JSON.parse(serializedSnapshot) as WorkflowRunState,
+          snapshot: materializedSnapshot,
           updatedAt: now,
           completedAt: now,
         },

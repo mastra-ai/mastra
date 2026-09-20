@@ -176,5 +176,23 @@ describe('workflow snapshot handoff', () => {
     };
     await expect(workflows.claimWorkflowSnapshotHandoff(bareErrorInput)).resolves.toMatchObject({ status: 'created' });
     await expect(workflows.claimWorkflowSnapshotHandoff(bareErrorInput)).resolves.toMatchObject({ status: 'existing' });
+
+    const presentWorkflowName = 'present-error-workflow';
+    const presentRunId = 'present-error-run';
+    const presentCanonical = snapshot(presentRunId, 'failed', { error: new Error('present error') });
+    await workflows.persistWorkflowSnapshot({
+      workflowName: presentWorkflowName,
+      runId: presentRunId,
+      snapshot: presentCanonical,
+    });
+    const presentInput = {
+      workflowName: presentWorkflowName,
+      runId: presentRunId,
+      expectedCanonical: { kind: 'present' as const, snapshot: presentCanonical },
+      snapshot: snapshot(presentRunId, 'waiting'),
+      mutationFence: 'present-owner',
+    };
+    await expect(workflows.claimWorkflowSnapshotHandoff(presentInput)).resolves.toMatchObject({ status: 'created' });
+    await expect(workflows.claimWorkflowSnapshotHandoff(presentInput)).resolves.toMatchObject({ status: 'existing' });
   });
 });

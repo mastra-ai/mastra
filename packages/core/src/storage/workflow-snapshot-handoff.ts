@@ -50,9 +50,8 @@ function canonicalize(value: unknown): unknown {
 
 /** Materializes a handoff snapshot using the JSON representation persisted by durable adapters. */
 export function materializeWorkflowSnapshotHandoffSnapshot(snapshot: WorkflowRunState): WorkflowRunState {
-  const serialized = JSON.stringify(snapshot);
-  if (serialized === undefined) throw new TypeError('Workflow snapshot handoff snapshot must be JSON-serializable');
-  const materialized: unknown = JSON.parse(serialized);
+  const materialized = canonicalize(snapshot);
+  if (materialized === undefined) throw new TypeError('Workflow snapshot handoff snapshot must be JSON-serializable');
   if (!materialized || typeof materialized !== 'object' || Array.isArray(materialized)) {
     throw new TypeError('Workflow snapshot handoff snapshot must be a JSON object');
   }
