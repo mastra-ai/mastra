@@ -2,14 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import {
   boundText,
+  clearHighWater,
   clearResumeCursor,
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   MAX_RECORD_TEXT,
+  readHighWater,
   readResumeCursor,
   readWatermark,
   walkPages,
+  writeHighWater,
   writeResumeCursor,
   writeWatermark,
 } from '../importer-runtime.js';
@@ -47,6 +50,21 @@ describe('importer-runtime helpers', () => {
 
       const bad = createFakeState({ c: 'not-json' });
       await expect(readResumeCursor(bad, 'c')).rejects.toThrow(/not valid JSON/);
+    });
+  });
+
+  describe('high water', () => {
+    it('round-trips through durable state, treats a cleared value as unset, and rejects malformed state', async () => {
+      const state = createFakeState();
+      expect(await readHighWater(state, 'h')).toBeUndefined();
+      await writeHighWater(state, 'h', '2026-09-30T00:00:00Z');
+      expect(await readHighWater(state, 'h')).toBe('2026-09-30T00:00:00Z');
+      await clearHighWater(state, 'h');
+      expect(state.entries.get('h')).toBe(JSON.stringify({ highWater: '' }));
+      expect(await readHighWater(state, 'h')).toBeUndefined();
+
+      const bad = createFakeState({ h: 'not-json' });
+      await expect(readHighWater(bad, 'h')).rejects.toThrow(/not valid JSON/);
     });
   });
 

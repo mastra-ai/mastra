@@ -68,6 +68,38 @@ export async function clearResumeCursor(state: KnowledgeImporterState, key: stri
   await state.set(key, JSON.stringify({ cursor: '' }));
 }
 
+const highWaterSchema = z.object({ highWater: z.string() });
+
+/**
+ * Reads the persisted high-water candidate for a descending-walk backfill in progress.
+ * Descending walkers observe the newest timestamp on their first-fetched page; on a
+ * multi-run backfill the drain run only sees older items via its resume cursor and would
+ * otherwise regress the watermark. Persisting the high-water across runs lets the drain
+ * write the true newest value.
+ */
+export async function readHighWater(state: KnowledgeImporterState, key: string): Promise<string | undefined> {
+  const raw = await state.get(key);
+  if (raw === undefined) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Knowledge importer state '${key}' is not valid JSON`);
+  }
+  const value = highWaterSchema.parse(parsed).highWater;
+  return value === '' ? undefined : value;
+}
+
+/** Persist the running high-water candidate. Callers write during multi-run backfill. */
+export async function writeHighWater(state: KnowledgeImporterState, key: string, highWater: string): Promise<void> {
+  await state.set(key, JSON.stringify({ highWater }));
+}
+
+/** Mark the high-water as cleared. Empty sentinel, treated as unset by `readHighWater`. */
+export async function clearHighWater(state: KnowledgeImporterState, key: string): Promise<void> {
+  await state.set(key, JSON.stringify({ highWater: '' }));
+}
+
 /**
  * Deterministic UUID-shaped record id derived from arbitrary content. Two calls
  * with the same content produce the same id, so idempotent appends dedupe

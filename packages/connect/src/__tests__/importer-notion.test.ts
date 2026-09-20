@@ -215,15 +215,49 @@ describe('notion importer', () => {
     expect(await state.get('notion:resume-cursor')).toBe(JSON.stringify({ cursor: 'cursor-A' }));
 
     // Run 2: resumes from cursor-A. This time the source returns a partial page (< page_size),
-    // so we drain. Watermark advances and cursor is cleared.
+    // so we drain. Watermark advances to the HIGH-WATER mark across BOTH runs (not this run
+    // only) and cursor is cleared. The newest item across runs 1+2 is one of pageA's dates
+    // (rotating hourly on 2026-09-30). Assert the watermark is on 2026-09-30, not the older
+    // 2026-08-15 from pageB — which would cause the next run to re-walk the whole backfill.
     const pageB = [{ id: 'pB0', title: 'B0', lastEditedTime: '2026-08-15T00:00:00Z' }];
     request.mockResolvedValueOnce(searchResponse(pageB));
     await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
     // The second call passed cursor-A as start_cursor.
     const secondCall = request.mock.calls[1]![0]!;
     expect(secondCall.body).toMatchObject({ start_cursor: 'cursor-A' });
-    // Now drained: watermark = newest processed in this run; resume cursor cleared.
-    expect(await state.get('notion:watermark')).toBe(JSON.stringify({ watermark: '2026-08-15T00:00:00Z' }));
+    // Drained: watermark = newest observed across BOTH runs. Since pageA had items on 2026-09-30
+    // (newer than pageB's 2026-08-15), the watermark must be on 2026-09-30 — not regress to pageB.
+    const storedWatermark = JSON.parse((await state.get('notion:watermark'))!).watermark as string;
+    expect(storedWatermark.startsWith('2026-09-30')).toBe(true);
+    expect(await state.get('notion:resume-cursor')).toBe(JSON.stringify({ cursor: '' }));
+  });
+
+  it('never regresses the watermark: a drain run resumed from a cursor uses the persisted high-water from the earlier truncated run', async () => {
+    // Locks in the round-3 fix. Run 1 is the "newest" chunk; run 2 drains a tiny old tail.
+    // The final watermark must reflect the newest observed across BOTH runs, not run 2's tail.
+    const { ctx, request, importer, state } = makeContext();
+    // Run 1: no watermark, one page over the cap with has_more=true → cursor + high-water persisted.
+    const newestChunk = Array.from({ length: 501 }, (_, i) => ({
+      id: `n${i}`,
+      title: `N${i}`,
+      lastEditedTime: `2026-09-30T${String(i % 24).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}:00Z`,
+    }));
+    request.mockResolvedValueOnce(searchResponse(newestChunk, 'cursor-1'));
+    await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
+    // High-water persisted from run 1.
+    expect(await state.get('notion:high-water')).toBeDefined();
+    const runOneHighWater = JSON.parse((await state.get('notion:high-water'))!).highWater as string;
+    expect(runOneHighWater.startsWith('2026-09-30')).toBe(true);
+
+    // Run 2: resumes, drains with a single much-older item. Watermark must still be 2026-09-30.
+    request.mockResolvedValueOnce(
+      searchResponse([{ id: 'nOld', title: 'Old', lastEditedTime: '2026-01-01T00:00:00Z' }]),
+    );
+    await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
+    const finalWatermark = JSON.parse((await state.get('notion:watermark'))!).watermark as string;
+    expect(finalWatermark).toBe(runOneHighWater);
+    // High-water and resume cursor both cleared on drain.
+    expect(await state.get('notion:high-water')).toBe(JSON.stringify({ highWater: '' }));
     expect(await state.get('notion:resume-cursor')).toBe(JSON.stringify({ cursor: '' }));
   });
 

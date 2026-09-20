@@ -3,18 +3,22 @@ import { z } from 'zod';
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
 import {
   boundText,
+  clearHighWater,
   clearResumeCursor,
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
+  readHighWater,
   readResumeCursor,
   readWatermark,
+  writeHighWater,
   writeResumeCursor,
   writeWatermark,
 } from '../../importer-runtime.js';
 
 const FIREFLIES_WATERMARK_KEY = 'fireflies:watermark';
 const FIREFLIES_RESUME_CURSOR_KEY = 'fireflies:resume-cursor';
+const FIREFLIES_HIGH_WATER_KEY = 'fireflies:high-water';
 
 const summarySchema = z
   .object({
@@ -96,6 +100,7 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
     }) => {
       const previousWatermark = await readWatermark(context.state, FIREFLIES_WATERMARK_KEY);
       const resumeCursor = await readResumeCursor(context.state, FIREFLIES_RESUME_CURSOR_KEY);
+      const persistedHighWater = await readHighWater(context.state, FIREFLIES_HIGH_WATER_KEY);
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
@@ -110,6 +115,10 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
       let skip = Number.isFinite(parsedResume) && parsedResume >= 0 ? parsedResume : 0;
       const limit = 25;
       let drainedFully = false;
+      // Track the newest date observed across the raw API responses so the drain-after-cursor
+      // path doesn't regress the watermark to the older tail. Seeded from persisted high-water
+      // so multi-run backfills carry the true high forward to the final drain run.
+      let newestObserved: string | undefined = persistedHighWater;
       for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
         if (context.signal.aborted) break;
         const variables: Record<string, unknown> = { limit, skip };
@@ -121,7 +130,11 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
             body: { query: TRANSCRIPTS_QUERY, variables },
           }),
         );
-        for (const transcript of parsed.data.transcripts) collected.push(transcript);
+        for (const transcript of parsed.data.transcripts) {
+          const observed = normaliseDate(transcript.date);
+          if (observed && (!newestObserved || observed > newestObserved)) newestObserved = observed;
+          collected.push(transcript);
+        }
         if (parsed.data.transcripts.length < limit) {
           drainedFully = true;
           break;
@@ -174,11 +187,17 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
         if (date && (!lastProcessed || date > lastProcessed)) lastProcessed = date;
       }
 
-      if (drainedFully && lastProcessed) {
-        await writeWatermark(context.state, FIREFLIES_WATERMARK_KEY, lastProcessed);
+      if (drainedFully && (lastProcessed || newestObserved)) {
+        const candidate =
+          newestObserved && (!previousWatermark || newestObserved > previousWatermark)
+            ? newestObserved
+            : previousWatermark;
         await clearResumeCursor(context.state, FIREFLIES_RESUME_CURSOR_KEY);
+        await clearHighWater(context.state, FIREFLIES_HIGH_WATER_KEY);
+        if (candidate) await writeWatermark(context.state, FIREFLIES_WATERMARK_KEY, candidate);
       } else if (!drainedFully) {
         await writeResumeCursor(context.state, FIREFLIES_RESUME_CURSOR_KEY, String(skip));
+        if (newestObserved) await writeHighWater(context.state, FIREFLIES_HIGH_WATER_KEY, newestObserved);
       }
     },
   };

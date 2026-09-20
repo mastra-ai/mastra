@@ -195,11 +195,14 @@ describe('linear importer', () => {
     expect(await state.get('linear:resume-cursor')).toBe(JSON.stringify({ cursor: 'cursor-A' }));
 
     // Run 2: resumes from cursor-A, source exhausts pagination this time (no endCursor).
+    // Watermark must reflect the HIGH-WATER across both runs — pageA's 2026-09-30 items are
+    // newer than pageB's 2026-08-15, so the watermark must stay on 2026-09-30.
     request.mockResolvedValueOnce(issuesResponse([{ id: 'iB0', title: 'B0', updatedAt: '2026-08-15T00:00:00Z' }]));
     await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
     const secondCall = request.mock.calls[1]![0]! as { body: { variables: { after?: string } } };
     expect(secondCall.body.variables.after).toBe('cursor-A');
-    expect(await state.get('linear:watermark')).toBe(JSON.stringify({ watermark: '2026-08-15T00:00:00Z' }));
+    const storedWatermark = JSON.parse((await state.get('linear:watermark'))!).watermark as string;
+    expect(storedWatermark.startsWith('2026-09-30')).toBe(true);
     expect(await state.get('linear:resume-cursor')).toBe(JSON.stringify({ cursor: '' }));
   });
 
