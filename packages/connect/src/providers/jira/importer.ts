@@ -1,0 +1,134 @@
+import { z } from 'zod';
+
+import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
+import {
+  boundText,
+  contentRecordId,
+  DEFAULT_MAX_PAGES_PER_RUN,
+  DEFAULT_MAX_RECORDS_PER_RUN,
+  readWatermark,
+  walkPages,
+  writeWatermark,
+} from '../../importer-runtime.js';
+
+const JIRA_WATERMARK_KEY = 'jira:watermark';
+
+const issueSchema = z.object({
+  id: z.string().optional(),
+  key: z.string(),
+  self: z.string().optional(),
+  fields: z
+    .object({
+      summary: z.string().nullish(),
+      description: z.string().nullish(),
+      status: z.object({ name: z.string().optional() }).nullish(),
+      project: z.object({ key: z.string().optional(), name: z.string().optional() }).nullish(),
+      updated: z.string(),
+    })
+    .passthrough(),
+});
+
+const searchResponseSchema = z.object({
+  issues: z.array(issueSchema),
+  startAt: z.number().optional(),
+  maxResults: z.number().optional(),
+  total: z.number().optional(),
+});
+
+type JiraIssue = z.infer<typeof issueSchema>;
+
+function createJiraImporter(ctx: ImporterProviderContext) {
+  return {
+    id: 'jira',
+    access: ctx.access,
+    triggers: {
+      cron: {
+        schedule: ctx.schedule,
+        bindings: Object.keys(ctx.access).map(scope => ({ source: `jira:${ctx.connection.id}`, scope })),
+      },
+    },
+    handler: async (context: {
+      signal: AbortSignal;
+      state: import('@mastra/core/knowledge').KnowledgeImporterState;
+      importer: () => Promise<import('@mastra/core/knowledge').StaticKnowledgeImporterOperations>;
+    }) => {
+      const previousWatermark = await readWatermark(context.state, JIRA_WATERMARK_KEY);
+      const importer = await context.importer();
+      const canRemove = Object.values(ctx.access).some(role => role === 'owner');
+
+      const jql = previousWatermark ? `updated >= "${previousWatermark}" ORDER BY updated ASC` : 'ORDER BY updated ASC';
+
+      const collected: JiraIssue[] = [];
+      let startAt = 0;
+      const pageSize = 50;
+
+      await walkPages(
+        { signal: context.signal, maxRecords: DEFAULT_MAX_RECORDS_PER_RUN, maxPages: DEFAULT_MAX_PAGES_PER_RUN },
+        async () => {
+          const parsed = searchResponseSchema.parse(
+            await ctx.request({
+              method: 'GET',
+              path: 'rest/api/3/search',
+              query: {
+                jql,
+                fields: 'summary,description,status,project,updated',
+                startAt,
+                maxResults: pageSize,
+              },
+            }),
+          );
+          for (const issue of parsed.issues) collected.push(issue);
+          if (parsed.issues.length < pageSize) return undefined;
+          startAt += parsed.issues.length;
+          return { pageIndex: 0 };
+        },
+        async ({ recordsProcessed }) => recordsProcessed,
+      );
+
+      let latestSeen: string | undefined;
+      for (const issue of collected) {
+        if (context.signal.aborted) return;
+        const address = `jira:issue:${issue.key}`;
+        const title = issue.fields.summary ?? issue.key;
+        const description = issue.fields.description ?? '';
+        const updated = issue.fields.updated;
+        const recordPayload = {
+          address,
+          title,
+          description,
+          updated,
+        };
+        const recordId = contentRecordId(recordPayload);
+        const node = await importer.upsertNode(address, { name: title, kind: 'connect:jira:issue' });
+        const existingRecords = await node.listRecords();
+        if (!existingRecords.some(r => r.id === recordId)) {
+          await node.appendRecord({
+            id: recordId,
+            text: boundText(description ? `${title}\n\n${description}` : title),
+            metadata: {
+              key: issue.key,
+              status: issue.fields.status?.name,
+              project: issue.fields.project?.key ?? issue.fields.project?.name,
+              url: issue.self,
+            },
+          });
+        }
+        if (canRemove) {
+          for (const previous of existingRecords) {
+            if (previous.id !== recordId) await node.removeRecord(previous.id);
+          }
+        }
+        if (!latestSeen || updated > latestSeen) latestSeen = updated;
+      }
+
+      if (latestSeen) await writeWatermark(context.state, JIRA_WATERMARK_KEY, latestSeen);
+    },
+  };
+}
+
+export const jiraImporterRegistration: ImporterProviderRegistration = {
+  integrationId: 'jira',
+  envVar: 'MASTRA_JIRA_CONNECTION_ID',
+  defaultSchedule: '*/30 * * * *',
+  createImporter: createJiraImporter,
+};
