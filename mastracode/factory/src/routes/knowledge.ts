@@ -168,6 +168,9 @@ export interface KnowledgeGraphPayload {
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
   records: KnowledgeGraphRecord[];
+  truncated: boolean;
+  outOfWindow: Array<{ id: string; reference: string; name: string }>;
+  pinCensus: { resource: number; thread: number | null };
   page: {
     nextCursor?: string;
     truncated: boolean;
@@ -179,7 +182,38 @@ export interface KnowledgeGraphPayload {
     maxBoundaryNodes: number;
     boundaryHops: 1;
   };
-  version?: string;
+  version: string | null;
+}
+
+export interface KnowledgeSearchResult {
+  id: string;
+  name: string;
+  kind: string;
+  type: 'scope' | 'node';
+  rung: 'org' | 'resource' | 'thread' | null;
+  threadId?: string;
+  description?: string;
+}
+
+export interface KnowledgeSearchPayload {
+  results: KnowledgeSearchResult[];
+  truncated: boolean;
+}
+
+export interface KnowledgeActivityEvent {
+  id: string;
+  action: string;
+  targetType: string;
+  scopeId?: string;
+  sourceType: 'importer' | 'system';
+  sourceId?: string;
+  importRunId?: string;
+  createdAt: string;
+}
+
+export interface KnowledgeActivityPayload {
+  events: KnowledgeActivityEvent[];
+  nextCursor?: string;
 }
 
 export interface KnowledgeNodeRecordPayload {
@@ -357,6 +391,8 @@ function isKnowledgeHandle(value: string | undefined): boolean {
 
 interface ResolvedView {
   projectId: string;
+  /** Factory project display name — shown in place of the resource scope's raw UUID-derived name. */
+  projectName: string;
   knowledge: Knowledge;
   store: KnowledgeStorage;
   view: 'project' | 'thread';
@@ -863,7 +899,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const projectId = c.req.param('id');
     if (!projectId || !UUID_RE.test(projectId)) return { response: c.json({ error: 'Project not found' }, 404) };
     await this.deps.projects.ensureReady();
-    if (!(await this.deps.projects.get({ orgId: tenant.orgId, id: projectId }))) {
+    const project = await this.deps.projects.get({ orgId: tenant.orgId, id: projectId });
+    if (!project) {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
     let knowledge: Knowledge | undefined;
@@ -920,6 +957,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     if (!threadId) {
       return {
         projectId,
+        projectName: project.name,
         knowledge,
         store,
         view: 'project',
@@ -940,6 +978,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     if (probe.records.length === 0) return { response: c.json({ error: 'thread_not_found' }, 404) };
     return {
       projectId,
+      projectName: project.name,
       knowledge,
       store,
       view: 'thread',
@@ -1026,9 +1065,17 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return undefined;
   }
 
+  /**
+   * The resource scope's stored name defaults to its address tail — the raw
+   * project UUID. Substitute the Factory project's display name at read time
+   * so renames stay live without rewriting stored scope nodes.
+   */
+  #scopeDisplayName(view: ResolvedView, node: KnowledgeNode): string {
+    return node.id === view.resourceScopeId ? view.projectName : node.name;
+  }
+
   #scopeTreeNode(
-    projectId: string,
-    perspectiveKey: string,
+    view: ResolvedView,
     node: KnowledgeNode,
     counts: Pick<
       KnowledgeScopeTreeNode,
@@ -1038,9 +1085,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   ): KnowledgeScopeTreeNode {
     const description = metadataString(node.metadata, 'description');
     return {
-      id: this.#mintHandle(projectId, perspectiveKey, 'scope', node.id),
-      reference: this.#mintReference(projectId, 'scope', node.id),
-      name: node.name,
+      id: this.#mintHandle(view.projectId, view.perspectiveKey, 'scope', node.id),
+      reference: this.#mintReference(view.projectId, 'scope', node.id),
+      name: this.#scopeDisplayName(view, node),
       kind: node.kind ?? 'scope',
       ...(description ? { description } : {}),
       ...counts,
@@ -1771,7 +1818,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           ]);
           const visibleById = new Map<string, KnowledgeNode>();
           for (const node of [...prefixNodes, ...scannedNodes]) {
-            if (node.name.toLocaleLowerCase().includes(query)) visibleById.set(node.id, node);
+            const searchableName = node.isScope ? this.#scopeDisplayName(view, node) : node.name;
+            if (searchableName.toLocaleLowerCase().includes(query)) visibleById.set(node.id, node);
           }
           const results = await Promise.all(
             [...visibleById.values()].map(async node => {
@@ -1779,7 +1827,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               if (node.isScope) {
                 return {
                   id: this.#mintHandle(view.projectId, view.perspectiveKey, 'scope', node.id),
-                  name: node.name,
+                  name: this.#scopeDisplayName(view, node),
                   kind: node.kind ?? 'scope',
                   type: 'scope' as const,
                   rung: null,
@@ -1862,8 +1910,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const emptyCounts = directScopeMemberCounts([], this.#limits.maxNodes);
           const children = page.map(node =>
             this.#scopeTreeNode(
-              projectId,
-              view.perspectiveKey,
+              view,
               node,
               countsById.get(node.id) ?? emptyCounts,
               view.curationScopeIds.includes(node.id),
@@ -1878,8 +1925,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               : undefined;
           return loose(c).json({
             scope: this.#scopeTreeNode(
-              projectId,
-              view.perspectiveKey,
+              view,
               selected,
               countsById.get(selected.id) ?? emptyCounts,
               selectedNeedsCuration,
@@ -1888,8 +1934,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             ...(curationDestination
               ? {
                   curationDestination: this.#scopeTreeNode(
-                    projectId,
-                    view.perspectiveKey,
+                    view,
                     curationDestination,
                     countsById.get(curationDestination.id) ?? emptyCounts,
                   ),
@@ -1920,7 +1965,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if ('response' in view) return view.response;
           const scopeId = this.#resolveResource(projectId, view.perspectiveKey, 'scope', scopeHandle);
           if (scopeHandle && !scopeId) return c.json({ error: 'scope_not_found' }, 404);
-          const selected = await this.#resolveSelectedScope(view, scopeId, true);
+          const selected = await this.#resolveSelectedScope(view, scopeId);
           if (!selected) return c.json({ error: 'scope_not_found' }, 404);
           const structuralLens = Boolean(scopeHandle);
           const { store } = view;
@@ -2176,7 +2221,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               return {
                 id: this.#mintHandle(projectId, view.perspectiveKey, isScope ? 'scope' : 'node', node.id),
                 reference: this.#mintReference(projectId, isScope ? 'scope' : 'node', node.id),
-                name: node.name,
+                name: isScope ? this.#scopeDisplayName(view, node) : node.name,
                 kind: node.kind ?? (isScope ? 'scope' : 'concept'),
                 ...(description ? { description } : {}),
                 rung: isScope ? null : rungForScopeIds(nodeScopeIds, view),
@@ -2187,8 +2232,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                   ? {
                       boundary: {
                         scope: this.#scopeTreeNode(
-                          projectId,
-                          view.perspectiveKey,
+                          view,
                           boundaryScope,
                           emptyScopeCounts,
                           view.curationScopeIds.includes(boundaryScope.id),
@@ -2224,8 +2268,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const payload: KnowledgeGraphPayload = {
             view: view.view,
             scope: this.#scopeTreeNode(
-              projectId,
-              view.perspectiveKey,
+              view,
               selected,
               scopeCounts.get(selected.id) ?? emptyScopeCounts,
               view.curationScopeIds.includes(selected.id),

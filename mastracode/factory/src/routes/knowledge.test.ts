@@ -562,6 +562,26 @@ describe('KnowledgeRoutes', () => {
     expect(JSON.stringify(body)).not.toContain(content.id);
   });
 
+  // The resource scope's stored name is the address tail (the raw project
+  // UUID) — the routes must substitute the Factory project's display name.
+  it('shows the Factory project name for the resource scope instead of its UUID', async () => {
+    const h = await createHarness();
+
+    const scopeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const scopeBody = (await scopeResponse.json()) as KnowledgeScopeTreePayload;
+    expect(scopeBody.scope.name).toBe('Graph project');
+    expect(JSON.stringify(scopeBody)).not.toContain(h.projectId);
+
+    const graphResponse = await rawGraph(h);
+    expect(graphResponse.status).toBe(200);
+    expect(graphResponse.body.scope.name).toBe('Graph project');
+    expect(graphResponse.body.nodes.some(item => item.name === h.projectId)).toBe(false);
+
+    const searchResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/search?q=graph pro`);
+    const searchBody = (await searchResponse.json()) as KnowledgeSearchPayload;
+    expect(searchBody.results.some(result => result.type === 'scope' && result.name === 'Graph project')).toBe(true);
+  });
+
   it('renders a selected structural scope as the root of its bounded member lens', async () => {
     const h = await createHarness();
     const projectScopeId = h.projectScope.at(-1)!;
