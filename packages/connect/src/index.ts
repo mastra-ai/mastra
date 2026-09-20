@@ -30,6 +30,7 @@ export type {
   ImporterProviderRegistration,
   ImporterProxyRequest,
   ImporterProxyResponse,
+  ImporterScopesResolver,
 } from './importer-registry.js';
 export {
   DEFAULT_MAX_PAGES_PER_RUN,
