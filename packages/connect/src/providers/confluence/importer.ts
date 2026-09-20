@@ -15,26 +15,26 @@ const CONFLUENCE_WATERMARK_KEY = 'confluence:watermark';
 
 const searchResultSchema = z.object({
   id: z.string(),
-  type: z.string().optional(),
+  type: z.string().nullish(),
   title: z.string().default(''),
-  status: z.string().optional(),
-  version: z.object({ number: z.number(), when: z.string().optional() }).optional(),
-  space: z.object({ key: z.string().optional() }).optional(),
+  status: z.string().nullish(),
+  version: z.object({ number: z.number(), when: z.string().nullish() }).nullish(),
+  space: z.object({ key: z.string().nullish() }).nullish(),
   body: z
     .object({
-      storage: z.object({ value: z.string().default('') }).optional(),
+      storage: z.object({ value: z.string().default('') }).nullish(),
     })
-    .optional(),
-  _links: z.object({ webui: z.string().optional() }).optional(),
-  history: z.object({ lastUpdated: z.object({ when: z.string() }).optional() }).optional(),
+    .nullish(),
+  _links: z.object({ webui: z.string().nullish() }).nullish(),
+  history: z.object({ lastUpdated: z.object({ when: z.string() }).nullish() }).nullish(),
 });
 
 const searchResponseSchema = z.object({
   results: z.array(searchResultSchema),
-  _links: z.object({ next: z.string().optional() }).optional(),
-  start: z.number().optional(),
-  limit: z.number().optional(),
-  size: z.number().optional(),
+  _links: z.object({ next: z.string().nullish() }).nullish(),
+  start: z.number().nullish(),
+  limit: z.number().nullish(),
+  size: z.number().nullish(),
 });
 
 type ConfluenceResult = z.infer<typeof searchResultSchema>;
@@ -53,7 +53,7 @@ function storageToText(input: string): string {
 }
 
 function lastModifiedOf(result: ConfluenceResult): string | undefined {
-  return result.history?.lastUpdated?.when ?? result.version?.when;
+  return result.history?.lastUpdated?.when ?? result.version?.when ?? undefined;
 }
 
 function createConfluenceImporter(ctx: ImporterProviderContext) {

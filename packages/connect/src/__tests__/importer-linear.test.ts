@@ -11,7 +11,7 @@ interface LinearIssueFixture {
   description?: string;
   updatedAt: string;
   archivedAt?: string | null;
-  trashed?: boolean;
+  trashed?: boolean | null;
   state?: string;
   team?: string;
   url?: string;
@@ -26,7 +26,7 @@ function issueNode(fixture: LinearIssueFixture) {
     url: fixture.url ?? `https://linear.app/${fixture.id}`,
     updatedAt: fixture.updatedAt,
     archivedAt: fixture.archivedAt ?? null,
-    trashed: fixture.trashed ?? false,
+    trashed: fixture.trashed === undefined ? false : fixture.trashed,
     state: fixture.state ? { name: fixture.state } : null,
     team: fixture.team ? { key: fixture.team, name: fixture.team } : null,
   };
@@ -84,6 +84,19 @@ describe('linear importer', () => {
     const call = request.mock.calls[0]![0]! as { method: string; path: string };
     expect(call.method).toBe('POST');
     expect(call.path).toBe('graphql');
+  });
+
+  // Regression: the live Linear API returns `trashed: null` (not absent) for
+  // issues that were never trashed — a boolean-only schema failed whole runs.
+  it('tolerates null trashed/optional fields from the live API', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      issuesResponse([
+        { id: 'i1', title: 'Alpha', description: 'first', updatedAt: '2026-09-01T00:00:00Z', trashed: null },
+      ]),
+    );
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+    expect(importer.nodes.get('linear:issue:i1')?.records.size).toBe(1);
   });
 
   it('second run with unchanged fixtures is idempotent', async () => {

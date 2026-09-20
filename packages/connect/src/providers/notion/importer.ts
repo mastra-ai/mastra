@@ -36,9 +36,9 @@ const propertySchema = z.union([titlePropertySchema, genericPropertySchema]);
 const pageResultSchema = z.object({
   object: z.literal('page'),
   id: z.string(),
-  archived: z.boolean().optional(),
-  in_trash: z.boolean().optional(),
-  url: z.string().optional(),
+  archived: z.boolean().nullish(),
+  in_trash: z.boolean().nullish(),
+  url: z.string().nullish(),
   last_edited_time: z.string(),
   properties: z.record(z.string(), propertySchema).default({}),
 });
@@ -46,9 +46,9 @@ const pageResultSchema = z.object({
 const databaseResultSchema = z.object({
   object: z.literal('database'),
   id: z.string(),
-  archived: z.boolean().optional(),
-  in_trash: z.boolean().optional(),
-  url: z.string().optional(),
+  archived: z.boolean().nullish(),
+  in_trash: z.boolean().nullish(),
+  url: z.string().nullish(),
   last_edited_time: z.string(),
   title: z.array(richTextItemSchema).default([]),
 });

@@ -17,16 +17,16 @@ const ticketSchema = z.object({
   id: z.number(),
   subject: z.string().nullish(),
   description: z.string().nullish(),
-  status: z.string().optional(),
-  updated_at: z.string().optional(),
-  url: z.string().optional(),
+  status: z.string().nullish(),
+  updated_at: z.string().nullish(),
+  url: z.string().nullish(),
 });
 
 const cursorResponseSchema = z.object({
   tickets: z.array(ticketSchema),
   after_cursor: z.string().nullish(),
   after_url: z.string().nullish(),
-  end_of_stream: z.boolean().optional(),
+  end_of_stream: z.boolean().nullish(),
 });
 
 type ZendeskTicket = z.infer<typeof ticketSchema>;

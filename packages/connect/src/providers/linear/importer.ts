@@ -23,15 +23,15 @@ const LINEAR_HIGH_WATER_KEY = 'linear:high-water';
 
 const issueSchema = z.object({
   id: z.string(),
-  identifier: z.string().optional(),
+  identifier: z.string().nullish(),
   title: z.string().default(''),
   description: z.string().nullish(),
-  url: z.string().optional(),
+  url: z.string().nullish(),
   updatedAt: z.string(),
   archivedAt: z.string().nullish(),
-  trashed: z.boolean().optional(),
-  state: z.object({ name: z.string().optional() }).nullish(),
-  team: z.object({ key: z.string().optional(), name: z.string().optional() }).nullish(),
+  trashed: z.boolean().nullish(),
+  state: z.object({ name: z.string().nullish() }).nullish(),
+  team: z.object({ key: z.string().nullish(), name: z.string().nullish() }).nullish(),
 });
 
 const issuesResponseSchema = z.object({
