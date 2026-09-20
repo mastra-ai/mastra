@@ -1219,13 +1219,6 @@ export class MastraFactory {
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
-                refreshManagedMemorySettings: ({ binding, session }) =>
-                  refreshFactorySessionMemorySettings(session, {
-                    orgId: binding.orgId,
-                    factoryProjectId: binding.factoryProjectId,
-                    projects: factoryProjectsStorage,
-                    memorySettings: memorySettingsStorage,
-                  }),
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
@@ -1336,7 +1329,6 @@ export class MastraFactory {
       session =>
         hydrateSupervisorSession(session, {
           projects: factoryProjectsStorage,
-          memorySettings: memorySettingsStorage,
         }).catch(error => {
           console.warn('[Factory Supervisor] Failed to hydrate supervisor session', {
             error: error instanceof Error ? error.message : String(error),

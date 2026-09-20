@@ -1087,13 +1087,12 @@ describe('session start (onSessionStart)', () => {
     expect(warn).toHaveBeenCalled();
   });
 
-  it('leaves owner observational-memory settings for per-invocation resolution', async () => {
-    const deps = makeStartDeps({ memoryRecord: { observerModelId: 'openai/gpt-5.4-mini', observationThreshold: 111 } });
+  it('leaves observational-memory settings for per-invocation resolution', async () => {
+    const deps = makeStartDeps();
     const session = makeSession();
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(deps.memorySettings.get).not.toHaveBeenCalled();
     expect(session.om.observer.switchModel).not.toHaveBeenCalled();
     expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
     expect(session.state.set).not.toHaveBeenCalledWith(

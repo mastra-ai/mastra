@@ -31,7 +31,6 @@ import type {
 import type { FactoryActorExternalIdentity } from '../../storage/domains/comments/actor.js';
 import { actorFromChannelAuthor } from '../../storage/domains/comments/actor.js';
 import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
-import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
 import type { ModelPacksStorage } from '../../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
@@ -98,13 +97,6 @@ interface SlackChannelDeps {
   sourceControl?: SourceControlStorageHandle;
   /** Registered source-control partitions used to select the provider linked to each Factory project. */
   sourceControls?: readonly SourceControlStorageHandle[];
-  /**
-   * Observational-memory settings domain. When provided, a repo-backed session
-   * adopts its factory project's shared memory settings on start, matching the
-   * web kickoff — and the linked sender's own settings win over them for every
-   * knob the sender has saved.
-   */
-  memorySettings?: MemorySettingsStorage;
   /**
    * Model-packs domain. When provided, a new repo-backed session starts on the
    * linked sender's active pack build model — the model that user picked for
@@ -464,22 +456,13 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * default, else the SDK's built-in mode default. The choice is persisted on the
  * thread as `modeModelId_<mode>`, so it outlives the process that made it.
  *
- * Observational memory is configured here too, in the same order of who chose
- * it: the project's shared settings first, then the linked sender's own row,
- * which wins for every knob they have saved. The pair is re-applied on every
- * start rather than once — memory settings are stored preference, not a choice
- * made on this thread, and a restarted process re-resolves the project's row
- * before this hook runs.
- *
  * The model resolution is skipped on a session whose mode already has a model
  * persisted on the thread. That is the durable record of a deliberate choice —
  * either an earlier start or a user's own switch — and re-applying a preference
  * over it would undo the user's selection every time the process restarts.
- * Memory settings have no such per-thread record, so they are re-applied on
- * every start.
  */
 export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSessionStart {
-  const { projects, memorySettings, modelPacks } = deps;
+  const { projects, modelPacks } = deps;
   const sourceControlSessions = createSourceControlSessionLookup(configuredSourceControls(deps));
   return async ({ session, thread, requestContext }) => {
     // Seed the tenant org above every guard below. `gateDispatch` stamps it on
@@ -514,13 +497,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
 
       await hydrateFactorySession(session, {
         orgId: owner.orgId,
-        factoryProjectId: owner.factoryProjectId,
-        // The FACTORY model drives observational-memory's provider-aware
-        // fallback, even when the sender's pack supplies the model the session
-        // actually runs — a factory connected only to Anthropic should not
-        // observe with an uncredentialed provider.
         defaultModelId: factoryModelId,
-        memorySettings,
       });
 
       const selectedModelId = userModelId ?? factoryModelId;

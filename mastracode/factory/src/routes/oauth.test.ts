@@ -76,7 +76,6 @@ function buildApp(
       auth: fakeRouteAuth({ enabled: opts?.enabled, isOrganizationAdmin: opts?.isOrganizationAdmin }),
       authStorage,
       modelCredentials: opts?.noCredentials ? undefined : seed.credentials,
-      memorySettings: seed.memorySettings,
     }).routes(),
   );
   return app;
@@ -338,30 +337,27 @@ describe('session cancel and sign-out', () => {
 
 // ── Org-scoped sign-in ───────────────────────────────────────────────────
 
-describe('personal OM defaults follow login', () => {
-  it("seeds the caller's unset OM models from the provider on paste-code completion", async () => {
+describe('provider login preserves OM selection intent', () => {
+  it('leaves automatic roles unset after paste-code completion', async () => {
     const app = buildApp(userA);
     const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
     await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
 
-    expect(await seed.memorySettings.get(TENANT_A)).toMatchObject({
-      observerModelId: 'anthropic/claude-haiku-4-5',
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
-    });
+    expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
     expect(await seed.memorySettings.get({ orgId: 'org1', userId: 'user-b' })).toBeNull();
   });
 
-  it('seeds from the device-code provider on poll completion', async () => {
+  it('leaves automatic roles unset after device-code completion', async () => {
     pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
     const app = buildApp(userA);
     const { sessionId } = await (await post(app, '/web/config/providers/openai/oauth/start')).json();
     await makePollable(sessionId);
     await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
 
-    expect(await seed.memorySettings.get(TENANT_A)).toMatchObject({ observerModelId: 'openai/gpt-5.4-mini' });
+    expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
   });
 
-  it('keeps an OM model the user already chose', async () => {
+  it('keeps an explicit role pinned without materializing the automatic sibling', async () => {
     await seed.memorySettings.patch({ ...TENANT_A, patch: { observerModelId: 'openai/gpt-5.4-mini' } });
     const app = buildApp(userA);
     const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
@@ -369,44 +365,8 @@ describe('personal OM defaults follow login', () => {
 
     expect(await seed.memorySettings.get(TENANT_A)).toMatchObject({
       observerModelId: 'openai/gpt-5.4-mini',
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: null,
     });
-  });
-
-  it('does not seed for org-scoped sign-in or providers without a built-in OM pack', async () => {
-    const app = buildApp(userA);
-    const { sessionId } = await (
-      await post(app, '/web/config/providers/anthropic/oauth/start', { scope: 'org' })
-    ).json();
-    await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
-    expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
-
-    pollGitHubCopilotDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
-    const { sessionId: copilotSession } = await (
-      await post(app, '/web/config/providers/github-copilot/oauth/start')
-    ).json();
-    await makePollable(copilotSession);
-    await post(app, '/web/config/providers/github-copilot/oauth/poll', { sessionId: copilotSession });
-    expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
-  });
-
-  it('still reports login success and releases the session when OM seeding fails', async () => {
-    vi.spyOn(seed.memorySettings, 'patch').mockRejectedValueOnce(new Error('memory settings unavailable'));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const app = buildApp(userA);
-    const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
-
-    const res = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ status: 'complete' });
-    expect(await seed.credentials.getCredential(TENANT_A, 'anthropic')).toMatchObject({ type: 'oauth' });
-    expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('seed personal OM defaults'), expect.anything());
-    // Session was deleted, not left claimed.
-    const replay = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
-    expect(replay.status).toBe(404);
-    warn.mockRestore();
   });
 });
 

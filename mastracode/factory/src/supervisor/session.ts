@@ -11,7 +11,6 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
 import { hydrateFactorySession } from '../session/factory-session.js';
-import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SupervisorScope } from './read-tools.js';
 
@@ -57,13 +56,13 @@ export async function resolveSupervisorScope(options: {
 
 /**
  * Session-start hook: stamp the owning project onto a supervisor session and
- * apply the factory's default model and memory settings. Runs on every
- * (re)creation so a restarted server heals the in-memory state. Sessions
+ * apply the factory's default model. Runs on every (re)creation so a restarted
+ * server heals the in-memory state. Sessions
  * that are not supervisors are left untouched.
  */
 export async function hydrateSupervisorSession(
   session: FactorySession,
-  deps: { projects: Pick<FactoryProjectsStorage, 'getById'>; memorySettings?: MemorySettingsStorage },
+  deps: { projects: Pick<FactoryProjectsStorage, 'getById'> },
 ): Promise<void> {
   const factoryProjectId = parseSupervisorResourceId(session.identity.getResourceId());
   if (!factoryProjectId) return;
@@ -75,8 +74,6 @@ export async function hydrateSupervisorSession(
   });
   await hydrateFactorySession(session, {
     orgId: project.orgId,
-    factoryProjectId,
     defaultModelId: project.defaultModelId ?? undefined,
-    memorySettings: deps.memorySettings,
   });
 }

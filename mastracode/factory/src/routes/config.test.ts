@@ -313,33 +313,25 @@ describe('provider key routes with a tenant', () => {
     expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic')).toBeUndefined();
   });
 
-  it("seeds the caller's unset OM models from the provider of a user-scoped key", async () => {
+  it('does not materialize OM models when a provider key is connected', async () => {
     await putKey(buildApp(userA), { key: 'sk-mine' });
+    expect(await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
+
+    await seed.memorySettings.patch({
+      orgId: 'org1',
+      userId: 'user-a',
+      patch: { observerModelId: 'openai/gpt-5.4-mini' },
+    });
+    await putKey(buildApp(userA), { key: 'sk-replaced' });
     expect(await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).toMatchObject({
-      observerModelId: 'anthropic/claude-haiku-4-5',
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      observerModelId: 'openai/gpt-5.4-mini',
+      reflectorModelId: null,
     });
   });
 
-  it('does not seed OM models for an org-scoped key', async () => {
+  it('does not materialize OM models for an org-scoped key', async () => {
     await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
     expect(await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
-  });
-
-  it('still saves the key and returns 200 when OM seeding fails', async () => {
-    vi.spyOn(seed.memorySettings, 'patch').mockRejectedValueOnce(new Error('memory settings unavailable'));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const res = await putKey(buildApp(userA), { key: 'sk-mine' });
-
-    expect(res.status).toBe(200);
-    expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic')).toMatchObject({
-      type: 'api_key',
-      key: 'sk-mine',
-    });
-    expect(await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('seed personal OM defaults'), expect.anything());
-    warn.mockRestore();
   });
 
   it('stores an org-scoped key that all members inherit when the caller is an admin', async () => {

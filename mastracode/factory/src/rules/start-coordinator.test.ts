@@ -266,7 +266,6 @@ describe('FactoryStartCoordinator', () => {
       storage.workItems,
       undefined,
       makeSourceControl() as never,
-      storage.memorySettings,
     );
 
     await coordinator.prepare(startRequest());
