@@ -418,6 +418,13 @@ export class GitLabApiClient {
     );
   }
 
+  async getMergeRequestNote(projectId: string, mergeRequestIid: number, noteId: number): Promise<GitLabNote> {
+    return this.#request<GitLabNote>(
+      'GET',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/notes/${noteId}`,
+    );
+  }
+
   async updateMergeRequestNote(
     projectId: string,
     mergeRequestIid: number,

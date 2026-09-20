@@ -226,6 +226,20 @@ describe('GitLabApiClient', () => {
     expect(requestOf(fetchMock, 1).url).toBe('https://gitlab.example.com/api/v4/projects/101/merge_requests/17');
   });
 
+  it('retrieves an individual merge request note through the numeric project target', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => json({ id: 94, body: 'Reviewed' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new GitLabApiClient({
+      client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+      connectionId: 'a1b_gitlab',
+    });
+
+    await expect(client.getMergeRequestNote('101:group/project', 17, 94)).resolves.toMatchObject({ id: 94 });
+    expect(requestOf(fetchMock).url).toBe(
+      'https://integrations.example.com/v2/connections/a1b_gitlab/proxy/api/v4/projects/101/merge_requests/17/notes/94',
+    );
+  });
+
   it.each([
     [401, 'gitlab_auth_failed'],
     [403, 'gitlab_auth_failed'],

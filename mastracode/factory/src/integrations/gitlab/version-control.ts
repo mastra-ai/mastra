@@ -167,7 +167,38 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     };
   };
 
-  const getReview: VersionControl['getReview'] = async () => null;
+  const getReview: VersionControl['getReview'] = async input => {
+    const mergeRequestIid = requirePositiveId(input.pullRequestId, 'merge request');
+    const approvalPrefix = `${mergeRequestIid}:approval`;
+    const commentPrefix = `${mergeRequestIid}:comment:`;
+    if (input.reviewId !== approvalPrefix && !input.reviewId.startsWith(`${approvalPrefix}:`) && !input.reviewId.startsWith(commentPrefix)) {
+      return null;
+    }
+    const context = await deps.contextForConnection(input.connection);
+    if (input.reviewId === approvalPrefix || input.reviewId.startsWith(`${approvalPrefix}:`)) {
+      const reviewerKey = input.reviewId === approvalPrefix ? null : input.reviewId.slice(approvalPrefix.length + 1);
+      if (reviewerKey === '') return null;
+      const currentUser = reviewerKey === null ? await context.api.getCurrentUser() : null;
+      const approvals = await context.api.getMergeRequestApprovals(input.sourceId, mergeRequestIid);
+      const user = (approvals.approved_by ?? []).map(entry => entry.user).find(candidate =>
+        reviewerKey === null
+          ? (currentUser?.id !== undefined && candidate.id === currentUser.id) ||
+            candidate.username === currentUser?.username
+          : String(candidate.id ?? candidate.username) === reviewerKey,
+      );
+      return user ? toApprovalReview(context.host, input.sourceId, mergeRequestIid, user) : null;
+    }
+    const noteId = parsePositiveInteger(input.reviewId.slice(commentPrefix.length));
+    if (noteId === null) return null;
+    try {
+      const note = await context.api.getMergeRequestNote(input.sourceId, mergeRequestIid, noteId);
+      if (note.system || note.type === 'DiffNote') return null;
+      return toCommentReview(context.host, input.sourceId, mergeRequestIid, note);
+    } catch (error) {
+      if (error instanceof GitLabApiError && error.status === 404) return null;
+      throw error;
+    }
+  };
 
   const createReview: VersionControl['createReview'] = async input =>
     submitReviewAction(deps, {
@@ -545,7 +576,11 @@ async function submitReviewAction(
   const body = input.body?.trim();
   if (!body) throw new GitLabApiError('GitLab comment reviews require a body.', 400);
   const note = await context.api.createMergeRequestNote(input.sourceId, mergeRequestIid, body);
-  const comment = toPullRequestComment(context.host, input.sourceId, mergeRequestIid, note);
+  return toCommentReview(context.host, input.sourceId, mergeRequestIid, note);
+}
+
+function toCommentReview(host: string, sourceId: string, mergeRequestIid: number, note: GitLabNote): Review {
+  const comment = toPullRequestComment(host, sourceId, mergeRequestIid, note);
   return {
     id: `${mergeRequestIid}:comment:${note.id}`,
     url: comment.url,

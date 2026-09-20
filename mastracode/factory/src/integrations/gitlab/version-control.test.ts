@@ -424,6 +424,41 @@ describe('buildGitLabVersionControl', () => {
     expect(approve.mock.invocationCallOrder[0]!).toBeLessThan(createNote.mock.invocationCallOrder[0]!);
   });
 
+  it('reads synthetic approval and comment reviews by ID and returns null for missing reviews', async () => {
+    const result = setup();
+    const approvals = vi.spyOn(result.api, 'getMergeRequestApprovals').mockResolvedValue({
+      approved: true,
+      approved_by: [{ user: { id: 3, username: 'carol' } }],
+    });
+    vi.spyOn(result.api, 'getCurrentUser').mockResolvedValue({ id: 3, username: 'carol' });
+    const getNote = vi.spyOn(result.api, 'getMergeRequestNote').mockResolvedValue(note({ id: 94, body: 'Reviewed' }));
+    const reference = { connection: CONNECTION, sourceId: 'acme/app', pullRequestId: '17' };
+
+    await expect(result.versionControl.getReview({ ...reference, reviewId: '17:approval:3' })).resolves.toMatchObject({
+      id: '17:approval:3',
+      author: 'carol',
+      state: 'approved',
+    });
+    await expect(result.versionControl.getReview({ ...reference, reviewId: '17:approval' })).resolves.toMatchObject({
+      id: '17:approval:3',
+      state: 'approved',
+    });
+    await expect(result.versionControl.getReview({ ...reference, reviewId: '17:comment:94' })).resolves.toMatchObject({
+      id: '17:comment:94',
+      body: 'Reviewed',
+      state: 'commented',
+    });
+    expect(approvals).toHaveBeenCalledWith('acme/app', 17);
+    expect(getNote).toHaveBeenCalledWith('acme/app', 17, 94);
+    await expect(result.versionControl.getReview({ ...reference, reviewId: '18:approval:3' })).resolves.toBeNull();
+    await expect(result.versionControl.getReview({ ...reference, reviewId: '17:approval:9' })).resolves.toBeNull();
+    getNote.mockRejectedValueOnce(new GitLabApiError('Not found', 404));
+    await expect(result.versionControl.getReview({ ...reference, reviewId: '17:comment:95' })).resolves.toBeNull();
+    vi.spyOn(result.api, 'getCurrentUser').mockResolvedValue({ username: 'bob' });
+    approvals.mockResolvedValue({ approved: true, approved_by: [{ user: { username: 'carol' } }] });
+    await expect(result.versionControl.getReview({ ...reference, reviewId: '17:approval' })).resolves.toBeNull();
+  });
+
   it('rejects ambiguous review operations with explicit 501 errors', async () => {
     const result = setup();
     const reference = {
