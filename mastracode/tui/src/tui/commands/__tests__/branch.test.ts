@@ -179,13 +179,35 @@ describe('handleBranchesCommand', () => {
     const state = createState({
       listBranches: vi.fn(async () => ({ total: 1, page: 0, perPage: false, hasMore: false, branches })),
     });
-    mocks.askModalQuestion.mockResolvedValue('First Branch');
+    mocks.askModalQuestion.mockResolvedValue('First Branch · branch-1');
     const ctx = createCtx(state);
 
     await handleBranchesCommand(ctx as never);
 
     expect(state.session.thread.switch).toHaveBeenCalledWith({ threadId: 'branch-1' });
     expect(ctx.showInfo).toHaveBeenCalledWith('Switched to branch: First Branch');
+  });
+
+  it('disambiguates branches that share a title', async () => {
+    const branches = [
+      {
+        thread: { id: 'branch-1', title: 'Same Name' },
+        branch: { branchCreatedAt: new Date('2026-09-19T00:00:00Z') },
+      },
+      {
+        thread: { id: 'branch-2', title: 'Same Name' },
+        branch: { branchCreatedAt: new Date('2026-09-19T01:00:00Z') },
+      },
+    ];
+    const state = createState({
+      listBranches: vi.fn(async () => ({ total: 2, page: 0, perPage: false, hasMore: false, branches })),
+    });
+    mocks.askModalQuestion.mockResolvedValue('Same Name · branch-2');
+    const ctx = createCtx(state);
+
+    await handleBranchesCommand(ctx as never);
+
+    expect(state.session.thread.switch).toHaveBeenCalledWith({ threadId: 'branch-2' });
   });
 
   it('does not switch when the user cancels the branch list', async () => {

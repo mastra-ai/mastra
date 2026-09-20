@@ -907,7 +907,9 @@ export class SessionThread {
     const targetId = threadId ?? this.#threadId;
     if (!this.#store || !targetId) return null;
     // Only expose lineage for threads this session owns.
-    await this.#requireOwnedThread({ threadId: targetId });
+    if (this.#store.hasStorage()) {
+      await this.#requireOwnedThread({ threadId: targetId });
+    }
     return this.#store.getThreadParent({ threadId: targetId });
   }
 
@@ -940,7 +942,9 @@ export class SessionThread {
       return { total: 0, page: 0, perPage: false, hasMore: false, branches: [] };
     }
     // Only expose lineage for threads this session owns.
-    await this.#requireOwnedThread({ threadId: targetId });
+    if (this.#store.hasStorage()) {
+      await this.#requireOwnedThread({ threadId: targetId });
+    }
     return this.#store.listThreadBranches({ threadId: targetId, page, perPage });
   }
 
