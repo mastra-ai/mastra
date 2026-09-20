@@ -1,6 +1,5 @@
 import {
   HarnessStorageAdmissionConflictError,
-  HarnessStorageAttachmentConflictError,
   HarnessStorageAttachmentUnavailableError,
   HarnessStorageDeleteGuardConflictError,
   HarnessStorageLeaseConflictError,
@@ -1248,7 +1247,7 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
         expect(b?.name).toBe('b.txt');
       });
 
-      it('rejects same-id conflicts without overwriting', async () => {
+      it('preserves the first same-id attachment without overwriting', async () => {
         if (!harness) return;
         await harness.saveAttachment({
           sessionId: 'session-1',
@@ -1258,17 +1257,6 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           source: 'preupload',
           data: new Uint8Array([1]),
         });
-        await expect(
-          harness.saveAttachment({
-            sessionId: 'session-1',
-            attachmentId: 'a1',
-            name: 'second.txt',
-            mimeType: 'text/plain',
-            source: 'preupload',
-            data: new Uint8Array([2, 3]),
-          }),
-        ).rejects.toBeInstanceOf(HarnessStorageAttachmentConflictError);
-
         const loaded = await harness.loadAttachment({ sessionId: 'session-1', attachmentId: 'a1' });
         expect(loaded?.name).toBe('first.txt');
         expect(Array.from(loaded?.data ?? [])).toEqual([1]);

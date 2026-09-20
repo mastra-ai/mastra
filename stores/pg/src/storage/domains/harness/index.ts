@@ -175,6 +175,7 @@ type PgHarnessExecuteArgs = string | { sql: string; args?: QueryValues };
 type PgHarnessExecuteResult = { rows: Record<string, unknown>[]; rowsAffected: number };
 type PgHarnessTx = PgHarnessClient & { closed: boolean; commit(): Promise<void>; rollback(): Promise<void> };
 type HarnessAttachmentOperationKind = 'put' | 'delete';
+const HARNESS_ATTACHMENT_PUT_ABANDONMENT_DELAY_MS = 60_000;
 type HarnessAttachmentOperationStatus =
   | 'pending'
   | 'uploaded'
@@ -2240,7 +2241,7 @@ export class HarnessPG extends HarnessStorage {
             attachmentIncarnation,
             'put',
           );
-          if (putOperation && putOperation.status !== 'completed') {
+          if (putOperation && putOperation.status !== 'completed' && putOperation.status !== 'cleaned') {
             throw new HarnessStorageAttachmentPendingError(sessionId, attachmentId);
           }
           const operation = await this.#stageAttachmentDeleteTx(tx, {
@@ -3272,7 +3273,7 @@ export class HarnessPG extends HarnessStorage {
             String(sessionIncarnation),
             'put',
           );
-          if (putOperation && putOperation.status !== 'completed') {
+          if (putOperation && putOperation.status !== 'completed' && putOperation.status !== 'cleaned') {
             throw new HarnessStorageAttachmentPendingError(sessionId, attachmentId);
           }
         }
@@ -3710,8 +3711,8 @@ export class HarnessPG extends HarnessStorage {
     await tx.execute({
       sql: `INSERT INTO ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
             (id, harness_name, session_id, attachment_id, session_incarnation, kind, status,
-             name, mime_type, source, size_bytes, sha256, semantic_json, attempts, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             name, mime_type, source, size_bytes, sha256, semantic_json, attempts, created_at, updated_at, next_attempt_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (harness_name, session_id, attachment_id, session_incarnation, kind) DO NOTHING`,
       args: [
         randomUUID(),
@@ -3730,6 +3731,7 @@ export class HarnessPG extends HarnessStorage {
         0,
         now,
         now,
+        now + HARNESS_ATTACHMENT_PUT_ABANDONMENT_DELAY_MS,
       ],
     });
     const operation = await this.#loadAttachmentOperationTx(
@@ -3748,6 +3750,16 @@ export class HarnessPG extends HarnessStorage {
     }
     if (operation.status === 'claimed') {
       throw new HarnessStorageAttachmentPendingError(input.sessionId, input.attachmentId);
+    }
+    if (operation.status !== 'completed') {
+      const nextAttemptAt = Date.now() + HARNESS_ATTACHMENT_PUT_ABANDONMENT_DELAY_MS;
+      await tx.execute({
+        sql: `UPDATE ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
+              SET next_attempt_at = ?, updated_at = ?
+              WHERE id = ? AND status NOT IN (?, ?)`,
+        args: [nextAttemptAt, Date.now(), operation.id, 'completed', 'cleaned'],
+      });
+      operation.nextAttemptAt = nextAttemptAt;
     }
     const deleteOperation = await this.#loadAttachmentOperationTx(
       tx,
@@ -3872,13 +3884,17 @@ export class HarnessPG extends HarnessStorage {
     }
   }
 
-  async #markAttachmentOperationUnknown(operationId: string, blobRef?: string): Promise<void> {
+  async #markAttachmentOperationUnknown(operationId: string, blobRef?: string, claimId?: string): Promise<void> {
+    const claimCondition =
+      claimId === undefined ? 'status NOT IN (?, ?, ?)' : '(status NOT IN (?, ?) OR (status = ? AND claim_id = ?))';
+    const claimArgs =
+      claimId === undefined ? ['completed', 'cleaned', 'claimed'] : ['completed', 'cleaned', 'claimed', claimId];
     await this.#client.execute({
       sql: `UPDATE ${TABLE_HARNESS_ATTACHMENT_OPERATIONS}
             SET status = ?, blob_ref = COALESCE(?, blob_ref), claim_id = NULL,
                 claim_expires_at = NULL, next_attempt_at = ?, updated_at = ?,
                 last_error = ?
-            WHERE id = ? AND status NOT IN (?, ?)`,
+            WHERE id = ? AND ${claimCondition}`,
       args: [
         'unknown',
         blobRef ?? null,
@@ -3886,8 +3902,7 @@ export class HarnessPG extends HarnessStorage {
         Date.now(),
         JSON.stringify({ code: 'external_unknown' }),
         operationId,
-        'completed',
-        'cleaned',
+        ...claimArgs,
       ],
     });
   }
@@ -3928,11 +3943,11 @@ export class HarnessPG extends HarnessStorage {
         expectedSha256: operation.sha256,
       });
     } catch {
-      await this.#markAttachmentOperationUnknown(operation.id, operation.blobRef);
+      await this.#markAttachmentOperationUnknown(operation.id, operation.blobRef, claimId);
       return false;
     }
     if (outcome.outcome === 'unknown') {
-      await this.#markAttachmentOperationUnknown(operation.id, operation.blobRef);
+      await this.#markAttachmentOperationUnknown(operation.id, operation.blobRef, claimId);
       return false;
     }
     await this.#markAttachmentOperationCleaned(operation.id, claimId);
@@ -3996,11 +4011,11 @@ export class HarnessPG extends HarnessStorage {
           maxBytes: DEFAULT_HARNESS_ATTACHMENT_MAX_BYTES,
         });
       } catch {
-        await this.#markAttachmentOperationUnknown(operationId, operation.blobRef);
+        await this.#markAttachmentOperationUnknown(operationId, operation.blobRef, claimId);
         return false;
       }
       if (data === null || data.byteLength !== operation.sizeBytes || sha256Hex(data) !== operation.sha256) {
-        await this.#markAttachmentOperationUnknown(operationId, operation.blobRef);
+        await this.#markAttachmentOperationUnknown(operationId, operation.blobRef, claimId);
         return false;
       }
       await this.#markAttachmentOperationCompleted(operationId, claimId);
@@ -4041,12 +4056,12 @@ export class HarnessPG extends HarnessStorage {
         expectedSha256: operation.sha256,
       });
     } catch {
-      await this.#markAttachmentOperationUnknown(operationId, operation.blobRef);
+      await this.#markAttachmentOperationUnknown(operationId, operation.blobRef, claimId);
       if (throwOnUnknown) throw new HarnessStorageAttachmentPendingError(operation.sessionId, operation.attachmentId);
       return false;
     }
     if (outcome.outcome === 'unknown') {
-      await this.#markAttachmentOperationUnknown(operationId, operation.blobRef);
+      await this.#markAttachmentOperationUnknown(operationId, operation.blobRef, claimId);
       if (throwOnUnknown) throw new HarnessStorageAttachmentPendingError(operation.sessionId, operation.attachmentId);
       return false;
     }

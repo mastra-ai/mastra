@@ -32,6 +32,9 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
   #deleteStarted: (() => void) | undefined;
   #deleteRelease: (() => void) | undefined;
   #deleteStartedPromise: Promise<void> | undefined;
+  #cancelStarted: (() => void) | undefined;
+  #cancelRelease: (() => void) | undefined;
+  #cancelStartedPromise: Promise<void> | undefined;
   unknownSaveOnce = false;
   failSaveOnce = false;
   unknownDeleteOnce = false;
@@ -66,6 +69,22 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
   releaseDelete(): void {
     this.#deleteRelease?.();
     this.#deleteRelease = undefined;
+  }
+
+  pauseNextCancel(): void {
+    this.#cancelStartedPromise = new Promise(resolve => {
+      this.#cancelStarted = resolve;
+    });
+    this.#cancelRelease = undefined;
+  }
+
+  async waitForCancelStarted(): Promise<void> {
+    await this.#cancelStartedPromise;
+  }
+
+  releaseCancel(): void {
+    this.#cancelRelease?.();
+    this.#cancelRelease = undefined;
   }
 
   async save(input: HarnessAttachmentByteOwnerSaveInput): Promise<HarnessAttachmentByteOwnerSaveResult> {
@@ -108,7 +127,14 @@ class UnknownDeleteOnceOwner implements HarnessAttachmentByteOwner {
     return this.#delegate.delete(input);
   }
 
-  cancel(input: HarnessAttachmentByteOwnerCancelInput): Promise<HarnessAttachmentByteOwnerCancelResult> {
+  async cancel(input: HarnessAttachmentByteOwnerCancelInput): Promise<HarnessAttachmentByteOwnerCancelResult> {
+    if (this.#cancelStarted !== undefined) {
+      this.#cancelStarted();
+      this.#cancelStarted = undefined;
+      await new Promise<void>(resolve => {
+        this.#cancelRelease = resolve;
+      });
+    }
     return this.#delegate.cancel(input);
   }
 }
@@ -315,6 +341,7 @@ describe('HarnessPG native external attachment ownership', () => {
       data: new TextEncoder().encode('first upload'),
     });
     await owner.waitForSaveStarted();
+    await expect(harness.reconcileAttachmentOperations()).resolves.toMatchObject({ processed: 0, pending: 1 });
     await expect(harness.deleteSession({ sessionId: session.id })).rejects.toBeInstanceOf(
       HarnessStorageAttachmentPendingError,
     );
@@ -406,6 +433,43 @@ describe('HarnessPG native external attachment ownership', () => {
         maxBytes: 100 * 1024 * 1024,
       }),
     ).resolves.toBeNull();
+  });
+
+  it('keeps a cancellation claim while a late upload response arrives', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-attachment-cancel-claim',
+      resourceId: 'cancel-claim-resource',
+      threadId: 'cancel-claim-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'cancel-claim-owner', ttlMs: 60_000 },
+    });
+
+    owner.pauseNextSave();
+    owner.pauseNextCancel();
+    const savePromise = harness.saveAttachment({
+      sessionId: session.id,
+      attachmentId: 'late-upload',
+      name: 'late.txt',
+      mimeType: 'text/plain',
+      source: 'inline',
+      data: new TextEncoder().encode('late upload'),
+    });
+    await owner.waitForSaveStarted();
+    const reconciliation = harness.reconcileAttachmentOperations({ now: Date.now() + 61_000 });
+    await owner.waitForCancelStarted();
+    owner.releaseSave();
+    await expect(savePromise).rejects.toBeInstanceOf(HarnessStorageAttachmentPendingError);
+    const claimed = await store.db.one<{ status: string }>(
+      `SELECT status FROM "${schemaName}"."mastra_harness_attachment_operations"
+       WHERE kind = 'put' AND session_id = $1 AND attachment_id = $2`,
+      [session.id, 'late-upload'],
+    );
+    expect(claimed.status).toBe('claimed');
+    owner.releaseCancel();
+    await expect(reconciliation).resolves.toMatchObject({ processed: 1, pending: 0 });
+    await expect(harness.loadAttachment({ sessionId: session.id, attachmentId: 'late-upload' })).resolves.toBeNull();
   });
 
   it('reconciles an abandoned PUT through the typed owner fence before session deletion', async () => {
