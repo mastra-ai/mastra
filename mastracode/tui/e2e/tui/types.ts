@@ -284,6 +284,10 @@ export type McE2eScenario = {
   projectFixture?: 'long-branch' | 'manual';
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
+  /** Opt into OM model work, which deterministic TUI scenarios suppress by default. */
+  enableObservationalMemory?: boolean;
+  /** Opt into title model work, which deterministic TUI scenarios suppress by default. */
+  enableTitleGeneration?: boolean;
   aimockFixture?: string;
   env?: (context: McE2ePrepareContext) => Record<string, string | null>;
   entrypoint?: (context: McE2ePrepareContext) => string;

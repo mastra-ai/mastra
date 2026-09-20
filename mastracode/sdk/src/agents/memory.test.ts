@@ -146,7 +146,8 @@ describe('getDynamicMemory', () => {
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue({ models: {} });
     delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
-    delete process.env.MC_E2E_DISABLE_OBSERVATIONAL_MEMORY;
+    delete process.env.MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY;
+    delete process.env.MASTRACODE_DISABLE_TITLE_GENERATION;
   });
 
   it('wires Mastra Code observational memory activation defaults into core memory', async () => {
@@ -195,14 +196,23 @@ describe('getDynamicMemory', () => {
     });
   });
 
-  it('keeps storage-backed memory while suppressing model-driven memory work in generic E2E scenarios', async () => {
-    process.env.MC_E2E_DISABLE_OBSERVATIONAL_MEMORY = '1';
+  it('keeps storage-backed memory and title generation while suppressing OM work in generic E2E scenarios', async () => {
+    process.env.MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY = '1';
 
     const { config } = await createMemoryConfig({ projectPath: '/tmp/project' });
 
     expect(config.storage).toEqual({ storage: true });
-    expect(config.options.generateTitle).toBe(false);
+    expect(config.options.generateTitle).not.toBe(false);
     expect(config.options.observationalMemory).toBe(false);
+  });
+
+  it('can suppress title generation independently from observational memory in E2E scenarios', async () => {
+    process.env.MASTRACODE_DISABLE_TITLE_GENERATION = '1';
+
+    const { config } = await createMemoryConfig({ projectPath: '/tmp/project' });
+
+    expect(config.options.generateTitle).toBe(false);
+    expect(config.options.observationalMemory).not.toBe(false);
   });
 
   it('keeps Subconscious memory inert unless explicitly opted in', async () => {

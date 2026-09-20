@@ -289,7 +289,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
         // generation takes the primary OM model only — its model field does not
         // accept fallback arrays.
         generateTitle:
-          process.env.MC_E2E_DISABLE_OBSERVATIONAL_MEMORY === '1'
+          process.env.MASTRACODE_DISABLE_TITLE_GENERATION === '1'
             ? false
             : {
                 model: ({ requestContext }) => {
@@ -298,7 +298,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
                 },
               },
         observationalMemory:
-          process.env.MC_E2E_DISABLE_OBSERVATIONAL_MEMORY === '1'
+          process.env.MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY === '1'
             ? false
             : {
                 enabled: true,

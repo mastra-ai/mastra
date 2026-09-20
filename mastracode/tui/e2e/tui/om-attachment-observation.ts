@@ -14,7 +14,7 @@ export const omAttachmentObservationScenario = {
   name: 'om-attachment-observation',
   description: 'Proves Observational Memory receives submitted pasted-image attachment parts from the real TUI path.',
   testName: 'observes submitted pasted image attachment parts in OM input',
-  disableMemory: false,
+  enableObservationalMemory: true,
   useOpenAIModel: true,
   aimockFixture: 'om-attachment-observation.json',
   env() {

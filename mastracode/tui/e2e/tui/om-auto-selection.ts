@@ -7,7 +7,7 @@ export const omAutoSelectionScenario: McE2eScenario = {
   name: 'om-auto-selection',
   description: 'Displays effective auto OM models and resets one explicit role through the real TUI.',
   testName: 'shows and independently resets automatic OM model selection',
-  disableMemory: false,
+  enableObservationalMemory: true,
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;

@@ -92,7 +92,11 @@ export type ContinuationHintsConfig =
 export interface ObservationConfig {
   /**
    * Model for the Observer agent.
-   * Can be `'auto'` to select from the active actor model, a model ID string
+   * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
+   * then a low-cost model for the active provider when the actor is a model ID,
+   * then the exact effective actor model/config, the main agent model when no
+   * invocation model was captured, and finally this package's default model.
+   * Can also be a model ID string
    * (e.g., 'openai/gpt-4o'), a LanguageModel instance, a function that returns
    * either (for dynamic model selection), a `ModelByInputTokens` selector
    * (for token-tiered routing), or an array of ModelWithRetries for fallback support.
@@ -294,7 +298,11 @@ export interface ObservationConfig {
 export interface ReflectionConfig {
   /**
    * Model for the Reflector agent.
-   * Can be `'auto'` to select from the active actor model, a model ID string
+   * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
+   * then a low-cost model for the active provider when the actor is a model ID,
+   * then the exact effective actor model/config, the main agent model when no
+   * invocation model was captured, and finally this package's default model.
+   * Can also be a model ID string
    * (e.g., 'openai/gpt-4o'), a LanguageModel instance, a function that returns
    * either (for dynamic model selection), a `ModelByInputTokens` selector
    * (for token-tiered routing), or an array of ModelWithRetries for fallback support.
@@ -994,7 +1002,8 @@ export interface ObservationalMemoryConfig {
    * `observation.model` or `reflection.model` — an error will be thrown.
    * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
    * then a low-cost model for the active provider when the actor is a model ID,
-   * then the exact effective actor model/config.
+   * then the exact effective actor model/config, the main agent model when no
+   * invocation model was captured, and finally this package's default model.
    *
    * @default 'auto'
    */
