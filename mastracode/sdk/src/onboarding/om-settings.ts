@@ -76,11 +76,7 @@ export function seedProviderOMDefault(providerId: string): OMPack | undefined {
  *
  * Exported for unit testing; `persistOmRoleOverride` is the disk-backed wrapper.
  */
-export function applyOmRoleOverride(
-  settings: GlobalSettings,
-  role: 'observer' | 'reflector',
-  modelId: string,
-): void {
+export function applyOmRoleOverride(settings: GlobalSettings, role: 'observer' | 'reflector', modelId: string): void {
   if (role === 'observer') {
     settings.models.observerModelOverride = modelId;
     settings.models.observerModelSelection = modelId;
