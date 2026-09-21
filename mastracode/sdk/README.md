@@ -24,7 +24,7 @@ const { mastra, controller } = await mountAgentControllerOnMastra({
 });
 ```
 
-## Plugin background execution
+### Plugin background execution
 
 With the experimental `backgroundTools.enabled` setting on, plugin tools are eligible for native background execution only when they declare their own configuration:
 
@@ -41,15 +41,15 @@ The SDK doesn't infer support from tool names or serialize plugin calls. When th
 Tools that already await their work need no separate execution path. For a tool that returns an acknowledgement while continuing independently, native execution exposes `context.background`. Adopt the existing operation before returning:
 
 ```ts
-const operation = startResearch(input, context.abortSignal)
+const operation = startResearch(input, context.abortSignal);
 if (context.background) {
   context.background.adopt({
     completion: operation.finished,
     cancel: reason => operation.cancel(reason),
-  })
-  return { answer: 'Research started' }
+  });
+  return { answer: 'Research started' };
 }
-return await operation.finished
+return await operation.finished;
 ```
 
 Here, `startResearch` represents the plugin's own operation API. Its `finished` promise must resolve with the terminal tool result only after work and cleanup finish, or reject on failure. The native task tracks that promise instead of the acknowledgement. Adopt at most one operation, before `execute()` returns. Forward cancellation through the supplied signal or the operation's `cancel` callback. Without adoption, `execute()` must itself await the complete operation.
