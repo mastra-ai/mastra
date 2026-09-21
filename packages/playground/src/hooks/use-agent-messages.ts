@@ -33,14 +33,29 @@ export const useAgentMessages = ({ threadId, agentId, memory }: UseAgentMessages
               includeSystemReminders: true,
               perPage: PER_PAGE,
               orderBy: { field: 'createdAt', direction: 'DESC' },
-              filter: olderThan ? { dateRange: { end: new Date(olderThan), endExclusive: true } } : undefined,
+              // Inclusive bound: messages sharing the oldest createdAt of the previous page
+              // may have been cut off by perPage, so re-ask for them and dedupe by id below.
+              filter: olderThan ? { dateRange: { end: new Date(olderThan) } } : undefined,
             })
         : skipToken,
-    getNextPageParam: lastPage => {
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
       if (!lastPage.hasMore || lastPage.messages.length === 0) return undefined;
-      return new Date(Math.min(...lastPage.messages.map(createdAtMs))).toISOString();
+      const next = new Date(Math.min(...lastPage.messages.map(createdAtMs))).toISOString();
+      // A full page of same-timestamp messages would re-request itself forever.
+      return next === lastPageParam ? undefined : next;
     },
-    select: data => ({ ...data, messages: data.pages.flatMap(page => page.messages).sort(byCreatedAt) }),
+    select: data => {
+      const seen = new Set<string>();
+      const messages = data.pages
+        .flatMap(page => page.messages)
+        .filter(message => {
+          if (seen.has(message.id)) return false;
+          seen.add(message.id);
+          return true;
+        })
+        .sort(byCreatedAt);
+      return { ...data, messages };
+    },
     staleTime: 0,
     gcTime: 0,
     retry: false,

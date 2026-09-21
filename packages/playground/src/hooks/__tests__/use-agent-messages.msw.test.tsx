@@ -20,7 +20,6 @@ const createMessage = (index: number, text = `Message ${index}`): MastraDBMessag
 
 interface CursorRequest {
   end?: string;
-  endExclusive?: boolean;
 }
 
 const serveThread = (store: MastraDBMessage[], requests: CursorRequest[] = []) =>
@@ -28,12 +27,12 @@ const serveThread = (store: MastraDBMessage[], requests: CursorRequest[] = []) =
     const url = new URL(request.url);
     const perPage = Number(url.searchParams.get('perPage'));
     const filter = JSON.parse(url.searchParams.get('filter') ?? 'null');
-    requests.push({ end: filter?.dateRange?.end, endExclusive: filter?.dateRange?.endExclusive });
+    requests.push({ end: filter?.dateRange?.end });
 
     const cutoff = filter?.dateRange?.end ? new Date(filter.dateRange.end).getTime() : Infinity;
     const older = store
-      .filter(message => new Date(message.createdAt).getTime() < cutoff)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .filter(message => new Date(message.createdAt).getTime() <= cutoff)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || b.id.localeCompare(a.id));
     const page = older.slice(0, perPage).reverse();
     return HttpResponse.json({ messages: page, hasMore: older.length > perPage });
   });
@@ -65,7 +64,8 @@ describe('useAgentMessages', () => {
     await act(async () => {
       await result.current.fetchNextPage();
     });
-    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(10, 90)));
+    // Inclusive cursor re-serves msg-50, so the page reaches msg-11 instead of msg-10.
+    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(11, 90)));
 
     await act(async () => {
       await result.current.fetchNextPage();
@@ -74,10 +74,55 @@ describe('useAgentMessages', () => {
     expect(result.current.hasNextPage).toBe(false);
 
     expect(requests).toEqual([
-      { end: undefined, endExclusive: undefined },
-      { end: createdAt(50).toISOString(), endExclusive: true },
-      { end: createdAt(10).toISOString(), endExclusive: true },
+      { end: undefined },
+      { end: createdAt(50).toISOString() },
+      { end: createdAt(11).toISOString() },
     ]);
+  });
+
+  describe('when messages at the page boundary share the same createdAt', () => {
+    // Batch saves (user + assistant, tool call + result) land on one timestamp. With
+    // 40 per page, msg-40..msg-45 all sit on createdAt(40): the newest page only has
+    // room for msg-42..45, so an exclusive cursor would silently drop msg-40 and 41.
+    const store = [
+      ...seed(40),
+      ...Array.from({ length: 6 }, (_, i) => ({ ...createMessage(40 + i), createdAt: createdAt(40) })),
+      ...Array.from({ length: 10 }, (_, i) => createMessage(46 + i)),
+    ];
+
+    it('keeps every message and shows none twice', async () => {
+      server.use(serveThread(store));
+
+      const { result } = renderHookWithProviders(() =>
+        useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
+      );
+      await waitFor(() => expect(result.current.data?.messages).toHaveLength(40));
+
+      await act(async () => {
+        await result.current.fetchNextPage();
+      });
+      await waitFor(() => expect(result.current.hasNextPage).toBe(false));
+
+      expect(ids(result.current.data?.messages)?.sort()).toEqual(range(0, 56).sort());
+    });
+
+    it('stops paging instead of re-requesting a full page of identical timestamps', async () => {
+      const flat = Array.from({ length: 45 }, (_, i) => ({ ...createMessage(i), createdAt: createdAt(0) }));
+      const requests: CursorRequest[] = [];
+      server.use(serveThread(flat, requests));
+
+      const { result } = renderHookWithProviders(() =>
+        useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
+      );
+      await waitFor(() => expect(result.current.data?.messages).toHaveLength(40));
+
+      await act(async () => {
+        await result.current.fetchNextPage();
+      });
+      await waitFor(() => expect(result.current.hasNextPage).toBe(false));
+
+      expect(requests).toHaveLength(2);
+    });
   });
 
   it('keeps older pages stable when new messages land at the end of the thread', async () => {
@@ -121,10 +166,7 @@ describe('useAgentMessages', () => {
       await queryClient.invalidateQueries({ queryKey: ['memory', 'messages', 'thread-1'] });
     });
 
-    expect(requests).toEqual([
-      { end: undefined, endExclusive: undefined },
-      { end: createdAt(20).toISOString(), endExclusive: true },
-    ]);
+    expect(requests).toEqual([{ end: undefined }, { end: createdAt(20).toISOString() }]);
     await waitFor(() => {
       const messages = result.current.data?.messages ?? [];
       expect(ids(messages)).toEqual(range(0, 60));

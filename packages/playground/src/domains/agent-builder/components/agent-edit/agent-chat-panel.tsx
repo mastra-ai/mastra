@@ -24,6 +24,8 @@ interface AgentChatPanelProviderProps {
 
 interface AgentChatMeta {
   isConversationLoading: boolean;
+  loadPrevious?: () => void;
+  isLoadingPrevious?: boolean;
   agentName?: string;
   agentDescription?: string;
   agentAvatarUrl?: string;
@@ -70,17 +72,31 @@ export const AgentChatPanelProvider = ({
   const { data: currentUser } = useCurrentUser();
   const threadId = currentUser?.id ? `${currentUser.id}-${agentId}` : agentId;
 
-  const { data, isLoading: isConversationLoading } = useAgentMessages({
+  const {
+    data,
+    isLoading: isConversationLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useAgentMessages({
     agentId,
     threadId,
     memory: true,
   });
 
   const storedMessages = data?.messages ?? EMPTY_MESSAGES;
+  const loadPrevious = hasNextPage ? fetchNextPage : undefined;
 
   const meta = useMemo<AgentChatMeta>(
-    () => ({ isConversationLoading, agentName, agentDescription, agentAvatarUrl }),
-    [isConversationLoading, agentName, agentDescription, agentAvatarUrl],
+    () => ({
+      isConversationLoading,
+      loadPrevious,
+      isLoadingPrevious: isFetchingNextPage,
+      agentName,
+      agentDescription,
+      agentAvatarUrl,
+    }),
+    [isConversationLoading, loadPrevious, isFetchingNextPage, agentName, agentDescription, agentAvatarUrl],
   );
 
   return (
@@ -139,13 +155,16 @@ interface AgentChatMessageListProps {
 const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListProps) => {
   const messages = useStreamMessages();
   const isRunning = useStreamRunning();
-  const { isConversationLoading, agentName, agentDescription, agentAvatarUrl } = useContext(AgentChatMetaContext);
+  const { isConversationLoading, loadPrevious, isLoadingPrevious, agentName, agentDescription, agentAvatarUrl } =
+    useContext(AgentChatMetaContext);
 
   return (
     <MessageList
       messages={messages}
       isLoading={isConversationLoading}
       isRunning={isRunning}
+      onLoadPrevious={loadPrevious}
+      isLoadingPrevious={isLoadingPrevious}
       skeletonTestId="agent-builder-agent-chat-messages-skeleton"
       emptyState={
         <div

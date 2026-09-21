@@ -49,7 +49,7 @@ export const AgentBadgeWrapper = ({
   const shouldFetchAgentMessages = Boolean(
     result?.subAgentThreadId && !result.text && !result.subAgentToolResults?.length,
   );
-  const { data, isLoading } = useAgentMessages({
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useAgentMessages({
     threadId: shouldFetchAgentMessages ? result?.subAgentThreadId : undefined,
     agentId,
     memory: true,
@@ -85,8 +85,10 @@ export const AgentBadgeWrapper = ({
     childMessages = [{ type: 'text' as const, content: result.text }];
   }
 
+  let onLoadPrevious: (() => void) | undefined;
   if (!childMessages) {
     childMessages = resolveToChildMessages(convertedMessages) as AgentMessage[];
+    onLoadPrevious = hasNextPage ? fetchNextPage : undefined;
   }
 
   const hasStreamingChildMessages = Boolean(result && Object.prototype.hasOwnProperty.call(result, 'childMessages'));
@@ -106,6 +108,8 @@ export const AgentBadgeWrapper = ({
       isComplete={isComplete}
       status={status}
       errorText={errorText}
+      onLoadPrevious={onLoadPrevious}
+      isLoadingPrevious={isFetchingNextPage}
     />
   );
 };
