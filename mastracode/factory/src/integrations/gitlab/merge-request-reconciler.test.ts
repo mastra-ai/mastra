@@ -8,6 +8,7 @@ import type { IntegrationContext } from '../base.js';
 import { resolveGitLabRules } from './default-rules.js';
 import { encodeSourceId } from './integration.js';
 import { attachGitLabMergeRequestReconciler } from './merge-request-reconciler.js';
+import { mergeRequestTargetKey, subscribeToMergeRequest } from './subscriptions.js';
 
 const PROJECT_ID = '101';
 const PROJECT_PATH = 'acme/app';
@@ -153,7 +154,7 @@ function closedMergeRequest(merged: boolean): PullRequest {
 function createReconciler(
   seeded: Awaited<ReturnType<typeof seedMergeRequestCard>>,
   pullRequest: PullRequest,
-  options: { missingIdentity?: boolean; accessLevel?: number } = {},
+  options: { missingIdentity?: boolean; accessLevel?: number; subscriptions?: boolean } = {},
 ) {
   const getPullRequest = vi.fn<VersionControl['getPullRequest']>().mockResolvedValue(pullRequest);
   // Trust drops between sweeps by default so the second sweep has a metadata change to write.
@@ -169,6 +170,7 @@ function createReconciler(
     resolveActiveConnectionForHost: vi
       .fn()
       .mockImplementation(async (connectionId: string) => (options.missingIdentity ? 'direct' : connectionId)),
+    ...(options.subscriptions ? { integrationStorage: seeded.seeded.integrations.forIntegration('gitlab') } : {}),
   };
   const context = {
     storage: { projects: seeded.seeded.projects, sourceControl: seeded.sourceControl, intake: seeded.seeded.intake },
@@ -319,5 +321,37 @@ describe('GitLab merge-request reconciler', () => {
     expect(item?.metadata).not.toHaveProperty(FACTORY_PULL_REQUEST_RECONCILIATION_KEY);
 
     await expect(reconcile()).resolves.toMatchObject({ checked: 1, updated: 0 });
+  });
+
+  it("retires the merge request's open thread subscriptions when it replays a missed terminal outcome", async () => {
+    const seeded = await seedMergeRequestCard({ initialStage: 'review', initialState: 'open' });
+    const { project } = seeded;
+    const storage = seeded.seeded.integrations.forIntegration('gitlab');
+    const input = {
+      orgId: project.orgId,
+      host: HOST,
+      projectId: PROJECT_ID,
+      projectPath: PROJECT_PATH,
+      projectRepositoryId: 'link-1',
+      installationExternalId: 'direct',
+      changeRequestId: '17',
+      sessionId: 'session-1',
+      ownerId: project.createdBy,
+      resourceId: project.id,
+      threadId: 'thread-1',
+      source: 'explicit-tool' as const,
+    };
+    await subscribeToMergeRequest(input, storage);
+    await subscribeToMergeRequest({ ...input, changeRequestId: '18' }, storage);
+    const { reconcile } = createReconciler(seeded, closedMergeRequest(true), { subscriptions: true });
+
+    await expect(reconcile()).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
+
+    const [retired] = await storage.subscriptions.listByTarget(mergeRequestTargetKey(input));
+    expect(retired?.status).toBe('merged');
+    const [untouched] = await storage.subscriptions.listByTarget(
+      mergeRequestTargetKey({ ...input, changeRequestId: '18' }),
+    );
+    expect(untouched?.status).toBe('open');
   });
 });

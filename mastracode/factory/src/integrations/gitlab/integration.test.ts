@@ -86,6 +86,7 @@ describe('GitLabIntegration', () => {
       { path: '/web/gitlab/projects/:id/prs/:number', requiresAuth: false },
       { path: '/web/gitlab/issues', requiresAuth: false },
       { path: '/web/gitlab/issues/:issueId', requiresAuth: false },
+      { path: '/web/gitlab/subscriptions', requiresAuth: false },
       { path: '/web/gitlab/webhook', requiresAuth: false },
     ]);
     expect(gitlab.diagnostics()).toMatchObject({ webhookConfigured: true });
@@ -251,7 +252,10 @@ describe('GitLabIntegration', () => {
     const gitlab = direct(fetchMock);
     const primary = encodeSourceId({ connectionId: 'direct', projectId: '10', projectPath: 'mastra/platform' });
     const control = encodeSourceId({ connectionId: 'direct', projectId: '11', projectPath: 'mastra/control' });
-    const input = { connection: { type: 'oauth' as const, accessToken: 'gitlab-direct-access-token' }, sourceIds: [primary, control] };
+    const input = {
+      connection: { type: 'oauth' as const, accessToken: 'gitlab-direct-access-token' },
+      sourceIds: [primary, control],
+    };
 
     const first = await gitlab.intake.listIssues(input);
     const second = await gitlab.intake.listIssues({ ...input, cursor: first.nextCursor ?? undefined });
@@ -314,7 +318,10 @@ describe('GitLabIntegration', () => {
   });
 
   it('resolves project-qualified issue shorthand for the read tool', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(json([issue()])).mockResolvedValueOnce(json([]));
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json([issue()]))
+      .mockResolvedValueOnce(json([]));
 
     const detail = await direct(fetchMock).intake.getIssue({
       connection: { type: 'oauth', accessToken: 'gitlab-tool' },
@@ -392,21 +399,29 @@ describe('GitLabIntegration', () => {
       input: { installationId: installation.id, externalId: '10', slug: 'mastra/platform', defaultBranch: 'main' },
     });
 
-    await expect(gitlab.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository.id })).resolves.toEqual({
+    await expect(
+      gitlab.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository.id }),
+    ).resolves.toEqual({
       connection: { type: 'oauth', accessToken: 'gitlab-direct-access-token' },
       sourceId: '10:mastra/platform',
     });
-    await expect(gitlab.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository.id })).resolves.toEqual({
+    await expect(
+      gitlab.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository.id }),
+    ).resolves.toEqual({
       cloneUrl: 'https://gitlab.com/mastra/platform.git',
       authorization: { scheme: 'bearer', token: 'group-token', username: 'oauth2' },
     });
-    await expect(gitlab.resolveActiveConnectionForHost('git_platform_connection', 'gitlab.com')).resolves.toBe('direct');
-    await expect(gitlab.resolveActiveConnectionForHost('git_platform_connection', 'gitlab.other.example')).resolves.toBe(
-      'git_platform_connection',
+    await expect(gitlab.resolveActiveConnectionForHost('git_platform_connection', 'gitlab.com')).resolves.toBe(
+      'direct',
     );
+    await expect(
+      gitlab.resolveActiveConnectionForHost('git_platform_connection', 'gitlab.other.example'),
+    ).resolves.toBe('git_platform_connection');
 
     const otherHost = await storage.installations.upsert({
-      orgId: 'org-1', connectedByUserId: 'user-1', externalId: 'git_other_connection',
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'git_other_connection',
       providerMetadata: {
         host: 'gitlab.other.example',
         connection: { type: 'oauth', accessToken: 'gitlab-connection:git_other_connection' },
@@ -416,9 +431,9 @@ describe('GitLabIntegration', () => {
       orgId: 'org-1',
       input: { installationId: otherHost.id, externalId: '11', slug: 'mastra/other', defaultBranch: 'main' },
     });
-    await expect(gitlab.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: otherRepository.id })).rejects.toThrow(
-      'GitLab connection is unavailable.',
-    );
+    await expect(
+      gitlab.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: otherRepository.id }),
+    ).rejects.toThrow('GitLab connection is unavailable.');
   });
 });
 
@@ -440,6 +455,7 @@ describe('PlatformGitLabIntegration', () => {
       '/web/gitlab/projects/:id/prs/:number',
       '/web/gitlab/issues',
       '/web/gitlab/issues/:issueId',
+      '/web/gitlab/subscriptions',
       '/web/gitlab/webhook',
     ]);
     expect(gitlab.diagnostics()).toMatchObject({
@@ -449,58 +465,71 @@ describe('PlatformGitLabIntegration', () => {
     });
   });
   it.each([
-    { name: 'OAuth', credential: { type: 'oauth2', accessToken: 'oauth-clone-token', expiresAt: null }, token: 'oauth-clone-token' },
-    { name: 'group access token', credential: { type: 'api_key', apiKey: 'group-clone-token' }, token: 'group-clone-token' },
-  ])('fetches a fresh $name credential for each repository operation without persisting it', async ({ credential, token }) => {
-    let credentialResponse: unknown = credential;
-    let credentialStatus = 200;
-    const fetchMock = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
-      if (url.endsWith('/v2/connections/a1b_mastra/credentials')) return json(credentialResponse, credentialStatus);
-      throw new Error(`Unexpected request: ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const gitlab = platform();
-    const storage = new SourceControlStorageInMemory('gitlab');
-    gitlab.versionControl.initialize({ storage });
-    const installation = await gitlab.versionControl.registerInstallation({
-      orgId: 'org-1',
-      userId: 'user-1',
-      installation: {
-        externalId: 'a1b_mastra',
-        accountName: 'mastra',
-        accountType: 'GitLab',
-        metadata: { connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_mastra' } },
-      },
-    });
-    const [repository] = await gitlab.versionControl.registerRepositories({
-      orgId: 'org-1',
-      installationId: installation.id,
-      repositories: [{ externalId: '10', slug: 'mastra/platform', defaultBranch: 'main' }],
-    });
+    {
+      name: 'OAuth',
+      credential: { type: 'oauth2', accessToken: 'oauth-clone-token', expiresAt: null },
+      token: 'oauth-clone-token',
+    },
+    {
+      name: 'group access token',
+      credential: { type: 'api_key', apiKey: 'group-clone-token' },
+      token: 'group-clone-token',
+    },
+  ])(
+    'fetches a fresh $name credential for each repository operation without persisting it',
+    async ({ credential, token }) => {
+      let credentialResponse: unknown = credential;
+      let credentialStatus = 200;
+      const fetchMock = vi.fn<typeof fetch>(async input => {
+        const url = String(input);
+        if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+        if (url.endsWith('/v2/connections/a1b_mastra/credentials')) return json(credentialResponse, credentialStatus);
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const gitlab = platform();
+      const storage = new SourceControlStorageInMemory('gitlab');
+      gitlab.versionControl.initialize({ storage });
+      const installation = await gitlab.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: {
+          externalId: 'a1b_mastra',
+          accountName: 'mastra',
+          accountType: 'GitLab',
+          metadata: { connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_mastra' } },
+        },
+      });
+      const [repository] = await gitlab.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '10', slug: 'mastra/platform', defaultBranch: 'main' }],
+      });
 
-    const input = { orgId: 'org-1', repositoryId: repository!.id };
-    await expect(
-      gitlab.versionControl.getRepositoryAccess({ orgId: 'org-other', repositoryId: repository!.id }),
-    ).rejects.toThrow('Version-control repository not found.');
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/credentials'))).toHaveLength(0);
-    await expect(gitlab.versionControl.getRepositoryAccess(input)).resolves.toEqual({
-      cloneUrl: 'https://gitlab.com/mastra/platform.git',
-      authorization: { scheme: 'bearer', token, username: 'oauth2' },
-    });
-    await gitlab.versionControl.getRepositoryAccess(input);
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/credentials'))).toHaveLength(2);
-    expect(JSON.stringify({ installation, repository, diagnostics: gitlab.diagnostics() })).not.toContain(token);
-    credentialResponse = { type: 'oauth2', accessToken: '' };
-    await expect(gitlab.versionControl.getRepositoryAccess(input)).rejects.toMatchObject<Partial<GitLabApiError>>({
-      status: 502,
-    });
-    credentialResponse = { message: 'GitLab connection requires reauthorization.' };
-    credentialStatus = 401;
-    await expect(gitlab.versionControl.getRepositoryAccess(input)).rejects.toMatchObject({ status: 401 });
-    expect(fetchMock.mock.calls.every(([url]) => String(url).startsWith('https://integrations.example.com/'))).toBe(true);
-  });
+      const input = { orgId: 'org-1', repositoryId: repository!.id };
+      await expect(
+        gitlab.versionControl.getRepositoryAccess({ orgId: 'org-other', repositoryId: repository!.id }),
+      ).rejects.toThrow('Version-control repository not found.');
+      expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/credentials'))).toHaveLength(0);
+      await expect(gitlab.versionControl.getRepositoryAccess(input)).resolves.toEqual({
+        cloneUrl: 'https://gitlab.com/mastra/platform.git',
+        authorization: { scheme: 'bearer', token, username: 'oauth2' },
+      });
+      await gitlab.versionControl.getRepositoryAccess(input);
+      expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/credentials'))).toHaveLength(2);
+      expect(JSON.stringify({ installation, repository, diagnostics: gitlab.diagnostics() })).not.toContain(token);
+      credentialResponse = { type: 'oauth2', accessToken: '' };
+      await expect(gitlab.versionControl.getRepositoryAccess(input)).rejects.toMatchObject<Partial<GitLabApiError>>({
+        status: 502,
+      });
+      credentialResponse = { message: 'GitLab connection requires reauthorization.' };
+      credentialStatus = 401;
+      await expect(gitlab.versionControl.getRepositoryAccess(input)).rejects.toMatchObject({ status: 401 });
+      expect(fetchMock.mock.calls.every(([url]) => String(url).startsWith('https://integrations.example.com/'))).toBe(
+        true,
+      );
+    },
+  );
 
   it('lists projects only from the explicitly configured Platform connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
@@ -678,8 +707,12 @@ describe('PlatformGitLabIntegration', () => {
     await expect(discovered.listConnections()).resolves.toMatchObject([{ id: 'a1b_acme' }, { id: 'a1b_mastra' }]);
     expect(discovered.diagnostics()).toMatchObject({ connectionFilterConfigured: false });
     expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).searchParams.get('providerKey'))).toEqual([
-      'gitlab', 'gitlab-group', 'gitlab-group-token',
-      'gitlab', 'gitlab-group', 'gitlab-group-token',
+      'gitlab',
+      'gitlab-group',
+      'gitlab-group-token',
+      'gitlab',
+      'gitlab-group',
+      'gitlab-group-token',
     ]);
   });
 });

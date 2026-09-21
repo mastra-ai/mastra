@@ -19,6 +19,7 @@ import type {
   UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
 import type { RouteAuth } from '../../routes/route.js';
+import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
@@ -38,6 +39,12 @@ import { attachGitLabReconciler } from './reconciler.js';
 import { gitlabReconciliationEnabled, gitlabReconciliationInterval } from './reconciliation-config.js';
 import { buildGitLabRoutes } from './routes.js';
 import { attachGitLabRules } from './rules.js';
+import {
+  createGitLabSubscriptionTools,
+  parseCreatedMergeRequest,
+  subscribeCurrentSessionToMergeRequest,
+} from './session-subscriptions.js';
+import type { GitLabSubscriptionStorage } from './subscriptions.js';
 import { buildGitLabVersionControl } from './version-control.js';
 
 interface GitLabConnectionContext {
@@ -104,6 +111,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   readonly id = 'gitlab';
   #projects: FactoryProjectsStorage | undefined;
   #sourceControl: SourceControlStorageHandle | undefined;
+  #integrationStorage: GitLabSubscriptionStorage | undefined;
   #auth: RouteAuth | undefined;
   readonly #orgIdByResourceId = new Map<string, string | null>();
   readonly rules: GitLabEventRules;
@@ -126,10 +134,12 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     contextForStoredInstallation: (connection, host) => this.#versionControlContextForInstallation(connection, host),
   });
   initialize({
+    storage,
     projects,
     auth,
     sourceControl,
   }: {
+    storage?: IntegrationStorageHandle;
     projects: FactoryProjectsStorage;
     auth: RouteAuth;
     sourceControl?: SourceControlStorageHandle;
@@ -137,6 +147,20 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     this.#projects = projects;
     this.#auth = auth;
     this.#sourceControl = sourceControl;
+    this.#integrationStorage = storage as GitLabSubscriptionStorage | undefined;
+  }
+
+  /** Generic integration persistence (merge-request subscriptions). */
+  get integrationStorage(): GitLabSubscriptionStorage {
+    if (!this.#integrationStorage) {
+      throw new Error(`${this.constructor.name} is not initialized — the factory binds storage during prepare().`);
+    }
+    return this.#integrationStorage;
+  }
+
+  /** Source-control rows for this integration; absent when the host runs without them. */
+  get sourceControlStorage(): SourceControlStorageHandle | undefined {
+    return this.#sourceControl;
   }
 
   get authEnabled(): boolean {
@@ -186,11 +210,17 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     });
     for (const connection of connections) {
       if (connection.integrationId !== 'gitlab') continue;
-      const links = await this.#sourceControl.projectRepositories.list({ orgId: input.orgId, connectionId: connection.id });
+      const links = await this.#sourceControl.projectRepositories.list({
+        orgId: input.orgId,
+        connectionId: connection.id,
+      });
       const link = links.find(candidate => candidate.id === input.projectRepositoryId);
       if (!link) continue;
       const repository = await this.#sourceControl.repositories.get({ orgId: input.orgId, id: link.repositoryId });
-      const installation = await this.#sourceControl.installations.get({ orgId: input.orgId, id: connection.installationId });
+      const installation = await this.#sourceControl.installations.get({
+        orgId: input.orgId,
+        id: connection.installationId,
+      });
       if (!repository || !installation) return null;
       const host = installation.providerMetadata.host;
       if (typeof host !== 'string' || !host) return null;
@@ -332,11 +362,25 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       sandbox: ctx.sandbox,
       webhookSecret: this.webhookSecret,
       ingestFactoryEvent,
+      ...(ctx.controller ? { controller: ctx.controller } : {}),
     });
   }
 
   async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {
     return buildGitLabAgentTools({ requestContext: args.requestContext, gitlab: this });
+  }
+
+  sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
+    return createGitLabSubscriptionTools(requestContext, this);
+  }
+
+  async postToolObserver({
+    toolContext,
+    requestContext,
+  }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
+    const mergeRequestUrl = parseCreatedMergeRequest(toolContext);
+    if (!mergeRequestUrl || !requestContext) return;
+    await subscribeCurrentSessionToMergeRequest(requestContext, mergeRequestUrl, 'auto-create-change-request', this);
   }
 
   abstract diagnostics(): Record<string, unknown>;
@@ -807,7 +851,7 @@ function decodeOpaque<T>(value: string, prefix: string, guard: (value: unknown) 
   }
 }
 
-function normalizeGitLabHost(host: string): string {
+export function normalizeGitLabHost(host: string): string {
   return host.trim().toLowerCase().replace(/\.$/, '');
 }
 

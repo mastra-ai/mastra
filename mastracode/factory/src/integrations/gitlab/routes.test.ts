@@ -60,7 +60,9 @@ describe('GitLab UI routes', () => {
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
     vi.spyOn(gitlab, 'resolveOrgId').mockResolvedValue('org1');
     const linked = vi.spyOn(gitlab, 'getLinkedRepository').mockResolvedValue(null);
-    const list = vi.spyOn(gitlab.versionControl, 'listPullRequests').mockResolvedValue({ pullRequests: [], nextCursor: null });
+    const list = vi
+      .spyOn(gitlab.versionControl, 'listPullRequests')
+      .mockResolvedValue({ pullRequests: [], nextCursor: null });
     const target = vi.spyOn(gitlab.versionControl, 'getRepositoryTarget').mockResolvedValue({
       connection: { type: 'oauth', accessToken: 'gitlab-connection:direct' },
       sourceId: '10:acme/app',
@@ -72,13 +74,26 @@ describe('GitLab UI routes', () => {
 
     linked.mockResolvedValue({ repository: { id: 'repo-1', externalId: '10' }, host: 'gitlab.com' } as never);
     list.mockResolvedValue({
-      pullRequests: [{
-        id: '5', title: 'Validate MR', url: 'https://gitlab.com/acme/app/-/merge_requests/5',
-        author: 'rhys', assignees: [], requestedReviewers: [], body: 'description',
-        state: 'open', draft: false, merged: false, mergeable: true,
-        baseBranch: 'main', headBranch: 'feature', headSha: 'abc',
-        createdAt: '2026-09-18T00:00:00Z', updatedAt: '2026-09-18T00:00:00Z',
-      }],
+      pullRequests: [
+        {
+          id: '5',
+          title: 'Validate MR',
+          url: 'https://gitlab.com/acme/app/-/merge_requests/5',
+          author: 'rhys',
+          assignees: [],
+          requestedReviewers: [],
+          body: 'description',
+          state: 'open',
+          draft: false,
+          merged: false,
+          mergeable: true,
+          baseBranch: 'main',
+          headBranch: 'feature',
+          headSha: 'abc',
+          createdAt: '2026-09-18T00:00:00Z',
+          updatedAt: '2026-09-18T00:00:00Z',
+        },
+      ],
       nextCursor: null,
     });
     const response = await buildApp(gitlab, orgUser()).request(path);
@@ -91,10 +106,14 @@ describe('GitLab UI routes', () => {
   });
 
   it('reports direct server configuration without exposing credentials', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ id: 7, username: 'rhys' }), { status: 200 }),
-    );
-    const gitlab = new GitLabIntegration({ accessToken: 'group-token', baseUrl: 'https://gitlab.acme.test', fetchImpl });
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify({ id: 7, username: 'rhys' }), { status: 200 }));
+    const gitlab = new GitLabIntegration({
+      accessToken: 'group-token',
+      baseUrl: 'https://gitlab.acme.test',
+      fetchImpl,
+    });
 
     const response = await buildApp(gitlab, orgUser()).request('/web/gitlab/status');
 
@@ -113,9 +132,9 @@ describe('GitLab UI routes', () => {
   });
 
   it('rejects an invalid configured direct token instead of reporting ready', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ message: '401 Unauthorized' }), { status: 401 }),
-    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify({ message: '401 Unauthorized' }), { status: 401 }));
     const gitlab = new GitLabIntegration({ accessToken: 'revoked-token', fetchImpl });
 
     const response = await buildApp(gitlab, orgUser()).request('/web/gitlab/status');
@@ -254,9 +273,11 @@ describe('GitLab UI routes', () => {
         github: { enabled: false, sourceIds: null },
         gitlab: { enabled: true, sourceIds: [legacyId, canonicalId] },
       }),
-      listBindings: vi.fn().mockResolvedValue([
-        { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1', board: 'work' },
-      ]),
+      listBindings: vi
+        .fn()
+        .mockResolvedValue([
+          { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1', board: 'work' },
+        ]),
       migrateSourceIds: vi.fn().mockResolvedValue({
         migrations: [{ from: legacyId, to: canonicalId }],
         conflicts: [],
@@ -272,7 +293,6 @@ describe('GitLab UI routes', () => {
       migrations: [{ from: legacyId, to: canonicalId }],
     });
   });
-
 
   it('lists only selected GitLab sources routed to the caller-owned Factory', async () => {
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
@@ -405,5 +425,78 @@ describe('GitLab UI routes', () => {
 
     expect((await buildApp(gitlab, null).request('/web/gitlab/projects')).status).toBe(401);
     expect((await buildApp(gitlab, { workosId: 'u1' }).request('/web/gitlab/projects')).status).toBe(403);
+  });
+});
+
+describe('GitLab subscriptions route', () => {
+  const row = {
+    id: 'subscription-1',
+    orgId: 'org1',
+    targetKey: 'change-request:gitlab:gitlab.example.com:101:17',
+    sessionId: 'session-1',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    sessionScope: '/tmp/worktree',
+    status: 'open',
+    data: {
+      host: 'gitlab.example.com',
+      projectId: '101',
+      projectPath: 'acme/app',
+      projectRepositoryId: 'link-1',
+      installationExternalId: 'direct',
+      changeRequestId: '17',
+      ownerId: 'u1',
+      source: 'explicit-tool',
+      subscribedByUserId: 'u1',
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const subscribedGitLab = () => {
+    const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
+    gitlab.initialize({
+      storage: {
+        subscriptions: { listByThread: vi.fn(async () => [row, { ...row, id: 'other-org', orgId: 'org2' }]) },
+      } as never,
+      projects: {} as never,
+      auth: fakeRouteAuth({ enabled: true }),
+    });
+    return gitlab;
+  };
+
+  it('requires an organization user and both thread coordinates', async () => {
+    const gitlab = subscribedGitLab();
+    expect(
+      (await buildApp(gitlab, null).request('/web/gitlab/subscriptions?resourceId=resource-1&threadId=thread-1'))
+        .status,
+    ).toBe(401);
+    expect(
+      (
+        await buildApp(gitlab, { workosId: 'u1' }).request(
+          '/web/gitlab/subscriptions?resourceId=resource-1&threadId=thread-1',
+        )
+      ).status,
+    ).toBe(401);
+    expect((await buildApp(gitlab, orgUser()).request('/web/gitlab/subscriptions?resourceId=resource-1')).status).toBe(
+      400,
+    );
+  });
+
+  it("lists the caller organization's subscriptions for the thread in the shared link shape", async () => {
+    const response = await buildApp(subscribedGitLab(), orgUser()).request(
+      '/web/gitlab/subscriptions?resourceId=resource-1&threadId=thread-1&scope=%2Ftmp%2Fworktree',
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      subscriptions: [
+        {
+          id: 'subscription-1',
+          repoFullName: 'acme/app',
+          pullRequestNumber: 17,
+          status: 'open',
+          url: 'https://gitlab.example.com/acme/app/-/merge_requests/17',
+        },
+      ],
+    });
   });
 });

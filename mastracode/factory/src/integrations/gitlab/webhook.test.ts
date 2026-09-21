@@ -42,16 +42,10 @@ describe('parseGitLabWebhook', () => {
   it('rejects missing secret, event, token, and invalid token', async () => {
     await expect(parseGitLabWebhook(validContext(), undefined)).resolves.toMatchObject({ status: 401 });
     await expect(
-      parseGitLabWebhook(
-        context({ headers: { 'x-gitlab-token': 'webhook-secret' }, body: '{}' }),
-        'webhook-secret',
-      ),
+      parseGitLabWebhook(context({ headers: { 'x-gitlab-token': 'webhook-secret' }, body: '{}' }), 'webhook-secret'),
     ).resolves.toMatchObject({ status: 400 });
     await expect(
-      parseGitLabWebhook(
-        context({ headers: { 'x-gitlab-event': 'Issue Hook' }, body: '{}' }),
-        'webhook-secret',
-      ),
+      parseGitLabWebhook(context({ headers: { 'x-gitlab-event': 'Issue Hook' }, body: '{}' }), 'webhook-secret'),
     ).resolves.toMatchObject({ status: 401 });
     await expect(
       parseGitLabWebhook(
@@ -195,5 +189,75 @@ describe('handleGitLabWebhook', () => {
         { webhookSecret: 'webhook-secret' },
       ),
     ).resolves.toMatchObject({ status: 401 });
+  });
+});
+
+describe('handleGitLabWebhook session dispatch', () => {
+  const mergeHook = () =>
+    context({
+      headers: {
+        'x-gitlab-event': 'Merge Request Hook',
+        'x-gitlab-token': 'webhook-secret',
+        'webhook-id': 'delivery-9',
+      },
+      body: JSON.stringify({
+        object_kind: 'merge_request',
+        user: { id: 7, username: 'ada' },
+        project: { id: 101, path_with_namespace: 'acme/app', web_url: 'https://gitlab.example.com/acme/app' },
+        object_attributes: { iid: 17, action: 'merge', url: 'https://gitlab.example.com/acme/app/-/merge_requests/17' },
+      }),
+    });
+
+  it('delivers merge request activity to subscribed sessions after the rules ingress', async () => {
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    const send = vi.fn(async () => ({ record: { id: 'n-1' }, decision: { action: 'deliver' } }));
+    const session = { thread: { getId: () => 'thread-1', switch: vi.fn() }, sendNotificationSignal: send };
+    const retireSubscription = vi.fn(async () => undefined);
+    const result = await handleGitLabWebhook(mergeHook(), {
+      webhookSecret: 'webhook-secret',
+      ingestFactoryEvent,
+      controller: {
+        queryThreadById: async () => ({ id: 'thread-1', resourceId: 'resource-1' }),
+        getSessionByResource: async () => session,
+      } as never,
+      listSubscriptions: async () => [
+        {
+          id: 'sub-1',
+          orgId: 'org-1',
+          targetKey: 'change-request:gitlab:gitlab.example.com:101:17',
+          sessionId: 'session-1',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          sessionScope: '',
+          status: 'open',
+          data: {
+            host: 'gitlab.example.com',
+            projectId: '101',
+            projectPath: 'acme/app',
+            projectRepositoryId: 'link-1',
+            installationExternalId: 'direct',
+            changeRequestId: '17',
+            ownerId: 'u1',
+            source: 'explicit-tool',
+            subscribedByUserId: 'u1',
+          },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      retireSubscription,
+    });
+
+    expect(result).toEqual({ status: 202, body: { ok: true } });
+    expect(ingestFactoryEvent).toHaveBeenCalledOnce();
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ source: 'gitlab', kind: 'pull-request-merged' }));
+    expect(retireSubscription).toHaveBeenCalledWith('sub-1', 'merged');
+  });
+
+  it('keeps the plain acknowledgement when no controller is mounted', async () => {
+    await expect(handleGitLabWebhook(mergeHook(), { webhookSecret: 'webhook-secret' })).resolves.toEqual({
+      status: 202,
+      body: { ok: true },
+    });
   });
 });

@@ -1,12 +1,10 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Context } from 'hono';
 
-export const SUPPORTED_GITLAB_WEBHOOK_EVENTS = new Set([
-  'Issue Hook',
-  'Note Hook',
-  'Merge Request Hook',
-  'Push Hook',
-]);
+import { dispatchGitLabWebhook } from './webhook-dispatch.js';
+import type { GitLabWebhookDispatchDependencies } from './webhook-dispatch.js';
+
+export const SUPPORTED_GITLAB_WEBHOOK_EVENTS = new Set(['Issue Hook', 'Note Hook', 'Merge Request Hook', 'Push Hook']);
 
 export interface ParsedGitLabWebhook {
   event: string;
@@ -30,9 +28,11 @@ export type GitLabWebhookResult =
   | { status: 400; body: { error: 'bad_request'; message: string } }
   | { status: 401; body: { error: 'unauthorized'; message: string } };
 
-export interface GitLabWebhookHandlerOptions {
+export interface GitLabWebhookHandlerOptions extends Partial<Omit<GitLabWebhookDispatchDependencies, 'controller'>> {
   webhookSecret?: string;
   ingestFactoryEvent?: (event: ParsedGitLabWebhook) => Promise<unknown>;
+  /** When present, merge-request activity is also delivered to subscribed sessions. */
+  controller?: GitLabWebhookDispatchDependencies['controller'];
 }
 
 function normalizeHeader(value: string | undefined | null): string | null {
@@ -125,13 +125,13 @@ export function normalizeGitLabWebhookMetadata(parsed: ParsedGitLabWebhook): Git
       parsed.event === 'Issue Hook'
         ? objectIid
         : noteableType === 'Issue'
-          ? getNumber(issue?.iid) ?? objectIid
+          ? (getNumber(issue?.iid) ?? objectIid)
           : undefined,
     mergeRequestIid:
       parsed.event === 'Merge Request Hook'
         ? objectIid
         : noteableType === 'MergeRequest'
-          ? getNumber(mergeRequest?.iid) ?? objectIid
+          ? (getNumber(mergeRequest?.iid) ?? objectIid)
           : undefined,
     noteableType,
     sender: getString(parsed.payload.user_username) ?? getString(user?.username) ?? getString(user?.name),
@@ -149,5 +149,25 @@ export async function handleGitLabWebhook(
   }
 
   if (options.ingestFactoryEvent) await options.ingestFactoryEvent(parsed);
+  if (!options.controller) return { status: 202, body: { ok: true } };
+
+  const { webhookSecret: _secret, ingestFactoryEvent: _ingest, controller, ...dispatch } = options;
+  const result = await dispatchGitLabWebhook(parsed, {
+    onSenderRejected: notification => {
+      console.info('[GitLab Webhook] sender not authorized', {
+        deliveryId: parsed.deliveryId,
+        repository: notification.metadata.projectPath,
+        sender: notification.metadata.sender,
+        kind: notification.kind,
+      });
+    },
+    ...dispatch,
+    controller,
+  });
+  if (result.failed > 0) {
+    console.warn(`[GitLab Webhook] ${result.failed} subscribed target(s) failed for delivery ${parsed.deliveryId}.`);
+  }
+  // The rules ingress already acknowledged the event; an event no session
+  // subscribes to is still a handled delivery, not an ignored one.
   return { status: 202, body: { ok: true } };
 }

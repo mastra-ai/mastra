@@ -15,8 +15,9 @@ import {
   gitlabConnection,
 } from './integration.js';
 import type { GitLabIntegrationBase } from './integration.js';
+import { listMergeRequestSubscriptionsForThread, mergeRequestUrl } from './subscriptions.js';
 import { handleGitLabWebhook } from './webhook.js';
-import type { ParsedGitLabWebhook } from './webhook.js';
+import type { GitLabWebhookHandlerOptions, ParsedGitLabWebhook } from './webhook.js';
 
 type RouteContext = Context;
 
@@ -32,6 +33,8 @@ export interface BuildGitLabRoutesOptions {
   emitAudit?: AuditEmitter['emit'];
   webhookSecret?: string;
   ingestFactoryEvent?: (event: ParsedGitLabWebhook) => Promise<unknown>;
+  /** Mounted agent controller; enables webhook delivery to subscribed sessions. */
+  controller?: GitLabWebhookHandlerOptions['controller'];
 }
 
 async function resolveOrgTenant(
@@ -242,7 +245,9 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           const sourceId = typeof input?.sourceId === 'string' ? input.sourceId.trim() : '';
           if (!sourceId) return c.json({ error: 'invalid_gitlab_source' }, 400);
           try {
-            const source = (await gitlab.intake.listSources(resolved.tenant)).find(candidate => candidate.id === sourceId);
+            const source = (await gitlab.intake.listSources(resolved.tenant)).find(
+              candidate => candidate.id === sourceId,
+            );
             const project = source ? gitlabProjectPayload(source) : null;
             if (!project) return c.json({ error: 'gitlab_project_not_found' }, 404);
             const installation = await gitlab.versionControl.registerInstallation({
@@ -473,6 +478,43 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
     );
   }
 
+  if (gitlab && auth) {
+    routes.push(
+      registerApiRoute('/web/gitlab/subscriptions', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          await auth.ensureUser(loose(c));
+          const tenant = auth.tenant(loose(c));
+          if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
+
+          const resourceId = c.req.query('resourceId');
+          const threadId = c.req.query('threadId');
+          const sessionScope = c.req.query('scope');
+          if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
+
+          const subscriptions = await listMergeRequestSubscriptionsForThread(
+            { orgId: tenant.orgId, resourceId, threadId, sessionScope },
+            gitlab.integrationStorage,
+          );
+          return c.json({
+            subscriptions: subscriptions.map(subscription => ({
+              id: subscription.id,
+              repoFullName: subscription.data.projectPath,
+              pullRequestNumber: Number(subscription.data.changeRequestId),
+              status: subscription.status,
+              url: mergeRequestUrl(
+                subscription.data.host,
+                subscription.data.projectPath,
+                subscription.data.changeRequestId,
+              ),
+            })),
+          });
+        },
+      }),
+    );
+  }
+
   routes.push(
     registerApiRoute('/web/gitlab/webhook', {
       method: 'POST',
@@ -481,6 +523,18 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
         const result = await handleGitLabWebhook(loose(c), {
           webhookSecret: options.webhookSecret,
           ingestFactoryEvent: options.ingestFactoryEvent,
+          ...(options.controller && gitlab
+            ? {
+                controller: options.controller,
+                gitlab,
+                onTargetError: (subscription, error) => {
+                  console.warn(
+                    `[GitLab Webhook] Delivery failed for subscription ${subscription.id} (${subscription.resourceId}/${subscription.threadId}).`,
+                    error,
+                  );
+                },
+              }
+            : {}),
         });
         return c.json(result.body, result.status);
       },

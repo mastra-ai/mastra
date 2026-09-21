@@ -8,6 +8,7 @@ import type { IssueReconcileSummary } from '../issue-reconciler.js';
 import { decodeMergeRequestReference, gitlabConnection, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import type { GitLabIntegrationBase } from './integration.js';
 import { attachGitLabRules } from './rules.js';
+import { retireMergeRequestSubscriptions } from './subscriptions.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
 
 function stringMetadata(item: WorkItemRow, key: string): string | undefined {
@@ -142,6 +143,17 @@ async function connectionForItem(
 
 export type GitLabMergeRequestReconciler = () => Promise<IssueReconcileSummary>;
 
+/** The integration storage handle when the host bound one; tests may omit it. */
+function subscriptionStorage(
+  gitlab: Partial<Pick<GitLabIntegrationBase, 'integrationStorage'>>,
+): GitLabIntegrationBase['integrationStorage'] | undefined {
+  try {
+    return gitlab.integrationStorage;
+  } catch {
+    return undefined;
+  }
+}
+
 export function attachGitLabMergeRequestReconciler(
   gitlab: Pick<
     GitLabIntegrationBase,
@@ -150,7 +162,8 @@ export function attachGitLabMergeRequestReconciler(
     | 'getProjectMemberAccessLevel'
     | 'getWorkItemAuthorUsername'
     | 'resolveActiveConnectionForHost'
-  >,
+  > &
+    Partial<Pick<GitLabIntegrationBase, 'integrationStorage'>>,
   context: IntegrationContext,
 ): GitLabMergeRequestReconciler | undefined {
   if (!context.runtime) return undefined;
@@ -275,6 +288,20 @@ export function attachGitLabMergeRequestReconciler(
               !item.stages.includes(pullRequest.merged ? 'done' : 'canceled');
             if (terminalTransition) {
               await ingest(terminalEvent(item, pullRequest, identity));
+              // The webhook path retires thread subscriptions itself; a missed
+              // terminal event must not leave the session's MR chip open.
+              const subscriptions = subscriptionStorage(gitlab);
+              if (subscriptions) {
+                await retireMergeRequestSubscriptions(
+                  {
+                    host,
+                    projectId: String(projectId),
+                    changeRequestId: String(mergeRequestIid),
+                    merged: pullRequest.merged,
+                  },
+                  subscriptions,
+                );
+              }
             }
             // The settled stamp is what takes a terminal card out of later
             // sweeps. Withhold it while cleanup failed so the next sweep retries.
