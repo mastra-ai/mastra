@@ -1959,6 +1959,7 @@ export class EventedRun<
     perStep,
     outputOptions,
     tracingContext,
+    actor,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
@@ -1969,6 +1970,7 @@ export class EventedRun<
       includeResumeLabels?: boolean;
     };
     tracingContext?: TracingContext;
+    actor?: ActorSignal;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -2064,6 +2066,7 @@ export class EventedRun<
         pubsub: this.mastra.pubsub,
         retryConfig: this.retryConfig,
         requestContext,
+        actor,
         abortController: this.abortController,
         perStep,
         outputOptions,
@@ -2098,11 +2101,13 @@ export class EventedRun<
     initialState,
     requestContext,
     perStep,
+    actor,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
     initialState?: TState;
     perStep?: boolean;
+    actor?: ActorSignal;
   }): Promise<{ runId: string }> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -2170,6 +2175,7 @@ export class EventedRun<
         runId: this.runId,
         prevResult: { status: 'success', output: inputDataToUse },
         requestContext: requestContext.toJSON(),
+        actor,
         initialState: initialStateToUse,
         perStep,
       },
@@ -2190,6 +2196,7 @@ export class EventedRun<
     closeOnSuspend = true,
     perStep,
     outputOptions,
+    actor,
   }: (TInput extends unknown ? { inputData?: TInput } : { inputData: TInput }) &
     (TState extends unknown ? { initialState?: TState } : { initialState: TState }) & {
       requestContext?: RequestContext;
@@ -2199,6 +2206,7 @@ export class EventedRun<
         includeState?: boolean;
         includeResumeLabels?: boolean;
       };
+      actor?: ActorSignal;
     }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
@@ -2240,6 +2248,7 @@ export class EventedRun<
             initialState: initialState as TState,
             perStep,
             outputOptions,
+            actor,
           });
 
           if (self.streamOutput) {
@@ -2532,6 +2541,7 @@ export class EventedRun<
         },
         pubsub: this.mastra.pubsub,
         requestContext,
+        actor: params.actor,
         abortController: this.abortController,
         perStep: params.perStep,
         outputOptions: params.outputOptions,

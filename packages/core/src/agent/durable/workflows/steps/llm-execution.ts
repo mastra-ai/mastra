@@ -398,7 +398,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             {
               id: `${typedInput.modelConfig.provider}/${typedInput.modelConfig.modelId}`,
               config: typedInput.modelConfig,
-              maxRetries: 0,
+              // Agent-level maxRetries rides on serialized options (there is
+              // no modelList entry to carry it for single-model agents).
+              maxRetries: typedInput.options?.agentMaxRetries ?? 0,
               enabled: true,
             },
           ];
@@ -434,7 +436,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
       for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
         const modelEntry = modelList[modelIndex]!;
-        const maxRetries = modelEntry.maxRetries || 0;
+        // Same precedence as the in-process loop (llm-execution-step.ts): an
+        // explicitly configured agent-level maxRetries wins; otherwise the
+        // call-time modelSettings.maxRetries applies. Serialized fallback-list
+        // entries always carry a folded per-model value, so they keep it.
+        const entryConfigured = hasModelList || (typedInput.options?.agentMaxRetriesConfigured ?? false);
+        const maxRetries = entryConfigured
+          ? modelEntry.maxRetries || 0
+          : (typedInput.options?.modelSettings?.maxRetries ?? modelEntry.maxRetries ?? 0);
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           // Capture this attempt before processors can rotate the active id. The

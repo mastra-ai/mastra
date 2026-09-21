@@ -192,6 +192,19 @@ export interface SerializableDurableOptions {
   activeTools?: string[];
   /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed). Headers are excluded — see RunRegistryEntry. */
   modelSettings?: SerializableModelSettings;
+  /**
+   * Agent-level maxRetries (folded, defaults to 0). Single-model agents have
+   * no modelList entry to carry retry config, so it rides on options; the
+   * llm-execution step's retry ladder reads it to apply the same
+   * agent-vs-call-time precedence as the in-process loop.
+   */
+  agentMaxRetries?: number;
+  /**
+   * Whether `maxRetries` was explicitly configured on the agent. An explicit
+   * value (including 0) overrides call-time `modelSettings.maxRetries`;
+   * otherwise the call-time value wins — matching `llm-execution-step.ts`.
+   */
+  agentMaxRetriesConfigured?: boolean;
   /** Whether to require tool approval globally */
   requireToolApproval?: boolean;
   /** Concurrency limit / strategy for parallel tool calls (JSON-safe union) */
@@ -420,6 +433,17 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * apply to the persisted args/result on recall.
    */
   transformMetadata?: { mastra?: { toolPayloadTransform?: ToolPayloadTransformMetadata } };
+  /**
+   * Set when a delegation `onDelegationComplete` hook called `ctx.bail()`
+   * during this tool call. The bail signal is written by-reference to the
+   * RequestContext the sub-agent tool was built with, which on the evented
+   * engine is a different instance from the one later steps rehydrate from
+   * their event payloads — so the tool-call step reads it in-process and
+   * carries it here across the serialization boundary. The mapping step ORs
+   * it into the iteration output so the dountil predicate stops the loop in
+   * the same iteration on every engine (G3).
+   */
+  delegationBailed?: boolean;
   /** Error if tool execution failed */
   error?: {
     name: string;

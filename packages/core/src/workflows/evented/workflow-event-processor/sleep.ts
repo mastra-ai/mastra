@@ -42,6 +42,11 @@ export async function processWorkflowWaitForEvent(
       prevResult,
       activeStepsPath: {},
       requestContext: currentState?.requestContext,
+      // Known gap: the actor signal is not persisted in the workflow snapshot,
+      // so a run continued from a waitForEvent timer only keeps the actor if
+      // the incoming user event carried one. requestContext survives via the
+      // snapshot; actor intentionally does not (it is a per-call credential).
+      actor: workflowData.actor,
       perStep: workflowData.perStep,
     },
   });
@@ -62,6 +67,7 @@ export async function processWorkflowSleep(
     resumeData,
     parentWorkflow,
     requestContext,
+    actor,
     perStep,
   }: ProcessorArgs,
   {
@@ -155,6 +161,7 @@ export async function processWorkflowSleep(
           parentWorkflow,
           activeStepsPath,
           requestContext,
+          actor,
           perStep,
         },
       });
@@ -178,6 +185,7 @@ export async function processWorkflowSleepUntil(
     resumeData,
     parentWorkflow,
     requestContext,
+    actor,
     perStep,
   }: ProcessorArgs,
   {
@@ -272,6 +280,7 @@ export async function processWorkflowSleepUntil(
           parentWorkflow,
           activeStepsPath,
           requestContext,
+          actor,
           perStep,
         },
       });

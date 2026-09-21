@@ -1,3 +1,4 @@
+import type { ActorSignal } from '../auth/ee';
 import type { StepResult } from '../workflows/types';
 
 export type { WorkerDeps, WorkerStopOptions } from './worker';
@@ -14,6 +15,7 @@ export interface StepExecutionParams {
   stepResults: Record<string, unknown>;
   state: Record<string, unknown>;
   requestContext: Record<string, unknown>;
+  actor?: ActorSignal;
   input?: unknown;
   resumeData?: unknown;
   retryCount?: number;

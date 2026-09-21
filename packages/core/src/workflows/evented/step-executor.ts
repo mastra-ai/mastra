@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { TripWire } from '../../agent/trip-wire';
+import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
 import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../../error';
@@ -71,6 +72,8 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     requestContext: RequestContext;
+    /** Caller identity, forwarded to step/tool/agent execution contexts (parity with the default engine). */
+    actor?: ActorSignal;
     retryCount?: number;
     foreachIdx?: number;
     validateInputs?: boolean;
@@ -184,6 +187,7 @@ export class StepExecutor extends MastraBase {
               runId,
               mastra: this.mastra!,
               requestContext,
+              actor: params.actor,
               inputData,
               state: params.state,
               setState: async (newState: Record<string, any>) => {
@@ -388,6 +392,7 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     requestContext: RequestContext;
+    actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
   }): Promise<number[]> {
@@ -403,6 +408,7 @@ export class StepExecutor extends MastraBase {
             condition,
             runId,
             requestContext,
+            actor: params.actor,
             inputData: params.input,
             state: params.state,
             retryCount,
@@ -438,6 +444,7 @@ export class StepExecutor extends MastraBase {
     stepResults,
     state,
     requestContext,
+    actor,
     abortController,
     retryCount = 0,
     iterationCount,
@@ -450,6 +457,7 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     requestContext: RequestContext;
+    actor?: ActorSignal;
     abortController: AbortController;
     retryCount?: number;
     iterationCount: number;
@@ -464,6 +472,7 @@ export class StepExecutor extends MastraBase {
           runId,
           mastra: this.mastra!,
           requestContext,
+          actor,
           inputData,
           state,
           retryCount,

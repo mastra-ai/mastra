@@ -1113,6 +1113,18 @@ export class Agent<
   }
 
   /**
+   * Whether `maxRetries` was explicitly configured on this agent. Durable
+   * preparation serializes this alongside `maxRetries` so the llm-execution
+   * step's retry ladder can apply the same precedence as the in-process loop:
+   * an explicitly configured agent value (including 0) beats call-time
+   * `modelSettings.maxRetries`; otherwise the call-time value wins.
+   * @internal
+   */
+  __getMaxRetriesConfigured(): boolean {
+    return this.#maxRetriesConfigured;
+  }
+
+  /**
    * Returns a closure that drains pending signals for a given run from the
    * shared `AgentThreadStreamRuntime`. Used by `prepareForDurableExecution` to
    * store the drain function on the in-process `RunRegistryEntry`.

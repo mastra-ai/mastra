@@ -186,6 +186,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   activeTools?: AgentExecutionOptions<OUTPUT>['activeTools'];
   /** Model-specific settings like temperature */
   modelSettings?: AgentExecutionOptions<OUTPUT>['modelSettings'];
+  /** Provider-specific options forwarded to the model (serialized into the durable workflow input) */
+  providerOptions?: AgentExecutionOptions<OUTPUT>['providerOptions'];
   /** Require approval for tool calls. Boolean (gate all / none) or a per-call function policy. */
   requireToolApproval?: AgentExecutionOptions<OUTPUT>['requireToolApproval'];
   /** Automatically resume suspended tools */

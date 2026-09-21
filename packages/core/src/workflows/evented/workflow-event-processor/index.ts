@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import EventEmitter from 'node:events';
+import type { ActorSignal } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
@@ -46,6 +47,12 @@ export type ProcessorArgs = {
   resumeSteps: string[];
   prevResult: StepResult<any, any, any, any>;
   requestContext: Record<string, any>;
+  /**
+   * Caller identity for the run. Serialized alongside `requestContext` on
+   * every re-published step event so tools/steps observe `context.actor`
+   * across the whole event chain, mirroring the default engine.
+   */
+  actor?: ActorSignal;
   timeTravel?: TimeTravelExecutionParams;
   restart?: RestartExecutionParams;
   resumeData?: any;
@@ -519,6 +526,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResults,
       resumeData,
       requestContext,
+      actor,
     }: Omit<ProcessorArgs, 'workflow'>,
     e: Error,
   ) {
@@ -533,6 +541,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults,
         prevResult: { status: 'failed', error: getErrorFromUnknown(e).toJSON() },
         requestContext,
+        actor,
         resumeData,
         activeStepsPath: {},
         parentWorkflow: parentWorkflow,
@@ -579,6 +588,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     executionPath,
     stepResults,
     requestContext,
+    actor,
     perStep,
     format,
     state,
@@ -688,6 +698,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         timeTravel,
         restart,
         requestContext,
+        actor,
         resumeData,
         activeStepsPath: {},
         perStep,
@@ -789,6 +800,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       parentWorkflow,
       activeStepsPath,
       requestContext,
+      actor,
       runId,
       timeTravel,
       perStep,
@@ -848,6 +860,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumeData: parentWorkflow.resumeData,
             parentWorkflow: parentWorkflow.parentWorkflow,
             requestContext,
+            actor,
             retryCount: 0,
           },
           {
@@ -873,6 +886,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             parentWorkflow: parentWorkflow.parentWorkflow,
             parentContext: parentWorkflow,
             requestContext,
+            actor,
             timeTravel,
             perStep,
             state: finalState,
@@ -906,6 +920,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       activeStepsPath,
       runId,
       requestContext,
+      actor,
       timeTravel,
       restart,
       stepResults,
@@ -968,6 +983,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           activeStepsPath,
           requestContext,
+          actor,
           parentWorkflow: parentWorkflow.parentWorkflow,
           parentContext: parentWorkflow,
           state: finalState,
@@ -1000,6 +1016,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       parentWorkflow,
       activeStepsPath,
       requestContext,
+      actor,
       timeTravel,
       restart,
       stepResults,
@@ -1067,6 +1084,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           activeStepsPath,
           requestContext,
+          actor,
           parentWorkflow: parentWorkflow.parentWorkflow,
           parentContext: parentWorkflow,
           state: finalState,
@@ -1104,6 +1122,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       resumeData,
       parentWorkflow,
       requestContext,
+      actor,
       perStep,
       state,
       outputOptions,
@@ -1126,6 +1145,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          actor,
         },
         new MastraError({
           id: 'MASTRA_WORKFLOW',
@@ -1152,6 +1172,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult,
           activeStepsPath,
           requestContext,
+          actor,
           // Use currentState (resolved from stepResults.__state and state) instead of
           // the possibly-undefined state parameter, to ensure final state is preserved
           state: currentState,
@@ -1170,6 +1191,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          actor,
         },
         new MastraError({
           id: 'MASTRA_WORKFLOW',
@@ -1211,6 +1233,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          actor,
           perStep,
           state: currentState,
           outputOptions,
@@ -1236,6 +1259,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          actor,
           perStep,
           state: currentState,
           outputOptions,
@@ -1262,6 +1286,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          actor,
           perStep,
           state: currentState,
           outputOptions,
@@ -1288,6 +1313,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          actor,
           perStep,
           state: currentState,
           outputOptions,
@@ -1314,6 +1340,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          actor,
           perStep,
           state: currentState,
           outputOptions,
@@ -1368,6 +1395,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       outputOptions,
       forEachIndex,
       step,
+      actor,
     } = args;
     let requestContext = args.requestContext;
     const streamFormat = this.runFormats.get(runId);
@@ -1392,6 +1420,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          actor,
         },
         new MastraError({
           id: 'MASTRA_WORKFLOW',
@@ -1494,6 +1523,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               resumeData,
               parentWorkflow,
               requestContext,
+              actor,
             },
             new MastraError({
               id: 'MASTRA_WORKFLOW',
@@ -1524,6 +1554,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               resumeData,
               parentWorkflow,
               requestContext,
+              actor,
             },
             new MastraError({
               id: 'MASTRA_WORKFLOW',
@@ -1570,6 +1601,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumeData,
             activeStepsPath,
             requestContext,
+            actor,
             perStep,
             initialState: currentState,
             state: currentState,
@@ -1592,6 +1624,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               resumeData,
               parentWorkflow,
               requestContext,
+              actor,
             },
             new MastraError({
               id: 'MASTRA_WORKFLOW',
@@ -1642,6 +1675,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumeData,
             activeStepsPath,
             requestContext,
+            actor,
             perStep,
             initialState: currentState,
             state: currentState,
@@ -1696,6 +1730,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             timeTravel: timeTravelParams,
             activeStepsPath,
             requestContext,
+            actor,
             perStep,
             initialState: currentState,
             state: currentState,
@@ -1741,6 +1776,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             restart: restartParams,
             activeStepsPath: restartParams.activeStepsPath,
             requestContext,
+            actor,
             perStep,
             initialState: restartParams.state,
             state: restartParams.state,
@@ -1808,6 +1844,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumeData,
             activeStepsPath,
             requestContext,
+            actor,
             perStep,
             initialState: currentState,
             state: currentState,
@@ -1882,6 +1919,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults,
         state: currentState,
         requestContext: Object.fromEntries(rc.entries()),
+        actor,
         input: (prevResult as any)?.output,
         resumeData: resumeDataToUse,
         retryCount,
@@ -1899,6 +1937,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults,
         state: currentState,
         requestContext: rc,
+        actor,
         input: (prevResult as any)?.output,
         resumeData: resumeDataToUse,
         retryCount,
@@ -1938,6 +1977,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult: { ...stepResult, status: 'canceled' }, //set the status to canceled to indicate the workflow was canceled
           activeStepsPath,
           requestContext,
+          actor,
           perStep,
           state: updatedState,
           outputOptions,
@@ -1965,6 +2005,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         prevResult: stepResult,
         activeStepsPath,
         requestContext,
+        actor,
         perStep,
         state: currentState,
         outputOptions,
@@ -1988,6 +2029,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             prevResult: stepResult,
             activeStepsPath,
             requestContext,
+            actor,
             state: currentState,
             outputOptions,
           },
@@ -2008,6 +2050,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             prevResult,
             activeStepsPath,
             requestContext,
+            actor,
             retryCount: retryCount + 1,
             state: currentState,
             outputOptions,
@@ -2040,6 +2083,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult: stepResult,
           activeStepsPath,
           requestContext,
+          actor,
           perStep,
           state: updatedState,
           outputOptions,
@@ -2064,6 +2108,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          actor,
           retryCount: retryCount + 1,
         },
         {
@@ -2096,6 +2141,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult: stepResult,
           activeStepsPath,
           requestContext,
+          actor,
           perStep,
           state: updatedState,
           outputOptions,
@@ -2136,6 +2182,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     stepResults,
     activeStepsPath,
     requestContext,
+    actor,
     state,
     outputOptions,
   }: {
@@ -2158,6 +2205,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     stepResults: Record<string, any>;
     activeStepsPath: Record<string, number[]>;
     requestContext: Record<string, any>;
+    actor?: ActorSignal;
     state: Record<string, any>;
     outputOptions?: { includeState?: boolean; includeResumeLabels?: boolean };
   }) {
@@ -2256,6 +2304,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult: { status: 'suspended' } as any,
           activeStepsPath,
           requestContext,
+          actor,
           timeTravel,
           restart,
           state: currentState,
@@ -2288,6 +2337,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         prevResult: { status: 'success', output: allResults },
         activeStepsPath,
         requestContext,
+        actor,
         timeTravel,
         restart,
         state: currentState,
@@ -2310,6 +2360,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     activeStepsPath,
     parentContext,
     requestContext,
+    actor,
     perStep,
     state,
     outputOptions,
@@ -2356,6 +2407,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepResults,
           activeStepsPath,
           requestContext,
+          actor,
         },
         new MastraError({
           id: 'MASTRA_WORKFLOW',
@@ -2420,6 +2472,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             prevResult: bailedResult,
             activeStepsPath,
             requestContext,
+            actor,
             perStep,
             state: currentState,
             outputOptions,
@@ -2564,6 +2617,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               resumeData: undefined, // Don't pass resumeData when starting new iterations
               parentWorkflow,
               requestContext,
+              actor,
               perStep,
               state: currentState,
               outputOptions,
@@ -2677,6 +2731,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               prevResult: foreachSuspendResult,
               activeStepsPath,
               requestContext,
+              actor,
               timeTravel,
               restart,
               state: currentState,
@@ -2703,6 +2758,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumeData: undefined,
             parentWorkflow,
             requestContext,
+            actor,
             perStep,
             state: currentState,
             outputOptions,
@@ -2781,6 +2837,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult,
           activeStepsPath,
           requestContext,
+          actor,
           state: currentState,
           outputOptions,
         },
@@ -2829,6 +2886,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepResults,
           activeStepsPath,
           requestContext,
+          actor,
           state: currentState,
           outputOptions,
         });
@@ -2893,6 +2951,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult,
           activeStepsPath,
           requestContext,
+          actor,
           timeTravel,
           restart,
           state: currentState,
@@ -2953,6 +3012,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult: { ...nestedPrevResult, status: 'paused' },
           activeStepsPath,
           requestContext,
+          actor,
           perStep,
         });
       } else {
@@ -2967,6 +3027,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult,
           activeStepsPath,
           requestContext,
+          actor,
           perStep,
         });
       }
@@ -2985,6 +3046,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults,
         activeStepsPath,
         requestContext,
+        actor,
         state: currentState,
         outputOptions,
       });
@@ -3005,6 +3067,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult: { ...prevResult, output: originalArray },
           activeStepsPath,
           requestContext,
+          actor,
           timeTravel,
           restart,
           state: currentState,
@@ -3024,6 +3087,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         prevResult,
         activeStepsPath,
         requestContext,
+        actor,
         state: currentState,
         outputOptions,
       });
@@ -3042,6 +3106,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult,
           activeStepsPath,
           requestContext,
+          actor,
           timeTravel,
           restart,
           state: currentState,

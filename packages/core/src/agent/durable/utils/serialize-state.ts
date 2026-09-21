@@ -220,6 +220,8 @@ export function serializeDurableOptions(options: {
   toolChoice?: any;
   activeTools?: string[];
   modelSettings?: SerializableModelSettings | Record<string, unknown>;
+  agentMaxRetries?: number;
+  agentMaxRetriesConfigured?: boolean;
   requireToolApproval?: boolean;
   toolCallConcurrency?: ToolCallConcurrency;
   autoResumeSuspendedTools?: boolean;
@@ -259,6 +261,8 @@ export function serializeDurableOptions(options: {
     toolChoice: serializedToolChoice,
     activeTools: options.activeTools,
     modelSettings: serializeModelSettings(options.modelSettings),
+    agentMaxRetries: options.agentMaxRetries,
+    agentMaxRetriesConfigured: options.agentMaxRetriesConfigured,
     requireToolApproval: options.requireToolApproval,
     toolCallConcurrency: options.toolCallConcurrency,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,

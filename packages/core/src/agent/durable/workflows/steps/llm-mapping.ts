@@ -320,11 +320,15 @@ export function createDurableLLMMappingStep() {
       const hasPendingHITL = toolResults.some(isPendingClientCall);
       const isContinued = hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
-      // Check if any delegation hook called ctx.bail(). The bail flag is
-      // communicated via requestContext because Zod output validation strips
-      // unknown fields from the tool result. We read it here and propagate
-      // it on the serializable output so the dowhile predicate can stop.
-      let delegationBailed = false;
+      // Check if any delegation hook called ctx.bail(). The primary channel
+      // is the tool-call step's serializable output: the hook writes the flag
+      // by-reference to the RequestContext the tool was built with, which the
+      // tool-call step consumes in-process and carries as `delegationBailed`
+      // on its output — the only channel that survives the evented engine's
+      // per-step RequestContext rehydration (G3). The requestContext read is
+      // kept as a fallback for same-process paths where the flag lands on
+      // this step's own instance.
+      let delegationBailed = toolResults.some(r => r?.delegationBailed === true);
       if (requestContext?.get('__mastra_delegationBailed')) {
         delegationBailed = true;
         requestContext.set('__mastra_delegationBailed', false);

@@ -17,6 +17,7 @@ import { EntityType, SpanType, createObservabilityContext } from '../../../../ob
 import type { ExportedSpan, ObservabilityContext } from '../../../../observability';
 import type { ProcessorState } from '../../../../processors';
 import { ProcessorRunner } from '../../../../processors/runner';
+import type { RequestContext } from '../../../../request-context';
 import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import {
@@ -124,6 +125,11 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // chunk (L18b): merged into providerMetadata by the mapping step before
   // commitToolResult so transcript/display targets apply on recall.
   transformMetadata: z.record(z.string(), z.any()).optional(),
+  // Set when a delegation onDelegationComplete hook called ctx.bail() during
+  // this tool call. Carried on the step output (not requestContext) because
+  // the evented engine rehydrates a fresh RequestContext per step, so the
+  // wrapper's by-reference flag write never reaches the mapping step there.
+  delegationBailed: z.boolean().optional(),
 });
 
 /**
@@ -427,6 +433,9 @@ export function createDurableToolCallStep() {
       let rebuiltWorkspace: any;
       let rebuiltMemory: any;
       let rebuiltSaveQueueManager: any;
+      // RequestContext the rebuilt tools were built with (their closures
+      // capture it) — checked for the delegation bail flag after execution.
+      let rebuiltRequestContext: RequestContext | undefined;
 
       if (!tool) {
         tool = findProviderToolByName(registryEntry?.tools as any, toolName) as typeof tool;
@@ -492,6 +501,7 @@ export function createDurableToolCallStep() {
           rebuiltWorkspace = rebuilt.workspace;
           rebuiltMemory = rebuilt.memory;
           rebuiltSaveQueueManager = rebuilt.saveQueueManager;
+          rebuiltRequestContext = rebuilt.requestContext;
           // Keep an already-resolved tool: we may have rebuilt purely to obtain the
           // SaveQueueManager, and the registry's instance is the live per-request closure.
           if (!tool) {
@@ -1403,6 +1413,28 @@ export function createDurableToolCallStep() {
         };
       }
 
+      // Read-and-clear the delegation bail signal (`ctx.bail()` from an
+      // onDelegationComplete hook). The sub-agent tool wrapper writes the
+      // flag by-reference to the RequestContext instance captured when the
+      // tool was BUILT — the registry's live instance in-process, or the
+      // context restored by rebuildRunToolsFromMastra cross-process. On the
+      // evented engine every step rehydrates its own RequestContext copy from
+      // its event payload, so that write never reaches the llm-mapping step's
+      // instance and bail used to cost one extra LLM turn (G3). Consuming the
+      // flag here — same process and same instances as tool execution — and
+      // carrying it on the serializable step output stops the loop in the
+      // same iteration on every engine.
+      const consumeDelegationBailSignal = (): boolean => {
+        let bailed = false;
+        for (const rc of [registryEntry?.requestContext, rebuiltRequestContext, requestContext]) {
+          if (rc?.get('__mastra_delegationBailed')) {
+            bailed = true;
+            rc.set('__mastra_delegationBailed', false);
+          }
+        }
+        return bailed;
+      };
+
       try {
         const outcome = await executeToolCall({
           tool: tool as any,
@@ -1619,6 +1651,7 @@ export function createDurableToolCallStep() {
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(transformMetadata ? { transformMetadata } : {}),
+          ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
         };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them —
@@ -1674,6 +1707,8 @@ export function createDurableToolCallStep() {
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(errorTransformMetadata ? { transformMetadata: errorTransformMetadata } : {}),
+          // A hook may bail on a FAILED delegation too (success: false).
+          ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
         };
       }
     },
