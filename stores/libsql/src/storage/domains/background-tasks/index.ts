@@ -163,10 +163,6 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
       setClauses.push('suspend_payload = jsonb(?)');
       params.push(serializeJson(update.suspendPayload));
     }
-    if ('args' in update) {
-      setClauses.push('args = jsonb(?)');
-      params.push(serializeJson(update.args));
-    }
     if ('retryCount' in update) {
       setClauses.push('retry_count = ?');
       params.push(update.retryCount as number);

@@ -222,7 +222,6 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
     if ('result' in update) data.result = update.result ?? null;
     if ('error' in update) data.error = update.error ?? null;
     if ('suspendPayload' in update) data.suspend_payload = update.suspendPayload ?? null;
-    if ('args' in update) data.args = update.args ?? null;
     if ('retryCount' in update) data.retry_count = update.retryCount;
     if ('startedAt' in update) data.startedAt = update.startedAt ?? null;
     if ('suspendedAt' in update) data.suspendedAt = update.suspendedAt ?? null;

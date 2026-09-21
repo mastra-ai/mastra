@@ -150,10 +150,6 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
       columns.push('suspend_payload');
       values.push(serializeJson(update.suspendPayload));
     }
-    if ('args' in update) {
-      columns.push('args');
-      values.push(serializeJson(update.args));
-    }
     if ('retryCount' in update) {
       columns.push('retry_count');
       values.push(update.retryCount as number);

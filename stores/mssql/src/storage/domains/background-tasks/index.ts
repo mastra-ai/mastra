@@ -211,10 +211,6 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
       setClauses.push(`[suspend_payload] = @p${idx}`);
       params[`p${idx++}`] = serializeJson(update.suspendPayload);
     }
-    if ('args' in update) {
-      setClauses.push(`[args] = @p${idx}`);
-      params[`p${idx++}`] = serializeJson(update.args);
-    }
     if ('retryCount' in update) {
       setClauses.push(`[retry_count] = @p${idx}`);
       params[`p${idx++}`] = update.retryCount;

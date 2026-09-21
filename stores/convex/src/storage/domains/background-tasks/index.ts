@@ -66,7 +66,6 @@ function toStoredPatch(update: UpdateBackgroundTask): StoredTaskPatch {
   if ('result' in update) patch.result = serializeJson(update.result);
   if ('error' in update) patch.error = serializeJson(update.error);
   if ('suspendPayload' in update) patch.suspend_payload = serializeJson(update.suspendPayload);
-  if ('args' in update) patch.args = serializeRequiredJson(update.args);
   if (update.retryCount !== undefined) patch.retry_count = update.retryCount;
   if (update.maxRetries !== undefined) patch.max_retries = update.maxRetries;
   if (update.timeoutMs !== undefined) patch.timeout_ms = update.timeoutMs;
