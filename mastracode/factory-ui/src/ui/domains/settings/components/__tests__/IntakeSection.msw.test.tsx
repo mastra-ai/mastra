@@ -10,6 +10,7 @@ import type { GitLabProject, GitLabStatus } from '../../../factory/services/gitl
 import type { IntakeConfig, IntakeSourceBinding } from '../../../factory/services/intake';
 import type { JiraProject, JiraStatus } from '../../../factory/services/jira';
 import type { LinearProject, LinearStatus } from '../../../factory/services/linear';
+import type { GithubStatus } from '../../../workspaces/services/github';
 import { IntakeSection } from '../IntakeSection';
 
 // Headless Nango auth is the browser boundary the SPA drives after the
@@ -44,6 +45,7 @@ beforeEach(() => {
 
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
 const BINDINGS_URL = `${TEST_BASE_URL}/web/intake/bindings`;
+const GITHUB_STATUS_URL = `${TEST_BASE_URL}/web/github/status`;
 const LINEAR_STATUS_URL = `${TEST_BASE_URL}/web/linear/status`;
 const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
 const LINEAR_TEAMS_URL = `${TEST_BASE_URL}/web/linear/teams`;
@@ -103,6 +105,13 @@ function baseConfig(): IntakeConfig {
   };
 }
 
+const githubReadyStatus: GithubStatus = {
+  enabled: true,
+  connected: true,
+  installations: [{ installationId: 1, accountLogin: 'acme', accountType: 'Organization' }],
+  reason: 'ready',
+};
+
 const connectedStatus: LinearStatus = {
   enabled: true,
   connected: true,
@@ -154,7 +163,12 @@ function seedGithubProject() {
 function useIntakeHandlers({
   config = baseConfig(),
   status = connectedStatus,
-}: { config?: IntakeConfig; status?: LinearStatus } = {}) {
+  githubStatus = githubReadyStatus,
+}: {
+  config?: IntakeConfig;
+  status?: LinearStatus;
+  githubStatus?: GithubStatus;
+} = {}) {
   const saved: IntakeConfig[] = [];
   server.use(
     http.get(CONFIG_URL, () => HttpResponse.json({ config })),
@@ -163,6 +177,7 @@ function useIntakeHandlers({
       saved.push(next);
       return HttpResponse.json({ config: next });
     }),
+    http.get(GITHUB_STATUS_URL, () => HttpResponse.json(githubStatus)),
     http.get(LINEAR_STATUS_URL, () => HttpResponse.json(status)),
     http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
     http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: linearTeams })),
@@ -458,6 +473,27 @@ describe('IntakeSection', () => {
       expect(saved[0]!.github.enabled).toBe(false);
       expect(saved[0]!.linear.enabled).toBe(true);
       expect(await screen.findByText('Intake sources updated')).toBeInTheDocument();
+    });
+  });
+
+  describe('given GitHub is not configured on the server', () => {
+    it('disables GitHub intake and hides repository controls', async () => {
+      seedGithubProject();
+      useIntakeHandlers({
+        githubStatus: {
+          enabled: false,
+          connected: false,
+          installations: [],
+          reason: 'missing_config',
+        },
+      });
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('GitHub is not configured on this server.')).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync GitHub issues' })).toBeDisabled();
+      expect(screen.queryByRole('checkbox', { name: 'mastra' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'GitHub routing' })).not.toBeInTheDocument();
     });
   });
 
@@ -987,6 +1023,9 @@ describe('IntakeSection', () => {
       seedGithubProject();
       server.use(
         http.get(CONFIG_URL, () => HttpResponse.json({ config: {} })),
+        http.get(GITHUB_STATUS_URL, () =>
+          HttpResponse.json({ enabled: false, connected: false, installations: [], reason: 'missing_config' }),
+        ),
         http.get(LINEAR_STATUS_URL, () => HttpResponse.json(connectedStatus)),
         http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
         http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: linearTeams })),
@@ -994,8 +1033,9 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      // GitHub defaults to enabled; Linear stays off until it's connected here.
-      expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
+      // Missing provider entries stay off, and unavailable providers cannot be toggled on.
+      expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).not.toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Sync GitHub issues' })).toBeDisabled();
       expect(screen.getByRole('switch', { name: 'Sync Linear issues' })).not.toBeChecked();
       expect(screen.getByRole('switch', { name: 'Sync GitLab issues' })).not.toBeChecked();
     });
@@ -1005,6 +1045,7 @@ describe('IntakeSection', () => {
     it('shows the unavailable notice', async () => {
       server.use(
         http.get(CONFIG_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
+        http.get(GITHUB_STATUS_URL, () => HttpResponse.json(githubReadyStatus)),
         http.get(LINEAR_STATUS_URL, () => HttpResponse.json(connectedStatus)),
         http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
         http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: linearTeams })),
