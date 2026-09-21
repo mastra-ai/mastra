@@ -17,6 +17,7 @@ import type {
   StorageIndexStats,
   HarnessAttachmentByteOwner,
   HarnessSessionRecordProjectionOption,
+  HarnessTerminalHandoffOption,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
@@ -59,6 +60,7 @@ export interface PgDomainClientConfig {
   indexes?: CreateIndexOptions[];
   attachmentByteOwner?: HarnessAttachmentByteOwner;
   sessionRecordProjection?: HarnessSessionRecordProjectionOption;
+  terminalHandoff?: HarnessTerminalHandoffOption;
 }
 
 /**
@@ -82,6 +84,7 @@ export interface PgDomainPoolConfig {
   indexes?: CreateIndexOptions[];
   attachmentByteOwner?: HarnessAttachmentByteOwner;
   sessionRecordProjection?: HarnessSessionRecordProjectionOption;
+  terminalHandoff?: HarnessTerminalHandoffOption;
 }
 
 /**
@@ -101,6 +104,7 @@ export type PgDomainRestConfig = {
   indexes?: CreateIndexOptions[];
   attachmentByteOwner?: HarnessAttachmentByteOwner;
   sessionRecordProjection?: HarnessSessionRecordProjectionOption;
+  terminalHandoff?: HarnessTerminalHandoffOption;
 } & (
   | {
       host: string;
@@ -129,6 +133,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
   indexes?: CreateIndexOptions[];
   attachmentByteOwner?: HarnessAttachmentByteOwner;
   sessionRecordProjection?: HarnessSessionRecordProjectionOption;
+  terminalHandoff?: HarnessTerminalHandoffOption;
 } {
   // Existing client
   if ('client' in config) {
@@ -141,6 +146,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
       indexes: config.indexes,
       attachmentByteOwner: config.attachmentByteOwner,
       sessionRecordProjection: config.sessionRecordProjection,
+      terminalHandoff: config.terminalHandoff,
     };
   }
 
@@ -156,6 +162,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
       indexes: config.indexes,
       attachmentByteOwner: config.attachmentByteOwner,
       sessionRecordProjection: config.sessionRecordProjection,
+      terminalHandoff: config.terminalHandoff,
     };
   }
 
@@ -197,6 +204,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
     indexes: config.indexes,
     attachmentByteOwner: config.attachmentByteOwner,
     sessionRecordProjection: config.sessionRecordProjection,
+    terminalHandoff: config.terminalHandoff,
   };
 }
 

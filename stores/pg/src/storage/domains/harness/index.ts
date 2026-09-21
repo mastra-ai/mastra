@@ -184,7 +184,6 @@ import type {
   HarnessTerminalCommitReceipt,
   HarnessTerminalError,
   HarnessTerminalFailReceipt,
-  HarnessTerminalHandoffOption,
   HarnessTerminalIntent,
   HarnessTerminalIntentLoadInput,
   HarnessTerminalQueuePressure,
@@ -753,9 +752,9 @@ export class HarnessPG extends HarnessStorage {
     TABLE_HARNESS_SESSION_PROJECTION_PRESSURE,
   ] as const;
 
-  constructor(config: PgDomainConfig & { harnessName?: string; terminalHandoff?: HarnessTerminalHandoffOption }) {
+  constructor(config: PgDomainConfig & { harnessName?: string }) {
     const resolved = resolvePgConfig(config);
-    super({ terminalHandoff: config.terminalHandoff, sessionRecordProjection: resolved.sessionRecordProjection });
+    super({ terminalHandoff: resolved.terminalHandoff, sessionRecordProjection: resolved.sessionRecordProjection });
     const { client, schemaName, disableInit, skipDefaultIndexes, indexes, attachmentByteOwner } = resolved;
     this.#client = new PgHarnessClient(client, schemaName);
     this.#harnessName = config.harnessName ?? 'default';

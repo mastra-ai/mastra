@@ -4,6 +4,7 @@ import type {
   CreateIndexOptions,
   HarnessAttachmentByteOwner,
   HarnessSessionRecordProjectionOption,
+  HarnessTerminalHandoffOption,
   RetentionConfig,
 } from '@mastra/core/storage';
 import type { ClientConfig, Pool, PoolConfig } from 'pg';
@@ -90,6 +91,8 @@ export interface PostgresBaseConfig {
   sessionRecordProjection?: HarnessSessionRecordProjectionOption;
   /** Native Harness attachment bytes remain external to PG and are supplied by the app. */
   attachmentByteOwner?: HarnessAttachmentByteOwner;
+  /** Opt in to the native Harness terminal handoff protocol and tune its bounds. */
+  terminalHandoff?: HarnessTerminalHandoffOption;
 }
 
 /**

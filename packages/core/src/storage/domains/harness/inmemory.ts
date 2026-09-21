@@ -1713,8 +1713,13 @@ export class InMemoryHarness extends HarnessStorage {
     for (const current of candidates) {
       if (claimed.length >= input.limit) break;
       if (current.status === 'claimed' && (current.claimExpiresAt ?? 0) > now) continue;
-      if (current.status !== 'pending' && !(current.status === 'failed' && (current.nextAttemptAt ?? 0) <= now))
+      if (
+        current.status !== 'pending' &&
+        current.status !== 'claimed' &&
+        !(current.status === 'failed' && (current.nextAttemptAt ?? 0) <= now)
+      )
         continue;
+      if (this.hasEarlierUnsettledTerminalIntent(current)) continue;
       if (current.attempts >= this.terminalHandoff.maxAttempts) {
         current.status = 'dead';
         current.deadAt = now;
@@ -1722,7 +1727,6 @@ export class InMemoryHarness extends HarnessStorage {
         this.adjustTerminalPressure(current.harnessName, -1, -current.projection.payloadBytes);
         continue;
       }
-      if (this.hasEarlierUnsettledTerminalIntent(current)) continue;
       current.status = 'claimed';
       current.claimId = terminalClaimId();
       current.claimExpiresAt = now + leaseMs;

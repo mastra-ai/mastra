@@ -290,6 +290,7 @@ export class PostgresStore extends MastraCompositeStore {
         indexes: config.indexes,
         attachmentByteOwner: config.attachmentByteOwner,
         sessionRecordProjection: config.sessionRecordProjection,
+        terminalHandoff: config.terminalHandoff,
       };
 
       const enabledDomains =
