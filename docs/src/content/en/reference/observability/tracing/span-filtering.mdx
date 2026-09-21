@@ -102,6 +102,31 @@ spanFilter: span => span.metadata?.environment === 'production'
 spanFilter: span => span.entityId !== 'noisy-agent'
 ```
 
+## Per-exporter filtering
+
+The options above apply to every exporter on the observability instance. To drop span types from a single exporter, pass `excludeSpanTypes` to that exporter's config instead. Every exporter that extends `BaseExporter` supports it.
+
+```ts title="src/mastra/index.ts"
+import { SpanType } from '@mastra/core/observability'
+import { LangfuseExporter } from '@mastra/langfuse'
+
+new LangfuseExporter({
+  excludeSpanTypes: [SpanType.MODEL_CHUNK],
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'excludeSpanTypes',
+    type: 'SpanType[]',
+    description:
+      "Span types this exporter drops before export. Other exporters on the same instance are not affected. Runs before the exporter's customSpanFormatter.",
+    isOptional: true,
+  },
+]}
+/>
+
 ## Processing order
 
 Span filtering happens at export time in this order:
@@ -110,6 +135,7 @@ Span filtering happens at export time in this order:
 1. `excludeSpanTypes` removes matching span types.
 1. `spanOutputProcessors` transform the remaining spans.
 1. `spanFilter` decides whether to keep the final exported span.
+1. Each exporter drops span types listed in its own `excludeSpanTypes`, then applies its `customSpanFormatter`.
 
 If `spanFilter` throws an error, Mastra keeps the span and logs the error to avoid silent data loss.
 

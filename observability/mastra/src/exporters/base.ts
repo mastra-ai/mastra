@@ -14,6 +14,7 @@ import type {
   ObservabilityExporter,
   InitExporterOptions,
   CustomSpanFormatter,
+  SpanType,
 } from '@mastra/core/observability';
 
 /**
@@ -49,6 +50,24 @@ export interface BaseExporterConfig {
    * ```
    */
   customSpanFormatter?: CustomSpanFormatter;
+  /**
+   * Span types this exporter should drop before export.
+   *
+   * Unlike the observability-level `excludeSpanTypes` option, which applies to
+   * every exporter on the instance, this only affects this exporter. Use it to
+   * keep high-volume span types (for example `MODEL_CHUNK`) out of a
+   * per-span-billed platform while other exporters still receive them.
+   *
+   * Excluded spans are dropped before `customSpanFormatter` runs.
+   *
+   * @example
+   * ```typescript
+   * const exporter = new LangfuseExporter({
+   *   excludeSpanTypes: [SpanType.MODEL_CHUNK],
+   * });
+   * ```
+   */
+  excludeSpanTypes?: SpanType[];
 }
 
 /**
@@ -94,6 +113,9 @@ export abstract class BaseExporter implements ObservabilityExporter {
   /** Whether this exporter is disabled */
   #disabled: boolean = false;
 
+  /** Span types dropped by this exporter (from `excludeSpanTypes`) */
+  #excludedSpanTypes: ReadonlySet<SpanType>;
+
   /** Public getter for disabled state */
   get isDisabled(): boolean {
     return this.#disabled;
@@ -104,6 +126,7 @@ export abstract class BaseExporter implements ObservabilityExporter {
    */
   constructor(config: BaseExporterConfig = {}) {
     this.baseConfig = config;
+    this.#excludedSpanTypes = new Set(config.excludeSpanTypes ?? []);
     // Map string log level to LogLevel enum if needed
     const logLevel = this.resolveLogLevel(config.logLevel);
     // Use constructor name as fallback since this.name isn't set yet (subclass initializes it)
@@ -154,6 +177,13 @@ export abstract class BaseExporter implements ObservabilityExporter {
   }
 
   /**
+   * Whether the span carried by this event is excluded via `excludeSpanTypes`.
+   */
+  protected isSpanTypeExcluded(event: TracingEvent): boolean {
+    return this.#excludedSpanTypes.has(event.exportedSpan.type);
+  }
+
+  /**
    * Apply the customSpanFormatter if configured.
    * This is called automatically by exportTracingEvent before _exportTracingEvent.
    *
@@ -200,12 +230,15 @@ export abstract class BaseExporter implements ObservabilityExporter {
   /**
    * Export a tracing event
    *
-   * This method checks if the exporter is disabled, applies the customSpanFormatter,
-   * then calls _exportTracingEvent.
+   * This method checks if the exporter is disabled, drops spans excluded via
+   * `excludeSpanTypes`, applies the customSpanFormatter, then calls _exportTracingEvent.
    * Subclasses should implement _exportTracingEvent instead of overriding this method.
    */
   async exportTracingEvent(event: TracingEvent): Promise<void> {
     if (this.isDisabled) {
+      return;
+    }
+    if (this.isSpanTypeExcluded(event)) {
       return;
     }
     const processedEvent = await this.applySpanFormatter(event);

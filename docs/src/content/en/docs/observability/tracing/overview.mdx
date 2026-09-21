@@ -473,7 +473,7 @@ Processors are executed in the order they're defined, allowing you to chain mult
 
 ## Span filtering
 
-Span filtering lets you reduce noise and per-span costs before data reaches your observability platform. Configure it per observability instance, so different exporters or environments can keep different levels of detail.
+Span filtering lets you reduce noise and per-span costs before data reaches your observability platform. Configure it per observability instance, or per exporter when only one destination should skip certain span types.
 
 - Use `excludeSpanTypes` to drop entire categories of spans with minimal configuration.
 - Use `spanFilter` when you need custom logic based on the exported span data.
@@ -514,6 +514,34 @@ Filtering happens at export time in this order:
 1. `spanFilter` decides whether to keep the final exported span.
 
 If `spanFilter` throws, Mastra keeps the span and logs the error to avoid silent data loss. For the full span type list and more examples, see the [Span filtering reference](/reference/observability/tracing/span-filtering).
+
+### Per-exporter filtering
+
+Every exporter also accepts `excludeSpanTypes`. Spans of those types are dropped by that exporter only, so other exporters on the same instance still receive them. This is useful when one platform bills per span and another (for example Mastra Studio) needs the full detail:
+
+```ts title="src/mastra/index.ts"
+import { SpanType } from '@mastra/core/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
+import { LangfuseExporter } from '@mastra/langfuse'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [
+          // Studio keeps every span, including streamed chunks
+          new MastraStorageExporter(),
+          // Langfuse skips per-chunk spans
+          new LangfuseExporter({ excludeSpanTypes: [SpanType.MODEL_CHUNK] }),
+        ],
+      },
+    },
+  }),
+})
+```
+
+Exporter-level exclusion runs after the instance-level filtering above and before the exporter's `customSpanFormatter`.
 
 ### Custom span formatters
 

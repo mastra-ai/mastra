@@ -1,5 +1,5 @@
 /**
- * Unit tests for BaseExporter and customSpanFormatter functionality.
+ * Unit tests for BaseExporter, excludeSpanTypes, and customSpanFormatter functionality.
  */
 
 import { SpanType, TracingEventType } from '@mastra/core/observability';
@@ -247,6 +247,69 @@ describe('BaseExporter', () => {
       expect(exporter.exportedEvents[0].exportedSpan.input).toBe('original-input');
       expect(logger.error).toHaveBeenCalled();
     });
+  });
+});
+
+describe('BaseExporter excludeSpanTypes', () => {
+  it('should drop spans whose type is excluded', async () => {
+    const exporter = new TestExporter({ excludeSpanTypes: [SpanType.MODEL_CHUNK] });
+
+    await exporter.exportTracingEvent(createTracingEvent(createMockSpan({ id: 'chunk', type: SpanType.MODEL_CHUNK })));
+    await exporter.exportTracingEvent(createTracingEvent(createMockSpan({ id: 'agent', type: SpanType.AGENT_RUN })));
+
+    expect(exporter.exportedEvents.map(e => e.exportedSpan.id)).toEqual(['agent']);
+  });
+
+  it('should drop excluded spans for every tracing event type', async () => {
+    const exporter = new TestExporter({ excludeSpanTypes: [SpanType.MODEL_CHUNK] });
+    const span = createMockSpan({ type: SpanType.MODEL_CHUNK });
+
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_UPDATED, exportedSpan: span });
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: span });
+
+    expect(exporter.exportedEvents).toHaveLength(0);
+  });
+
+  it('should export everything when excludeSpanTypes is empty or unset', async () => {
+    const unset = new TestExporter();
+    const empty = new TestExporter({ excludeSpanTypes: [] });
+    const event = createTracingEvent(createMockSpan({ type: SpanType.MODEL_CHUNK }));
+
+    await unset.exportTracingEvent(event);
+    await empty.exportTracingEvent(event);
+
+    expect(unset.exportedEvents).toHaveLength(1);
+    expect(empty.exportedEvents).toHaveLength(1);
+  });
+
+  it('should not run customSpanFormatter for excluded spans', async () => {
+    const formatter = vi.fn<CustomSpanFormatter>(span => span);
+    const exporter = new TestExporter({
+      excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      customSpanFormatter: formatter,
+    });
+
+    await exporter.exportTracingEvent(createTracingEvent(createMockSpan({ type: SpanType.MODEL_CHUNK })));
+    await exporter.exportTracingEvent(createTracingEvent(createMockSpan({ type: SpanType.AGENT_RUN })));
+
+    expect(formatter).toHaveBeenCalledTimes(1);
+    expect(formatter.mock.calls[0][0].type).toBe(SpanType.AGENT_RUN);
+  });
+
+  it('should filter on the original span type, not the formatted one', async () => {
+    // The formatter runs after exclusion, so retyping a span in the formatter
+    // cannot resurrect an excluded span or cause a kept span to be dropped.
+    const formatter: CustomSpanFormatter = span => ({ ...span, type: SpanType.MODEL_CHUNK });
+    const exporter = new TestExporter({
+      excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      customSpanFormatter: formatter,
+    });
+
+    await exporter.exportTracingEvent(createTracingEvent(createMockSpan({ type: SpanType.AGENT_RUN })));
+
+    expect(exporter.exportedEvents).toHaveLength(1);
+    expect(exporter.exportedEvents[0].exportedSpan.type).toBe(SpanType.MODEL_CHUNK);
   });
 });
 

@@ -64,6 +64,7 @@ Extends `BaseExporterConfig`, which includes:
 
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+- `excludeSpanTypes?: SpanType[]` - Span types this exporter drops before export (only affects this exporter)
 
 ## `TracingStorageStrategy`
 
