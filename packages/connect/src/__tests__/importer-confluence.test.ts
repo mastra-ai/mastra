@@ -12,6 +12,7 @@ interface ConfluencePageFixture {
   body?: string;
   status?: string;
   spaceKey?: string;
+  ancestors?: { id: string; title?: string }[];
 }
 
 function pageResult(fixture: ConfluencePageFixture) {
@@ -25,6 +26,7 @@ function pageResult(fixture: ConfluencePageFixture) {
     body: { storage: { value: fixture.body ?? '' } },
     _links: { webui: `/wiki/spaces/${fixture.spaceKey ?? 'ENG'}/pages/${fixture.id}` },
     history: { lastUpdated: { when: fixture.lastModified } },
+    ...(fixture.ancestors ? { ancestors: fixture.ancestors } : {}),
   };
 }
 
@@ -174,5 +176,99 @@ describe('confluence importer', () => {
     const definition = confluenceImporterRegistration.createImporter(ctx);
     await expect(runImporter(definition, { importer, state })).rejects.toThrow();
     expect(await state.get('confluence:watermark')).toBeUndefined();
+  });
+
+  it('requests ancestors in the expand and emits a child-of link toward the direct parent', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      searchResponse([
+        {
+          id: 'p3',
+          title: 'Grandchild',
+          lastModified: '2026-09-01T00:00:00Z',
+          body: '<p>content</p>',
+          ancestors: [
+            { id: 'p1', title: 'Root' },
+            { id: 'p2', title: 'Parent' },
+          ],
+        },
+      ]),
+    );
+    await runImporter(confluenceImporterRegistration.createImporter(ctx), { importer, state });
+
+    const call = request.mock.calls[0]![0]! as { query: Record<string, unknown> };
+    expect(call.query.expand).toContain('ancestors');
+    const record = [...importer.nodes.get('confluence:page:p3')!.records.values()][0]!;
+    // Direct parent is the LAST ancestor (root → parent order).
+    expect((record.metadata as { links: unknown[] }).links).toEqual([
+      { address: 'confluence:page:p2', rel: 'child-of' },
+    ]);
+  });
+
+  it('extracts ri:page links — content-id becomes an address link, title-only becomes a name link', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      searchResponse([
+        {
+          id: 'p1',
+          title: 'Alpha',
+          lastModified: '2026-09-01T00:00:00Z',
+          body:
+            '<p>See <ac:link><ri:page ri:content-title="Runbook" ri:content-id="777"/></ac:link> and ' +
+            '<ac:link><ri:page ri:content-title="Onboarding Guide"/></ac:link> for details.</p>',
+        },
+      ]),
+    );
+    await runImporter(confluenceImporterRegistration.createImporter(ctx), { importer, state });
+
+    const record = [...importer.nodes.get('confluence:page:p1')!.records.values()][0]!;
+    expect((record.metadata as { links: unknown[] }).links).toEqual([
+      { name: 'Onboarding Guide', rel: 'references' },
+      { address: 'confluence:page:777', rel: 'references' },
+    ]);
+    // Links survive even though HTML stripping removed the markup from the body text.
+    expect(record.text).not.toContain('ri:page');
+    expect(record.text).toContain('See');
+  });
+
+  it('stamps node self-address metadata and neutralizes wikilink brackets in body text', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      searchResponse([
+        { id: 'p1', title: 'Alpha', lastModified: '2026-09-01T00:00:00Z', body: '<p>about [[Beta]] page</p>' },
+      ]),
+    );
+    await runImporter(confluenceImporterRegistration.createImporter(ctx), { importer, state });
+
+    const node = importer.nodes.get('confluence:page:p1')!;
+    expect(node.input.metadata).toEqual({ address: 'confluence:page:p1' });
+    const record = [...node.records.values()][0]!;
+    expect(record.text).toContain('［［Beta］］');
+    expect(record.text).not.toContain('[[');
+  });
+
+  it('a link change alone produces a new content-hash record', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      searchResponse([
+        { id: 'p1', title: 'Alpha', lastModified: '2026-09-01T00:00:00Z', ancestors: [{ id: 'parentA' }] },
+      ]),
+    );
+    const definition = confluenceImporterRegistration.createImporter(ctx);
+    await runImporter(definition, { importer, state });
+    const firstId = [...importer.nodes.get('confluence:page:p1')!.records.keys()][0]!;
+
+    // Page moved under a different parent — same title/body/timestamp, ONLY the
+    // links differ, proving the link array is part of the content-hash payload.
+    request.mockResolvedValueOnce(
+      searchResponse([
+        { id: 'p1', title: 'Alpha', lastModified: '2026-09-01T00:00:00Z', ancestors: [{ id: 'parentB' }] },
+      ]),
+    );
+    await runImporter(definition, { importer, state });
+
+    const ids = [...importer.nodes.get('confluence:page:p1')!.records.keys()];
+    expect(ids).toHaveLength(1);
+    expect(ids[0]).not.toBe(firstId);
   });
 });

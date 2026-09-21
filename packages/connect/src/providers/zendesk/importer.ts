@@ -1,12 +1,16 @@
 import { z } from 'zod';
 
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
+import type { RecordLink } from '../../importer-runtime.js';
 import {
   boundText,
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   importerCronTrigger,
+  linksMetadata,
+  neutralizeWikilinks,
+  nodeSelfMetadata,
   readWatermark,
   writeWatermark,
 } from '../../importer-runtime.js';
@@ -24,6 +28,7 @@ const articleSchema = z.object({
   body: z.string().nullish(),
   draft: z.boolean().nullish(),
   locale: z.string().nullish(),
+  section_id: z.union([z.number(), z.string()]).nullish(),
   updated_at: z.string().nullish(),
   html_url: z.string().nullish(),
 });
@@ -35,6 +40,65 @@ const incrementalArticlesSchema = z.object({
 });
 
 type ZendeskArticle = z.infer<typeof articleSchema>;
+
+/** Maximum section-list pages fetched per run (sections are few; 10 × 100 is generous). */
+export const MAX_SECTION_PAGES = 10;
+
+const sectionSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  name: z.string().nullish(),
+});
+
+const sectionsResponseSchema = z.object({
+  sections: z.array(sectionSchema).default([]),
+  next_page: z.string().nullish(),
+  meta: z.object({ has_more: z.boolean().nullish(), after_cursor: z.string().nullish() }).nullish(),
+});
+
+/**
+ * Fetches Help Center sections once per run, bounded by `MAX_SECTION_PAGES`.
+ * Returns `undefined` on any failure — the run then imports articles without
+ * section containers or `in` links; containment resumes on a later good run.
+ */
+async function fetchSectionNames(
+  ctx: ImporterProviderContext,
+  signal: AbortSignal,
+): Promise<Map<string, string> | undefined> {
+  const names = new Map<string, string>();
+  try {
+    let cursor: string | undefined;
+    for (let pageIndex = 0; pageIndex < MAX_SECTION_PAGES; pageIndex++) {
+      if (signal.aborted) break;
+      const query: Record<string, string | number> = { 'page[size]': 100 };
+      if (cursor) query['page[after]'] = cursor;
+      const parsed = sectionsResponseSchema.parse(
+        await ctx.request({ method: 'GET', path: 'api/v2/help_center/sections.json', query }),
+      );
+      for (const section of parsed.sections) {
+        const name = section.name?.trim();
+        if (name) names.set(String(section.id), name);
+      }
+      const after = parsed.meta?.after_cursor ?? undefined;
+      if (!parsed.meta?.has_more || !after) break;
+      cursor = after;
+    }
+    return names;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Help Center article hrefs, e.g. `/hc/en-us/articles/123456-some-slug`. */
+const ARTICLE_HREF_PATTERN = /<a\b[^>]*href="[^"]*\/hc\/[^"]*\/articles\/(\d+)[^"]*"/gi;
+
+/** Extract article→article reference links from raw HTML, before tags are stripped. */
+function extractArticleLinks(html: string): RecordLink[] {
+  const links: RecordLink[] = [];
+  for (const match of html.matchAll(ARTICLE_HREF_PATTERN)) {
+    links.push({ address: `zendesk:article:${match[1]}`, rel: 'references' });
+  }
+  return links;
+}
 
 /** Strip HTML tags from article bodies — enough for semantic search, no DOM needed. */
 function stripHtml(html: string): string {
@@ -93,6 +157,14 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
         if (collected.length >= DEFAULT_MAX_RECORDS_PER_RUN) break;
       }
 
+      // Section names resolve container nodes and `in` links. Fetched once per
+      // run, only when there's something to import; on failure articles still
+      // import (no containers, no `in` links this run).
+      const nonDraft = collected.filter(article => !article.draft);
+      const sectionNames =
+        nonDraft.length > 0 ? await fetchSectionNames(ctx, context.signal) : new Map<string, string>();
+      const upsertedSections = new Set<string>();
+
       for (const article of collected) {
         if (context.signal.aborted) return;
         const address = `zendesk:article:${article.id}`;
@@ -107,24 +179,62 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
           continue;
         }
         const title = article.title ?? `Article #${article.id}`;
-        const body = stripHtml(article.body ?? '');
+        const rawHtml = article.body ?? '';
+        // Links live in the HTML — extract BEFORE tags are stripped.
+        const links: RecordLink[] = extractArticleLinks(rawHtml);
+        const sectionId = article.section_id != null ? String(article.section_id) : undefined;
+        const sectionName = sectionId ? sectionNames?.get(sectionId) : undefined;
+        if (sectionId && sectionName) {
+          const sectionAddress = `zendesk:section:${sectionId}`;
+          if (!upsertedSections.has(sectionAddress)) {
+            upsertedSections.add(sectionAddress);
+            const sectionNode = await importer.upsertNode(sectionAddress, {
+              name: sectionName,
+              kind: 'connect:zendesk:section',
+              metadata: nodeSelfMetadata(sectionAddress),
+            });
+            const sectionRecordId = contentRecordId({ address: sectionAddress, name: sectionName });
+            const sectionRecords = await sectionNode.listRecords();
+            if (!sectionRecords.some(r => r.id === sectionRecordId)) {
+              await sectionNode.appendRecord({
+                id: sectionRecordId,
+                text: neutralizeWikilinks(sectionName),
+                metadata: { sectionId },
+              });
+            }
+            if (canRemove) {
+              for (const previous of sectionRecords) {
+                if (previous.id !== sectionRecordId) await sectionNode.removeRecord(previous.id);
+              }
+            }
+          }
+          links.push({ address: sectionAddress, rel: 'in' });
+        }
+        const linkMeta = linksMetadata(links.filter(link => link.address !== address));
+        const body = stripHtml(rawHtml);
         const recordPayload = {
           address,
           title,
           body,
+          links: linkMeta.links ?? [],
           updatedAt: article.updated_at,
         };
         const recordId = contentRecordId(recordPayload);
-        const node = await importer.upsertNode(address, { name: title, kind: 'connect:zendesk:article' });
+        const node = await importer.upsertNode(address, {
+          name: title,
+          kind: 'connect:zendesk:article',
+          metadata: nodeSelfMetadata(address),
+        });
         const existingRecords = await node.listRecords();
         if (!existingRecords.some(r => r.id === recordId)) {
           await node.appendRecord({
             id: recordId,
-            text: boundText(body ? `${title}\n\n${body}` : title),
+            text: boundText(neutralizeWikilinks(body ? `${title}\n\n${body}` : title)),
             metadata: {
               locale: article.locale,
               updatedAt: article.updated_at,
               url: article.html_url,
+              ...linkMeta,
             },
           });
         }
