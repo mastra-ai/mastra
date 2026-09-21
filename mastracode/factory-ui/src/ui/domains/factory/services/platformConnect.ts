@@ -25,10 +25,26 @@ export type PlatformConnectProviderId =
 /** How the provider authorizes: OAuth consent popup or an API-key form. */
 export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
 
+/**
+ * A connection-config field the SPA must collect before `nango.auth()` can
+ * run — e.g. Zendesk's tenant subdomain, which Nango needs to build the
+ * authorization URL. Collected in the same dialog pattern as the API-key
+ * form and passed as `params` to the headless auth call.
+ */
+export interface PlatformConnectParamField {
+  key: string;
+  label: string;
+  placeholder?: string;
+  /** One-line helper rendered under the input. */
+  hint?: string;
+}
+
 export interface PlatformConnectProviderMeta {
   id: PlatformConnectProviderId;
   displayName: string;
   authKind: PlatformConnectAuthKind;
+  /** Connection-config fields to collect before authorizing (OAuth params). */
+  connectParams?: readonly PlatformConnectParamField[];
 }
 
 export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, PlatformConnectProviderMeta> = {
@@ -37,8 +53,25 @@ export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, Platf
   notion: { id: 'notion', displayName: 'Notion', authKind: 'oauth' },
   confluence: { id: 'confluence', displayName: 'Confluence', authKind: 'oauth' },
   linear: { id: 'linear', displayName: 'Linear', authKind: 'oauth' },
-  zendesk: { id: 'zendesk', displayName: 'Zendesk', authKind: 'oauth' },
-  fireflies: { id: 'fireflies', displayName: 'Fireflies', authKind: 'oauth' },
+  zendesk: {
+    id: 'zendesk',
+    displayName: 'Zendesk',
+    authKind: 'oauth',
+    // Nango's Zendesk authorization URL is tenant-scoped
+    // (https://<subdomain>.zendesk.com/oauth/authorizations/new), so headless
+    // auth must supply the subdomain as a connection param.
+    connectParams: [
+      {
+        key: 'subdomain',
+        label: 'Zendesk subdomain',
+        placeholder: 'your-company',
+        hint: 'The part before .zendesk.com in your Zendesk URL.',
+      },
+    ],
+  },
+  // Fireflies is an API_KEY integration in the Nango catalog — no OAuth
+  // consent screen exists, so Connect collects the key in-app.
+  fireflies: { id: 'fireflies', displayName: 'Fireflies', authKind: 'apiKey' },
 };
 
 /**
@@ -249,15 +282,19 @@ export class HeadlessAuthError extends Error {
  * Complete a minted connect/reconnect session headlessly. OAuth providers get
  * the provider's own consent popup; API-key providers submit the credential
  * directly with no popup. Mirrors Mastra Platform's own headless connect.
+ * `params` carries provider connection config (e.g. Zendesk's subdomain)
+ * that Nango needs to build the authorization URL.
  */
 export async function runHeadlessAuth(input: {
   session: PlatformConnectSession;
   credentials?: Record<string, string>;
+  params?: Record<string, string>;
 }): Promise<void> {
   const nango = new Nango({ connectSessionToken: input.session.sessionToken });
   const options: AuthOptions = {};
   if (input.credentials) options.credentials = input.credentials;
   else options.detectClosedAuthWindow = true;
+  if (input.params) options.params = input.params;
   try {
     await nango.auth(input.session.integrationId, options);
   } catch (error) {

@@ -44,6 +44,78 @@ interface ApiKeyDialogProps {
   onClose: () => void;
 }
 
+interface ConnectParamsDialogProps {
+  provider: PlatformConnectProviderId;
+  title: string;
+  pending: boolean;
+  onSubmit: (params: Record<string, string>) => void;
+  onClose: () => void;
+}
+
+/**
+ * Collects provider connection config (e.g. Zendesk's subdomain) before the
+ * OAuth popup opens — Nango needs these values to build the authorization
+ * URL. Same dialog pattern as the API-key form so every provider's connect
+ * flow feels identical.
+ */
+function ConnectParamsDialog({ provider, title, pending, onSubmit, onClose }: ConnectParamsDialogProps) {
+  const meta = PLATFORM_CONNECT_PROVIDERS[provider];
+  const fields = meta.connectParams ?? [];
+  const [values, setValues] = useState<Record<string, string>>({});
+  const complete = fields.every(field => (values[field.key] ?? '').trim());
+  const submit = () => {
+    const params: Record<string, string> = {};
+    for (const field of fields) params[field.key] = (values[field.key] ?? '').trim();
+    onSubmit(params);
+  };
+  return (
+    <Dialog open onOpenChange={open => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            {meta.displayName} needs this to open the right sign-in page. You'll authorize in a {meta.displayName}{' '}
+            popup next.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-3">
+          {fields.map(field => (
+            <label key={field.key} className="flex flex-col gap-1.5">
+              <Txt as="span" variant="ui-sm" className="text-icon5">
+                {field.label}
+              </Txt>
+              <Input
+                aria-label={field.label}
+                placeholder={field.placeholder}
+                value={values[field.key] ?? ''}
+                onChange={event => setValues(prev => ({ ...prev, [field.key]: event.target.value }))}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' && complete && !pending) submit();
+                }}
+              />
+              {field.hint && (
+                <Txt as="span" variant="ui-xs" className="text-icon3">
+                  {field.hint}
+                </Txt>
+              )}
+            </label>
+          ))}
+        </DialogBody>
+        <DialogFooter>
+          <ButtonsGroup>
+            <Button variant="ghost" onClick={onClose} disabled={pending}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={pending || !complete}>
+              {pending ? 'Connecting…' : 'Continue'}
+            </Button>
+          </ButtonsGroup>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDialogProps) {
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const [apiKey, setApiKey] = useState('');
@@ -110,18 +182,15 @@ export function ProviderConnectControl({
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const connectMutation = useConnectPlatformProviderMutation(provider);
   const reconnectMutation = useReconnectPlatformProviderMutation(provider);
-  const [collectingApiKey, setCollectingApiKey] = useState(false);
+  const [collecting, setCollecting] = useState<'apiKey' | 'params' | null>(null);
   const pending = connectMutation.isPending || reconnectMutation.isPending;
 
-  const run = async (credentials?: Record<string, string>) => {
+  const run = async (input: { credentials?: Record<string, string>; params?: Record<string, string> } = {}) => {
     try {
       const connection = reconnectConnectionId
-        ? await reconnectMutation.mutateAsync({
-            connectionId: reconnectConnectionId,
-            ...(credentials ? { credentials } : {}),
-          })
-        : await connectMutation.mutateAsync({ ...(credentials ? { credentials } : {}) });
-      setCollectingApiKey(false);
+        ? await reconnectMutation.mutateAsync({ connectionId: reconnectConnectionId, ...input })
+        : await connectMutation.mutateAsync(input);
+      setCollecting(null);
       if (connection) {
         toast.success(`${meta.displayName} connected`);
       } else {
@@ -133,24 +202,33 @@ export function ProviderConnectControl({
     }
   };
 
+  const start = () => {
+    if (meta.authKind === 'apiKey') setCollecting('apiKey');
+    else if (meta.connectParams?.length) setCollecting('params');
+    else void run();
+  };
+
   return (
     <>
-      <Button
-        size={size}
-        variant={variant}
-        icon={icon}
-        disabled={pending}
-        onClick={() => (meta.authKind === 'apiKey' ? setCollectingApiKey(true) : void run())}
-      >
+      <Button size={size} variant={variant} icon={icon} disabled={pending} onClick={start}>
         {pending ? 'Connecting…' : label}
       </Button>
-      {collectingApiKey && (
+      {collecting === 'apiKey' && (
         <ApiKeyDialog
           provider={provider}
           title={label}
           pending={pending}
-          onSubmit={apiKey => void run({ apiKey })}
-          onClose={() => setCollectingApiKey(false)}
+          onSubmit={apiKey => void run({ credentials: { apiKey } })}
+          onClose={() => setCollecting(null)}
+        />
+      )}
+      {collecting === 'params' && (
+        <ConnectParamsDialog
+          provider={provider}
+          title={label}
+          pending={pending}
+          onSubmit={params => void run({ params })}
+          onClose={() => setCollecting(null)}
         />
       )}
     </>

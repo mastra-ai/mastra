@@ -79,9 +79,13 @@ export function useConnectPlatformProviderMutation(provider: PlatformConnectProv
   const { baseUrl } = useApiConfig();
   const invalidate = useInvalidateProviderState(provider);
   return useMutation({
-    mutationFn: async (input: { credentials?: Record<string, string> } = {}) => {
+    mutationFn: async (input: { credentials?: Record<string, string>; params?: Record<string, string> } = {}) => {
       const session = await createPlatformConnectSession(baseUrl, provider);
-      await runHeadlessAuth({ session, ...(input.credentials ? { credentials: input.credentials } : {}) });
+      await runHeadlessAuth({
+        session,
+        ...(input.credentials ? { credentials: input.credentials } : {}),
+        ...(input.params ? { params: input.params } : {}),
+      });
       return waitForActiveConnection(baseUrl, provider, session.connectionId);
     },
     onSettled: invalidate,
@@ -124,9 +128,17 @@ export function useReconnectPlatformProviderMutation(provider: PlatformConnectPr
   const { baseUrl } = useApiConfig();
   const invalidate = useInvalidateProviderState(provider);
   return useMutation({
-    mutationFn: async (input: { connectionId: string; credentials?: Record<string, string> }) => {
+    mutationFn: async (input: {
+      connectionId: string;
+      credentials?: Record<string, string>;
+      params?: Record<string, string>;
+    }) => {
       const session = await createPlatformReconnectSession(baseUrl, provider, input.connectionId);
-      await runHeadlessAuth({ session, ...(input.credentials ? { credentials: input.credentials } : {}) });
+      await runHeadlessAuth({
+        session,
+        ...(input.credentials ? { credentials: input.credentials } : {}),
+        ...(input.params ? { params: input.params } : {}),
+      });
       return waitForActiveConnection(baseUrl, provider, input.connectionId);
     },
     onSettled: invalidate,
