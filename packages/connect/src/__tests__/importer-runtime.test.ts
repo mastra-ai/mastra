@@ -8,7 +8,10 @@ import {
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   importerCronTrigger,
+  linksMetadata,
   MAX_RECORD_TEXT,
+  neutralizeWikilinks,
+  nodeSelfMetadata,
   readHighWater,
   readResumeCursor,
   readWatermark,
@@ -145,6 +148,53 @@ describe('importer-runtime helpers', () => {
 
       const bad = createFakeState({ h: 'not-json' });
       await expect(readHighWater(bad, 'h')).rejects.toThrow(/not valid JSON/);
+    });
+  });
+
+  describe('linksMetadata', () => {
+    it('sorts deterministically by address-or-name then rel, and dedups identical entries', () => {
+      expect(
+        linksMetadata([
+          { address: 'z:2', rel: 'references' },
+          { address: 'a:1', rel: 'references' },
+          { address: 'a:1', rel: 'references' },
+          { address: 'a:1', rel: 'child-of' },
+          { name: 'Middle Page', rel: 'references' },
+        ]),
+      ).toEqual({
+        // Sorted by code-unit order of `address ?? name`, then `rel` — 'M' < 'a' < 'z'.
+        links: [
+          { name: 'Middle Page', rel: 'references' },
+          { address: 'a:1', rel: 'child-of' },
+          { address: 'a:1', rel: 'references' },
+          { address: 'z:2', rel: 'references' },
+        ],
+      });
+    });
+
+    it('drops entries with neither address nor name and returns {} when nothing survives', () => {
+      expect(linksMetadata([])).toEqual({});
+      expect(linksMetadata([{ rel: 'references' }, { address: '  ' }, { name: '' }])).toEqual({});
+    });
+  });
+
+  describe('nodeSelfMetadata', () => {
+    it('produces the address, adding aliases only when present', () => {
+      expect(nodeSelfMetadata('notion:page:p1')).toEqual({ address: 'notion:page:p1' });
+      expect(nodeSelfMetadata('linear:document:d1', ['linear:document:slug:s1'])).toEqual({
+        address: 'linear:document:d1',
+        addressAliases: ['linear:document:slug:s1'],
+      });
+      expect(nodeSelfMetadata('a', [])).toEqual({ address: 'a' });
+    });
+  });
+
+  describe('neutralizeWikilinks', () => {
+    it('replaces both bracket forms with fullwidth lookalikes so imported text cannot mint edges', () => {
+      expect(neutralizeWikilinks('see [[Other Page]] and [[Another]]')).toBe(
+        'see ［［Other Page］］ and ［［Another］］',
+      );
+      expect(neutralizeWikilinks('no links here')).toBe('no links here');
     });
   });
 

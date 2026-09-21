@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
+import type { RecordLink } from '../../importer-runtime.js';
 import {
   boundText,
   clearHighWater,
@@ -9,6 +10,9 @@ import {
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   importerCronTrigger,
+  linksMetadata,
+  neutralizeWikilinks,
+  nodeSelfMetadata,
   readHighWater,
   readResumeCursor,
   readWatermark,
@@ -21,9 +25,20 @@ const NOTION_WATERMARK_KEY = 'notion:watermark';
 const NOTION_RESUME_CURSOR_KEY = 'notion:resume-cursor';
 const NOTION_HIGH_WATER_KEY = 'notion:high-water';
 
+/** Maximum block-children pages fetched per Notion page per run (≤300 blocks). */
+export const MAX_BLOCK_PAGES_PER_ENTITY = 3;
+
 const richTextItemSchema = z.object({
   plain_text: z.string().default(''),
 });
+
+const parentSchema = z
+  .object({
+    type: z.string(),
+    page_id: z.string().nullish(),
+    database_id: z.string().nullish(),
+  })
+  .passthrough();
 
 const titlePropertySchema = z
   .object({ type: z.literal('title'), title: z.array(richTextItemSchema).default([]) })
@@ -40,6 +55,7 @@ const pageResultSchema = z.object({
   in_trash: z.boolean().nullish(),
   url: z.string().nullish(),
   last_edited_time: z.string(),
+  parent: parentSchema.nullish(),
   properties: z.record(z.string(), propertySchema).default({}),
 });
 
@@ -50,6 +66,7 @@ const databaseResultSchema = z.object({
   in_trash: z.boolean().nullish(),
   url: z.string().nullish(),
   last_edited_time: z.string(),
+  parent: parentSchema.nullish(),
   title: z.array(richTextItemSchema).default([]),
 });
 
@@ -106,6 +123,164 @@ function nodeAddress(result: NotionSearchResult): string {
 
 function nodeKind(result: NotionSearchResult): 'connect:notion:page' | 'connect:notion:database' {
   return result.object === 'page' ? 'connect:notion:page' : 'connect:notion:database';
+}
+
+const blockRichTextItemSchema = z
+  .object({
+    plain_text: z.string().default(''),
+    href: z.string().nullish(),
+    mention: z
+      .object({
+        type: z.string(),
+        page: z.object({ id: z.string() }).nullish(),
+        database: z.object({ id: z.string() }).nullish(),
+      })
+      .passthrough()
+      .nullish(),
+  })
+  .passthrough();
+
+const blockSchema = z
+  .object({
+    type: z.string(),
+    link_to_page: z
+      .object({
+        type: z.string().nullish(),
+        page_id: z.string().nullish(),
+        database_id: z.string().nullish(),
+      })
+      .passthrough()
+      .nullish(),
+  })
+  .passthrough();
+
+const blockChildrenResponseSchema = z.object({
+  results: z.array(blockSchema).default([]),
+  has_more: z.boolean().default(false),
+  next_cursor: z.string().nullish(),
+});
+
+type NotionBlock = z.infer<typeof blockSchema>;
+
+/** Block types whose rich text becomes record body text. */
+const TEXT_BLOCK_TYPES = new Set([
+  'paragraph',
+  'heading_1',
+  'heading_2',
+  'heading_3',
+  'bulleted_list_item',
+  'numbered_list_item',
+  'quote',
+  'callout',
+  'toggle',
+]);
+
+/** notion.so URL carrying a 32-hex-char page/database id (dashes optional). */
+const NOTION_URL_ID_PATTERN =
+  /notion\.so\/(?:[^\s"')]*-)?([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})/i;
+
+/** Normalize a Notion id to the canonical dashed UUID form used by the search API. */
+function normalizeNotionId(id: string): string {
+  const hex = id.replaceAll('-', '').toLowerCase();
+  if (!/^[0-9a-f]{32}$/.test(hex)) return id;
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function richTextItems(block: NotionBlock): z.infer<typeof blockRichTextItemSchema>[] {
+  const payload = (block as Record<string, unknown>)[block.type];
+  if (!payload || typeof payload !== 'object') return [];
+  const richText = (payload as Record<string, unknown>).rich_text;
+  if (!Array.isArray(richText)) return [];
+  const items: z.infer<typeof blockRichTextItemSchema>[] = [];
+  for (const raw of richText) {
+    const parsed = blockRichTextItemSchema.safeParse(raw);
+    if (parsed.success) items.push(parsed.data);
+  }
+  return items;
+}
+
+interface BlockExtraction {
+  readonly text: string;
+  readonly links: RecordLink[];
+}
+
+/**
+ * Extracts body text and cross-page reference links from a page's blocks.
+ * `child_page`/`child_database` blocks are deliberately skipped — containment
+ * is emitted one-directionally by the child via its `parent` field.
+ */
+function extractFromBlocks(blocks: readonly NotionBlock[]): BlockExtraction {
+  const textParts: string[] = [];
+  const links: RecordLink[] = [];
+  const addLink = (object: 'page' | 'database', id: string) =>
+    links.push({ address: `notion:${object}:${normalizeNotionId(id)}`, rel: 'references' });
+  for (const block of blocks) {
+    if (block.type === 'link_to_page' && block.link_to_page) {
+      if (block.link_to_page.page_id) addLink('page', block.link_to_page.page_id);
+      else if (block.link_to_page.database_id) addLink('database', block.link_to_page.database_id);
+      continue;
+    }
+    const items = richTextItems(block);
+    for (const item of items) {
+      if (item.mention?.type === 'page' && item.mention.page?.id) addLink('page', item.mention.page.id);
+      else if (item.mention?.type === 'database' && item.mention.database?.id)
+        addLink('database', item.mention.database.id);
+      else if (item.href) {
+        const match = NOTION_URL_ID_PATTERN.exec(item.href);
+        if (match?.[1]) addLink('page', match[1]);
+      }
+    }
+    if (TEXT_BLOCK_TYPES.has(block.type)) {
+      const text = items
+        .map(item => item.plain_text)
+        .join('')
+        .trim();
+      if (text) textParts.push(text);
+    }
+  }
+  return { text: textParts.join('\n'), links };
+}
+
+/**
+ * Bounded block-children fetch for one page. Follows `next_cursor` up to
+ * `MAX_BLOCK_PAGES_PER_ENTITY` pages (no recursion into nested blocks).
+ * Returns `undefined` on any fetch/parse failure — the caller degrades
+ * per-page instead of failing the run.
+ */
+async function fetchPageBlocks(
+  ctx: ImporterProviderContext,
+  pageId: string,
+  signal: AbortSignal,
+): Promise<NotionBlock[] | undefined> {
+  const blocks: NotionBlock[] = [];
+  let cursor: string | undefined;
+  try {
+    for (let fetchIndex = 0; fetchIndex < MAX_BLOCK_PAGES_PER_ENTITY; fetchIndex++) {
+      if (signal.aborted) break;
+      const query: Record<string, string | number> = { page_size: 100 };
+      if (cursor) query.start_cursor = cursor;
+      const parsed = blockChildrenResponseSchema.parse(
+        await ctx.request({ method: 'GET', path: `v1/blocks/${pageId}/children`, query }),
+      );
+      blocks.push(...parsed.results);
+      if (!parsed.has_more || !parsed.next_cursor) break;
+      cursor = parsed.next_cursor;
+    }
+    return blocks;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Structure link toward the entity's parent page/database, if any. */
+function parentLink(result: NotionSearchResult): RecordLink | undefined {
+  const parent = result.parent;
+  if (!parent) return undefined;
+  if (parent.type === 'page_id' && parent.page_id)
+    return { address: `notion:page:${normalizeNotionId(parent.page_id)}`, rel: 'child-of' };
+  if (parent.type === 'database_id' && parent.database_id)
+    return { address: `notion:database:${normalizeNotionId(parent.database_id)}`, rel: 'child-of' };
+  return undefined;
 }
 
 function createNotionImporter(ctx: ImporterProviderContext) {
@@ -198,20 +373,55 @@ function createNotionImporter(ctx: ImporterProviderContext) {
 
         const title = extractTitle(result);
         const propertyText = extractPropertyText(result);
+        const links: RecordLink[] = [];
+        const parent = parentLink(result);
+        if (parent) links.push(parent);
+
+        // Page bodies (and in-content links) live in blocks, not search results.
+        // A failed block fetch degrades per-page — it never fails the run.
+        let blockText = '';
+        let blockFetchFailed = false;
+        if (result.object === 'page') {
+          const blocks = await fetchPageBlocks(ctx, result.id, context.signal);
+          if (blocks === undefined) {
+            blockFetchFailed = true;
+          } else {
+            const extraction = extractFromBlocks(blocks);
+            blockText = extraction.text;
+            links.push(...extraction.links);
+          }
+        }
+
+        const linkMeta = linksMetadata(links.filter(link => link.address !== address));
+        const node = await importer.upsertNode(address, {
+          name: title,
+          kind: nodeKind(result),
+          metadata: nodeSelfMetadata(address),
+        });
+        const existingRecords = await node.listRecords();
+        if (blockFetchFailed && existingRecords.length > 0) {
+          // Keep the existing good record rather than replace it with a degraded
+          // title-only one — the page is revisited on its next edit.
+          lastProcessed = result.last_edited_time;
+          continue;
+        }
         const recordPayload = {
           address,
           title,
           propertyText,
+          blockText,
+          links: linkMeta.links ?? [],
           lastEditedTime: result.last_edited_time,
         };
         const recordId = contentRecordId(recordPayload);
-        const node = await importer.upsertNode(address, { name: title, kind: nodeKind(result) });
-        const existingRecords = await node.listRecords();
         if (!existingRecords.some(r => r.id === recordId)) {
+          const bodyParts = [title];
+          if (propertyText) bodyParts.push(propertyText);
+          if (blockText) bodyParts.push(blockText);
           await node.appendRecord({
             id: recordId,
-            text: boundText(propertyText ? `${title}\n\n${propertyText}` : title),
-            metadata: { url: result.url, lastEditedTime: result.last_edited_time },
+            text: boundText(neutralizeWikilinks(bodyParts.join('\n\n'))),
+            metadata: { url: result.url, lastEditedTime: result.last_edited_time, ...linkMeta },
           });
         }
         // Remove stale records the importer previously owned for this node.
