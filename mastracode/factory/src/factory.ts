@@ -389,9 +389,10 @@ function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'
  * `importersOptions.integrations`, every catalogue provider defaults to
  * per-project, per-source destinations: dynamic scopes enumerating the
  * Factory project inventory at each cron fire, one
- * `resource:<projectId>:connect:<provider>` sub-scope per project per source
- * (materialized on demand), with a parameterized access grant
- * (`resource:$projectId:connect:$sourceId`) so each sub-scope is writable.
+ * `resource:<projectId>:<provider>:<connectionId>` sub-scope per project per
+ * connected account (materialized on demand), with a parameterized access
+ * grant (`resource:$projectId:<provider>:$accountId`) so each sub-scope is
+ * writable.
  *
  * Any throw from `importers()` (missing project id, credential resolution, …)
  * is swallowed with a single console warning — Factory boot must survive a

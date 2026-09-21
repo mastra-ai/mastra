@@ -298,31 +298,31 @@ const platformImportersEnabled = Boolean(
     process.env.MASTRA_PROJECT_ID?.trim(),
 );
 // Destination scopes are resolved dynamically at each cron fire via
-// `factoryProjectScopes`: one `resource:<projectId>:connect:<provider>`
-// sub-scope per Factory project per source (filtered by any per-connection
-// routing selection), materialized on demand, so new projects start syncing
-// without a restart. The parameterized access grant
-// (`resource:$projectId:connect:$sourceId`) makes each sub-scope writable.
-// The project Importers tab resolves these dynamic destinations at request
-// time, so a connected importer is listed before its first run. The
+// `factoryProjectScopes`: one `resource:<projectId>:<provider>:<connectionId>`
+// sub-scope per Factory project per connected account (filtered by any
+// per-connection routing selection), materialized on demand, so new projects
+// start syncing without a restart. The parameterized access grant
+// (`resource:$projectId:<provider>:$accountId`) makes each sub-scope
+// writable. The project Importers tab resolves these dynamic destinations at
+// request time, so a connected importer is listed before its first run. The
 // `knowledge` thunk late-binds `demoKnowledge` (declared below) — it's only
 // invoked at cron fire, long after module init.
 const demoImportersResolver = (() => {
   if (!demoKnowledgeEnabled || !platformImportersEnabled) return undefined;
   const scopes = factoryProjectScopes(storage, { knowledge: () => demoKnowledge });
-  const integrationConfig = (role: 'owner' | 'edit') =>
-    ({ access: { 'resource:$projectId:connect:$sourceId': role }, scopes }) as const;
+  const integrationConfig = (integrationId: string, role: 'owner' | 'edit') =>
+    ({ access: { [`resource:$projectId:${integrationId}:$accountId`]: role }, scopes }) as const;
   try {
     return platformImporters({
       integrations: {
-        notion: integrationConfig('owner'),
-        confluence: integrationConfig('owner'),
-        jira: integrationConfig('edit'),
+        notion: integrationConfig('notion', 'owner'),
+        confluence: integrationConfig('confluence', 'owner'),
+        jira: integrationConfig('jira', 'edit'),
         // Document-shaped sources (Linear Documents, Zendesk Help Center
         // articles) own their nodes so archived/draft content gets removed.
-        linear: integrationConfig('owner'),
-        zendesk: integrationConfig('owner'),
-        fireflies: integrationConfig('edit'),
+        linear: integrationConfig('linear', 'owner'),
+        zendesk: integrationConfig('zendesk', 'owner'),
+        fireflies: integrationConfig('fireflies', 'edit'),
       },
     });
   } catch (error) {

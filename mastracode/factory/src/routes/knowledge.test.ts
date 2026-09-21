@@ -1520,8 +1520,8 @@ describe('KnowledgeRoutes', () => {
                 return [
                   // Platform importers land in per-source sub-scopes under the
                   // project — the view filter must accept those.
-                  { source: 'notion:conn-1', scope: `resource:${h.projectId}:connect:notion` },
-                  { source: 'notion:conn-1', scope: 'resource:00000000-0000-4000-8000-000000000099:connect:notion' },
+                  { source: 'notion:conn-1', scope: `resource:${h.projectId}:notion:conn-1` },
+                  { source: 'notion:conn-1', scope: 'resource:00000000-0000-4000-8000-000000000099:notion:conn-1' },
                 ];
               },
             },

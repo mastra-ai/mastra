@@ -443,13 +443,16 @@ function importBinding(binding: string): { source?: string; scopeAddress?: strin
 }
 
 function importScopeBelongsToView(scope: string | undefined, projectId: string, threadId?: string): boolean {
-  return (
-    scope === `resource:${projectId}` ||
-    // Per-source sub-scopes (`resource:<pid>:connect:<provider>`) belong to
-    // the project view — they're where the platform importers land content.
-    scope?.startsWith(`resource:${projectId}:connect:`) === true ||
-    (threadId !== undefined && scope === `resource:${projectId}:thread:${threadId}`)
-  );
+  if (scope === `resource:${projectId}`) return true;
+  // Thread scopes stay thread-private: only the requested thread's own
+  // bindings are visible, never a sibling thread's.
+  if (scope?.startsWith(`resource:${projectId}:thread:`)) {
+    return threadId !== undefined && scope === `resource:${projectId}:thread:${threadId}`;
+  }
+  // Any other sub-scope under the project (`resource:<pid>:<provider>:<resource>`,
+  // e.g. `:notion:<connectionId>` or `:github:<repo>`) belongs to the project
+  // view — that's where importers land per-source content.
+  return scope?.startsWith(`resource:${projectId}:`) === true;
 }
 
 function importRunBelongsToView(run: KnowledgeImportRun, projectId: string, threadId?: string): boolean {
