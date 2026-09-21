@@ -72,11 +72,12 @@ export function resolveRunTiming(
   const startedAt = Math.min(...startedTimes);
 
   if (status === 'suspended') {
-    const waitingSince = suspendedTimes.length > 0 ? Math.max(...suspendedTimes) : undefined;
+    const lastActivity = [...endedTimes, ...suspendedTimes];
+    const endedAt = lastActivity.length > 0 ? Math.max(...lastActivity) : undefined;
     return {
-      span: { startedAt, ...(waitingSince === undefined ? {} : { endedAt: waitingSince }) },
+      span: { startedAt, ...(endedAt === undefined ? {} : { endedAt }) },
       spansSuspension,
-      waitingSince,
+      waitingSince: suspendedTimes.length > 0 ? Math.min(...suspendedTimes) : undefined,
     };
   }
   if (status === 'running' || status === 'waiting') return { span: { startedAt }, spansSuspension };

@@ -1,5 +1,5 @@
 import type { Step } from '../context/use-current-run';
-import { resolveStepSpan } from '../context/workflow-step-timing';
+import { isAwaitingInput, resolveStepSpan } from '../context/workflow-step-timing';
 
 export interface TimelineRow {
   stepId: string;
@@ -46,7 +46,7 @@ export function buildTimeline(steps: Record<string, Step>, now: number): Timelin
     return {
       stepId,
       step,
-      status: step.status,
+      status: isAwaitingInput(step) ? 'suspended' : step.status,
       timing,
       spansSuspension,
       isRunning: isLive,

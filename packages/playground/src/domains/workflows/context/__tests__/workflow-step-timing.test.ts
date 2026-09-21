@@ -83,6 +83,19 @@ describe('resolveRunTiming', () => {
     ).toEqual({ span: { startedAt: 1_000, endedAt: 1_022 }, spansSuspension: false, waitingSince: 1_022 });
   });
 
+  it('counts a branch that kept working past the suspension, and waits from the first one', () => {
+    expect(
+      resolveRunTiming(
+        {
+          approval: suspendedLeaf,
+          review: { status: 'suspended', startedAt: 1_000, suspendedAt: 1_030 },
+          sibling: { status: 'success', startedAt: 1_000, endedAt: 1_500 },
+        },
+        'suspended',
+      ),
+    ).toEqual({ span: { startedAt: 1_000, endedAt: 1_500 }, spansSuspension: false, waitingSince: 1_022 });
+  });
+
   it('keeps a sleeping run counting, because nobody is being waited on', () => {
     expect(resolveRunTiming({ nap: { status: 'waiting', startedAt: 1_000 } }, 'waiting')).toEqual({
       span: { startedAt: 1_000 },

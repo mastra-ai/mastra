@@ -85,6 +85,7 @@ describe('Workflow timeline timing', () => {
     const rows = buildTimeline({ 'nested.approval': { status: 'running', startedAt: 100, suspendedAt: 122 } }, 600_000);
     expect(rowById(rows, 'nested.approval')?.timing?.durationMs).toBe(22);
     expect(rowById(rows, 'nested.approval')?.isRunning).toBe(false);
+    expect(rowById(rows, 'nested.approval')?.status).toBe('suspended');
   });
 
   it('flags a resumed step, whose wall clock necessarily contains the wait', () => {
