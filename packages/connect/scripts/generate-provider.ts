@@ -201,6 +201,37 @@ function isArrayInputField(inputSchemaText: string, field: string): boolean {
 }
 
 /**
+ * True when the exec reads `credentials` off the result of
+ * `nango.getConnection()` — directly on the call, through a variable bound to
+ * it, or by destructuring `credentials` from it. Reads of `.credentials` on
+ * unrelated values (such as an input field named `credentials`) don't count,
+ * so the generated tool never fetches a secret the action doesn't use.
+ */
+function execReadsConnectionCredentials(execInitializer: Node): boolean {
+  const isGetConnectionCall = (node: Node): boolean =>
+    /^\(*\s*(?:await\s+)?nango\s*\.\s*getConnection\s*\(\s*\)\s*\)*$/.test(node.getText());
+  const connectionBindings = new Set<string>();
+  for (const declaration of execInitializer.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const initializer = declaration.getInitializer();
+    if (!initializer || !isGetConnectionCall(initializer)) continue;
+    const nameNode = declaration.getNameNode();
+    if (Node.isIdentifier(nameNode)) {
+      connectionBindings.add(nameNode.getText());
+    } else if (/\bcredentials\b/.test(nameNode.getText())) {
+      // `const { credentials } = await nango.getConnection();`
+      return true;
+    }
+  }
+  for (const access of execInitializer.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
+    if (access.getName() !== 'credentials') continue;
+    const target = access.getExpression();
+    if (isGetConnectionCall(target)) return true;
+    if (Node.isIdentifier(target) && connectionBindings.has(target.getText())) return true;
+  }
+  return false;
+}
+
+/**
  * Templates serialize every query parameter through an array-or-scalar
  * branch. The input schema already fixes each field's shape, so fields it
  * declares as scalars are serialized directly; array fields keep the join.
@@ -329,16 +360,14 @@ function extractAction(
   if (unsupportedMethods.length > 0) {
     return { kind: 'skip', reason: `exec uses unsupported template SDK helpers: ${unsupportedMethods.join(', ')}` };
   }
-  // Templates that read `connection.credentials` need the raw credential the
-  // platform proxy deliberately leaves out of `getConnection()`. Their calls
-  // are rewritten below to `getConnectionWithCredentials()`, which fetches it
-  // from the platform's credential endpoint, so only these execs ever see a
-  // secret. A credential read without a getConnection call has no rewrite
-  // point and cannot work.
-  const readsCredentials = /\.credentials\b/.test(originalExecBody);
-  if (readsCredentials && !usedContextMethods.has('getConnection')) {
-    return { kind: 'skip', reason: 'exec reads connection credentials without calling getConnection' };
-  }
+  // Templates that read `credentials` off the `nango.getConnection()` result
+  // need the raw credential the platform proxy deliberately leaves out of
+  // `getConnection()`. Their calls are rewritten below to
+  // `getConnectionWithCredentials()`, which fetches it from the platform's
+  // credential endpoint, so only these execs ever see a secret. Detection is
+  // binding-aware: `.credentials` reads on unrelated values (for example a
+  // `credentials` input field) don't trigger the rewrite.
+  const readsCredentials = execReadsConnectionCredentials(execInitializer);
   const usesProviderProxy = [...PROXY_REQUEST_METHODS].some(method =>
     new RegExp(`\\bnango\\.${method}\\s*\\(`).test(source.getFullText()),
   );

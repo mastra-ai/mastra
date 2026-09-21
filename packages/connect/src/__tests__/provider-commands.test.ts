@@ -155,6 +155,54 @@ const action = createAction({
 export default action;
 `;
 
+const connectionCredentialsTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Echo a value using the connection token.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const connection = await nango.getConnection();
+    const token = connection.credentials.access_token;
+    const response = await nango.get({ endpoint: \`/echo/\${token}\`, params: { value: input.value } });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const inputCredentialsTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ credentials: z.object({ user: z.string() }) });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Echo a caller-supplied credentials field without touching connection credentials.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const connection = await nango.getConnection();
+    const response = await nango.post({
+      endpoint: '/echo',
+      data: { user: input.credentials.user, region: connection.connection_config.region },
+    });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
 const noProxyCallTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -194,6 +242,8 @@ describe('maintainer provider commands', () => {
         writeFileSync(resolve(actionDir, 'proxy-configuration.ts'), proxyConfigurationTemplate);
         writeFileSync(resolve(actionDir, 'connection-context.ts'), connectionContextTemplate);
         writeFileSync(resolve(actionDir, 'inline-context-helper.ts'), inlineContextHelperTemplate);
+        writeFileSync(resolve(actionDir, 'connection-credentials.ts'), connectionCredentialsTemplate);
+        writeFileSync(resolve(actionDir, 'input-credentials.ts'), inputCredentialsTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-no-proxy.ts'), noProxyCallTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-response-type.ts'), unsupportedResponseTypeTemplate);
       }
@@ -338,7 +388,7 @@ export default createAction({
     expect(listProviders({ installedOnly: false, search: 'custom' })).toEqual([
       'first-provider (1 action templates) [installed as custom]',
     ]);
-    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual(['second-provider (6 action templates)']);
+    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual(['second-provider (8 action templates)']);
   });
 
   it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
@@ -370,6 +420,21 @@ export default createAction({
     );
     expect(inlineContextTool).toContain('platformProxy: PlatformProxy,');
     expect(inlineContextTool).not.toContain('typeof action');
+
+    // Only reads of `credentials` on the getConnection() result opt into the
+    // credential-fetching variant; a `credentials` input field does not.
+    const connectionCredentialsTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/connection-credentials.ts'),
+      'utf8',
+    );
+    expect(connectionCredentialsTool).toContain('await platformProxy.getConnectionWithCredentials()');
+    expect(connectionCredentialsTool).not.toContain('platformProxy.getConnection()');
+    const inputCredentialsTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/input-credentials.ts'),
+      'utf8',
+    );
+    expect(inputCredentialsTool).toContain('await platformProxy.getConnection()');
+    expect(inputCredentialsTool).not.toContain('getConnectionWithCredentials');
     expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-no-proxy.ts'))).toBe(false);
     expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-response-type.ts'))).toBe(
       false,
@@ -378,7 +443,7 @@ export default createAction({
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
     ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
-    expect(manifest.toolCount).toBe(4);
+    expect(manifest.toolCount).toBe(6);
     expect(manifest.skippedActions).toEqual([
       {
         action: 'unsupported-no-proxy',
@@ -441,7 +506,7 @@ export default createAction({
     expect(providerIndex).not.toContain('.stale.generate-123');
     expect(listProviders({ installedOnly: true })).toEqual([
       'local <- first-provider (1 tools, 0 skipped)',
-      'other <- second-provider (4 tools, 2 skipped)',
+      'other <- second-provider (6 tools, 2 skipped)',
     ]);
   });
 
