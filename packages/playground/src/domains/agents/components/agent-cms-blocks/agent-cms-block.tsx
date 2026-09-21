@@ -11,10 +11,9 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
@@ -97,30 +96,26 @@ const SaveAsPromptBlockDialog = ({
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <DialogBody className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="prompt-block-name">Name</Label>
-              <Input
-                id="prompt-block-name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="e.g. Tone guidelines"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="prompt-block-description">Description (optional)</Label>
-              <Input
-                id="prompt-block-description"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Brief description..."
-              />
-            </div>
-            {error && (
-              <Txt variant="ui-xs" className="text-error">
-                {error}
-              </Txt>
-            )}
+            <TextFieldBlock
+              name="prompt-block-name"
+              label="Name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Tone guidelines"
+              autoFocus
+            />
+            <TextFieldBlock
+              name="prompt-block-description"
+              label="Description (optional)"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Brief description..."
+            />
+            {error ? (
+              <div role="alert">
+                <Notice variant="destructive">{error}</Notice>
+              </div>
+            ) : null}
           </DialogBody>
           <DialogFooter className="px-4 pt-4">
             <Button icon={<X />} type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>

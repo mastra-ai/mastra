@@ -38,7 +38,7 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
     <div className="flex items-center gap-2">
       <RadioGroupItem value="network" id="network" className="text-foreground" disabled={itemDisabled} />
       <Label
-        className={cn('text-foreground text-ui-md', !isNetworkAvailable && 'text-muted-foreground! cursor-not-allowed')}
+        className={cn('text-foreground', !isNetworkAvailable && 'text-muted-foreground! cursor-not-allowed')}
         htmlFor="network"
       >
         Network
@@ -85,7 +85,7 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
         disabled={itemDisabled}
       />
       <Label
-        className={cn('text-foreground text-ui-md', !supported && 'text-muted-foreground! cursor-not-allowed')}
+        className={cn('text-foreground', !supported && 'text-muted-foreground! cursor-not-allowed')}
         htmlFor="streamSubscription"
       >
         Stream subscription (default)
@@ -215,7 +215,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-foreground"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-foreground text-ui-md" htmlFor="generateLegacy">
+                      <Label className="text-foreground" htmlFor="generateLegacy">
                         Generate (Legacy)
                       </Label>
                     </div>
@@ -228,7 +228,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-foreground"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-foreground text-ui-md" htmlFor="generate">
+                      <Label className="text-foreground" htmlFor="generate">
                         Generate
                       </Label>
                     </div>
@@ -241,7 +241,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-foreground"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-foreground text-ui-md" htmlFor="streamLegacy">
+                      <Label className="text-foreground" htmlFor="streamLegacy">
                         Stream (Legacy)
                       </Label>
                     </div>
@@ -257,7 +257,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-foreground"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-foreground text-ui-md" htmlFor="stream">
+                      <Label className="text-foreground" htmlFor="stream">
                         Stream
                       </Label>
                     </div>

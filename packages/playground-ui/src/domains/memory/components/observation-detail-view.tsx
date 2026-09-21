@@ -223,7 +223,7 @@ function ObservationContent({ observations }: { observations: string }) {
         <section key={`${section.title}-${i}`} className="space-y-3">
           <div className="border-border1 flex items-baseline justify-between gap-3 border-b pb-2">
             <div className="min-w-0">
-              <h3 className="text-foreground text-ui-sm font-medium">{section.title}</h3>
+              <h3 className="text-ui-sm text-foreground font-medium">{section.title}</h3>
               {section.relativeTime && <p className="text-icon3 text-ui-xs">{section.relativeTime}</p>}
             </div>
           </div>
@@ -248,7 +248,7 @@ function ObservationHistoryPanel({
   return (
     <div className="border-border1 flex w-50 min-w-45 flex-col overflow-hidden border-l">
       <div className="border-border1 border-b px-4 py-2">
-        <p className="text-foreground text-ui-md font-normal">History</p>
+        <p className="text-ui-md text-foreground font-normal">History</p>
       </div>
       <div className="flex-1 overflow-y-auto">
         {records.map(record => {
@@ -338,7 +338,7 @@ export function ObservationDetailView({
         {previousRecord && (
           <div className="border-border1 border-b px-4 py-2">
             <div className="flex items-start justify-end gap-3">
-              <label className="flex cursor-pointer items-center gap-1.5">
+              <label className="text-ui-sm flex cursor-pointer items-center gap-1.5">
                 <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
                 <span className="text-icon3 text-ui-sm">Show diff</span>
               </label>

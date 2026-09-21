@@ -85,6 +85,8 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
                   <div className="flex flex-col gap-2">
                     <Combobox
                       multiple
+                      name="tools"
+                      aria-label="Tools"
                       options={options}
                       value={selectedIds}
                       onValueChange={handleValueChange}

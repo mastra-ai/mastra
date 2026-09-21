@@ -1,5 +1,5 @@
-import { Input } from '../../Input';
-import type { InputProps } from '../../Input';
+import { Textarea } from '../../Textarea';
+import type { TextareaProps } from '../../Textarea';
 import { FieldBlock } from '../block/field-block';
 import type { FieldBlockErrorMsgProps } from '../block/field-block-error-msg';
 import type { FieldBlockHelpTextProps } from '../block/field-block-help-text';
@@ -8,20 +8,19 @@ import type { FieldBlockLayoutProps } from '../block/field-block-layout';
 import { fieldErrorId } from '../block/field-error-id';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 
-export type TextFieldBlockProps = Pick<FieldBlockLayoutProps, 'layout' | 'labelColumnWidth'> &
-  Omit<InputProps, 'name' | 'size'> & {
+export type TextareaFieldBlockProps = Pick<FieldBlockLayoutProps, 'layout' | 'labelColumnWidth'> &
+  Omit<TextareaProps, 'name' | 'size'> & {
     name: string;
     labelIsHidden?: boolean;
     label?: FieldBlockLabelProps['children'];
     labelSize?: FieldBlockLabelProps['size'];
     helpText?: FieldBlockHelpTextProps['children'];
     errorMsg?: FieldBlockErrorMsgProps['children'];
-    size?: InputProps['size'];
+    size?: TextareaProps['size'];
   };
 
-export function TextFieldBlock({
+export function TextareaFieldBlock({
   name,
-  value,
   label,
   labelIsHidden = false,
   labelColumnWidth,
@@ -32,13 +31,12 @@ export function TextFieldBlock({
   disabled = false,
   labelSize,
   layout = 'vertical',
-  placeholder,
   size = 'md',
   testId,
   className,
   'aria-describedby': ariaDescribedBy,
   ...props
-}: TextFieldBlockProps) {
+}: TextareaFieldBlockProps) {
   const describedBy =
     [ariaDescribedBy, errorMsg ? fieldErrorId(name) : undefined].filter(Boolean).join(' ') || undefined;
 
@@ -58,15 +56,13 @@ export function TextFieldBlock({
           </FieldBlock.Label>
         ) : null}
         <FieldBlock.Column className="gap-1">
-          <Input
+          <Textarea
             id={`input-${name}`}
             name={name}
             disabled={disabled}
             required={required}
-            value={value}
-            placeholder={placeholder}
-            data-testid={testId}
             size={size}
+            data-testid={testId}
             error={error || Boolean(errorMsg)}
             aria-describedby={describedBy}
             {...props}

@@ -1,6 +1,6 @@
 import type { AutoFormFieldProps } from '@autoform/react';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import React from 'react';
 
 export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, inputProps }) => (
@@ -20,9 +20,8 @@ export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, i
       defaultChecked={field.default}
       disabled={inputProps.disabled || inputProps.readOnly}
     />
-    <Txt as="label" variant="ui-sm" className="text-muted-foreground" htmlFor={id}>
+    <FieldBlock.Label name={id} htmlFor={id} required={field.required}>
       {label}
-      {field.required && <span className="text-accent2"> *</span>}
-    </Txt>
+    </FieldBlock.Label>
   </div>
 );

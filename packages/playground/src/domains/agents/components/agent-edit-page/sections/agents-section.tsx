@@ -97,6 +97,8 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                     <div className="flex flex-col gap-2">
                       <Combobox
                         multiple
+                        name="agents"
+                        aria-label="Agents"
                         options={options}
                         value={selectedIds}
                         onValueChange={handleValueChange}

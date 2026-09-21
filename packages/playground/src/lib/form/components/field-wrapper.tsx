@@ -1,4 +1,5 @@
 import type { FieldWrapperProps } from '@autoform/react';
+import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import React from 'react';
 
@@ -10,10 +11,9 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({ label, children, id,
   return (
     <div className="pb-4 last:pb-0">
       {!isDisabled && (
-        <Txt as="label" variant="ui-sm" className="text-muted-foreground block pb-1" htmlFor={id}>
+        <FieldBlock.Label name={id} htmlFor={id} required={field.required} className="pb-1">
           {label}
-          {field.required && <span className="text-accent2"> *</span>}
-        </Txt>
+        </FieldBlock.Label>
       )}
 
       {children}
@@ -24,11 +24,7 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({ label, children, id,
         </Txt>
       )}
 
-      {error && (
-        <Txt as="p" variant="ui-sm" className="text-accent2">
-          {error}
-        </Txt>
-      )}
+      {error && <FieldBlock.ErrorMsg name={id}>{error}</FieldBlock.ErrorMsg>}
     </div>
   );
 };

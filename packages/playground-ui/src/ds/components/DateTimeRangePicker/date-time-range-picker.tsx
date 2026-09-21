@@ -1,11 +1,12 @@
 import { isValid, parse } from 'date-fns';
 import { CalendarIcon, Check } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
+import { FieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
 import { cn } from '@/lib/utils';
 
@@ -70,6 +71,7 @@ export function DateTimeRangePicker({
   const [draftTimeFrom, setDraftTimeFrom] = useState('12:00 AM');
   const [draftTimeTo, setDraftTimeTo] = useState('11:59 PM');
   const [customRangeError, setCustomRangeError] = useState<string | undefined>();
+  const customRangeFieldName = useId();
 
   const datePresetLabel = DATE_PRESETS.find(p => p.value === preset)?.label ?? 'All';
 
@@ -124,45 +126,56 @@ export function DateTimeRangePicker({
           </PopoverTrigger>
         )}
         <PopoverContent align="start" className={cn('w-auto p-0')}>
-          <div className={cn('flex')}>
-            <div className={cn('border-r border-border1')}>
-              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-muted-foreground')}>Start</span>
-              <DatePicker
-                mode="single"
-                selected={draftDateFrom}
-                month={draftDateFrom}
-                onSelect={setDraftDateFrom}
-                disabled={disabled}
-                toDate={draftDateTo}
-              />
-              <TimePicker
-                className="mx-4 mb-3 w-auto"
-                defaultValue={draftTimeFrom}
-                onValueChange={v => {
-                  if (!disabled) setDraftTimeFrom(v);
-                }}
-              />
+          <div
+            role="group"
+            aria-label="Custom date range"
+            aria-invalid={customRangeError ? true : undefined}
+            aria-describedby={customRangeError ? fieldErrorId(customRangeFieldName) : undefined}
+          >
+            <div className={cn('flex')}>
+              <div className={cn('border-r border-border1')}>
+                <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-muted-foreground')}>Start</span>
+                <DatePicker
+                  mode="single"
+                  selected={draftDateFrom}
+                  month={draftDateFrom}
+                  onSelect={setDraftDateFrom}
+                  disabled={disabled}
+                  toDate={draftDateTo}
+                />
+                <TimePicker
+                  className="mx-4 mb-3 w-auto"
+                  defaultValue={draftTimeFrom}
+                  onValueChange={v => {
+                    if (!disabled) setDraftTimeFrom(v);
+                  }}
+                />
+              </div>
+              <div>
+                <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-muted-foreground')}>End</span>
+                <DatePicker
+                  mode="single"
+                  selected={draftDateTo}
+                  month={draftDateTo}
+                  onSelect={setDraftDateTo}
+                  disabled={disabled}
+                  fromDate={draftDateFrom}
+                />
+                <TimePicker
+                  className="mx-4 mb-3 w-auto"
+                  defaultValue={draftTimeTo}
+                  onValueChange={v => {
+                    if (!disabled) setDraftTimeTo(v);
+                  }}
+                />
+              </div>
             </div>
-            <div>
-              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-muted-foreground')}>End</span>
-              <DatePicker
-                mode="single"
-                selected={draftDateTo}
-                month={draftDateTo}
-                onSelect={setDraftDateTo}
-                disabled={disabled}
-                fromDate={draftDateFrom}
-              />
-              <TimePicker
-                className="mx-4 mb-3 w-auto"
-                defaultValue={draftTimeTo}
-                onValueChange={v => {
-                  if (!disabled) setDraftTimeTo(v);
-                }}
-              />
-            </div>
+            {customRangeError && (
+              <FieldBlock.ErrorMsg name={customRangeFieldName} className="px-4 pb-1">
+                {customRangeError}
+              </FieldBlock.ErrorMsg>
+            )}
           </div>
-          {customRangeError && <p className={cn('px-4 pb-1 text-ui-sm text-error')}>{customRangeError}</p>}
           <div className={cn('flex items-center justify-between px-4 pb-3')}>
             <Button
               variant="ghost"

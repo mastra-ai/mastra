@@ -5,6 +5,7 @@ import {
   EntityIcon,
   EntityName,
 } from '@mastra/playground-ui/components/Entity';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -69,9 +70,11 @@ export function MCPClientToolPreview({
       )}
 
       {tryConnect.isError && (
-        <Txt variant="ui-sm" className="text-accent2">
-          {tryConnect.error instanceof Error ? tryConnect.error.message : 'Connection failed'}
-        </Txt>
+        <div role="alert">
+          <Notice variant="destructive">
+            {tryConnect.error instanceof Error ? tryConnect.error.message : 'Connection failed'}
+          </Notice>
+        </div>
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length === 0 && (

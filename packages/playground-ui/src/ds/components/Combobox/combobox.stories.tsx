@@ -104,6 +104,17 @@ export const Default: Story = {
   },
 };
 
+export const WithError: Story = {
+  args: {
+    options: frameworkOptions,
+    placeholder: 'Select a framework...',
+    name: 'framework',
+    error: 'Choose a framework.',
+    'aria-label': 'Framework',
+    className: 'w-[200px]',
+  },
+};
+
 export const WithValue: Story = {
   args: {
     options: frameworkOptions,

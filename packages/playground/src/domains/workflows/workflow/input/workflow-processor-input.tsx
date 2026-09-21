@@ -1,3 +1,4 @@
+import { FieldBlock, fieldErrorId, TextareaFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId, useState } from 'react';
@@ -33,7 +34,7 @@ export const WorkflowProcessorInput = ({
   submitButtonVariant,
   submitButtonFullWidth,
 }: WorkflowProcessorInputProps) => {
-  const messageId = useId();
+  const messageName = useId();
   const phaseId = useId();
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -50,25 +51,10 @@ export const WorkflowProcessorInput = ({
 
   return (
     <div className="flex flex-col gap-4">
-      {errors.length > 0 && (
-        <div role="alert" className="border-accent2 rounded-lg border p-2">
-          <Txt as="p" variant="ui-md" className="text-accent2 font-semibold">
-            {errors.length} errors found
-          </Txt>
-          <ul className="list-inside list-disc">
-            {errors.map((error, index) => (
-              <li key={index} className="text-ui-sm text-accent2">
-                {error}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <div className="space-y-2">
-        <Txt as="label" htmlFor={phaseId} variant="ui-sm" className="text-muted-foreground">
+        <FieldBlock.Label name={phaseId} htmlFor={phaseId}>
           Phase
-        </Txt>
+        </FieldBlock.Label>
         <Select
           value={value.phase}
           onValueChange={phase => {
@@ -77,7 +63,12 @@ export const WorkflowProcessorInput = ({
           }}
           disabled={isSubmitLoading}
         >
-          <SelectTrigger id={phaseId} className="w-full">
+          <SelectTrigger
+            id={phaseId}
+            className="w-full"
+            aria-invalid={errors.length > 0 ? true : undefined}
+            aria-describedby={errors.length > 0 ? fieldErrorId('workflow-processor-input') : undefined}
+          >
             <SelectValue placeholder="Select phase" />
           </SelectTrigger>
           <SelectContent>
@@ -93,23 +84,32 @@ export const WorkflowProcessorInput = ({
         </Txt>
       </div>
 
-      <div className="space-y-2">
-        <Txt as="label" htmlFor={messageId} variant="ui-sm" className="text-muted-foreground">
-          Test Message
-        </Txt>
-        <textarea
-          id={messageId}
-          value={getProcessorMessage(value)}
-          onChange={event => {
-            setErrors([]);
-            onChange(withPhaseRole(updateProcessorMessage(value, event.target.value)));
-          }}
-          placeholder="Enter a test message..."
-          rows={4}
-          disabled={isSubmitLoading}
-          className="border-border1 text-ui-sm text-foreground placeholder:text-muted-foreground focus:ring-accent1 w-full rounded-md border bg-transparent p-3 focus:ring-2 focus:outline-hidden disabled:opacity-50"
-        />
-      </div>
+      <TextareaFieldBlock
+        name={messageName}
+        label="Test Message"
+        value={getProcessorMessage(value)}
+        onChange={event => {
+          setErrors([]);
+          onChange(withPhaseRole(updateProcessorMessage(value, event.target.value)));
+        }}
+        placeholder="Enter a test message..."
+        rows={4}
+        disabled={isSubmitLoading}
+        aria-invalid={errors.length > 0 ? true : undefined}
+        aria-describedby={errors.length > 0 ? fieldErrorId('workflow-processor-input') : undefined}
+      />
+
+      {errors.length > 0 && (
+        <FieldBlock.ErrorMsg name="workflow-processor-input">
+          <span className="space-y-1">
+            {errors.map(error => (
+              <span key={error} className="block">
+                {error}
+              </span>
+            ))}
+          </span>
+        </FieldBlock.ErrorMsg>
+      )}
 
       {children}
 

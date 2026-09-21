@@ -283,10 +283,11 @@ export function PropertyFilterCreator({
               searchPlaceholder={`Search ${selectedField.label.toLowerCase()}...`}
               emptyText={selectedField.emptyText ?? 'No option found.'}
               size="md"
+              name={`property-filter-${selectedField.id}`}
+              aria-label={selectedField.label}
+              error={error}
             />
           )}
-
-          {error && <div className="text-ui-sm text-red-500">{error}</div>}
 
           {selectedField && (
             <div className="flex items-center justify-end gap-2">

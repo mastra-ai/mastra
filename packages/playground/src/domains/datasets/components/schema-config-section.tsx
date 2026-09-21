@@ -1,5 +1,6 @@
 'use client';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import type { JSONSchema7 } from 'json-schema';
@@ -195,10 +196,12 @@ export function SchemaConfigSection({
 
         {/* Source selector */}
         <div className="space-y-2">
-          <label className="text-muted-foreground text-ui-md font-medium">Import From</label>
+          <FieldBlock.Label name="schema-source" size="bigger">
+            Import From
+          </FieldBlock.Label>
           <div className="flex items-center gap-2">
             <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
-              <SelectTrigger size="sm" className="w-40">
+              <SelectTrigger id="input-schema-source" size="sm" className="w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

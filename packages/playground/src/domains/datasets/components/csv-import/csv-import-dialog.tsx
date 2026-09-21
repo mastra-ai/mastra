@@ -9,6 +9,7 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Check, Upload, ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -391,9 +392,11 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* No valid rows warning */}
             {schemaValidation.validCount === 0 && (
-              <p className="text-destructive text-ui-md">
-                No valid rows to import. Please fix the data or adjust the schema.
-              </p>
+              <div role="alert">
+                <Notice variant="destructive">
+                  No valid rows to import. Please fix the data or adjust the schema.
+                </Notice>
+              </div>
             )}
 
             {/* Detailed validation report (only show table if there are invalid rows) */}

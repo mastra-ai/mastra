@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { FieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Input } from '@/ds/components/Input';
 import { cn } from '@/lib/utils';
 
@@ -143,9 +144,9 @@ const AskUserInput = ({
   if (options.length === 0) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <label className="text-foreground mb-2 block font-medium" htmlFor={inputId}>
+        <FieldBlock.Label name={inputId} htmlFor={inputId} className="mb-2">
           {payload.question}
-        </label>
+        </FieldBlock.Label>
         <div className="flex items-center gap-2">
           <Input
             id={inputId}

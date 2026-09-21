@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -76,22 +77,23 @@ export function MCPClientFormSidebar({
           <SectionHeader title="Identity" subtitle="Define the MCP client name and description." />
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-client-name" className="text-foreground text-ui-sm">
-              Name <span className="text-accent2">*</span>
-            </Label>
+            <FieldBlock.Label name="mcp-client-name" required>
+              Name
+            </FieldBlock.Label>
             <Input
-              id="mcp-client-name"
+              id="input-mcp-client-name"
               placeholder="My MCP Client"
               className={SOLID_FIELD}
               disabled={readOnly}
               {...register('name')}
               error={!!errors.name}
+              aria-describedby={errors.name ? fieldErrorId('mcp-client-name') : undefined}
             />
-            {errors.name && <span className="text-accent2 text-ui-sm">{errors.name.message}</span>}
+            {errors.name && <FieldBlock.ErrorMsg name="mcp-client-name">{errors.name.message}</FieldBlock.ErrorMsg>}
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-client-description" className="text-foreground text-ui-sm">
+            <Label htmlFor="mcp-client-description" className="text-foreground">
               Description
             </Label>
             <Textarea
@@ -125,22 +127,25 @@ export function MCPClientFormSidebar({
           <SectionHeader title="Server Configuration" subtitle="Configure the MCP server connection details." />
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-server-name" className="text-foreground text-ui-sm">
-              Server Name <span className="text-accent2">*</span>
-            </Label>
+            <FieldBlock.Label name="mcp-server-name" required>
+              Server Name
+            </FieldBlock.Label>
             <Input
-              id="mcp-server-name"
+              id="input-mcp-server-name"
               placeholder="default"
               className={SOLID_FIELD}
               disabled={readOnly}
               {...register('serverName')}
               error={!!errors.serverName}
+              aria-describedby={errors.serverName ? fieldErrorId('mcp-server-name') : undefined}
             />
-            {errors.serverName && <span className="text-accent2 text-ui-sm">{errors.serverName.message}</span>}
+            {errors.serverName && (
+              <FieldBlock.ErrorMsg name="mcp-server-name">{errors.serverName.message}</FieldBlock.ErrorMsg>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-foreground text-ui-sm">Server Type</Label>
+            <Label className="text-foreground">Server Type</Label>
             <Controller
               name="serverType"
               control={control}
@@ -161,22 +166,23 @@ export function MCPClientFormSidebar({
           {serverType === 'http' && (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-url" className="text-foreground text-ui-sm">
-                  URL <span className="text-accent2">*</span>
-                </Label>
+                <FieldBlock.Label name="mcp-url" required>
+                  URL
+                </FieldBlock.Label>
                 <Input
-                  id="mcp-url"
+                  id="input-mcp-url"
                   placeholder="http://localhost:4111/api/mcp/server/mcp"
                   className={SOLID_FIELD}
                   disabled={readOnly}
                   {...register('url')}
                   error={!!errors.url}
+                  aria-describedby={errors.url ? fieldErrorId('mcp-url') : undefined}
                 />
-                {errors.url && <span className="text-accent2 text-ui-sm">{errors.url.message}</span>}
+                {errors.url && <FieldBlock.ErrorMsg name="mcp-url">{errors.url.message}</FieldBlock.ErrorMsg>}
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-timeout" className="text-foreground text-ui-sm">
+                <Label htmlFor="mcp-timeout" className="text-foreground">
                   Timeout (ms)
                 </Label>
                 <Input
@@ -194,22 +200,25 @@ export function MCPClientFormSidebar({
           {serverType === 'stdio' && (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-command" className="text-foreground text-ui-sm">
-                  Command <span className="text-accent2">*</span>
-                </Label>
+                <FieldBlock.Label name="mcp-command" required>
+                  Command
+                </FieldBlock.Label>
                 <Input
-                  id="mcp-command"
+                  id="input-mcp-command"
                   placeholder="npx"
                   className={SOLID_FIELD}
                   disabled={readOnly}
                   {...register('command')}
                   error={!!errors.command}
+                  aria-describedby={errors.command ? fieldErrorId('mcp-command') : undefined}
                 />
-                {errors.command && <span className="text-accent2 text-ui-sm">{errors.command.message}</span>}
+                {errors.command && (
+                  <FieldBlock.ErrorMsg name="mcp-command">{errors.command.message}</FieldBlock.ErrorMsg>
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-args" className="text-foreground text-ui-sm">
+                <Label htmlFor="mcp-args" className="text-foreground">
                   Arguments (one per line)
                 </Label>
                 <Textarea
@@ -222,7 +231,7 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-foreground text-ui-sm">Environment Variables</Label>
+                <Label className="text-foreground">Environment Variables</Label>
                 <div className="flex flex-col gap-2">
                   {env.map((_, index) => (
                     <div key={index} className="flex items-center gap-2">

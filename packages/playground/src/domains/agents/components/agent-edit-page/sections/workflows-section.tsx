@@ -82,6 +82,8 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
                   <div className="flex flex-col gap-2">
                     <Combobox
                       multiple
+                      name="workflows"
+                      aria-label="Workflows"
                       options={options}
                       value={selectedIds}
                       onValueChange={handleValueChange}
