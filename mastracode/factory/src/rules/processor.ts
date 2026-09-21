@@ -252,13 +252,17 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   ) {}
 
   /**
-   * Memory settings are caller state, not run state. Resolve the caller's
-   * authoritative row before any per-step hook runs, so the observers and
-   * reflectors that resolve their model during the step hook — memory's
-   * processors run before configured ones — see the row the settings UI edits.
-   * Doing this in `processInputStep` would be too late: memory's input-step hook
-   * fires first and can already start an observation for the step.
+   * Memory settings are caller state, not run state. Factory invokes this while
+   * resolving its configured processor list, before Agent resolves dynamic
+   * Memory and enumerates Memory's processors. This guarantees both the Memory
+   * options and its model callbacks see the authoritative row for this
+   * invocation. Doing this in `processInputStep` would be too late: Memory's
+   * input-step hook runs before configured processors.
    */
+  async prepareMemorySettings(requestContext: ProcessInputArgs['requestContext']): Promise<void> {
+    await this.loadCallerMemorySettings(requestContext, undefined, true);
+  }
+
   async processInput(args: ProcessInputArgs): Promise<MessageList> {
     await this.loadCallerMemorySettings(args.requestContext);
     return args.messageList;
@@ -266,7 +270,13 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
 
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | undefined> {
     const address = getFactorySessionCoordinates(args.requestContext);
-    const binding = address ? await this.options.storage.findRunBindingBySession(address) : undefined;
+    let binding: FactoryRunBindingRecord | null | undefined;
+    try {
+      binding = address ? await this.options.storage.findRunBindingBySession(address) : undefined;
+    } catch {
+      await this.loadCallerMemorySettings(args.requestContext, undefined);
+      return;
+    }
     // Resumed runs skip the input-processor phase, so re-check here: it is a
     // no-op once `processInput` already placed the row for this request. Passing
     // `undefined` (not `null`) keeps the recovery lookup inside the loader, so a
@@ -281,21 +291,29 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   }
 
   /**
-   * Loads the caller's row once per request. The row is authoritative per run,
-   * not per step, so later steps reuse the value already on the request context
-   * (`undefined` means it has not been loaded yet; `null` means an empty row).
+   * Loads the caller's row once per invocation. The input hook always refreshes
+   * it in case the controller reused a request context; later step hooks reuse
+   * that value (`undefined` means it has not been loaded yet; `null` means an
+   * empty row).
    *
    * The WeakSet covers loaders that do not set the context key themselves, so a
-   * request is still loaded once. A failed load is not recorded, so the next
-   * step retries it instead of leaving the run without settings.
+   * request is still loaded once. A failed load records an unavailable sentinel
+   * that disables model-driven memory work, but is not marked loaded so the next
+   * step can retry.
    */
   private async loadCallerMemorySettings(
     requestContext: ProcessInputStepArgs['requestContext'] | ProcessInputArgs['requestContext'],
     binding?: FactoryRunBindingRecord | null,
+    force = false,
   ): Promise<void> {
     if (!requestContext || !this.options.loadMemorySettings) return;
-    if (requestContext.get('factoryMemorySettings') !== undefined) return;
-    if (this.loadedMemorySettings.has(requestContext)) return;
+    const currentSettings = requestContext.get('mastra__factoryMemorySettings') as
+      | { status?: unknown }
+      | null
+      | undefined;
+    if (force) this.loadedMemorySettings.delete(requestContext);
+    if (!force && currentSettings !== undefined && currentSettings?.status !== 'unavailable') return;
+    if (!force && this.loadedMemorySettings.has(requestContext)) return;
     try {
       let runBinding = binding ?? null;
       if (binding === undefined) {
@@ -310,9 +328,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       await this.options.loadMemorySettings({ requestContext, binding: runBinding });
       this.loadedMemorySettings.add(requestContext);
     } catch (error) {
-      console.warn('[Factory Memory Settings] Failed to load settings for run', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      const reason = error instanceof Error ? error.message : String(error);
+      requestContext.set('mastra__factoryMemorySettings', { status: 'unavailable', reason });
+      console.warn('[Factory Memory Settings] Failed to load settings for run', { error: reason });
     }
   }
 

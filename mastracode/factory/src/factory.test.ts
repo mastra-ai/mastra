@@ -276,6 +276,54 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
+  it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
+    const storage = fakeStorage();
+    const config = await prepareFactory({ storage, auth: null });
+    const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
+    await memorySettings.patch({
+      orgId: 'local',
+      userId: 'local',
+      patch: { observerModelId: 'openai/observer-1' },
+    });
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const requestContext = new RequestContext();
+
+    const first = await inputProcessors({ requestContext });
+    expect(first).toHaveLength(1);
+    expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
+      observerModelId: 'openai/observer-1',
+    });
+
+    await memorySettings.patch({
+      orgId: 'local',
+      userId: 'local',
+      patch: { observerModelId: 'openai/observer-2' },
+    });
+    await inputProcessors({ requestContext });
+    expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
+      observerModelId: 'openai/observer-2',
+    });
+  });
+
+  it('fails closed when work items are unavailable and project ownership cannot be recovered', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const config = await prepareFactory({ storage, auth: null });
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const requestContext = new RequestContext();
+
+    await expect(inputProcessors({ requestContext })).resolves.toEqual([]);
+    expect(requestContext.get('mastra__factoryMemorySettings')).toEqual({
+      status: 'unavailable',
+      reason: 'work-items unavailable',
+    });
+    expect(warn).toHaveBeenCalledWith('[Factory Memory Settings] Failed to load settings for run', {
+      error: 'work-items unavailable',
+    });
+    warn.mockRestore();
+  });
+
   it('uses the platform bot co-author identity', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 

@@ -17,8 +17,8 @@ import type { PackMemoryModelChainEntry } from './model.js';
 /**
  * The authoritative per-caller Factory memory-settings row, placed on the request
  * context before Factory's model-dependent processors run. `null` means the row
- * exists but is empty (every role auto); `undefined` means the run is not
- * Factory-scoped.
+ * exists but is empty (every role auto). An unavailable sentinel or a missing
+ * value on a Factory-owned session disables model-driven memory work.
  */
 interface FactoryMemorySettings {
   observerModelId: string | null;
@@ -28,8 +28,20 @@ interface FactoryMemorySettings {
   observeAttachments: 'auto' | boolean | null;
 }
 
-function getFactoryMemorySettings(requestContext: RequestContext): FactoryMemorySettings | null | undefined {
-  return requestContext.get('factoryMemorySettings') as FactoryMemorySettings | null | undefined;
+type FactoryMemorySettingsContext =
+  | FactoryMemorySettings
+  | null
+  | { status: 'unavailable'; reason: string }
+  | undefined;
+
+function getFactoryMemorySettingsContext(requestContext: RequestContext): FactoryMemorySettingsContext {
+  return requestContext.get('mastra__factoryMemorySettings') as FactoryMemorySettingsContext;
+}
+
+function isFactoryMemorySettingsUnavailable(
+  settings: FactoryMemorySettingsContext,
+): settings is { status: 'unavailable'; reason: string } {
+  return settings !== null && typeof settings === 'object' && 'status' in settings && settings.status === 'unavailable';
 }
 
 /**
@@ -45,7 +57,14 @@ function resolveOmRoleModelForRequest(
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext } as const;
-  const factorySettings = getFactoryMemorySettings(requestContext);
+  const factorySettingsContext = getFactoryMemorySettingsContext(requestContext);
+  const factorySettingsUnavailable =
+    isFactoryMemorySettingsUnavailable(factorySettingsContext) ||
+    (factorySettingsContext === undefined && typeof state?.factoryProjectId === 'string');
+  if (factorySettingsUnavailable) {
+    throw new Error('Factory memory settings are unavailable for this invocation');
+  }
+  const factorySettings = factorySettingsContext;
 
   // The configured settings file, not the default one: a caller that points the
   // agent at another settings path must get the same pack/override resolution
@@ -247,7 +266,10 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     // The Factory row is authoritative and read per invocation, so a stored
     // threshold/attachment change reaches the running Memory without a session.
-    const factorySettings = getFactoryMemorySettings(requestContext);
+    const factorySettingsContext = getFactoryMemorySettingsContext(requestContext);
+    const factorySettingsUnavailable =
+      isFactoryMemorySettingsUnavailable(factorySettingsContext) || (factorySettingsContext === undefined && isFactory);
+    const factorySettings = factorySettingsUnavailable ? null : factorySettingsContext;
     const obsThreshold =
       factorySettings !== undefined
         ? (factorySettings?.observationThreshold ?? DEFAULT_OBS_THRESHOLD)
@@ -265,8 +287,9 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const observeAttachments =
       factorySettings !== undefined ? (factorySettings?.observeAttachments ?? 'auto') : state?.observeAttachments;
     // Factory sessions get a factory-only Subconscious config, so the cache key
-    // carries a factory presence bit to keep the two configs from cross-serving.
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
+    // carries Factory presence and settings availability to keep those configs
+    // from cross-serving.
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${factorySettingsUnavailable ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -289,7 +312,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
         // generation takes the primary OM model only — its model field does not
         // accept fallback arrays.
         generateTitle:
-          process.env.MASTRACODE_DISABLE_TITLE_GENERATION === '1'
+          factorySettingsUnavailable || process.env.MASTRACODE_DISABLE_TITLE_GENERATION === '1'
             ? false
             : {
                 model: ({ requestContext }) => {
@@ -298,7 +321,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
                 },
               },
         observationalMemory:
-          process.env.MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY === '1'
+          factorySettingsUnavailable || process.env.MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY === '1'
             ? false
             : {
                 enabled: true,

@@ -275,10 +275,13 @@ export interface MastraCodeConfig {
   /** Observe completed tool calls without replacing or modifying the built-in tool implementation. */
   postToolObserver?: PostToolObserver;
   /**
-   * Stateless input processor instances prepended before Mastra Code's mandatory processors.
+   * Stateless input processor instances prepended before Mastra Code's mandatory processors,
+   * or a per-request resolver for processors that depend on trusted request context.
    * Embedders may extend processing but cannot replace built-in safety and compatibility policy.
    */
-  inputProcessors?: InputProcessor[];
+  inputProcessors?:
+    | InputProcessor[]
+    | ((args: { requestContext: RequestContext }) => InputProcessor[] | Promise<InputProcessor[]>);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /**
@@ -899,8 +902,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Mastra Code's own processors are constructed once, here, rather than inside
   // the resolver below: the resolver runs before every LLM call, and rebuilding
   // stateful processors per request would reset them.
+  const staticConfiguredInputProcessors = Array.isArray(config?.inputProcessors) ? config.inputProcessors : [];
   const mastraCodeInputProcessors: InputProcessor[] = [
-    ...(config?.inputProcessors ?? []),
+    ...staticConfiguredInputProcessors,
     new PlanRejectionAbortProcessor(),
     ...(backgroundToolsEnabled ? [createBackgroundWorkSignalProcessor()] : []),
     new AgentsMDInjector({
@@ -1078,15 +1082,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // per-request from the active workspace (mirrors `judge`).
       tools: getGoalJudgeTools,
     },
-    inputProcessors: () => [
-      ...mastraCodeInputProcessors,
-      // Input-lane notice ONLY (no processAPIError — see the class doc): the
-      // runner walks input processors first in runProcessAPIError, so an
-      // input-lane processAPIError would rotate before transient retries run.
-      new AccountStartNoticeProcessor({ credentialStore: authStorage, settingsPath: config?.settingsPath }),
-      ...readPluginProcessors().input.map(entry => entry.value),
-      ...(pluginSignalLane?.getInputProcessors() ?? []),
-    ],
+    inputProcessors: ({ requestContext }) => {
+      const resolveProcessors = (configured: InputProcessor[]) => [
+        ...configured,
+        ...mastraCodeInputProcessors,
+        // Input-lane notice ONLY (no processAPIError — see the class doc): the
+        // runner walks input processors first in runProcessAPIError, so an
+        // input-lane processAPIError would rotate before transient retries run.
+        new AccountStartNoticeProcessor({ credentialStore: authStorage, settingsPath: config?.settingsPath }),
+        ...readPluginProcessors().input.map(entry => entry.value),
+        ...(pluginSignalLane?.getInputProcessors() ?? []),
+      ];
+      if (typeof config?.inputProcessors !== 'function') return resolveProcessors([]);
+      const configured = config.inputProcessors({ requestContext });
+      return configured instanceof Promise ? configured.then(resolveProcessors) : resolveProcessors(configured);
+    },
     // Mastra Code contributes no output processors of its own; the lane exists
     // so plugins can. Like the input lane, plugin processors sit last — after
     // the layers they customize, before the channel and memory layers the

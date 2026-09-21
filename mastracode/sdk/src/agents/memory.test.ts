@@ -90,6 +90,7 @@ function createRequestContext(state: Record<string, unknown>, sessionId = 'sessi
   const getState = () => state;
   const values = new Map<string, unknown>([
     ['user', { workosId: 'user-1', organizationId: 'org-1' }],
+    ...(typeof state.factoryProjectId === 'string' ? ([['mastra__factoryMemorySettings', null]] as const) : []),
     [
       'controller',
       {
@@ -213,6 +214,39 @@ describe('getDynamicMemory', () => {
 
     expect(config.options.generateTitle).toBe(false);
     expect(config.options.observationalMemory).not.toBe(false);
+  });
+
+  it('fails closed when a Factory run has no authoritative settings result', async () => {
+    vi.resetModules();
+    memoryConstructorMock.mockClear();
+    getOmScopeMock.mockReturnValue('thread');
+    const { getDynamicMemory } = await import('./memory.js');
+    const requestContext = createRequestContext({
+      projectPath: '/tmp/project',
+      factoryProjectId: 'factory-project-1',
+      observerModelSelection: 'openai/stale-observer',
+      reflectorModelSelection: 'openai/stale-reflector',
+    });
+    requestContext.set('mastra__factoryMemorySettings', undefined);
+
+    const resolve = getDynamicMemory({ storage: true } as never);
+    const memory = resolve({ requestContext: requestContext as never }) as unknown as { config: MemoryConfig };
+    const unscopedContext = createRequestContext({
+      observerModelSelection: 'openai/stale-observer',
+      reflectorModelSelection: 'openai/stale-reflector',
+    });
+    unscopedContext.set('mastra__factoryMemorySettings', {
+      status: 'unavailable',
+      reason: 'storage unavailable',
+    });
+    const unscopedMemory = resolve({ requestContext: unscopedContext as never }) as unknown as { config: MemoryConfig };
+
+    expect(memory.config.storage).toEqual({ storage: true });
+    expect(memory.config.options.generateTitle).toBe(false);
+    expect(memory.config.options.observationalMemory).toBe(false);
+    expect(unscopedMemory.config.options.generateTitle).toBe(false);
+    expect(unscopedMemory.config.options.observationalMemory).toBe(false);
+    expect(resolveModelMock).not.toHaveBeenCalled();
   });
 
   it('keeps Subconscious memory inert unless explicitly opted in', async () => {
@@ -440,7 +474,7 @@ describe('getDynamicMemory', () => {
     const { config, requestContext } = await createMemoryConfig(state);
     const controllerContext = requestContext.get('controller');
     requestContext.get = vi.fn(key =>
-      key === 'factoryMemorySettings'
+      key === 'mastra__factoryMemorySettings'
         ? { observerModelId: 'openai/factory-observer', reflectorModelId: null }
         : key === 'controller'
           ? { ...(controllerContext as object), session: { modelId: 'anthropic/claude-sonnet-4-5' } }
@@ -476,7 +510,7 @@ describe('getDynamicMemory', () => {
     const requestContext = createRequestContext(state);
     const contextGet = requestContext.get;
     requestContext.get = vi.fn(key =>
-      key === 'factoryMemorySettings'
+      key === 'mastra__factoryMemorySettings'
         ? { observationThreshold: 12_000, reflectionThreshold: 16_000, observeAttachments: false }
         : contextGet(key),
     );
@@ -509,7 +543,9 @@ describe('getDynamicMemory', () => {
     const requestContext = createRequestContext(state);
     const contextGet = requestContext.get;
     requestContext.get = vi.fn(key =>
-      key === 'factoryMemorySettings' ? { observationThreshold: null, observeAttachments: null } : contextGet(key),
+      key === 'mastra__factoryMemorySettings'
+        ? { observationThreshold: null, observeAttachments: null }
+        : contextGet(key),
     );
 
     const memory = getDynamicMemory(
