@@ -23,8 +23,8 @@ import {
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
-import type { MessageFactoryPart } from '@mastra/react';
 import { useSpeechRecognition } from '@mastra/react';
+import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 

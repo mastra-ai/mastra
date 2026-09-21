@@ -247,6 +247,8 @@ function BoardContent({
       if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
+      if (intake.active === 'jira') return item.source === 'jira-issue';
+      if (intake.active === 'incidentio') return item.source === 'incidentio-follow-up';
       return false;
     });
   const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
@@ -463,7 +465,6 @@ function BoardContent({
                           onRun={(move, prompt) =>
                             items.handleDrop(candidatePayload(candidate, prompt), move.stage, 'card_action')
                           }
-                          onFile={() => items.handleDrop(candidatePayload(candidate), candidate.column)}
                         />
                       )}
                     />

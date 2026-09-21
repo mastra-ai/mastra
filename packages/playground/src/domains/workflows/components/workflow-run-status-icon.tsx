@@ -2,7 +2,7 @@ import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Check, CirclePause, CircleSlash, Clock, X } from 'lucide-react';
+import { Check, CirclePause, CircleSlash, Clock, Pause, X } from 'lucide-react';
 
 export interface WorkflowRunStatusIconProps {
   status: WorkflowRunStatus;
@@ -19,6 +19,8 @@ function StatusIcon({ status }: WorkflowRunStatusIconProps) {
     case 'pending':
     case 'waiting':
       return <Clock className="text-neutral3" />;
+    case 'paused':
+      return <Pause className="text-badge-yellow-fg" />;
     case 'suspended':
       return <CirclePause className="text-accent3" />;
     case 'success':

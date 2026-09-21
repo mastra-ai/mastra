@@ -1,8 +1,8 @@
 ---
-title: "Reference: Workspace class | Workspace"
-description: "The Workspace class combines a filesystem and sandbox to provide agents with file storage and command execution capabilities."
+title: 'Reference: Workspace class | Workspace'
+description: 'The Workspace class combines a filesystem and sandbox to provide agents with file storage and command execution capabilities.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Workspace class
@@ -108,7 +108,7 @@ const workspace = new Workspace({
     name: 'skills',
     type: 'string[] | ((context: SkillsContext) => string[] | Promise<string[]>)',
     description:
-      "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically. Supports glob patterns like './**/skills' for discovery.",
+      "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically. Supports glob patterns like './**/skills' for discovery. Skills are read from `skillSource` when set, otherwise from the workspace `filesystem` — including a resolver-backed filesystem, which is resolved per request. With a resolver, use `workspace.skills.getScoped({ requestContext })` so the filesystem is chosen from the request; direct calls such as `workspace.skills.list()` resolve with an empty `RequestContext`. Only when no filesystem is configured are skills read from the local disk.",
     isOptional: true,
   },
   {

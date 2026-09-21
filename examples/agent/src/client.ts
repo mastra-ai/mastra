@@ -1,5 +1,7 @@
+import { RequestContext } from '@mastra/core/request-context';
+import { noopObserve } from '@mastra/core/tools';
 import { MCPClient } from '@mastra/mcp';
-// import type { ElicitationHandler } from '@mastra/mcp';
+import type { MCPInputRequestHandler } from '@mastra/mcp';
 import { createInterface } from 'readline';
 
 // Create readline interface for user input
@@ -17,20 +19,30 @@ function askQuestion(question: string): Promise<string> {
   });
 }
 
-// Elicitation handler that prompts the user for input
-const elicitationHandler = async request => {
-  console.log('\n🔔 Elicitation Request Received:');
-  console.log(`Message: ${request.message}`);
-  console.log('Requested Schema:');
-  console.log(JSON.stringify(request.requestedSchema, null, 2));
+// Answers one embedded input request. A 2026-07-28 server replies to
+// `tools/call` with `input_required` when a tool calls `context.suspend()`;
+// the client invokes this handler once per keyed request and retries the
+// call with the collected answers.
+const inputRequestHandler: MCPInputRequestHandler = async ({ key, params }) => {
+  console.log(`\n🔔 Input Request Received (${key}):`);
+  console.log(`Message: ${params.message}`);
 
-  const schema = request.requestedSchema;
+  if (!('requestedSchema' in params)) {
+    // URL-mode requests need a browser; this console client can't answer them.
+    console.log(`This request must be completed in a browser: ${params.url}`);
+    return { action: 'decline' as const };
+  }
+
+  console.log('Requested Schema:');
+  console.log(JSON.stringify(params.requestedSchema, null, 2));
+
+  const schema = params.requestedSchema;
   const properties = schema.properties;
   const required = schema.required || [];
 
   console.log('\nPlease provide the following information:');
 
-  const content: Record<string, unknown> = {};
+  const content: Record<string, string> = {};
 
   // Collect input for each field
   for (const [fieldName, fieldSchema] of Object.entries(properties)) {
@@ -67,7 +79,7 @@ const elicitationHandler = async request => {
     // Handle empty responses
     if (answer === '' && isRequired) {
       console.log(`❌ Error: ${fieldName} is required`);
-      return { action: 'reject' as const };
+      return { action: 'decline' as const };
     } else if (answer !== '') {
       content[fieldName] = answer;
     }
@@ -87,7 +99,7 @@ const elicitationHandler = async request => {
   } else if (confirmAnswer.toLowerCase() === 'cancel' || confirmAnswer.toLowerCase() === 'c') {
     return { action: 'cancel' as const };
   } else {
-    return { action: 'reject' as const };
+    return { action: 'decline' as const };
   }
 };
 
@@ -96,19 +108,18 @@ async function main() {
     servers: {
       myMcpServerTwo: {
         url: new URL('http://localhost:4111/api/mcp/myMcpServerTwo/mcp'),
+        inputRequests: inputRequestHandler,
       },
     },
   });
-
-  mcpClient.elicitation.onRequest('myMcpServerTwo', elicitationHandler);
 
   try {
     console.log('Connecting to MCP server...');
     const tools = await mcpClient.listTools();
     console.log('Available tools:', Object.keys(tools));
 
-    // Test the elicitation functionality
-    console.log('\n🧪 Testing elicitation functionality...');
+    // Test the input-required flow
+    console.log('\n🧪 Testing the input-required flow...');
 
     // Find the collectContactInfo tool
     const collectContactInfoTool = tools['myMcpServerTwo_collectContactInfo'];
@@ -116,11 +127,10 @@ async function main() {
       console.log('\nCalling collectContactInfo tool...');
 
       try {
-        const result = await collectContactInfoTool.execute({
-          context: {
-            reason: 'We need your contact information to send you updates about our service.',
-          },
-        });
+        const result = await collectContactInfoTool.execute?.(
+          { reason: 'We need your contact information to send you updates about our service.' },
+          { requestContext: new RequestContext(), observe: noopObserve },
+        );
 
         console.log('\n📋 Tool Result:');
         console.log(result);

@@ -7,7 +7,7 @@ description: "Browse Alibaba (China) model IDs, capabilities, context windows, a
 
 # <img src="https://models.dev/logos/alibaba-cn.svg" alt="Alibaba (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba (China)
 
-Access 89 Alibaba (China) models through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
+Access 90 Alibaba (China) models through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
 
 Learn more in the [Alibaba (China) documentation](https://www.alibabacloud.com/help/en/model-studio/models).
 
@@ -200,6 +200,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.435,
     "outputCost": 0.87
+  },
+  {
+    "model": "alibaba-cn/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.29754,
+    "outputCost": 1.19015
   },
   {
     "model": "alibaba-cn/glm-5",

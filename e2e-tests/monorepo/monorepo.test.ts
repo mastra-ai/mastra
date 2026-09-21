@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
-import { join, relative } from 'path';
+import { dirname, join, relative } from 'path';
 import { setupMonorepo } from './prepare';
 import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -227,7 +227,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(body).toEqual({ message: 'Hello, POST!' });
     });
 
-    it('should resolve transitive workspace dependencies', async () => {
+    it('should resolve scoped transitive workspace dependencies', async () => {
       const res = await fetch(`http://localhost:${port}/transitive-workspace`);
       const body = await res.json();
       expect(res.status).toBe(200);
@@ -271,6 +271,40 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(Object.keys(body).sort()).toEqual(
         ['calculatorTool', 'lodashTool', 'hello-world', 'generate-password', 'compare-password'].sort(),
       );
+    });
+
+    it('should list a registered MCP server and execute its tool', async () => {
+      const listRes = await fetch(`http://localhost:${port}/api/mcp/v0/servers`);
+      const list = await listRes.json();
+      expect(listRes.status).toBe(200);
+      expect(list.servers.map((server: { id: string }) => server.id)).toContain('calculator');
+
+      const toolsRes = await fetch(`http://localhost:${port}/api/mcp/calculator/tools`);
+      const tools = await toolsRes.json();
+      expect(toolsRes.status).toBe(200);
+      expect(tools.tools.map((tool: { id: string }) => tool.id)).toEqual(['calculatorTool']);
+
+      const execRes = await fetch(`http://localhost:${port}/api/mcp/calculator/tools/calculatorTool/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { a: 2, b: 3 } }),
+      });
+      const executed = await execRes.json();
+      expect(execRes.status).toBe(200);
+      expect(executed).toEqual({ result: 5 });
+    });
+
+    it('should answer invalid MCP tool input with 400', async () => {
+      const res = await fetch(`http://localhost:${port}/api/mcp/calculator/tools/calculatorTool/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { a: 'two', b: 3 } }),
+      });
+      const body = await res.json();
+      expect({ status: res.status, body }).toEqual({
+        status: 400,
+        body: { error: expect.stringContaining('calculatorTool') },
+      });
     });
   }
 
@@ -613,17 +647,38 @@ export const environmentRoute = registerApiRoute('/environment', {
     });
 
     // This stays in the monorepo E2E suite because it builds the generated fixture and validates its output manifest.
-    it('should keep default and user-configured externals in the output manifest', async () => {
+    it('should keep global and user-configured externals in the output manifest', async () => {
       const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
 
       expect(packageJson.dependencies).toEqual(
         expect.objectContaining({
-          '@mastra/core': expect.any(String),
           bcrypt: expect.any(String),
           typescript: expect.any(String),
         }),
       );
+    });
+
+    it('should exclude dependencies imported only from dead NODE_ENV branches', async () => {
+      const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
+      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
+
+      expect(packageJson.dependencies?.['date-fns']).toBeUndefined();
+    });
+
+    it('should preserve workspace externals as runtime dependencies instead of bundling them', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const outputFiles = await readdir(outputDir, { recursive: true });
+      const output = (
+        await Promise.all(
+          outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
+        )
+      ).join('\n');
+      const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+
+      expect(packageJson.dependencies?.['@inner/subpath-only']).toBeTruthy();
+      expect(output).toMatch(/from ["']@inner\/subpath-only["']/);
+      expect(output).toMatch(/from ["']@inner\/subpath-only\/value["']/);
     });
 
     it('should update the source pnpm lockfile while installing output dependencies', async () => {
@@ -1105,7 +1160,7 @@ export const mastra = new Mastra({
     );
 
     it(
-      'should exit non-zero when a workspace subpath import cannot be resolved',
+      'should reject an unresolved subpath from an externalized workspace package',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-missing-dep-test-${pkgManager}-`));
         try {
@@ -1133,8 +1188,7 @@ export const mastra = new Mastra({
           const output = `${buildResult.stdout}\n${buildResult.stderr}`;
 
           expect(buildResult.exitCode, output).toBe(1);
-          expect(output).toContain('Missing "./missing" specifier in "@inner/subpath-only" package');
-          expect(output).toContain('@inner/subpath-only/missing');
+          expect(output).toContain('Could not resolve workspace package subpath "@inner/subpath-only/missing".');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
@@ -1263,18 +1317,17 @@ export const mastra = new Mastra({
     );
   });
 
-  describe.sequential('reproducible tool bundles', () => {
+  describe.sequential('reproducible bundles', () => {
     it(
-      'produces identical tool bundles when invoked from the app and monorepo roots',
+      'produces identical bundles when invoked from the app and monorepo roots',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-reproducible-test-${pkgManager}-`));
         try {
           await setupMonorepo(isolatedFixturePath, pkgManager);
 
           const appDir = join(isolatedFixturePath, 'apps', 'custom');
-          const outputRoot = join(appDir, '.mastra', 'output');
-          const build = async (cwd: string, args: string[], cliPath?: string) => {
-            await rm(join(appDir, '.mastra'), { recursive: true, force: true });
+          const build = async (cwd: string, args: string[], outputRoot: string, cliPath?: string) => {
+            await rm(dirname(outputRoot), { recursive: true, force: true });
             const options = {
               cwd,
               env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
@@ -1283,17 +1336,14 @@ export const mastra = new Mastra({
             const result = cliPath ? await execaNode(cliPath, args, options) : await execa(pkgManager, args, options);
             expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
             const outputDigests = await getDirectoryDigests(outputRoot);
-            return Object.fromEntries(
-              Object.entries(outputDigests).filter(
-                ([path]) => path === 'tools.mjs' || (path.startsWith('tools/') && path.endsWith('.mjs')),
-              ),
-            );
+            return Object.fromEntries(Object.entries(outputDigests).filter(([path]) => path.endsWith('.mjs')));
           };
 
-          const first = await build(appDir, ['build']);
+          const first = await build(appDir, ['build'], join(appDir, '.mastra', 'output'));
           const second = await build(
             isolatedFixturePath,
-            ['build', '--root', 'apps/custom'],
+            ['build', '--root', '.', '--dir', 'apps/custom/src/mastra'],
+            join(isolatedFixturePath, '.mastra', 'output'),
             join(appDir, 'node_modules', 'mastra', 'dist', 'index.js'),
           );
 

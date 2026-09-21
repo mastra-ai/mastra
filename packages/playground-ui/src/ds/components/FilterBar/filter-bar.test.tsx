@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
+import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from './types';
 
 // eslint-friendly access to mock call arguments (avoids non-null assertions).
@@ -55,11 +56,13 @@ function Harness({
   fields = FIELDS,
   onChange,
   readOnlyIds = [],
+  nonRemovableIds = [],
 }: {
   initial?: FilterBarItem[];
   fields?: FilterBarField[];
   onChange?: (items: FilterBarItem[]) => void;
   readOnlyIds?: string[];
+  nonRemovableIds?: string[];
 }) {
   const [items, setItems] = useState<FilterBarItem[]>(initial);
   return (
@@ -72,13 +75,19 @@ function Harness({
         onChange?.(next);
       }}
     >
-      {readOnlyIds.length > 0 ? (
-        items.map(item => <FilterBar.Chip key={item.id} item={item} readOnly={readOnlyIds.includes(item.id)} />)
+      {readOnlyIds.length > 0 || nonRemovableIds.length > 0 ? (
+        items.map(item => (
+          <FilterBar.Chip
+            key={item.id}
+            item={item}
+            readOnly={readOnlyIds.includes(item.id)}
+            removable={!nonRemovableIds.includes(item.id)}
+          />
+        ))
       ) : (
         <FilterBar.Chips />
       )}
       <FilterBar.Input placeholder="Filter…" />
-      <FilterBar.Clear />
     </FilterBar>
   );
 }
@@ -152,8 +161,6 @@ describe('FilterBar', () => {
       type('duration');
       await screen.findByRole('option', { name: 'Duration' });
       key('Enter');
-      await screen.findByRole('option', { name: '>' });
-      key('Enter');
 
       expect(input.inputMode).toBe('decimal');
       const apply = (await screen.findByRole('button', { name: /^Apply/ })) as HTMLButtonElement;
@@ -178,8 +185,6 @@ describe('FilterBar', () => {
       input.focus();
       type('has error');
       await screen.findByRole('option', { name: 'Has error' });
-      key('Enter');
-      await screen.findByRole('option', { name: 'is' });
       key('Enter');
 
       await screen.findByRole('option', { name: 'True' });
@@ -321,8 +326,6 @@ describe('FilterBar', () => {
       getInput().focus();
       type('tags');
       key('Enter');
-      await screen.findByRole('option', { name: 'in' });
-      key('Enter');
       await screen.findByRole('option', { name: 'prod' });
       key('Enter'); // toggle prod
       key('ArrowDown');
@@ -342,7 +345,6 @@ describe('FilterBar', () => {
       getInput().focus();
       type('tags');
       key('Enter');
-      key('Enter');
       await screen.findByRole('option', { name: 'prod' });
       type('zzz');
       await screen.findByText('No matching value.');
@@ -353,6 +355,49 @@ describe('FilterBar', () => {
       expect(input.dataset.step).toBe('value');
       expect(input.getAttribute('aria-expanded')).toBe('true');
       expect(input.value).toBe('zzz');
+    });
+
+    describe('when a field has a single operator', () => {
+      it('skips the operator step and goes straight to the value', async () => {
+        const onChange = vi.fn();
+        render(<Harness onChange={onChange} />);
+        getInput().focus();
+        type('duration');
+        key('Enter');
+        expect(getInput().dataset.step).toBe('value');
+        expect(screen.queryByRole('option', { name: '>' })).toBeNull();
+        type('42');
+        key('Enter');
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ fieldId: 'duration', operatorId: 'gt', value: 42 });
+      });
+
+      it('steps back from the value straight to the field step', () => {
+        render(<Harness />);
+        getInput().focus();
+        type('duration');
+        key('Enter');
+        expect(getInput().dataset.step).toBe('value');
+        key('Escape');
+        expect(getInput().dataset.step).toBe('field');
+      });
+
+      it('does not render the operator segment on the draft chip', () => {
+        render(<Harness />);
+        getInput().focus();
+        type('duration');
+        key('Enter');
+        const draft = document.querySelector('[data-slot="filter-bar-draft-chip"]');
+        expect(draft?.textContent).toBe('Duration');
+      });
+
+      it('does not render the operator segment on the chip', () => {
+        render(<Harness initial={[{ id: 'a', fieldId: 'duration', operatorId: 'gt', value: 5 }]} />);
+        const chip = getChips()[0];
+        expect(within(chip).queryByRole('combobox', { name: 'Operator: >' })).toBeNull();
+        expect(chip.getAttribute('aria-label')).toBe('Duration 5');
+        expect(within(chip).getByRole('combobox', { name: 'Field: Duration' })).toBeTruthy();
+        expect(within(chip).getByRole('combobox', { name: 'Value: 5' })).toBeTruthy();
+      });
     });
 
     it('Backspace on an empty input removes the last chip', () => {
@@ -384,16 +429,17 @@ describe('FilterBar', () => {
       expect(screen.getByRole('group', { name: 'Trace ID is x' })).toBeDefined();
     });
 
-    it('ArrowLeft from the empty input reaches the last chip, ArrowRight goes back to the input', () => {
+    it('ArrowLeft from the empty input reaches the last chip remove button, ArrowRight goes back to the input', () => {
       render(<Harness initial={INITIAL} />);
       const input = getInput();
       input.focus();
       key('ArrowLeft');
-      const lastValue = screen.getByRole('combobox', { name: 'Value: x' });
-      expect(document.activeElement).toBe(lastValue);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Trace ID filter' }));
 
       const secondChip = screen.getByRole('group', { name: 'Trace ID is x' });
-      fireEvent.keyDown(lastValue, { key: 'ArrowLeft' });
+      pressActive({ key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(within(secondChip).getByRole('combobox', { name: 'Value: x' }));
+      pressActive({ key: 'ArrowLeft' });
       expect(document.activeElement).toBe(within(secondChip).getByRole('combobox', { name: 'Operator: is' }));
       pressActive({ key: 'ArrowLeft' });
       expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Field: Trace ID' }));
@@ -481,7 +527,90 @@ describe('FilterBar', () => {
       expect(within(locked).queryAllByRole('button')).toHaveLength(0);
       getInput().focus();
       key('ArrowLeft');
-      expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Value: Running' }));
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Status filter' }));
+    });
+
+    describe('when a chip is not removable', () => {
+      it('stays editable but has no remove button', () => {
+        render(<Harness initial={INITIAL} nonRemovableIds={['b']} />);
+        const chip = screen.getByRole('group', { name: 'Trace ID is x' });
+        expect(within(chip).getByRole('combobox', { name: 'Value: x' })).not.toBeNull();
+        expect(within(chip).queryByRole('button', { name: /Remove/ })).toBeNull();
+      });
+
+      it('ignores Backspace and Delete', () => {
+        const onChange = vi.fn();
+        render(<Harness initial={INITIAL} nonRemovableIds={['b']} onChange={onChange} />);
+        const value = screen.getByRole('combobox', { name: 'Value: x' });
+        value.focus();
+        fireEvent.keyDown(value, { key: 'Backspace' });
+        fireEvent.keyDown(value, { key: 'Delete' });
+        expect(onChange).not.toHaveBeenCalled();
+        expect(getChips()).toHaveLength(INITIAL.length);
+      });
+
+      it('Clear keeps it and removes the others', () => {
+        const onChange = vi.fn();
+        render(<Harness initial={INITIAL} nonRemovableIds={['b']} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        expect(onChange).toHaveBeenCalledWith([INITIAL[1]]);
+      });
+
+      it('hides Clear when no other chip is removable', () => {
+        render(<Harness initial={INITIAL.slice(1)} nonRemovableIds={['b']} />);
+        expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+      });
+
+      it('ArrowLeft from the next chip lands on its value segment', () => {
+        render(<Harness initial={INITIAL} nonRemovableIds={['a']} />);
+        const field = screen.getByRole('combobox', { name: 'Field: Trace ID' });
+        field.focus();
+        fireEvent.keyDown(field, { key: 'ArrowLeft' });
+        expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Value: Running' }));
+      });
+    });
+
+    describe('when a custom chip registers only a value segment', () => {
+      function ValueOnlyChip({ item }: { item: FilterBarItem }) {
+        const ctx = useFilterBarContext();
+        return (
+          <FilterBar.Chip item={item} removable={false}>
+            <span>Time</span>
+            <button
+              type="button"
+              data-filter-bar-segment=""
+              aria-label="Value: Last 7 days"
+              ref={el => ctx.registerSegment(item.id, 'value', el)}
+            />
+          </FilterBar.Chip>
+        );
+      }
+      const TIME: FilterBarItem = { id: 'time', fieldId: 'time', operatorId: 'is', value: '' };
+      const FIELDS_WITH_TIME: FilterBarField[] = [...FIELDS, { id: 'time', label: 'Time', operators: ['is'] }];
+
+      function CustomHarness() {
+        const [items, setItems] = useState<FilterBarItem[]>([TIME, ...INITIAL]);
+        return (
+          <FilterBar fields={FIELDS_WITH_TIME} operators={OPERATORS} value={items} onValueChange={setItems}>
+            {items.map(item =>
+              item.id === TIME.id ? (
+                <ValueOnlyChip key={item.id} item={item} />
+              ) : (
+                <FilterBar.Chip key={item.id} item={item} />
+              ),
+            )}
+            <FilterBar.Input placeholder="Filter…" />
+          </FilterBar>
+        );
+      }
+
+      it('ArrowLeft from the next chip focuses that value segment', () => {
+        render(<CustomHarness />);
+        const field = screen.getByRole('combobox', { name: 'Field: Status' });
+        field.focus();
+        fireEvent.keyDown(field, { key: 'ArrowLeft' });
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Value: Last 7 days' }));
+      });
     });
 
     it('Clear empties the bar and focuses the input', () => {
@@ -506,8 +635,7 @@ describe('FilterBar', () => {
       expect(resolver).not.toHaveBeenCalled();
       getInput().focus();
       type('name');
-      key('Enter');
-      await screen.findByRole('option', { name: 'is' });
+      await screen.findByRole('option', { name: 'Name' });
       expect(resolver).not.toHaveBeenCalled();
       key('Enter');
 
@@ -594,6 +722,27 @@ describe('FilterBar', () => {
       key('Enter');
       await screen.findByRole('option', { name: 'alpha' });
       expect(calls).toEqual(['']);
+    });
+  });
+
+  describe('when a field is hidden', () => {
+    const fields: FilterBarField[] = [
+      { id: 'scope', label: 'Scope', operators: ['is'], hidden: true },
+      { id: 'traceId', label: 'Trace ID', operators: ['is'] },
+    ];
+
+    it('does not list it in the field step', async () => {
+      render(<Harness fields={fields} />);
+      getInput().focus();
+      await screen.findByRole('option', { name: 'Trace ID' });
+      expect(screen.queryByRole('option', { name: 'Scope' })).toBeNull();
+    });
+
+    it('still labels an existing chip for it', () => {
+      render(
+        <Harness fields={fields} initial={[{ id: 'scope', fieldId: 'scope', operatorId: 'is', value: 'agent-1' }]} />,
+      );
+      expect(within(getChips()[0] as HTMLElement).getByText('Scope')).toBeTruthy();
     });
   });
 });

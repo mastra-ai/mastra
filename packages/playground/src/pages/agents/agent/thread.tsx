@@ -30,7 +30,6 @@ import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { cleanProviderId } from '@/domains/llm/utils';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
-import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
 
 function AgentThread() {
   const { agentId, threadId } = useParams();
@@ -76,8 +75,6 @@ function AgentThread() {
   );
 
   const messageId = searchParams.get('messageId') ?? undefined;
-  // A new thread has no traces yet, so the advanced (trace-based) view falls back to the chat.
-  const isAdvancedVariant = searchParams.get('variant') === 'advanced' && !isNewThread;
   const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
@@ -168,29 +165,25 @@ function AgentThread() {
                     >
                       <div key={actualThreadId} className="relative flex h-full min-h-0 flex-col">
                         <div className="relative grid min-h-0 flex-1">
-                          {isAdvancedVariant ? (
-                            <ThreadViewByTrace threadId={actualThreadId} />
-                          ) : (
-                            <AgentChat
-                              agentId={agentId!}
-                              agentName={agent?.name}
-                              modelVersion={agent?.modelVersion}
-                              supportsMemory={agent?.supportsMemory}
-                              threadId={actualThreadId}
-                              memory={hasMemory}
-                              refreshThreadList={handleRefreshThreadList}
-                              modelList={agent?.modelList}
-                              messageId={messageId}
-                              suggestedPrompts={suggestedPrompts}
-                              isNewThread={isNewThread}
-                              runOptionsSlot={
-                                <AgentRunOptions
-                                  triggerVariant="icon"
-                                  requestContextSchema={agent?.requestContextSchema}
-                                />
-                              }
-                            />
-                          )}
+                          <AgentChat
+                            agentId={agentId!}
+                            agentName={agent?.name}
+                            modelVersion={agent?.modelVersion}
+                            supportsMemory={agent?.supportsMemory}
+                            threadId={actualThreadId}
+                            memory={hasMemory}
+                            refreshThreadList={handleRefreshThreadList}
+                            modelList={agent?.modelList}
+                            messageId={messageId}
+                            suggestedPrompts={suggestedPrompts}
+                            isNewThread={isNewThread}
+                            runOptionsSlot={
+                              <AgentRunOptions
+                                triggerVariant="icon"
+                                requestContextSchema={agent?.requestContextSchema}
+                              />
+                            }
+                          />
                         </div>
                       </div>
                     </AgentLayout>

@@ -4,11 +4,11 @@ import type { ReasoningLevel } from '../../loop/types';
 /**
  * Time-based execution budget for an agent run.
  *
- * Both budgets are optional and independent. When omitted, no time limit is applied.
+ * All budgets are optional and independent. When omitted, no time limit is applied.
  */
 export type ModelTimeoutSettings = {
   /**
-   * Maximum wall-clock duration, in milliseconds, for an entire agent run.
+   * Maximum wall-clock duration, in positive finite milliseconds, for an entire agent run.
    *
    * Covers every loop iteration, tool call and retry. When exceeded, the run is
    * aborted and fails with a `MastraTimeoutError` — fallback models are NOT tried,
@@ -17,7 +17,7 @@ export type ModelTimeoutSettings = {
   totalMs?: number;
 
   /**
-   * Maximum wall-clock duration, in milliseconds, for a single model call.
+   * Maximum wall-clock duration, in positive finite milliseconds, for a single model call.
    *
    * Covers both establishing the stream and consuming it, so a provider that opens
    * a stream and then stalls is also caught. When exceeded, the call fails with a
@@ -27,12 +27,41 @@ export type ModelTimeoutSettings = {
   stepMs?: number;
 
   /**
-   * Maximum wall-clock duration, in milliseconds, for a streaming model call to
+   * Maximum wall-clock duration, in positive finite milliseconds, for a streaming model call to
    * emit its first content-bearing chunk. Metadata and stream-start chunks do not
    * satisfy this budget. Once content begins, only `stepMs` and `totalMs` remain active.
    */
   firstChunkMs?: number;
 };
+
+const timeoutSettingNames = ['totalMs', 'stepMs', 'firstChunkMs'] as const;
+
+export function validateModelTimeoutSettings(timeout: unknown): ModelTimeoutSettings | undefined {
+  if (timeout === undefined) {
+    return undefined;
+  }
+
+  if (
+    timeout === null ||
+    typeof timeout !== 'object' ||
+    Array.isArray(timeout) ||
+    (Object.getPrototypeOf(timeout) !== Object.prototype && Object.getPrototypeOf(timeout) !== null)
+  ) {
+    throw new TypeError(
+      '`modelSettings.timeout` must be an object with optional `totalMs`, `stepMs`, and `firstChunkMs` properties.',
+    );
+  }
+
+  const settings = timeout as Record<string, unknown>;
+  for (const name of timeoutSettingNames) {
+    const value = settings[name];
+    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)) {
+      throw new TypeError(`\`modelSettings.timeout.${name}\` must be a positive, finite number of milliseconds.`);
+    }
+  }
+
+  return timeout as ModelTimeoutSettings;
+}
 
 /**
  * Model call settings accepted by Mastra.

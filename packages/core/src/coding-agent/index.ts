@@ -44,12 +44,18 @@ function isECONNRESETError(error: unknown): boolean {
 }
 
 /**
- * Builds the portable default error processors: catch-all stream retries with
- * specialized ECONNRESET and bad-request policies, prefill-error recovery, and
- * provider-history compatibility.
+ * Builds the portable default error processors: provider-history compatibility
+ * and prefill-error recovery first, then catch-all stream retries with
+ * specialized ECONNRESET and bad-request policies.
  */
 function defaultErrorProcessors(): NonNullable<AgentConfig['errorProcessors']> {
   return [
+    // Repairs must run before StreamErrorRetryProcessor: error processors
+    // short-circuit on the first `retry: true`, and the retry below claims the
+    // same 400s these two repair. A blind retry first resends the unrepaired
+    // request, and both of these decline once `retryCount > 0`.
+    new ProviderHistoryCompat(),
+    new PrefillErrorHandler(),
     new StreamErrorRetryProcessor({
       retryUnknownErrors: true,
       maxRetries: 2,
@@ -64,8 +70,6 @@ function defaultErrorProcessors(): NonNullable<AgentConfig['errorProcessors']> {
         },
       ],
     }),
-    new PrefillErrorHandler(),
-    new ProviderHistoryCompat(),
   ];
 }
 
@@ -86,7 +90,7 @@ function defaultWorkspace(basePath: string): Workspace {
  *
  * Most fields are passed straight through to the underlying `Agent`. The
  * factory fills portable defaults for the pieces a coding agent always needs —
- * a local workspace, the task-list signal provider, stream-retry error
+ * a local workspace, the task-list signal provider, repair-then-retry error
  * processors, and the goal judge prompt — so a caller can get a working coding
  * agent by supplying only `model`, `instructions`, and `tools`.
  */
@@ -113,8 +117,8 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  *   {@link TaskSignalProvider} — which requires a memory-backed thread — into
  *   agents that have no memory.
  * - `errorProcessors` is used verbatim when provided; otherwise it defaults to
- *   catch-all stream retries with specialized ECONNRESET/bad-request policies,
- *   plus prefill + provider-history compatibility processors.
+ *   the provider-history and prefill repair processors, followed by catch-all
+ *   stream retries with specialized ECONNRESET/bad-request policies.
  * - `goal.prompt` defaults to {@link DEFAULT_GOAL_JUDGE_PROMPT} when a goal is
  *   configured without one.
  *

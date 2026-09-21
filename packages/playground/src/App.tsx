@@ -60,7 +60,6 @@ import CmsScorersEditPage from './pages/cms/scorers/edit';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
-import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import CreateDatasetPage from './pages/datasets/new';
@@ -68,7 +67,6 @@ import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
-import ExperimentItemPage from './pages/experiments/experiment/item';
 import ReviewQueuePage from './pages/experiments/review-queue';
 import InboxPage from './pages/inbox';
 import IntegrationsPage from './pages/integrations';
@@ -635,7 +633,8 @@ export const routes: RouteObject[] = [
               children: [
                 {
                   path: 'items/:itemId',
-                  element: <DatasetItemPage />,
+                  // Drawer is rendered by the dataset page; this route only carries params + crumbs.
+                  element: null,
                   handle: {
                     crumbs: ({ params }) => [
                       { id: 'dataset-items', label: 'Items' },
@@ -706,7 +705,8 @@ export const routes: RouteObject[] = [
               children: [
                 {
                   path: 'items/:itemId',
-                  element: <ExperimentItemPage />,
+                  // Drawer is rendered by the experiment page; this route only carries params + crumbs.
+                  element: null,
                   handle: {
                     crumbs: ({ params }) => [
                       { id: 'experiment-items', label: 'Items' },

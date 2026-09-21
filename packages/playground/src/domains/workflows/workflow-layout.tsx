@@ -1,4 +1,4 @@
-import type { WorkflowRunState } from '@mastra/core/workflows';
+import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { RequestContextProvider } from '@mastra/playground-ui/domains/request-context';
@@ -10,13 +10,24 @@ import { WorkflowLayout as WorkflowLayoutUI } from '@/domains/workflows/componen
 import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '@/domains/workflows/context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '@/domains/workflows/context/workflow-step-detail-provider';
-import { useWorkflowRun } from '@/hooks/use-workflow-runs';
 import { useWorkflow } from '@/hooks/use-workflows';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
+  return (
+    <ErrorBoundary
+      resetKeys={[workflowId, runId]}
+      title="Unable to display this workflow"
+      description="The workflow data could not be displayed. Try again or open another workflow."
+    >
+      <WorkflowRoute>{children}</WorkflowRoute>
+    </ErrorBoundary>
+  );
+};
+
+function WorkflowRoute({ children }: { children: React.ReactNode }) {
+  const { workflowId, runId } = useParams();
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
-  const { data: runExecutionResult, isLoading: isRunLoading } = useWorkflowRun(workflowId ?? '', runId ?? '');
 
   if (!workflowId) {
     return (
@@ -28,7 +39,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (isWorkflowLoading || (Boolean(runId) && isRunLoading)) {
+  if (isWorkflowLoading) {
     return (
       <div className="h-full p-4">
         <Skeleton className="h-full" />
@@ -36,40 +47,22 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  const snapshot =
-    runExecutionResult && runId
-      ? ({
-          context: {
-            input: runExecutionResult?.payload,
-            ...runExecutionResult?.steps,
-          },
-          status: runExecutionResult?.status,
-          result: runExecutionResult?.result,
-          error: runExecutionResult?.error,
-          runId,
-          serializedStepGraph: runExecutionResult?.serializedStepGraph,
-        } as WorkflowRunState)
-      : undefined;
-
   return (
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
       <RequestContextProvider key={workflowId} entityKey={`workflow:${workflowId}`}>
-        <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
-          <WorkflowSelectedStepProvider>
-            <WorkflowStepDetailProvider>
-              <div className="h-full min-h-0">
+        <WorkflowStepDetailProvider key={workflowId}>
+          <WorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
+            <WorkflowSelectedStepProvider>
+              <div className="flex h-full min-h-0 flex-col">
                 <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />
-                <WorkflowLayoutUI
-                  workflowId={workflowId!}
-                  leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
-                >
+                <WorkflowLayoutUI leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}>
                   {children}
                 </WorkflowLayoutUI>
               </div>
-            </WorkflowStepDetailProvider>
-          </WorkflowSelectedStepProvider>
-        </WorkflowRunProvider>
+            </WorkflowSelectedStepProvider>
+          </WorkflowRunProvider>
+        </WorkflowStepDetailProvider>
       </RequestContextProvider>
     </TracingSettingsProvider>
   );
-};
+}

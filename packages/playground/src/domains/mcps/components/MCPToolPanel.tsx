@@ -136,7 +136,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
         handleExecuteTool={handleExecuteTool}
         toolDescription={tool.description || ''}
         toolId={tool.name}
-        entityKey={`mcp:${serverId}:${tool.id}`}
+        entityKey={`mcp:${serverId}:${tool.name}`}
       />
     </div>
   );

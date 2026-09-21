@@ -1,7 +1,7 @@
 import type { ListWorkflowRunsResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
@@ -60,6 +60,7 @@ const paths = {
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
+  experimentItemLink: (experimentId: string, itemId: string) => `/experiments/${experimentId}/items/${itemId}`,
 } satisfies LinkComponentProviderProps['paths'];
 
 function renderRunList(runId?: string) {
@@ -89,6 +90,34 @@ function stubRuns(response: ListWorkflowRunsResponse) {
 afterEach(cleanup);
 
 describe('WorkflowRecentRuns', () => {
+  describe('when the run history request fails', () => {
+    it('reports the failure instead of claiming there are no runs', async () => {
+      stubCapabilities();
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () =>
+          HttpResponse.json({ error: 'Storage unavailable' }, { status: 403 }),
+        ),
+      );
+      renderRunList();
+      expect(await screen.findByText('Unable to load workflow runs.')).not.toBeNull();
+      expect(screen.queryByText('Your run history will appear here once you run the workflow')).toBeNull();
+    });
+  });
+  describe('when the run history is collapsed', () => {
+    it('keeps the count visible and restores the selected run', async () => {
+      stubCapabilities();
+      stubRuns(oneSuccessfulRun);
+      renderRunList('run-success-1');
+      const link = await screen.findByRole('link', { name: /run-success-1/ });
+      const trigger = screen.getByRole('button', { name: /Recent runs/ });
+      fireEvent.click(trigger);
+      await waitFor(() => expect(screen.queryByRole('link', { name: /run-success-1/ })).toBeNull());
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(within(trigger).getByText('1')).not.toBeNull();
+      fireEvent.click(trigger);
+      expect(await screen.findByRole('link', { name: /run-success-1/ })).toBe(link);
+    });
+  });
   it('never renders the "New workflow run" button (it lives in the left panel now)', async () => {
     stubCapabilities();
     stubRuns(oneSuccessfulRun);
@@ -106,26 +135,19 @@ describe('WorkflowRecentRuns', () => {
     renderRunList();
 
     expect(await screen.findByRole('link', { name: /run-success-1/ })).not.toBeNull();
-    // Status icon trigger exposes the raw status for accessibility...
     expect(screen.getByLabelText('success')).not.toBeNull();
-    // ...and the textual badge is gone.
     expect(screen.queryByText('SUCCESS')).toBeNull();
   });
 
-  it('shows the run id and date in the same muted metadata row', async () => {
-    stubCapabilities();
-    stubRuns(oneSuccessfulRun);
-
-    renderRunList();
-
-    const link = await screen.findByRole('link', { name: /run-success-1/ });
-    const runId = within(link).getByTitle('run-success-1');
-    expect(runId.className).toContain('truncate');
-    const dateText = within(link).getByText(/2026/);
-    expect(dateText.className).toContain('text-neutral3');
-    expect(runId.parentElement?.className).toContain('flex');
-    expect(runId.parentElement?.className).toContain('items-center');
-    expect(runId.parentElement?.className).toContain('gap-2');
+  describe('when a run has a timestamp', () => {
+    it('keeps its full identifier accessible alongside a readable date', async () => {
+      stubCapabilities();
+      stubRuns(oneSuccessfulRun);
+      renderRunList();
+      const link = await screen.findByRole('link', { name: /run-success-1/ });
+      expect(within(link).getByTitle('run-success-1')).not.toBeNull();
+      expect(within(link).getByText(/2026/).getAttribute('datetime')).not.toBeNull();
+    });
   });
 
   it('shows the input preview only for the active run', async () => {
@@ -167,7 +189,7 @@ describe('WorkflowRecentRuns', () => {
 
     expect(await screen.findByText('Recent runs')).not.toBeNull();
     expect(screen.queryByText('run-success-1')).toBeNull();
-    expect(screen.getByText('Your run history will appear here once you run the workflow')).not.toBeNull();
+    expect(await screen.findByText('Your run history will appear here once you run the workflow')).not.toBeNull();
   });
 
   it('links each run row to its run detail path', async () => {

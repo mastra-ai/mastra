@@ -67,6 +67,8 @@ export type AppAction =
   | 'undo'
   | 'toggleThinking'
   | 'expandTools'
+  | 'openBackgroundActivityCenter'
+  | 'clearFinishedBackgroundActivities'
   | 'followUp'
   | 'queueFollowUp'
   | 'cycleMode'
@@ -614,7 +616,11 @@ export class CustomEditor extends Editor {
     return true;
   }
 
-  private completeAutocompleteSelection(): boolean {
+  /**
+   * Accept the highlighted autocomplete item, repairing the leading slash that
+   * pi-tui's applyCompletion drops for namespaced commands like `skill/<name>`.
+   */
+  private completeAutocompleteSelection({ appendTrailingSpace = false } = {}): boolean {
     if (!this.isShowingAutocomplete()) {
       return false;
     }
@@ -623,7 +629,12 @@ export class CustomEditor extends Editor {
     super.handleInput('\t');
     const completedText = this.getText();
     if (wasSlashCommand && !completedText.trimStart().startsWith('/')) {
-      this.setText(`/${completedText.trimStart()}`);
+      const repaired = completedText.trimStart();
+      // pi-tui's slash-command branch inserts "<command> " with a trailing space,
+      // but the file-path branch that namespaced commands fall into does not.
+      // Only the Tab path leaves the text in the editor for further typing.
+      const suffix = appendTrailingSpace && !repaired.includes(' ') ? ' ' : '';
+      this.setText(`/${repaired}${suffix}`);
     }
     return wasSlashCommand;
   }
@@ -964,6 +975,22 @@ export class CustomEditor extends Editor {
       }
     }
 
+    if (matchesKey(data, 'ctrl+g')) {
+      const handler = this.actionHandlers.get('openBackgroundActivityCenter');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+
+    if (matchesKey(data, 'alt+g')) {
+      const handler = this.actionHandlers.get('clearFinishedBackgroundActivities');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+
     if (matchesKey(data, 'ctrl+f')) {
       const handler = this.actionHandlers.get('queueFollowUp');
       if (handler) {
@@ -1002,6 +1029,11 @@ export class CustomEditor extends Editor {
         handler();
         return;
       }
+    }
+
+    if (matchesKey(data, 'tab') && this.isShowingAutocomplete()) {
+      this.completeAutocompleteSelection({ appendTrailingSpace: true });
+      return;
     }
 
     if (matchesKey(data, 'ctrl+y')) {

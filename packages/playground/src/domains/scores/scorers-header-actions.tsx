@@ -10,7 +10,12 @@ export function ScorersHeaderCreateAction() {
   if (!isCmsAvailable) return null;
   return (
     <RouteHeaderActions owner="scorer-list">
-      <CreateButton as={Link} to={paths.cmsScorersCreateLink()} tooltip="Create a scorer" variant="ghost" size="sm">
+      <CreateButton
+        render={<Link href={paths.cmsScorersCreateLink()} />}
+        tooltip="Create a scorer"
+        variant="ghost"
+        size="sm"
+      >
         New scorer
       </CreateButton>
     </RouteHeaderActions>

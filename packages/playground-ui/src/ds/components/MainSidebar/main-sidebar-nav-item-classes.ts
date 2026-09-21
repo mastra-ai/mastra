@@ -33,10 +33,10 @@ type NavItemLayoutOptions = {
 type ItemStyleOptions = NavRowSurfaceOptions & NavItemLayoutOptions;
 
 const nestedExpandedItemClasses = (level: number) => {
-  if (level <= 0) return 'w-full gap-2 py-1 px-3 justify-start';
-  if (level === 1) return 'w-full gap-2 py-1 pr-3 pl-8 justify-start text-ui-sm h-8';
-  if (level === 2) return 'w-full gap-2 py-1 pr-3 pl-10 justify-start text-ui-sm h-8';
-  return 'w-full gap-2 py-1 pr-3 pl-12 justify-start text-ui-sm h-8';
+  if (level <= 0) return 'gap-2 py-1 px-3';
+  if (level === 1) return 'gap-2 py-1 pr-3 pl-8 text-ui-sm h-8';
+  if (level === 2) return 'gap-2 py-1 pr-3 pl-10 text-ui-sm h-8';
+  return 'gap-2 py-1 pr-3 pl-12 text-ui-sm h-8';
 };
 
 const idleSurface = cn(
@@ -59,11 +59,11 @@ export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOpti
 export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLayoutOptions) =>
   cn(
     navItemVariants({ size }),
-    'transition-all duration-normal ease-out-custom motion-reduce:transition-none',
+    'w-full justify-start transition-[padding,gap,background-color,color] duration-slow ease-out-custom motion-reduce:transition-none',
     '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:transition-colors [&_svg]:duration-normal motion-reduce:[&_svg]:transition-none',
     'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
     !isCollapsed && nestedExpandedItemClasses(level),
-    isCollapsed && 'w-full justify-center p-0',
+    isCollapsed && 'gap-0 px-[13.5px] py-0',
   );
 
 export const navItemClasses = ({ isActive, isCollapsed, isFeatured, level, size }: ItemStyleOptions = {}) =>

@@ -49,10 +49,14 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
           actionSlot={
             <Button
               variant="ghost"
-              as="a"
-              href="https://mastra.ai/docs/observability/metrics/overview"
-              target="_blank"
-              rel="noopener noreferrer"
+              render={
+                <a
+                  href="https://mastra.ai/docs/observability/metrics/overview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
+
               icon={<ExternalLinkIcon />}
             >
               Metrics Documentation

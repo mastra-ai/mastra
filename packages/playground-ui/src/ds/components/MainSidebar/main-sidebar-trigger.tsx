@@ -29,9 +29,9 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
               'size-7',
               isCollapsed ? 'mx-auto' : 'ml-auto',
               'hover:bg-sidebar-accent hover:text-foreground',
-              'transition-all duration-normal ease-out-custom',
+              'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
               'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
-              '[&_svg]:size-4 [&_svg]:text-muted-foreground [&_svg]:transition-transform [&_svg]:duration-normal [&:hover_svg]:text-foreground',
+              '[&_svg]:size-4 [&_svg]:text-muted-foreground [&_svg]:transition-transform [&_svg]:duration-slow [&_svg]:ease-out-custom motion-reduce:[&_svg]:transition-none [&:hover_svg]:text-foreground',
               className,
             )}
           >
@@ -44,7 +44,7 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
         }
       />
 
-      <TooltipContent className="new-theme border-border bg-popover text-foreground">
+      <TooltipContent>
         <span className="inline-flex items-center gap-1.5">
           Toggle Sidebar
           <Kbd size="xs" className="border-border bg-muted text-muted-foreground">

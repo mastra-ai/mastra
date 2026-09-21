@@ -1,7 +1,6 @@
 import { useRunOptionsDraft } from '@mastra/playground-ui/domains/run-options';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { z } from 'zod';
-import { removeEmptyValues } from './utils';
 
 interface RequestContextFormDraftProps {
   schema: z.ZodType<Record<string, unknown>>;
@@ -17,7 +16,7 @@ export function RequestContextFormDraft({ schema, defaultValues, onSave }: Reque
   useRunOptionsDraft({
     isDirty: form.formState.isDirty && JSON.stringify(values) !== JSON.stringify(defaultValues),
     save: () => {
-      const result = schema.safeParse(removeEmptyValues(form.getValues()));
+      const result = schema.safeParse(form.getValues());
       form.clearErrors();
       if (!result.success) {
         result.error.issues.forEach((issue, index) => {

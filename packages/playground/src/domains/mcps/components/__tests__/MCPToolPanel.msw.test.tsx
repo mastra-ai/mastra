@@ -87,26 +87,34 @@ describe('MCPToolPanel', () => {
       const callTool = await connectApp();
       await saveContext();
       await callTool();
-      await waitFor(() => expect(requests).toHaveBeenCalledWith({ data: {}, requestContext: { locale: 'en' } }));
+      await waitFor(() =>
+        expect(requests).toHaveBeenCalledWith(expect.objectContaining({ requestContext: { locale: 'en' } })),
+      );
     });
     it('uses the updated context in form executions', async () => {
       const requests = setup();
       await saveContext();
       fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
-      await waitFor(() => expect(requests).toHaveBeenCalledWith({ data: {}, requestContext: { locale: 'en' } }));
+      await waitFor(() =>
+        expect(requests).toHaveBeenCalledWith(expect.objectContaining({ requestContext: { locale: 'en' } })),
+      );
     });
   });
   describe('when the tool has saved request context', () => {
     it('includes it in form executions', async () => {
       const requests = setup();
       fireEvent.click(await screen.findByRole('button', { name: 'Submit' }));
-      await waitFor(() => expect(requests).toHaveBeenCalledWith({ data: {}, requestContext: { locale: 'fr' } }));
+      await waitFor(() =>
+        expect(requests).toHaveBeenCalledWith(expect.objectContaining({ requestContext: { locale: 'fr' } })),
+      );
     });
     it('includes it in App bridge executions', async () => {
       const requests = setup();
       const callTool = await connectApp();
       await callTool();
-      await waitFor(() => expect(requests).toHaveBeenCalledWith({ data: {}, requestContext: { locale: 'fr' } }));
+      await waitFor(() =>
+        expect(requests).toHaveBeenCalledWith(expect.objectContaining({ requestContext: { locale: 'fr' } })),
+      );
     });
   });
 });

@@ -114,7 +114,16 @@
               "reasoning": [],
               "sources": [],
               "text": "Mock V2 stream response",
-              "warnings": []
+              "warnings": [],
+              "toolCalls": [
+                {
+                  "toolCallId": "call-metadata-1",
+                  "toolName": "metadataTool",
+                  "args": {
+                    "input": "some data"
+                  }
+                }
+              ]
             }
           },
           "children": [
@@ -196,7 +205,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["metadataTool"],
                       "toolChoice": "auto",
                       "usage": {
@@ -400,7 +411,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["metadataTool"],
                       "toolChoice": "auto",
                       "usage": {
