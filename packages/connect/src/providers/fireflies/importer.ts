@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
+import type { RecordLink } from '../../importer-runtime.js';
 import {
   boundText,
   clearHighWater,
@@ -9,6 +10,9 @@ import {
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   importerCronTrigger,
+  linksMetadata,
+  neutralizeWikilinks,
+  nodeSelfMetadata,
   readHighWater,
   readResumeCursor,
   readWatermark,
@@ -34,6 +38,10 @@ const transcriptSchema = z.object({
   title: z.string().nullish(),
   date: z.union([z.string(), z.number()]).nullish(),
   participants: z.array(z.string()).nullish(),
+  organizer_email: z.string().nullish(),
+  meeting_attendees: z
+    .array(z.object({ displayName: z.string().nullish(), email: z.string().nullish() }))
+    .nullish(),
   summary: summarySchema,
 });
 
@@ -52,6 +60,11 @@ query Transcripts($fromDate: DateTime, $limit: Int, $skip: Int) {
     title
     date
     participants
+    organizer_email
+    meeting_attendees {
+      displayName
+      email
+    }
     summary {
       overview
       action_items
@@ -82,6 +95,49 @@ function extractFacets(transcript: FirefliesTranscript): FacetRecord[] {
     facets.push({ facet: 'keywords', text: summary.keywords.join(', ') });
   }
   return facets;
+}
+
+interface Attendee {
+  email: string;
+  displayName?: string;
+}
+
+/**
+ * A meeting's people are its structure. Prefer `meeting_attendees` (has display
+ * names); degrade to the plain `participants` email array when absent.
+ */
+function extractAttendees(transcript: FirefliesTranscript): Attendee[] {
+  const byEmail = new Map<string, Attendee>();
+  const richAttendees = transcript.meeting_attendees ?? [];
+  for (const attendee of richAttendees) {
+    const email = attendee.email?.trim().toLowerCase();
+    if (!email) continue;
+    const displayName = attendee.displayName?.trim() || undefined;
+    const existing = byEmail.get(email);
+    if (!existing || (!existing.displayName && displayName)) byEmail.set(email, { email, displayName });
+  }
+  if (byEmail.size === 0) {
+    for (const raw of transcript.participants ?? []) {
+      const email = raw.trim().toLowerCase();
+      if (email) byEmail.set(email, { email });
+    }
+  }
+  return [...byEmail.values()];
+}
+
+/**
+ * Recurring meetings share a title — the normalized title keys the series
+ * container. Heuristic: unrelated meetings with the same title collapse into
+ * one series; a renamed recurring meeting starts a new one.
+ */
+function seriesSlug(title: string | null | undefined): string | undefined {
+  if (!title) return undefined;
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || undefined;
 }
 
 function createFirefliesImporter(ctx: ImporterProviderContext) {
@@ -149,6 +205,7 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
       });
 
       let lastProcessed: string | undefined;
+      const upsertedContainers = new Set<string>();
       for (const transcript of collected) {
         if (context.signal.aborted) return;
         const address = `fireflies:transcript:${transcript.id}`;
@@ -160,20 +217,87 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
           date,
           participants: transcript.participants ?? undefined,
         };
-        const node = await importer.upsertNode(address, { name: title, kind: 'connect:fireflies:transcript' });
+
+        // Structure links: attendees + organizer + recurring-meeting series.
+        const links: RecordLink[] = [];
+        const attendees = extractAttendees(transcript);
+        const organizerEmail = transcript.organizer_email?.trim().toLowerCase() || undefined;
+        for (const attendee of attendees) {
+          const personAddress = `fireflies:person:${attendee.email}`;
+          if (!upsertedContainers.has(personAddress)) {
+            upsertedContainers.add(personAddress);
+            const personName = attendee.displayName ?? attendee.email;
+            const personNode = await importer.upsertNode(personAddress, {
+              name: personName,
+              kind: 'connect:fireflies:person',
+              metadata: nodeSelfMetadata(personAddress),
+            });
+            const personRecordId = contentRecordId({ address: personAddress, name: personName });
+            const personRecords = await personNode.listRecords();
+            if (!personRecords.some(r => r.id === personRecordId)) {
+              await personNode.appendRecord({
+                id: personRecordId,
+                text: neutralizeWikilinks(personName),
+                metadata: { email: attendee.email },
+              });
+            }
+            if (canRemove) {
+              for (const previous of personRecords) {
+                if (previous.id !== personRecordId) await personNode.removeRecord(previous.id);
+              }
+            }
+          }
+          links.push({ address: personAddress, rel: 'attended-by' });
+          if (organizerEmail === attendee.email) links.push({ address: personAddress, rel: 'organized-by' });
+        }
+        const slug = seriesSlug(transcript.title);
+        if (slug) {
+          const seriesAddress = `fireflies:series:${slug}`;
+          if (!upsertedContainers.has(seriesAddress)) {
+            upsertedContainers.add(seriesAddress);
+            const seriesName = transcript.title!.trim();
+            const seriesNode = await importer.upsertNode(seriesAddress, {
+              name: seriesName,
+              kind: 'connect:fireflies:series',
+              metadata: nodeSelfMetadata(seriesAddress),
+            });
+            const seriesRecordId = contentRecordId({ address: seriesAddress, name: seriesName });
+            const seriesRecords = await seriesNode.listRecords();
+            if (!seriesRecords.some(r => r.id === seriesRecordId)) {
+              await seriesNode.appendRecord({
+                id: seriesRecordId,
+                text: neutralizeWikilinks(seriesName),
+                metadata: { slug },
+              });
+            }
+            if (canRemove) {
+              for (const previous of seriesRecords) {
+                if (previous.id !== seriesRecordId) await seriesNode.removeRecord(previous.id);
+              }
+            }
+          }
+          links.push({ address: seriesAddress, rel: 'in' });
+        }
+        const linkMeta = linksMetadata(links);
+
+        const node = await importer.upsertNode(address, {
+          name: title,
+          kind: 'connect:fireflies:transcript',
+          metadata: nodeSelfMetadata(address),
+        });
         const existingRecords = await node.listRecords();
         const existingIds = new Set(existingRecords.map(r => r.id));
         const facets = extractFacets(transcript);
         const kept = new Set<string>();
         for (const facet of facets) {
-          const recordPayload = { address, facet: facet.facet, text: facet.text };
+          const recordPayload = { address, facet: facet.facet, text: facet.text, links: linkMeta.links ?? [] };
           const recordId = contentRecordId(recordPayload);
           kept.add(recordId);
           if (!existingIds.has(recordId)) {
             await node.appendRecord({
               id: recordId,
-              text: boundText(`${title} — ${facet.facet}\n\n${facet.text}`),
-              metadata: { ...metadata, facet: facet.facet },
+              text: boundText(neutralizeWikilinks(`${title} — ${facet.facet}\n\n${facet.text}`)),
+              metadata: { ...metadata, facet: facet.facet, ...linkMeta },
             });
           }
         }

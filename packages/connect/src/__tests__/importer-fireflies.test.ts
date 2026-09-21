@@ -9,6 +9,8 @@ interface FirefliesTranscriptFixture {
   title?: string;
   date?: string;
   participants?: string[];
+  organizerEmail?: string;
+  meetingAttendees?: Array<{ displayName?: string | null; email?: string | null }>;
   overview?: string | null;
   actionItems?: string | null;
   keywords?: string[] | null;
@@ -20,6 +22,8 @@ function transcriptNode(fixture: FirefliesTranscriptFixture) {
     title: fixture.title ?? null,
     date: fixture.date ?? null,
     participants: fixture.participants ?? null,
+    organizer_email: fixture.organizerEmail ?? null,
+    meeting_attendees: fixture.meetingAttendees ?? null,
     summary: {
       overview: fixture.overview ?? null,
       action_items: fixture.actionItems ?? null,
@@ -150,7 +154,9 @@ describe('fireflies importer', () => {
     );
     await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
     expect(request).toHaveBeenCalledTimes(2);
-    expect(importer.nodes.size).toBe(26);
+    // Each transcript also mints a title-keyed series container — count transcripts only.
+    const transcriptNodes = [...importer.nodes.keys()].filter(a => a.startsWith('fireflies:transcript:'));
+    expect(transcriptNodes).toHaveLength(26);
   });
 
   it('does not advance the watermark when the run bails on maxRecords before the source signals end', async () => {
@@ -228,5 +234,141 @@ describe('fireflies importer', () => {
     request.mockResolvedValueOnce({ data: { transcripts: [{ title: 'no id' }] } });
     await expect(runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state })).rejects.toThrow();
     expect(await state.get('fireflies:watermark')).toBeUndefined();
+  });
+
+  it('requests organizer_email and meeting_attendees in the GraphQL selection', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(transcriptsResponse([]));
+    await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
+    const call = request.mock.calls[0]![0]! as { body: { query: string } };
+    expect(call.body.query).toContain('organizer_email');
+    expect(call.body.query).toContain('meeting_attendees');
+  });
+
+  it('upserts attendee person nodes with display names and rides links on every facet record', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      transcriptsResponse([
+        {
+          id: 't1',
+          title: 'Weekly Sync',
+          date: '2026-09-01T09:00:00Z',
+          organizerEmail: 'Alice@acme.com',
+          meetingAttendees: [
+            { displayName: 'Alice', email: 'alice@acme.com' },
+            { displayName: null, email: 'bob@acme.com' },
+          ],
+          overview: 'Discussed roadmap.',
+          keywords: ['roadmap'],
+        },
+      ]),
+    );
+    await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
+
+    const alice = importer.nodes.get('fireflies:person:alice@acme.com')!;
+    expect(alice.input).toMatchObject({
+      name: 'Alice',
+      kind: 'connect:fireflies:person',
+      metadata: { address: 'fireflies:person:alice@acme.com' },
+    });
+    const bob = importer.nodes.get('fireflies:person:bob@acme.com')!;
+    expect(bob.input.name).toBe('bob@acme.com');
+    const series = importer.nodes.get('fireflies:series:weekly-sync')!;
+    expect(series.input).toMatchObject({ name: 'Weekly Sync', kind: 'connect:fireflies:series' });
+
+    const transcript = importer.nodes.get('fireflies:transcript:t1')!;
+    expect(transcript.input.metadata).toEqual({ address: 'fireflies:transcript:t1' });
+    const expectedLinks = [
+      { address: 'fireflies:person:alice@acme.com', rel: 'attended-by' },
+      { address: 'fireflies:person:alice@acme.com', rel: 'organized-by' },
+      { address: 'fireflies:person:bob@acme.com', rel: 'attended-by' },
+      { address: 'fireflies:series:weekly-sync', rel: 'in' },
+    ];
+    // Both facet records (overview + keywords) carry the same link set.
+    const records = [...transcript.records.values()];
+    expect(records).toHaveLength(2);
+    for (const record of records) {
+      expect((record.metadata as { links: unknown[] }).links).toEqual(expectedLinks);
+    }
+  });
+
+  it('degrades to participants emails when meeting_attendees is absent', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      transcriptsResponse([
+        {
+          id: 't1',
+          title: 'Standup',
+          date: '2026-09-01T00:00:00Z',
+          participants: ['Carol@acme.com', 'dave@acme.com'],
+          overview: 'x',
+        },
+      ]),
+    );
+    await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
+
+    expect(importer.nodes.get('fireflies:person:carol@acme.com')!.input.name).toBe('carol@acme.com');
+    expect(importer.nodes.get('fireflies:person:dave@acme.com')).toBeDefined();
+    const record = [...importer.nodes.get('fireflies:transcript:t1')!.records.values()][0]!;
+    expect((record.metadata as { links: unknown[] }).links).toEqual([
+      { address: 'fireflies:person:carol@acme.com', rel: 'attended-by' },
+      { address: 'fireflies:person:dave@acme.com', rel: 'attended-by' },
+      { address: 'fireflies:series:standup', rel: 'in' },
+    ]);
+  });
+
+  it('a transcript with no title produces no series link', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      transcriptsResponse([{ id: 't1', date: '2026-09-01T00:00:00Z', overview: 'x' }]),
+    );
+    await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
+
+    const seriesNodes = [...importer.nodes.keys()].filter(a => a.startsWith('fireflies:series:'));
+    expect(seriesNodes).toHaveLength(0);
+    const record = [...importer.nodes.get('fireflies:transcript:t1')!.records.values()][0]!;
+    expect((record.metadata as { links?: unknown[] }).links).toBeUndefined();
+  });
+
+  it('a link change alone produces new facet record ids', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      transcriptsResponse([
+        {
+          id: 't1',
+          title: 'Sync',
+          date: '2026-09-01T00:00:00Z',
+          meetingAttendees: [{ displayName: 'Alice', email: 'alice@acme.com' }],
+          overview: 'x',
+          keywords: ['k'],
+        },
+      ]),
+    );
+    await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
+    const firstIds = new Set(importer.nodes.get('fireflies:transcript:t1')!.records.keys());
+    expect(firstIds.size).toBe(2);
+
+    // Same facets, same date — ONLY the attendee list changes, proving the link
+    // array is part of every facet's hash payload.
+    request.mockResolvedValueOnce(
+      transcriptsResponse([
+        {
+          id: 't1',
+          title: 'Sync',
+          date: '2026-09-01T00:00:00Z',
+          meetingAttendees: [
+            { displayName: 'Alice', email: 'alice@acme.com' },
+            { displayName: 'Bob', email: 'bob@acme.com' },
+          ],
+          overview: 'x',
+          keywords: ['k'],
+        },
+      ]),
+    );
+    await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
+    const secondIds = new Set(importer.nodes.get('fireflies:transcript:t1')!.records.keys());
+    expect(secondIds.size).toBe(2);
+    const intersection = [...firstIds].filter(id => secondIds.has(id));
+    expect(intersection).toHaveLength(0);
   });
 });

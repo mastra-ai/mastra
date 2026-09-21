@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
+import type { RecordLink } from '../../importer-runtime.js';
 import {
   boundText,
   clearHighWater,
@@ -9,6 +10,9 @@ import {
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   importerCronTrigger,
+  linksMetadata,
+  neutralizeWikilinks,
+  nodeSelfMetadata,
   readHighWater,
   readResumeCursor,
   readWatermark,
@@ -32,10 +36,11 @@ const documentSchema = z.object({
   title: z.string().default(''),
   content: z.string().nullish(),
   url: z.string().nullish(),
+  slugId: z.string().nullish(),
   updatedAt: z.string(),
   archivedAt: z.string().nullish(),
   trashed: z.boolean().nullish(),
-  project: z.object({ name: z.string().nullish() }).nullish(),
+  project: z.object({ id: z.string().nullish(), name: z.string().nullish() }).nullish(),
   initiative: z.object({ name: z.string().nullish() }).nullish(),
 });
 
@@ -53,6 +58,24 @@ const documentsResponseSchema = z.object({
 
 type LinearDocument = z.infer<typeof documentSchema>;
 
+/** Linear doc URLs: `https://linear.app/<ws>/document/<slug>-<slugId>`. */
+const DOC_URL_PATTERN = /linear\.app\/[^)\s"]+\/document\/([^)\s"?#]+)/g;
+
+/**
+ * Extract doc→doc reference links from a markdown body. Doc URLs end in the
+ * short `slugId`, not the uuid, so targets resolve through the slug-alias
+ * addresses each doc node registers in `metadata.addressAliases`.
+ */
+function extractDocLinks(markdown: string): RecordLink[] {
+  const links: RecordLink[] = [];
+  for (const match of markdown.matchAll(DOC_URL_PATTERN)) {
+    const segment = match[1]!;
+    const slugId = segment.slice(segment.lastIndexOf('-') + 1);
+    if (slugId) links.push({ address: `linear:document:slug:${slugId}`, rel: 'references' });
+  }
+  return links;
+}
+
 const DOCUMENTS_QUERY = `
 query Documents($filter: DocumentFilter, $after: String) {
   documents(filter: $filter, orderBy: updatedAt, first: 50, after: $after) {
@@ -61,10 +84,11 @@ query Documents($filter: DocumentFilter, $after: String) {
       title
       content
       url
+      slugId
       updatedAt
       archivedAt
       trashed
-      project { name }
+      project { id name }
       initiative { name }
     }
     pageInfo { hasNextPage endCursor }
@@ -129,6 +153,7 @@ function createLinearImporter(ctx: ImporterProviderContext) {
       collected.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
 
       let lastProcessed: string | undefined;
+      const upsertedProjects = new Set<string>();
       for (const document of collected) {
         if (context.signal.aborted) return;
         const address = `linear:document:${document.id}`;
@@ -146,23 +171,64 @@ function createLinearImporter(ctx: ImporterProviderContext) {
         }
         const title = document.title || document.id;
         const content = document.content ?? '';
+        // Cross-doc reference links from the markdown body, resolved via the
+        // slug-alias each doc registers on its own node.
+        const links: RecordLink[] = extractDocLinks(content);
+        // Structure: doc → project container.
+        const projectId = document.project?.id ?? undefined;
+        if (projectId) {
+          const projectAddress = `linear:project:${projectId}`;
+          if (!upsertedProjects.has(projectAddress)) {
+            upsertedProjects.add(projectAddress);
+            const projectName = document.project?.name || projectId;
+            const projectNode = await importer.upsertNode(projectAddress, {
+              name: projectName,
+              kind: 'connect:linear:project',
+              metadata: nodeSelfMetadata(projectAddress),
+            });
+            const projectRecordId = contentRecordId({ address: projectAddress, name: projectName });
+            const projectRecords = await projectNode.listRecords();
+            if (!projectRecords.some(r => r.id === projectRecordId)) {
+              await projectNode.appendRecord({
+                id: projectRecordId,
+                text: neutralizeWikilinks(projectName),
+                metadata: { projectId },
+              });
+            }
+            if (canRemove) {
+              for (const previous of projectRecords) {
+                if (previous.id !== projectRecordId) await projectNode.removeRecord(previous.id);
+              }
+            }
+          }
+          links.push({ address: projectAddress, rel: 'in' });
+        }
+        const slugId = document.slugId ?? undefined;
+        const selfAlias = slugId ? `linear:document:slug:${slugId}` : undefined;
+        const linkMeta = linksMetadata(links.filter(link => link.address !== address && link.address !== selfAlias));
         const recordPayload = {
           address,
           title,
           content,
+          links: linkMeta.links ?? [],
           updatedAt: document.updatedAt,
         };
         const recordId = contentRecordId(recordPayload);
-        const node = await importer.upsertNode(address, { name: title, kind: 'connect:linear:document' });
+        const node = await importer.upsertNode(address, {
+          name: title,
+          kind: 'connect:linear:document',
+          metadata: nodeSelfMetadata(address, selfAlias ? [selfAlias] : undefined),
+        });
         const existingRecords = await node.listRecords();
         if (!existingRecords.some(r => r.id === recordId)) {
           await node.appendRecord({
             id: recordId,
-            text: boundText(content ? `${title}\n\n${content}` : title),
+            text: boundText(neutralizeWikilinks(content ? `${title}\n\n${content}` : title)),
             metadata: {
               project: document.project?.name,
               initiative: document.initiative?.name,
               url: document.url,
+              ...linkMeta,
             },
           });
         }
