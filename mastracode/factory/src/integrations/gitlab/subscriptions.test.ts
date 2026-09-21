@@ -71,6 +71,37 @@ describe('GitLab merge-request subscription store', () => {
     expect(await listMergeRequestSubscriptionsForThread(baseInput, storage)).toHaveLength(1);
   });
 
+  it('answers a user session that addresses itself by its own id', async () => {
+    await subscribeToMergeRequest(
+      {
+        ...baseInput,
+        resourceId: 'factory-project',
+        sessionId: 'session-u',
+        threadId: 'session-u',
+        sessionScope: undefined,
+      },
+      storage,
+    );
+    const rows = await listMergeRequestSubscriptionsForThread(
+      { orgId: 'org-a', resourceId: 'session-u', threadId: 'session-u' },
+      storage,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ sessionId: 'session-u', resourceId: 'factory-project' });
+    expect(
+      await listMergeRequestSubscriptionsForThread(
+        { orgId: 'org-b', resourceId: 'session-u', threadId: 'session-u' },
+        storage,
+      ),
+    ).toEqual([]);
+    expect(
+      await listMergeRequestSubscriptionsForThread(
+        { orgId: 'org-a', resourceId: 'session-u', threadId: 'session-u', sessionScope: '/x' },
+        storage,
+      ),
+    ).toEqual([]);
+  });
+
   it('returns the existing row for duplicate subscriptions and reactivates a retired one', async () => {
     const first = await subscribeToMergeRequest(baseInput, storage);
     const second = await subscribeToMergeRequest(baseInput, storage);

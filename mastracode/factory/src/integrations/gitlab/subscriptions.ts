@@ -128,13 +128,18 @@ export async function listMergeRequestSubscriptionsForThread(
   storage: GitLabSubscriptionStorage,
 ): Promise<GitLabSignalSubscriptionRow[]> {
   const rows = await storage.subscriptions.listByThread(input.resourceId, input.threadId);
-  return rows.filter(
+  const matching = rows.filter(
     row =>
       row.orgId === input.orgId &&
       row.resourceId === input.resourceId &&
       row.threadId === input.threadId &&
       (row.sessionScope ?? '') === (input.sessionScope ?? ''),
   );
+  if (matching.length > 0 || input.sessionScope) return matching;
+  // Same as GitHub: a user session addresses itself by its own id while its
+  // rows name the owning Factory project, so fall back to the session's rows.
+  const owned = await storage.subscriptions.listBySession(input.resourceId);
+  return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId && !row.sessionScope);
 }
 
 export async function listMergeRequestSubscriptions(
