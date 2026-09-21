@@ -242,7 +242,7 @@ export const WithLabel: Story = {
 
 export const SettingsList: Story = {
   render: () => (
-    <div className="w-dropdown-max-height flex flex-col gap-4">
+    <div className="w-75 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <Label htmlFor="email">Email notifications</Label>
         <Switch id="email" defaultChecked />

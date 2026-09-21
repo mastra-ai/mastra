@@ -117,7 +117,7 @@ export const comboboxStyles = {
   list: 'p-1 empty:p-0',
 
   /** Scroll container around the List; hosts the fluid highlight so it scrolls with the rows. */
-  listScroller: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden',
+  listScroller: 'max-h-dropdown overflow-y-auto overflow-x-hidden',
 
   /** Option item base — rounded-lg sits concentrically inside rounded-xl + p-1. */
   item: comboboxItemClass({ multiple: false }),

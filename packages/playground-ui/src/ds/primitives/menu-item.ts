@@ -12,6 +12,10 @@ import { cn } from '@/lib/utils';
 // to the full available width instead of the widest item.
 const MENU_ITEM_OVERRIDES = cn(
   'flex w-full justify-start rounded-lg text-left select-none',
+  // An item may carry a second line (a name over its description). The Button
+  // height becomes the floor so single-line rows keep the control rhythm and a
+  // taller item grows instead of overflowing into its neighbour.
+  'h-auto min-h-form-md py-1',
   // Button brightens its border on focus-visible; inside a menu the highlight is the focus cue.
   'focus-visible:border-transparent',
   // No row background: the popup's FluidMenuItems highlight travels between rows;
@@ -48,7 +52,7 @@ export const menuPositionerClass = 'z-50 outline-none data-[anchor-hidden]:hidde
 // Width: at least the anchor (or 11rem), otherwise as wide as the widest item, never
 // wider than the space Floating UI reports. Shared by every menu-like popup.
 export const menuPopupClass = cn(
-  'z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))]',
+  'z-50 max-h-[min(var(--max-height-dropdown),var(--available-height))]',
   'w-max max-w-(--available-width) min-w-[max(11rem,var(--anchor-width))]',
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
   cn('rounded-xl p-1 text-foreground/90 outline-none', raisedSurfaceStyle),

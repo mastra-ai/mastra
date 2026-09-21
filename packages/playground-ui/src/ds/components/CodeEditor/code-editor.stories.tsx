@@ -156,7 +156,7 @@ export const WithoutCopyButton: Story = {
   args: {
     data: { message: 'Hello, World!' },
     showCopyButton: false,
-    className: 'w-dropdown-max-height',
+    className: 'w-75',
   },
 };
 

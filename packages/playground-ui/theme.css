@@ -15,7 +15,7 @@
   --surface5: oklch(24.35% 0 0deg / 90%);
   --surface6: oklch(30.92% 0 0deg);
 
-  --background-1: oklch(0 0 0);
+  --background-1: oklch(0.1382 0 0);
   --background-2: oklch(0.1591 0 0);
   --background-3: oklch(0.1913 0 0);
   --gray-1: oklch(0.2178 0 0);
@@ -88,10 +88,10 @@
    *                1.4.11 (3:1 against the fill it sits on) — 3.3:1 here,
    *                3.2:1 in light. Brighter reads as a highlight, not a focus.
    */
-  --border: var(--gray-alpha-2);
-  --border-strong: oklch(94.51% 0 0deg / 18%);
-  --border-hover: oklch(94.51% 0 0deg / 30%);
-  --border-focus: oklch(94.51% 0 0deg / 40%);
+  --border: oklch(var(--fill-tint) 0 0 / 9%);
+  --border-strong: oklch(var(--fill-tint) 0 0 / 19%);
+  --border-hover: oklch(var(--fill-tint) 0 0 / 31%);
+  --border-focus: oklch(var(--fill-tint) 0 0 / 45%);
   --ring: var(--border-focus);
   --destructive: oklch(0.637 0.237 25.331);
   --destructive-foreground: oklch(0 0 0);
@@ -105,15 +105,13 @@
 
   /*
    * Fill ladder — one language for anything sitting ABOVE its parent surface.
-   * Rungs are `--foreground` alphas, so a rung is a relative step and reads the
-   * same on the sidebar, the canvas and a card; `--border` stays a notch below
-   * `--fill` to keep its rim on a filled control.
-   *
-   * The light theme uses its own, much shallower alphas — roughly 45% of these.
-   * A lightness step has to be large to register on a near-black surface and
-   * small to register on a near-white one; matching the dark alphas in light
-   * turns every field into a grey box floating on white. There the hairline
-   * border carries the edge and the fill only tints.
+   * Rungs are alphas of `--fill-tint`, the only part that flips per theme:
+   * light catching a dark surface, shade landing on a light one. Alpha
+   * compositing is linear in sRGB, so one alpha is one step in both themes —
+   * white over near-black spans 242 levels, near-black over near-white 233 —
+   * and a rung reads the same on the sidebar, the canvas and a card. The
+   * boundary ladder takes its alphas from the same tint, `--border` sitting a
+   * notch above `--fill` so its rim survives on a filled control.
    *
    * fill         rest of a filled control (input, button, trigger, chip) and of
    *              a raised container; also press on a transparent base
@@ -124,29 +122,36 @@
    *              disabled fills
    * fill-strong  selection-control press
    */
-  --fill-subtle: var(--gray-alpha-1);
-  --fill: var(--gray-alpha-3);
-  --fill-hover: var(--gray-alpha-4);
-  --fill-active: var(--gray-alpha-5);
-  --fill-strong: var(--gray-alpha-6);
+  --fill-tint: 100%;
+  --fill-subtle: oklch(var(--fill-tint) 0 0 / 4%);
+  --fill: oklch(var(--fill-tint) 0 0 / 6%);
+  --fill-hover: oklch(var(--fill-tint) 0 0 / 9%);
+  --fill-active: oklch(var(--fill-tint) 0 0 / 12%);
+  --fill-strong: oklch(var(--fill-tint) 0 0 / 18%);
 
   /* Opaque twin of `--fill` over `--background`, for a scrolling panel whose
    * sticky parts cannot let rows show through. Keep the two in sync: a panel and
    * a resting control side by side on the canvas must read as one material. */
-  --surface-panel: oklch(0.2645 0 0);
+  --surface-panel: oklch(0.2244 0 0);
 
   --surface-overlay-soft: var(--fill-subtle);
   --surface-overlay-strong: var(--gray-alpha-2);
   /*
    * The one elevation recipe, shared by every raised surface: app frame, card,
-   * popover, dropdown, dialog, floating panel. It carries the rim as well as
-   * the shadow — a 1px ring plus, in dark, a top inset highlight reading as
-   * light catching the edge — so a raised surface never draws its own border.
+   * popover, dropdown, dialog, floating panel, list panel. It carries the rim as
+   * well as the shadow — so a raised surface never draws its own border.
+   *
+   * In dark the rim is a light one: a black ring on a near-black canvas paints
+   * nothing. It sits at 8%, just under `--border`, so the boundary of a surface
+   * is never quieter than a divider drawn inside it, and the extra 4% along the
+   * top edge reads as light catching the lip. Under ~5% the edge disappears and
+   * over ~20% it reads as a frame rather than a shape.
    * Stacked drops at 2/4/8px give the falloff a single large blur cannot.
    */
   --shadow-raised:
-    inset 0 1px 0 oklch(100% 0 0deg / 4%), inset 0 0 0 1px oklch(100% 0 0deg / 3%), 0 0 0 1px oklch(0% 0 0deg / 40%),
-    0 2px 2px oklch(0% 0 0deg / 10%), 0 4px 4px oklch(0% 0 0deg / 10%), 0 8px 8px oklch(0% 0 0deg / 10%);
+    inset 0 1px 0 oklch(100% 0 0deg / 12%), inset 0 0 0 1px oklch(100% 0 0deg / 8%),
+    0 0 0 1px oklch(0% 0 0deg / 10%), 0 2px 2px oklch(0% 0 0deg / 10%), 0 4px 4px oklch(0% 0 0deg / 10%),
+    0 8px 8px oklch(0% 0 0deg / 10%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -272,10 +277,6 @@ html.light {
   --neutral5: oklch(0.208 0 0);
   --neutral6: oklch(0.13 0 0);
 
-  --border: var(--gray-alpha-3);
-  --border-strong: oklch(20.5% 0 0deg / 20%);
-  --border-hover: oklch(20.5% 0 0deg / 32%);
-  --border-focus: oklch(20.5% 0 0deg / 50%);
   --destructive: oklch(0.47 0.19 27.325);
   --destructive-foreground: oklch(1 0 0);
 
@@ -284,15 +285,11 @@ html.light {
   --overlay: oklch(20.8% 0 0deg / 45%);
   --border1: oklch(20.8% 0 0deg / 10%);
   --border2: oklch(20.8% 0 0deg / 16%);
-  /* Shallow light rungs: a field must stay near-white on a near-white canvas,
-   * or it reads as a grey box. Same roles, ~45% of the dark alphas. */
-  --fill-subtle: oklch(20.5% 0 0deg / 2.5%);
-  --fill: oklch(20.5% 0 0deg / 4.5%);
-  --fill-hover: oklch(20.5% 0 0deg / 7%);
-  --fill-active: oklch(20.5% 0 0deg / 10%);
-  --fill-strong: oklch(20.5% 0 0deg / 16%);
+  /* Shade instead of light, at the same alphas: the whole fill and boundary
+   * ladder re-resolves from here. */
+  --fill-tint: 20.5%;
   /* Opaque twin of the light `--fill` over `--background`. */
-  --surface-panel: oklch(0.9545 0 0);
+  --surface-panel: oklch(0.9442 0 0);
   /* No inset highlight in light: the edge reads from the ring and the drops. */
   --shadow-raised:
     0 0 0 1px oklch(0% 0 0deg / 6%), 0 1px 2px -1px oklch(0% 0 0deg / 6%), 0 2px 4px oklch(0% 0 0deg / 4%);
@@ -438,11 +435,9 @@ html.light {
   --height-table-header: 28px;
   --height-table-row: 40px;
   --height-table-row-small: 32px;
-  --height-badge-default: 20px;
   --height-avatar-sm: 24px;
   --height-avatar-md: 32px;
   --height-avatar-lg: 40px;
-  --height-dropdown-max-height: 300px;
 
   --max-height-icon-default: 16px;
   --max-height-icon-lg: 20px;
@@ -452,11 +447,10 @@ html.light {
   --max-height-table-header: 28px;
   --max-height-table-row: 40px;
   --max-height-table-row-small: 32px;
-  --max-height-badge-default: 20px;
   --max-height-avatar-sm: 24px;
   --max-height-avatar-md: 32px;
   --max-height-avatar-lg: 40px;
-  --max-height-dropdown-max-height: 300px;
+  --max-height-dropdown: 300px;
 
   --min-height-header-default: 40px;
 
@@ -469,11 +463,9 @@ html.light {
   --width-table-header: 28px;
   --width-table-row: 40px;
   --width-table-row-small: 32px;
-  --width-badge-default: 20px;
   --width-avatar-sm: 24px;
   --width-avatar-md: 32px;
   --width-avatar-lg: 40px;
-  --width-dropdown-max-height: 300px;
 
   --container-icon-default: 16px;
   --container-icon-lg: 20px;
@@ -483,11 +475,9 @@ html.light {
   --container-table-header: 28px;
   --container-table-row: 40px;
   --container-table-row-small: 32px;
-  --container-badge-default: 20px;
   --container-avatar-sm: 24px;
   --container-avatar-md: 32px;
   --container-avatar-lg: 40px;
-  --container-dropdown-max-height: 300px;
 
   --color-surface1: var(--surface1);
   --color-surface2: var(--surface2);

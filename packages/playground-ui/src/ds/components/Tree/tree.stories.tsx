@@ -18,7 +18,7 @@ type Story = StoryObj<typeof Tree>;
 
 export const Default: Story = {
   render: () => (
-    <div className="w-dropdown-max-height">
+    <div className="w-75">
       <Tree>
         <Tree.Folder defaultOpen>
           <Tree.FolderTrigger>
@@ -85,7 +85,7 @@ function WithSelectionExample() {
   const [selected, setSelected] = useState('src/index.ts');
 
   return (
-    <div className="w-dropdown-max-height">
+    <div className="w-75">
       <Tree selectedId={selected} onSelect={setSelected}>
         <Tree.Folder defaultOpen>
           <Tree.FolderTrigger>
@@ -127,7 +127,7 @@ export const WithSelection: Story = {
 export const WithActions: Story = {
   render: () => (
     <TooltipProvider>
-      <div className="w-dropdown-max-height">
+      <div className="w-75">
         <Tree>
           <Tree.Folder defaultOpen>
             <Tree.FolderTrigger
@@ -190,7 +190,7 @@ export const WithActions: Story = {
 
 export const CustomContent: Story = {
   render: () => (
-    <div className="w-dropdown-max-height">
+    <div className="w-75">
       <Tree>
         <Tree.Folder defaultOpen>
           <Tree.FolderTrigger>
@@ -250,7 +250,7 @@ function WithInlineCreationExample() {
 
   return (
     <TooltipProvider>
-      <div className="w-dropdown-max-height">
+      <div className="w-75">
         <Tree>
           <Tree.Folder defaultOpen>
             <Tree.FolderTrigger

@@ -63,7 +63,7 @@ const deferredSemanticTokens = [
   'selected',
 ] as const;
 
-const darkAliases = {
+const semanticAliases = {
   background: 'background-2',
   sidebar: 'background-1',
   card: 'background-3',
@@ -72,13 +72,7 @@ const darkAliases = {
   foreground: 'gray-10',
   'muted-foreground': 'gray-8',
   placeholder: 'gray-7',
-  border: 'gray-alpha-2',
   ring: 'border-focus',
-} as const;
-
-const lightAliases = {
-  ...darkAliases,
-  border: 'gray-alpha-3',
 } as const;
 
 const parseVariables = (css: string) => {
@@ -107,8 +101,10 @@ const resolveToken = (token: string, variables: Map<string, string>, seen: strin
   if (seen.includes(token)) throw new Error(`Token cycle: ${[...seen, token].join(' -> ')}`);
   const value = variables.get(token);
   if (!value) throw new Error(`Missing token: ${token}`);
-  const reference = value.match(/^var\(--([\w-]+)\)$/)?.[1];
-  return reference ? resolveToken(reference, variables, [...seen, token]) : value;
+
+  return value.replace(/var\(--([\w-]+)\)/g, (_, reference: string) =>
+    resolveToken(reference, variables, [...seen, token]),
+  );
 };
 
 const oklchLightness = (value: string) => {
@@ -158,7 +154,7 @@ describe('theme.css export', () => {
   it('exposes the background and gray foundation scales', () => {
     const [darkTheme, lightTheme] = themeCss.split('html.light');
     const darkColors = [
-      ['background-1', 'oklch(0 0 0)'],
+      ['background-1', 'oklch(0.1382 0 0)'],
       ['background-2', 'oklch(0.1591 0 0)'],
       ['background-3', 'oklch(0.1913 0 0)'],
       ['gray-1', 'oklch(0.2178 0 0)'],
@@ -220,11 +216,8 @@ describe('theme.css export', () => {
   it('defines the approved semantic alias graph in both themes', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
 
-    for (const [token, reference] of Object.entries(darkAliases)) {
+    for (const [token, reference] of Object.entries(semanticAliases)) {
       expect(darkVariables.get(token)).toBe(`var(--${reference})`);
-    }
-
-    for (const [token, reference] of Object.entries(lightAliases)) {
       expect(lightVariables.get(token)).toBe(`var(--${reference})`);
     }
 
@@ -233,6 +226,20 @@ describe('theme.css export', () => {
       expect(() => resolveToken(token, lightVariables)).not.toThrow();
       expect(themeCss).toContain(`--color-${token}: var(--${token});`);
     }
+  });
+
+  it('declares one interaction ladder for both themes, flipped by the tint alone', () => {
+    const [darkTheme, lightTheme] = themeCss.split('html.light');
+    const ladder = ['fill-subtle', 'fill', 'fill-hover', 'fill-active', 'fill-strong'];
+    const boundaries = ['border', 'border-strong', 'border-hover', 'border-focus'];
+
+    for (const token of [...ladder, ...boundaries]) {
+      expect(darkTheme).toContain(`--${token}: oklch(var(--fill-tint)`);
+      expect(lightTheme).not.toContain(`--${token}:`);
+    }
+
+    expect(darkTheme).toContain('--fill-tint: 100%');
+    expect(lightTheme).toContain('--fill-tint: 20.5%');
   });
 
   it('exports semantic tokens to TypeScript consumers', () => {

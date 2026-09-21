@@ -15,7 +15,7 @@ type Story = StoryObj<typeof Entity>;
 
 export const Default: Story = {
   render: () => (
-    <Entity className="w-dropdown-max-height">
+    <Entity className="w-75">
       <EntityIcon>
         <Bot />
       </EntityIcon>
@@ -29,7 +29,7 @@ export const Default: Story = {
 
 export const Clickable: Story = {
   render: () => (
-    <Entity className="w-dropdown-max-height" onClick={() => console.log('Entity clicked')}>
+    <Entity className="w-75" onClick={() => console.log('Entity clicked')}>
       <EntityIcon>
         <Workflow />
       </EntityIcon>
@@ -61,7 +61,7 @@ export const WithCustomContent: Story = {
 
 export const EntityList: Story = {
   render: () => (
-    <div className="w-dropdown-max-height flex flex-col gap-2">
+    <div className="w-75 flex flex-col gap-2">
       <Entity onClick={() => console.log('Agent 1 clicked')}>
         <EntityIcon>
           <Bot />

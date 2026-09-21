@@ -2,7 +2,6 @@ import { extendTailwindMerge } from 'tailwind-merge';
 import * as Tokens from '../ds/tokens';
 
 const colorKeys = Object.keys({ ...Tokens.Colors, ...Tokens.BorderColors });
-const spacingKeys = Object.keys(Tokens.Spacings);
 const fontSizeKeys = Object.keys(Tokens.FontSizes);
 const lineHeightKeys = Object.keys(Tokens.LineHeights);
 const borderRadiusKeys = Object.keys(Tokens.BorderRadius);
@@ -14,7 +13,10 @@ export const twMerge = extendTailwindMerge({
   extend: {
     theme: {
       color: colorKeys,
-      spacing: spacingKeys,
+      // Numeric rungs come off one multiplier, which tailwind-merge already
+      // understands; only the named rungs (`form-md`, `avatar-lg`) need listing,
+      // or `h-auto h-form-md` would both survive a merge.
+      spacing: sizeKeys,
       radius: borderRadiusKeys,
       leading: lineHeightKeys,
       shadow: shadowKeys,

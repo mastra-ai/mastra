@@ -100,7 +100,7 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                 <Txt variant="caption">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
               </div>
             ) : (
-              <div className="max-h-dropdown-max-height flex flex-col gap-1 overflow-y-auto">
+              <div className="max-h-dropdown flex flex-col gap-1 overflow-y-auto">
                 {filtered.map(block => (
                   <button
                     key={block.id}

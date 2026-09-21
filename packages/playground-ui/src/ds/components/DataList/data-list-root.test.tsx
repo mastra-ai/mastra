@@ -44,7 +44,6 @@ describe('DataListRoot', () => {
       expect(grid).not.toBe(container.firstElementChild);
       expect(grid?.className).not.toContain('overflow-auto');
       expect(container.firstElementChild?.className).toContain('rounded-xl');
-      expect(container.firstElementChild?.className).toContain('bg-surface-panel');
       expect(container.firstElementChild?.className).toContain('self-start');
       expect(container.firstElementChild?.className).toContain('max-h-full');
       expect(grid?.className).toContain('gap-y-px');
@@ -63,7 +62,7 @@ describe('DataListRoot', () => {
 
       const root = container.firstElementChild as HTMLElement;
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(root.className).not.toContain('bg-surface-panel');
+      expect(root.className).not.toContain('shadow-raised');
       expect(root.className).toContain('rounded-xl');
       expect(root.getAttribute('variant')).toBeNull();
       expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--background)');
@@ -78,7 +77,7 @@ describe('DataListRoot', () => {
       );
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--surface-panel)');
+      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--card)');
       expect(grid?.className).toContain('[&_.data-list-top]:bg-(--data-list-background)');
       expect(grid?.className).toContain('[&_.data-list-row>.data-list-sticky-start]:bg-background');
       expect(grid?.className).not.toMatch(/hover:bg-|focus-within\]:bg-/);

@@ -46,6 +46,6 @@ describe('menuPopupClass', () => {
   it('uses the shared surface and dropdown max-height token', () => {
     expect(menuPopupClass).toContain('bg-card');
     expect(menuPopupClass).toContain('z-50');
-    expect(menuPopupClass).toContain('var(--max-height-dropdown-max-height)');
+    expect(menuPopupClass).toContain('var(--max-height-dropdown)');
   });
 });

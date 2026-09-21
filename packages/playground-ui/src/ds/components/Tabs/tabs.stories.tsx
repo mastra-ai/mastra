@@ -196,7 +196,7 @@ export const LegacyLineFallback: Story = {
 
 export const TwoTabs: Story = {
   render: () => (
-    <Tabs defaultTab="input" className="w-dropdown-max-height">
+    <Tabs defaultTab="input" className="w-75">
       <TabList>
         <Tab value="input">Input</Tab>
         <Tab value="output">Output</Tab>

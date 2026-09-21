@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
 import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 /**
@@ -18,7 +19,8 @@ export type DataListFit = 'content' | 'container';
 /**
  * Surface treatment of the list.
  *
- * - `default`: rows sit on a rounded `--surface-panel` panel.
+ * - `default`: rows sit as wells inside a raised card panel — the same material
+ *   and elevation as a card, a popover or a settings container.
  * - `light`: no panel behind the rows; rows sit directly on the page.
  */
 export type DataListVariant = 'default' | 'light';
@@ -28,7 +30,7 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   columns: string;
   /** Grid width behavior; defaults to `content` (existing horizontal-scroll sizing). */
   fit?: DataListFit;
-  /** Surface treatment; defaults to `default` (rows on a `--surface-panel` panel). */
+  /** Surface treatment; defaults to `default` (rows on a raised card panel). */
   variant?: DataListVariant;
   /**
    * Edge fades from the underlying ScrollArea. DataList keeps the top fade off
@@ -92,14 +94,14 @@ const dataListGridStyles = [
 ] as const;
 
 const dataListVariantClasses: Record<DataListVariant, string> = {
-  default: 'bg-surface-panel',
+  default: raisedSurfaceStyle,
   light: '',
 };
 
 // The sticky header reads this so it stays opaque while scrolling: the panel
-// color by default, the page surface when there is no panel.
+// material by default, the page surface when there is no panel.
 const dataListVariantBackground: Record<DataListVariant, string> = {
-  default: 'var(--surface-panel)',
+  default: 'var(--card)',
   light: 'var(--background)',
 };
 

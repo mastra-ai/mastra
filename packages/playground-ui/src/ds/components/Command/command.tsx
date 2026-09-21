@@ -155,7 +155,7 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
       <CommandPrimitive.List
         className={cn(
           'outline-none focus:outline-none focus-visible:outline-none',
-          scrollArea ? 'overflow-visible' : 'max-h-dropdown-max-height overflow-x-hidden overflow-y-auto',
+          scrollArea ? 'overflow-visible' : 'max-h-dropdown overflow-x-hidden overflow-y-auto',
           menu.containerClassName,
           className,
         )}

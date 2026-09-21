@@ -3,7 +3,6 @@ import { Txt } from '../components/Txt/Txt';
 import { BorderRadius } from './borders';
 import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';
 import { Sizes } from './sizes';
-import type { Spacing } from './spacings';
 
 const meta: Meta = {
   title: 'Foundations/Shape',
@@ -32,14 +31,17 @@ const radiusNotes: Record<RadiusToken, string> = {
   xl: 'Popover, dialog, floating panel',
 };
 
-// Rungs typed against the spacing mirror: a representative ladder, not the
-// whole multiplier — `--spacing` generates every step between them.
-const spacingRungs = ['1', '2', '3', '4', '6', '8', '12', '16', '24', '32'] as const satisfies readonly Spacing[];
+// A representative ladder, not the whole multiplier — `--spacing` generates
+// every step between and beyond these.
+const spacingRungs = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32] as const;
 
 const sizeKeys = Object.keys(Sizes) as SizeToken[];
 const iconKeys = sizeKeys.filter(key => key.startsWith('icon-'));
 const formKeys = sizeKeys.filter(key => key.startsWith('form-'));
-const elementKeys = sizeKeys.filter(key => !key.startsWith('icon-') && !key.startsWith('form-'));
+// `dropdown` caps a popup rather than sizing a control, so it sits in the note.
+const elementKeys = sizeKeys.filter(
+  key => !key.startsWith('icon-') && !key.startsWith('form-') && key !== 'dropdown',
+);
 
 // A form rung is declared as a named spacing so it can size a height and a
 // width from one token; everything else is declared as a height.
@@ -110,7 +112,7 @@ export const ShapeFoundations: Story = {
 
       <FoundationSection
         label="Sizes"
-        description="Named heights, so every control in a row lands on the same baseline instead of a guessed pixel value."
+        description="Named heights, so every control in a row lands on the same baseline instead of a guessed pixel value. --max-height-dropdown (300px) is the one constraint here rather than a height: it caps how far a popup may grow."
       >
         <SpecimenGroup label="Icons">
           <div className="flex flex-wrap items-end gap-6">

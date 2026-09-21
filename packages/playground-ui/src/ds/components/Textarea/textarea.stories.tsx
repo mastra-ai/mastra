@@ -31,13 +31,13 @@ type Story = StoryObj<typeof Textarea>;
 export const Default: Story = {
   args: {
     placeholder: 'Type something...',
-    className: 'w-dropdown-max-height',
+    className: 'w-75',
   },
 };
 
 export const Variants: Story = {
   render: () => (
-    <div className="w-dropdown-max-height flex flex-col gap-3">
+    <div className="w-75 flex flex-col gap-3">
       <Textarea variant="default" placeholder="default" />
       <Textarea variant="outline" placeholder="outline" />
       <Textarea variant="unstyled" placeholder="unstyled" />
@@ -47,7 +47,7 @@ export const Variants: Story = {
 
 export const Sizes: Story = {
   render: () => (
-    <div className="w-dropdown-max-height flex flex-col gap-3">
+    <div className="w-75 flex flex-col gap-3">
       <Textarea size="xs" placeholder="xs" />
       <Textarea size="sm" placeholder="sm" />
       <Textarea size="md" placeholder="md" />
@@ -60,7 +60,7 @@ export const Error: Story = {
   args: {
     placeholder: 'Invalid input...',
     error: true,
-    className: 'w-dropdown-max-height',
+    className: 'w-75',
   },
 };
 
@@ -68,7 +68,7 @@ export const Disabled: Story = {
   args: {
     placeholder: 'Disabled...',
     disabled: true,
-    className: 'w-dropdown-max-height',
+    className: 'w-75',
   },
 };
 

@@ -30,7 +30,7 @@ export interface TheadProps {
 export const Thead = ({ className, children }: TheadProps) => {
   return (
     <thead>
-      <tr className={cn('h-table-header border-b border-border1 bg-surface2/80', className)}>{children}</tr>
+      <tr className={cn('h-table-header border-b border-border bg-card', className)}>{children}</tr>
     </thead>
   );
 };

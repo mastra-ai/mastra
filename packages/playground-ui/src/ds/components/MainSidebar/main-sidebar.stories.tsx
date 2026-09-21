@@ -301,7 +301,7 @@ const StudioSidebarBody = () => {
         {state !== 'collapsed' && (
           <>
             <hr className="bg-border1 mx-6 my-2 h-px border-0" />
-            <span className="bg-sidebar-nav-active text-meta dark:text-foreground ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-sans leading-none text-black/80">
+            <span className="bg-fill text-meta dark:text-foreground ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-sans leading-none text-black/80">
               v0.0.0
             </span>
           </>

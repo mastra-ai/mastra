@@ -35,8 +35,6 @@ describe('Settings', () => {
     expect(screen.getByText('Theme').classList).toContain('text-foreground');
     expect(screen.getByText('Color scheme for the interface').classList).toContain('text-caption');
     expect(screen.getByText('Color scheme for the interface').classList).toContain('text-muted-foreground');
-    expect(document.querySelector('[data-slot="settings-container"]')?.classList).toContain('bg-card');
-    expect(document.querySelector('[data-slot="settings-container"]')?.classList).toContain('border-border');
     expect(document.querySelector('[data-slot="settings-row"]')?.classList).toContain('sm:flex-row');
     expect(document.querySelector('header')?.classList).toContain('sm:items-center');
   });

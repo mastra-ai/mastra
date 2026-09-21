@@ -290,7 +290,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
             showCopyButton={false}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? fieldErrorId('provider-options') : undefined}
-            className="h-dropdown-max-height"
+            className="h-75"
           />
           {error && <FieldBlock.ErrorMsg name="provider-options">{error}</FieldBlock.ErrorMsg>}
         </div>
