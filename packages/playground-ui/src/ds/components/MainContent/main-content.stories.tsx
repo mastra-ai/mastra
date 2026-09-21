@@ -22,7 +22,7 @@ export const Default: Story = {
       </PageHeader>
       <MainContentContent>
         <div className="p-4">
-          <p className="text-neutral5">Main content area</p>
+          <p className="text-foreground">Main content area</p>
         </div>
       </MainContentContent>
     </MainContentLayout>
@@ -37,8 +37,8 @@ export const Centered: Story = {
       </PageHeader>
       <MainContentContent isCentered>
         <div className="text-center">
-          <p className="text-neutral5 text-header-sm">No items found</p>
-          <p className="text-neutral3 text-ui-md">Create your first item to get started</p>
+          <p className="text-foreground text-header-sm">No items found</p>
+          <p className="text-muted-foreground text-ui-md">Create your first item to get started</p>
         </div>
       </MainContentContent>
     </MainContentLayout>
@@ -53,10 +53,10 @@ export const Divided: Story = {
       </PageHeader>
       <MainContentContent isDivided>
         <div className="border-border1 border-r p-4">
-          <p className="text-neutral5">Left column content</p>
+          <p className="text-foreground">Left column content</p>
         </div>
         <div className="p-4">
-          <p className="text-neutral5">Right column content</p>
+          <p className="text-foreground">Right column content</p>
         </div>
       </MainContentContent>
     </MainContentLayout>
@@ -71,10 +71,10 @@ export const WithLeftServiceColumn: Story = {
       </PageHeader>
       <MainContentContent hasLeftServiceColumn>
         <div className="border-border1 bg-surface2 border-r p-2">
-          <p className="text-neutral3 text-ui-md">Nav</p>
+          <p className="text-muted-foreground text-ui-md">Nav</p>
         </div>
         <div className="p-4">
-          <p className="text-neutral5">Main content</p>
+          <p className="text-foreground">Main content</p>
         </div>
       </MainContentContent>
     </MainContentLayout>
@@ -89,13 +89,13 @@ export const DividedWithServiceColumn: Story = {
       </PageHeader>
       <MainContentContent isDivided hasLeftServiceColumn>
         <div className="border-border1 bg-surface2 border-r p-2">
-          <p className="text-neutral3 text-ui-md">Nav</p>
+          <p className="text-muted-foreground text-ui-md">Nav</p>
         </div>
         <div className="border-border1 border-r p-4">
-          <p className="text-neutral5">Center column</p>
+          <p className="text-foreground">Center column</p>
         </div>
         <div className="p-4">
-          <p className="text-neutral5">Right column</p>
+          <p className="text-foreground">Right column</p>
         </div>
       </MainContentContent>
     </MainContentLayout>

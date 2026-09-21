@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 // Same rendering as Combobox items: no visible control, a trailing check when selected.
 // Focus is on the item itself (roving via [data-pick-multi-item]), so highlight rides on :focus.
-const pickMultiItemClass = cn(menuItemClass, 'min-w-0 focus:bg-neutral6/5 focus:text-neutral6');
+const pickMultiItemClass = cn(menuItemClass, 'min-w-0 focus:bg-neutral6/5 focus:text-foreground');
 
 function PickMultiItem({
   role,
@@ -102,7 +102,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
 
       {field.isLoading ? (
         <div className={cn(menuEmptyClass, 'm-1')}>
-          <Spinner size="sm" className="text-neutral3 size-3" />
+          <Spinner size="sm" className="text-muted-foreground size-3" />
           Loading options…
         </div>
       ) : filteredOptions.length === 0 ? (

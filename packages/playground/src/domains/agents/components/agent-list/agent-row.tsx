@@ -41,7 +41,7 @@ export function AgentRow({ agent, rowProps }: AgentRowProps) {
         tabIndex={-1}
         onClick={stopPropagation}
       >
-        <EntityList.Cell className="text-neutral4 min-w-0 overflow-visible text-left">
+        <EntityList.Cell className="text-muted-foreground min-w-0 overflow-visible text-left">
           <span title={agent.name} className="block max-w-full min-w-0 overflow-clip text-ellipsis whitespace-nowrap">
             {agent.name}
           </span>

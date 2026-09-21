@@ -5,6 +5,7 @@ import * as React from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
+import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -14,7 +15,7 @@ const Command = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <CommandPrimitive
     ref={ref}
-    className={cn('flex size-full flex-col overflow-hidden rounded-xl bg-surface3 text-neutral4', className)}
+    className={cn('flex size-full flex-col overflow-hidden rounded-xl bg-surface3 text-muted-foreground', className)}
     {...props}
   />
 ));
@@ -77,7 +78,7 @@ const CommandDialog = ({
           filter={filter}
           onKeyDown={handleKeyDown}
           className={cn(
-            '[&_[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:text-neutral3',
+            '[&_[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:text-muted-foreground',
             '[&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 **:[[cmdk-group]]:px-2',
             '[&_[data-slot=command-input-wrapper]_svg]:size-5',
             '**:[[cmdk-input]]:h-12',
@@ -104,12 +105,12 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       data-slot="command-input-wrapper"
       className={cn('flex items-center border-b border-border1 px-3', transitions.colors, wrapperClassName)}
     >
-      <Search className={cn('mr-2 size-4 shrink-0 text-neutral3', transitions.colors)} />
+      <Search className={cn('mr-2 size-4 shrink-0 text-muted-foreground', transitions.colors)} />
       <CommandPrimitive.Input
         ref={ref}
         className={cn(
-          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-ui-smd leading-ui-sm text-neutral6',
-          'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
+          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-ui-smd leading-ui-sm text-foreground',
+          'placeholder:text-placeholder disabled:cursor-not-allowed disabled:opacity-50',
           'outline-none focus:outline-none focus-visible:outline-none',
           transitions.colors,
           className,
@@ -117,7 +118,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
         {...props}
       />
       {rightSlot && (
-        <div data-slot="command-input-right-slot" className="text-neutral3 ml-2 flex shrink-0 items-center">
+        <div data-slot="command-input-right-slot" className="text-muted-foreground ml-2 flex shrink-0 items-center">
           {rightSlot}
         </div>
       )}
@@ -131,23 +132,40 @@ type CommandListProps = React.ComponentPropsWithoutRef<typeof CommandPrimitive.L
   scrollAreaClassName?: string;
   scrollAreaViewportClassName?: string;
   scrollAreaMask?: ScrollAreaMask;
+  /** Extra classes for the travelling hover surface (e.g. a different radius). */
+  highlightClassName?: string;
 };
 
 const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.List>, CommandListProps>(
   (
-    { className, scrollArea = false, scrollAreaClassName, scrollAreaViewportClassName, scrollAreaMask, ...props },
+    {
+      className,
+      children,
+      scrollArea = false,
+      scrollAreaClassName,
+      scrollAreaViewportClassName,
+      scrollAreaMask,
+      highlightClassName,
+      ...props
+    },
     ref,
   ) => {
+    const menu = useFluidMenu<HTMLDivElement>({ activeAttr: 'data-selected' });
     const list = (
       <CommandPrimitive.List
-        ref={ref}
         className={cn(
           'outline-none focus:outline-none focus-visible:outline-none',
           scrollArea ? 'overflow-visible' : 'max-h-dropdown-max-height overflow-x-hidden overflow-y-auto',
+          menu.containerClassName,
           className,
         )}
         {...props}
-      />
+        {...menu.getContainerProps(props, ref)}
+      >
+        <FluidMenuItems menu={menu} className={highlightClassName}>
+          {children}
+        </FluidMenuItems>
+      </CommandPrimitive.List>
     );
 
     if (!scrollArea) return list;
@@ -169,7 +187,7 @@ const CommandEmpty = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Empty>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
 >((props, ref) => (
-  <CommandPrimitive.Empty ref={ref} className="text-ui-smd text-neutral3 py-6 text-center" {...props} />
+  <CommandPrimitive.Empty ref={ref} className="text-ui-smd text-muted-foreground py-6 text-center" {...props} />
 ));
 CommandEmpty.displayName = CommandPrimitive.Empty.displayName;
 
@@ -180,8 +198,8 @@ const CommandGroup = React.forwardRef<
   <CommandPrimitive.Group
     ref={ref}
     className={cn(
-      'overflow-hidden p-1 text-neutral4',
-      '[&_[cmdk-group-heading]]:text-ui-xs [&_[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:tracking-wider **:[[cmdk-group-heading]]:text-neutral3 **:[[cmdk-group-heading]]:uppercase',
+      'overflow-hidden p-1 text-muted-foreground',
+      '[&_[cmdk-group-heading]]:text-ui-xs [&_[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:tracking-wider **:[[cmdk-group-heading]]:text-muted-foreground **:[[cmdk-group-heading]]:uppercase',
       className,
     )}
     {...props}
@@ -202,14 +220,15 @@ const CommandItem = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
 >(({ className, ...props }, ref) => (
   <CommandPrimitive.Item
-    ref={ref}
+    ref={useFluidMenuItemRef(ref)}
     className={cn(
-      'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-ui-smd leading-ui-sm text-neutral4 select-none',
+      'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-ui-smd leading-ui-sm text-muted-foreground select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
       transitions.colors,
-      'data-[selected=true]:bg-surface4 data-[selected=true]:text-neutral6',
+      // The row background is the travelling FluidMenuItems highlight in CommandList.
+      'data-[selected=true]:text-foreground',
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
-      '[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-neutral3 data-[selected=true]:[&_svg]:text-neutral6',
+      '[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground data-[selected=true]:[&_svg]:text-foreground',
       className,
     )}
     {...props}
@@ -218,7 +237,12 @@ const CommandItem = React.forwardRef<
 CommandItem.displayName = CommandPrimitive.Item.displayName;
 
 const CommandShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
-  return <span className={cn('ml-auto text-ui-xs tracking-wider text-neutral3 tabular-nums', className)} {...props} />;
+  return (
+    <span
+      className={cn('ml-auto text-ui-xs tracking-wider text-muted-foreground tabular-nums', className)}
+      {...props}
+    />
+  );
 };
 CommandShortcut.displayName = 'CommandShortcut';
 

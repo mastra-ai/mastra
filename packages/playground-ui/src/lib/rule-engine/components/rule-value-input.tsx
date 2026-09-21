@@ -87,7 +87,10 @@ const BooleanValueInput: React.FC<BaseInputProps> = ({ value, onChange, classNam
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="sm" className="text-neutral3 pointer-events-none absolute top-1/2 left-2 z-10 -translate-y-1/2">
+      <Icon
+        size="sm"
+        className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 z-10 -translate-y-1/2"
+      >
         <ToggleLeft />
       </Icon>
       <Select value={stringValue} onValueChange={handleChange}>
@@ -124,7 +127,7 @@ const NumberValueInput: React.FC<BaseInputProps> = ({ value, onChange, placehold
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="sm" className="text-neutral3 pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
+      <Icon size="sm" className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
         <Hash />
       </Icon>
       <Input
@@ -154,7 +157,7 @@ const TextValueInput: React.FC<BaseInputProps> = ({ value, onChange, placeholder
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="sm" className="text-neutral3 pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
+      <Icon size="sm" className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
         <Type />
       </Icon>
       <Input

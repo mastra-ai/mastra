@@ -16,6 +16,8 @@ export type Step = Pick<
   | 'tripwire'
   | 'startedAt'
   | 'endedAt'
+  | 'suspendedAt'
+  | 'resumedAt'
   | 'output'
   | 'suspendOutput'
   | 'suspendPayload'
@@ -36,6 +38,8 @@ const toRunStep = (step: WorkflowRunStreamStep): Step => ({
   tripwire: step.tripwire,
   startedAt: step.startedAt,
   endedAt: step.endedAt,
+  suspendedAt: step.suspendedAt,
+  resumedAt: step.resumedAt,
   output: step.output,
   input: step.payload,
   resumeData: step.resumePayload,

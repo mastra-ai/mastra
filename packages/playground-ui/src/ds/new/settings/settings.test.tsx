@@ -2,11 +2,45 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SettingsContainer, SettingsGroup, SettingsHeader, SettingsRow, SettingsTitle } from './index';
+import {
+  SettingsContainer,
+  SettingsDescription,
+  SettingsGroup,
+  SettingsHeader,
+  SettingsRow,
+  SettingsTitle,
+} from './index';
 
 afterEach(cleanup);
 
 describe('Settings', () => {
+  it('uses the semantic card surface and Marvin text hierarchy', () => {
+    render(
+      <SettingsGroup>
+        <SettingsHeader action={<button type="button">Save</button>}>
+          <SettingsTitle>General</SettingsTitle>
+          <SettingsDescription>Stored in this browser.</SettingsDescription>
+        </SettingsHeader>
+        <SettingsContainer>
+          <SettingsRow label="Theme" description="Color scheme for the interface" />
+        </SettingsContainer>
+      </SettingsGroup>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-header-sm');
+    expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-foreground');
+    expect(screen.getByText('Stored in this browser.').classList).toContain('text-ui-sm');
+    expect(screen.getByText('Stored in this browser.').classList).toContain('text-muted-foreground');
+    expect(screen.getByText('Theme').classList).toContain('text-ui-md');
+    expect(screen.getByText('Theme').classList).toContain('text-foreground');
+    expect(screen.getByText('Color scheme for the interface').classList).toContain('text-ui-sm');
+    expect(screen.getByText('Color scheme for the interface').classList).toContain('text-muted-foreground');
+    expect(document.querySelector('[data-slot="settings-container"]')?.classList).toContain('bg-card');
+    expect(document.querySelector('[data-slot="settings-container"]')?.classList).toContain('border-border');
+    expect(document.querySelector('[data-slot="settings-row"]')?.classList).toContain('sm:flex-row');
+    expect(document.querySelector('header')?.classList).toContain('sm:items-center');
+  });
+
   describe('when multiple groups render on the same page', () => {
     it('names each group with its own heading', () => {
       render(

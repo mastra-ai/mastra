@@ -10,6 +10,7 @@ import { useCreateFactoryFromDraft } from '../../hooks/useCreateFactoryFromDraft
 import { factoryHomePath } from '../../services/factoryPaths';
 import { connectGithub, manageGithubConnection } from '../../services/github';
 import { useKeyDown } from '../../../../lib/hooks';
+import { CreateFactoryJiraRows } from './CreateFactoryJiraRows';
 import { CreateFactoryLinearRows } from './CreateFactoryLinearRows';
 import { CreateFactoryModelStep } from './CreateFactoryModelStep';
 import { CreateFactoryNameRows } from './CreateFactoryNameRows';
@@ -108,7 +109,7 @@ export function CreateFactoryWizard() {
         value={value}
         onValueChange={nextValue => setTyped({ step, value: nextValue })}
         onBack={picksSettled ? undefined : goBack}
-        onSkip={step === 'project-management' ? () => void flow.skipLinear() : undefined}
+        onSkip={step === 'project-management' ? () => void flow.skipProjectManagement() : undefined}
       >
         {step === 'name' && <CreateFactoryNameRows name={value} onSubmit={flow.startVcs} />}
         {step === 'vcs' && (
@@ -128,15 +129,21 @@ export function CreateFactoryWizard() {
           />
         )}
         {step === 'project-management' && (
-          <CreateFactoryLinearRows
-            query={value}
-            onConnect={() => {
-              flow.persistBeforeRedirect(factoryId);
-              connectLinear(baseUrl);
-            }}
-            onSelectProject={projectId => void flow.chooseLinearProject(projectId)}
-            onSkip={() => void flow.skipLinear()}
-          />
+          <>
+            <CreateFactoryLinearRows
+              query={value}
+              onConnect={() => {
+                flow.persistBeforeRedirect(factoryId);
+                connectLinear(baseUrl);
+              }}
+              onSelectProject={projectId => void flow.chooseLinearProject(projectId)}
+              onSkip={() => void flow.skipProjectManagement()}
+            />
+            <CreateFactoryJiraRows
+              query={value}
+              onSelectProject={projectId => void flow.chooseJiraProject(projectId)}
+            />
+          </>
         )}
         {step === 'model-provider' && (
           <CreateFactoryModelStep

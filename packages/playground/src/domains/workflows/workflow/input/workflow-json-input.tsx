@@ -1,4 +1,5 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import type { WorkflowInputDataProps } from '../workflow-input-data';
 import { FormSubmitRow } from '@/lib/form/components/form-submit-row';
 
@@ -20,16 +21,24 @@ export function WorkflowJsonInput({
 }: WorkflowJsonInputProps) {
   return (
     <div className="flex flex-col gap-4">
+      <CodeEditor
+        value={value}
+        onChange={onChange}
+        editable={!isSubmitLoading}
+        aria-invalid={errors.length > 0 ? true : undefined}
+        aria-describedby={errors.length > 0 ? fieldErrorId('workflow-json-input') : undefined}
+      />
       {errors.length > 0 && (
-        <div role="alert" className="border-accent2/30 bg-accent2/5 text-ui-sm text-accent2 rounded-lg border p-3">
-          <ul className="list-inside list-disc">
-            {errors.map((error, index) => (
-              <li key={index}>{error}</li>
+        <FieldBlock.ErrorMsg name="workflow-json-input">
+          <span className="space-y-1">
+            {errors.map(error => (
+              <span key={error} className="block">
+                {error}
+              </span>
             ))}
-          </ul>
-        </div>
+          </span>
+        </FieldBlock.ErrorMsg>
       )}
-      <CodeEditor value={value} onChange={onChange} editable={!isSubmitLoading} />
       {children}
       <FormSubmitRow {...submitProps} isSubmitLoading={isSubmitLoading} onSubmit={onSubmit} />
     </div>

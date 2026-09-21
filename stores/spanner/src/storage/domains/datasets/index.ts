@@ -6,6 +6,7 @@ import {
   createStorageErrorId,
   DatasetsStorage,
   normalizePerPage,
+  resolveListOrderBy,
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_VERSIONS,
@@ -667,6 +668,10 @@ export class DatasetsSpanner extends DatasetsStorage {
   }
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt', 'name'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
     const { page = 0, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -729,7 +734,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       const limit = perPageInput === false ? total : perPage;
       const [rows] = await this.database.run({
         sql: `SELECT * FROM ${tableName} ${whereClause}
-              ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, ${quoteIdent('id', 'column name')} ASC
+              ORDER BY ${quoteIdent(orderBy.field, 'column name')} ${orderBy.direction}, ${quoteIdent('id', 'column name')} ASC
               LIMIT @limit OFFSET @offset`,
         params: { ...filterParams, limit, offset },
         types: filterTypes,
@@ -1199,6 +1204,10 @@ export class DatasetsSpanner extends DatasetsStorage {
   }
 
   async listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
     const { page = 0, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -1247,7 +1256,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       const limit = perPageInput === false ? total : perPage;
       const [rows] = await this.database.run({
         sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName} ${whereSql}
-              ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, ${quoteIdent('id', 'column name')} ASC
+              ORDER BY ${quoteIdent(orderBy.field, 'column name')} ${orderBy.direction}, ${quoteIdent('id', 'column name')} ASC
               LIMIT @limit OFFSET @offset`,
         params: { ...params, limit, offset },
         json: true,

@@ -5,11 +5,12 @@ import type {
   GetTraceQueryValuesArgs,
   GetTraceQueryValuesResponse,
   TraceQueryGroupResponse,
+  TraceQueryPaginatedTraceResponse,
   TraceQueryTraceResponse,
 } from '@mastra/core/storage';
 import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import type { QueryTraceThreadsResult } from './observability';
+import type { QueryTraceThreadsResult, QueryTracesInput } from './observability';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -488,7 +489,15 @@ describe('Observability Methods', () => {
   });
 
   describe('queryTraces()', () => {
-    it('should post the advanced query body unchanged with a trace-only result type', async () => {
+    it('should reject mixed pagination modes at the type boundary', () => {
+      expectTypeOf<{
+        timeRange: { from: string; to: string };
+        page: { limit: number };
+        pagination: { page: number; perPage: number };
+      }>().not.toMatchTypeOf<QueryTracesInput>();
+    });
+
+    it('should post the advanced query body unchanged with trace result types', async () => {
       mockSuccessfulResponse();
       const request = {
         timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
@@ -508,8 +517,31 @@ describe('Observability Methods', () => {
 
       const result = await client.queryTraces(request);
 
-      expectTypeOf(result).toEqualTypeOf<TraceQueryTraceResponse>();
+      expectTypeOf(result).toEqualTypeOf<TraceQueryTraceResponse | TraceQueryPaginatedTraceResponse>();
       expectTypeOf(result).not.toEqualTypeOf<TraceQueryGroupResponse>();
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
+    });
+
+    it('should expose paginated trace responses for page-mode queries', async () => {
+      mockSuccessfulResponse();
+      const request = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        pagination: { page: 0, perPage: 25 },
+      };
+
+      const result = await client.queryTraces(request);
+
+      expectTypeOf(result).toEqualTypeOf<TraceQueryTraceResponse | TraceQueryPaginatedTraceResponse>();
+      if ('pagination' in result) {
+        expectTypeOf(result.pagination).toEqualTypeOf<TraceQueryPaginatedTraceResponse['pagination']>();
+      }
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces/query`,
         expect.objectContaining({

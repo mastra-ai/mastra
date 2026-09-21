@@ -22,6 +22,20 @@ afterEach(() => {
 const renderListSearch = (props: Partial<React.ComponentProps<typeof ListSearch>> = {}) =>
   render(<ListSearch onSearch={vi.fn()} label="Filter agents" placeholder="Filter by name" {...props} />);
 
+describe('ListSearch surface', () => {
+  it('uses the filled Input surface and the shared icon color by default', () => {
+    const { container } = renderListSearch();
+
+    const input = screen.getByRole('textbox', { name: 'Filter agents' });
+    expect(input.className).toContain('bg-foreground/10');
+    expect(input.className).toContain('text-foreground');
+
+    const icon = container.querySelector('svg');
+    expect(icon?.getAttribute('class')).toContain('text-muted-foreground');
+    expect(icon?.getAttribute('class')).not.toContain('opacity-50');
+  });
+});
+
 describe('ListSearch keyboard shortcut', () => {
   it('focuses the search field on Cmd+Shift+F on mac', () => {
     setPlatform('MacIntel');

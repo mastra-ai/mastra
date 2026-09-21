@@ -19,9 +19,12 @@ import type {
   ExperimentResultStatus,
   ExperimentStatus,
   ExperimentTenancyFilters,
+  ListDatasetItemsInput,
   ListDatasetItemsOutput,
   ListExperimentResultsOutput,
+  ListExperimentsInput,
   ListExperimentsOutput,
+  ListExperimentResultsInput,
   TargetType,
   UpdateDatasetInput,
   UpdateDatasetItemInput,
@@ -274,6 +277,7 @@ export class Dataset {
     page?: number;
     perPage?: number;
     search?: string;
+    orderBy?: ListDatasetItemsInput['orderBy'];
   }): Promise<DatasetItem[] | ListDatasetItemsOutput> {
     const store = await this.#getDatasetsStore();
 
@@ -290,6 +294,7 @@ export class Dataset {
       datasetId: this.id,
       ...(args?.version !== undefined ? { version: args.version } : {}),
       ...(args?.search ? { search: args.search } : {}),
+      ...(args?.orderBy !== undefined ? { orderBy: args.orderBy } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
       filters: this.#scope,
     });
@@ -489,6 +494,7 @@ export class Dataset {
     filters?: ExperimentTenancyFilters;
     page?: number;
     perPage?: number;
+    orderBy?: ListExperimentsInput['orderBy'];
   }): Promise<ListExperimentsOutput> {
     await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
@@ -503,6 +509,7 @@ export class Dataset {
       ...(args?.variantId !== undefined ? { variantId: args.variantId } : {}),
       ...(args?.trialIndex !== undefined ? { trialIndex: args.trialIndex } : {}),
       ...(args?.filters !== undefined ? { filters: args.filters } : {}),
+      ...(args?.orderBy !== undefined ? { orderBy: args.orderBy } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }
@@ -586,6 +593,7 @@ export class Dataset {
     filters?: ExperimentTenancyFilters;
     page?: number;
     perPage?: number;
+    orderBy?: ListExperimentResultsInput['orderBy'];
   }): Promise<ListExperimentResultsOutput> {
     await this.#assertExperimentOwnership(args.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
@@ -595,6 +603,7 @@ export class Dataset {
       ...(args.status !== undefined ? { status: args.status } : {}),
       ...(args.tags !== undefined ? { tags: args.tags } : {}),
       ...(args.filters !== undefined ? { filters: args.filters } : {}),
+      ...(args.orderBy !== undefined ? { orderBy: args.orderBy } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }

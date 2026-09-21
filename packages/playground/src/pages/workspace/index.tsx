@@ -14,6 +14,7 @@ import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility'
 import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
 import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
+import type { SkillsSort } from '@/domains/workspace/components/skills-table';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
 import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
 import { isImageFile, isVideoFile } from '@/domains/workspace/file-type-utils';
@@ -43,6 +44,7 @@ export default function Workspace() {
   const [updatingSkillName, setUpdatingSkillName] = useState<string | null>(null);
   // Track if we installed a skill that wasn't discovered (client-side only, resets on refresh)
   const [hasUndiscoveredInstall, setHasUndiscoveredInstall] = useState(false);
+  const [skillsSort, setSkillsSort] = useState<SkillsSort>();
 
   // Get state from URL query params (path, file, tab are still query params)
   const fileFromUrl = searchParams.get('file');
@@ -388,16 +390,16 @@ export default function Workspace() {
               {selectedWorkspace?.source === 'agent' ? (
                 <Bot className="text-accent1 h-4 w-4" />
               ) : (
-                <Server className="text-neutral4 h-4 w-4" />
+                <Server className="text-muted-foreground h-4 w-4" />
               )}
               <span className="flex-1 truncate text-left">
                 {selectedWorkspace?.name ?? 'Select workspace'}
                 {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
-                  <span className="text-neutral4 ml-1">({selectedWorkspace.agentName})</span>
+                  <span className="text-muted-foreground ml-1">({selectedWorkspace.agentName})</span>
                 )}
               </span>
               <ChevronDown
-                className={`text-neutral4 h-4 w-4 transition-transform ${showWorkspaceDropdown ? 'rotate-180' : ''}`}
+                className={`text-muted-foreground h-4 w-4 transition-transform ${showWorkspaceDropdown ? 'rotate-180' : ''}`}
               />
             </button>
 
@@ -417,11 +419,11 @@ export default function Workspace() {
                     {workspace.source === 'agent' ? (
                       <Bot className="text-accent1 h-4 w-4 shrink-0" />
                     ) : (
-                      <Server className="text-neutral4 h-4 w-4 shrink-0" />
+                      <Server className="text-muted-foreground h-4 w-4 shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="text-neutral6 text-ui-md truncate font-medium">{workspace.name}</div>
-                      <div className="text-neutral4 text-ui-sm truncate">
+                      <div className="text-foreground text-ui-md truncate font-medium">{workspace.name}</div>
+                      <div className="text-muted-foreground text-ui-sm truncate">
                         {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
                       </div>
                     </div>
@@ -432,13 +434,17 @@ export default function Workspace() {
                         </span>
                       )}
                       {workspace.capabilities.hasFilesystem && (
-                        <span className="bg-surface4 text-neutral4 text-ui-xs rounded px-1.5 py-0.5">FS</span>
+                        <span className="bg-surface4 text-muted-foreground text-ui-xs rounded px-1.5 py-0.5">FS</span>
                       )}
                       {workspace.capabilities.hasSandbox && (
-                        <span className="bg-surface4 text-neutral4 text-ui-xs rounded px-1.5 py-0.5">Sandbox</span>
+                        <span className="bg-surface4 text-muted-foreground text-ui-xs rounded px-1.5 py-0.5">
+                          Sandbox
+                        </span>
                       )}
                       {workspace.capabilities.hasSkills && (
-                        <span className="bg-surface4 text-neutral4 text-ui-xs rounded px-1.5 py-0.5">Skills</span>
+                        <span className="bg-surface4 text-muted-foreground text-ui-xs rounded px-1.5 py-0.5">
+                          Skills
+                        </span>
                       )}
                     </div>
                   </button>
@@ -450,7 +456,7 @@ export default function Workspace() {
 
         {/* Single workspace info badge - shown when only one workspace */}
         {workspaces.length === 1 && selectedWorkspace && (
-          <div className="text-neutral4 text-ui-md flex items-center gap-2">
+          <div className="text-muted-foreground text-ui-md flex items-center gap-2">
             {selectedWorkspace.source === 'agent' ? (
               <Bot className="text-accent1 h-4 w-4" />
             ) : (
@@ -458,7 +464,7 @@ export default function Workspace() {
             )}
             <span>{selectedWorkspace.name}</span>
             {selectedWorkspace.source === 'agent' && selectedWorkspace.agentName && (
-              <span className="text-neutral3">({selectedWorkspace.agentName})</span>
+              <span className="text-muted-foreground">({selectedWorkspace.agentName})</span>
             )}
             {isReadOnly && (
               <span className="text-ui-xs rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-400">Read-only</span>
@@ -508,7 +514,9 @@ export default function Workspace() {
                   <Wand2 className="h-4 w-4" />
                   Skills
                   {isSkillsConfigured && skills.length > 0 && (
-                    <span className="bg-surface4 text-neutral4 text-ui-sm rounded px-1.5 py-0.5">{skills.length}</span>
+                    <span className="bg-surface4 text-muted-foreground text-ui-sm rounded px-1.5 py-0.5">
+                      {skills.length}
+                    </span>
                   )}
                 </Tab>
               )}
@@ -555,6 +563,8 @@ export default function Workspace() {
                 <SkillsTable
                   skills={skills}
                   isLoading={isLoadingSkills}
+                  sort={skillsSort}
+                  onSortChange={(direction, key) => setSkillsSort({ key, direction })}
                   isSkillsConfigured={isSkillsConfigured}
                   hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
                   basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
@@ -570,7 +580,7 @@ export default function Workspace() {
         )}
 
         {!hasFilesystem && !hasSkills && !isLoadingInfo && (
-          <div className="text-neutral4 py-8 text-center">
+          <div className="text-muted-foreground py-8 text-center">
             <p>No workspace capabilities are configured.</p>
           </div>
         )}
@@ -624,7 +634,7 @@ function WorkspaceSearchPanel({
     <div className="border-border1 bg-surface2 space-y-4 rounded-lg border p-4">
       {canSearchFiles && (
         <div>
-          <h3 className="text-neutral5 text-ui-md mb-3 flex items-center gap-2 font-medium">
+          <h3 className="text-foreground text-ui-md mb-3 flex items-center gap-2 font-medium">
             <FileText className="h-4 w-4" />
             Search Indexed Files
           </h3>
@@ -654,7 +664,7 @@ function WorkspaceSearchPanel({
 
       {canSearchSkills && (
         <div>
-          <h3 className="text-neutral5 text-ui-md mb-3 flex items-center gap-2 font-medium">
+          <h3 className="text-foreground text-ui-md mb-3 flex items-center gap-2 font-medium">
             <Wand2 className="h-4 w-4" />
             Search Skills
           </h3>
