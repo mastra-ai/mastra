@@ -299,7 +299,7 @@ export async function dispatchGitLabWebhook(
         dependencies.onTargetSkipped?.(subscription);
         continue;
       }
-      const runContext = subscriptionRunContext(session);
+      const runContext = await subscriptionRunContext(subscription, dependencies.gitlab?.sourceControlStorage);
       const result = await session.sendNotificationSignal(
         {
           source: 'gitlab',

@@ -250,7 +250,10 @@ describe('handleGitLabWebhook session dispatch', () => {
 
     expect(result).toEqual({ status: 202, body: { ok: true } });
     expect(ingestFactoryEvent).toHaveBeenCalledOnce();
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({ source: 'gitlab', kind: 'pull-request-merged' }));
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'gitlab', kind: 'pull-request-merged' }),
+      expect.objectContaining({ requestContext: expect.anything() }),
+    );
     expect(retireSubscription).toHaveBeenCalledWith('sub-1', 'merged');
   });
 

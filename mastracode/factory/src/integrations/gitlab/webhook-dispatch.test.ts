@@ -178,15 +178,10 @@ describe('dispatchGitLabWebhook', () => {
     expect(listSubscriptions).not.toHaveBeenCalled();
   });
 
-  it('runs the woken session as its owner in its organization', async () => {
+  it('runs the woken session as the subscribing user in the subscription organization', async () => {
     const owned = session('thread-a');
-    const liveSession = {
-      ...owned.session,
-      ownerId: 'owner-1',
-      state: { get: () => ({ factoryOrgId: 'org-1' }) },
-    };
     const result = await dispatchGitLabWebhook(mergeRequest('reopen'), {
-      controller: controllerStub({ getSessionByResource: vi.fn(async () => liveSession), createSession: vi.fn() }),
+      controller: controllerStub({ getSessionByResource: vi.fn(async () => owned.session), createSession: vi.fn() }),
       listSubscriptions: async () => [subscription('a', '/worktrees/a', 'thread-a')],
       retireSubscription: vi.fn(async () => undefined),
     });
@@ -197,25 +192,39 @@ describe('dispatchGitLabWebhook', () => {
       unknown,
       { requestContext?: { get: (key: string) => unknown } },
     ];
-    expect(options?.requestContext?.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+    expect(options?.requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
   });
 
-  it('sends no run context for a session whose organization is unresolved', async () => {
-    const unresolved = session('thread-a');
+  it('falls back to the Factory session owner for a row that names no subscribing user', async () => {
+    const owned = session('thread-a');
+    const row = subscription('a', '/worktrees/a', 'thread-a');
+    row.data = { ...row.data, subscribedByUserId: null };
     const result = await dispatchGitLabWebhook(mergeRequest('reopen'), {
-      controller: controllerStub({
-        getSessionByResource: vi.fn(async () => ({
-          ...unresolved.session,
-          ownerId: 'owner-1',
-          state: { get: () => ({}) },
-        })),
-        createSession: vi.fn(),
-      }),
-      listSubscriptions: async () => [subscription('a', '/worktrees/a', 'thread-a')],
+      controller: controllerStub({ getSessionByResource: vi.fn(async () => owned.session), createSession: vi.fn() }),
+      gitlab: gitlabStub({ userId: 'owner-9', orgId: 'org-9' }),
+      listSubscriptions: async () => [row],
       retireSubscription: vi.fn(async () => undefined),
     });
     expect(result).toMatchObject({ delivered: 1 });
-    expect(unresolved.send.mock.calls[0]).toHaveLength(1);
+    const [, options] = owned.send.mock.calls[0] as unknown as [
+      unknown,
+      { requestContext?: { get: (key: string) => unknown } },
+    ];
+    expect(options?.requestContext?.get('user')).toEqual({ workosId: 'owner-9', organizationId: 'org-9' });
+  });
+
+  it('sends no run context when neither the row nor the session names a user', async () => {
+    const owned = session('thread-a');
+    const row = subscription('a', '/worktrees/a', 'thread-a');
+    row.data = { ...row.data, subscribedByUserId: null };
+    const result = await dispatchGitLabWebhook(mergeRequest('reopen'), {
+      controller: controllerStub({ getSessionByResource: vi.fn(async () => owned.session), createSession: vi.fn() }),
+      gitlab: gitlabStub(null),
+      listSubscriptions: async () => [row],
+      retireSubscription: vi.fn(async () => undefined),
+    });
+    expect(result).toMatchObject({ delivered: 1 });
+    expect(owned.send.mock.calls[0]).toHaveLength(1);
   });
 
   it('delivers to every subscribed session, then retires terminal subscriptions', async () => {
@@ -254,6 +263,7 @@ describe('dispatchGitLabWebhook', () => {
           deliveryId: 'delivery-1',
         }),
       }),
+      expect.objectContaining({ requestContext: expect.anything() }),
     );
     expect(retireSubscription.mock.calls).toEqual([
       ['a', 'merged'],
@@ -283,6 +293,7 @@ describe('dispatchGitLabWebhook', () => {
           targetUrl: 'https://gitlab.example.com/acme/app/-/merge_requests/34#note_9',
         }),
       }),
+      expect.objectContaining({ requestContext: expect.anything() }),
     );
     expect(getProjectMemberAccessLevel).toHaveBeenCalledWith('direct', '101', 'ada');
   });
