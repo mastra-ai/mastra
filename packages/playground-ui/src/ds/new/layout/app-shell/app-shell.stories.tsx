@@ -95,7 +95,7 @@ function Frame({ children }: { children: ReactNode }) {
 
 function MainContent({ withHeader = true }: { withHeader?: boolean }) {
   return (
-    <PageLayout breadcrumbs={withHeader ? crumbs : undefined} heading="Research agent" className="grid-rows-none gap-4">
+    <PageLayout breadcrumbs={withHeader ? crumbs : undefined} className="grid gap-4 p-4">
       <PageHeader>
         <PageHeader.Icon>
           <Bot />

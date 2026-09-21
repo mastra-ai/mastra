@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { ExistingConnectionsPanel } from './components/existing-connections-panel';
 import { ProviderToolkitSelector } from './components/provider-toolkit-selector';
 import { getGroupedConnectionsByAuthor } from './group-connections';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import type { CrumbDef } from '@/domains/navigation/crumbs';
 import { useAuthorize } from '@/domains/tool-providers/hooks/use-authorize';
 import { useDisconnectConnection } from '@/domains/tool-providers/hooks/use-disconnect-connection';
@@ -59,7 +59,7 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <div className="max-w-3xl space-y-6 text-ui-md">
         <p className="text-gray-500">
           Minimal page to verify the ToolProvider backend. Pick a provider and toolkit, then connect.

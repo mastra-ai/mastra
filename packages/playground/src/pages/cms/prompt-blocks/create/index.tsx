@@ -1,5 +1,5 @@
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { PromptBlockCreateContent } from '@/domains/prompt-blocks';
 import { useLinkComponent } from '@/lib/framework';
@@ -10,9 +10,9 @@ function CmsPromptBlocksCreatePage() {
   const { navigate, paths } = useLinkComponent();
 
   return (
-    <MainContentLayout {...pageHeaderProps(crumbs)} className="grid-rows-[1fr]">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[1fr] p-4">
       <PromptBlockCreateContent onSuccess={block => navigate(paths.cmsPromptBlockEditLink(block.id))} />
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

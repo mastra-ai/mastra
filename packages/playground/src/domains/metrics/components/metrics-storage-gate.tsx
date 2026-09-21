@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { metricsCrumbs } from '../metrics-crumbs';
 import { MetricsCapabilityError } from './metrics-capability-error';
 import { MetricsPageLayout } from './metrics-page-layout';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
 const filterFieldsWithoutDiscovery = createMetricsPropertyFilterFields({
@@ -34,7 +34,7 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
   }
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(metricsCrumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
         <MetricsCapabilityError error={error} />
       </NoDataPageLayout>
     );

@@ -5,7 +5,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
 import { AgentsCompactGrid } from '@/domains/agents/components/agent-list/agents-compact-grid';
 import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
@@ -28,7 +28,7 @@ function Agents() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -36,7 +36,7 @@ function Agents() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="agents" />
       </NoDataPageLayout>
     );
@@ -44,7 +44,7 @@ function Agents() {
 
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <ErrorState title="Failed to load agents" message={error.message} />
       </NoDataPageLayout>
     );
@@ -52,7 +52,7 @@ function Agents() {
 
   if (Object.keys(agents).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <NoAgentsInfo />
       </NoDataPageLayout>
     );
@@ -79,7 +79,11 @@ function Agents() {
   }
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} actions={<AgentHeaderCreateAction />} height="full">
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actions={<AgentHeaderCreateAction />}
+      className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
+    >
       <PageLayout.TopArea>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="max-w-120 flex-1">

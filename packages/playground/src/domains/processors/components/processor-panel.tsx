@@ -4,7 +4,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { FieldBlock, TextareaFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { MainContentContent } from '@mastra/playground-ui/components/MainContent';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -125,7 +124,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
   const resultCode = result ? JSON.stringify(result, null, 2) : '{}';
 
   return (
-    <MainContentContent hasLeftServiceColumn={true} className="relative">
+    <div className="relative grid h-full min-w-min grid-cols-[auto_1fr] overflow-x-auto overflow-y-auto">
       <div className="bg-surface2 border-border1 w-[22rem] overflow-y-auto border-r">
         <ProcessorInformation processor={processor} />
 
@@ -226,7 +225,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
       <div className="relative h-full overflow-x-auto overflow-y-auto p-5">
         <CodeMirror value={errorString || resultCode} editable={true} theme={theme} extensions={[jsonLanguage]} />
       </div>
-    </MainContentContent>
+    </div>
   );
 }
 

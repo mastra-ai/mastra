@@ -5,7 +5,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { McpServersList } from '@/domains/mcps/components/mcps-list/mcps-list';
 import { NoMCPServersInfo } from '@/domains/mcps/components/mcps-list/no-mcp-servers-info';
 import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
@@ -19,7 +19,7 @@ const MCPs = () => {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -27,7 +27,7 @@ const MCPs = () => {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="MCP servers" />
       </NoDataPageLayout>
     );
@@ -35,7 +35,7 @@ const MCPs = () => {
 
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <ErrorState title="Failed to load MCP servers" message={error.message} />
       </NoDataPageLayout>
     );
@@ -43,14 +43,14 @@ const MCPs = () => {
 
   if (mcpServers.length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <NoMCPServersInfo />
       </NoDataPageLayout>
     );
   }
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <PageLayout.TopArea>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter MCP servers" placeholder="Filter by name" />

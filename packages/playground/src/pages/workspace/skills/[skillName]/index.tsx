@@ -1,4 +1,4 @@
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 
 import { validateAgentId } from './validate-agent-id';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { decodeRouteParam, navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 import { ReferenceViewerDialog } from '@/domains/workspace/components/reference-viewer-dialog';
 import { SkillDetail } from '@/domains/workspace/components/skill-detail';
@@ -84,39 +84,39 @@ export default function WorkspaceSkillDetailPage() {
 
   if (isLoading) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
         <div className="grid h-full place-items-center">
           <div className="border-accent1 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
         </div>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   // 401 check - session expired
   if (error && is401UnauthorizedError(error)) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   // 403 check - permission denied for workspaces
   if (error && is403ForbiddenError(error)) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="workspaces" />
         </div>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   if (error || !skill) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
         <div className="grid h-full place-items-center">
           <div className="text-center">
             <p className="mb-2 text-red-400">Failed to load skill</p>
@@ -125,12 +125,12 @@ export default function WorkspaceSkillDetailPage() {
             </p>
           </div>
         </div>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   return (
-    <MainContentLayout {...pageHeaderProps(crumbs)}>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
       <div className="grid h-full overflow-x-hidden overflow-y-auto">
         <div className="mx-auto h-full w-full max-w-[100rem] overflow-x-hidden px-[3rem] py-5">
           <SkillDetail skill={skill} rawSkillMd={rawSkillMdData?.content} onReferenceClick={setViewingReference} />
@@ -145,6 +145,6 @@ export default function WorkspaceSkillDetailPage() {
         content={referenceData?.content}
         isLoading={isLoadingReference}
       />
-    </MainContentLayout>
+    </PageLayout>
   );
 }

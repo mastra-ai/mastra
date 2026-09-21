@@ -9,7 +9,7 @@ import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
@@ -29,7 +29,7 @@ const EMPTY_RESULTS: never[] = [];
 
 function ExperimentPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <div />
       <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
     </PageLayout>
@@ -45,7 +45,6 @@ function ExperimentPage() {
       id: 'experiment',
       Component: ExperimentCrumb,
       icon: ExperimentCrumbStatusIcon,
-      heading: 'Experiment',
       to: experimentId ? `/experiments/${encodeURIComponent(experimentId)}` : undefined,
     },
     ...(itemId
@@ -154,7 +153,10 @@ function ExperimentPage() {
       hasNextPage={hasNextPage}
     >
       <div className="h-full">
-        <PageLayout {...pageHeaderProps(crumbs)} height="full">
+        <PageLayout
+          breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+          className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
+        >
           <ExperimentTopArea experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)}>
             <ExperimentResultsBulkActions selection={selection} />
           </ExperimentTopArea>

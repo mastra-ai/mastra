@@ -13,7 +13,7 @@ import { ArrowLeft, Copy, DatabaseIcon, FlaskConical, MoreVertical, Pencil, Play
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import {
   DatasetItemsView,
   DatasetTagsEditor,
@@ -32,7 +32,7 @@ import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/do
 
 function DatasetPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <div />
       <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
     </PageLayout>
@@ -133,7 +133,7 @@ function DatasetPage() {
   return (
     <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
       <div className="h-full">
-        <PageLayout {...pageHeaderProps(crumbs)} height="full" className="grid-rows-[1fr] p-0">
+        <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[1fr]">
           <PageLayout.MainArea>
             <DatasetItemsView
               datasetId={datasetId}

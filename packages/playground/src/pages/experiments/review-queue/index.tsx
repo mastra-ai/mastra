@@ -6,7 +6,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowUpRight } from 'lucide-react';
 import { useSearchParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 import { navCrumb } from '@/domains/navigation/crumbs';
@@ -65,7 +65,7 @@ function ReviewQueuePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -73,7 +73,7 @@ function ReviewQueuePage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="experiments" />
       </NoDataPageLayout>
     );
@@ -81,14 +81,14 @@ function ReviewQueuePage() {
 
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <ErrorState title="Failed to load experiments" message={error.message} />
       </NoDataPageLayout>
     );
   }
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <DatasetReview
         datasetId={selected?.datasetId ?? undefined}
         experimentId={selectedId ?? undefined}

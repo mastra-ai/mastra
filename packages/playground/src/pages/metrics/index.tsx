@@ -22,7 +22,7 @@ import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { LatencyCard } from '@/domains/metrics/components/latency-card';
 import { MemoryCard } from '@/domains/metrics/components/memory-card';
@@ -213,7 +213,7 @@ function MetricsContent() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(metricsCrumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -221,7 +221,7 @@ function MetricsContent() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(metricsCrumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
         <PermissionDenied resource="metrics" />
       </NoDataPageLayout>
     );
@@ -229,7 +229,7 @@ function MetricsContent() {
 
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(metricsCrumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
         <ErrorState title="Failed to load metrics" message={error.message} />
       </NoDataPageLayout>
     );

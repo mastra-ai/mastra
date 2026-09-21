@@ -1,6 +1,6 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
@@ -111,7 +111,7 @@ function AgentSession() {
                 <ThreadInputProvider>
                   <ObservationalMemoryProvider>
                     <ActivatedSkillsProvider>
-                      <MainContentLayout>
+                      <PageLayout className="grid grid-rows-[auto_1fr] p-4">
                         <SessionHeader />
                         <div className="relative grid h-full min-h-0">
                           <AgentChat
@@ -129,7 +129,7 @@ function AgentSession() {
                             hideModelSwitcher
                           />
                         </div>
-                      </MainContentLayout>
+                      </PageLayout>
                     </ActivatedSkillsProvider>
                   </ObservationalMemoryProvider>
                 </ThreadInputProvider>
@@ -145,10 +145,10 @@ function AgentSession() {
 export default AgentSession;
 
 const AgentSessionLoadingSkeleton = () => (
-  <MainContentLayout>
+  <PageLayout className="grid grid-rows-[auto_1fr] p-4">
     <SessionHeader />
     <div className="relative grid h-full overflow-y-auto pt-4" data-testid="agent-session-skeleton" aria-busy="true">
       <AgentChatLoadingSkeleton />
     </div>
-  </MainContentLayout>
+  </PageLayout>
 );

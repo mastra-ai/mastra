@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 
 import { PageShell } from './page-shell';
 
-// The page-layout wrapper is always h-full; `height` only drives the <main> scroll container.
 function mainClassName(markup: string) {
   return /<main class="([^"]*)"/.exec(markup)?.[1] ?? '';
 }
@@ -103,29 +102,26 @@ describe('PageShell', () => {
     });
   });
 
-  describe('width, height, and className', () => {
-    it('defaults to wide, full height, and px-6', () => {
+  describe('className', () => {
+    it('defaults to px-6 on the scrollable main', () => {
       const markup = renderToStaticMarkup(
         <PageShell title="Research agent">
           <main>Main content</main>
         </PageShell>,
       );
 
-      expect(markup).toContain('px-6');
-      expect(mainClassName(markup)).toContain('h-full');
+      expect(mainClassName(markup)).toContain('px-6');
     });
 
-    it('supports overriding width, height, and className', () => {
+    it('lets callers override the padding', () => {
       const markup = renderToStaticMarkup(
-        <PageShell title="Research agent" width="narrow" height="default" className="px-2">
+        <PageShell title="Research agent" className="px-2">
           <main>Main content</main>
         </PageShell>,
       );
 
-      expect(markup).toContain('max-w-screen-lg');
-      expect(mainClassName(markup)).not.toContain('h-full');
-      expect(markup).toContain('px-2');
-      expect(markup).not.toContain('px-6');
+      expect(mainClassName(markup)).toContain('px-2');
+      expect(mainClassName(markup)).not.toContain('px-6');
     });
   });
 });

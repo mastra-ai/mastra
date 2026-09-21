@@ -3,7 +3,7 @@ import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { DatabaseIcon } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { CreateDatasetForm } from '@/domains/datasets/components/create-dataset-form';
 import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { navCrumb } from '@/domains/navigation/crumbs';
@@ -30,7 +30,7 @@ function CreateDatasetPage() {
   };
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <div />
       <PageLayout.MainArea isCentered>
         <div className="w-full max-w-2xl overflow-y-auto px-4 py-5">

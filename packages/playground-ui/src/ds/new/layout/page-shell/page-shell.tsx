@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { PageHeader } from '../page-header';
 import { PageLayout } from '@/ds/components/PageLayout';
+import { cn } from '@/lib/utils';
 
 export interface PageShellProps {
   title: ReactNode;
@@ -11,8 +12,6 @@ export interface PageShellProps {
   meta?: ReactNode;
   action?: ReactNode;
   isLoading?: boolean;
-  width?: 'default' | 'narrow' | 'wide';
-  height?: 'default' | 'full';
   className?: string;
 }
 
@@ -26,20 +25,9 @@ export interface PageShellProps {
  * `isLoading` affects the header only, blanking the title and description and
  * hiding the icon. Callers render their own loading body.
  */
-export function PageShell({
-  title,
-  children,
-  icon,
-  description,
-  meta,
-  action,
-  isLoading,
-  width = 'wide',
-  height = 'full',
-  className = 'px-6',
-}: PageShellProps) {
+export function PageShell({ title, children, icon, description, meta, action, isLoading, className }: PageShellProps) {
   return (
-    <PageLayout width={width} height={height} className={className}>
+    <PageLayout className={cn('grid grid-rows-[auto_minmax(0,1fr)] p-4 px-6', className)}>
       <PageLayout.TopArea>
         <PageHeader>
           {icon != null && !isLoading ? <PageHeader.Icon>{icon}</PageHeader.Icon> : null}

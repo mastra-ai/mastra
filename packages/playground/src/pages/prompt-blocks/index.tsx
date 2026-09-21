@@ -5,7 +5,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useState } from 'react';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { useStoredPromptBlocks, PromptsList, NoPromptBlocksInfo } from '@/domains/prompt-blocks';
 import { PromptBlocksHeaderCreateAction } from '@/domains/prompt-blocks/prompt-blocks-header-actions';
@@ -38,7 +38,7 @@ export default function PromptBlocks() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -46,7 +46,7 @@ export default function PromptBlocks() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="prompt blocks" />
       </NoDataPageLayout>
     );
@@ -54,7 +54,7 @@ export default function PromptBlocks() {
 
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <ErrorState title="Failed to load prompt blocks" message={error.message} />
       </NoDataPageLayout>
     );
@@ -62,14 +62,18 @@ export default function PromptBlocks() {
 
   if (promptBlocks.length === 0 && !isLoading && page === 0) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)} actions={<PromptBlocksHeaderCreateAction />}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actions={<PromptBlocksHeaderCreateAction />}>
         <NoPromptBlocksInfo />
       </NoDataPageLayout>
     );
   }
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} actions={<PromptBlocksHeaderCreateAction />} height="full">
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actions={<PromptBlocksHeaderCreateAction />}
+      className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
+    >
       <PageLayout.TopArea>
         <PageLayout.Row align="center" stack="responsive">
           <div className="max-w-120 flex-1">

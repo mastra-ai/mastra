@@ -14,7 +14,7 @@ import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { metricsCrumbs } from '../metrics-crumbs';
 import { MetricsToolbar } from './metrics-toolbar';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 
 type MetricsPageLayoutProps = {
   children: ReactNode;
@@ -56,7 +56,10 @@ export function MetricsPageLayout({ children, filterFields, isLoading = false }:
   };
 
   return (
-    <PageLayout {...pageHeaderProps(metricsCrumbs)} width="wide" height="full">
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}
+      className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
+    >
       <PageLayout.TopArea>
         <PageLayout.Row>
           <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">

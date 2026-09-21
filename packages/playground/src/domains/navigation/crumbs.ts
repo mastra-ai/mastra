@@ -13,8 +13,6 @@ export type CrumbIcon = ComponentType<SVGProps<SVGSVGElement>>;
 interface CrumbBase {
   /** Stable identifier used as the React key. Prefer semantic ids like `agent` or `dataset-item`. */
   id: string;
-  /** Accessible page heading fallback when the visual crumb content is custom. */
-  heading?: string;
   to?: string;
   icon?: CrumbIcon;
   /** Hook-driven control rendered next to the crumb label (e.g. an icon-only entity switcher). */
@@ -28,24 +26,13 @@ export type CrumbDef = CrumbBase &
     | { Component: ComponentType; label?: never; node?: never }
   );
 
-type NavCrumbOverrides = Partial<Pick<CrumbDef, 'id' | 'label' | 'heading' | 'to' | 'icon'>>;
+type NavCrumbOverrides = Partial<Pick<CrumbDef, 'id' | 'label' | 'to' | 'icon'>>;
 
 /** Crumb derived from the nav registry — guarantees icon/label parity with the sidebar. */
 export function navCrumb(url: string, overrides?: NavCrumbOverrides): CrumbDef {
   const item = findNavItem(url);
   if (!item) throw new Error(`navCrumb: unknown nav url "${url}"`);
   return { id: `nav:${url}`, label: item.name, icon: item.Icon, to: url, ...overrides };
-}
-
-/** Accessible `<h1>` text derived from the last crumb that carries a heading/label. */
-export function crumbsHeading(crumbs: CrumbDef[]) {
-  for (let i = crumbs.length - 1; i >= 0; i -= 1) {
-    const def = crumbs[i];
-    const nodeHeading = 'node' in def && typeof def.node === 'string' ? def.node : undefined;
-    const heading = (def.heading ?? ('label' in def ? def.label : nodeHeading))?.trim();
-    if (heading) return heading;
-  }
-  return undefined;
 }
 
 export const decodeRouteParam = (value: string | undefined) => {
@@ -67,41 +54,34 @@ export const agentCrumb = {
   id: 'agent',
   Component: AgentCrumb,
   Action: AgentSwitcherAction,
-  heading: 'Agent',
 } satisfies CrumbDef;
 export const scorerCrumb = {
   id: 'scorer',
   Component: ScorerCrumb,
   Action: ScorerSwitcherAction,
-  heading: 'Scorer',
 } satisfies CrumbDef;
 export const toolCrumb = {
   id: 'tool',
   Component: ToolCrumb,
   Action: ToolSwitcherAction,
-  heading: 'Tool',
 } satisfies CrumbDef;
 export const processorCrumb = {
   id: 'processor',
   Component: ProcessorCrumb,
   Action: ProcessorSwitcherAction,
-  heading: 'Processor',
 } satisfies CrumbDef;
 export const mcpServerCrumb = {
   id: 'mcp-server',
   Component: McpServerCrumb,
   Action: McpServerSwitcherAction,
-  heading: 'MCP server',
 } satisfies CrumbDef;
 export const workflowCrumb = {
   id: 'workflow',
   Component: WorkflowCrumb,
   Action: WorkflowSwitcherAction,
-  heading: 'Workflow',
 } satisfies CrumbDef;
 export const datasetCrumb = {
   id: 'dataset',
   Component: DatasetCrumb,
   Action: DatasetSwitcherAction,
-  heading: 'Dataset',
 } satisfies CrumbDef;

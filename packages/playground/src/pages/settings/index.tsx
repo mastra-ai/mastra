@@ -9,7 +9,7 @@ import {
   SettingsRow,
   SettingsTitle,
 } from '@mastra/playground-ui/new/settings';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { navCrumb } from '@/domains/navigation/crumbs';
@@ -20,7 +20,7 @@ export const StudioSettingsPage = () => {
   const { baseUrl, headers, apiPrefix } = useStudioConfig();
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} className="p-0">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="">
       <SettingsLayout>
         <div className="mx-auto flex max-w-4xl flex-col gap-8">
           <SettingsGroup>

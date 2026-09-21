@@ -1,8 +1,8 @@
 import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
@@ -10,7 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { navCrumb } from '@/domains/navigation/crumbs';
@@ -29,7 +29,7 @@ import {
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
 import { useLinkComponent } from '@/lib/framework';
 
-const crumbs = [navCrumb('/prompts'), { id: 'prompt-block', Component: PromptBlockCrumb, heading: 'Prompt block' }];
+const crumbs = [navCrumb('/prompts'), { id: 'prompt-block', Component: PromptBlockCrumb }];
 
 type StoredPromptBlockData = NonNullable<ReturnType<typeof useStoredPromptBlock>['data']>;
 
@@ -250,7 +250,7 @@ function CmsPromptBlocksEditPage() {
 
   if (isLoading) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)} className="grid-rows-[1fr]">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[1fr] p-4">
         <AgentEditLayout
           leftSlot={
             <div className="flex h-full items-center justify-center">
@@ -262,13 +262,13 @@ function CmsPromptBlocksEditPage() {
             <Spinner className="size-8" />
           </div>
         </AgentEditLayout>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   if (!block || !blockId) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)} className="grid-rows-[1fr]">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[1fr] p-4">
         <AgentEditLayout
           leftSlot={
             <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
@@ -276,7 +276,7 @@ function CmsPromptBlocksEditPage() {
         >
           <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
         </AgentEditLayout>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
@@ -295,7 +295,11 @@ function CmsPromptBlocksEditPage() {
   );
 
   return (
-    <MainContentLayout {...pageHeaderProps(crumbs)} actions={actions} className="grid-rows-[1fr]">
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actions={actions}
+      className="grid grid-rows-[1fr] p-4"
+    >
       <CmsPromptBlocksEditForm
         block={block}
         blockId={blockId}
@@ -305,7 +309,7 @@ function CmsPromptBlocksEditPage() {
         activeVersionId={activeVersionId}
         onClearVersion={handleClearVersion}
       />
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

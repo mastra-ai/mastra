@@ -7,7 +7,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetHealthCard } from '@/domains/datasets';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
@@ -50,7 +50,7 @@ export default function Evaluation() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -58,7 +58,7 @@ export default function Evaluation() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="evaluation" />
       </NoDataPageLayout>
     );
@@ -66,14 +66,14 @@ export default function Evaluation() {
 
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <ErrorState title="Failed to load evaluation data" message={error.message} />
       </NoDataPageLayout>
     );
   }
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <PageLayout.TopArea>
         <PageLayout.Row>
           <PageLayout.Column>

@@ -4,7 +4,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useParams, Navigate } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb, processorCrumb } from '@/domains/navigation/crumbs';
 import { ProcessorPanel } from '@/domains/processors/components/processor-panel';
 import { useProcessor } from '@/domains/processors/hooks/use-processors';
@@ -18,7 +18,7 @@ export function Processor() {
   // 401 check - session expired
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout {...pageHeaderProps(crumbs)} height="full">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -29,7 +29,7 @@ export function Processor() {
   // 403 check - permission denied for processors
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout {...pageHeaderProps(crumbs)} height="full">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="processors" />
         </div>
@@ -44,7 +44,7 @@ export function Processor() {
 
   if (isLoading) {
     return (
-      <PageLayout {...pageHeaderProps(crumbs)} height="full">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
         <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </PageLayout>
@@ -52,7 +52,7 @@ export function Processor() {
   }
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full" className="grid-rows-[minmax(0,1fr)] p-0">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[minmax(0,1fr)]">
       <div className="h-full w-full overflow-y-hidden">
         <ProcessorPanel processorId={processorId!} />
       </div>

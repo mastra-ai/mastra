@@ -10,7 +10,7 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { MoreVertical, Pencil, Play } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { navCrumb, scorerCrumb } from '@/domains/navigation/crumbs';
@@ -205,9 +205,8 @@ export default function Scorer() {
 
     return (
       <PageLayout
-        {...pageHeaderProps(crumbs)}
-        width="wide"
-        height="full"
+        breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+
         className={hasError || !scorerActionsMenu ? 'grid-rows-[1fr]' : undefined}
       >
         {!hasError && scorerActionsMenu && (
@@ -232,7 +231,7 @@ export default function Scorer() {
   }
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <PageLayout.TopArea>
         <div className="flex items-center justify-between gap-3">
           <ScoresTools

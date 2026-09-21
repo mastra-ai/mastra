@@ -5,13 +5,10 @@ import { useParams } from 'react-router';
 import { Link } from '../../lib/link';
 import { SignalsEntityCrumb } from './signals-entity-crumb';
 import { useSignalsDateUrlState } from './use-signals-date-url-state';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
-const crumbs: CrumbDef[] = [
-  navCrumb('/intelligence'),
-  { id: 'signals-entity', Component: SignalsEntityCrumb, heading: 'Entity' },
-];
+const crumbs: CrumbDef[] = [navCrumb('/intelligence'), { id: 'signals-entity', Component: SignalsEntityCrumb }];
 
 export function SignalsEntityDetailPage() {
   const { entityType, entityId } = useParams();
@@ -20,7 +17,7 @@ export function SignalsEntityDetailPage() {
   if (!entityType || !entityId) return null;
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full" className="grid-rows-[minmax(0,1fr)] p-0">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[minmax(0,1fr)]">
       <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link}>
         <TraceIntelligenceEntityDetail
           entityId={entityId}

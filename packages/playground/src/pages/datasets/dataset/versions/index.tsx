@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
-import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
@@ -9,7 +9,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetCompareVersionToolbar, DatasetCompareVersionsList } from '@/domains/datasets';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
@@ -52,33 +52,33 @@ function DatasetCompareVersionsPage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="datasets" />
         </div>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   if (!datasetId || versionNumbers.length < 2) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)}>
-        <MainContentContent>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+        <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="text-muted-foreground py-5 text-center">
             <p>Select at least two versions to compare.</p>
           </div>
-        </MainContentContent>
-      </MainContentLayout>
+        </div>
+      </PageLayout>
     );
   }
 
@@ -89,7 +89,7 @@ function DatasetCompareVersionsPage() {
   };
 
   return (
-    <MainContentLayout {...pageHeaderProps(crumbs)}>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="mx-auto grid h-full max-w-[140rem] grid-rows-[auto_1fr] gap-4">
           <MainHeader>
@@ -131,7 +131,7 @@ function DatasetCompareVersionsPage() {
           </Columns>
         </div>
       </div>
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

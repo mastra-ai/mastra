@@ -4,7 +4,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { ScorersToolbar, useScorers } from '@/domains/scores';
 import { NoScorersInfo } from '@/domains/scores/components/scorers-list/no-scorers-info';
@@ -20,7 +20,7 @@ export default function Scorers() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -28,7 +28,7 @@ export default function Scorers() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="scorers" />
       </NoDataPageLayout>
     );
@@ -36,7 +36,7 @@ export default function Scorers() {
 
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <ErrorState title="Failed to load scorers" message={error.message} />
       </NoDataPageLayout>
     );
@@ -44,7 +44,7 @@ export default function Scorers() {
 
   if (Object.keys(scorers).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)} actions={<ScorersHeaderCreateAction />}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actions={<ScorersHeaderCreateAction />}>
         <NoScorersInfo />
       </NoDataPageLayout>
     );
@@ -58,7 +58,11 @@ export default function Scorers() {
   };
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} actions={<ScorersHeaderCreateAction />} height="full">
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actions={<ScorersHeaderCreateAction />}
+      className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
+    >
       <PageLayout.TopArea>
         <ScorersToolbar
           search={search}

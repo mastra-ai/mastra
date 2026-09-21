@@ -5,7 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useParams } from 'react-router';
 import { WorkflowRunCopyAction, WorkflowRunCrumb } from './workflow-crumbs';
 import { WorkflowHeader } from './workflow-header';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb, workflowCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
@@ -36,14 +36,12 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
     navCrumb('/workflows'),
     // The `to` link only renders on the nested graph/:runId route.
     runId ? { ...workflowCrumb, to: `/workflows/${encodeURIComponent(workflowId ?? '')}/graph` } : workflowCrumb,
-    ...(runId
-      ? [{ id: 'workflow-run', Component: WorkflowRunCrumb, Action: WorkflowRunCopyAction, heading: 'Workflow run' }]
-      : []),
+    ...(runId ? [{ id: 'workflow-run', Component: WorkflowRunCrumb, Action: WorkflowRunCopyAction }] : []),
   ];
 
   if (!workflowId) {
     return (
-      <PageLayout {...pageHeaderProps(crumbs)} height="full">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
         <div className="flex h-full flex-col items-center justify-center">
           <Txt variant="ui-md" className="text-foreground text-center">
             No workflow ID provided
@@ -55,7 +53,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
 
   if (isWorkflowLoading) {
     return (
-      <PageLayout {...pageHeaderProps(crumbs)} height="full">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
         <Skeleton className="h-full" />
       </PageLayout>
     );
@@ -68,10 +66,9 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
           <WorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
             <WorkflowSelectedStepProvider>
               <PageLayout
-                {...pageHeaderProps(crumbs)}
+                breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
                 actions={<WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />}
-                height="full"
-                className="grid-rows-[minmax(0,1fr)] p-0"
+                className="grid grid-rows-[minmax(0,1fr)]"
               >
                 <WorkflowLayoutUI leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}>
                   {children}

@@ -8,7 +8,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { DatabaseIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { EditDatasetForm } from '@/domains/datasets/components/edit-dataset-form';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { datasetCrumb, navCrumb } from '@/domains/navigation/crumbs';
@@ -17,7 +17,7 @@ const crumbs = [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-edit', label
 
 function EditDatasetPageShell({ children }: { children?: ReactNode }) {
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <div />
       <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
     </PageLayout>
@@ -61,7 +61,7 @@ function EditDatasetPage() {
   }
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <div />
       <PageLayout.MainArea isCentered>
         <div className="w-full max-w-2xl overflow-y-auto px-4 py-5">

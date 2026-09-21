@@ -98,7 +98,7 @@ export default function AgentBuilderAgentsPage() {
   })();
 
   return (
-    <PageLayout height="full" className="px-4 md:px-10">
+    <PageLayout className="grid grid-rows-[auto_minmax(0,1fr)] p-4 px-4 md:px-10">
       <PageLayout.TopArea>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
           <PageHeader>

@@ -40,7 +40,7 @@ import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useTracesListSource } from './hooks/use-traces-list-source';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
@@ -345,7 +345,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // `isFetching`) gates this: background refetches after the stale window must not flash it.
   if (isDiscoveryLoading) {
     return (
-      <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
         <PageLayout.MainArea>
           <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
         </PageLayout.MainArea>
@@ -355,7 +355,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   if (tracesError) {
     return (
-      <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
         {pageTopArea}
         <PageLayout.MainArea isCentered>
           <TracesErrorContent error={tracesError} resource="traces" errorTitle="Failed to load traces" />
@@ -368,7 +368,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
     return (
-      <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
         {pageTopArea}
         <PageLayout.MainArea isCentered>
           <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
@@ -378,7 +378,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   }
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       {pageTopArea}
 
       <TracesListView

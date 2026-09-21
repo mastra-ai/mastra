@@ -1,12 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Check, Download, GitPullRequest, Save, Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
 import { getCodeAgentOverrideSections } from '@/domains/agents/components/agent-cms-sidebar/agent-cms-sections';
 import { AgentVersionPanel } from '@/domains/agents/components/agent-version-panel';
@@ -323,7 +323,7 @@ function EditLayoutWrapper() {
   );
 
   return (
-    <MainContentLayout {...pageHeaderProps(crumbs)} actions={actions}>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actions={actions} className="p-4">
       {isNotFound ? (
         <>
           <div className="text-muted-foreground flex h-full items-center justify-center">Agent not found</div>
@@ -365,7 +365,7 @@ function EditLayoutWrapper() {
           editorConfig={codeAgent?.editor}
         />
       )}
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

@@ -3,7 +3,6 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent, CardHeader } from '@mastra/playground-ui/components/Card';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
@@ -12,7 +11,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { format } from 'date-fns';
 import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon, GitCompareIcon } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetItemDetails } from '@/domains/datasets';
 import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
@@ -116,33 +115,33 @@ function DatasetItemVersionsComparePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="datasets" />
         </div>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   if (!datasetId || !itemId) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)}>
-        <MainContentContent>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+        <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="text-muted-foreground py-5 text-center">
             <p>Item not found.</p>
           </div>
-        </MainContentContent>
-      </MainContentLayout>
+        </div>
+      </PageLayout>
     );
   }
 
@@ -154,8 +153,8 @@ function DatasetItemVersionsComparePage() {
   const leftIsOlder = (leftVersion?.datasetVersion ?? 0) < (rightVersion?.datasetVersion ?? 0);
 
   return (
-    <MainContentLayout
-      {...pageHeaderProps(crumbs)}
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actions={
         canDiff && (
           <Button variant="outline" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
@@ -171,8 +170,9 @@ function DatasetItemVersionsComparePage() {
           </Button>
         )
       }
+      className="p-4"
     >
-      <PageLayout height="full" className="grid-rows-[minmax(0,1fr)]">
+      <PageLayout className="grid grid-rows-[minmax(0,1fr)] p-4">
         <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
           <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
             <CardHeader>
@@ -229,7 +229,7 @@ function DatasetItemVersionsComparePage() {
           </Card>
         </div>
       </PageLayout>
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

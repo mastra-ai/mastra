@@ -1,6 +1,6 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { BookIcon, EarthIcon, MessageSquareIcon, ExternalLinkIcon, CloudUploadIcon, BuildingIcon } from 'lucide-react';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/resources')];
@@ -53,7 +53,7 @@ const resources = [
 
 export default function Resources() {
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} width="narrow">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="mx-auto max-w-screen-lg p-4 pt-6">
       <PageLayout.MainArea>
         <div className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
           {resources.map(resource => (

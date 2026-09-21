@@ -5,7 +5,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import {
@@ -109,7 +109,7 @@ export default function Experiments() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -117,7 +117,7 @@ export default function Experiments() {
 
   if (errorExperiments && is403ForbiddenError(errorExperiments)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="experiments" />
       </NoDataPageLayout>
     );
@@ -125,7 +125,7 @@ export default function Experiments() {
 
   if (errorDatasets && is403ForbiddenError(errorDatasets)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="datasets" />
       </NoDataPageLayout>
     );
@@ -133,7 +133,7 @@ export default function Experiments() {
 
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <ErrorState title="Failed to load experiments" message={error.message} />
       </NoDataPageLayout>
     );
@@ -150,7 +150,7 @@ export default function Experiments() {
   // With a dataset or target filter active, keep the toolbar so the user can reset it.
   if (experiments.length === 0 && !isLoading && datasetFilter === 'all' && !targetType) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
         {runDialog}
       </NoDataPageLayout>
@@ -176,7 +176,7 @@ export default function Experiments() {
   };
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <PageLayout.TopArea>
         <ExperimentsToolbar
           search={search}

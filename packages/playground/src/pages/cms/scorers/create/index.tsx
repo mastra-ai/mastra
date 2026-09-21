@@ -1,5 +1,5 @@
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
 import { useLinkComponent } from '@/lib/framework';
@@ -10,9 +10,9 @@ function CmsScorersCreatePage() {
   const { navigate, paths } = useLinkComponent();
 
   return (
-    <MainContentLayout {...pageHeaderProps(crumbs)} className="grid-rows-[1fr]">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[1fr] p-4">
       <ScorerCreateContent onSuccess={scorer => navigate(paths.scorerLink(scorer.id))} />
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

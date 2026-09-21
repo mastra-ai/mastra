@@ -8,7 +8,7 @@ import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { decodeRouteParam, navCrumb } from '@/domains/navigation/crumbs';
 import { ScheduleStatusText } from '@/domains/schedules/components/schedule-status-badge';
 import { ScheduleTriggersList } from '@/domains/schedules/components/schedule-triggers-list';
@@ -51,7 +51,7 @@ export default function SchedulePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -59,7 +59,7 @@ export default function SchedulePage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="schedules" />
       </NoDataPageLayout>
     );
@@ -67,7 +67,7 @@ export default function SchedulePage() {
 
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <ErrorState title="Failed to load schedule" message={error.message} />
       </NoDataPageLayout>
     );
@@ -77,7 +77,7 @@ export default function SchedulePage() {
   const agentId = schedule?.agentId;
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)}>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
       <PageLayout.TopArea>
         <PageLayout.Row className="justify-end">
           <PageLayout.Column className="flex justify-end gap-2">

@@ -8,7 +8,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { CalendarClockIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
 import { WorkflowsList } from '@/domains/workflows/components/workflows-list/workflows-list';
@@ -22,7 +22,7 @@ function Workflows() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -30,7 +30,7 @@ function Workflows() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="workflows" />
       </NoDataPageLayout>
     );
@@ -38,7 +38,7 @@ function Workflows() {
 
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <ErrorState title="Failed to load workflows" message={error.message} />
       </NoDataPageLayout>
     );
@@ -46,14 +46,14 @@ function Workflows() {
 
   if (Object.keys(workflows || {}).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <NoWorkflowsInfo />
       </NoDataPageLayout>
     );
   }
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
       <PageLayout.TopArea>
         <PageLayout.Row align="center" stack="responsive">
           <div className="max-w-120 flex-1">

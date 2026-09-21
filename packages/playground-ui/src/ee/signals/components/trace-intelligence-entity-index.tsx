@@ -16,7 +16,7 @@ import { DataListSkeleton } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { ListSearch } from '@/ds/components/ListSearch';
-import { NoDataPageLayout, PageLayout } from '@/ds/components/PageLayout';
+import { PageLayout } from '@/ds/components/PageLayout';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { SessionExpired } from '@/ds/components/SessionExpired';
@@ -41,22 +41,22 @@ export interface TraceIntelligenceEntityIndexProps {
 function EntityIndexError({ error }: { error: Error }) {
   if (is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <PageLayout.MainArea isCentered className="p-4">
         <SessionExpired />
-      </NoDataPageLayout>
+      </PageLayout.MainArea>
     );
   }
   if (is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <PageLayout.MainArea isCentered className="p-4">
         <PermissionDenied resource="Trace Intelligence" />
-      </NoDataPageLayout>
+      </PageLayout.MainArea>
     );
   }
   return (
-    <NoDataPageLayout>
+    <PageLayout.MainArea isCentered className="p-4">
       <ErrorState title="Failed to load Trace Intelligence" message={error.message} />
-    </NoDataPageLayout>
+    </PageLayout.MainArea>
   );
 }
 
@@ -179,7 +179,7 @@ export function TraceIntelligenceEntityIndex({
   }
 
   return (
-    <PageLayout width="narrow" height="full" className="max-w-7xl grid-rows-[auto_minmax(0,1fr)] content-normal">
+    <div className="mx-auto grid min-h-0 w-full max-w-7xl grid-rows-[auto_minmax(0,1fr)] p-4 pt-6">
       <PageLayout.TopArea>
         <EntityIndexControls
           search={search}
@@ -211,6 +211,6 @@ export function TraceIntelligenceEntityIndex({
         <div className="min-h-0 min-w-0">{body}</div>
         {settingsOpen ? <TraceSignalSettingsPanel onClose={() => setSettingsOpen(false)} /> : null}
       </div>
-    </PageLayout>
+    </div>
   );
 }

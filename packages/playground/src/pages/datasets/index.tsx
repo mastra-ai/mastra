@@ -6,7 +6,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
 import { useInfiniteDatasets } from '@/domains/datasets/hooks/use-datasets';
@@ -49,7 +49,7 @@ export default function Datasets() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -57,7 +57,7 @@ export default function Datasets() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="datasets" />
       </NoDataPageLayout>
     );
@@ -65,7 +65,7 @@ export default function Datasets() {
 
   if (error) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <ErrorState title="Failed to load datasets" message={error.message} />
       </NoDataPageLayout>
     );
@@ -74,7 +74,7 @@ export default function Datasets() {
   // With a target filter active, keep the toolbar so the user can reset it.
   if (datasets.length === 0 && !isLoading && !targetType) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)} actions={headerCreateAction}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actions={headerCreateAction}>
         <NoDatasetsInfo onCreateClick={openCreatePage} />
       </NoDataPageLayout>
     );
@@ -90,7 +90,11 @@ export default function Datasets() {
   };
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} actions={headerCreateAction} height="full">
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actions={headerCreateAction}
+      className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
+    >
       <PageLayout.TopArea>
         <DatasetsToolbar
           search={search}

@@ -1,24 +1,18 @@
 import type { ReactNode } from 'react';
-import { PageLayout } from './page-layout';
-import type { PageLayoutRootProps } from './page-layout-root';
+import { PageLayoutBase } from './page-layout';
+import type { PageLayoutProps } from './page-layout';
+import { PageLayoutMainArea } from './page-layout-main-area';
 
-export interface NoDataPageLayoutProps extends Pick<PageLayoutRootProps, 'breadcrumbs' | 'actions' | 'heading'> {
+export interface NoDataPageLayoutProps extends Pick<PageLayoutProps, 'breadcrumbs' | 'actions'> {
   title?: string;
   icon?: ReactNode;
   children: ReactNode;
 }
 
-export function NoDataPageLayout({ children, breadcrumbs, actions, heading }: NoDataPageLayoutProps) {
+export function NoDataPageLayout({ children, breadcrumbs, actions }: NoDataPageLayoutProps) {
   return (
-    <PageLayout
-      width="wide"
-      height="full"
-      className="grid-rows-[1fr]"
-      breadcrumbs={breadcrumbs}
-      actions={actions}
-      heading={heading}
-    >
-      <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
-    </PageLayout>
+    <PageLayoutBase className="grid grid-rows-[1fr] p-4" breadcrumbs={breadcrumbs} actions={actions}>
+      <PageLayoutMainArea isCentered>{children}</PageLayoutMainArea>
+    </PageLayoutBase>
   );
 }

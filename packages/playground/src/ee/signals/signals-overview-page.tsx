@@ -3,14 +3,14 @@ import { TraceIntelligenceEntityIndex, TraceIntelligenceProvider } from '@mastra
 import { Navigate, useSearchParams } from 'react-router';
 import { Link } from '../../lib/link';
 import { useEntityIndexUrlState } from './use-entity-index-url-state';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/intelligence')];
 
 export function SignalsOverviewPage() {
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} height="full" className="grid-rows-[minmax(0,1fr)] p-0">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[minmax(0,1fr)]">
       <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link}>
         <SignalsOverviewContent />
       </TraceIntelligenceProvider>

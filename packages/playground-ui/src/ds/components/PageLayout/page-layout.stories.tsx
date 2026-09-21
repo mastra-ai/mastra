@@ -21,7 +21,7 @@ const resources = ['Research agent', 'Support workflow', 'Knowledge search tool'
 export const FullPage: Story = {
   render: () => (
     <div className="bg-surface1 h-152">
-      <PageLayout width="wide" height="full" heading="Resources">
+      <PageLayout className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
         <PageLayout.TopArea>
           <PageLayout.Row align="center" stack="responsive">
             <PageLayout.Column>
@@ -59,8 +59,7 @@ export const WithHeader: Story = {
   render: () => (
     <div className="bg-surface1 h-152">
       <PageLayout
-        height="full"
-        heading="Research agent"
+        className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
         breadcrumbs={
           <Breadcrumb label="Breadcrumb">
             <Crumb as="span">Agents</Crumb>
@@ -87,7 +86,7 @@ export const WithHeader: Story = {
 export const NarrowSettings: Story = {
   render: () => (
     <div className="bg-surface1 min-h-136">
-      <PageLayout width="narrow">
+      <PageLayout className="mx-auto max-w-screen-lg p-4 pt-6">
         <PageLayout.TopArea>
           <PageHeader>
             <PageHeader.Title>Settings</PageHeader.Title>

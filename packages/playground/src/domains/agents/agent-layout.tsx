@@ -1,9 +1,9 @@
 import { coreFeatures } from '@mastra/core/features';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useParams, useLocation, useNavigate } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-detail-header-actions';
 import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-panel/agent-overview-panel';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
@@ -61,7 +61,11 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           <AgentOverviewPanel agentId={agentId!} />
         </ActivatedSkillsProvider>
       </RouteSidePanel>
-      <MainContentLayout {...pageHeaderProps(crumbs)} actions={<AgentDetailHeaderActions agentId={agentId!} />}>
+      <PageLayout
+        breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+        actions={<AgentDetailHeaderActions agentId={agentId!} />}
+        className="p-4"
+      >
         <AgentPageTabs
           agentId={agentId!}
           activeTab={activeTab}
@@ -69,7 +73,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           showObservability={showObservability}
         />
         {children}
-      </MainContentLayout>
+      </PageLayout>
     </KeyboardScope>
   );
 

@@ -1,8 +1,8 @@
 import type { UpdateStoredScorerParams } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
@@ -10,7 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { useStoredScorer, useStoredScorerMutations } from '@/domains/scores';
@@ -23,7 +23,7 @@ import { useScorerVersions, useScorerVersion } from '@/domains/scores/hooks/use-
 import { StoredScorerCrumb } from '@/domains/scores/scorer-crumb';
 import { useLinkComponent } from '@/lib/framework';
 
-const crumbs = [navCrumb('/scorers'), { id: 'scorer', Component: StoredScorerCrumb, heading: 'Scorer' }];
+const crumbs = [navCrumb('/scorers'), { id: 'scorer', Component: StoredScorerCrumb }];
 
 type StoredScorerData = NonNullable<ReturnType<typeof useStoredScorer>['data']>;
 
@@ -247,7 +247,7 @@ function CmsScorersEditPage() {
 
   if (isLoading) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)} className="grid-rows-[1fr]">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[1fr] p-4">
         <AgentEditLayout
           leftSlot={
             <div className="flex h-full items-center justify-center">
@@ -259,13 +259,13 @@ function CmsScorersEditPage() {
             <Spinner className="size-8" />
           </div>
         </AgentEditLayout>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   if (!scorer || !scorerId) {
     return (
-      <MainContentLayout {...pageHeaderProps(crumbs)} className="grid-rows-[1fr]">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[1fr] p-4">
         <AgentEditLayout
           leftSlot={
             <div className="text-muted-foreground flex h-full items-center justify-center">Scorer not found</div>
@@ -273,7 +273,7 @@ function CmsScorersEditPage() {
         >
           <div className="text-muted-foreground flex h-full items-center justify-center">Scorer not found</div>
         </AgentEditLayout>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
@@ -291,7 +291,11 @@ function CmsScorersEditPage() {
   );
 
   return (
-    <MainContentLayout {...pageHeaderProps(crumbs)} actions={actions} className="grid-rows-[1fr]">
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actions={actions}
+      className="grid grid-rows-[1fr] p-4"
+    >
       <CmsScorersEditForm
         scorer={scorer}
         scorerId={scorerId}
@@ -300,7 +304,7 @@ function CmsScorersEditPage() {
         activeVersionId={activeVersionId}
         onClearVersion={handleClearVersion}
       />
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

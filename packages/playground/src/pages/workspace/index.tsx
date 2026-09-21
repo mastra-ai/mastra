@@ -10,7 +10,7 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
 import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
@@ -305,7 +305,7 @@ export default function Workspace() {
   // Show loading while fetching workspace list
   if (isLoadingWorkspaces) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <Spinner />
       </NoDataPageLayout>
     );
@@ -314,7 +314,7 @@ export default function Workspace() {
   // If session expired (401 error)
   if (isSessionExpired) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -323,7 +323,7 @@ export default function Workspace() {
   // If permission denied (403 error)
   if (isPermissionDenied) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <PermissionDenied resource="workspaces" />
       </NoDataPageLayout>
     );
@@ -332,7 +332,7 @@ export default function Workspace() {
   // If workspace v1 is not supported by the server's @mastra/core version
   if (isWorkspaceNotSupported) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <WorkspaceNotSupported />
       </NoDataPageLayout>
     );
@@ -342,7 +342,7 @@ export default function Workspace() {
   const genericError = workspacesError || workspaceInfoError;
   if (genericError) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <ErrorState title="Failed to load workspace" message={(genericError as Error).message} />
       </NoDataPageLayout>
     );
@@ -351,7 +351,7 @@ export default function Workspace() {
   // If the workspace feature is configured but no workspaces exist yet, show empty state
   if (!isLoadingWorkspaces && workspaces.length === 0) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <NoWorkspacesInfo />
       </NoDataPageLayout>
     );
@@ -361,7 +361,7 @@ export default function Workspace() {
   // Also wait for workspaces list to load to avoid showing this before 403 is detected
   if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
-      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <WorkspaceNotConfigured />
       </NoDataPageLayout>
     );
@@ -370,7 +370,10 @@ export default function Workspace() {
   const showSkillsEmptyState = activeTab === 'skills' && hasSkills && !isSkillsConfigured && !isLoadingSkills;
 
   return (
-    <PageLayout {...pageHeaderProps(crumbs)} className={showSkillsEmptyState ? 'flex min-h-full flex-col' : undefined}>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      className={showSkillsEmptyState ? 'flex min-h-full flex-col' : undefined}
+    >
       {hasSearchCapability && (
         <PageLayout.TopArea>
           <PageLayout.Row className="justify-end">

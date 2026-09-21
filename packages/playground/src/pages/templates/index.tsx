@@ -1,10 +1,10 @@
 import { Header, HeaderTitle } from '@mastra/playground-ui/components/Header';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { PackageIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { TemplatesList } from '@/domains/templates/templates-list';
 import { TemplatesTools } from '@/domains/templates/templates-tools';
 import { useMastraTemplates } from '@/hooks/use-templates';
@@ -66,7 +66,7 @@ export default function Templates() {
   const isFiltered = searchTerm || selectedTag !== 'all' || selectedProvider !== 'all';
 
   return (
-    <MainContentLayout {...pageHeaderProps(crumbs)}>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
       <Header>
         <HeaderTitle>
           <Icon>
@@ -97,6 +97,6 @@ export default function Templates() {
           isLoading={isLoading}
         />
       </div>
-    </MainContentLayout>
+    </PageLayout>
   );
 }

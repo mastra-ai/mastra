@@ -1,11 +1,11 @@
 import { version } from '@mastra/core/package.json';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
-import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { decodeRouteParam } from '@/domains/navigation/crumbs';
 import { TemplateFailure } from '@/domains/templates/template-failure';
 import { TemplateForm } from '@/domains/templates/template-form';
@@ -332,7 +332,7 @@ export default function Template() {
   };
 
   return (
-    <MainContentLayout {...pageHeaderProps(crumbs)}>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
       <div className={cn('w-full lg:px-12 h-full overflow-y-scroll')}>
         <div className="mx-auto grid w-full max-w-[80rem] gap-y-4 p-4">
           <TemplateInfo
@@ -392,6 +392,6 @@ export default function Template() {
           )}
         </div>
       </div>
-    </MainContentLayout>
+    </PageLayout>
   );
 }

@@ -62,7 +62,7 @@ export const AgentBuilderInfrastructure = () => {
   const { data, isLoading, error } = useInfrastructureStatus({ enabled: canViewInfrastructure });
 
   return (
-    <PageLayout width="narrow">
+    <PageLayout className="mx-auto max-w-screen-lg p-4 pt-6">
       <PageLayout.TopArea>
         <PageHeader>
           <PageHeader.Title>Infrastructure</PageHeader.Title>
