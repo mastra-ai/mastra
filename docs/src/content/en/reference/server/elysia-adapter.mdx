@@ -111,7 +111,8 @@ console.log('Server running on http://localhost:3000')
   {
     name: 'mcpOptions',
     type: 'MCPOptions',
-    typeDescription: '{ serverless?: boolean, sessionIdGenerator?: () => string }',
+    typeDescription:
+      '{ setRequestAuth?: (req, requestContext) => void | Promise<void>, serverless?: boolean, sessionIdGenerator?: () => string }',
     description:
       'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`.',
     isOptional: true,

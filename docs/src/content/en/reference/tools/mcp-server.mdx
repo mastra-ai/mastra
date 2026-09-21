@@ -525,7 +525,7 @@ Here are the details for the values needed by the `startHTTP` method:
     name: 'options',
     type: 'MCPServerHTTPRequestOptions',
     description: 'Optional request guards. See the options table above for more details.',
-    optional: true,
+    isOptional: true,
   },
 ]}
 />
@@ -992,7 +992,7 @@ The example at the beginning of this page also demonstrates how to instantiate `
 
 ## OAuth protection
 
-To protect your MCP server with OAuth authentication per the [MCP Authorization specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `createOAuthMiddleware` function:
+To protect your MCP server with OAuth authentication per the [MCP Authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization), use the `createOAuthMiddleware` function:
 
 ```typescript
 import http from 'node:http'
