@@ -394,7 +394,7 @@ export class MessageHistory implements Processor {
     const foreignIds = new Set(
       storedInput.filter(message => message.id && !belongsHere(message)).map(message => message.id as string),
     );
-    // The reconciler drops these silently by design; report them here so a
+    // The reconciler itself is silent about these; the caller reports them, so a
     // client reusing an ID across threads is not losing messages invisibly.
     const droppedIds = messageIds.filter(id => foreignIds.has(id));
     span?.update({ attributes: { reconciliationDroppedMessageCount: droppedIds.length } });
