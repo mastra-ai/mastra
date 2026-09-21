@@ -43,6 +43,7 @@ function createHarness() {
         return vi.fn();
       }),
     },
+    options: { backgroundToolsEnabled: false },
     hookManager: undefined,
   } as any;
 
@@ -314,6 +315,7 @@ describe('input-request notifications fire at event receipt (#20398)', () => {
           return vi.fn();
         }),
       },
+      options: { backgroundToolsEnabled: false },
       hookManager: undefined,
     } as any;
     const handled: string[] = [];

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CheckIcon, MailIcon, MinusIcon, PlusIcon, SearchIcon, SendIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Kbd } from '../Kbd';
+import { Txt } from '../Txt/Txt';
 import {
   InputGroup,
   InputGroupAddon,
@@ -46,12 +47,6 @@ export const Variants: Story = {
           <SearchIcon />
         </InputGroupAddon>
         <InputGroupInput placeholder="Default" />
-      </InputGroup>
-      <InputGroup>
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput placeholder="Filled" />
       </InputGroup>
       <InputGroup variant="outline">
         <InputGroupAddon>
@@ -268,37 +263,49 @@ export const NumberWithStepper: Story = {
 
 export const OnDifferentSurfaces: Story = {
   render: () => (
-    <div className="new-theme flex w-96 flex-col gap-4">
+    <div className="new-theme flex w-[calc(100vw-2rem)] max-w-96 flex-col gap-4">
       <div className="border-border bg-sidebar rounded-lg border p-4">
+        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+          Sidebar
+        </Txt>
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-sidebar (recessed)" />
+          <InputGroupInput aria-label="Search agents on the sidebar" placeholder="Search agents..." />
         </InputGroup>
       </div>
       <div className="border-border bg-background rounded-lg border p-4">
+        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+          Main canvas
+        </Txt>
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-background" />
+          <InputGroupInput aria-label="Search agents on the main canvas" placeholder="Search agents..." />
         </InputGroup>
       </div>
       <div className="border-border bg-card rounded-lg border p-4">
+        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+          Card
+        </Txt>
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-card" />
+          <InputGroupInput aria-label="Search agents on a card" placeholder="Search agents..." />
         </InputGroup>
       </div>
-      <div className="border-border bg-muted rounded-lg border p-4">
+      <div className="border-border bg-popover rounded-lg border p-4">
+        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+          Popover
+        </Txt>
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-muted (raised)" />
+          <InputGroupInput aria-label="Search agents in a popover" placeholder="Search agents..." />
         </InputGroup>
       </div>
     </div>

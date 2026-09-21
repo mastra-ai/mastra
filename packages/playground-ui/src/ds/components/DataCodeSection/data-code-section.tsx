@@ -327,9 +327,9 @@ export function DataCodeSection({
         </div>
       </div>
 
-      <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+      <div className="border-border1 bg-surface3 text-ui-sm text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
         {usePlainTextView ? (
-          <div className="text-neutral4 font-mono break-all">
+          <div className="text-muted-foreground font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
@@ -390,8 +390,8 @@ export function DataCodeSection({
           </DialogHeader>
           <div className="overflow-auto px-6 pb-6">
             {expandedMultiline ? (
-              <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
-                <div className="text-neutral4 font-mono break-all">
+              <div className="border-border1 bg-surface3 text-ui-sm text-muted-foreground overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+                <div className="text-muted-foreground font-mono break-all">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>
               </div>

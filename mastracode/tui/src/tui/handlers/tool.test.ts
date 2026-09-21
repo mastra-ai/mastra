@@ -2,6 +2,7 @@ import { Container } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 
 import type { TUIState } from '../state.js';
 import {
@@ -16,7 +17,9 @@ import type { EventHandlerContext } from './types.js';
 async function flushParser(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
-  await new Promise(resolve => setTimeout(resolve, 100));
+  // Streamed args are applied by the render scheduler's coalesce timer, so the
+  // wait must exceed it (`handlers/__tests__/tool.test.ts` does the same).
+  await new Promise(resolve => setTimeout(resolve, DEFAULT_RENDER_COALESCE_MS + 20));
 }
 
 function visibleChildren(ctx: EventHandlerContext) {

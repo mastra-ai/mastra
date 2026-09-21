@@ -1,5 +1,6 @@
 import { ToolCallMono } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
@@ -40,6 +41,9 @@ export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   status?: ToolCallStatus;
   /** Error message when the delegation failed (tool part state `output-error`). */
   errorText?: string;
+  /** When set, shows a control that loads older messages from the sub-agent thread. */
+  onLoadPrevious?: () => void;
+  isLoadingPrevious?: boolean;
 }
 
 export const AgentBadge = ({
@@ -56,6 +60,8 @@ export const AgentBadge = ({
   keepOpenForStreamingChildMessages = false,
   status = 'idle',
   errorText,
+  onLoadPrevious,
+  isLoadingPrevious = false,
 }: AgentBadgeProps) => {
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
@@ -117,6 +123,18 @@ export const AgentBadge = ({
         ) : null
       }
     >
+      {onLoadPrevious && (
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={onLoadPrevious}
+          disabled={isLoadingPrevious}
+          data-testid="agent-badge-load-previous"
+        >
+          {isLoadingPrevious ? 'Loading earlier messages…' : 'Load earlier messages'}
+        </Button>
+      )}
+
       {messages.map((message, index) => {
         if (message.type === 'text') {
           return <Markdown key={index}>{message.content}</Markdown>;

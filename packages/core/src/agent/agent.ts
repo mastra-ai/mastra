@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { UIMessage } from '@internal/ai-sdk-v4';
 import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
@@ -113,7 +112,7 @@ import type { SignalProvider } from '../signals/signal-provider';
 import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
 import type { AgentSkillsInput, AgentSkillsResolver, SkillInput } from '../skills/types';
 
-import { InMemoryStore } from '../storage';
+import { getSnapshotMemoryInfo, InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
 import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
@@ -197,6 +196,7 @@ import type { ActiveThreadRun } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentClaimThreadPeerOptions,
+  AgentAbortThreadOptions,
   AgentConfig,
   AgentUpdateThreadPeerOptions,
   AgentDurableOption,
@@ -1188,7 +1188,7 @@ export class Agent<
         ? suppliedActiveDurationMs
         : 0;
     const record: GoalObjectiveRecord = {
-      id: options.id ?? randomUUID(),
+      id: options.id ?? globalThis.crypto.randomUUID(),
       objective,
       status: 'active',
       runsUsed: 0,
@@ -3287,7 +3287,7 @@ export class Agent<
     defaultMaxRetriesConfigured: boolean,
   ): ModelFallbacks[number] {
     return {
-      id: mdl.id ?? randomUUID(),
+      id: mdl.id ?? globalThis.crypto.randomUUID(),
       model: mdl.model as DynamicArgument<MastraModelConfig>,
       maxRetries: mdl.maxRetries ?? defaultMaxRetries,
       maxRetriesConfigured: mdl.maxRetries !== undefined || defaultMaxRetriesConfigured,
@@ -3564,6 +3564,14 @@ export class Agent<
   }
 
   #primitives?: MastraPrimitives;
+
+  /**
+   * Returns the logger registered with the agent.
+   * @internal
+   */
+  __getLogger() {
+    return this.logger;
+  }
 
   /**
    * Registers  logger primitives with the agent.
@@ -5109,7 +5117,7 @@ export class Agent<
           execute: async (inputData: SubAgentToolInput, context) => {
             const invocationActor = getInvocationActor(context);
             const startTime = Date.now();
-            const toolCallId = context?.agent?.toolCallId || randomUUID();
+            const toolCallId = context?.agent?.toolCallId || globalThis.crypto.randomUUID();
 
             // Get messages from context - available at tool execution time
             const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
@@ -5168,7 +5176,7 @@ export class Agent<
                 maxSteps: inputData.maxSteps || undefined,
               },
               iteration: derivedIteration,
-              runId: runId || randomUUID(),
+              runId: runId || globalThis.crypto.randomUUID(),
               threadId,
               resourceId,
               parentAgentId: this.id,
@@ -5181,13 +5189,13 @@ export class Agent<
             // Generate sub-agent thread and resource IDs early (before any rejection)
             // These are needed for both successful execution and rejection cases
             const subAgentThreadId = inputData.threadId
-              ? `${inputData.threadId}-${randomUUID()}`
+              ? `${inputData.threadId}-${globalThis.crypto.randomUUID()}`
               : context?.mastra?.generateId({
                   idType: 'thread',
                   source: 'agent',
                   entityId: agentName,
                   resourceId,
-                }) || randomUUID();
+                }) || globalThis.crypto.randomUUID();
 
             const subAgentResourceId = inputData.resourceId
               ? `${inputData.resourceId}-${agentName}`
@@ -5364,7 +5372,7 @@ export class Agent<
                   await context.writer?.write({
                     type: 'text-delta',
                     payload: {
-                      id: randomUUID(),
+                      id: globalThis.crypto.randomUUID(),
                       text: `[Delegation Rejected] ${rejectionMessage}`,
                     },
                     runId,
@@ -5378,7 +5386,7 @@ export class Agent<
                   try {
                     // Create user message with the original prompt
                     const userMessage: MastraDBMessage = {
-                      id: this.#mastra?.generateId() || randomUUID(),
+                      id: this.#mastra?.generateId() || globalThis.crypto.randomUUID(),
                       role: 'user',
                       type: 'text',
                       createdAt: new Date(),
@@ -5397,7 +5405,7 @@ export class Agent<
 
                     // Create assistant message with the rejection
                     const assistantMessage: MastraDBMessage = {
-                      id: this.#mastra?.generateId() || randomUUID(),
+                      id: this.#mastra?.generateId() || globalThis.crypto.randomUUID(),
                       role: 'assistant',
                       type: 'text',
                       createdAt: new Date(new Date().getTime() + 1),
@@ -5496,7 +5504,7 @@ export class Agent<
                     primitiveType: 'agent',
                     prompt: effectivePrompt,
                     iteration: derivedIteration,
-                    runId: runId || randomUUID(),
+                    runId: runId || globalThis.crypto.randomUUID(),
                     threadId,
                     resourceId,
                     parentAgentId: this.id,
@@ -5551,7 +5559,7 @@ export class Agent<
               // observational memory finalizing a turn), the explicit save after the run
               // upserts the same row instead of inserting a duplicate prompt.
               const subAgentUserMessage: MastraDBMessage = {
-                id: this.#mastra?.generateId() || randomUUID(),
+                id: this.#mastra?.generateId() || globalThis.crypto.randomUUID(),
                 role: 'user',
                 // New runs let MessageList stamp this after it adds forwarded context.
                 // Resume runs neither add the prompt again nor include it in the
@@ -5883,7 +5891,7 @@ export class Agent<
                     duration: Date.now() - startTime,
                     success: result.finishReason !== 'error',
                     iteration: derivedIteration,
-                    runId: runId || randomUUID(),
+                    runId: runId || globalThis.crypto.randomUUID(),
                     toolCallId,
                     parentAgentId: this.id,
                     parentAgentName: this.name,
@@ -5910,7 +5918,7 @@ export class Agent<
                   // Handle feedback if provided
                   if (completeResult?.feedback) {
                     const feedbackMessage: MastraDBMessage = {
-                      id: this.#mastra?.generateId() || randomUUID(),
+                      id: this.#mastra?.generateId() || globalThis.crypto.randomUUID(),
                       role: 'assistant',
                       type: 'text',
                       createdAt: new Date(),
@@ -5983,7 +5991,7 @@ export class Agent<
                     success: false,
                     error: err instanceof Error ? err : new Error(String(err)),
                     iteration: derivedIteration,
-                    runId: runId || randomUUID(),
+                    runId: runId || globalThis.crypto.randomUUID(),
                     toolCallId,
                     parentAgentId: this.id,
                     parentAgentName: this.name,
@@ -6005,7 +6013,7 @@ export class Agent<
 
                   if (completeResult?.feedback) {
                     const feedbackMessage: MastraDBMessage = {
-                      id: this.#mastra?.generateId() || randomUUID(),
+                      id: this.#mastra?.generateId() || globalThis.crypto.randomUUID(),
                       role: 'assistant',
                       type: 'text',
                       createdAt: new Date(),
@@ -6207,7 +6215,7 @@ export class Agent<
               // resolved by the framework from persisted suspension state may select an
               // existing run; model-authored arguments never control run identity.
               const shouldResumeWorkflow = resumeData !== undefined && !!suspendedToolRunId;
-              runIdToUse = shouldResumeWorkflow ? suspendedToolRunId : randomUUID();
+              runIdToUse = shouldResumeWorkflow ? suspendedToolRunId : globalThis.crypto.randomUUID();
               this.logger.debug('Executing workflow as tool', {
                 agent: this.name,
                 workflow: workflowName,
@@ -7047,23 +7055,9 @@ export class Agent<
   }
 
   #getSnapshotMemoryInfo(existingSnapshot: WorkflowRunState | null | undefined): AgentSnapshotMemoryInfo | undefined {
-    for (const key in existingSnapshot?.context) {
-      const step = existingSnapshot?.context[key];
-      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
-        return step.suspendPayload?.__streamState?.messageList?.memoryInfo;
-      }
-    }
-
-    // Durable agentic-loop snapshots don't embed `__streamState` in suspend
-    // payloads; their thread/resource info lives on the serialized workflow
-    // input's message-list state instead.
-    const durableMemoryInfo = (existingSnapshot?.context as Record<string, any> | undefined)?.input?.messageListState
-      ?.memoryInfo;
-    if (durableMemoryInfo && typeof durableMemoryInfo === 'object') {
-      return durableMemoryInfo as AgentSnapshotMemoryInfo;
-    }
-
-    return undefined;
+    // Canonical extraction shared with storage adapters — see
+    // `getSnapshotMemoryInfo` in storage/domains/workflows/snapshot-memory-info.ts.
+    return getSnapshotMemoryInfo(existingSnapshot);
   }
 
   #getSnapshotAgentId(existingSnapshot: WorkflowRunState | null | undefined): string | undefined {
@@ -7607,7 +7601,7 @@ export class Agent<
         threadId: threadFromArgs?.id,
         resourceId,
       }) ||
-      randomUUID();
+      globalThis.crypto.randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
     const mcpServerGuidance = await this.getMcpServerGuidance({
       requestContext,
@@ -7706,7 +7700,7 @@ export class Agent<
       logger: this.logger,
       getMemory: this.getMemory.bind(this),
       getModel: this.getModel.bind(this),
-      generateMessageId: this.#mastra?.generateId?.bind(this.#mastra) || (() => randomUUID()),
+      generateMessageId: this.#mastra?.generateId?.bind(this.#mastra) || (() => globalThis.crypto.randomUUID()),
       mastra: this.#mastra,
       _agentNetworkAppend:
         '_agentNetworkAppend' in this
@@ -8176,7 +8170,7 @@ export class Agent<
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
 
-    const runId = mergedOptions?.runId || this.#mastra?.generateId() || randomUUID();
+    const runId = mergedOptions?.runId || this.#mastra?.generateId() || globalThis.crypto.randomUUID();
 
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
@@ -8201,7 +8195,7 @@ export class Agent<
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
-      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
+      generateId: context => this.#mastra?.generateId(context) || globalThis.crypto.randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages,
       threadId,
@@ -8277,7 +8271,7 @@ export class Agent<
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
-      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
+      generateId: context => this.#mastra?.generateId(context) || globalThis.crypto.randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages: [],
       threadId,
@@ -8607,13 +8601,15 @@ export class Agent<
       });
     }
 
-    // resourceId is a storage column, so push it down to narrow the query;
-    // threadId lives inside the snapshot state, so filter here. The in-process
-    // resource check below stays as the correctness backstop: adapters silently
-    // skip the filter when the column is missing, and rows persisted before the
-    // column was populated carry the resource only in the snapshot. Durable
-    // agents persist their agentic loop under a separate workflow name, so
-    // query both — otherwise suspended durable runs are never discoverable.
+    // resourceId is a storage column and threadId is a best-effort JSON-path
+    // filter, so push both down to narrow the query where the adapter supports
+    // them. The in-process checks below stay as the correctness backstop:
+    // adapters silently skip filters they can't evaluate (missing column,
+    // non-JSON snapshot storage) and return a superset, and rows persisted
+    // before the resourceId column was populated carry the resource only in
+    // the snapshot. Durable agents persist their agentic loop under a separate
+    // workflow name, so query both — otherwise suspended durable runs are
+    // never discoverable.
     const storagePageSize = 100;
     const isPaginated = perPage !== undefined && page !== undefined;
     const firstRequestedMatch = isPaginated ? page * perPage : 0;
@@ -8627,6 +8623,7 @@ export class Agent<
           workflowName,
           status: 'suspended',
           resourceId,
+          threadId,
           fromDate,
           toDate,
           perPage: storagePageSize,
@@ -8681,7 +8678,7 @@ export class Agent<
     return { runs: matchedRuns, total };
   }
 
-  abortThreadStream(options: AgentThreadIdentityOptions): boolean {
+  abortThreadStream(options: AgentAbortThreadOptions): boolean {
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
 
@@ -9141,7 +9138,7 @@ export class Agent<
         idType: 'run',
         source: 'agent',
         entityId: this.id,
-      }) ?? randomUUID();
+      }) ?? globalThis.crypto.randomUUID();
     // The wait also reserves the thread for this runId, so concurrent stream()
     // calls on the same thread serialize instead of racing between this wait
     // and registerRun below.

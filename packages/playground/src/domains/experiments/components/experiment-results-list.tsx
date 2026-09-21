@@ -142,7 +142,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
             const rowCells = (
               <>
                 {hasItemIdColumn && (
-                  <DataList.Cell className="text-ui-smd text-neutral3 flex items-center gap-1.5 tracking-wide">
+                  <DataList.Cell className="text-ui-smd text-muted-foreground flex items-center gap-1.5 tracking-wide">
                     <span>{result.itemId?.slice(0, 8) ?? ''}</span>
                     {hasError && (
                       <Tooltip>
@@ -160,7 +160,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                     {result.status ? (
                       <ReviewStatusBadge status={result.status} />
                     ) : (
-                      <span className="text-neutral2">—</span>
+                      <span className="text-placeholder">—</span>
                     )}
                   </DataList.Cell>
                 )}
@@ -190,7 +190,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
                   return (
-                    <DataList.Cell key={scorerId} className="text-neutral3 text-ui-smd font-mono">
+                    <DataList.Cell key={scorerId} className="text-muted-foreground text-ui-smd font-mono">
                       {score != null ? score.score.toFixed(3) : '-'}
                     </DataList.Cell>
                   );
@@ -249,17 +249,17 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
     : Object.values(scores ?? {});
   if (values.length === 0) {
     return (
-      <Txt variant="ui-xs" className="text-neutral2">
+      <Txt variant="ui-xs" className="text-placeholder">
         —
       </Txt>
     );
   }
   return (
     <div className="flex items-center gap-1">
-      <Icon size="sm" className="text-neutral3">
+      <Icon size="sm" className="text-muted-foreground">
         <GaugeIcon />
       </Icon>
-      <Txt variant="ui-xs" className="text-neutral4 font-mono">
+      <Txt variant="ui-xs" className="text-muted-foreground font-mono">
         {values[0].toFixed(2)}
       </Txt>
       {values.length > 1 && <Badge>+{values.length - 1}</Badge>}

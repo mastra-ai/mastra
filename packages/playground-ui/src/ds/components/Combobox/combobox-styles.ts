@@ -56,11 +56,11 @@ export function comboboxTriggerClass({
     // Fill the field and push the value left / chevron right (Button's base
     // centers its content with `justify-center`). Icon sizes are a fixed square
     // showing only the chevron, so they keep Button's centering.
-    !isIconButtonSize(size) && 'w-full justify-between',
+    !isIconButtonSize(size) && 'w-full justify-between font-normal',
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant === 'default' ? 'field' : visualVariant],
     'data-[placeholder]:text-muted-foreground',
-    error && 'border-error hover:border-error focus-visible:border-error',
+    error && 'border-destructive hover:border-destructive focus-visible:border-destructive',
     className,
   );
 }

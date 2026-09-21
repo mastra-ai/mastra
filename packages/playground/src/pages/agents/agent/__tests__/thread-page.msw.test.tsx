@@ -325,9 +325,10 @@ describe('Standalone thread page', () => {
         expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
         await act(async () => releaseHistory());
         await waitFor(() =>
-          expect(queryClient.getQueryState(['memory', 'messages', THREAD_ID, AGENT_ID, 'requestContext'])?.status).toBe(
-            'success',
-          ),
+          expect(
+            queryClient.getQueryCache().find({ queryKey: ['memory', 'messages', THREAD_ID, AGENT_ID], exact: false })
+              ?.state.status,
+          ).toBe('success'),
         );
         expect(historyReturned).toHaveBeenCalledOnce();
         await waitFor(

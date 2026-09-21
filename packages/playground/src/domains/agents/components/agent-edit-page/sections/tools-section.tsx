@@ -41,9 +41,9 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
     <div className="border-border1 bg-surface2 rounded-md border">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="bg-surface3 flex w-full items-center gap-1 p-3">
-          <ChevronRight className="text-neutral3 h-4 w-4" />
+          <ChevronRight className="text-muted-foreground h-4 w-4" />
           <SectionTitle icon={<ToolsIcon className="text-accent6" />}>
-            Tools{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+            Tools{count > 0 && <span className="text-muted-foreground font-normal">({count})</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -85,6 +85,8 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
                   <div className="flex flex-col gap-2">
                     <Combobox
                       multiple
+                      name="tools"
+                      aria-label="Tools"
                       options={options}
                       value={selectedIds}
                       onValueChange={handleValueChange}

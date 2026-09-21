@@ -101,8 +101,7 @@ createWorkflowTestSuite({
   },
 
   beforeAll: async () => {
-    vi.unmock('crypto');
-    vi.unmock('node:crypto');
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockRestore();
   },
 
   afterAll: async () => {

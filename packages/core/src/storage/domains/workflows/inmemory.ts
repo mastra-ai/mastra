@@ -11,6 +11,7 @@ import { matchesExpectedWorkflowStatus } from '../../types';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
+import { getSnapshotMemoryInfo } from './snapshot-memory-info';
 
 /**
  * Deep-clone in-memory workflow state.
@@ -341,6 +342,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     perPage,
     page,
     resourceId,
+    threadId,
     status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     if (page !== undefined && page < 0) {
@@ -384,6 +386,25 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       runs = runs.filter((run: any) => new Date(run.createdAt).getTime() <= toDate.getTime());
     }
     if (resourceId) runs = runs.filter((run: any) => run.resourceId === resourceId);
+    if (threadId) {
+      runs = runs.filter((run: any) => {
+        let snapshot: WorkflowRunState | string = run?.snapshot!;
+
+        if (!snapshot) {
+          return false;
+        }
+
+        if (typeof snapshot === 'string') {
+          try {
+            snapshot = JSON.parse(snapshot) as WorkflowRunState;
+          } catch {
+            return false;
+          }
+        }
+
+        return getSnapshotMemoryInfo(snapshot)?.threadId === threadId;
+      });
+    }
 
     const total = runs.length;
 

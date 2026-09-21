@@ -56,7 +56,7 @@ export function TraceTimeRangeChip(props: TraceTimeRangeChipProps) {
   return (
     <FilterBarChip item={TRACE_TIME_RANGE_ITEM} removable={false}>
       <span
-        className={cn(segmentClass, 'text-neutral6 last:rounded-r-none')}
+        className={cn(segmentClass, 'text-foreground last:rounded-r-none')}
         style={fieldSegmentAccentStyle(TRACE_TIME_RANGE_FIELD)}
       >
         <FilterBarFieldLabel field={TRACE_TIME_RANGE_FIELD} />

@@ -1,3 +1,10 @@
+import {
+  ACCOUNT_SWITCH_PART_TYPE,
+  isAccountSwitchReason,
+  isPackFallbackReason,
+  type AccountSwitchPartData,
+  type PackFallbackPartData,
+} from '@mastra/code-sdk/auth/account-rotation-processor';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import type { CreatedAgentSignal } from '@mastra/core/signals';
@@ -44,7 +51,19 @@ export interface OmRenderPart {
   data: Record<string, unknown>;
 }
 
-export type AssistantRenderPart = TextRenderPart | ThinkingRenderPart | ToolRenderPart | OmRenderPart;
+export interface AccountSwitchRenderPart extends AccountSwitchPartData {
+  kind: 'account-switch';
+}
+
+export type PackFallbackRenderPart = PackFallbackPartData & { kind: 'pack-fallback' };
+
+export type AssistantRenderPart =
+  | TextRenderPart
+  | ThinkingRenderPart
+  | ToolRenderPart
+  | OmRenderPart
+  | AccountSwitchRenderPart
+  | PackFallbackRenderPart;
 
 function getParts(message: MastraDBMessage): MessagePart[] {
   const content = message.content;
@@ -66,6 +85,60 @@ const OM_EVENT_BY_TYPE: Record<string, OmRenderPart['event']> = {
   'data-om-observation-failed': 'failed',
   'data-om-thread-update': 'thread-title',
 };
+
+const PACK_FALLBACK_PART_TYPE = 'data-mastracode-pack-fallback';
+
+function packFallbackRenderPart(data: unknown): PackFallbackRenderPart | null {
+  if (!data || typeof data !== 'object') return null;
+  const record = data as Record<string, unknown>;
+  const endpoint = (value: unknown): { packId: string; label: string } | null => {
+    if (!value || typeof value !== 'object') return null;
+    const entry = value as Record<string, unknown>;
+    if (typeof entry.packId !== 'string' || typeof entry.label !== 'string') return null;
+    return { packId: entry.packId, label: entry.label };
+  };
+  const from = endpoint(record.from);
+  const to = endpoint(record.to);
+  if (!from || !to || !isPackFallbackReason(record.reason)) return null;
+  return {
+    kind: 'pack-fallback',
+    from,
+    to,
+    reason: record.reason,
+    at: typeof record.at === 'string' ? record.at : '',
+  };
+}
+
+function accountSwitchRenderPart(data: unknown): AccountSwitchRenderPart | null {
+  if (!data || typeof data !== 'object') return null;
+  const record = data as Record<string, unknown>;
+  if (typeof record.provider !== 'string' || !isAccountSwitchReason(record.reason)) return null;
+  const endpoint = (value: unknown): { id: string; label: string } | null => {
+    if (!value || typeof value !== 'object') return null;
+    const entry = value as Record<string, unknown>;
+    if (typeof entry.id !== 'string' || typeof entry.label !== 'string') return null;
+    return { id: entry.id, label: entry.label };
+  };
+  // `null` is the explicit persisted marker for "no usable account" (pool
+  // exhaustion). Anything else that doesn't parse is schema drift and must not
+  // collapse to `null` either — that renders as "All accounts unavailable",
+  // misreporting a rotation as exhaustion. Unknown endpoint instead.
+  const toEndpoint = (value: unknown): { id: string; label: string } | null => {
+    if (value === null || value === undefined) return null;
+    return endpoint(value) ?? { id: 'unknown', label: 'unknown' };
+  };
+  return {
+    kind: 'account-switch',
+    provider: record.provider,
+    from: endpoint(record.from),
+    to: toEndpoint(record.to),
+    reason: record.reason,
+    at: typeof record.at === 'string' ? record.at : '',
+    // A12 exclusivity flag: without it a pinned route's exhaustion would
+    // re-render from history as "all accounts unavailable".
+    ...(record.exclusive === true ? { exclusive: true } : {}),
+  };
+}
 
 /**
  * Walk a message's `content.parts` and project them into flat render items in
@@ -128,6 +201,16 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
         break;
       }
       default: {
+        if (partType === ACCOUNT_SWITCH_PART_TYPE) {
+          const switchPart = accountSwitchRenderPart((part as { data?: unknown }).data);
+          if (switchPart) out.push(switchPart);
+          break;
+        }
+        if (partType === PACK_FALLBACK_PART_TYPE) {
+          const hopPart = packFallbackRenderPart((part as { data?: unknown }).data);
+          if (hopPart) out.push(hopPart);
+          break;
+        }
         const event = OM_EVENT_BY_TYPE[part.type];
         if (event) {
           const data = ((part as { data?: Record<string, unknown> }).data ?? {}) as Record<string, unknown>;

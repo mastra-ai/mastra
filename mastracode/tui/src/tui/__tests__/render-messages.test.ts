@@ -690,7 +690,11 @@ describe('addUserMessage', () => {
     expect((state.chatContainer.children[0] as TemporalGapComponent).render(80).join('\n')).toContain(
       '⏳ 15 minutes later',
     );
-    expect(state.messageComponentsById.size).toBe(0);
+    // Reminders are registered in `messageComponentsById` before insertion —
+    // `render-messages.ts` keys the addUserMessage dedup guard on that map, so
+    // an unregistered reminder would double-render on a repeat dispatch.
+    expect(state.messageComponentsById.size).toBe(1);
+    expect(state.messageComponentsById.get('__temporal_1')).toBe(state.chatContainer.children[0]);
   });
 
   it('anchors a persisted temporal-gap marker before its target message when precedesMessageId is present', () => {

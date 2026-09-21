@@ -150,17 +150,17 @@ export function DatasetItemsList({
                 </DataList.TextCell>
                 <DataList.Cell className="min-w-0">
                   {item.expectedTrajectory ? (
-                    <span className="text-ui-smd text-neutral3">
+                    <span className="text-ui-smd text-muted-foreground">
                       {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
                         ? `${((item.expectedTrajectory as Record<string, unknown>).steps as unknown[]).length} steps`
                         : 'Yes'}
                     </span>
                   ) : (
-                    <span className="text-neutral4">—</span>
+                    <span className="text-muted-foreground">—</span>
                   )}
                 </DataList.Cell>
                 <DataList.Cell className="min-w-0">
-                  <span className="text-ui-smd text-neutral2 block truncate">{formatDate(createdAtDate)}</span>
+                  <span className="text-ui-smd text-placeholder block truncate">{formatDate(createdAtDate)}</span>
                 </DataList.Cell>
               </>
             );

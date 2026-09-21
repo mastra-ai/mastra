@@ -4,13 +4,14 @@ import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/t
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
 import {
   emptyTraceQueryFields,
   traceQueryFieldsWithRegion,
   traceQueryPage,
   traceQueryRegionValues,
+  traceQuerySpanModelValues,
 } from './fixtures/trace-query';
 import {
   branchList,
@@ -119,6 +120,17 @@ beforeEach(() => {
     serializeTraceColumnPreferences({ visibleColumns: ['inputTokens'], metadataKeys: [] }),
   );
   onBreakdownRequest.mockClear();
+});
+
+// `TracesListView` dispatches a synthetic `scroll` event on its scroll container to make the
+// virtualizer re-read `scrollTop` once a query settles. The virtualizer answers scroll events
+// through a trailing debounce of `isScrollingResetDelay` (150ms) that its `cleanup()` never
+// cancels, so a test that finishes right after a render leaves that timer pending. Vitest tears
+// the jsdom environment down when the file ends, and the timer then fires with the `window`
+// global already gone — an unhandled `ReferenceError: window is not defined` that fails the
+// whole run. Let the debounce expire while the environment is still alive.
+afterAll(async () => {
+  await new Promise(resolve => setTimeout(resolve, 200));
 });
 
 describe('Traces page usage columns', () => {
@@ -571,8 +583,8 @@ describe('Traces page filter bar', () => {
 
       // Tags cannot be filtered by the trace query API, so no chip advertises them.
       expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
-        'Trace IDtrace-a',
-        'Environmentprod',
+        'Trace IDistrace-a',
+        'Environmentisprod',
       ]);
     });
   });
@@ -588,7 +600,7 @@ describe('Traces page filter bar', () => {
       fireEvent.click(await screen.findByRole('option', { name: 'Environment' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEnvironment='));
-      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual(['Environment…']);
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual(['Environmentis…']);
       expect(screen.getByTestId('location').textContent).not.toContain('status=');
     });
   });
@@ -613,7 +625,9 @@ describe('Traces page filter bar', () => {
       focusFilterInput();
       typeInFilter('Environment');
       await screen.findByRole('option', { name: 'Environment' });
-      // Every trace field has a single operator, so the operator step is skipped.
+      pressInFilter('Enter');
+      // Operator step: "is" is the first option.
+      await screen.findByRole('option', { name: 'is' });
       pressInFilter('Enter');
       await screen.findByRole('option', { name: 'prod' });
       pressInFilter('Enter');
@@ -638,6 +652,164 @@ describe('Traces page filter bar', () => {
     });
   });
 
+  describe('when the URL carries filterTraceId.op=isNot', () => {
+    const renderIsNot = async () => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTraceId.op=isNot');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      return onQuery;
+    };
+
+    it('renders the chip with the "is not" operator', async () => {
+      await renderIsNot();
+
+      expect(screen.getByRole('combobox', { name: 'Operator: is not' })).toBeTruthy();
+    });
+
+    it('sends a ne predicate on traceId in the trace query request', async () => {
+      const onQuery = await renderIsNot();
+
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
+        JSON.stringify({ op: 'ne', left: { path: 'traceId' }, right: { literal: 'trace-a' } }),
+      );
+    });
+  });
+
+  const renderCapturingQuery = async (entry: string) => {
+    const onQuery = vi.fn<(body: unknown) => void>();
+    setTracePageHandlers(metricsCapableSystemPackages);
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+        onQuery(await request.json());
+        return HttpResponse.json(traceQueryPage);
+      }),
+    );
+    const { queryClient } = renderPage(entry);
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    return onQuery;
+  };
+
+  describe('when the URL carries filterSpanModel.op=isNot', () => {
+    it('sends spans.none with the positive eq predicate', async () => {
+      const onQuery = await renderCapturingQuery('/traces?filterSpanModel=gpt-5-mini&filterSpanModel.op=isNot');
+
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
+        JSON.stringify({ spans: { none: { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-5-mini' } } } }),
+      );
+    });
+  });
+
+  describe('when the URL carries filterThreadId.op=isNot', () => {
+    it('also keeps traces whose thread is unset', async () => {
+      const onQuery = await renderCapturingQuery('/traces?filterThreadId=t1&filterThreadId.op=isNot');
+
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
+        JSON.stringify({
+          op: 'or',
+          args: [
+            { op: 'ne', left: { path: 'threadId' }, right: { literal: 't1' } },
+            { op: 'notExists', path: 'threadId' },
+          ],
+        }),
+      );
+    });
+  });
+
+  describe('when the URL carries filterSpanDurationMs=1000 with the gt operator', () => {
+    it('sends a numeric gt predicate inside spans.some', async () => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      const { queryClient } = renderPage('/traces?filterSpanDurationMs=1000&filterSpanDurationMs.op=gt');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
+        JSON.stringify({ spans: { some: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 1000 } } } }),
+      );
+    });
+  });
+
+  describe('when the URL carries filterSpanError with the exists operator', () => {
+    const renderExists = async () => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage('/traces?filterSpanError=&filterSpanError.op=exists');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      return onQuery;
+    };
+
+    it('renders the chip without a value segment', async () => {
+      await renderExists();
+
+      const chip = getFilterChips()[1];
+      expect(chip?.textContent).toBe('Span errorexists');
+      expect(within(chip!).queryByRole('combobox', { name: /^Value/ })).toBeNull();
+    });
+
+    it('sends an exists predicate inside spans.some', async () => {
+      const onQuery = await renderExists();
+
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
+        JSON.stringify({ spans: { some: { op: 'exists', path: 'error' } } }),
+      );
+    });
+  });
+
+  describe('when the user switches an existing chip to the "is not" operator', () => {
+    it('writes the .op param to the URL', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+
+      const { queryClient } = renderPage('/traces?filterTraceId=trace-a');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('combobox', { name: 'Operator: is' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'is not' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterTraceId.op=isNot'));
+      expect(screen.getByTestId('location').textContent).toContain('filterTraceId=trace-a');
+    });
+  });
+
+  describe('when the user opens the value step of a Model chip', () => {
+    it('suggests models discovered in the spans scope', async () => {
+      const onValues = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/values`, async ({ request }) => {
+          onValues(await request.json());
+          return HttpResponse.json(traceQuerySpanModelValues);
+        }),
+      );
+
+      const { queryClient } = renderPage('/traces?filterSpanModel=');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('combobox', { name: 'Value: …' }));
+
+      expect(await screen.findByRole('option', { name: 'gpt-4o' })).toBeTruthy();
+      expect(onValues.mock.calls.at(-1)?.[0]).toMatchObject({ predicateScope: 'spans', path: 'model' });
+    });
+  });
+
   describe('when the page is scoped to an agent', () => {
     const renderScoped = async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
@@ -653,7 +825,7 @@ describe('Traces page filter bar', () => {
     it('does not render chips for the scope fields', async () => {
       await renderScoped();
 
-      expect([...getFilterChips()].slice(1).map(chip => chip.textContent)).toEqual(['Trace IDtrace-a']);
+      expect([...getFilterChips()].slice(1).map(chip => chip.textContent)).toEqual(['Trace IDistrace-a']);
     });
 
     it('keeps the scope in the URL after Clear filters', async () => {
@@ -758,6 +930,8 @@ describe('Traces page metadata filter discovery', () => {
       typeInFilter('region');
       await screen.findByRole('option', { name: 'region' });
       pressInFilter('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      pressInFilter('Enter');
       await screen.findByRole('option', { name: 'eu-west' });
       pressInFilter('Enter');
 
@@ -808,7 +982,7 @@ describe('Traces page metadata filter discovery', () => {
       const { queryClient } = renderPage('/traces?filterMetadata.region=eu-west');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual(['regioneu-west']);
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual(['regioniseu-west']);
     });
   });
 });

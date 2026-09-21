@@ -91,25 +91,25 @@ const BackgroundTaskMetadata = ({
 
         <DialogBody className="space-y-4">
           <div className="space-y-2">
-            <Txt className="text-neutral3">Background Task Duration</Txt>
-            <Txt className="text-neutral6 text-ui-md">{toSigFigs(timeDiff, 3)}ms</Txt>
+            <Txt className="text-muted-foreground">Background Task Duration</Txt>
+            <Txt className="text-foreground text-ui-md">{toSigFigs(timeDiff, 3)}ms</Txt>
           </div>
 
           <div className="space-y-2">
-            <Txt className="text-neutral3">Background Task Arguments</Txt>
+            <Txt className="text-muted-foreground">Background Task Arguments</Txt>
             {argSlot}
           </div>
 
           {suspendPayloadSlot !== undefined && suspendPayload && (
             <div className="space-y-2">
-              <Txt className="text-neutral3">Background Task Suspend Data</Txt>
+              <Txt className="text-muted-foreground">Background Task Suspend Data</Txt>
               {suspendPayloadSlot}
             </div>
           )}
 
           {resultSlot !== undefined && result && (
             <div className="space-y-2">
-              <Txt className="text-neutral3">Background Task Result</Txt>
+              <Txt className="text-muted-foreground">Background Task Result</Txt>
               {resultSlot}
             </div>
           )}
@@ -139,9 +139,9 @@ export const BackgroundTaskMetadataDialogTrigger = ({ backgroundTask }: Backgrou
         onClick={() => setIsOpen(s => !s)}
       >
         {backgroundTask.completedAt || backgroundTask.suspendedAt ? (
-          <Share2 className="text-neutral3 size-5" />
+          <Share2 className="text-muted-foreground size-5" />
         ) : (
-          <Loader2Icon className="text-neutral3 size-5 animate-spin" />
+          <Loader2Icon className="text-muted-foreground size-5 animate-spin" />
         )}
       </Button>
 
