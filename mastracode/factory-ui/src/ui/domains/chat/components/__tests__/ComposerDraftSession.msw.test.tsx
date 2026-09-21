@@ -13,6 +13,7 @@ import {
   SESSION_ID,
   createdDraftSession,
   renderDraft,
+  renderThread,
   stubPreparingSession,
 } from './composer-session-test-fixture';
 
@@ -74,6 +75,33 @@ describe('Composer on a lazy user-session draft', () => {
     await waitFor(() => expect(preparation.delivered).toEqual(['fix the login bug']));
     expect(preparation.posted).toEqual(['fix the login bug']);
     expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
+  });
+
+  it('restores an interrupted first prompt as a draft without sending it twice', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'recover this prompt' });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+        HttpResponse.json({ session: createdDraftSession('recover this prompt') }),
+      ),
+    );
+    const user = userEvent.setup();
+    const firstPage = renderDraft();
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'recover this prompt');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(preparation.posted).toEqual(['recover this prompt']));
+
+    // The server accepted the request but is still preparing the workspace.
+    // A page reload must not automatically send it a second time.
+    firstPage.unmount();
+    const recoveredPage = renderThread();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('recover this prompt'));
+    expect(await screen.findByText(/Check the transcript before retrying/)).toBeInTheDocument();
+    recoveredPage.unmount();
+    renderThread();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('recover this prompt'));
+    expect(preparation.posted).toEqual(['recover this prompt']);
   });
 
   it('applies a draft-selected pack before dispatching the first prompt', async () => {
