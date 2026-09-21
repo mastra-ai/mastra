@@ -8,6 +8,7 @@ import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
 import type {
+  DraftStage,
   FilterBarField,
   FilterBarFieldType,
   FilterBarItem,
@@ -62,6 +63,13 @@ export function FilterBarFieldLabel({ field, label }: { field: FilterBarField | 
 /** Inline style carrying a field's accent onto its field segment (text + icon). */
 export const fieldSegmentAccentStyle = (field: FilterBarField | undefined) =>
   field?.color ? { color: field.color } : undefined;
+
+/** Segments a chip already showed before its latest step, given how far its draft had got. */
+const settledSegments = (from: DraftStage, operatorImplied: boolean): number => {
+  if (from === 'none') return 0;
+  if (from === 'field' || operatorImplied) return 1;
+  return 2;
+};
 
 export const formatValue = (value: FilterBarValue, field: FilterBarField | undefined): string => {
   const suggestions = getFieldSuggestions(field);
@@ -143,21 +151,13 @@ export function FilterBarChip({
     .filter(Boolean)
     .join(' ');
 
-  // Segments of the default composition currently shown. When that number grows (the
-  // draft gaining its operator, then becoming an item), the entrance stagger resumes
-  // after the ones already on screen (see filter-bar-chip.css).
-  const segmentCount =
-    (readOnly ? 1 : 0) +
-    1 +
-    (operatorImplied || (draft && !operator) ? 0 : 1) +
-    (draft || (operator?.arity ?? 'one') === 'none' ? 0 : 1) +
-    (readOnly || draft || !removable ? 0 : 1);
-  const [segments, setSegments] = useState({ settled: 0, count: segmentCount });
-  if (segments.count !== segmentCount) setSegments({ settled: segments.count, count: segmentCount });
-
-  // Landing the value turns the draft into a filter: the chip glints once to mark it.
-  const [shine, setShine] = useState({ wasDraft: draft, active: false });
-  if (shine.wasDraft !== draft) setShine({ wasDraft: draft, active: shine.wasDraft && !draft });
+  // The provider records where each draft step (and the final commit) started from, so
+  // the entrance stagger resumes after the segments already on screen and the chip
+  // glints once when it lands as a filter (see filter-bar-chip.css).
+  const commit = !draft && ctx.lastCommit?.id === item.id ? ctx.lastCommit : null;
+  const from = draft ? (ctx.draft?.from ?? 'none') : (commit?.from ?? 'none');
+  const settled = settledSegments(from, operatorImplied);
+  const shine = commit !== null;
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -216,18 +216,18 @@ export function FilterBarChip({
         data-slot="filter-bar-chip"
         data-draft={draft || undefined}
         data-readonly={readOnly || undefined}
-        data-shine={shine.active || undefined}
+        data-shine={shine || undefined}
         className={cn(chipClass, className)}
         style={
           {
-            '--filter-bar-segments-settled': segments.settled,
+            '--filter-bar-segments-settled': settled,
             '--filter-bar-chip-shine': field?.color ?? 'currentColor',
           } as CSSProperties
         }
         onKeyDown={handleKeyDown}
         onClick={(event: MouseEvent) => event.stopPropagation()}
         onAnimationEnd={(event: AnimationEvent) => {
-          if (event.animationName === 'filter-bar-chip-shine') setShine(s => ({ ...s, active: false }));
+          if (event.animationName === 'filter-bar-chip-shine') ctx.settleCommit();
         }}
       >
         {readOnly && (

@@ -81,6 +81,17 @@ export type FilterBarDraft = {
   id: string;
   fieldId: string;
   operatorId?: string;
+  /** What the draft chip showed before this step, so only the new segments animate in. */
+  from: DraftStage;
+};
+
+/** How far a draft had progressed: nothing yet, its field, or its field and operator. */
+export type DraftStage = 'none' | 'field' | 'operator';
+
+/** The draft that just became an item — the chip glints once, then settles. */
+export type FilterBarCommit = {
+  id: string;
+  from: DraftStage;
 };
 
 export type FilterBarSegment = 'field' | 'operator' | 'value' | 'remove';

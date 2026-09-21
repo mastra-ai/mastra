@@ -333,6 +333,31 @@ describe('FilterBar', () => {
         expect(onChange).toHaveBeenCalledTimes(1);
       });
 
+      it('glints the committed chip once, while chips present from the start never glint', async () => {
+        render(<Harness initial={[{ id: 'a', fieldId: 'status', operatorId: 'is', value: 'Failed' }]} />);
+        const preexisting = screen.getByRole('group', { name: 'Status is Failed' });
+        expect(preexisting.hasAttribute('data-shine')).toBe(false);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        expect(document.querySelector('[data-draft]')?.hasAttribute('data-shine')).toBe(false);
+        key('Enter');
+
+        const committed = screen.getByRole('group', { name: 'Status is Running' });
+        expect(committed.hasAttribute('data-shine')).toBe(true);
+        expect(preexisting.hasAttribute('data-shine')).toBe(false);
+
+        // jsdom has no AnimationEvent: build one with the name the browser would report.
+        const end = new Event('animationend', { bubbles: true });
+        Object.defineProperty(end, 'animationName', { value: 'filter-bar-chip-shine' });
+        fireEvent(committed, end);
+        expect(committed.hasAttribute('data-shine')).toBe(false);
+      });
+
       it('keeps the draft chip element with a custom renderChip that skips some items', async () => {
         function Custom() {
           const [items, setItems] = useState<FilterBarItem[]>([
