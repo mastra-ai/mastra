@@ -15,8 +15,7 @@ type CardActionButtonProps = {
 export function OpenInTracesButton({ href, LinkComponent = 'a' }: CardActionButtonProps) {
   return (
     <Button
-      as={LinkComponent}
-      href={href}
+      render={<LinkComponent href={href} />}
       variant="ghost"
       size="icon-md"
       tooltip="View in Traces"
@@ -32,8 +31,7 @@ export function OpenInTracesButton({ href, LinkComponent = 'a' }: CardActionButt
 export function OpenErrorsInLogsButton({ href, LinkComponent = 'a' }: CardActionButtonProps) {
   return (
     <Button
-      as={LinkComponent}
-      href={href}
+      render={<LinkComponent href={href} />}
       variant="ghost"
       size="icon-md"
       tooltip="View errors in Logs"

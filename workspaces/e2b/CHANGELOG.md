@@ -1,5 +1,27 @@
 # @mastra/e2b
 
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- Commands without an explicit timeout now use the sandbox timeout (5 minutes by default) instead of hitting E2B's 60 second connection deadline and failing with `[deadline_exceeded]`. ([#24484](https://github.com/mastra-ai/mastra/pull/24484))
+
+- Updated dependencies [[`2cb5319`](https://github.com/mastra-ai/mastra/commit/2cb5319fc72ef20e7feebfa1e786ff78956aae84), [`f6e7562`](https://github.com/mastra-ai/mastra/commit/f6e7562b2ccfdd5d7d77a7eeea0849b6ffd2ec94), [`d4795a4`](https://github.com/mastra-ai/mastra/commit/d4795a42067605d2bbec10ad0b3dcc45acf02147), [`b87aa0d`](https://github.com/mastra-ai/mastra/commit/b87aa0dc38055558950024f750532ddae6ccf40c), [`53519a2`](https://github.com/mastra-ai/mastra/commit/53519a29ce0063712786b74973ae2dbe97a433a7)]:
+  - @mastra/core@1.68.0-alpha.9
+
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- **Fixed commands that read stdin hanging until timeout** ([#24336](https://github.com/mastra-ai/mastra/pull/24336))
+
+  Commands that read standard input without being given anything to read — a bare `cat`, or `grep`/`rg` with no path argument — blocked until the command timeout expired. Commands run through `executeCommand()` no longer keep stdin open, so these commands see end-of-input and exit immediately.
+
+  `processes.spawn()` is unchanged: it still keeps stdin open so long-running processes can be driven with `sendStdin()`.
+
+- Updated dependencies [[`11560f5`](https://github.com/mastra-ai/mastra/commit/11560f54627055f5ae541a6825669778983a23c9), [`9fe69d6`](https://github.com/mastra-ai/mastra/commit/9fe69d6566c3e6d1e5c9f5bf5e9848b35c73e182), [`15d3e76`](https://github.com/mastra-ai/mastra/commit/15d3e7647636c7286650ef517953c9885806c3dd), [`3c86726`](https://github.com/mastra-ai/mastra/commit/3c867260be59d3cd8337bc0af9a76bac517fe16f), [`0a989ab`](https://github.com/mastra-ai/mastra/commit/0a989abf37c409040ee2ce9a9ccfcfb5a700508e), [`ed24c7f`](https://github.com/mastra-ai/mastra/commit/ed24c7f654bb193a0c503469f4f19dda9d687ecb), [`0894a0e`](https://github.com/mastra-ai/mastra/commit/0894a0e6ede48058b547aab5bb8a2a3d71c3878a), [`5968b71`](https://github.com/mastra-ai/mastra/commit/5968b718044f8dd21bab6ce4ae7da3590729842b), [`dafabf2`](https://github.com/mastra-ai/mastra/commit/dafabf22e4f4b0aabecb09839de5abe54e03151a), [`150a670`](https://github.com/mastra-ai/mastra/commit/150a67086539eea91cac3550fc068e6ac5c7e79b), [`9fe69d6`](https://github.com/mastra-ai/mastra/commit/9fe69d6566c3e6d1e5c9f5bf5e9848b35c73e182), [`c6999e2`](https://github.com/mastra-ai/mastra/commit/c6999e2b4ab805301e66723ca8ba9fe30faa82ca)]:
+  - @mastra/core@1.68.0-alpha.7
+
 ## 0.12.0
 
 ### Minor Changes

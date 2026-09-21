@@ -10,6 +10,10 @@ afterEach(() => cleanup());
 const getInput = () => screen.getByPlaceholderText('Leave feedback...') as HTMLInputElement;
 const getSubmit = () => screen.getByRole('button', { name: 'Send feedback' }) as HTMLButtonElement;
 const type = (value: string) => fireEvent.change(getInput(), { target: { value } });
+const openActions = async () => {
+  fireEvent.click(screen.getByRole('button', { name: 'Feedback actions' }));
+  return screen.findByRole('menu');
+};
 
 const feedbackData = {
   feedback: [
@@ -150,10 +154,10 @@ describe('FeedbackThread', () => {
       );
 
       expect(screen.getByText('Reviewed')).toBeTruthy();
-      expect(screen.queryByRole('button', { name: 'Mark reviewed' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Feedback actions' })).toBeNull();
     });
 
-    it('offers "Mark reviewed" on unreviewed feedback and calls onMarkReviewed with the feedbackId', () => {
+    it('offers "Mark reviewed" in the actions menu on unreviewed feedback and calls onMarkReviewed with the feedbackId', async () => {
       const onMarkReviewed = vi.fn();
       render(
         <FeedbackThread
@@ -163,7 +167,8 @@ describe('FeedbackThread', () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+      await openActions();
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Mark reviewed' }));
 
       expect(onMarkReviewed).toHaveBeenCalledWith('fb-1');
     });
@@ -172,10 +177,10 @@ describe('FeedbackThread', () => {
       render(<FeedbackThread feedbackData={withReviewStatus('needs-review')} onSubmit={vi.fn()} />);
 
       expect(screen.getByText('Needs review')).toBeTruthy();
-      expect(screen.queryByRole('button', { name: 'Mark reviewed' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Feedback actions' })).toBeNull();
     });
 
-    it('disables "Mark reviewed" for the feedback currently being updated', () => {
+    it('disables "Mark reviewed" for the feedback currently being updated', async () => {
       render(
         <FeedbackThread
           feedbackData={withReviewStatus('needs-review')}
@@ -185,7 +190,8 @@ describe('FeedbackThread', () => {
         />,
       );
 
-      expect((screen.getByRole('button', { name: 'Mark reviewed' }) as HTMLButtonElement).disabled).toBe(true);
+      await openActions();
+      expect(screen.getByRole('menuitem', { name: 'Mark reviewed' }).getAttribute('aria-disabled')).toBe('true');
     });
   });
 

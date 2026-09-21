@@ -1,3 +1,5 @@
+import '../../../../new-theme.css';
+
 import { createContext, useContext, useId } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Txt } from '@/ds/components/Txt';
@@ -12,7 +14,7 @@ export function SettingsGroup({ className, ...props }: ComponentProps<'section'>
     <SettingsTitleIdContext.Provider value={titleId}>
       <section
         aria-labelledby={titleId}
-        className={cn('flex min-w-0 scroll-mt-4 flex-col gap-2', className)}
+        className={cn('new-theme flex min-w-0 scroll-mt-4 flex-col gap-2', className)}
         {...props}
       />
     </SettingsTitleIdContext.Provider>
@@ -27,7 +29,7 @@ export function SettingsHeader({
 }: ComponentProps<'header'> & { action?: ReactNode }) {
   return (
     <header
-      className={cn('flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4', className)}
+      className={cn('flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4', className)}
       {...props}
     >
       <div className="flex min-w-0 flex-col gap-1">{children}</div>
@@ -44,13 +46,19 @@ export function SettingsTitle({
   const titleId = useContext(SettingsTitleIdContext);
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <Txt as="h2" id={titleId} variant="title" className={className} {...props} />
+    <div className="new-theme flex min-w-0 flex-wrap items-center gap-2">
+      <Txt
+        as="h2"
+        id={titleId}
+        variant="header-sm"
+        className={cn('font-medium text-foreground', className)}
+        {...props}
+      />
       {accessory}
     </div>
   );
 }
 
 export function SettingsDescription({ className, ...props }: ComponentProps<'p'>) {
-  return <Txt as="p" variant="caption" className={className} {...props} />;
+  return <Txt as="p" variant="ui-sm" className={cn('new-theme text-muted-foreground', className)} {...props} />;
 }

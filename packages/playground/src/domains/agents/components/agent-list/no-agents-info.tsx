@@ -11,10 +11,8 @@ export const NoAgentsInfo = () => (
       actionSlot={
         <Button
           variant="ghost"
-          as="a"
-          href="https://mastra.ai/docs/agents/overview"
-          target="_blank"
-          rel="noopener noreferrer"
+          render={<a href="https://mastra.ai/docs/agents/overview" target="_blank" rel="noopener noreferrer" />}
+
           icon={<ExternalLinkIcon />}
         >
           Agents Documentation

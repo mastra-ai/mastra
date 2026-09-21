@@ -1,5 +1,8 @@
+import { describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { SpanRecord } from '../types';
+import { SpanErrorRenderer, SpanInputRenderer, SpanOutputRenderer, SpanPayloadSection } from './span-payload';
+import { asCoreSpan } from './span-payload/span-payload-registry';
 import { SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
@@ -49,26 +52,46 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             </>
           )}
 
-          <DataDetailsPanel.CodeSection
+          <SpanPayloadSection title="Error" raw={span.error} layout="details" className="mb-3">
+            <SpanErrorRenderer span={span} />
+          </SpanPayloadSection>
+
+          <SpanPayloadSection
             title="Input"
             icon={<FileInputIcon />}
-            codeStr={JSON.stringify(span.input ?? null, null, 2)}
-          />
-          <DataDetailsPanel.CodeSection
+            raw={span.input}
+            hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
+            layout="details"
+          >
+            <SpanInputRenderer span={span} />
+          </SpanPayloadSection>
+          <SpanPayloadSection
             title="Output"
             icon={<FileOutputIcon />}
-            codeStr={JSON.stringify(span.output ?? null, null, 2)}
-          />
-          <DataDetailsPanel.CodeSection
+            raw={span.output}
+            hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
+            layout="details"
+          >
+            <SpanOutputRenderer span={span} />
+          </SpanPayloadSection>
+          <SpanPayloadSection
             title="Metadata"
             icon={<BracesIcon />}
-            codeStr={JSON.stringify(span.metadata ?? null, null, 2)}
-          />
-          <DataDetailsPanel.CodeSection
+            raw={span.metadata}
+            hasPreview={false}
+            layout="details"
+          >
+            {null}
+          </SpanPayloadSection>
+          <SpanPayloadSection
             title="Attributes"
             icon={<BracesIcon />}
-            codeStr={JSON.stringify(span.attributes ?? null, null, 2)}
-          />
+            raw={span.attributes}
+            hasPreview={false}
+            layout="details"
+          >
+            {null}
+          </SpanPayloadSection>
         </DataDetailsPanel.Content>
       )}
     </DataDetailsPanel>

@@ -217,6 +217,50 @@ describe('workItemActivity', () => {
     expect(activity.extraActors).toEqual({ 'linear:grace': { id: 'linear:grace', name: 'grace' } });
   });
 
+  it('shows Jira reporter and assignee metadata like Linear work items', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'jira-issue',
+        metadata: { identifier: 'ENG-42', assignee: 'Ada', creator: 'Grace', labels: ['bug'] },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'jira:Ada', name: 'Ada' });
+    expect(activity.extraActors).toEqual({
+      'jira:Ada': { id: 'jira:Ada', name: 'Ada' },
+      'jira:Grace': { id: 'jira:Grace', name: 'Grace' },
+    });
+    expect(activity.events.map(candidate => ({ id: candidate.id, actorId: candidate.actorId }))).toEqual([
+      { id: `synthetic-assigned:${item.id}`, actorId: 'jira:Ada' },
+      { id: `synthetic-created:${item.id}`, actorId: 'jira:Grace' },
+    ]);
+  });
+
+  it('shows incident.io creator and assignee metadata like Linear work items', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'incidentio-follow-up',
+        metadata: { identifier: 'INC-42', assignee: 'Grace Hopper', creator: 'Ada Lovelace' },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'incidentio:Grace Hopper', name: 'Grace Hopper' });
+    expect(activity.extraActors).toEqual({
+      'incidentio:Grace Hopper': { id: 'incidentio:Grace Hopper', name: 'Grace Hopper' },
+      'incidentio:Ada Lovelace': { id: 'incidentio:Ada Lovelace', name: 'Ada Lovelace' },
+    });
+    expect(activity.events.map(candidate => ({ id: candidate.id, actorId: candidate.actorId }))).toEqual([
+      { id: `synthetic-assigned:${item.id}`, actorId: 'incidentio:Grace Hopper' },
+      { id: `synthetic-created:${item.id}`, actorId: 'incidentio:Ada Lovelace' },
+    ]);
+  });
+
   it('accepts legacy Linear metadata that stored the assignee under `linearAssignee`', () => {
     const activity = workItemActivity(
       {

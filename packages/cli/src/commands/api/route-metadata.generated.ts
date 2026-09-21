@@ -208,6 +208,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "expectedRunId",
       "resourceId",
       "threadId"
     ],
@@ -2004,6 +2005,7 @@ export const API_ROUTE_METADATA = {
       "group",
       "orderBy",
       "page",
+      "pagination",
       "timeRange",
       "where"
     ],

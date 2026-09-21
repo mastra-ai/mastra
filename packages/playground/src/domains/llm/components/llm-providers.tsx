@@ -21,6 +21,10 @@ export interface LLMProvidersProps {
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
   disabled?: boolean;
+  id?: string;
+  name?: string;
+  error?: string;
+  'aria-label'?: string;
 }
 
 export const LLMProviders = ({
@@ -33,6 +37,10 @@ export const LLMProviders = ({
   onOpenChange,
   container,
   disabled,
+  id,
+  name,
+  error,
+  'aria-label': ariaLabel,
 }: LLMProvidersProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const allProviders = dataProviders?.providers || [];
@@ -104,6 +112,10 @@ export const LLMProviders = ({
       onOpenChange={onOpenChange}
       container={container}
       disabled={disabled}
+      id={id}
+      name={name}
+      error={error}
+      aria-label={ariaLabel}
     />
   );
 };

@@ -58,8 +58,8 @@ describe('Section', () => {
     );
 
     expect(screen.getByText('View only:')).toBeTruthy();
-    expect(screen.getByText('Project access').className).toContain('text-neutral3');
-    expect(screen.getByText('Leave organization').className).toContain('text-accent2');
+    expect(screen.getByText('Project access').className).toContain('text-muted-foreground');
+    expect(screen.getByText('Leave organization').className).toContain('text-destructive');
   });
 
   it('keeps flat and factory headings on the card edge while rows retain their inset', () => {

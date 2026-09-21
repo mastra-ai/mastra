@@ -215,7 +215,7 @@ export async function fetchFollowingAllowedRedirects(
         domain: ErrorDomain.MCP,
         category: ErrorCategory.THIRD_PARTY,
         // Interpolate only the host, not the full URL: a URL's path/query could
-        // contain substrings (e.g. "sessionId") that isReconnectableMCPError
+        // contain substrings (e.g. "not connected") that isReconnectableMCPError
         // matches, which would misclassify this terminal failure as transient.
         text: `Exceeded the maximum of ${MAX_REDIRECT_HOPS} redirect hops while requesting host "${currentUrl.host}" under the allowedHosts policy.`,
       });

@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -88,20 +87,15 @@ export const AttachFilePopover = () => {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-4">
-        {error && <p role="alert">{error}</p>}
         <form onSubmit={handleSubmit} className="flex flex-row items-end gap-2">
-          <div className="w-full space-y-1">
-            <Label htmlFor="url-attachment" className="text-neutral3 text-ui-md">
-              Public URL
-            </Label>
-            <Input
-              type="text"
-              name="url-attachment"
-              id="url-attachment"
-              className="w-full"
-              placeholder="https://placehold.co/600x400/png"
-            />
-          </div>
+          <TextFieldBlock
+            name="url-attachment"
+            label="Public URL"
+            type="url"
+            className="w-full"
+            placeholder="https://placehold.co/600x400/png"
+            errorMsg={error}
+          />
           <Button type="submit" className="h-8!" variant="default" icon={<Link />}>
             Add
           </Button>

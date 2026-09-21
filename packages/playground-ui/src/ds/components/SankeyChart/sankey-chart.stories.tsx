@@ -58,7 +58,7 @@ function UserLandControls() {
           <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-wrap items-center gap-2">
             {controlColumns.map(column => {
               const checkbox = (
-                <label className="flex items-center gap-2">
+                <label className="text-ui-sm flex items-center gap-2">
                   <Checkbox
                     checked={column.visible}
                     onCheckedChange={() => toggleColumn(column.id)}

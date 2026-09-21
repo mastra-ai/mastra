@@ -4,8 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import util from 'node:util';
 import debug from 'debug';
+import { BUNDLE } from './bundle';
 
 const execFile = util.promisify(child_process.execFile);
+const availableCodemods = new Set(BUNDLE);
 
 interface TransformOptions {
   dry?: boolean;
@@ -107,6 +109,10 @@ export async function transform(
   transformOptions: TransformOptions,
   options: { logStatus: boolean } = { logStatus: true },
 ): Promise<{ errors: TransformErrors; notImplementedErrors: TransformErrors }> {
+  if (!availableCodemods.has(codemod)) {
+    throw new Error(`Unknown codemod "${codemod}". Available codemods: ${BUNDLE.join(', ')}`);
+  }
+
   if (options.logStatus) {
     log(`Applying codemod '${codemod}': ${source}`);
   }
