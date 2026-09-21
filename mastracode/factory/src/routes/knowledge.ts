@@ -1270,6 +1270,59 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           return c.json({ importers: importers.filter(importer => importer !== null) });
         },
       }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/importers/:importerId/run', {
+        method: 'POST',
+        requiresAuth: true,
+        handler: async raw => {
+          const c = loose(raw);
+          const resolved = await this.#resolveView(c);
+          if ('response' in resolved) return resolved.response;
+          const importerId = c.req.param('importerId');
+          if (!importerId) return c.json({ error: 'importer_not_found' }, 404);
+          let importer = resolved.knowledge.getImporter(importerId);
+          if (!importer) {
+            // A connection completed moments ago may not have reconciled into
+            // the importer set yet (the runner reconciles on its scheduling
+            // tick). Reconcile once before giving up so connect-time triggers
+            // work immediately.
+            await resolved.knowledge.reconcileImportersInternal();
+            importer = resolved.knowledge.getImporter(importerId);
+          }
+          if (!importer) return c.json({ error: 'importer_not_found' }, 404);
+          const cron = importer.triggers.cron;
+          if (!cron) return c.json({ error: 'importer_not_triggerable' }, 409);
+          const declared = [...(cron.bindings ?? [])];
+          if (cron.resolveBindings) {
+            try {
+              declared.push(...(await cron.resolveBindings()));
+            } catch {
+              /* static bindings only */
+            }
+          }
+          const bindings = Array.from(
+            new Map(declared.map(binding => [`${binding.source}\u0000${binding.scope}`, binding])).values(),
+          ).filter(binding => importScopeBelongsToView(binding.scope, resolved.projectId, resolved.threadId));
+          if (bindings.length === 0) return c.json({ error: 'importer_not_found' }, 404);
+          const runs: KnowledgeImportRun[] = [];
+          for (const binding of bindings) {
+            try {
+              runs.push(
+                await resolved.knowledge.runImporter(importerId, binding, undefined, {
+                  triggerKind: 'cron',
+                  awaitCompletion: false,
+                }),
+              );
+            } catch {
+              // Binding validation raced a resolver change — skip this binding.
+            }
+          }
+          if (runs.length === 0) return c.json({ error: 'import_trigger_failed' }, 503);
+          return c.json(
+            { runs: runs.map(run => this.#importRunPayload(resolved.projectId, resolved.perspectiveKey, run)) },
+            202,
+          );
+        },
+      }),
       registerApiRoute('/web/factory/projects/:id/knowledge/importers/:importerId/runs', {
         method: 'GET',
         requiresAuth: true,

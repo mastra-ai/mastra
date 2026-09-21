@@ -1758,6 +1758,112 @@ describe('KnowledgeRoutes', () => {
     expect(JSON.stringify(body)).not.toContain(expected.id);
   });
 
+  it('manually triggers an import run for the bindings visible to the project view', async () => {
+    const handled: string[] = [];
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        {
+          id: 'connect:notion:conn-1',
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              resolveBindings: async () => [
+                { source: 'notion:conn-1', scope: `resource:${h.projectId}:notion:conn-1` },
+                { source: 'notion:conn-1', scope: 'resource:00000000-0000-4000-8000-000000000099:notion:conn-1' },
+              ],
+            },
+          },
+          handler: async () => {
+            handled.push('ran');
+          },
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/connect:notion:conn-1/run`,
+      { method: 'POST' },
+    );
+    expect(response.status).toBe(202);
+    const body = await response.json();
+    expect(body.runs).toHaveLength(1);
+    expect(body.runs[0]).toMatchObject({ id: expect.stringMatching(/^kh_/), source: 'notion:conn-1' });
+    // Only the binding belonging to this project view is enqueued.
+    expect(JSON.stringify(body)).not.toContain('00000000-0000-4000-8000-000000000099');
+
+    await vi.waitFor(() => expect(handled).toHaveLength(1));
+  });
+
+  it('reconciles resolver importers before answering a manual trigger for a fresh connection', async () => {
+    // Simulates the connect flow: the resolver knows about the new connection
+    // but the runner has not reconciled it into the registry yet.
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: async () => [
+        {
+          id: 'connect:linear:conn-9',
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              resolveBindings: async () => [
+                { source: 'linear:conn-9', scope: `resource:${h.projectId}:linear:conn-9` },
+              ],
+            },
+          },
+          handler: async () => {},
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/connect:linear:conn-9/run`,
+      { method: 'POST' },
+    );
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      runs: [{ id: expect.stringMatching(/^kh_/), source: 'linear:conn-9' }],
+    });
+  });
+
+  it('rejects manual triggers for unknown, foreign-only, and cron-less importers', async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        { id: 'calendar', handler: async () => {} },
+        {
+          id: 'connect:zendesk:conn-2',
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              resolveBindings: async () => [
+                { source: 'zendesk:conn-2', scope: 'resource:00000000-0000-4000-8000-000000000099:zendesk:conn-2' },
+              ],
+            },
+          },
+          handler: async () => {},
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+    const base = `/web/factory/projects/${h.projectId}/knowledge/importers`;
+
+    const unknown = await h.app.request(`${base}/nope/run`, { method: 'POST' });
+    expect(unknown.status).toBe(404);
+
+    const foreignOnly = await h.app.request(`${base}/connect:zendesk:conn-2/run`, { method: 'POST' });
+    expect(foreignOnly.status).toBe(404);
+
+    const cronless = await h.app.request(`${base}/calendar/run`, { method: 'POST' });
+    expect(cronless.status).toBe(409);
+    await expect(cronless.json()).resolves.toMatchObject({ error: 'importer_not_triggerable' });
+  });
+
   it('filters proposals by the project perspective and applies admin review actions', async () => {
     const h = await createHarness();
     const projectScopeId = h.projectScope.at(-1)!;
