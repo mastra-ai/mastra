@@ -1,10 +1,12 @@
 import type { Step } from '../context/use-current-run';
+import { resolveStepSpan } from '../context/workflow-step-timing';
 
 export interface TimelineRow {
   stepId: string;
   step: Step;
   status: Step['status'];
   timing?: { offsetPct: number; widthPct: number; durationMs: number };
+  spansSuspension: boolean;
   isRunning: boolean;
   isNestedEntry: boolean;
 }
@@ -14,34 +16,26 @@ const isNestedTimelineEntry = (stepId: string) => stepId.includes('.');
 const isInputKey = (key: string) => key === 'input' || key.endsWith('.input');
 const MIN_WIDTH_PCT = 1;
 
-export function formatTimelineDuration(durationMs: number) {
-  if (durationMs < 1000) return `${Number(durationMs.toPrecision(3))}ms`;
-  return `${Number((durationMs / 1000).toPrecision(3))}s`;
-}
-
 type StepSpan = { start: number; end: number };
 
-const isStepRunning = (step: Step) => step.status === 'running' && step.endedAt === undefined;
-
-function measureStep(step: Step, now: number): StepSpan | undefined {
-  const start = step.startedAt;
-  if (start === undefined || !Number.isFinite(start)) return undefined;
-  const end = isStepRunning(step) ? Math.max(now, start) : step.endedAt;
-  if (end === undefined || !Number.isFinite(end) || end < start) return undefined;
-  return { start, end };
+function measureStep(step: Step, now: number) {
+  const span = resolveStepSpan(step);
+  const end = span?.isLive ? Math.max(now, span.start) : span?.end;
+  const measured: StepSpan | undefined = span && end !== undefined ? { start: span.start, end } : undefined;
+  return { span: measured, isLive: span?.isLive ?? false, spansSuspension: span?.spansSuspension ?? false };
 }
 
 export function buildTimeline(steps: Record<string, Step>, now: number): TimelineRow[] {
   const entries = Object.entries(steps)
     .filter(([key]) => !isInputKey(key))
-    .map(([stepId, step]) => ({ stepId, step, span: measureStep(step, now) }))
+    .map(([stepId, step]) => ({ stepId, step, ...measureStep(step, now) }))
     .sort((a, b) => (a.span?.start ?? Infinity) - (b.span?.start ?? Infinity) || a.stepId.localeCompare(b.stepId));
   const spans = entries.flatMap(entry => (entry.span ? [entry.span] : []));
   const runStart = Math.min(...spans.map(span => span.start));
   const runEnd = Math.max(runStart, ...spans.map(span => span.end));
   const totalMs = Math.max(runEnd - runStart, 1);
 
-  return entries.map(({ stepId, step, span }) => {
+  return entries.map(({ stepId, step, span, isLive, spansSuspension }) => {
     let timing: TimelineRow['timing'];
     if (span) {
       const durationMs = span.end - span.start;
@@ -54,7 +48,8 @@ export function buildTimeline(steps: Record<string, Step>, now: number): Timelin
       step,
       status: step.status,
       timing,
-      isRunning: isStepRunning(step),
+      spansSuspension,
+      isRunning: isLive,
       isNestedEntry: isNestedTimelineEntry(stepId),
     };
   });

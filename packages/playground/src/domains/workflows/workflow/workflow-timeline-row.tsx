@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -15,7 +16,6 @@ import {
 } from 'lucide-react';
 import type { Step } from '../context/use-current-run';
 import type { TimelineRow } from './workflow-timeline-utils';
-import { formatTimelineDuration } from './workflow-timeline-utils';
 
 const statusPresentation = {
   success: { label: 'Completed', icon: Check, color: 'text-positive1', bar: 'bg-neutral3/60' },
@@ -115,8 +115,11 @@ export function WorkflowTimelineRow({
           />
         )}
       </div>
-      <span className="text-muted-foreground text-ui-xs text-right whitespace-nowrap tabular-nums">
-        {row.timing ? formatTimelineDuration(row.timing.durationMs) : <span aria-label="Timing unavailable">—</span>}
+      <span
+        className="text-muted-foreground text-ui-xs text-right whitespace-nowrap tabular-nums"
+        title={row.timing && row.spansSuspension ? 'Includes time spent suspended waiting for input' : undefined}
+      >
+        {row.timing ? formatDuration(row.timing.durationMs) : <span aria-label="Timing unavailable">—</span>}
       </span>
       <div className="flex items-center">
         <Button

@@ -164,7 +164,12 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
             </span>
             {startedAt !== undefined && (
               <span className="ml-auto">
-                <WorkflowClock startedAt={startedAt} endedAt={endedAt} isRunning={isRunning} />
+                <WorkflowClock
+                  startedAt={startedAt}
+                  endedAt={endedAt}
+                  isRunning={isRunning}
+                  spansSuspension={props.spansSuspension}
+                />
               </span>
             )}
             {actionBar}
