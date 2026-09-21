@@ -129,14 +129,16 @@ const tempDirs: string[] = [];
 function lastGhToken(): string | undefined {
   const calls = mocks.setEnv.mock.calls;
   const update = calls[calls.length - 1]?.[0] as
-    ((env: Record<string, string | undefined>) => Record<string, string | undefined>) | undefined;
+    | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
+    | undefined;
   return update?.({}).GH_TOKEN;
 }
 
 function lastSandboxEnv(): Record<string, string | undefined> {
   const calls = mocks.setEnv.mock.calls;
   const update = calls[calls.length - 1]?.[0] as
-    ((env: Record<string, string | undefined>) => Record<string, string | undefined>) | undefined;
+    | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
+    | undefined;
   return update?.({}) ?? {};
 }
 
