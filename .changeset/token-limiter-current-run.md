@@ -6,14 +6,16 @@ Fixed `TokenLimiterProcessor` dropping the current run's tool calls and results 
 
 **What went wrong**
 
-Trimming worked newest-first and did not know which messages belonged to the run in progress, so it could evict a tool call or its result. The model then had no record of the tool it had just run. It could re-issue the same call until it hit `maxSteps`, and the lost message might never be saved to memory.
+Trimming ran newest-first with no notion of which messages belonged to the run in progress, so a newer or larger message could outrank an assistant tool message and evict it. The next model call then saw neither the tool call nor its result, with nothing to signal anything had been removed. In the reported case the model re-issued the same tool call until it ran out of steps. Removal also strips the message from the response set, which can stop it being saved to memory.
 
 **What changed**
 
-Tool calls and results from the run in progress are now kept, and a call is always kept together with its result. Older history is trimmed first.
+Tool calls and results produced by the run in progress are now kept, and older history gives up its budget first. A call and its result are kept together.
 
-If that tool traffic alone does not fit, the processor now stops with a non-retryable `TripWire` that names the cause, instead of dropping the tool call or reporting "No messages fit within the remaining token budget".
+When that tool traffic alone exceeds the budget left after system messages, nothing remains that can safely be removed, so the processor now fails with a non-retryable `TripWire` naming that as the cause. Previously `best-fit` silently re-ran the tool, and `contiguous` stopped but blamed it on "No messages fit within the remaining token budget".
 
-**Behavior change**
+**Behavior change to note**
 
-Protection adds up across steps. A long run whose combined tool output no longer fits will now stop rather than quietly drop its earlier tool traffic. Raise `limit` if you rely on long multi-step tool runs.
+Protection adds up across steps. A long multi-step run whose combined tool output crosses the limit now stops with that error, rather than quietly dropping its earlier tool traffic.
+
+Applies to `best-fit` and `contiguous`. The `memory-only` mode is unchanged.
