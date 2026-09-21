@@ -730,6 +730,94 @@ describe('bundled Factory skill assets', () => {
     expect(review).toContain('**Your design before theirs.**');
   });
 
+  it('bundles the review category references and loads them between the design and the diff', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const reviewRoot = path.join(assetRoot, 'factory-review');
+    const referencesRoot = path.join(reviewRoot, 'references');
+
+    // The README index is the entry point the skills name; every page it lists
+    // must ship, and the archaeology recipes the pages cite must ship with them.
+    const readme = await fs.readFile(path.join(referencesRoot, 'categories', 'README.md'), 'utf8');
+    const listedPages = [...readme.matchAll(/^\| `([^`]+\.md)` +\|/gm)].map(match => match[1]!);
+    expect(listedPages.length).toBeGreaterThanOrEqual(15);
+    for (const page of listedPages) {
+      await expect(fs.stat(path.join(referencesRoot, 'categories', page))).resolves.toMatchObject({});
+    }
+    const archaeology = await fs.readFile(path.join(referencesRoot, 'archaeology.md'), 'utf8');
+    expect(archaeology).toContain('## Callers');
+    expect(archaeology).toContain('## Test on base');
+    // Interactive-only procedures stay out of the autonomous bundle: publishing
+    // and follow-up pushes are governed by the skill's own contract.
+    expect(archaeology).not.toContain('## Posting');
+    expect(archaeology).not.toContain('## Pushing trivial cleanup');
+    expect(archaeology).not.toContain('mastra_expert');
+    // Category pages that execute PR code carry the token-stripping rule.
+    expect(archaeology).toContain('env -u GH_TOKEN -u GITHUB_TOKEN pnpm vitest run');
+    for (const page of listedPages) {
+      const body = await fs.readFile(path.join(referencesRoot, 'categories', page), 'utf8');
+      expect(body, `${page} uses the factory handoff vocabulary`).not.toMatch(/briefing|Needs you/);
+    }
+
+    // The bundled source serves the sibling files under the mount, which is the
+    // path the core skill_read tool reads through.
+    const mount = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
+    const source = new FactorySkillSource(
+      {
+        exists: async () => false,
+        stat: async () => {
+          throw new Error('not used');
+        },
+        readFile: async () => {
+          throw new Error('not used');
+        },
+        readdir: async () => [],
+      } as any,
+      [],
+      undefined,
+    );
+    const servedReadme = String(
+      await source.readFile(path.join(mount, 'factory-review', 'references', 'categories', 'README.md')),
+    );
+    expect(servedReadme).toBe(readme);
+    const servedNames = (await source.readdir(path.join(mount, 'factory-review', 'references', 'categories')))
+      .map(entry => entry.name)
+      .sort();
+    expect(servedNames).toEqual(['README.md', ...listedPages].sort());
+
+    // Every review skill loads the guidance after recording its design and
+    // before opening the diff, and re-reviews point at factory-review's copy.
+    const read = (name: string) => fs.readFile(path.join(assetRoot, name, 'SKILL.md'), 'utf8');
+    const review = await read('factory-review');
+    const reviewPhase1 = review.slice(review.indexOf('## Phase 1: PR Goal & Context'), review.indexOf('## Phase 2'));
+    const reviewDesignAt = reviewPhase1.indexOf('Write your own design before reading theirs');
+    const reviewLoadAt = reviewPhase1.indexOf('Load the category guidance before opening the diff');
+    const reviewDiffAt = reviewPhase1.indexOf('gh pr diff <number>');
+    expect(reviewDesignAt).toBeGreaterThan(-1);
+    expect(reviewLoadAt).toBeGreaterThan(reviewDesignAt);
+    expect(reviewDiffAt).toBeGreaterThan(reviewLoadAt);
+    expect(reviewPhase1).toContain('`references/categories/README.md`');
+    expect(reviewPhase1).toContain('Reassess the categories against the actual change');
+
+    const rereview = await read('factory-rereview');
+    const rereviewPhase1 = rereview.slice(
+      rereview.indexOf('## Phase 1: PR Goal & Prior Pass'),
+      rereview.indexOf('## Phase 2'),
+    );
+    const rereviewDesignAt = rereviewPhase1.indexOf('Recover or write your own design before reading theirs');
+    const rereviewLoadAt = rereviewPhase1.indexOf('Load the category guidance before opening the cumulative diff');
+    const rereviewDiffAt = rereviewPhase1.indexOf('gh pr diff <number>');
+    expect(rereviewDesignAt).toBeGreaterThan(-1);
+    expect(rereviewLoadAt).toBeGreaterThan(rereviewDesignAt);
+    expect(rereviewDiffAt).toBeGreaterThan(rereviewLoadAt);
+    expect(rereviewPhase1).toContain('from the `factory-review` skill');
+
+    for (const name of ['factory-gitlab-review', 'factory-gitlab-rereview']) {
+      expect(await read(name), `${name} loads the shared category guidance`).toContain(
+        '`references/categories/README.md` from the `factory-review` skill',
+      );
+    }
+  });
+
   it('keeps Factory re-reviews aligned with current-head evidence requirements', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const instructions = await fs.readFile(path.join(assetRoot, 'factory-rereview', 'SKILL.md'), 'utf8');
