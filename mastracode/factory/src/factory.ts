@@ -1359,8 +1359,6 @@ export class MastraFactory {
       session =>
         hydrateSessionMemorySettings(session, {
           sourceControl: { sessions: sourceControlSessions },
-          projects: factoryProjectsStorage,
-          memorySettings: memorySettingsStorage,
         }),
       { blocking: true },
     );
