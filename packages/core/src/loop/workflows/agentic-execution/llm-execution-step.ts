@@ -2202,9 +2202,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // which accounts for it against the same limit. Work already running is left
           // alone rather than cancelled. On a normal terminal finish, and on a per-chunk
           // stream-processor tripwire, the step still returns its tool calls and the
-          // foreach adopts it. A `processToolResult` tripwire is the exception: it builds
-          // a bail response, so nothing adopts the work, and letting it finish is only
-          // better than aborting a side effect that is already underway.
+          // foreach adopts it — cancelling here would strip the adoption entry and make
+          // the foreach run the body a second time. A `processToolResult` tripwire is the
+          // exception: it builds a bail response, so nothing adopts the work and it is
+          // simply orphaned. Letting it finish is a deliberate tradeoff, not a necessity:
+          // cancelling would not un-run a side effect already underway, only tear it
+          // partway. A caller abort is terminal too and does cancel, so the distinction
+          // here is the tradeoff, not terminality.
           eagerCoordinator?.stop();
 
           if (toolResultTripwireFromStream) {

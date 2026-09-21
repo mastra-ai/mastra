@@ -1336,15 +1336,20 @@ describe('eager tool dispatch — unsafe terminations', () => {
    * server-executed tools take the mapping-step site instead). When it does, the step builds a
    * bail response and no foreach ever adopts the eagerly dispatched server tool.
    *
-   * The backstop stops the coordinator *without* `cancelRunning`, deliberately: unlike the
-   * discarded-attempt and caller-abort paths, this bail is terminal — no replacement attempt
-   * will re-issue the call, so there is no duplicate run to prevent, and aborting would only
-   * tear a side effect already underway. This test locks that in: the orphaned call is allowed
-   * to finish rather than being aborted.
+   * The backstop stops the coordinator *without* `cancelRunning`. That is a deliberate
+   * tradeoff rather than a consequence of the bail being terminal — a caller abort is
+   * terminal too and does cancel. Here nothing will re-issue the call, so there is no
+   * duplicate run to prevent, and cancelling would not un-run a side effect already
+   * underway, only tear it partway. This test locks the chosen behaviour in: the orphaned
+   * call is allowed to finish rather than being aborted.
    */
   it('lets orphaned eager work finish when a stream tool-result tripwire bails the attempt', async () => {
     const { events, record } = createRecorder();
     let releaseSlow: (() => void) | undefined;
+    let slowEntered: () => void;
+    const slowHasEntered = new Promise<void>(resolve => {
+      slowEntered = resolve;
+    });
 
     const model = new MockLanguageModelV2({
       doStream: async () => ({
@@ -1366,8 +1371,9 @@ describe('eager tool dispatch — unsafe terminations', () => {
               toolName: 'slow-tool',
               input: JSON.stringify({ value: 'slow' }),
             });
-            // Give the eager dispatch its window to actually start the body.
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Hand off to the eager dispatcher: proceed only once the body has actually
+            // entered, so the in-flight window is a handshake rather than a timing race.
+            await slowHasEntered;
             // A deferred provider-executed result arriving mid-stream. This is the only
             // shape that reaches the stream-level processToolResult hook.
             controller.enqueue({
@@ -1412,6 +1418,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
           outputSchema: z.object({ value: z.string() }),
           execute: async ({ value }, options) => {
             record('enter-slow');
+            slowEntered();
             const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
             await new Promise<void>(resolve => {
               releaseSlow = resolve;
@@ -1427,25 +1434,33 @@ describe('eager tool dispatch — unsafe terminations', () => {
       outputProcessors: [new TripwireOnProviderResult() as any],
     });
 
-    const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true })).catch(() => []);
+    try {
+      const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
 
-    // The tripwire really fired, on the stream-level hook, and really bailed the attempt.
-    expect(events).toContain('tripwire');
-    expect(chunks.some(chunk => chunk.type === 'tripwire')).toBe(true);
-    // No result for the orphaned call: nothing adopted it.
-    expect(chunks.some(chunk => chunk.type === 'tool-result' && chunk.payload?.toolCallId === 'call-slow')).toBe(false);
+      // The tripwire really fired, on the stream-level hook, and really bailed the attempt.
+      expect(events).toContain('tripwire');
+      expect(chunks.some(chunk => chunk.type === 'tripwire')).toBe(true);
+      // No result for the orphaned call: nothing adopted it, so the mapping-step
+      // processToolResult site — the only other tripwire emitter — never ran.
+      expect(chunks.some(chunk => chunk.type === 'tool-result' && chunk.payload?.toolCallId === 'call-slow')).toBe(
+        false,
+      );
 
-    // It was dispatched eagerly — the body entered before the model stream finished.
-    expect(events.indexOf('enter-slow')).toBeLessThan(events.indexOf('finish'));
-    // It is still in flight at bail time, i.e. the backstop had something to cancel.
-    expect(events).not.toContain('finish-slow');
-    expect(events).not.toContain('aborted-slow');
+      // It was dispatched eagerly — the body entered before the model stream finished.
+      expect(events.indexOf('enter-slow')).toBeLessThan(events.indexOf('finish'));
+      // It is still in flight at bail time, i.e. the backstop had something to cancel.
+      expect(events).not.toContain('finish-slow');
+      expect(events).not.toContain('aborted-slow');
 
-    // Now let it settle. It must complete, not report an abort.
-    releaseSlow?.();
-    await vi.waitFor(() => expect(events).toContain('finish-slow'), { timeout: 2000 });
-    expect(events).not.toContain('aborted-slow');
-    expect(events.filter(event => event === 'enter-slow')).toHaveLength(1);
+      // Now let it settle. It must complete, not report an abort.
+      releaseSlow?.();
+      await vi.waitFor(() => expect(events).toContain('finish-slow'), { timeout: 2000 });
+      expect(events).not.toContain('aborted-slow');
+      expect(events.filter(event => event === 'enter-slow')).toHaveLength(1);
+    } finally {
+      // Never leave the blocked tool pending if an assertion above threw.
+      releaseSlow?.();
+    }
   });
 });
 
