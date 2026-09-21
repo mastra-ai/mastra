@@ -378,38 +378,35 @@ export class MessageHistory implements Processor {
 
     const span = this.memorySpan(observabilityContext);
     span?.update({ attributes: { reconciliationMessageCount: messageIds.length } });
-    try {
-      const { messages: storedInput } = await this.storage.listMessagesById({ messageIds });
-      // Only records that actually belong to this thread (and resource) may act as
-      // the canonical version of an echoed ID.
-      const belongsHere = (message: MastraDBMessage) =>
-        message.threadId === threadId && (!resourceId || message.resourceId === resourceId);
-      const storedById = new Map(storedInput.filter(belongsHere).map(message => [message.id, message]));
-      // IDs that resolve to a canonical record on a foreign thread/resource. These
-      // must not be persisted under their echoed ID — an ID-keyed upsert would
-      // clobber the foreign record — so the reconciler drops them instead of
-      // treating them as genuinely new.
-      const foreignIds = new Set(
-        storedInput.filter(message => message.id && !belongsHere(message)).map(message => message.id as string),
-      );
-      // The reconciler drops these silently by design; report them here so a
-      // client reusing an ID across threads is not losing messages invisibly.
-      const droppedIds = messageIds.filter(id => foreignIds.has(id));
-      span?.update({ attributes: { reconciliationDroppedMessageCount: droppedIds.length } });
-      if (droppedIds.length > 0) {
-        this.getLogger?.()?.warn('MessageHistory: dropped client-echoed messages with foreign-thread IDs', {
-          threadId,
-          resourceId,
-          droppedMessageIds: droppedIds,
-          reason: 'foreign-thread ID collision: the ID belongs to a record on another thread',
-        });
-      }
-      return reconcileClientEchoes(messages, storedById, foreignIds);
-    } catch (error) {
-      // Fail closed: a transient read failure must not fall back to an
-      // unreconciled upsert that could clobber canonical stored records.
-      throw error;
+    // Fail closed: this read is deliberately left unguarded. A transient read
+    // failure must propagate rather than fall back to an unreconciled upsert
+    // that could clobber canonical stored records.
+    const { messages: storedInput } = await this.storage.listMessagesById({ messageIds });
+    // Only records that actually belong to this thread (and resource) may act as
+    // the canonical version of an echoed ID.
+    const belongsHere = (message: MastraDBMessage) =>
+      message.threadId === threadId && (!resourceId || message.resourceId === resourceId);
+    const storedById = new Map(storedInput.filter(belongsHere).map(message => [message.id, message]));
+    // IDs that resolve to a canonical record on a foreign thread/resource. These
+    // must not be persisted under their echoed ID — an ID-keyed upsert would
+    // clobber the foreign record — so the reconciler drops them instead of
+    // treating them as genuinely new.
+    const foreignIds = new Set(
+      storedInput.filter(message => message.id && !belongsHere(message)).map(message => message.id as string),
+    );
+    // The reconciler drops these silently by design; report them here so a
+    // client reusing an ID across threads is not losing messages invisibly.
+    const droppedIds = messageIds.filter(id => foreignIds.has(id));
+    span?.update({ attributes: { reconciliationDroppedMessageCount: droppedIds.length } });
+    if (droppedIds.length > 0) {
+      this.getLogger?.()?.warn('MessageHistory: dropped client-echoed messages with foreign-thread IDs', {
+        threadId,
+        resourceId,
+        droppedMessageIds: droppedIds,
+        reason: 'foreign-thread ID collision: the ID belongs to a record on another thread',
+      });
     }
+    return reconcileClientEchoes(messages, storedById, foreignIds);
   }
 
   /**

@@ -88,12 +88,14 @@ function isToolInvocationPart(part: V2Part): part is ToolInvocationPart {
  * Whether a part is server-authored state that observational memory writes onto
  * a message and a client echo must never be able to erase or forge.
  *
- * Observational memory appends `data-om-*` observation marker parts
- * (`data-om-observation-start`/`-end`/`-failed`, `data-om-buffering-*`,
- * `data-om-activation`, `data-om-thread-update`) to messages — including user
- * messages — to record observation boundaries. They are server-owned: a client
- * echo may neither drop them (they are re-added from the stored record) nor
- * inject them (they are stripped from the incoming editable surface).
+ * Observational memory records observation boundaries by appending `data-om-*`
+ * marker parts (`data-om-observation-start`/`-end`/`-failed`,
+ * `data-om-buffering-*`, `data-om-activation`, `data-om-thread-update`) to the
+ * assistant messages it writes; it does not append them to user messages. Either
+ * way they are server-owned, so this predicate is applied to every echoed
+ * message: a client echo may neither drop a marker (it is re-added from the
+ * stored record) nor inject one (it is stripped from the incoming editable
+ * surface).
  */
 function isServerOwnedEchoPart(part: V2Part): boolean {
   const type = (part as { type?: unknown }).type;
@@ -141,16 +143,17 @@ export function mergeEchoWithStored(incoming: MastraDBMessage, stored: MastraDBM
  * The client is the author of the user-visible content, so a genuine
  * edit-and-resend (same ID, changed text) must survive rather than be discarded
  * by a server-wins merge. But observational memory writes server-authored state
- * onto user messages — `data-om-*` observation marker parts and
- * `content.metadata` (which carries `mastra.sealed`) — and a lossy echo that
- * dropped them must not be able to erase them.
+ * onto user messages too — `content.metadata`, which carries `mastra.sealed` —
+ * and a lossy echo that dropped it must not be able to erase it.
  *
  * So the client may replace only the editable content surface: its own non-marker
- * parts and the `content` string. Server-owned metadata and observation marker
- * parts are always taken from the stored record. The client can neither drop the
- * markers (they are re-added from stored) nor inject new ones (they are stripped
- * from the incoming parts), and it cannot pre-seed metadata keys the server never
- * set (the whole metadata object comes from stored).
+ * parts and the `content` string. Server-owned metadata is always taken from the
+ * stored record, so the client can neither erase it nor pre-seed metadata keys
+ * the server never set (the whole metadata object comes from stored). Marker
+ * parts are filtered on both sides for the same reason, though observational
+ * memory does not in fact append `data-om-*` parts to user messages: keeping the
+ * filter here means an injected marker is stripped rather than trusted, without
+ * this merge having to know which roles OM marks.
  */
 function mergeUserEcho(incoming: MastraDBMessage, stored: MastraDBMessage): MastraDBMessage {
   const storedContent = stored.content;
@@ -162,9 +165,11 @@ function mergeUserEcho(incoming: MastraDBMessage, stored: MastraDBMessage): Mast
   const mergedContent: MastraMessageContentV2 = {
     ...storedContent, // retain server-owned metadata (e.g. mastra.sealed)
     format: 2,
-    // Client-editable content first, then the server-owned markers. Observational
-    // memory appends its markers after the user content, so this preserves both
-    // their presence and their trailing position regardless of what the echo sent.
+    // Client-editable content first, then any server-owned markers. Observational
+    // memory appends markers after a message's content, so restoring them last
+    // preserves the trailing position it wrote them in. For user messages this
+    // list is normally empty — OM does not mark user messages — so the ordering
+    // matters only if a marker part is ever present on one.
     parts: [...clientEditableParts, ...serverMarkerParts],
   };
 

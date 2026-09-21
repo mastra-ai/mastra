@@ -2024,18 +2024,16 @@ describe('MessageHistory', () => {
     });
 
     it('should reject an edited echo of a sealed user message', async () => {
-      // Observational memory appends a `data-om-*` marker part and stamps
-      // `content.metadata.mastra.sealed` onto the user message.
-      const observationMarker = {
-        type: 'data-om-observation-end',
-        data: { cycleId: 'cycle-1', operationType: 'observation', recordId: 'rec-1', threadId: 'thread-1' },
-      };
+      // Observational memory stamps `content.metadata.mastra.sealed` onto a user
+      // message once it has crossed an observation boundary. (It does not append
+      // `data-om-*` marker parts to user messages, so the stored fixture carries
+      // none.)
       const stored = {
         id: 'msg-1',
         role: 'user',
         content: {
           format: 2,
-          parts: [{ type: 'text', text: 'Original question' }, observationMarker],
+          parts: [{ type: 'text', text: 'Original question' }],
           metadata: { mastra: { sealed: true } },
         },
         threadId: 'thread-1',
@@ -2046,8 +2044,8 @@ describe('MessageHistory', () => {
       processor = new MessageHistory({ storage: mockStorage });
       const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
 
-      // The client edits the text and — as a lossy echo — drops the observation
-      // marker and the sealed metadata.
+      // The client edits the text and — as a lossy echo — drops the sealed
+      // metadata.
       const edited = {
         id: 'msg-1',
         role: 'user',
