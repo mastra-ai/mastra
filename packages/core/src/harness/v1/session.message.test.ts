@@ -17,6 +17,7 @@ import { AgentThreadOutputDrainError } from '../../agent/thread-stream-runtime';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import {
   HarnessStorageAdmissionConflictError,
+  HarnessStorageVersionConflictError,
   harnessTerminalAdmissionId,
   harnessTerminalIntentId,
 } from '../../storage/domains/harness';
@@ -4464,6 +4465,9 @@ describe('Session.message() — default path', () => {
       if (cancelCalls === 1) throw new Error('cancel write lost');
       return originalCancel(input);
     });
+    // The raw storage error is wrapped in the typed indeterminate-outcome
+    // error — the tombstone may or may not have landed — and the same pending
+    // failure is drained to retained observers.
     await expect(
       (session as any)._terminalizeUndeliverableResuspension({
         pending: stamped,
@@ -4472,7 +4476,7 @@ describe('Session.message() — default path', () => {
         full: { finishReason: 'suspended', runId: stamped.runId } as any,
         error: new AgentThreadOutputDrainError('terminal-publish-failed', 'publication lost'),
       }),
-    ).rejects.toThrow('cancel write lost');
+    ).rejects.toThrow('Native terminal finalization is indeterminate and requires reconciliation');
     expect(session.getRecord().pendingResume?.toolCallId).toBe('tc-1');
     expect(
       (
@@ -5288,6 +5292,253 @@ describe('Session.message() — default path', () => {
     await expect(duplicate).resolves.toMatchObject({ text: 'resumed answer' });
     expect(restarted.getTokenUsage().totalTokens).toBe(23);
     await restartedHarness.shutdown();
+  });
+
+  it('drains retained terminal observers when the resume admission probe fails', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    agent.enqueueRun({ finishReason: 'stop', text: 'resumed answer' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-probe-drain', generation: 1 };
+    const failures: unknown[] = [];
+    const receipts: unknown[] = [];
+    const first = await session.message({
+      content: 'needs approval',
+      admissionId: 'probe-drain-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+      onTerminalCommit: receipt => receipts.push(receipt),
+      onTerminalCommitError: err => failures.push(err),
+    });
+    expect(first.finishReason).toBe('suspended');
+
+    // The suspended commit defers and retains this caller's observers under
+    // the admission's run id. Wait for the retention before the resume.
+    await vi.waitFor(() => expect((session as any)._terminalObserversByRunId.size).toBe(1));
+
+    // The resume's settlement probe fails before `_commitTerminalHandoff` can
+    // take ownership of the drain — the retained observer must still hear a
+    // terminal failure and the admission must stay recoverable. The probe is
+    // gated on `resumedAt` so only the settle-time call (after the respond's
+    // admission CAS stamped it) rejects, not the resume's pre-CAS probe.
+    const originalByRun = storage.loadTerminalAdmissionByRun.bind(storage);
+    vi.spyOn(storage, 'loadTerminalAdmissionByRun').mockImplementation(async (input: any) => {
+      if (session.getRecord().pendingResume?.resumedAt !== undefined) throw new Error('probe lost');
+      return originalByRun(input);
+    });
+    await expect(session.respondToToolApproval({ approved: true })).rejects.toThrow();
+    expect(failures).toHaveLength(1);
+    expect(receipts).toHaveLength(0);
+    expect((session as any)._terminalObserversByRunId.size).toBe(0);
+    // The durable admission is still pending — the probe failure must not
+    // terminalize what it could not read.
+    expect(
+      (
+        await storage.loadTerminalAdmission({
+          harnessName: 'default',
+          sessionId: session.id,
+          admissionId: 'probe-drain-admission',
+          executionGrant: grant,
+        })
+      )?.status,
+    ).toBe('pending');
+  });
+
+  it('does not apply cached-restore usage when a CAS retry loses the restore fence', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+      totalUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-cas-retry', generation: 1 };
+    const first = await session.message({
+      content: 'needs approval',
+      admissionId: 'cas-retry-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(first.finishReason).toBe('suspended');
+    expect(session.getTokenUsage().totalTokens).toBe(15);
+
+    // Sabotage the restore flush once: a concurrent owner clears pendingResume
+    // (a commit won the grant) and bumps the version, so the retried updater
+    // hits the restore fence and skips the write. The writeApplied flag from
+    // the losing attempt must not leak usage into the retried flush.
+    const originalSave = storage.saveSession.bind(storage);
+    let sabotageArmed = true;
+    vi.spyOn(storage, 'saveSession').mockImplementation(async (record: any, opts?: any) => {
+      if (sabotageArmed && record.pendingResume?.toolCallId === 'tc-1' && record.pendingResume.runId === first.runId) {
+        sabotageArmed = false;
+        const latest = await storage.loadSession({ harnessName: 'default', sessionId: session.id });
+        await originalSave(
+          { ...latest!, pendingResume: undefined },
+          { harnessName: 'default', ownerId: opts?.ownerId, ifVersion: latest!.version },
+        );
+        throw new HarnessStorageVersionConflictError(session.id, opts?.ifVersion ?? 0, latest!.version + 1);
+      }
+      return originalSave(record, opts);
+    });
+
+    const duplicate = session.message({
+      content: 'needs approval',
+      admissionId: 'cas-retry-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    await expect(duplicate).resolves.toMatchObject({ finishReason: 'suspended' });
+    expect(sabotageArmed).toBe(false);
+    // The skipped restore must not re-apply the suspended run's cumulative
+    // usage — the durable baseline is gone (pending cleared), so accounting it
+    // would double-count the full 15.
+    expect(session.getTokenUsage().totalTokens).toBe(15);
+    expect(session.getRecord().pendingResume).toBeUndefined();
+  });
+
+  it('recovers an approved plan mode transition when finalizing a committed admission after a crashed respond', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-P', toolName: 'submit_plan', args: { title: 't', plan: 'p' } },
+    });
+    agent.enqueueRun({ finishReason: 'stop', text: 'resumed answer' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      modes: [
+        { id: 'planner', agentId: 'default', transitionsTo: 'builder' },
+        { id: 'builder', agentId: 'default' },
+      ],
+      defaultModeId: 'planner',
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-mode-recover', generation: 1 };
+    const first = await session.message({
+      content: 'plan',
+      admissionId: 'mode-recover-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(first.finishReason).toBe('suspended');
+    const pending = session.getRecord().pendingResume!;
+    expect(pending.kind).toBe('plan-approval');
+
+    // The respond commits the terminal winner, then dies in the post-commit
+    // bookkeeping flush — the durable record keeps the resumed pending plus
+    // the 'accepted' receipt that persists the caller's approval payload.
+    let commitSealed = false;
+    const originalCommit = storage.commitTerminalHandoff.bind(storage);
+    vi.spyOn(storage, 'commitTerminalHandoff').mockImplementation(async (input: any) => {
+      const receipt = await originalCommit(input);
+      commitSealed = true;
+      return receipt;
+    });
+    const originalSave = storage.saveSession.bind(storage);
+    let failedOnce = false;
+    vi.spyOn(storage, 'saveSession').mockImplementation(async (record: any, opts?: any) => {
+      if (commitSealed && !failedOnce) {
+        failedOnce = true;
+        throw new Error('pendingResume flush lost');
+      }
+      return originalSave(record, opts);
+    });
+    await expect(
+      session.respondToPlanApproval({
+        approved: true,
+        responseId: 'resp-mode-1',
+        itemId: pending.itemId,
+        runId: pending.runId,
+        toolCallId: pending.toolCallId,
+        pendingRequestedAt: pending.requestedAt,
+      } as any),
+    ).rejects.toThrow();
+    expect(session.getCurrentMode().id).toBe('planner');
+    const parked = session.getRecord().pendingResume!;
+    expect(parked.resumedAt).toBeDefined();
+    const receipt = session.getRecord().inboxResponseReceipts?.['resp-mode-1'];
+    expect(receipt?.status).toBe('accepted');
+
+    // Deadline recovery must replay the persisted transition — the approval
+    // data survived on the receipt, and clearing the pending without it would
+    // leave the old mode and permission policy active forever.
+    vi.restoreAllMocks();
+    const generation = (session as any)._pendingInteractionGeneration(parked);
+    const past = Date.now() - 1;
+    const recovered = await (session as any)._internalExpirePendingInteractionGeneration({
+      ...generation,
+      resumeRecoveryAt: past,
+      dueAt: past,
+    });
+    expect(recovered).toBe(true);
+    expect(session.getCurrentMode().id).toBe('builder');
+    expect(session.getRecord().pendingResume).toBeUndefined();
+    expect(session.getRecord().inboxResponseReceipts?.['resp-mode-1']?.status).toBe('applied');
   });
 });
 

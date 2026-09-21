@@ -4895,6 +4895,9 @@ export class HarnessPG extends HarnessStorage {
       if (!sameHarnessTerminalAdmissionInput(stored, admissionInput)) {
         throw new HarnessTerminalHandoffIdentityConflictError(admissionInput.executionGrant.key);
       }
+      if (stored.status === 'fenced') {
+        throw new HarnessTerminalHandoffFencedError(stored.sessionId);
+      }
 
       const evidenceRow = await tx.execute({
         sql: `SELECT * FROM ${TABLE_HARNESS_MESSAGE_RESULTS} WHERE id = ? LIMIT 1 FOR UPDATE`,
@@ -4939,9 +4942,6 @@ export class HarnessPG extends HarnessStorage {
         });
         await tx.commit();
         return { status: 'cancelled', admission: { ...stored, status: 'cancelled' } };
-      }
-      if (stored.status === 'fenced') {
-        throw new HarnessTerminalHandoffFencedError(stored.sessionId);
       }
 
       if (stored.status === 'committed') {

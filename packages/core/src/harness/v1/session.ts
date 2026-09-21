@@ -97,6 +97,7 @@ import type {
   HarnessRunSummary,
   HarnessStorage,
   HarnessTerminalAdmissionReceipt,
+  HarnessTerminalCancelReceipt,
   HarnessTerminalCommitReceipt,
   HarnessTerminalExecutionGrant,
   HarnessTerminalFinalizer,
@@ -3820,13 +3821,42 @@ export class Session {
           this._rememberCompletedRun(parked.runId, { ok: true, full });
           const pendingQueuedItemId = this._queuedItemIdForPendingResume(parked);
           const resumeRuntimeDependencies = this._runtimeDependenciesForPendingResume(parked);
+          // The resume-data payload lived in the dead caller, but a
+          // `responseId` respond persisted it on the generation's inbox
+          // receipt — recover an approved plan transition from there (and the
+          // pending's declared fallback) instead of clearing the interaction
+          // while leaving the old mode and permission policy active.
+          let modeFlipTarget: string | undefined;
+          if (parked.kind === 'plan-approval') {
+            const generationReceipt = Object.values(this._record.inboxResponseReceipts ?? {}).find(
+              candidate =>
+                candidate.status === 'accepted' &&
+                candidate.kind === parked.kind &&
+                candidate.runId === parked.runId &&
+                candidate.toolCallId === parked.toolCallId &&
+                candidate.pendingRequestedAt === parked.requestedAt &&
+                candidate.itemId === (parked.itemId ?? parked.toolCallId),
+            );
+            const data = generationReceipt?.response as { approved?: boolean; transitionToMode?: string } | undefined;
+            if (data?.approved === true) {
+              const candidate = data.transitionToMode ?? parked.transitionModeId;
+              if (candidate && candidate !== this._record.modeId) {
+                try {
+                  this._harness._getMode(candidate);
+                  modeFlipTarget = candidate;
+                } catch {
+                  // The target mode vanished from config since admission —
+                  // recovery must stay total; skip the flip rather than brick
+                  // the session on a mode that no longer exists.
+                }
+              }
+            }
+          }
           await this._withActiveDeletedWaiter(async activeTurnWaiter => {
             await this._finalizeResumedTurnOutcome(parked, full, {
               pendingQueuedItemId,
               completingQueuedItemId: expectedQueuedItemId,
-              // The resume-data payload (and thus any plan-approval mode flip)
-              // lived in the dead caller; the committed outcome is recovered
-              // without it.
+              modeFlipTarget,
               previousModeId: this._record.modeId,
               resumeModeId: this._modeIdForPendingResume(parked),
               resumeModelId: resumeRuntimeDependencies.modelId,
@@ -9325,16 +9355,30 @@ export class Session {
     // instance — a reopened session must still observe a bound admission and
     // fail closed through the commit barrier rather than report success on an
     // unsettled (or dead) grant.
-    const sessionIncarnation = this._record.sessionIncarnation;
-    if (!this._storage.supportsTerminalHandoff || sessionIncarnation === undefined) return;
-    const admission = await this._storage.loadTerminalAdmissionByRun({
-      harnessName: this._record.harnessName,
-      sessionId: this.id,
-      runId: pending.runId,
-      sessionIncarnation,
-    });
+    const admission = await this._probeResumeAdmissionByRun(pending);
     if (!admission) return;
     await this._commitTerminalHandoff(admission, full, options);
+  }
+
+  /**
+   * By-run admission probe shared by the settle and cancel paths. A probe
+   * failure never reaches `_commitTerminalHandoff`'s drain, so the
+   * indeterminate outcome is reported to the run's retained observers here
+   * while the admission stays pending/recoverable.
+   */
+  private async _probeResumeAdmissionByRun(pending: PendingResume) {
+    const sessionIncarnation = this._record.sessionIncarnation;
+    if (!this._storage.supportsTerminalHandoff || sessionIncarnation === undefined) return undefined;
+    try {
+      return await this._storage.loadTerminalAdmissionByRun({
+        harnessName: this._record.harnessName,
+        sessionId: this.id,
+        runId: pending.runId,
+        sessionIncarnation,
+      });
+    } catch (err) {
+      throw this._terminalFailure(err, undefined, pending.runId);
+    }
   }
 
   /**
@@ -9351,17 +9395,10 @@ export class Session {
   ): Promise<void> {
     // Durable admission state is independent of local finalizer registration —
     // a reopened session must still drain observers for a dead grant.
-    const sessionIncarnation = this._record.sessionIncarnation;
-    if (!this._storage.supportsTerminalHandoff || sessionIncarnation === undefined) return;
     // Probe across statuses: an external cancellation may have already moved
     // the row out of 'pending', and the retained observers still need their
     // terminal outcome.
-    const admission = await this._storage.loadTerminalAdmissionByRun({
-      harnessName: this._record.harnessName,
-      sessionId: this.id,
-      runId: pending.runId,
-      sessionIncarnation,
-    });
+    const admission = await this._probeResumeAdmissionByRun(pending);
     if (!admission) return;
     if (admission.status === 'cancelled') {
       this._drainTerminalObservers(
@@ -9394,16 +9431,23 @@ export class Session {
       });
       return;
     }
-    const receipt = await this._storage.cancelTerminalHandoff({
-      harnessName: admission.harnessName,
-      sessionId: admission.sessionId,
-      sessionIncarnation: admission.sessionIncarnation,
-      admissionId: admission.admissionId,
-      admissionHash: admission.admissionHash,
-      executionGrant: admission.executionGrant,
-      reason: { code: 'harness.terminal_cancelled', message: error.message },
-      cancelledAt: Date.now(),
-    });
+    let receipt: HarnessTerminalCancelReceipt;
+    try {
+      receipt = await this._storage.cancelTerminalHandoff({
+        harnessName: admission.harnessName,
+        sessionId: admission.sessionId,
+        sessionIncarnation: admission.sessionIncarnation,
+        admissionId: admission.admissionId,
+        admissionHash: admission.admissionHash,
+        executionGrant: admission.executionGrant,
+        reason: { code: 'harness.terminal_cancelled', message: error.message },
+        cancelledAt: Date.now(),
+      });
+    } catch (err) {
+      // Same pre-commit drain gap as the probe: durable cancel state is
+      // uncertain, so observers get the recoverable pending failure.
+      throw this._terminalFailure(err, undefined, pending.runId);
+    }
     if (receipt.status === 'cancelled' || receipt.status === 'duplicate') {
       this._drainTerminalObservers(
         pending.runId,
@@ -12466,6 +12510,9 @@ export class Session {
       if (pending.toolSurfaceFence !== undefined) this._retainCurrentReplacementToolSurface(full.runId);
       await this._flushUpdate(
         prev => {
+          // CAS retries re-run this updater against newer state — the apply
+          // flag must reflect the attempt that actually won, not a failed one.
+          writeApplied = false;
           const current = prev.pendingResume;
           if (opts.restoreFence !== undefined) {
             const currentKey = current === undefined ? undefined : pendingInteractionGenerationKey(current);
@@ -12512,6 +12559,7 @@ export class Session {
     await this._flushUpdate(
       prev => {
         restored = true;
+        writeApplied = false;
         if (opts.restoreFence !== undefined) {
           const current = prev.pendingResume;
           const currentKey = current === undefined ? undefined : pendingInteractionGenerationKey(current);

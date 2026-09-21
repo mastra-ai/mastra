@@ -1576,11 +1576,11 @@ export class InMemoryHarness extends HarnessStorage {
     if (!sameTerminalAdmissionInput(stored, admissionInput)) {
       throw new HarnessTerminalHandoffIdentityConflictError(admissionInput.executionGrant.key);
     }
+    if (stored.status === 'fenced') throw new HarnessTerminalHandoffFencedError(stored.sessionId);
     const tombstone = this.db.harnessTerminalTombstones.get(harnessTerminalGrantTombstoneId(admissionInput));
     if (tombstone && stored.status !== 'committed') {
       return { status: 'cancelled', admission: cloneHarnessTerminal({ ...stored, status: 'cancelled' }) };
     }
-    if (stored.status === 'fenced') throw new HarnessTerminalHandoffFencedError(stored.sessionId);
     const currentSession = this.db.harnessSessions.get(sessionKey(namespace, stored.sessionId));
     if (!currentSession || currentSession.sessionIncarnation !== stored.sessionIncarnation) {
       stored.status = 'fenced';
