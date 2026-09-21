@@ -247,7 +247,7 @@ type InputShared_Type_1 = {
 };
 
 type InputShared_Type_2 = {
-  name?: string | undefined;
+  rootSpanName?: string | undefined;
   metadata?:
     | {
         [key: string]: unknown;

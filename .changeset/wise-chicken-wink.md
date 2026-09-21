@@ -4,4 +4,4 @@
 '@mastra/core': patch
 ---
 
-Accept `name` in `tracingOptions` on agent and workflow HTTP routes so clients can set a per-run root span name. Related: https://github.com/mastra-ai/mastra/issues/24518
+Accept `rootSpanName` in `tracingOptions` on agent and workflow HTTP routes so clients can set a per-run root span name. Related: https://github.com/mastra-ai/mastra/issues/24518

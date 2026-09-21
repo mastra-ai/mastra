@@ -1780,7 +1780,7 @@ export interface TracingOptions {
    * `agent run: '<id>'` / `workflow run: '<id>'` name. Use it to tell runs of the
    * same agent or workflow apart in trace lists. Only applied to the root span.
    */
-  name?: string;
+  rootSpanName?: string;
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
   /**

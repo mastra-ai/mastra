@@ -1564,7 +1564,7 @@ describe('Tracing', () => {
   });
 
   describe('Root span name override', () => {
-    it('should replace the root span name via tracingOptions.name', () => {
+    it('should replace the root span name via tracingOptions.rootSpanName', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
@@ -1577,7 +1577,7 @@ describe('Tracing', () => {
         entityType: EntityType.WORKFLOW_RUN,
         entityId: 'skill-analyze',
         entityName: 'skill-analyze',
-        tracingOptions: { name: 'skill-analyze: typescript' },
+        tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
       });
 
       expect(span.name).toBe('skill-analyze: typescript');
@@ -1587,7 +1587,7 @@ describe('Tracing', () => {
       span.end();
     });
 
-    it('should keep the default name when tracingOptions.name is empty', () => {
+    it('should keep the default name when tracingOptions.rootSpanName is empty', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
@@ -1597,7 +1597,7 @@ describe('Tracing', () => {
       const span = observability.startSpan({
         type: SpanType.WORKFLOW_RUN,
         name: "workflow run: 'skill-analyze'",
-        tracingOptions: { name: '' },
+        tracingOptions: { rootSpanName: '' },
       });
 
       expect(span.name).toBe("workflow run: 'skill-analyze'");
@@ -1615,14 +1615,14 @@ describe('Tracing', () => {
       const rootSpan = observability.startSpan({
         type: SpanType.WORKFLOW_RUN,
         name: "workflow run: 'skill-analyze'",
-        tracingOptions: { name: 'skill-analyze: typescript' },
+        tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
       });
 
       const childSpan = observability.startSpan({
         type: SpanType.WORKFLOW_STEP,
         name: "workflow step: 'analyze'",
         parent: rootSpan,
-        tracingOptions: { name: 'ignored' },
+        tracingOptions: { rootSpanName: 'ignored' },
       });
 
       expect(childSpan.name).toBe("workflow step: 'analyze'");

@@ -293,7 +293,7 @@ const result = await agent.generate([{ role: 'user', content: 'Analyze this' }],
 
 ### Naming a trace
 
-Every run of the same agent or workflow gets the same root span name by default, for example `workflow run: 'skill-analyze'`. When one workflow runs over many subjects, set `name` in `tracingOptions` to label each run. The name replaces the root span name in Studio's trace list and in exporters that display span names.
+Every run of the same agent or workflow gets the same root span name by default, for example `workflow run: 'skill-analyze'`. When one workflow runs over many subjects, set `rootSpanName` in `tracingOptions` to label each run. The name replaces the root span name in Studio's trace list and in exporters that display span names.
 
 ```ts
 const run = await mastra.getWorkflow('skillAnalyze').createRun()
