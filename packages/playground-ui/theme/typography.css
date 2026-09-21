@@ -57,8 +57,7 @@
    * Role-based font tokens. Components reference --font-display (headlines,
    * brand) and --font-body (UI, paragraphs). Defaults are system stacks so
    * this package has no font-licensing footprint. Consumers override these
-   * tokens in their own CSS to apply product fonts — Studio maps display and
-   * body onto Mona Sans in playground/src/fonts.css.
+   * tokens in their own CSS to apply product fonts.
    */
   --font-display:
     system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
@@ -66,7 +65,9 @@
     system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --font-mono: ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
 
-  /* `font-sans` resolves to the product font rather than Tailwind's stock stack.
+  /* Load-bearing, not legacy: Tailwind's preflight sets the document font from
+     --default-font-family, which reads --font-sans. Dropping this line silently
+     returns every page to Tailwind's stock stack.
      The system has no serif family, so `font-serif` is removed outright. */
   --font-sans: var(--font-body);
   --font-serif: initial;

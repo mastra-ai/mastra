@@ -313,7 +313,10 @@ export const MemorySearch = ({
                               <Txt
                                 variant="meta"
                                 tone={result.threadId !== currentThreadId ? undefined : 'muted'}
-                                className={cn('truncate max-w-[150px]', result.threadId !== currentThreadId && 'text-blue-400')}
+                                className={cn(
+                                  'truncate max-w-[150px]',
+                                  result.threadId !== currentThreadId && 'text-blue-400',
+                                )}
                                 title={result.threadTitle}
                               >
                                 • {result.threadTitle}

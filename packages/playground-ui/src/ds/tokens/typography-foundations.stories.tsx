@@ -81,14 +81,20 @@ const RoleRow = ({ role }: { role: TextRole }) => {
   );
 };
 
-// Same rule as RoleRow: the stack is read back off the rendered specimen, so it reports
-// the font the app actually resolved rather than a string that can drift from the CSS.
+const emojiFallback = /emoji|symbol/i;
+
 const FamilySpecimen = ({ token, use, className, sample }: (typeof families)[number]) => {
   const [stack, setStack] = useState('');
 
   const measure = useCallback((element: HTMLElement | null) => {
     if (!element) return;
-    setStack(getComputedStyle(element).fontFamily);
+    const resolved = getComputedStyle(element).fontFamily.split(',');
+    setStack(
+      resolved
+        .map(family => family.trim())
+        .filter(family => !emojiFallback.test(family))
+        .join(', '),
+    );
   }, []);
 
   return (
@@ -97,7 +103,7 @@ const FamilySpecimen = ({ token, use, className, sample }: (typeof families)[num
         <p ref={measure} className={cn('text-title text-foreground min-w-0 truncate', className)}>
           {sample}
         </p>
-        <Txt variant="meta" font="mono" tone="faint">
+        <Txt variant="meta" font="mono" tone="faint" className="min-w-0 truncate" title={stack}>
           {stack}
         </Txt>
       </div>
