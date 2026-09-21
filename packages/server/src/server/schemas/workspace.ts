@@ -10,6 +10,27 @@
 import { z } from 'zod/v4';
 
 // =============================================================================
+// Query Coercion Helpers
+// =============================================================================
+
+/**
+ * Boolean coercion for query-string flags.
+ *
+ * HTTP query params arrive as strings, and the client SDK serializes explicit
+ * booleans with `String(value)`, so `false` reaches the server as the string
+ * `"false"`. `z.coerce.boolean()` applies `Boolean(input)`, and
+ * `Boolean("false") === true`, which silently flips an explicit `false` to
+ * `true`. This preprocessor maps the string forms of `true`/`false` correctly
+ * and passes everything else (real booleans, `undefined`) through untouched.
+ */
+const queryBoolean = () =>
+  z.preprocess(v => {
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    return v;
+  }, z.boolean());
+
+// =============================================================================
 // Filesystem Path Schemas
 // =============================================================================
 
@@ -32,7 +53,7 @@ export const fsReadQuerySchema = z.object({
 
 export const fsListQuerySchema = z.object({
   path: z.string().describe('Path to the directory to list'),
-  recursive: z.coerce.boolean().optional().describe('Include subdirectories'),
+  recursive: queryBoolean().optional().describe('Include subdirectories'),
 });
 
 export const fsStatQuerySchema = z.object({
@@ -41,8 +62,8 @@ export const fsStatQuerySchema = z.object({
 
 export const fsDeleteQuerySchema = z.object({
   path: z.string().describe('Path to delete'),
-  recursive: z.coerce.boolean().optional().describe('Delete directories recursively'),
-  force: z.coerce.boolean().optional().describe("Don't error if path doesn't exist"),
+  recursive: queryBoolean().optional().describe('Delete directories recursively'),
+  force: queryBoolean().optional().describe("Don't error if path doesn't exist"),
 });
 
 // =============================================================================
@@ -53,12 +74,12 @@ export const fsWriteBodySchema = z.object({
   path: z.string().describe('Path to write to'),
   content: z.string().describe('Content to write (text or base64-encoded binary)'),
   encoding: z.enum(['utf-8', 'base64']).optional().default('utf-8').describe('Content encoding'),
-  recursive: z.coerce.boolean().optional().describe('Create parent directories if needed'),
+  recursive: queryBoolean().optional().describe('Create parent directories if needed'),
 });
 
 export const fsMkdirBodySchema = z.object({
   path: z.string().describe('Directory path to create'),
-  recursive: z.coerce.boolean().optional().describe('Create parent directories if needed'),
+  recursive: queryBoolean().optional().describe('Create parent directories if needed'),
 });
 
 // =============================================================================
@@ -279,7 +300,7 @@ export const searchSkillsQuerySchema = z.object({
   topK: z.coerce.number().optional().default(5).describe('Maximum number of results'),
   minScore: z.coerce.number().optional().describe('Minimum relevance score threshold'),
   skillNames: z.string().optional().describe('Comma-separated list of skill names to search within'),
-  includeReferences: z.coerce.boolean().optional().default(true).describe('Include reference files in search'),
+  includeReferences: queryBoolean().optional().default(true).describe('Include reference files in search'),
 });
 
 // =============================================================================
