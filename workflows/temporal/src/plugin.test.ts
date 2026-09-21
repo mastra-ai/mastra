@@ -21,10 +21,15 @@ async function writeMastraCoreShim(projectRoot: string): Promise<void> {
       name: '@mastra/core',
       type: 'module',
       exports: {
+        './di': './di.js',
         './mastra': './mastra.js',
         './workflows': './workflows.js',
       },
     }),
+  );
+  await writeFile(
+    path.join(coreDir, 'di.js'),
+    `export class RequestContext { constructor(entries = {}) { this.entries = entries; } get(key) { return this.entries[key]; } }`,
   );
   await writeFile(
     path.join(coreDir, 'mastra.js'),

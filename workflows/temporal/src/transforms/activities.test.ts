@@ -102,7 +102,7 @@ describe('activity transform', () => {
       export const fetchWeather = createStep({ id: 'fetch-weather', execute: async () => ({ ok: true }) });
     `);
 
-    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.params,[\s\S]*mastra[\s\S]*\}\)/);
+    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/);
     expect(output).not.toMatch(/await import\(/);
     expect(output).toContain('const fetchWeather = createStep({');
   });
@@ -158,6 +158,9 @@ describe('activity transform', () => {
     expect(output).toContain('const double =');
     expect(output).toMatch(/const mappingMappedWorkflow0[\s\S]*export \{ mappingMappedWorkflow0 \}/);
     expect(output).toContain('getInitData: () => initData');
+    expect(output).toContain('requestContext');
+    expect(output).toContain('runId');
+    expect(output).toContain('resourceId');
     expect(output).not.toContain('const mappedWorkflow =');
     expect(activityBindings).toContainEqual({
       exportName: 'mappingMappedWorkflow0',
@@ -239,6 +242,6 @@ describe('activity transform', () => {
 
     expect(output).toContain('const mastra =');
     expect(output).not.toMatch(/export\s+(const|\{)\s*mastra/);
-    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.params,[\s\S]*mastra[\s\S]*\}\)/);
+    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/);
   });
 });

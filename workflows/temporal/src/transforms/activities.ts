@@ -248,13 +248,22 @@ function createMappingActivityStatements(
       exportName = `${baseExportName}${exportSuffix++}`;
     }
     usedExportNames.add(exportName);
+    const contextNames = ['requestContext', 'runId', 'resourceId'];
     const params = t.objectPattern([
       t.objectProperty(t.identifier('inputData'), t.identifier('inputData'), false, true),
       t.objectProperty(t.identifier('initData'), t.identifier('initData'), false, true),
+      ...contextNames.map(name => t.objectProperty(t.identifier(name), t.identifier(name), false, true)),
     ]);
     const callbackContext = t.objectExpression([
       t.objectProperty(t.identifier('inputData'), t.identifier('inputData'), false, true),
       t.objectProperty(t.identifier('getInitData'), t.arrowFunctionExpression([], t.identifier('initData'))),
+      t.objectProperty(
+        t.identifier('requestContext'),
+        t.newExpression(t.identifier('RequestContext'), [t.identifier('requestContext')]),
+      ),
+      ...contextNames
+        .filter(name => name !== 'requestContext')
+        .map(name => t.objectProperty(t.identifier(name), t.identifier(name), false, true)),
     ]);
     const callbackExpression = t.cloneNode(callback, true) as t.Expression;
     const body = t.callExpression(callbackExpression, [callbackContext]);
@@ -345,30 +354,38 @@ function createTemporalActivitiesHelperStatements(
   mastraImportPath: string | null,
   hasMastraBinding: boolean,
 ): t.Statement[] {
-  const helperSource = mastraImportPath
-    ? `
-        function createStep(args) {
-          return async (params) => {
-            const { mastra } = await import(${JSON.stringify(mastraImportPath)});
-            return args.execute({ ...params, mastra });
-          };
-        }
-      `
-    : hasMastraBinding
-      ? `
-        function createStep(args) {
-          return async (params) => {
-            return args.execute({ ...params, mastra });
-          };
-        }
-      `
-      : `
-        function createStep(args) {
-          return async (params) => {
-            return args.execute(params);
-          };
-        }
-      `;
+  const helperSource = `
+    function withRequestContext(params) {
+      return { ...params, requestContext: new RequestContext(params.requestContext) };
+    }
+
+    ${
+      mastraImportPath
+        ? `
+          function createStep(args) {
+            return async (params) => {
+              const { mastra } = await import(${JSON.stringify(mastraImportPath)});
+              return args.execute({ ...withRequestContext(params), mastra });
+            };
+          }
+        `
+        : hasMastraBinding
+          ? `
+            function createStep(args) {
+              return async (params) => {
+                return args.execute({ ...withRequestContext(params), mastra });
+              };
+            }
+          `
+          : `
+            function createStep(args) {
+              return async (params) => {
+                return args.execute(withRequestContext(params));
+              };
+            }
+          `
+    }
+  `;
 
   return parse(helperSource, {
     sourceType: 'module',
@@ -412,7 +429,12 @@ export async function buildTemporalActivitiesModule(
             sourceFilename: id,
           });
 
-          const statements: t.Statement[] = [];
+          const statements: t.Statement[] = [
+            t.importDeclaration(
+              [t.importSpecifier(t.identifier('RequestContext'), t.identifier('RequestContext'))],
+              t.stringLiteral('@mastra/core/di'),
+            ),
+          ];
           const seenNames = new Set<string>();
           const strippedNames = new Set<string>();
           const workflowBindingNames = collectWorkflowBindingNames(ast);

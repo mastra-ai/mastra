@@ -1,9 +1,16 @@
+import { RequestContext } from '@mastra/core/di';
 import { z } from 'zod';
 
+function withRequestContext(params) {
+  return {
+    ...params,
+    requestContext: new RequestContext(params.requestContext)
+  };
+}
 function createStep(args) {
   return async params => {
     return args.execute({
-      ...params,
+      ...withRequestContext(params),
       mastra
     });
   };

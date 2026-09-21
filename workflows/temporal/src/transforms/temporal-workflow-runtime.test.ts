@@ -30,10 +30,21 @@ describe('temporal workflow runtime helper module', () => {
 
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
     const workflow = createWorkflow('weather-workflow').then('fetch-weather').commit();
-    const result = await workflow({ inputData: { city: 'SF' }, initialState: { started: true } });
+    const result = await workflow({
+      inputData: { city: 'SF' },
+      initialState: { started: true },
+      requestContext: { tenantId: 'tenant-1' },
+      runId: 'run-1',
+      resourceId: 'resource-1',
+    });
 
     expect(proxyActivities).toHaveBeenCalledWith({ startToCloseTimeout: '1 minute' });
-    expect(fetchWeather).toHaveBeenCalledWith({ inputData: { city: 'SF' } });
+    expect(fetchWeather).toHaveBeenCalledWith({
+      inputData: { city: 'SF' },
+      requestContext: { tenantId: 'tenant-1' },
+      runId: 'run-1',
+      resourceId: 'resource-1',
+    });
     expect(result).toEqual({
       status: 'success',
       input: { city: 'SF' },
@@ -55,9 +66,20 @@ describe('temporal workflow runtime helper module', () => {
 
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
     const workflow = createWorkflow('mapped-workflow').map(mappingId).commit();
-    const result = await workflow({ inputData: { value: 21 } });
+    const result = await workflow({
+      inputData: { value: 21 },
+      requestContext: { tenantId: 'tenant-1' },
+      runId: 'run-1',
+      resourceId: 'resource-1',
+    });
 
-    expect(mapping).toHaveBeenCalledWith({ inputData: { value: 21 }, initData: { value: 21 } });
+    expect(mapping).toHaveBeenCalledWith({
+      inputData: { value: 21 },
+      initData: { value: 21 },
+      requestContext: { tenantId: 'tenant-1' },
+      runId: 'run-1',
+      resourceId: 'resource-1',
+    });
     expect(result).toEqual({
       status: 'success',
       input: { value: 21 },
@@ -100,9 +122,23 @@ describe('temporal workflow runtime helper module', () => {
 
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
     const workflow = createWorkflow('weather-workflow').thenWorkflow('childWorkflow').commit();
-    const result = await workflow({ inputData: { city: 'SF' } });
+    const result = await workflow({
+      inputData: { city: 'SF' },
+      requestContext: { tenantId: 'tenant-1' },
+      runId: 'run-1',
+      resourceId: 'resource-1',
+    });
 
-    expect(executeChild).toHaveBeenCalledWith('childWorkflow', { args: [{ inputData: { city: 'SF' } }] });
+    expect(executeChild).toHaveBeenCalledWith('childWorkflow', {
+      args: [
+        {
+          inputData: { city: 'SF' },
+          requestContext: { tenantId: 'tenant-1' },
+          runId: 'run-1',
+          resourceId: 'resource-1',
+        },
+      ],
+    });
     expect(result).toEqual({
       status: 'success',
       input: { city: 'SF' },
