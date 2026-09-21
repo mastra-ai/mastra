@@ -1,4 +1,11 @@
-import { login, clearCredentials, loadCredentials, verifyToken, tryRefreshToken } from './credentials.js';
+import {
+  login,
+  clearCredentials,
+  loadCredentials,
+  verifyToken,
+  tryRefreshToken,
+  LoginCancelledError,
+} from './credentials.js';
 
 export async function loginAction() {
   const existing = await loadCredentials();
@@ -9,7 +16,12 @@ export async function loginAction() {
       return;
     }
   }
-  await login();
+  try {
+    await login();
+  } catch (error) {
+    if (!(error instanceof LoginCancelledError)) throw error;
+    console.info('\nLogin cancelled.\n');
+  }
 }
 
 export async function logoutAction() {

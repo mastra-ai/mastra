@@ -6,6 +6,8 @@ import { createServer } from 'node:http';
 import { homedir, release } from 'node:os';
 import { join } from 'node:path';
 
+import * as p from '@clack/prompts';
+
 import { MASTRA_PLATFORM_API_URL } from './client.js';
 
 const CREDENTIALS_DIR = join(homedir(), '.mastra');
@@ -27,12 +29,20 @@ export interface Credentials {
 export interface LoginOptions {
   skipOnInput?: boolean;
   allowLogin?: boolean;
+  timeoutMs?: number;
 }
 
 export class LoginCancelledError extends Error {
   constructor() {
-    super('Login skipped.');
+    super('Login cancelled.');
     this.name = 'LoginCancelledError';
+  }
+}
+
+class LoginTimedOutError extends Error {
+  constructor() {
+    super('Login timed out.');
+    this.name = 'LoginTimedOutError';
   }
 }
 
@@ -223,7 +233,7 @@ function listenForSkipInput(onSkip: () => void): () => void {
   return cleanup;
 }
 
-export async function login(signal?: AbortSignal, options: LoginOptions = {}): Promise<Credentials> {
+async function loginAttempt(signal?: AbortSignal, options: LoginOptions = {}): Promise<Credentials> {
   signal?.throwIfAborted();
   console.info('\n   Logging in to Mastra...\n');
 
@@ -277,9 +287,12 @@ export async function login(signal?: AbortSignal, options: LoginOptions = {}): P
     const handleAbort = () => {
       finish(() => reject(signal?.reason instanceof Error ? signal.reason : new Error('Login cancelled')));
     };
-    const timeout = setTimeout(() => {
-      finish(() => reject(new Error('Login timed out (60s)')));
-    }, 60000);
+    const timeout = setTimeout(
+      () => {
+        finish(() => reject(new LoginTimedOutError()));
+      },
+      options.timeoutMs ?? 5 * 60 * 1000,
+    );
 
     signal?.addEventListener('abort', handleAbort, { once: true });
     if (signal?.aborted) {
@@ -326,6 +339,29 @@ export async function login(signal?: AbortSignal, options: LoginOptions = {}): P
   await saveCredentials(creds);
   console.info(`   Logged in as ${creds.user.email}\n`);
   return creds;
+}
+
+export async function login(signal?: AbortSignal, options: LoginOptions = {}): Promise<Credentials> {
+  while (true) {
+    try {
+      return await loginAttempt(signal, options);
+    } catch (error) {
+      if (!(error instanceof LoginTimedOutError)) throw error;
+    }
+
+    const cancelValue = options.skipOnInput ? 'skip' : 'cancel';
+    const choice = await p.select({
+      message: 'Browser sign-in timed out.',
+      options: [
+        { value: 'retry', label: 'Retry' },
+        { value: cancelValue, label: options.skipOnInput ? 'Skip platform setup' : 'Cancel login' },
+      ],
+      initialValue: 'retry',
+      showInstructions: false,
+      signal,
+    });
+    if (p.isCancel(choice) || choice === cancelValue) throw new LoginCancelledError();
+  }
 }
 
 function isInteractive(): boolean {
