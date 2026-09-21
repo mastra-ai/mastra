@@ -15,7 +15,6 @@ import { ThreadInputProvider } from '@/domains/conversation';
 import { emptyMcpServers, memoryDisabled, v2Agent } from '@/lib/ai-ui/__tests__/fixtures/agent';
 import { server } from '@/test/msw-server';
 
-
 const BASE_URL = 'http://localhost:4111';
 
 const workingMemoryResponse = () =>

@@ -143,4 +143,58 @@ describe('useAgentMessages', () => {
       expect(message80?.content?.parts?.[0]?.text).toBe('Updated message 80');
     });
   });
+
+  it('refreshes every loaded page when another feature invalidates the thread by prefix', async () => {
+    const pages = [
+      Array.from({ length: 40 }, (_, i) => createMessage(80 + i)),
+      Array.from({ length: 40 }, (_, i) => createMessage(40 + i)),
+      Array.from({ length: 40 }, (_, i) => createMessage(i)),
+    ];
+    const pageRequests: number[] = [];
+
+    server.use(
+      http.get(MESSAGES_URL, ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('page') ?? '0');
+        pageRequests.push(page);
+        return HttpResponse.json({
+          messages: pages[page] ?? [],
+          page,
+          perPage: 40,
+          total: 120,
+          hasMore: page < 2,
+        });
+      }),
+    );
+
+    const { result, queryClient } = renderHookWithProviders(() =>
+      useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
+    );
+
+    await waitFor(() => expect(result.current.data?.messages).toHaveLength(40));
+    await act(async () => {
+      await result.current.fetchPreviousPage();
+    });
+    await act(async () => {
+      await result.current.fetchPreviousPage();
+    });
+    await waitFor(() => expect(result.current.data?.messages).toHaveLength(120));
+
+    pages[2][0] = createMessage(0, 'Updated by the voice call');
+    pageRequests.length = 0;
+
+    // `useVoiceCall` refreshes the transcript with the thread prefix alone, so the
+    // query key it never spells out in full still has to match.
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['memory', 'messages', 'thread-1'] });
+    });
+
+    expect(pageRequests).toEqual([2, 1, 0]);
+    await waitFor(() =>
+      expect(result.current.data?.messages.find(m => m.id === 'msg-0')?.content?.parts?.[0]?.text).toBe(
+        'Updated by the voice call',
+      ),
+    );
+    const ids = result.current.data?.messages.map(m => m.id);
+    expect(ids).toEqual(Array.from({ length: 120 }, (_, i) => `msg-${i}`));
+  });
 });
