@@ -322,6 +322,7 @@ function WorkspaceGroup({
             active={row.active}
             disabled={pending}
             merged={mergedByPath[row.workspace.sessionId] ?? row.knownMerged}
+            changeRequestProvider={row.provider}
             status={sessionRowStatus(row)}
             pinned={row.pinned}
             preview={{

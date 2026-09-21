@@ -125,7 +125,7 @@ describe('Workspace sidebar GitLab merge status', () => {
     const { githubSubscriptionRequests } = stubSidebar('merged');
     renderSection();
 
-    expect(await screen.findByRole('img', { name: 'Pull request merged for Review loader' })).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: 'Merge request merged for Review loader' })).toBeInTheDocument();
     expect(githubSubscriptionRequests).not.toHaveBeenCalled();
   });
 
@@ -135,6 +135,6 @@ describe('Workspace sidebar GitLab merge status', () => {
 
     await screen.findByText('Review loader');
     await new Promise(resolve => setTimeout(resolve, 50));
-    expect(screen.queryByRole('img', { name: 'Pull request merged for Review loader' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Merge request merged for Review loader' })).not.toBeInTheDocument();
   });
 });
