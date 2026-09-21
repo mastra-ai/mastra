@@ -785,4 +785,45 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     );
     expect(row?.snapshot?.runId).toBe('pinned-run');
   });
+
+  it('rejects a transition whose replacement getter retargets the expected snapshot', async () => {
+    const workflowName = `getter-order-${randomUUID()}`;
+    const runId = randomUUID();
+    const a = snapshot(runId, 'waiting', { phase: 'a' });
+    const b = snapshot(runId, 'waiting', { phase: 'b' });
+    await workflows.claimWorkflowSnapshotHandoff({
+      workflowName,
+      runId,
+      expectedCanonical: { kind: 'absent' },
+      snapshot: a,
+      mutationFence: 'owner',
+    });
+    await workflows.transitionWorkflowSnapshotHandoff({
+      workflowName,
+      runId,
+      expectedSnapshot: a,
+      snapshot: b,
+      mutationFence: 'owner',
+    });
+
+    // A stale A→C request whose `snapshot` getter rewrites expectedSnapshot to
+    // B must still compare the pre-call expectation (A) against the stored
+    // snapshot (B) and conflict — not silently adopt B and overwrite it.
+    const input = {
+      workflowName,
+      runId,
+      mutationFence: 'owner',
+      expectedSnapshot: a,
+      get snapshot() {
+        input.expectedSnapshot = b;
+        return snapshot(runId, 'waiting', { phase: 'c' });
+      },
+    };
+    await expect(workflows.transitionWorkflowSnapshotHandoff(input)).resolves.toMatchObject({
+      status: 'conflict',
+    });
+    await expect(workflows.listWorkflowSnapshotHandoffs({ workflowName })).resolves.toMatchObject({
+      records: [{ snapshot: { value: { phase: 'b' } } }],
+    });
+  });
 });

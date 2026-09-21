@@ -821,4 +821,243 @@ describe('workflow snapshot handoff', () => {
     const parentAfter = JSON.stringify(await workflows.loadWorkflowSnapshot({ workflowName, runId }));
     expect(parentAfter).toBe(parentBefore);
   });
+
+  it('rejects a transition whose replacement getter retargets the expected snapshot', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'getter-order-workflow';
+    const runId = 'getter-order-run';
+
+    const a = snapshot(runId, 'waiting', { phase: 'a' });
+    const b = snapshot(runId, 'waiting', { phase: 'b' });
+    await workflows.claimWorkflowSnapshotHandoff({
+      workflowName,
+      runId,
+      expectedCanonical: { kind: 'absent' },
+      snapshot: a,
+      mutationFence: 'owner',
+    });
+    await workflows.transitionWorkflowSnapshotHandoff({
+      workflowName,
+      runId,
+      expectedSnapshot: a,
+      snapshot: b,
+      mutationFence: 'owner',
+    });
+
+    // A stale A→C request whose `snapshot` getter rewrites expectedSnapshot to
+    // B must still compare the pre-call expectation (A) against the stored
+    // snapshot (B) and conflict — not silently adopt B and overwrite it.
+    const input = {
+      workflowName,
+      runId,
+      mutationFence: 'owner',
+      expectedSnapshot: a,
+      get snapshot() {
+        input.expectedSnapshot = b;
+        return snapshot(runId, 'waiting', { phase: 'c' });
+      },
+    };
+    await expect(workflows.transitionWorkflowSnapshotHandoff(input)).resolves.toMatchObject({
+      status: 'conflict',
+    });
+    const records = await workflows.listWorkflowSnapshotHandoffs({ workflowName });
+    expect(records.records[0]?.snapshot).toMatchObject({ value: { phase: 'b' } });
+  });
+
+  it('re-checks the source row after reading the outcome snapshot resourceId', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'proto-resource-workflow';
+    const runId = 'proto-resource-run';
+
+    // cloneRunData preserves the snapshot prototype, so an inherited
+    // `resourceId` getter fires when the stored-outcome record is built. On a
+    // fresh run the record helper returns the proposal unwrapped, so the only
+    // read is the record literal's — it must happen before the final source
+    // check or a reentrant write is clobbered without a retry.
+    let fired = false;
+    const proto = {};
+    Object.defineProperty(proto, 'resourceId', {
+      get() {
+        if (!fired) {
+          fired = true;
+          void workflows.persistWorkflowSnapshot({
+            workflowName,
+            runId,
+            snapshot: snapshot(runId, 'success', { marker: 'newer' }),
+          });
+        }
+        return 'proto-resource';
+      },
+    });
+    const update = Object.setPrototypeOf(snapshot(runId, 'running'), proto);
+
+    const result = await workflows.persistWorkflowStepUpdate({ workflowName, runId, snapshot: update });
+    expect(result).toMatchObject({ status: 'finalized' });
+    const stored = await workflows.loadWorkflowSnapshot({ workflowName, runId });
+    expect(stored).toMatchObject({ status: 'success', value: { marker: 'newer' } });
+  });
+
+  it('fences a retried nested admission when the parent handoff is claimed mid-admit', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'nested-parent-fenced';
+    const runId = 'parent-run';
+    const child = { workflowName: 'nested-child-fenced', runId: 'child-run' };
+    const childKey = JSON.stringify([child.workflowName, child.runId]);
+
+    const parent = snapshot(runId, 'running');
+    parent.serializedStepGraph = NESTED_PARENT_GRAPH;
+    parent.context = {
+      nested: { status: 'running', payload: {}, metadata: {} },
+    } as WorkflowRunState['context'];
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: parent });
+
+    const childSnapshot = snapshot(child.runId, 'running');
+    childSnapshot.serializedStepGraph = [];
+    const admitInput = () => ({
+      workflowName,
+      runId,
+      stepId: 'nested',
+      nestedWorkflowName: child.workflowName,
+      nestedRunId: child.runId,
+      expectedChildGraphFingerprint: createWorkflowTerminalGraphFingerprint([]),
+      result: { status: 'running' as const, payload: {} },
+      requestContext: {},
+      recoveryAncestry: nestedAncestry(child, { workflowName, runId }),
+      initialChildSnapshot: { snapshot: childSnapshot },
+    });
+    await expect(workflows.admitWorkflowNestedRun(admitInput())).resolves.toMatchObject({ status: 'admitted' });
+
+    // Leave the binding + ancestry in place but drop the child snapshot row so
+    // the next admission takes the already_bound + existingRecovery branch.
+    await workflows.deleteWorkflowRunById({ workflowName: child.workflowName, runId: child.runId });
+
+    // Re-persist the parent with an armed Error: cloneRunData invokes a cloned
+    // Error's own toJSON for its stack signal, so this claims the parent
+    // handoff from inside the admission loop's stored-snapshot clone. The flag
+    // keeps the re-persist itself unfenced; the claim fires only during admit.
+    const bound = (await workflows.loadWorkflowSnapshot({ workflowName, runId }))!;
+    let armed = false;
+    let claimed = false;
+    const armedSnapshot = { ...bound, value: {} } as WorkflowRunState;
+    const armedError = new Error('armed');
+    Object.defineProperty(armedError, 'toJSON', {
+      enumerable: false,
+      configurable: true,
+      value() {
+        if (armed && !claimed) {
+          claimed = true;
+          void workflows.claimWorkflowSnapshotHandoff({
+            workflowName,
+            runId,
+            expectedCanonical: { kind: 'present', snapshot: armedSnapshot },
+            snapshot: snapshot(runId, 'waiting'),
+            mutationFence: 'parent-owner',
+          });
+        }
+        // Keep `stack` in the JSON form so cloneRunData retains the field and
+        // keeps invoking toJSON on subsequent clones.
+        return { armed: true, stack: 'x' };
+      },
+    });
+    (armedSnapshot.value as Record<string, unknown>).err = armedError;
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: armedSnapshot });
+    armed = true;
+
+    await expect(workflows.admitWorkflowNestedRun(admitInput())).rejects.toThrow(WorkflowSnapshotHandoffFenceError);
+    // The child must not be initialized and the ancestry must stay untouched.
+    await expect(
+      workflows.loadWorkflowSnapshot({ workflowName: child.workflowName, runId: child.runId }),
+    ).resolves.toBeNull();
+    const db = (
+      workflows as unknown as {
+        db: {
+          workflowTerminalRecoveryAncestries: Map<
+            string,
+            { ancestry?: Array<{ childWorkflowName?: string; childRunId?: string }> }
+          >;
+        };
+      }
+    ).db;
+    expect(db.workflowTerminalRecoveryAncestries.get(childKey)).toMatchObject({
+      ancestry: [{ childWorkflowName: child.workflowName, childRunId: child.runId }],
+    });
+  });
+
+  it('keeps non-enumerable backing data readable by a copied Error toJSON', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'error-backfill-workflow';
+    const runId = 'error-backfill-run';
+
+    // The clone copies toJSON verbatim; a toJSON that reads non-enumerable own
+    // data must still see it, or the stored JSON projection diverges from what
+    // durable adapters persist for the identical source object.
+    const err = new Error('with-detail');
+    Object.defineProperty(err, 'detail', {
+      value: { code: 42 },
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+    Object.defineProperty(err, 'toJSON', {
+      value(this: Error & { detail?: unknown }) {
+        return { detail: this.detail };
+      },
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+    const canonical = snapshot(runId, 'failed', { error: err });
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: canonical });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: canonical },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-a',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+  });
+
+  it('does not mutate the stored snapshot while observing canonical state', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'self-mutating-workflow';
+    const runId = 'self-mutating-run';
+
+    // A stored snapshot's own toJSON may mutate its fields mid-serialization.
+    // Canonical observation must serialize a clone so the stored row stays
+    // consistent with what the CAS comparison verified.
+    let armed = false;
+    const base = snapshot(runId, 'running', { n: 1 });
+    const selfMutating = {
+      ...base,
+      toJSON(this: Record<string, unknown>) {
+        const { toJSON: _omit, ...out } = this;
+        if (armed) {
+          armed = false;
+          this.value = { n: 2 };
+        }
+        return out;
+      },
+    } as WorkflowRunState;
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: selfMutating });
+    armed = true;
+
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: base },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-a',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+    const stored = await workflows.loadWorkflowSnapshot({ workflowName, runId });
+    expect(stored).toMatchObject({ value: { n: 1 } });
+  });
 });

@@ -5027,14 +5027,16 @@ export class WorkflowsPG extends WorkflowsStorage {
   ): Promise<ClaimWorkflowSnapshotHandoffResult> {
     // Capture every input field before invoking caller serialization
     // (toJSON/getters) or awaiting: a mutated input object must not redirect
-    // the compare-and-write or swap the expected state mid-call.
+    // the compare-and-write or swap the expected state mid-call. Expected
+    // fields are destructured before `snapshot` so a replacement getter
+    // cannot retarget them.
     const {
       workflowName,
       runId,
       mutationFence,
       resourceId,
-      snapshot: rawSnapshot,
       expectedCanonical: rawExpectedCanonical,
+      snapshot: rawSnapshot,
     } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
     // Materialize the expectation before the replacement snapshot so no
@@ -5102,14 +5104,16 @@ export class WorkflowsPG extends WorkflowsStorage {
   async transitionWorkflowSnapshotHandoff(
     input: TransitionWorkflowSnapshotHandoffInput,
   ): Promise<TransitionWorkflowSnapshotHandoffResult> {
+    // Expected fields are destructured before `snapshot` so a replacement
+    // getter cannot retarget them mid-capture.
     const {
       workflowName,
       runId,
       mutationFence,
       resourceId,
       expectedResourceId,
-      snapshot: rawSnapshot,
       expectedSnapshot: rawExpectedSnapshot,
+      snapshot: rawSnapshot,
     } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
     // Materialize the expectation before the replacement snapshot so no
@@ -5161,14 +5165,16 @@ export class WorkflowsPG extends WorkflowsStorage {
   async completeWorkflowSnapshotHandoff(
     input: CompleteWorkflowSnapshotHandoffInput,
   ): Promise<CompleteWorkflowSnapshotHandoffResult> {
+    // Expected fields are destructured before `snapshot` so a replacement
+    // getter cannot retarget them mid-capture.
     const {
       workflowName,
       runId,
       mutationFence,
       resourceId,
       expectedResourceId,
-      snapshot: rawSnapshot,
       expectedSnapshot: rawExpectedSnapshot,
+      snapshot: rawSnapshot,
     } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
     // Materialize the expectation before the replacement snapshot so no
