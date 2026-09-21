@@ -1409,7 +1409,8 @@ function planPredicate(
     const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
-    if (predicate.value.trim().length === 0) {
+    const value = normalizeLiteral(predicate.value, rule);
+    if (typeof value !== 'string') {
       state.issues.push({
         code: 'invalid_literal',
         path: [...path, 'value'],
@@ -1417,12 +1418,7 @@ function planPredicate(
       });
       return undefined;
     }
-    return {
-      type: 'collection',
-      field: field as TraceQueryPredicateField,
-      operator: predicate.op,
-      value: predicate.value,
-    };
+    return { type: 'collection', field: field as TraceQueryPredicateField, operator: predicate.op, value };
   }
 
   if (predicate.op === 'in' || predicate.op === 'notIn') {
@@ -1561,7 +1557,7 @@ function normalizeLiteral(
     const timestamp = timestampLiteralSchema.safeParse(value);
     return timestamp.success ? new Date(timestamp.data).toISOString() : undefined;
   }
-  if (rule.valueKind === 'string') {
+  if (rule.valueKind === 'string' || rule.valueKind === 'stringList') {
     return typeof value === 'string' && (!rule.nonEmpty || value.trim().length > 0) ? value : undefined;
   }
   return undefined;

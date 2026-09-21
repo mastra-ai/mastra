@@ -144,7 +144,8 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
         unicodeValue: '大阪',
       },
       environment: 'staging',
-      tags: ['beta'],
+      // Stores trim and drop blank tags on write, so discovery only sees `beta`.
+      tags: [' beta ', '', '   '],
     }),
     span(21, 'trace-b', 'span-model-b', {
       parentSpanId: 'root-b',
