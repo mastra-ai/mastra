@@ -2292,6 +2292,85 @@ describe('MongoDBVector describeIndex embedded-only count (round4-fix8)', () => 
   });
 });
 
+// The conditional registry write is only as good as MongoDB's matching rules, so exercise the
+// claim against a real server rather than a mocked collection: whether an equality-to-null
+// matches an entry that predates autoEmbed, and whether a losing claim raises a duplicate key
+// instead of silently overwriting, are both server behaviours.
+describe('MongoDBVector registry claim', () => {
+  const claimIdx = 'claim_probe_idx';
+  let store: MongoDBVector;
+  let registry: any;
+
+  beforeAll(async () => {
+    store = new MongoDBVector({ uri, dbName, id: 'mongodb-registry-claim' });
+    await store.connect();
+    registry = store['db'].collection('__mastra_vector_indexes__');
+  });
+
+  afterAll(async () => {
+    await registry.deleteOne({ _id: claimIdx }).catch(() => {});
+    await store.disconnect();
+  });
+
+  const claimFor = (autoEmbed?: { path: string; model: string }) => ({
+    collectionName: claimIdx,
+    ...(autoEmbed ? { 'autoEmbed.path': autoEmbed.path, 'autoEmbed.model': autoEmbed.model } : { autoEmbed: null }),
+  });
+  const write = (entry: Record<string, unknown>, claim: Record<string, unknown>) =>
+    (store as any).writeRegistryEntry(claimIdx, entry, claim);
+
+  it('inserts on a first claim and accepts an identical second one', async () => {
+    await registry.deleteOne({ _id: claimIdx });
+    const entry = { collectionName: claimIdx, autoEmbed: { path: 'fullplot', model: 'voyage-4' } };
+    const claim = claimFor({ path: 'fullplot', model: 'voyage-4' });
+
+    await write(entry, claim);
+    await write(entry, claim);
+
+    expect(await registry.findOne({ _id: claimIdx })).toMatchObject({
+      collectionName: claimIdx,
+      autoEmbed: { path: 'fullplot', model: 'voyage-4' },
+    });
+  });
+
+  it('rejects a claim that does not match the registered embedding', async () => {
+    await registry.deleteOne({ _id: claimIdx });
+    await write(
+      { collectionName: claimIdx, autoEmbed: { path: 'fullplot', model: 'voyage-4' } },
+      claimFor({ path: 'fullplot', model: 'voyage-4' }),
+    );
+
+    await expect(
+      write(
+        { collectionName: claimIdx, autoEmbed: { path: 'document', model: 'voyage-4' } },
+        claimFor({ path: 'document', model: 'voyage-4' }),
+      ),
+    ).rejects.toMatchObject({ code: 11000 });
+
+    // The winner's entry is untouched.
+    expect(await registry.findOne({ _id: claimIdx })).toMatchObject({ autoEmbed: { path: 'fullplot' } });
+  });
+
+  it('matches an entry written before autoEmbed existed, which carries no such field', async () => {
+    await registry.deleteOne({ _id: claimIdx });
+    await registry.insertOne({ _id: claimIdx, indexName: claimIdx, collectionName: claimIdx, dimension: 4 });
+
+    await expect(write({ collectionName: claimIdx, dimension: 4 }, claimFor())).resolves.toBeUndefined();
+  });
+
+  it('rejects an autoEmbed claim over a client-side entry', async () => {
+    await registry.deleteOne({ _id: claimIdx });
+    await write({ collectionName: claimIdx, dimension: 4 }, claimFor());
+
+    await expect(
+      write(
+        { collectionName: claimIdx, autoEmbed: { path: 'document', model: 'voyage-4' } },
+        claimFor({ path: 'document', model: 'voyage-4' }),
+      ),
+    ).rejects.toMatchObject({ code: 11000 });
+  });
+});
+
 // ─── Automated Embedding (autoEmbed indexes) ─────────────────────────────────────────────
 describe('MongoDBVector autoEmbed', () => {
   const makeVector = () => new MongoDBVector({ id: 'test', uri: 'mongodb://localhost:27017', dbName: 'test_db' });
@@ -2474,6 +2553,90 @@ describe('MongoDBVector autoEmbed', () => {
       });
 
       await expect(v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } })).resolves.toBeUndefined();
+    });
+
+    it('rejects a createIndex whose registry claim is lost to a concurrent call', async () => {
+      const v = makeVector();
+      const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      // The entry the winning call registered after this one read an empty registry.
+      const winner = {
+        _id: 'movies',
+        indexName: 'movies',
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        allowWrites: true,
+        autoEmbed: { model: 'voyage-4', path: 'fullplot' },
+      };
+      const duplicateKey = Object.assign(new Error('E11000 duplicate key error'), { code: 11000 });
+      const registry = {
+        // Empty on the guard's read, populated by the time this call writes.
+        findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValue(winner),
+        updateOne: vi.fn().mockRejectedValue(duplicateKey),
+      };
+      (v as any).db = {
+        listCollections: () => ({ hasNext: async () => true }),
+        collection: () => registry,
+      };
+
+      let caught: any;
+      try {
+        await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } });
+      } catch (e) {
+        caught = e;
+      }
+
+      expect(caught).toBeDefined();
+      expect(caught.message).toMatch(/registered concurrently/);
+      // The message names what the winner registered, so the caller can see which side lost.
+      expect(caught.message).toMatch(/path "fullplot"/);
+      expect(caught.category).toBe('USER');
+      expect(caught.id).toMatch(/CONFLICT/);
+      // Losing the claim must stop the call before it provisions anything.
+      expect(createSearchIndex).not.toHaveBeenCalled();
+    });
+
+    it('conditions the registry write on the resolved embedding target', async () => {
+      const v = makeVector();
+      const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      const registry = { findOne: vi.fn().mockResolvedValue(null), updateOne: vi.fn().mockResolvedValue({}) };
+      (v as any).db = {
+        listCollections: () => ({ hasNext: async () => true }),
+        collection: () => registry,
+      };
+
+      await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4', path: 'fullplot' } });
+
+      expect(registry.updateOne.mock.calls[0][0]).toEqual({
+        _id: 'movies',
+        collectionName: 'movies',
+        'autoEmbed.path': 'fullplot',
+        'autoEmbed.model': 'voyage-4',
+      });
+    });
+
+    it('conditions the registry write of a client-side index on the absence of autoEmbed', async () => {
+      const v = makeVector();
+      const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      const registry = { findOne: vi.fn().mockResolvedValue(null), updateOne: vi.fn().mockResolvedValue({}) };
+      (v as any).db = {
+        listCollections: () => ({ hasNext: async () => true }),
+        collection: () => registry,
+      };
+
+      await v.createIndex({ indexName: 'movies', dimension: 1024 });
+
+      // `autoEmbed: null` rather than `$exists: false`: the driver stores an undefined
+      // autoEmbed as null, and an equality-to-null also matches entries written before
+      // autoEmbed existed, which carry no such key at all.
+      expect(registry.updateOne.mock.calls[0][0]).toEqual({
+        _id: 'movies',
+        collectionName: 'movies',
+        autoEmbed: null,
+      });
     });
 
     it('still creates the companion full-text index for a managed autoEmbed index', async () => {

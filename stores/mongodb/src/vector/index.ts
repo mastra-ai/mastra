@@ -202,6 +202,11 @@ interface RegistryDoc extends IndexTarget {
   metric?: string;
 }
 
+/** Name an index's embedding mode for a conflict message. */
+function describeEmbedding(config?: { path: string; model: string } | null): string {
+  return config ? `autoEmbed (path "${config.path}", model "${config.model}")` : 'client-side vectors';
+}
+
 // Define the document interface
 interface MongoDBDocument extends Document {
   _id: string; // Explicitly declare '_id' as string
@@ -448,10 +453,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * Persist (upsert) a logical-index target so it survives a process restart. Idempotent
    * createIndex refreshes it; a partial update (e.g. only the text-search-index name) merges
    * into the existing entry.
+   *
+   * `claim` narrows the upsert to entries the caller considers compatible. Because the filter
+   * still pins `_id`, an incompatible entry matches nothing, the upsert attempts an insert, and
+   * the duplicate `_id` surfaces as a duplicate-key error (code 11000) instead of overwriting
+   * the entry someone else registered. Callers that only refresh part of an entry omit it.
    */
-  private async writeRegistryEntry(indexName: string, entry: Partial<RegistryDoc>): Promise<void> {
+  private async writeRegistryEntry(indexName: string, entry: Partial<RegistryDoc>, claim?: Document): Promise<void> {
     const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
-    await registry.updateOne({ _id: indexName }, { $set: { indexName, ...entry } }, { upsert: true });
+    await registry.updateOne({ _id: indexName, ...claim }, { $set: { indexName, ...entry } }, { upsert: true });
   }
 
   /** Remove a logical-index target from the durable registry (called by deleteIndex). */
@@ -774,8 +784,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           resolvedAutoEmbed &&
           (existingAutoEmbed.path !== resolvedAutoEmbed.path || existingAutoEmbed.model !== resolvedAutoEmbed.model));
       if (existingEntry && embeddingChanged) {
-        const describeEmbedding = (config?: { path: string; model: string }) =>
-          config ? `autoEmbed (path "${config.path}", model "${config.model}")` : 'client-side vectors';
         throw new MastraError({
           id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
           domain: ErrorDomain.STORAGE,
@@ -784,16 +792,51 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           text: `Index "${indexName}" is already registered with ${describeEmbedding(existingAutoEmbed)}, but this createIndex call resolves to ${describeEmbedding(resolvedAutoEmbed)}. Call deleteIndex({ indexName: "${indexName}" }) first to rebuild it.`,
         });
       }
-      await this.writeRegistryEntry(indexName, {
+      // The two guards above compare against a snapshot taken earlier in this method. Another
+      // process can register the same logical index in the gap, and since both calls then
+      // provision, Atlas keeps whichever definition landed first and treats the second as
+      // IndexAlreadyExists. Conditioning the write on the values those guards checked makes the
+      // registry the arbiter: exactly one concurrent createIndex claims the entry, and the rest
+      // fail here rather than persisting a target the physical index does not match.
+      //
+      // Equality-to-null, not $exists:false — the driver stores an undefined autoEmbed as null,
+      // and null also matches entries written before autoEmbed existed, which carry no such key.
+      const registryClaim: Document = {
         collectionName: targetCollection,
-        searchIndexName: targetSearchIndex,
-        isByo: effectiveIsByo,
-        allowWrites: effectiveWritable,
-        textSearchIndexName,
-        dimension,
-        metric,
-        autoEmbed: resolvedAutoEmbed,
-      });
+        ...(resolvedAutoEmbed
+          ? { 'autoEmbed.path': resolvedAutoEmbed.path, 'autoEmbed.model': resolvedAutoEmbed.model }
+          : { autoEmbed: null }),
+      };
+      try {
+        await this.writeRegistryEntry(
+          indexName,
+          {
+            collectionName: targetCollection,
+            searchIndexName: targetSearchIndex,
+            isByo: effectiveIsByo,
+            allowWrites: effectiveWritable,
+            textSearchIndexName,
+            dimension,
+            metric,
+            autoEmbed: resolvedAutoEmbed,
+          },
+          registryClaim,
+        );
+      } catch (error: any) {
+        if (error?.code !== 11000) throw error;
+        const winner = await this.readRegistryEntry(indexName);
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          // The winning entry can be gone again by the time it is read back (a concurrent
+          // deleteIndex), in which case there is nothing to describe and a retry will succeed.
+          text: winner
+            ? `Index "${indexName}" was registered concurrently against collection "${winner.collectionName}" with ${describeEmbedding(winner.autoEmbed)}, but this createIndex call resolves to collection "${targetCollection}" with ${describeEmbedding(resolvedAutoEmbed)}. Call deleteIndex({ indexName: "${indexName}" }) first to rebuild it.`
+            : `Index "${indexName}" was registered concurrently by another process and removed again before this call could read it. Retry createIndex.`,
+        });
+      }
       this.indexTargets.set(indexName, {
         collectionName: targetCollection,
         searchIndexName: targetSearchIndex,
