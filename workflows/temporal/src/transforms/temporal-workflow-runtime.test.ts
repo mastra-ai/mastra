@@ -275,9 +275,22 @@ describe('temporal workflow runtime helper module', () => {
     const result = await workflow({ inputData: [{ value: 1 }, { value: 2 }, { value: 3 }] });
 
     expect(map).toHaveBeenCalledTimes(3);
-    expect(map).toHaveBeenNthCalledWith(1, { inputData: { value: 1 }, workflowId: 'foreach-workflow' });
-    expect(map).toHaveBeenNthCalledWith(2, { inputData: { value: 2 }, workflowId: 'foreach-workflow' });
-    expect(map).toHaveBeenNthCalledWith(3, { inputData: { value: 3 }, workflowId: 'foreach-workflow' });
+    const initData = [{ value: 1 }, { value: 2 }, { value: 3 }];
+    expect(map).toHaveBeenNthCalledWith(1, {
+      inputData: { value: 1 },
+      initData,
+      workflowId: 'foreach-workflow',
+    });
+    expect(map).toHaveBeenNthCalledWith(2, {
+      inputData: { value: 2 },
+      initData,
+      workflowId: 'foreach-workflow',
+    });
+    expect(map).toHaveBeenNthCalledWith(3, {
+      inputData: { value: 3 },
+      initData,
+      workflowId: 'foreach-workflow',
+    });
     expect(result).toMatchObject({
       result: [{ value: 11 }, { value: 12 }, { value: 13 }],
       steps: {
@@ -349,7 +362,11 @@ describe('temporal workflow runtime helper module', () => {
 
     expect(isSmall).toHaveBeenCalledWith({ inputData: { value: 3 }, workflowId: 'branch-workflow' });
     expect(isLarge).toHaveBeenCalledWith({ inputData: { value: 3 }, workflowId: 'branch-workflow' });
-    expect(smallStep).toHaveBeenCalledWith({ inputData: { value: 3 }, workflowId: 'branch-workflow' });
+    expect(smallStep).toHaveBeenCalledWith({
+      inputData: { value: 3 },
+      initData: { value: 3 },
+      workflowId: 'branch-workflow',
+    });
     expect(largeStep).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       result: {
@@ -383,6 +400,24 @@ describe('temporal workflow runtime helper module', () => {
       steps: {
         incrementUntil: { value: 2 },
       },
+    });
+    expect(incrementWhile).toHaveBeenNthCalledWith(1, {
+      inputData: { value: 0 },
+      initData: { value: 0 },
+      workflowId: 'dowhile-workflow',
+    });
+    expect(continueWhile).toHaveBeenNthCalledWith(1, {
+      inputData: { value: 1 },
+      workflowId: 'dowhile-workflow',
+    });
+    expect(incrementUntil).toHaveBeenNthCalledWith(1, {
+      inputData: { value: 0 },
+      initData: { value: 0 },
+      workflowId: 'dountil-workflow',
+    });
+    expect(stopUntil).toHaveBeenNthCalledWith(1, {
+      inputData: { value: 1 },
+      workflowId: 'dountil-workflow',
     });
     expect(incrementWhile).toHaveBeenCalledTimes(2);
     expect(continueWhile).toHaveBeenCalledTimes(2);

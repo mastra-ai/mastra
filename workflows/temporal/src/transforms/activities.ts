@@ -249,7 +249,7 @@ function createMappingActivityStatements(
       exportName = `${baseExportName}${exportSuffix++}`;
     }
     usedExportNames.add(exportName);
-    const contextNames = ['requestContext', 'runId', 'resourceId'];
+    const contextNames = ['requestContext', 'runId', 'resourceId', 'workflowId'];
     const params = t.objectPattern([
       t.objectProperty(t.identifier('inputData'), t.identifier('inputData'), false, true),
       t.objectProperty(t.identifier('initData'), t.identifier('initData'), false, true),

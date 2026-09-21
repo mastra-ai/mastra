@@ -176,6 +176,7 @@ describe('activity transform', () => {
     expect(output).toContain('requestContext');
     expect(output).toContain('runId');
     expect(output).toContain('resourceId');
+    expect(output).toContain('workflowId');
     expect(output).not.toContain('const mappedWorkflow =');
     expect(activityBindings).toContainEqual({
       exportName: 'mappingMappedWorkflow0',

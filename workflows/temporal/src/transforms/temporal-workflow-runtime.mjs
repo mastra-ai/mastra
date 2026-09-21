@@ -114,7 +114,7 @@ export class TemporalExecutionEngine {
         for (let i = 0; i < entry.steps.length; i++) {
           if (condResults[i]) {
             const stepId = entry.steps[i].step.id;
-            const res = await this.activityHandle[stepId](this.activityParams(inputData));
+            const res = await this.activityHandle[stepId](this.activityParams(inputData, { initData: this.initData }));
             out[stepId] = res;
             stepResults[stepId] = res;
           }
@@ -128,7 +128,7 @@ export class TemporalExecutionEngine {
         let current = inputData;
 
         while (true) {
-          current = await this.activityHandle[entry.step.id](this.activityParams(current));
+          current = await this.activityHandle[entry.step.id](this.activityParams(current, { initData: this.initData }));
           stepResults[entry.step.id] = current;
           const shouldContinue = Boolean(
             await this.activityHandle[entry.serializedCondition.id](this.activityParams(current)),
@@ -159,7 +159,9 @@ export class TemporalExecutionEngine {
             if (i >= items.length) {
               break;
             }
-            results[i] = await this.activityHandle[entry.step.id](this.activityParams(items[i]));
+            results[i] = await this.activityHandle[entry.step.id](
+              this.activityParams(items[i], { initData: this.initData }),
+            );
           }
         });
 
