@@ -18,7 +18,7 @@ New role tokens, all alphas of `--foreground` off the existing gray ramp, so a r
 - `fill-subtle` — state layer on a transparent base: ghost hover, list-row hover, disabled fill
 - `fill-strong` — selection-control press
 
-`--surface-panel` is the opaque twin of `fill` for scrolling panels whose sticky parts cannot be translucent; `DataList` now uses it, and its rows step down to `--background` and up to `--card` when featured or selected.
+`--surface-panel` is the opaque twin of `fill` for cases that cannot be translucent — the level a selected list row rests on, and the sticky cells that scroll over other cells. `DataList` rows step down to `--background` as wells inside the panel and up to `--surface-panel` when featured or selected.
 
 Values are unchanged, so existing controls look the same; the list panel is what moves to meet them.
 
