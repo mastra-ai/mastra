@@ -300,6 +300,11 @@ export async function dispatchGitLabWebhook(
         continue;
       }
       const runContext = await subscriptionRunContext(subscription, dependencies.gitlab?.sourceControlStorage);
+      // Without a tenant the woken run would fail closed after the terminal
+      // subscription had already been retired, so count it as a failed delivery.
+      if (!runContext) {
+        throw new Error(`GitLab subscription ${subscription.id} has no resolvable tenant identity; not delivered.`);
+      }
       const result = await session.sendNotificationSignal(
         {
           source: 'gitlab',
@@ -319,7 +324,7 @@ export async function dispatchGitLabWebhook(
             deliveryId: parsed.deliveryId,
           },
         },
-        ...(runContext ? [{ requestContext: runContext }] : []),
+        { requestContext: runContext },
       );
       await Promise.all([result.persisted, result.accepted].filter(Boolean));
       if (notification.terminal) {

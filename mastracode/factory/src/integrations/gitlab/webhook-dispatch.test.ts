@@ -213,18 +213,26 @@ describe('dispatchGitLabWebhook', () => {
     expect(options?.requestContext?.get('user')).toEqual({ workosId: 'owner-9', organizationId: 'org-9' });
   });
 
-  it('sends no run context when neither the row nor the session names a user', async () => {
+  it('fails the delivery, without retiring, when neither the row nor the session names a user', async () => {
     const owned = session('thread-a');
     const row = subscription('a', '/worktrees/a', 'thread-a');
     row.data = { ...row.data, subscribedByUserId: null };
-    const result = await dispatchGitLabWebhook(mergeRequest('reopen'), {
+    const retireSubscription = vi.fn(async () => undefined);
+    const onTargetError = vi.fn();
+    const result = await dispatchGitLabWebhook(mergeRequest('close'), {
       controller: controllerStub({ getSessionByResource: vi.fn(async () => owned.session), createSession: vi.fn() }),
       gitlab: gitlabStub(null),
       listSubscriptions: async () => [row],
-      retireSubscription: vi.fn(async () => undefined),
+      retireSubscription,
+      onTargetError,
     });
-    expect(result).toMatchObject({ delivered: 1 });
-    expect(owned.send.mock.calls[0]).toHaveLength(1);
+    expect(result).toMatchObject({ delivered: 0, failed: 1, skipped: 0 });
+    expect(owned.send).not.toHaveBeenCalled();
+    expect(retireSubscription).not.toHaveBeenCalled();
+    expect(onTargetError).toHaveBeenCalledWith(
+      row,
+      expect.objectContaining({ message: expect.stringContaining('has no resolvable tenant identity') }),
+    );
   });
 
   it('delivers to every subscribed session, then retires terminal subscriptions', async () => {
