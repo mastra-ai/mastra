@@ -826,4 +826,185 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
       records: [{ snapshot: { value: { phase: 'b' } } }],
     });
   });
+
+  it('keeps the expectation pinned when the replacement getter mutates its contents', async () => {
+    const workflowName = `nested-expected-${randomUUID()}`;
+    const runId = randomUUID();
+    const stored = snapshot(runId, 'waiting', { phase: 'b' });
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    // The replacement getter rewrites the expected snapshot's nested contents
+    // to match the stored row — the expectation must already be materialized,
+    // so the stale A-vs-B comparison still conflicts. The expected snapshot
+    // shares the stored timestamp so only `value.phase` discriminates.
+    const expected = { ...snapshot(runId, 'waiting', { phase: 'a' }), timestamp: stored.timestamp };
+    const input = {
+      workflowName,
+      runId,
+      expectedCanonical: { kind: 'present' as const, snapshot: expected },
+      mutationFence: 'owner',
+      get snapshot() {
+        expected.value = { phase: 'b' };
+        return snapshot(runId, 'waiting', { phase: 'c' });
+      },
+    };
+    await expect(workflows.claimWorkflowSnapshotHandoff(input)).resolves.toMatchObject({ status: 'conflict' });
+    await expect(workflows.listWorkflowSnapshotHandoffs({ workflowName })).resolves.toMatchObject({ records: [] });
+  });
+
+  it('pins step-update CAS fields before the payload snapshot getter', async () => {
+    const workflowName = `cas-order-${randomUUID()}`;
+    const runId = randomUUID();
+    const stored = { ...snapshot(runId, 'running'), executionGeneration: 'gen-2' } as WorkflowRunState;
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    // `snapshot` precedes `expectedExecutionGeneration` in property order, so
+    // a spread would read the getter first and let it rewrite the stale
+    // expectation to the current generation.
+    const input = {
+      workflowName,
+      runId,
+      get snapshot() {
+        input.expectedExecutionGeneration = 'gen-2';
+        return { ...snapshot(runId, 'running'), executionGeneration: 'gen-2' } as WorkflowRunState;
+      },
+      expectedExecutionGeneration: 'gen-1',
+    };
+    await expect(workflows.persistWorkflowStepUpdate(input)).resolves.toMatchObject({
+      status: 'stale_execution',
+    });
+    await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({
+      executionGeneration: 'gen-2',
+    });
+  });
+
+  it('pins updateWorkflowState CAS guards before awaiting', async () => {
+    const workflowName = `state-guards-${randomUUID()}`;
+    const runId = randomUUID();
+    const stored = { ...snapshot(runId, 'running'), executionGeneration: 'gen-2' } as WorkflowRunState;
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    // `opts` is caller-owned: mutating the expected generation while the
+    // transaction acquires its row locks must not retarget the comparison.
+    const opts = { expectedExecutionGeneration: 'gen-1', status: 'failed' } as {
+      expectedExecutionGeneration: string;
+      status: WorkflowRunState['status'];
+    };
+    const pending = workflows.updateWorkflowState({ workflowName, runId, opts });
+    opts.expectedExecutionGeneration = 'gen-2';
+    await expect(pending).resolves.toBeUndefined();
+    await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({
+      status: 'running',
+    });
+  });
+
+  it('rejects handoff identities that cannot round-trip through UTF-8', async () => {
+    const runId = randomUUID();
+
+    // Unpaired surrogates encode as U+FFFD on the PostgreSQL wire, which would
+    // rewrite the fence token and collapse distinct row identities.
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: `utf16-${randomUUID()}`,
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-\uD800',
+      }),
+    ).rejects.toThrow(TypeError);
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'wf-\uD800',
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner',
+      }),
+    ).rejects.toThrow(TypeError);
+
+    // Well-formed astral pairs still round-trip identically.
+    const workflowName = `wf-💥-${randomUUID()}`;
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-💥',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+  });
+
+  it('keeps draining eligible rows when a candidate is skipped mid-batch', async () => {
+    const prefix = `prune-race-${randomUUID()}`;
+    const nameA = `${prefix}-a`;
+    const nameB = `${prefix}-b`;
+    const runA = randomUUID();
+    const runB = randomUUID();
+    await workflows.persistWorkflowSnapshot({
+      workflowName: nameA,
+      runId: runA,
+      snapshot: snapshot(runA, 'success'),
+    });
+    await workflows.persistWorkflowSnapshot({
+      workflowName: nameB,
+      runId: runB,
+      snapshot: snapshot(runB, 'success'),
+    });
+    // Backdate both rows so they are prune-eligible, A strictly older.
+    await store.db.none(
+      `UPDATE mastra_workflow_snapshot SET "updatedAtZ" = clock_timestamp() - interval '2 days' WHERE workflow_name = $1`,
+      [nameA],
+    );
+    await store.db.none(
+      `UPDATE mastra_workflow_snapshot SET "updatedAtZ" = clock_timestamp() - interval '1 day' WHERE workflow_name = $1`,
+      [nameB],
+    );
+
+    // Hold an uncommitted update on A: the pruner selects A under READ
+    // COMMITTED (still eligible), then its DELETE blocks on this row lock.
+    // Once released, A's refreshed updatedAtZ fails the delete predicate, so
+    // A is skipped — the batch must move on and still drain B.
+    let releaseHold: () => void = () => {};
+    const holdOpen = new Promise<void>(resolve => (releaseHold = resolve));
+    let markUpdated: () => void = () => {};
+    const updated = new Promise<void>(resolve => (markUpdated = resolve));
+    const holdTx = store.db.tx(async t => {
+      await t.none(
+        `UPDATE mastra_workflow_snapshot SET "updatedAtZ" = clock_timestamp() + interval '1 day' WHERE workflow_name = $1`,
+        [nameA],
+      );
+      markUpdated();
+      await holdOpen;
+    });
+    await updated;
+
+    const prunePromise = workflows.prune({ workflowSnapshot: { maxAge: '0ms', batchSize: 1 } });
+
+    // Wait until the prune DELETE is actually blocked on the holder's row lock
+    // (an ungranted transactionid lock) before releasing it — that ordering
+    // guarantees the candidate select already ran against the stale row.
+    try {
+      const deadline = Date.now() + 10_000;
+      for (;;) {
+        const { n } = await store.db.one<{ n: number }>(`SELECT count(*)::int AS n FROM pg_locks WHERE NOT granted`);
+        if (n > 0) break;
+        if (Date.now() > deadline) throw new Error('prune never blocked on the snapshot row lock');
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+    } finally {
+      releaseHold();
+    }
+    await holdTx;
+    const results = await prunePromise;
+
+    // A zero-progress pass used to report done while B was still eligible;
+    // the fix excludes the skipped candidate and drains B within the batch.
+    expect(results).toMatchObject([{ table: 'mastra_workflow_snapshot', done: true }]);
+    const remaining = await store.db.one<{ n: number }>(
+      `SELECT count(*)::int AS n FROM mastra_workflow_snapshot WHERE workflow_name IN ($1, $2)`,
+      [nameA, nameB],
+    );
+    expect(remaining.n).toBe(1);
+  }, 30_000);
 });

@@ -118,6 +118,44 @@ export function validateWorkflowSnapshotHandoffFence(mutationFence: string): voi
   if (typeof mutationFence !== 'string' || mutationFence.length < 1 || mutationFence.length > 4096) {
     throw new TypeError('Workflow snapshot handoff mutationFence must be between 1 and 4096 characters');
   }
+  if (hasUnpairedSurrogate(mutationFence)) {
+    throw new TypeError('Workflow snapshot handoff mutationFence must be well-formed UTF-16');
+  }
+}
+
+function hasUnpairedSurrogate(value: string): boolean {
+  // Durable adapters transmit strings as UTF-8; unpaired surrogates encode as
+  // U+FFFD on the PostgreSQL wire, which would rewrite fence tokens and row
+  // identities and collapse distinct in-memory keys onto one stored row.
+  for (let i = 0; i < value.length; i++) {
+    const unit = value.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+      if (Number.isNaN(next) || next < 0xdc00 || next > 0xdfff) return true;
+      i++;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Rejects handoff identity fields that cannot round-trip through UTF-8 encoding. */
+export function validateWorkflowSnapshotHandoffIdentity(
+  workflowName: string,
+  runId: string,
+  resourceId?: string,
+  expectedResourceId?: string,
+): void {
+  if (hasUnpairedSurrogate(workflowName) || hasUnpairedSurrogate(runId)) {
+    throw new TypeError('Workflow snapshot handoff workflowName/runId must be well-formed UTF-16');
+  }
+  if (
+    (resourceId !== undefined && hasUnpairedSurrogate(resourceId)) ||
+    (expectedResourceId !== undefined && hasUnpairedSurrogate(expectedResourceId))
+  ) {
+    throw new TypeError('Workflow snapshot handoff resourceId must be well-formed UTF-16');
+  }
 }
 
 export function validateWorkflowSnapshotHandoffLimit(limit: number | undefined): number {

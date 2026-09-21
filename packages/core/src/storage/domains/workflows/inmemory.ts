@@ -95,6 +95,7 @@ import {
   compareWorkflowSnapshotHandoffCursors,
   materializeWorkflowSnapshotHandoffSnapshot,
   validateWorkflowSnapshotHandoffFence,
+  validateWorkflowSnapshotHandoffIdentity,
   validateWorkflowSnapshotHandoffLimit,
   workflowSnapshotHandoffCanonicalStatesEqual,
   workflowSnapshotHandoffSnapshotsEqual,
@@ -203,6 +204,12 @@ function isTerminalParentStatus(value: unknown): value is TerminalParentStatus {
   return typeof value === 'string' && TERMINAL_PARENT_STATUSES.includes(value as TerminalParentStatus);
 }
 
+// V8 exposes Error.stack as a lazy native accessor backed by internal slots a
+// prototype-only clone lacks — invoking it on the clone yields undefined. The
+// getter is shared across instances, so identity comparison detects it; the
+// memoizing native read is safe to perform on the source.
+const NATIVE_ERROR_STACK_GET = Object.getOwnPropertyDescriptor(new Error(), 'stack')?.get;
+
 function materializeTerminalSnapshot(snapshot: WorkflowRunState): WorkflowRunState {
   const materialized = cloneRunData(snapshot);
   const runId = materialized.runId;
@@ -216,15 +223,6 @@ function materializeTerminalSnapshot(snapshot: WorkflowRunState): WorkflowRunSta
     status: { configurable: true, enumerable: true, writable: true, value: status },
   });
   return materialized;
-}
-
-function defineEnumerableRunDataProperty(target: object, key: PropertyKey, value: unknown): void {
-  Object.defineProperty(target, key, {
-    configurable: true,
-    enumerable: true,
-    writable: true,
-    value,
-  });
 }
 
 function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknown {
@@ -285,91 +283,75 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     // non-enumerable while an explicitly assigned/defined one may be
     // enumerable, and the JSON persistence projection differs accordingly.
     const out = Object.create(Object.getPrototypeOf(value)) as Error;
-    Object.defineProperty(out, 'message', {
-      value: value.message,
-      writable: true,
-      configurable: true,
-      enumerable: Object.getOwnPropertyDescriptor(value, 'message')?.enumerable ?? false,
-    });
-    Object.defineProperty(out, 'name', {
-      value: value.name,
-      writable: true,
-      configurable: true,
-      enumerable: Object.getOwnPropertyDescriptor(value, 'name')?.enumerable ?? false,
-    });
+    // Register in `seen` BEFORE recursing so cycles (incl. self-referential
+    // `cause`) terminate.
+    seen.set(value, out);
+    const outRecord = out as unknown as Record<PropertyKey, unknown>;
+    // Copy every own property through its descriptor: data values are
+    // deep-cloned with source enumerability, accessors are preserved verbatim
+    // and never invoked on the source — a getter or toJSON mutating `this`
+    // during observation must only ever affect the clone, not the stored row.
+    for (const key of Reflect.ownKeys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor) continue;
+      if (!('value' in descriptor)) {
+        if (key === 'stack' && descriptor.get !== undefined && descriptor.get === NATIVE_ERROR_STACK_GET) {
+          // The native stack accessor cannot run on the clone (missing
+          // internal slots); resolve the source value and store it as data.
+          Object.defineProperty(outRecord, 'stack', {
+            configurable: true,
+            writable: true,
+            enumerable: descriptor.enumerable,
+            value: (value as Error).stack,
+          });
+          continue;
+        }
+        // Accessors are never invoked on the source — a getter mutating `this`
+        // during observation must only affect the clone. JSON.stringify
+        // resolves enumerable getters, so resolve them on the clone for a
+        // matching projection; non-enumerable accessors stay live as
+        // toJSON/method backing.
+        Object.defineProperty(outRecord, key, descriptor);
+        if (descriptor.enumerable && typeof descriptor.get === 'function') {
+          const resolved = deepCloneForRun(outRecord[key], seen);
+          Object.defineProperty(outRecord, key, {
+            configurable: true,
+            writable: true,
+            enumerable: true,
+            value: resolved,
+          });
+        }
+        continue;
+      }
+      if (key === 'cause' && descriptor.value === undefined) continue;
+      const cloned =
+        key === 'message' || key === 'name' || key === 'stack'
+          ? descriptor.value
+          : deepCloneForRun(descriptor.value, seen);
+      Object.defineProperty(outRecord, key, {
+        configurable: true,
+        writable: true,
+        enumerable: descriptor.enumerable,
+        value: cloned,
+      });
+    }
     // For `stack`, defer to the Error's own `toJSON` if present — that's how
     // producers signal whether they want stack persisted (e.g. step-executor
     // wraps via `getErrorFromUnknown(err, { serializeStack: false })` so the
     // attached toJSON omits stack from the JSON form). We only honour
     // toJSON's stack signal here, not its other fields, to avoid pulling in
     // subclass extras like Chai AssertionError.toJSON's name/ok/stack that
-    // the agent-loop snapshot tests don't expect.
-    const errRecord = value as unknown as Record<PropertyKey, unknown>;
-    let includeStack = value.stack !== undefined;
-    if (includeStack && typeof errRecord.toJSON === 'function') {
+    // the agent-loop snapshot tests don't expect. Invoke it on the clone so a
+    // self-mutating serializer cannot corrupt the source.
+    if (Object.getOwnPropertyDescriptor(out, 'stack') !== undefined && typeof outRecord.toJSON === 'function') {
       try {
-        const serialized = (errRecord.toJSON as () => unknown)();
+        const serialized = (outRecord.toJSON as () => unknown).call(out);
         if (serialized && typeof serialized === 'object' && !('stack' in serialized)) {
-          includeStack = false;
+          delete outRecord.stack;
         }
       } catch {
         // Defensive: if toJSON throws, fall back to default behaviour.
       }
-    }
-    if (includeStack) {
-      Object.defineProperty(out, 'stack', {
-        value: value.stack,
-        writable: true,
-        configurable: true,
-        enumerable: Object.getOwnPropertyDescriptor(value, 'stack')?.enumerable ?? false,
-      });
-    }
-    const toJSONDescriptor = Object.getOwnPropertyDescriptor(value, 'toJSON');
-    const copiedToJSON = typeof toJSONDescriptor?.value === 'function';
-    if (copiedToJSON) {
-      Object.defineProperty(out, 'toJSON', {
-        ...toJSONDescriptor,
-        value: toJSONDescriptor.value,
-      });
-    }
-    // Register in `seen` BEFORE recursing so cycles (incl. self-referential
-    // `cause`) terminate.
-    seen.set(value, out);
-    const outRecord = out as unknown as Record<string, unknown>;
-    if (value.cause !== undefined) {
-      // Preserve the source enumerability: a constructor-provided cause is
-      // non-enumerable while an assigned one is enumerable, and the JSON
-      // persistence projection differs accordingly.
-      const causeEnumerable = Object.getOwnPropertyDescriptor(value, 'cause')?.enumerable ?? false;
-      Object.defineProperty(outRecord, 'cause', {
-        configurable: true,
-        writable: true,
-        enumerable: causeEnumerable,
-        value: deepCloneForRun(value.cause, seen),
-      });
-    }
-    // Copy every remaining own property — enumerable or not — preserving the
-    // source enumerability. A copied `toJSON` may read non-enumerable backing
-    // fields (e.g. AggregateError-style payloads held off the JSON surface),
-    // and omitting them would make the clone serialize differently than the
-    // durable adapters' JSON.stringify of the source. Enumerable accessors
-    // are evaluated as before; non-enumerable accessors are skipped because
-    // Object.keys never reached them.
-    for (const key of Reflect.ownKeys(value)) {
-      if (key === 'message' || key === 'name' || key === 'stack' || key === 'cause' || key === 'toJSON') continue;
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (!descriptor) continue;
-      if (!('value' in descriptor)) {
-        if (!descriptor.enumerable) continue;
-        defineEnumerableRunDataProperty(outRecord, key, deepCloneForRun(errRecord[key], seen));
-        continue;
-      }
-      Object.defineProperty(outRecord, key, {
-        configurable: true,
-        writable: true,
-        enumerable: descriptor.enumerable,
-        value: deepCloneForRun(descriptor.value, seen),
-      });
     }
     return out;
   }
@@ -396,31 +378,32 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
   const out: Record<string, unknown> =
     proto === Object.prototype ? {} : (Object.create(proto) as Record<string, unknown>);
   seen.set(value, out);
-  const toJSONDescriptor = Object.getOwnPropertyDescriptor(value, 'toJSON');
-  const copiedToJSON = typeof toJSONDescriptor?.value === 'function';
-  if (copiedToJSON) {
-    Object.defineProperty(out, 'toJSON', {
-      ...toJSONDescriptor,
-      value: toJSONDescriptor.value,
-    });
-  }
   // `Object.keys` includes keys whose value is `undefined`, so explicitly-undefined
   // properties are preserved (unlike a JSON round-trip). Define each key as an
   // own data property instead of assigning through the destination prototype:
   // assignment to `__proto__` would otherwise invoke Object.prototype's legacy
   // setter and silently lose the workflow step slot during a clone.
-  // Non-enumerable own data props are copied too — preserving the source
+  // Non-enumerable own props are copied too — preserving the source
   // enumerability — because a copied `toJSON` may read backing fields that sit
   // off the JSON surface, and durable adapters stringify the full source.
-  // Enumerable accessors are evaluated as before; non-enumerable accessors are
-  // skipped because Object.keys never reached them.
+  // Accessors are never invoked on the source — a getter mutating `this`
+  // during observation must only affect the clone. JSON.stringify resolves
+  // enumerable getters, so resolve them on the clone for a matching
+  // projection; non-enumerable accessors stay live as toJSON/method backing.
   for (const key of Reflect.ownKeys(value as object)) {
-    if (copiedToJSON && key === 'toJSON') continue;
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor) continue;
     if (!('value' in descriptor)) {
-      if (!descriptor.enumerable) continue;
-      defineEnumerableRunDataProperty(out, key, deepCloneForRun((value as Record<PropertyKey, unknown>)[key], seen));
+      Object.defineProperty(out, key, descriptor);
+      if (descriptor.enumerable && typeof descriptor.get === 'function') {
+        const resolved = deepCloneForRun((out as Record<PropertyKey, unknown>)[key], seen);
+        Object.defineProperty(out, key, {
+          configurable: true,
+          writable: true,
+          enumerable: true,
+          value: resolved,
+        });
+      }
       continue;
     }
     Object.defineProperty(out, key, {
@@ -561,46 +544,148 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }
 
   async admitWorkflowResume(input: AdmitWorkflowResumeInput): Promise<AdmitWorkflowResumeResult> {
-    const { workflowName, runId, resourceId } = input;
-    // The spread re-invokes getters; override identity fields with the values
-    // captured by the destructure so every use agrees on the same identity.
-    const frozenInput = { ...input, workflowName, runId, resourceId };
+    // Pin every field in one ordered capture: CAS/identity fields before the
+    // payload fields so a payload getter cannot retarget an expectation — each
+    // input property's getter fires exactly once and a spread would re-read
+    // them all.
+    const {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates,
+      nextLifecycleResumeAttempt,
+      resourceId,
+      requestContext,
+      replaceRequestContext,
+      operationReplayContext,
+    } = input;
+    const frozenInput: AdmitWorkflowResumeInput = {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates,
+      nextLifecycleResumeAttempt,
+      resourceId,
+      requestContext,
+      replaceRequestContext,
+      operationReplayContext,
+    };
     return this.applyWorkflowResumeMutation(workflowName, runId, resourceId, snapshot =>
       admitWorkflowResumeRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as AdmitWorkflowResumeResult;
   }
 
   async rollbackWorkflowResume(input: RollbackWorkflowResumeInput): Promise<RollbackWorkflowResumeResult> {
-    const { workflowName, runId, resourceId } = input;
-    const frozenInput = { ...input, workflowName, runId, resourceId };
+    const {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates,
+      resourceId,
+    } = input;
+    const frozenInput: RollbackWorkflowResumeInput = {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates,
+      resourceId,
+    };
     return this.applyWorkflowResumeMutation(workflowName, runId, resourceId, snapshot =>
       rollbackWorkflowResumeRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as RollbackWorkflowResumeResult;
   }
 
   async finalizeWorkflowResume(input: FinalizeWorkflowResumeInput): Promise<FinalizeWorkflowResumeResult> {
-    const { workflowName, runId, resourceId } = input;
-    const frozenInput = { ...input, workflowName, runId, resourceId };
+    const {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates,
+      resourceId,
+      shouldPersistSnapshot,
+      receiptKey,
+      snapshot,
+      result,
+    } = input;
+    const frozenInput: FinalizeWorkflowResumeInput = {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates,
+      resourceId,
+      shouldPersistSnapshot,
+      receiptKey,
+      snapshot,
+      result,
+    };
     return this.applyWorkflowResumeMutation(workflowName, runId, resourceId, snapshot =>
       finalizeWorkflowResumeRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as FinalizeWorkflowResumeResult;
   }
 
   async consumeWorkflowResumeResult(input: ConsumeWorkflowResumeResultInput): Promise<ConsumeWorkflowResumeResult> {
-    const { workflowName, runId } = input;
-    const frozenInput = { ...input, workflowName, runId };
+    const {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      receiptKey,
+      consumerId,
+    } = input;
+    const frozenInput: ConsumeWorkflowResumeResultInput = {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      receiptKey,
+      consumerId,
+    };
     return this.applyWorkflowResumeMutation(workflowName, runId, undefined, snapshot =>
       consumeWorkflowResumeResultRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as ConsumeWorkflowResumeResult;
   }
 
   async persistWorkflowStepUpdate(input: PersistWorkflowStepUpdateInput): Promise<PersistWorkflowStepUpdateResult> {
-    // Capture every input field before invoking caller serialization
-    // (toJSON/getters) so a mutated input object cannot redirect the write or
-    // swap the CAS expectations mid-computation. The spread re-invokes
-    // getters, so identity fields are pinned from the destructure.
-    const { workflowName, runId, resourceId } = input;
-    const frozenInput = { ...input, workflowName, runId, resourceId };
+    // Pin every field in one ordered capture: CAS/identity fields before the
+    // payload `snapshot` so its getter cannot retarget an expectation — each
+    // input property's getter fires exactly once and a spread would re-read
+    // them all.
+    const {
+      workflowName,
+      runId,
+      resourceId,
+      expectedResumeOperationHash,
+      expectedExecutionGeneration,
+      expectedLifecycleResumeAttempt,
+      retainExistingLifecycleOutbox,
+      lifecycleEvents,
+      snapshot,
+    } = input;
+    const frozenInput: PersistWorkflowStepUpdateInput = {
+      workflowName,
+      runId,
+      resourceId,
+      expectedResumeOperationHash,
+      expectedExecutionGeneration,
+      expectedLifecycleResumeAttempt,
+      retainExistingLifecycleOutbox,
+      lifecycleEvents,
+      snapshot,
+    };
     const key = this.getWorkflowKey(workflowName, runId);
     for (let attempt = 1; ; attempt++) {
       const existing = this.db.workflows.get(key);
@@ -1569,22 +1654,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   ): Promise<ClaimWorkflowSnapshotHandoffResult> {
     // Capture every input field before invoking caller serialization
     // (toJSON/getters) so a mutated input object cannot redirect the write or
-    // swap the expected state mid-call. Expected fields are destructured
-    // before `snapshot` so a replacement getter cannot retarget them.
-    const {
-      workflowName,
-      runId,
-      mutationFence,
-      resourceId,
-      expectedCanonical: rawExpectedCanonical,
-      snapshot: rawSnapshot,
-    } = input;
+    // swap the expected state mid-call. `input.snapshot` is read only after
+    // the expectation is fully materialized: its getter may run arbitrary
+    // caller code that must not be able to rewrite the expected state.
+    const { workflowName, runId, mutationFence, resourceId, expectedCanonical: rawExpectedCanonical } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
-    // Materialize the expectation before the replacement snapshot so no
-    // caller serialization runs while an expected field is still uncaptured,
-    // and before touching shared state; serialization may run arbitrary user
-    // code that must not execute between the canonical comparison and the
-    // record write.
+    validateWorkflowSnapshotHandoffIdentity(workflowName, runId, resourceId);
     const expectedCanonical: WorkflowSnapshotHandoffCanonicalState =
       rawExpectedCanonical.kind === 'present'
         ? {
@@ -1593,7 +1668,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
             snapshot: materializeWorkflowSnapshotHandoffSnapshot(rawExpectedCanonical.snapshot),
           }
         : { kind: 'absent' };
-    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
+    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
     const key = this.getWorkflowKey(workflowName, runId);
     // Reading the canonical state materializes the stored snapshot, which can
     // invoke caller toJSON/getters and reenter these maps. Re-read both source
@@ -1647,8 +1722,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   async transitionWorkflowSnapshotHandoff(
     input: TransitionWorkflowSnapshotHandoffInput,
   ): Promise<TransitionWorkflowSnapshotHandoffResult> {
-    // Expected fields are destructured before `snapshot` so a replacement
-    // getter cannot retarget them mid-capture.
+    // `input.snapshot` is read only after the expectation is fully
+    // materialized so its getter cannot rewrite the expected state mid-capture.
     const {
       workflowName,
       runId,
@@ -1656,13 +1731,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       resourceId,
       expectedResourceId,
       expectedSnapshot: rawExpectedSnapshot,
-      snapshot: rawSnapshot,
     } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
-    // Materialize the expectation before the replacement snapshot so no caller
-    // serialization runs while an expected field is still uncaptured.
+    validateWorkflowSnapshotHandoffIdentity(workflowName, runId, resourceId, expectedResourceId);
     const expectedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
-    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
+    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
     const key = this.getWorkflowKey(workflowName, runId);
     const existing = this.db.workflowSnapshotHandoffs.get(key);
     if (!existing) return { status: 'missing' };
@@ -1693,8 +1766,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   async completeWorkflowSnapshotHandoff(
     input: CompleteWorkflowSnapshotHandoffInput,
   ): Promise<CompleteWorkflowSnapshotHandoffResult> {
-    // Expected fields are destructured before `snapshot` so a replacement
-    // getter cannot retarget them mid-capture.
+    // `input.snapshot` is read only after the expectation is fully
+    // materialized so its getter cannot rewrite the expected state mid-capture.
     const {
       workflowName,
       runId,
@@ -1702,13 +1775,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       resourceId,
       expectedResourceId,
       expectedSnapshot: rawExpectedSnapshot,
-      snapshot: rawSnapshot,
     } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
-    // Materialize the expectation before the replacement snapshot so no caller
-    // serialization runs while an expected field is still uncaptured.
+    validateWorkflowSnapshotHandoffIdentity(workflowName, runId, resourceId, expectedResourceId);
     const expectedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
-    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
+    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
     const key = this.getWorkflowKey(workflowName, runId);
     const existing = this.db.workflowSnapshotHandoffs.get(key);
     if (!existing) return { status: 'missing' };

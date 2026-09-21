@@ -1060,4 +1060,174 @@ describe('workflow snapshot handoff', () => {
     const stored = await workflows.loadWorkflowSnapshot({ workflowName, runId });
     expect(stored).toMatchObject({ value: { n: 1 } });
   });
+
+  it('keeps the expectation pinned when the replacement getter mutates its contents', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'nested-expected-workflow';
+    const runId = 'nested-expected-run';
+    const stored = snapshot(runId, 'waiting', { phase: 'b' });
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    // The replacement getter rewrites the expected snapshot's nested contents
+    // to match the stored row — the expectation must already be materialized,
+    // so the stale A-vs-B comparison still conflicts. The expected snapshot
+    // shares the stored timestamp so only `value.phase` discriminates.
+    const expected = { ...snapshot(runId, 'waiting', { phase: 'a' }), timestamp: stored.timestamp };
+    const input = {
+      workflowName,
+      runId,
+      expectedCanonical: { kind: 'present' as const, snapshot: expected },
+      mutationFence: 'owner',
+      get snapshot() {
+        expected.value = { phase: 'b' };
+        return snapshot(runId, 'waiting', { phase: 'c' });
+      },
+    };
+    await expect(workflows.claimWorkflowSnapshotHandoff(input)).resolves.toMatchObject({ status: 'conflict' });
+    await expect(workflows.listWorkflowSnapshotHandoffs({ workflowName })).resolves.toMatchObject({ records: [] });
+  });
+
+  it('pins step-update CAS fields before the payload snapshot getter', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'cas-order-workflow';
+    const runId = 'cas-order-run';
+    const stored = { ...snapshot(runId, 'running'), executionGeneration: 'gen-2' } as WorkflowRunState;
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    // `snapshot` precedes `expectedExecutionGeneration` in property order, so
+    // a spread would read the getter first and let it rewrite the stale
+    // expectation to the current generation.
+    const input = {
+      workflowName,
+      runId,
+      get snapshot() {
+        input.expectedExecutionGeneration = 'gen-2';
+        return { ...snapshot(runId, 'running'), executionGeneration: 'gen-2' } as WorkflowRunState;
+      },
+      expectedExecutionGeneration: 'gen-1',
+    };
+    await expect(workflows.persistWorkflowStepUpdate(input)).resolves.toMatchObject({
+      status: 'stale_execution',
+    });
+    await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({
+      executionGeneration: 'gen-2',
+    });
+  });
+
+  it('never invokes a stored Error serializer on the source object', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'error-self-mutate-workflow';
+    const runId = 'error-self-mutate-run';
+
+    // The stored Error's toJSON mutates an enumerable field on `this`. Canonical
+    // observation clones first, so the serializer only ever runs against clones
+    // and the stored row keeps its persisted mutation count. The count is
+    // compared before/after the claim so the exact number of legitimate
+    // clone-side invocations does not matter.
+    const err = new Error('boom');
+    Object.defineProperty(err, 'mutations', { value: 0, enumerable: true, writable: true, configurable: true });
+    Object.defineProperty(err, 'toJSON', {
+      value(this: { mutations?: number; message: string }) {
+        this.mutations = (this.mutations ?? 0) + 1;
+        return { message: this.message, stack: 'x' };
+      },
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+    const stored = snapshot(runId, 'failed', { error: err });
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    const before = (await workflows.loadWorkflowSnapshot({ workflowName, runId })) as {
+      value: { error: { mutations: number } };
+    };
+    expect(typeof before.value.error.mutations).toBe('number');
+
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: stored },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+    const after = (await workflows.loadWorkflowSnapshot({ workflowName, runId })) as {
+      value: { error: { mutations: number } };
+    };
+    expect(after.value.error.mutations).toBe(before.value.error.mutations);
+  });
+
+  it('preserves non-enumerable accessors a copied Error serializer depends on', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'error-accessor-workflow';
+    const runId = 'error-accessor-run';
+
+    // PostgreSQL stringifies the source Error: a non-enumerable getter backing
+    // its toJSON contributes to the durable JSON projection, so the clone must
+    // keep the accessor for the canonical comparison to see the same output.
+    const err = new Error('boom');
+    Object.defineProperty(err, 'detail', { get: () => 42, enumerable: false });
+    Object.defineProperty(err, 'toJSON', {
+      value(this: { detail?: number }) {
+        return { detail: this.detail };
+      },
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+    const stored = snapshot(runId, 'failed', { error: err });
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: stored },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+  });
+
+  it('rejects handoff identities that cannot round-trip through UTF-8', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const runId = 'utf16-run';
+
+    // Unpaired surrogates encode as U+FFFD on the PostgreSQL wire, which would
+    // rewrite the fence token and collapse distinct row identities.
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'utf16-workflow',
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-\uD800',
+      }),
+    ).rejects.toThrow(TypeError);
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'wf-\uD800',
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner',
+      }),
+    ).rejects.toThrow(TypeError);
+
+    // Well-formed astral pairs still round-trip identically in both adapters.
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'wf-💥',
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-💥',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+  });
 });
