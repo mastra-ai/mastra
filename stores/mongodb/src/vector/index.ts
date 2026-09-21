@@ -763,6 +763,27 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const resolvedAutoEmbed = autoEmbed
         ? { ...autoEmbed, path: autoEmbed.path ?? this.documentFieldName }
         : undefined;
+
+      // MongoDB leaves an existing index definition alone, so a re-create that changes how
+      // the index embeds would persist a config the physical index does not match: the store
+      // would read and write one field while Atlas embeds another. Refuse instead.
+      const existingAutoEmbed = existingEntry?.autoEmbed;
+      const embeddingChanged =
+        Boolean(existingAutoEmbed) !== Boolean(resolvedAutoEmbed) ||
+        (existingAutoEmbed &&
+          resolvedAutoEmbed &&
+          (existingAutoEmbed.path !== resolvedAutoEmbed.path || existingAutoEmbed.model !== resolvedAutoEmbed.model));
+      if (existingEntry && embeddingChanged) {
+        const describeEmbedding = (config?: { path: string; model: string }) =>
+          config ? `autoEmbed (path "${config.path}", model "${config.model}")` : 'client-side vectors';
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: `Index "${indexName}" is already registered with ${describeEmbedding(existingAutoEmbed)}, but this createIndex call resolves to ${describeEmbedding(resolvedAutoEmbed)}. Call deleteIndex({ indexName: "${indexName}" }) first to rebuild it.`,
+        });
+      }
       await this.writeRegistryEntry(indexName, {
         collectionName: targetCollection,
         searchIndexName: targetSearchIndex,

@@ -2435,6 +2435,47 @@ describe('MongoDBVector autoEmbed', () => {
       });
     });
 
+    it('rejects a re-create that changes the embedded path', async () => {
+      const v = makeVector();
+      stubCreateIndex(v);
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        autoEmbed: { model: 'voyage-4', path: 'fullplot' },
+      });
+
+      await expect(v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } })).rejects.toThrow(
+        /already registered/,
+      );
+    });
+
+    it('rejects a re-create that swaps autoEmbed for client-side vectors', async () => {
+      const v = makeVector();
+      stubCreateIndex(v);
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        autoEmbed: { model: 'voyage-4', path: 'document' },
+      });
+
+      await expect(v.createIndex({ indexName: 'movies', dimension: 1024 })).rejects.toThrow(/already registered/);
+    });
+
+    it('allows an idempotent re-create with the same autoEmbed config', async () => {
+      const v = makeVector();
+      stubCreateIndex(v);
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        autoEmbed: { model: 'voyage-4', path: 'document' },
+      });
+
+      await expect(v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } })).resolves.toBeUndefined();
+    });
+
     it('still creates the companion full-text index for a managed autoEmbed index', async () => {
       const v = makeVector();
       const createSearchIndex = stubCreateIndex(v);
