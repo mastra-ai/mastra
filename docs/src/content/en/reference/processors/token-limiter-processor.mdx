@@ -70,9 +70,9 @@ const processor = new TokenLimiterProcessor({
           },
           {
             name: 'trimMode',
-            type: "'best-fit' | 'contiguous'",
+            type: "'best-fit' | 'contiguous' | 'memory-only'",
             description:
-              "Controls how messages are trimmed when exceeding the token limit: 'best-fit' keeps as many messages as possible (may create gaps), 'contiguous' stops at the first message that does not fit, ensuring a continuous suffix of conversation history. Both modes only trim messages other than the current run's tool traffic: tool calls and results produced by the run in progress are retained independently of the trim order",
+              "Controls how messages are trimmed when exceeding the token limit: 'best-fit' walks newest-first and keeps every message that still fits, so an oversized newer message can be skipped while an older one that fits is kept (may create gaps), 'contiguous' stops at the first message that does not fit, ensuring a continuous suffix of conversation history. Both modes only trim messages other than the current run's tool traffic: tool calls and results produced by the run in progress are retained independently of the trim order. 'memory-only' instead leaves the current run alone entirely and trims only eligible remembered messages, oldest first, aiming to get back under `limit` minus `atMaxRemoveTokens`, though it can stay above that target when too little history is removable",
             isOptional: true,
             default: "'best-fit'",
           },
@@ -110,7 +110,7 @@ const processor = new TokenLimiterProcessor({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      'Prunes messages at each step of the agentic loop (including tool call continuations) to keep the conversation within the token limit. Mutates the messageList directly by removing oldest messages first while preserving system messages. Tool calls and tool results produced by the run in progress are never trimmed, so the model always sees the tool traffic it just produced; if that traffic alone exceeds the limit, a non-retryable `TripWire` is thrown instead of silently dropping the tool call the loop depends on.',
+      'Prunes messages at each step of the agentic loop (including tool call continuations) to keep the conversation within the token limit. Mutates the messageList directly, walking newest-first and dropping what does not fit the remaining budget, or in `contiguous` mode everything from the first non-fit onward, while preserving system messages. In `best-fit` and `contiguous` modes, tool calls and tool results produced by the run in progress are never trimmed, so the model always sees the tool traffic it just produced; if that traffic alone exceeds the budget remaining after system messages and conversation overhead, a non-retryable `TripWire` is thrown instead of silently dropping the tool call the loop depends on.',
     isOptional: false,
   },
   {
