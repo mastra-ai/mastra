@@ -9,11 +9,9 @@ const semanticTokenPattern =
   '(?:sidebar-accent-foreground|popover-foreground|secondary-foreground|tertiary-foreground|disabled-foreground|contrast-foreground|sidebar-foreground|sidebar-accent|sidebar-border|sidebar-divider|sidebar-ring|card-foreground|muted-foreground|accent-foreground|background|secondary|foreground|selected|popover|sidebar|accent|border|input|muted|card|ring)';
 const foundationTokenPattern = '(?:background-[1-3]|gray-(?:10|[1-9])|gray-alpha-(?:10|[1-9]))';
 const colorUtilityPattern = '(?:bg|text|border|ring|outline|fill|stroke|from|via|to)';
-const approvedFoundationFiles = new Set(['packages/playground-ui/theme.css']);
-const tokenContractFiles = new Set([
-  'packages/playground-ui/theme.css',
-  'packages/playground-ui/src/ds/tokens/colors.ts',
-]);
+const isThemeLayerFile = file =>
+  file === 'packages/playground-ui/theme.css' || file.startsWith('packages/playground-ui/theme/');
+const isTokenContractFile = file => isThemeLayerFile(file) || file === 'packages/playground-ui/src/ds/tokens/colors.ts';
 
 const normalizePath = value => value.split(sep).join('/');
 
@@ -64,7 +62,7 @@ const listTrackedFiles = (repositoryRoot, roots) => {
 };
 
 const classifyFile = file => {
-  if (tokenContractFiles.has(file)) return 'tokens';
+  if (isTokenContractFile(file)) return 'tokens';
   if (/(?:^|\/)\.storybook(?:\/|$)|\.stories\.[^.]+$/.test(file)) return 'stories';
   if (/(?:^|\/)__tests__(?:\/|$)|\.(?:test|spec)\.[^.]+$/.test(file)) return 'tests';
   return 'production';
@@ -167,7 +165,7 @@ const scanFile = (repositoryRoot, file) => {
     token => add(token, 'typescript', 'semantic'),
   );
 
-  if (!approvedFoundationFiles.has(file)) {
+  if (!isThemeLayerFile(file)) {
     findMatches(
       content,
       new RegExp(
@@ -183,9 +181,6 @@ const scanFile = (repositoryRoot, file) => {
       match => match[1],
       token => add(token, 'css-variable', 'foundation'),
     );
-  }
-
-  if (!approvedFoundationFiles.has(file)) {
     findMatches(
       content,
       /#[\da-fA-F]{3,8}\b/g,

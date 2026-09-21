@@ -30,6 +30,15 @@ const backgrounds = [
 const grayTokens = Array.from({ length: 10 }, (_, index) => `gray-${index + 1}`);
 const grayAlphaTokens = Array.from({ length: 10 }, (_, index) => `gray-alpha-${index + 1}`);
 
+const neutralTokens: { token: ColorToken; note?: string }[] = [
+  { token: 'neutral1' },
+  { token: 'neutral2' },
+  { token: 'neutral3' },
+  { token: 'neutral4' },
+  { token: 'neutral5' },
+  { token: 'neutral6', note: 'Within rounding of --gray-10' },
+];
+
 const surfaceRoles: { token: ColorToken; note: string }[] = [
   { token: 'background', note: 'The canvas every page sits on' },
   { token: 'sidebar', note: 'App chrome, one step behind the canvas' },
@@ -94,6 +103,7 @@ const tokenCount =
   backgrounds.length +
   grayTokens.length +
   grayAlphaTokens.length +
+  neutralTokens.length +
   surfaceRoles.length +
   textTones.length +
   2 +
@@ -196,6 +206,19 @@ export const ColorFoundations: Story = {
         surface="sidebar"
       >
         <RampRow tokens={grayAlphaTokens} />
+      </FoundationSection>
+
+      <FoundationSection
+        label="Neutral — legacy"
+        description="A second ink ramp, six steps against gray's ten, and the two only meet at the ink end — everything below --neutral6 lands between gray rungs, differently in each theme. It is here because the product still reads it, not as a choice for new work, which takes a semantic role, or a gray rung when no role fits."
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {neutralTokens.map(neutral => (
+            <Specimen key={neutral.token} name={`--${neutral.token}`} note={neutral.note}>
+              <Swatch value={Colors[neutral.token]} />
+            </Specimen>
+          ))}
+        </div>
       </FoundationSection>
 
       <FoundationSection label="Surfaces" description="The role a container asks for instead of a ramp step.">

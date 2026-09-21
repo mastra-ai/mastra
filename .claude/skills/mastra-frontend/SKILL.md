@@ -17,7 +17,7 @@ Every Mastra application UI is assembled from the `@mastra/playground-ui` design
 ## Find what exists — never guess, never rebuild
 
 - **Components**: browse `packages/playground-ui/src/ds/components/` (primitives) and `src/domains/` (feature components). Check the exports and existing usage before building anything new.
-- **Tokens**: read the `@theme` block in `packages/playground-ui/theme.css`. The namespace tells you the generated utility: `--color-x` → `bg-x`/`text-x`/`border-x`, `--spacing-x` → `p-x`/`gap-x`/`h-x`, `--text-x` → `text-x`, `--shadow-x` → `shadow-x`, `--radius-x` → `rounded-x`. Token names drift — confirm them in the file, never use them from memory.
+- **Tokens**: read the `@theme` blocks under `packages/playground-ui/theme/` (`colors`, `status`, `data-viz`, `surfaces`, `typography`, `scale`, `motion`), all imported by `packages/playground-ui/theme.css`, which holds the semantic aliases. The namespace tells you the generated utility: `--color-x` → `bg-x`/`text-x`/`border-x`, `--spacing-x` → `p-x`/`gap-x`/`h-x`, `--text-x` → `text-x`, `--shadow-x` → `shadow-x`, `--radius-x` → `rounded-x`. Token names drift — confirm them in the file, never use them from memory.
 
 ## Choosing a class value
 
@@ -31,7 +31,7 @@ Pick the highest rung that fits; each step down needs a reason:
 
 ## Theme contract
 
-- `theme.css` variables are API: adding one generates utilities for every consumer. Never modify `theme.css` or `packages/playground-ui/src/ds/tokens/*.ts` without explicit approval. To request a token: document the use case, explain why a local CSS custom property is not enough, and wait for the design team.
+- `theme.css` variables are API: adding one generates utilities for every consumer. Never modify `theme.css`, its layers in `packages/playground-ui/theme/`, or `packages/playground-ui/src/ds/tokens/*.ts` without explicit approval. To request a token: document the use case, explain why a local CSS custom property is not enough, and wait for the design team.
 - Runtime-only or single-component values get a plain CSS custom property (which generates no utility) consumed via `bg-(--var)` — not a new `@theme` token.
 - When JavaScript needs a theme value, read the CSS variable (`var(--color-surface4)`, `getComputedStyle`) — never `resolveConfig` or JS token imports for styling.
 
@@ -39,7 +39,7 @@ Pick the highest rung that fits; each step down needs a reason:
 
 - `packages/playground-ui/src/index.css` imports Tailwind and `theme.css`, and declares the dark variant: `@custom-variant dark (&:is(.dark *))`.
 - The palette defaults to dark in `:root`; `html.light` flips the semantic variables. Theming is automatic through semantic tokens — never write `dark:` color overrides on semantic tokens; reserve `dark:` for rare structural differences.
-- Build conditional or merged class strings with `cn()` — exported from `@mastra/playground-ui` for consumers, `src/lib/utils.ts` inside the package. Its `twMerge` is extended with the DS scales (`src/lib/tw-merge-config.ts`), so DS utilities like `text-ui-md` merge correctly; importing `twMerge` from `tailwind-merge` directly mis-merges them.
+- Build conditional or merged class strings with `cn()` — exported from `@mastra/playground-ui` for consumers, `src/lib/utils.ts` inside the package. Its `twMerge` is extended with the DS scales (`src/lib/tw-merge-config.ts`), so DS utilities like `text-body-sm` merge correctly; importing `twMerge` from `tailwind-merge` directly mis-merges them.
 - Code inside `packages/playground-ui` outside `ds/` (for example `src/domains/`) is itself a consumer of the `ds/` primitives — all of these rules apply there too.
 
 ## Review smells

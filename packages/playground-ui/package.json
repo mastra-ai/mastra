@@ -8,7 +8,8 @@
   ],
   "files": [
     "dist",
-    "theme.css"
+    "theme.css",
+    "theme"
   ],
   "exports": {
     "./style.css": "./dist/style.css",

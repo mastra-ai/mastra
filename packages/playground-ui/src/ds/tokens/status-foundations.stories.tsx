@@ -141,7 +141,7 @@ export const StatusFoundations: Story = {
 
       <FoundationSection
         label="Brand green"
-        description="The product colour, as an eleven-step ramp. theme.css clears Tailwind's own green and remaps the scale onto this ramp, so bg-green-500 in this codebase is brand green — reading a Tailwind swatch to predict it will be wrong."
+        description="The product colour, as an eleven-step ramp. theme/colors.css clears Tailwind's own green and remaps the scale onto this ramp, so bg-green-500 in this codebase is brand green — reading a Tailwind swatch to predict it will be wrong."
       >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
           {greenSteps.map(step => (

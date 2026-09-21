@@ -79,7 +79,7 @@ export const SurfaceFoundations: Story = {
   name: 'Surface foundations',
   render: (_args, context) => (
     <FoundationPage
-      eyebrow={`Surface / ${fillLadder.length + boundaryLadder.length + overlayWashes.length + rimTokens.length + tintTokens.length + 2} tokens`}
+      eyebrow={`Surface / ${fillLadder.length + boundaryLadder.length + overlayWashes.length + rimTokens.length + tintTokens.length + 3} tokens`}
       title="Surface foundations"
       description="A fill is the body of anything raised above its parent surface; a boundary is its 1px edge. Rungs are alphas, so the same rung holds on any surface — read each ladder twice below, once on the canvas and once on the sidebar."
       aside={
@@ -158,6 +158,29 @@ export const SurfaceFoundations: Story = {
           These two alias the gray-alpha ramp rather than the tint: --surface-overlay-soft is --fill-subtle,
           --surface-overlay-strong is --gray-alpha-2.
         </Txt>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Scrim"
+        description="The one wash that dims instead of lifting: it sits under a dialog or drawer and puts the app out of reach. The alpha is the whole token — black at 75% in dark, a near-black shade at 45% in light — so what is behind stays readable and unmistakably inert."
+      >
+        <SpecimenGroup label="A dialog over the canvas">
+          <Specimen name="--scrim" note="Backdrop of a dialog, drawer or command palette">
+            <div className="border-border relative overflow-hidden rounded-xl border">
+              <div className="bg-background flex flex-col gap-2 p-6">
+                <Txt variant="body-sm">The page behind</Txt>
+                <Txt variant="caption" tone="muted">
+                  Still visible, no longer reachable.
+                </Txt>
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center" style={{ background: Colors.scrim }}>
+                <div className="bg-popover shadow-overlay rounded-xl px-6 py-4">
+                  <Txt variant="body-sm">Dialog</Txt>
+                </div>
+              </div>
+            </div>
+          </Specimen>
+        </SpecimenGroup>
       </FoundationSection>
 
       <FoundationSection

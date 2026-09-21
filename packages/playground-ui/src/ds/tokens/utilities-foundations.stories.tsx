@@ -231,7 +231,7 @@ export const UtilitiesFoundations: Story = {
       title="Utilities foundations"
       description="These are the classes that carry a decision rather than a value. Each one exists because the obvious Tailwind spelling of the same idea breaks in one theme, on one surface, or under a scroller."
       note="Every animation and transition on this page stops under prefers-reduced-motion."
-      noteAside="Declared in src/index.css, theme.css and ds/components/Arrival/arrival.css."
+      noteAside="Declared in src/index.css, theme/motion.css and ds/components/Arrival/arrival.css."
     >
       <FoundationSection
         label="Interaction layer"
