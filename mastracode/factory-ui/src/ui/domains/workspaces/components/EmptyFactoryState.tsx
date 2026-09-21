@@ -92,9 +92,13 @@ export function EmptyFactoryState() {
     setMutationError(null);
     setConnectingRepositoryId(repo.id);
     try {
-      const factory = await createFactory.mutateAsync({ name: repo.name });
-      setPendingFactory(factory);
-      persistOnboardingFactory(factory.id);
+      // A prior attempt may have created the Factory before the link step
+      // failed. Reuse that Factory so retrying cannot create a duplicate.
+      const factory = pendingFactory ?? (await createFactory.mutateAsync({ name: repo.name }));
+      if (!pendingFactory) {
+        setPendingFactory(factory);
+        persistOnboardingFactory(factory.id);
+      }
       const linkedRepository = await linkRepository.mutateAsync({
         factoryProjectId: factory.id,
         repo,
