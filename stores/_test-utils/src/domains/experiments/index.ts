@@ -957,14 +957,14 @@ export function createExperimentsTests({
         await experimentsStorage.addExperimentResult({
           ...base,
           itemId: 'item-1',
-          input: 'first',
+          input: { q: 'first' },
           startedAt: new Date('2026-01-01T00:00:00Z'),
           completedAt: new Date('2026-01-01T00:00:01Z'),
         });
         await experimentsStorage.addExperimentResult({
           ...base,
           itemId: 'item-2',
-          input: 'second',
+          input: { q: 'second' },
           startedAt: new Date('2026-01-02T00:00:00Z'),
           completedAt: new Date('2026-01-02T00:00:01Z'),
         });
@@ -973,14 +973,14 @@ export function createExperimentsTests({
           experimentId: exp.id,
           pagination: { page: 0, perPage: 10 },
         });
-        expect(asc.results.map(r => r.input)).toEqual(['first', 'second']);
+        expect(asc.results.map(r => (r.input as { q: string }).q)).toEqual(['first', 'second']);
 
         const desc = await experimentsStorage.listExperimentResults({
           experimentId: exp.id,
           pagination: { page: 0, perPage: 10 },
           orderBy: { field: 'startedAt', direction: 'DESC' },
         });
-        expect(desc.results.map(r => r.input)).toEqual(['second', 'first']);
+        expect(desc.results.map(r => (r.input as { q: string }).q)).toEqual(['second', 'first']);
       });
     });
 
