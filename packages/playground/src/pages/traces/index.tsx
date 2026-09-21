@@ -37,6 +37,7 @@ import {
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useTracesListSource } from './hooks/use-traces-list-source';
@@ -56,6 +57,9 @@ type TracesPageProps = {
   scopedEntityId?: string;
   scopedEntityType?: EntityType;
 };
+
+const TRACES_SORT_KEYS = ['startedAt'] as const;
+const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
 
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
@@ -94,6 +98,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     querySearchParams.delete(`filter${field[0]?.toUpperCase()}${field.slice(1)}`);
   }
   const url = useTraceUrlState(querySearchParams, setPersistedSearchParams);
+  const { sort, onSortChange } = useUrlSort({
+    searchParams,
+    setSearchParams,
+    allowedKeys: TRACES_SORT_KEYS,
+    defaultSort: DEFAULT_TRACES_SORT,
+  });
+  const sortDirection = sort?.direction ?? 'desc';
 
   // Scope fields live in the URL (set by the scoping effect above) but never surface as chips.
   const scopedFieldIds = useMemo(() => new Set(isScoped ? ['rootEntityType', 'entityId'] : []), [isScoped]);
@@ -219,6 +230,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         tokens: url.filterTokens,
         now,
       }),
+    orderBy: [{ field: 'startedAt', direction: sortDirection }],
   });
   const traceColumns = useTraceColumnPreferences();
   const observabilityCapabilities = useObservabilityStorageCapabilities();
@@ -388,6 +400,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         isBranchesMode={url.listMode === 'branches'}
         columnPreferences={displayedColumnPreferences}
         usageByTraceId={traceUsage.data}
+        createdSort={sortDirection}
+        onSortChange={onSortChange}
         onTraceClick={trace => {
           const isBranches = url.listMode === 'branches';
           const isSameRow = isBranches
