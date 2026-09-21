@@ -371,6 +371,7 @@ describe('Session.message() — default path', () => {
     });
     const finalizerCalls: Array<{ seed: unknown; finalizerId: string; finalizerVersion: string }> = [];
     const { harness, agent } = setupHarness({
+      agents: { default: new MockAgent({ id: 'default', defaultOutput: { text: 'hello back' } }) },
       sessions: {
         storage,
         terminalHandoff: {
@@ -403,7 +404,7 @@ describe('Session.message() — default path', () => {
     });
 
     expect(result.text).toBe('hello back');
-    expect(agent.calls).toHaveLength(1);
+    expect(agent.streamCalls).toHaveLength(1);
     expect(finalizerCalls).toEqual([{ seed, finalizerId: 'doxa.chat', finalizerVersion: '2026-09-20' }]);
     const intent = await storage.loadTerminalIntent({
       harnessName: 'default',
