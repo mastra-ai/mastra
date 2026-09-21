@@ -309,6 +309,20 @@ describe('login() server lifecycle', () => {
     }
   });
 
+  it('cancels a timed-out login without prompting in CI with TTY streams', async () => {
+    const terminal = mockTerminal();
+    vi.stubEnv('CI', 'true');
+    try {
+      const { login, LoginCancelledError } = await import('./credentials.js');
+
+      await expect(login(undefined, { timeoutMs: 10 })).rejects.toBeInstanceOf(LoginCancelledError);
+      expect(selectMock).not.toHaveBeenCalled();
+    } finally {
+      terminal.restore();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('returns 400 when callback params are missing', async () => {
     const { login } = await import('./credentials.js');
 
