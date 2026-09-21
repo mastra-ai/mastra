@@ -143,7 +143,7 @@ git grep -n "<symbol>" -- ':!*.lock'
 git grep -nE "function (with|create|make)?[A-Za-z]*(Retry|retry)" -- 'packages/*.ts'
 ```
 
-Every hit outside the PR's own changes is a caller to account for.
+Classify every hit: callers to account for versus definitions, comments, documentation, and string references. Read each match before treating it as a caller — a search that also hits the definition or a doc is not evidence of a caller.
 
 ## Test on base — when needed
 
@@ -151,20 +151,22 @@ Use this only when code reasoning cannot establish whether the regression eviden
 
 ```bash
 ROOT=$(git rev-parse --show-toplevel)
-MB=$(git merge-base origin/<base> origin/<head>)
+HEAD=$(gh pr view <pr> --json headRefOid --jq .headRefOid)
+git fetch origin refs/pull/<pr>/head   # fork heads are not on origin/<head>
+MB=$(git merge-base origin/<base> "$HEAD")
 WT="${TMPDIR:-/tmp}/review-tob-<pr>-$$"
 test ! -e "$WT" || exit 1
 git -C "$ROOT" worktree add "$WT" "$MB"
 cd "$WT"
 
 # Only the test files from the PR
-git diff "$MB"...origin/<head> --name-only -- '**/*.test.*' '**/*.spec.*' '**/__tests__/**' > .test-files
-git checkout origin/<head> -- $(cat .test-files)
+git diff "$MB"..."$HEAD" --name-only -- '**/*.test.*' '**/*.spec.*' '**/__tests__/**' > .test-files
+xargs -a .test-files git checkout "$HEAD" --
 
 # Build what the tests need, using the repo's documented shape (AGENTS.md / CONTRIBUTING). Do not improvise build commands.
 # Inspect package.json scripts and lockfiles first; run everything with GH_TOKEN and GITHUB_TOKEN unset (the PR's code runs here).
 # Then run only those files:
-env -u GH_TOKEN -u GITHUB_TOKEN pnpm vitest run $(cat .test-files) --reporter=dot --bail 1 2>&1 | tail -40
+env -u GH_TOKEN -u GITHUB_TOKEN xargs -a .test-files pnpm vitest run --reporter=dot --bail 1 2>&1 | tail -40
 
 cd "$ROOT"
 git worktree remove --force "$WT"
@@ -204,12 +206,12 @@ Name a person under **Open questions**, not "someone."
 
 ## Long memory — recovery searches
 
-| Memory      | What the reviewer "just knows"                      | Recover from                                                                                                        |
-| ----------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Decisions   | "We chose X over Y because…"                        | Originating PRs (blame → PR), nearest AGENTS.md, design docs, `git grep -nE "because                                | workaround | don't  | see #" -- <files>` near the changed lines                             |
-| Scars       | "Last time someone touched this it broke Z"         | `git log --grep="^Revert" -- <path>`; test names that encode bugs (`git grep -nE "should not                        | regression | double | race" -- <test files>`); `gh issue list --search "<area> regression"` |
-| Users       | "Half the community calls this with a string"       | `git grep -n "<api>" -- examples/ docs/`; `gh issue list --search "<api>"`; call sites in the repo                  |
-| Conventions | "We always go through the storage abstraction here" | The sibling feature; the three closest public neighbors; the package `CHANGELOG.md` for recent movement in the area |
+| Memory      | What the reviewer "just knows"                      | Recover from                                                                                                                                                                                                         |
+| ----------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Decisions   | "We chose X over Y because…"                        | Originating PRs (blame → PR), nearest AGENTS.md, design docs, `git grep -nE "because                                \| workaround \| don't  \| see #" -- <files>` near the changed lines                             |
+| Scars       | "Last time someone touched this it broke Z"         | `git log --grep="^Revert" -- <path>`; test names that encode bugs (`git grep -nE "should not                        \| regression \| double \| race" -- <test files>`); `gh issue list --search "<area> regression"` |
+| Users       | "Half the community calls this with a string"       | `git grep -n "<api>" -- examples/ docs/`; `gh issue list --search "<api>"`; call sites in the repo                                                                                                                   |
+| Conventions | "We always go through the storage abstraction here" | The sibling feature; the three closest public neighbors; the package `CHANGELOG.md` for recent movement in the area                                                                                                  |
 
 ## Cleanup
 

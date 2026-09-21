@@ -752,7 +752,7 @@ describe('bundled Factory skill assets', () => {
     expect(archaeology).not.toContain('## Pushing trivial cleanup');
     expect(archaeology).not.toContain('mastra_expert');
     // Category pages that execute PR code carry the token-stripping rule.
-    expect(archaeology).toContain('env -u GH_TOKEN -u GITHUB_TOKEN pnpm vitest run');
+    expect(archaeology).toContain('env -u GH_TOKEN -u GITHUB_TOKEN xargs -a .test-files pnpm vitest run');
     for (const page of listedPages) {
       const body = await fs.readFile(path.join(referencesRoot, 'categories', page), 'utf8');
       expect(body, `${page} uses the factory handoff vocabulary`).not.toMatch(/briefing|Needs you/);
