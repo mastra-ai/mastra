@@ -222,7 +222,7 @@ Deletes a topic's stream and every consumer group on it, freeing the memory a fi
 
 Automatic cleanup requires `@mastra/core` and `@mastra/redis-streams` versions that both support `clearTopic`: the runtime routes the call through its caching layer, so upgrade the two packages together to get end-of-run stream deletion.
 
-Not every topic reaches a `clearTopic` call — topics without a defined end of life (per-conversation streams, application feeds) are never cleared, and a stream that misses its cleanup (for example, a crashed run) is never retried. Configure the `streamIdleTtlMs` sliding TTL to reclaim those streams once they go idle.
+Not every topic reaches a `clearTopic` call. Topics without a defined end of life (per-conversation streams, application feeds) are never cleared, and a stream that misses its cleanup (for example, a crashed run) is never retried. Configure the `streamIdleTtlMs` sliding TTL to reclaim those streams once they go idle.
 
 ```typescript
 await pubsub.clearTopic('workflow.events.run-123')
