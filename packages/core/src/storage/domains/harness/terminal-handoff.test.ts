@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { projectHarnessPublicError } from '../../../harness/v1/events';
 import { InMemoryDB } from '../inmemory-db';
 import {
+  HarnessTerminalHandoffClaimConflictError,
   HarnessTerminalHandoffFencedError,
   HarnessTerminalFinalizationPendingError,
   InMemoryHarness,
@@ -10,6 +11,7 @@ import {
   harnessTerminalIntentId,
   type AgentSignalResultEvidence,
   type HarnessTerminalAdmissionInput,
+  type HarnessTerminalIntent,
   type SessionRecord,
 } from './index';
 
@@ -201,6 +203,141 @@ describe('native chat terminal handoff', () => {
         projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: { text: 'stale' } },
       }),
     ).rejects.toBeInstanceOf(HarnessTerminalHandoffFencedError);
+  });
+
+  it('lets a committed winner survive a late cancel and a pending cancel fence a late commit', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const winner = admission();
+    await storage.writeMessageResultEvidence(pendingEvidence(winner));
+    await storage.admitTerminalHandoff(winner);
+    await storage.commitTerminalHandoff({
+      admission: winner,
+      resultEvidence: { ...pendingEvidence(winner), status: 'completed', result: { text: 'done' }, updatedAt: 3_000 },
+      terminalResult: { status: 'completed', runId: winner.runId, completedAt: 3_000 },
+      projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: { text: 'done' } },
+    });
+    await expect(
+      storage.cancelTerminalHandoff({
+        harnessName: winner.harnessName,
+        sessionId: winner.sessionId,
+        sessionIncarnation: winner.sessionIncarnation,
+        admissionId: winner.admissionId,
+        admissionHash: winner.admissionHash,
+        executionGrant: winner.executionGrant,
+        reason: { code: 'cancelled', message: 'too late' },
+      }),
+    ).resolves.toMatchObject({ status: 'committed' });
+
+    const loser = {
+      ...admission(),
+      admissionId: 'admission-2',
+      admissionHash: 'admission-hash-2',
+      signalId: 'signal-2',
+      runId: 'run-2',
+      executionGrant: { key: 'grant-2', generation: 1 },
+    };
+    await storage.writeMessageResultEvidence(pendingEvidence(loser));
+    await storage.admitTerminalHandoff(loser);
+    await storage.cancelTerminalHandoff({
+      harnessName: loser.harnessName,
+      sessionId: loser.sessionId,
+      sessionIncarnation: loser.sessionIncarnation,
+      admissionId: loser.admissionId,
+      admissionHash: loser.admissionHash,
+      executionGrant: loser.executionGrant,
+      reason: { code: 'cancelled', message: 'cancelled first' },
+    });
+    await expect(
+      storage.commitTerminalHandoff({
+        admission: loser,
+        resultEvidence: { ...pendingEvidence(loser), status: 'completed', result: { text: 'x' }, updatedAt: 3_000 },
+        terminalResult: { status: 'completed', runId: loser.runId, completedAt: 3_000 },
+        projection: { projectionKind: 'chat.summary', projectionId: 'summary-2', payload: { text: 'x' } },
+      }),
+    ).resolves.toMatchObject({ status: 'cancelled' });
+  });
+
+  it('fences a grant tombstone across scopes and keeps only the live claim able to settle', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true, maxAttempts: 2 } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const other = session({
+      id: 'session-2',
+      resourceId: 'resource-2',
+      threadId: 'thread-2',
+      sessionIncarnation: 'incarnation-2',
+    });
+    await storage.saveSession(other, { ownerId: 'owner-2', ifVersion: 0 });
+    const input = admission();
+    await storage.cancelTerminalHandoff({
+      harnessName: input.harnessName,
+      sessionId: input.sessionId,
+      sessionIncarnation: input.sessionIncarnation,
+      admissionId: input.admissionId,
+      admissionHash: input.admissionHash,
+      executionGrant: input.executionGrant,
+      reason: { code: 'cancelled', message: 'revoked' },
+    });
+    // The tombstone is grant-scoped: a replay under a different session is fenced.
+    await expect(
+      storage.admitTerminalHandoff({ ...input, sessionId: 'session-2', sessionIncarnation: 'incarnation-2' }),
+    ).resolves.toMatchObject({ status: 'cancelled' });
+
+    const live = { ...input, executionGrant: { key: 'grant-live', generation: 1 } };
+    await storage.writeMessageResultEvidence(pendingEvidence(live));
+    await storage.admitTerminalHandoff(live);
+    await storage.commitTerminalHandoff({
+      admission: live,
+      resultEvidence: { ...pendingEvidence(live), status: 'completed', result: { text: 'done' }, updatedAt: 3_000 },
+      terminalResult: { status: 'completed', runId: live.runId, completedAt: 3_000 },
+      projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: { text: 'done' } },
+    });
+    const claimed = await storage.claimTerminalIntents({
+      harnessName: live.harnessName,
+      consumerId: 'worker-a',
+      limit: 1,
+      now: 4_000,
+      leaseMs: 1_000,
+    });
+    const stale: HarnessTerminalIntent = claimed.intents[0]!;
+    const reclaimed = (
+      await storage.claimTerminalIntents({
+        harnessName: live.harnessName,
+        consumerId: 'worker-b',
+        limit: 1,
+        now: 5_500,
+      })
+    ).intents[0]!;
+    await expect(
+      storage.ackTerminalIntent({
+        harnessName: live.harnessName,
+        intentId: stale.id,
+        sessionId: stale.sessionId,
+        sessionIncarnation: stale.sessionIncarnation,
+        revision: stale.revision,
+        payloadHash: stale.projection.payloadHash,
+        claimId: stale.claimId!,
+        consumerId: 'worker-a',
+        now: 6_000,
+      }),
+    ).rejects.toBeInstanceOf(HarnessTerminalHandoffClaimConflictError);
+    await expect(
+      storage.ackTerminalIntent({
+        harnessName: live.harnessName,
+        intentId: reclaimed.id,
+        sessionId: reclaimed.sessionId,
+        sessionIncarnation: reclaimed.sessionIncarnation,
+        revision: reclaimed.revision,
+        payloadHash: reclaimed.projection.payloadHash,
+        claimId: reclaimed.claimId!,
+        consumerId: 'worker-b',
+        now: 6_000,
+      }),
+    ).resolves.toMatchObject({ status: 'acked' });
+    await expect(storage.getTerminalQueuePressure({ harnessName: live.harnessName })).resolves.toEqual({
+      pendingIntents: 0,
+      pendingBytes: 0,
+    });
   });
 
   it('keeps finalization-pending typed at the public error projection', () => {
