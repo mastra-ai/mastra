@@ -72,6 +72,8 @@ It accepts the same filtering, ordering and delta-polling arguments as `listTrac
 
 `queryTraces()` finds completed logical traces using trace fields and conditions over related spans, scores, or feedback. Every query requires an ISO timestamp range of at most 31 days.
 
+Use `pagination` when a list needs numeric page controls:
+
 ```typescript
 const result = await mastraClient.queryTraces({
   timeRange: {
@@ -89,8 +91,37 @@ const result = await mastraClient.queryTraces({
       },
     },
   },
+  pagination: { page: 0, perPage: 25 },
 })
+
+if ('pagination' in result) {
+  const { total, page, perPage, hasMore } = result.pagination
+  console.log({ total, page, perPage, hasMore })
+}
 ```
+
+Page mode uses the same zero-based `{ page, perPage }` request and `{ total, page, perPage, hasMore }` response metadata as `listTraces()`. Use `page` instead when traversing results with an opaque keyset cursor:
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+
+const firstPage = await mastraClient.queryTraces({
+  timeRange,
+  page: { limit: 100 },
+})
+
+if ('page' in firstPage && firstPage.page.next) {
+  await mastraClient.queryTraces({
+    timeRange,
+    page: { limit: 100, after: firstPage.page.next },
+  })
+}
+```
+
+Don't send `page` and `pagination` together. Omitting both selects keyset mode. Use `queryTraceThreads()` for thread identities. It remains keyset-only.
 
 ### Discover trace-query fields and values
 
@@ -189,9 +220,9 @@ const result = await mastraClient.queryTraceThreads({
 // { threads: [{ threadId: 'thread-123' }], page: { next: null } }
 ```
 
-The API limits predicate depth, nodes, related clauses, set members, literal bytes, and the total literal budget before storage execution. Cursor pages are deterministic but aren't a database snapshot, so signals written between requests can change later pages. PostgreSQL and ClickHouse trace and thread queries have a configurable 15-second execution timeout.
+The API limits predicate depth, nodes, related clauses, set members, literal bytes, and the total literal budget before storage execution. Each page-mode request returns coherent rows and count metadata, but neither pagination mode is a snapshot across requests. Signals written between requests can change later results and page totals. PostgreSQL and ClickHouse trace and thread queries have a configurable 15-second execution timeout.
 
-See [Advanced trace queries](/reference/observability/tracing/trace-query) for the complete limits, request fields, predicates, thread qualification semantics, cursor pagination, response shapes, and errors.
+See [Advanced trace queries](/reference/observability/tracing/trace-query) for the complete limits, request fields, predicates, thread qualification semantics, pagination modes, response shapes, and errors.
 
 ## Deleting traces
 

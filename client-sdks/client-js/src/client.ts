@@ -1123,7 +1123,12 @@ export class MastraClient extends BaseResource {
     return this.observability.listTraces(params);
   }
 
-  /** Queries completed logical traces using recursive trace and related-record predicates. */
+  /**
+   * Queries completed logical traces using recursive trace and related-record predicates.
+   *
+   * Use `page` for keyset pagination or `pagination` for zero-based list pagination. The response contains
+   * the corresponding `page.next` or `pagination` metadata.
+   */
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.observability.queryTraces(params);
   }
