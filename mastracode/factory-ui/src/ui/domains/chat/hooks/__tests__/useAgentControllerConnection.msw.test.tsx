@@ -336,6 +336,68 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
   });
 
+  it('given a state refetch started before the run ends, then the stale response does not revive the running flag', async () => {
+    const encoder = new TextEncoder();
+    const onEvent = vi.fn();
+    let emit: (event: AgentControllerEvent) => void = () => {};
+    let stateReads = 0;
+    let releaseRefetch: (() => void) | undefined;
+    const refetchGate = new Promise<void>(resolve => {
+      releaseRefetch = resolve;
+    });
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
+      ),
+      http.get(sessionUrl, async () => {
+        stateReads += 1;
+        if (stateReads > 1) await refetchGate;
+        return HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'thread-1',
+          running: true,
+          tasks: [],
+        });
+      }),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              },
+              cancel() {},
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    const { result, client } = renderHookWithProviders(() =>
+      useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent }),
+    );
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.state?.running).toBe(true);
+
+    void client.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
+      exact: true,
+    });
+    await waitFor(() => expect(stateReads).toBe(2));
+
+    emit({ type: 'agent_end' });
+    await waitFor(() => expect(result.current.state?.running).toBe(false));
+
+    releaseRefetch?.();
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current.state?.running).toBe(false);
+  });
+
   it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {
     expect(reconnectRefetchInterval(true, 0)).toBe(false);
     expect(reconnectRefetchInterval(true, 0, true)).toBe(15_000);

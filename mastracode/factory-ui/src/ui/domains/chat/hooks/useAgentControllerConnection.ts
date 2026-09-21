@@ -7,7 +7,10 @@ import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from '../../../../hooks/useAgentControllerSessionInit';
-import { useAgentControllerSessionSync } from '../../../../hooks/useAgentControllerSessionSync';
+import {
+  type AgentControllerLiveState,
+  useAgentControllerSessionSync,
+} from '../../../../hooks/useAgentControllerSessionSync';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
@@ -42,8 +45,8 @@ export function useAgentControllerConnection({
   const queryClient = useQueryClient();
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
   const sseStateRef = useRef<SseConnectionState>('never');
-  const taskEventGeneration = useRef(0);
-  const liveTasks = useRef<{ threadId?: string; tasks: NonNullable<AgentControllerSessionState['tasks']> }>(undefined);
+  const liveEventGeneration = useRef(0);
+  const liveState = useRef<AgentControllerLiveState>(undefined);
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
   const { session } = createAgentControllerClient({
@@ -70,8 +73,8 @@ export function useAgentControllerConnection({
     baseUrl,
     enabled: enabled && initQuery.isSuccess,
     sseConnected,
-    taskEventGeneration,
-    liveTasks,
+    liveEventGeneration,
+    liveState,
   });
   const observedRun = useRef<{ resourceId: string; running?: boolean }>({ resourceId });
   useEffect(() => {
@@ -122,11 +125,18 @@ export function useAgentControllerConnection({
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
     const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
-    if (tasks) {
-      taskEventGeneration.current += 1;
-      liveTasks.current = { threadId: sessionThreadId, tasks };
-    }
     if (typeof running === 'boolean' || tasks) {
+      // Bump the generation so a state request that was already in flight
+      // knows this event is newer than its response, and keep the latest
+      // tasks and running flag for that request to reconcile against.
+      liveEventGeneration.current += 1;
+      const previous = liveState.current?.threadId === sessionThreadId ? liveState.current : undefined;
+      liveState.current = {
+        ...previous,
+        threadId: sessionThreadId,
+        ...(typeof running === 'boolean' ? { running } : {}),
+        ...(tasks ? { tasks } : {}),
+      };
       const stateQueryKey = queryKeys.agentControllerConnectionState(
         agentControllerId,
         resourceId,
