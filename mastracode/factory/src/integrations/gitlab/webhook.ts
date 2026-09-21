@@ -148,6 +148,7 @@ export async function handleGitLabWebhook(
     return { status: 202, body: { ok: true, ignored: true } };
   }
 
+  console.info('[GitLab Webhook]', normalizeGitLabWebhookMetadata(parsed), { deliveryId: parsed.deliveryId });
   if (options.ingestFactoryEvent) await options.ingestFactoryEvent(parsed);
   if (!options.controller) return { status: 202, body: { ok: true } };
 
@@ -167,6 +168,7 @@ export async function handleGitLabWebhook(
   if (result.failed > 0) {
     console.warn(`[GitLab Webhook] ${result.failed} subscribed target(s) failed for delivery ${parsed.deliveryId}.`);
   }
+  if (!result.ignored) console.info('[GitLab Webhook] session delivery', { deliveryId: parsed.deliveryId, ...result });
   // The rules ingress already acknowledged the event; an event no session
   // subscribes to is still a handled delivery, not an ignored one.
   return { status: 202, body: { ok: true } };

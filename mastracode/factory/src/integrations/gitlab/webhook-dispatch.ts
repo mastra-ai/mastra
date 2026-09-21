@@ -1,7 +1,7 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 
-import { resolveSubscriptionSession } from '../subscription-session.js';
+import { resolveSubscriptionSession, subscriptionRunContext } from '../subscription-session.js';
 import type { SubscriptionSessionLookup } from '../subscription-session.js';
 import { GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import {
@@ -299,24 +299,28 @@ export async function dispatchGitLabWebhook(
         dependencies.onTargetSkipped?.(subscription);
         continue;
       }
-      const result = await session.sendNotificationSignal({
-        source: 'gitlab',
-        kind: notification.kind,
-        summary: notification.summary,
-        priority: notification.priority,
-        payload: notification.payload,
-        sourceId: parsed.deliveryId,
-        dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
-        coalesceKey: `gitlab:${notification.metadata.host}:${notification.metadata.projectId}:merge-request:${notification.metadata.mergeRequestIid}`,
-        metadata: {
-          event: notification.metadata.event,
-          action: notification.action,
-          repository: notification.metadata.projectPath,
-          mergeRequestIid: notification.metadata.mergeRequestIid,
-          targetUrl: notificationTargetUrl(notification),
-          deliveryId: parsed.deliveryId,
+      const runContext = subscriptionRunContext(session);
+      const result = await session.sendNotificationSignal(
+        {
+          source: 'gitlab',
+          kind: notification.kind,
+          summary: notification.summary,
+          priority: notification.priority,
+          payload: notification.payload,
+          sourceId: parsed.deliveryId,
+          dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
+          coalesceKey: `gitlab:${notification.metadata.host}:${notification.metadata.projectId}:merge-request:${notification.metadata.mergeRequestIid}`,
+          metadata: {
+            event: notification.metadata.event,
+            action: notification.action,
+            repository: notification.metadata.projectPath,
+            mergeRequestIid: notification.metadata.mergeRequestIid,
+            targetUrl: notificationTargetUrl(notification),
+            deliveryId: parsed.deliveryId,
+          },
         },
-      });
+        ...(runContext ? [{ requestContext: runContext }] : []),
+      );
       await Promise.all([result.persisted, result.accepted].filter(Boolean));
       if (notification.terminal) {
         await retireSubscription(subscription.id, notification.kind === 'pull-request-merged' ? 'merged' : 'closed');

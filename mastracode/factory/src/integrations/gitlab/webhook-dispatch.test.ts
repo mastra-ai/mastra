@@ -178,6 +178,46 @@ describe('dispatchGitLabWebhook', () => {
     expect(listSubscriptions).not.toHaveBeenCalled();
   });
 
+  it('runs the woken session as its owner in its organization', async () => {
+    const owned = session('thread-a');
+    const liveSession = {
+      ...owned.session,
+      ownerId: 'owner-1',
+      state: { get: () => ({ factoryOrgId: 'org-1' }) },
+    };
+    const result = await dispatchGitLabWebhook(mergeRequest('reopen'), {
+      controller: controllerStub({ getSessionByResource: vi.fn(async () => liveSession), createSession: vi.fn() }),
+      listSubscriptions: async () => [subscription('a', '/worktrees/a', 'thread-a')],
+      retireSubscription: vi.fn(async () => undefined),
+    });
+
+    expect(result).toMatchObject({ delivered: 1, failed: 0 });
+    expect(owned.send).toHaveBeenCalledTimes(1);
+    const [, options] = owned.send.mock.calls[0] as unknown as [
+      unknown,
+      { requestContext?: { get: (key: string) => unknown } },
+    ];
+    expect(options?.requestContext?.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+  });
+
+  it('sends no run context for a session whose organization is unresolved', async () => {
+    const unresolved = session('thread-a');
+    const result = await dispatchGitLabWebhook(mergeRequest('reopen'), {
+      controller: controllerStub({
+        getSessionByResource: vi.fn(async () => ({
+          ...unresolved.session,
+          ownerId: 'owner-1',
+          state: { get: () => ({}) },
+        })),
+        createSession: vi.fn(),
+      }),
+      listSubscriptions: async () => [subscription('a', '/worktrees/a', 'thread-a')],
+      retireSubscription: vi.fn(async () => undefined),
+    });
+    expect(result).toMatchObject({ delivered: 1 });
+    expect(unresolved.send.mock.calls[0]).toHaveLength(1);
+  });
+
   it('delivers to every subscribed session, then retires terminal subscriptions', async () => {
     const a = session('thread-a');
     const b = session('thread-b');
