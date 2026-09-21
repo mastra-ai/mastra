@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Replaced the numbered chart palette with hue-named tokens that hold in light mode.

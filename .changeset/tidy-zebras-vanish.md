@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Fixed three surface defects in the design system's controls, and collapsed form fields to a single look.
