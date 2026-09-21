@@ -19,6 +19,7 @@ import {
   isTemporalHelperModule,
   isWorkflowHelperDestructure,
   nodeReferencesName,
+  normalizeTemporalFactoryAliases,
   parserPlugins,
   pruneUnusedTopLevelBindings,
   walk,
@@ -40,6 +41,8 @@ export function collectTemporalActivityBindings(sourceText: string, filePath: st
     plugins: parserPlugins,
     sourceFilename: filePath,
   });
+
+  normalizeTemporalFactoryAliases(ast.program);
 
   const bindings: TemporalActivityBinding[] = [];
   const seenNames = new Set<string>();
@@ -411,6 +414,7 @@ export async function buildTemporalActivitiesModule(
             plugins: parserPlugins,
             sourceFilename: id,
           });
+          normalizeTemporalFactoryAliases(ast.program);
 
           const statements: t.Statement[] = [];
           const seenNames = new Set<string>();

@@ -109,6 +109,19 @@ describe('workflow transform', () => {
     expect(result).not.toContain('.then("createPlanActivities")');
   });
 
+  it('recognizes aliased workflow and step factories from bundled Temporal helpers', async () => {
+    const result = await transform(`
+      const { createWorkflow: createWorkflow$1, createStep: createStep$1 } = init({});
+      const readResource = createStep$1({ id: 'read-resource', execute: async () => ({}) });
+      export const mappedWorkflow = createWorkflow$1({ id: 'mapped-workflow' }).then(readResource);
+    `);
+
+    expect(result).toContain('const mappedWorkflow =');
+    expect(result).toContain('.then("read-resource")');
+    expect(result).not.toContain('createWorkflow$1');
+    expect(result).not.toContain('createStep$1');
+  });
+
   it('rewrites callback mappings as generated activity steps', async () => {
     const result = await transform(`
       import { createWorkflow } from '@mastra/core/workflows';
