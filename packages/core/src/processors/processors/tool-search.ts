@@ -4,6 +4,7 @@ import { MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
+import { markProcessorLoadedToolSource, processorLoadedToolSource } from '../../tools/tool-provenance';
 import { BM25Index } from '../../workspace/search/bm25';
 import type { TokenizeOptions } from '../../workspace/search/bm25';
 import type { ProcessInputStepArgs, Processor } from '../index';
@@ -442,6 +443,10 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
         }
         const isAllowed = await this.isToolAllowed(toolName, tool, requestContext, 'active');
         if (isAllowed) {
+          // Stamp provenance before this object is merged into step surfaces or
+          // converted for durable/resume paths: downstream copies must stay
+          // recognizable as this processor's own loaded executor.
+          markProcessorLoadedToolSource(tool, tool);
           loadedTools[toolName] = tool;
         }
       }
@@ -891,12 +896,25 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // Get loaded tools as of this step's snapshot.
     const loadedTools = await this.getLoadedTools(catalog, loadedToolNames, args.requestContext);
     const alwaysAvailableTools = this.includeResolvedTools ? unsearchableResolvedTools(tools) : (tools ?? {});
+
     for (const loadedToolName of Object.keys(loadedTools)) {
-      if (Object.prototype.hasOwnProperty.call(alwaysAvailableTools, loadedToolName)) {
-        throw new Error(
-          `ToolSearchProcessor loaded tool "${loadedToolName}" conflicts with an always-available input tool.`,
-        );
+      if (!Object.prototype.hasOwnProperty.call(alwaysAvailableTools, loadedToolName)) {
+        continue;
       }
+      const candidate = alwaysAvailableTools[loadedToolName];
+      const loadedTool = loadedTools[loadedToolName]!;
+      // Suspend/resume, tool-surface-fence restore, and durable registry replay
+      // can re-expose the loaded executor through the input surface — as a
+      // `makeCoreTool` copy, not the catalog instance. That is the same
+      // executor the merge below injects, not a foreign shadow; only a
+      // genuinely different tool under the loaded name is an unresolvable
+      // collision and must still fail closed.
+      if (candidate === loadedTool || processorLoadedToolSource(candidate) === loadedTool) {
+        continue;
+      }
+      throw new Error(
+        `ToolSearchProcessor loaded tool "${loadedToolName}" conflicts with an always-available input tool.`,
+      );
     }
 
     // Return merged tools, ordered to keep the cacheable prefix stable:
