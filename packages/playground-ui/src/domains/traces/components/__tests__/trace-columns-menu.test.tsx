@@ -137,9 +137,9 @@ describe('TraceColumnsMenu', () => {
       expect(field.getAttribute('aria-invalid')).toBe('false');
 
       fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
-      expect(field.getAttribute('aria-describedby')).toBe('trace-metadata-key-error');
+      expect(field.getAttribute('aria-describedby')).toBe('error-trace-metadata-key');
       expect(field.getAttribute('aria-invalid')).toBe('true');
-      expect(screen.getByRole('alert').getAttribute('id')).toBe('trace-metadata-key-error');
+      expect(screen.getByRole('alert').getAttribute('id')).toBe('error-trace-metadata-key');
     });
 
     it('clears the error as soon as the user types again', async () => {

@@ -2831,12 +2831,14 @@ describe('Agent Routes Authorization', () => {
           requestContext,
           resourceId: 'ignored-resource',
           threadId: 'ignored-thread',
+          expectedRunId: 'run-a',
         } as any),
       ).resolves.toEqual({ aborted: true });
 
       expect(abortThreadStream).toHaveBeenCalledWith({
         resourceId: 'user-a',
         threadId: 'abort-thread-owned-by-context',
+        expectedRunId: 'run-a',
       });
     });
 

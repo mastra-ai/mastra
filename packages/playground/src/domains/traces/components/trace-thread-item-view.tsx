@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
@@ -8,6 +7,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ListTreeIcon } from 'lucide-react';
 
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
+import { TraceMessagesSkeleton } from './trace-messages-skeleton';
 import { MessageRow } from '@/lib/ai-ui/messages/message-row';
 
 export interface TraceThreadItemViewProps {
@@ -22,13 +22,7 @@ const noop = () => {};
 export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
   const { data, isLoading, error } = useTraceSpans(traceId, { passive: true });
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center" aria-label="Loading partial thread">
-        <Spinner />
-      </div>
-    );
-  }
+  if (isLoading) return <TraceMessagesSkeleton className={className} />;
 
   if (error) {
     return (
@@ -51,8 +45,9 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
   }
 
   return (
-    <div className={cn('p-4', className)}>
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+    <div className={cn('animate-in fade-in-0 p-4 duration-300', className)}>
+      {/* Messages carry their own vertical margins; strip them at the edges so `p-4` is the only outer spacing. */}
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 [&>[data-slot=message]:first-child]:mt-0 [&>[data-slot=message]:last-child]:mb-0">
         <ToolCallProvider
           approveToolcall={noop}
           declineToolcall={noop}

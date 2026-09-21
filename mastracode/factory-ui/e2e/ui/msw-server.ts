@@ -29,6 +29,18 @@ export const server = setupServer(
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
+  // A server without the JIRA_* env group mounts no Jira routes; the ambient
+  // 404 mirrors that and the Jira service degrades to a disabled status.
+  // Jira-specific tests override these with `server.use(...)`.
+  http.get('*/web/jira/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+  http.get('*/web/jira/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+  http.get('*/web/jira/issues', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+  // A server without Platform machine credentials mounts no platform connect
+  // routes; the ambient 404 hides the provider sections. Provider connection
+  // tests override these with `server.use(...)`.
+  http.get('*/web/integrations/platform/:provider/connections', () =>
+    HttpResponse.json({ error: 'not_found' }, { status: 404 }),
+  ),
   // Ambient GitHub label routing (read by every board's intake feed); label-routing
   // tests override it with `server.use(...)`.
   http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),

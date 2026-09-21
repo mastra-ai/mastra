@@ -1,10 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { FieldBlock, TextareaFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, Save } from 'lucide-react';
 import type { RefObject } from 'react';
@@ -49,74 +49,72 @@ export function ScorerEditSidebar({
         <div className="flex flex-col gap-4 p-4">
           <SectionHeader title="Configuration" subtitle="Define your scorer's name, type, and settings." />
 
-          {/* Name */}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scorer-name" className="text-neutral5 text-ui-sm">
-              Name <span className="text-accent2">*</span>
-            </Label>
-            <Input
-              id="scorer-name"
-              placeholder="My Scorer"
-              variant="outline"
-              {...register('name')}
-              error={!!errors.name}
-            />
-            {errors.name && <span className="text-accent2 text-ui-sm">{errors.name.message}</span>}
-          </div>
+          <TextFieldBlock
+            label="Name"
+            required
+            placeholder="My Scorer"
+            variant="outline"
+            {...register('name')}
+            errorMsg={errors.name?.message}
+          />
 
-          {/* Description */}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scorer-description" className="text-neutral5 text-ui-sm">
-              Description <span className="text-accent2">*</span>
-            </Label>
-            <Textarea
-              id="scorer-description"
-              placeholder="Describe what this scorer does"
-              variant="outline"
-              {...register('description')}
-              error={!!errors.description}
-            />
-            {errors.description && <span className="text-accent2 text-ui-sm">{errors.description.message}</span>}
-          </div>
+          <TextareaFieldBlock
+            label="Description"
+            required
+            placeholder="Describe what this scorer does"
+            variant="outline"
+            {...register('description')}
+            errorMsg={errors.description?.message}
+          />
 
-          {/* Provider */}
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-ui-sm">
-              Provider <span className="text-accent2">*</span>
-            </Label>
-            <Controller
-              name="model.provider"
-              control={control}
-              render={({ field }) => (
-                <LLMProviders value={field.value} onValueChange={field.onChange} container={formRef} />
-              )}
-            />
-            {errors.model?.provider && <span className="text-accent2 text-ui-sm">{errors.model.provider.message}</span>}
-          </div>
+          <FieldBlock.Layout>
+            <FieldBlock.Column>
+              <FieldBlock.Label name="model-provider" required>
+                Provider
+              </FieldBlock.Label>
+              <Controller
+                name="model.provider"
+                control={control}
+                render={({ field }) => (
+                  <LLMProviders
+                    id="input-model-provider"
+                    name="model-provider"
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    container={formRef}
+                    error={errors.model?.provider?.message}
+                  />
+                )}
+              />
+            </FieldBlock.Column>
+          </FieldBlock.Layout>
 
-          {/* Model */}
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-ui-sm">
-              Model <span className="text-accent2">*</span>
-            </Label>
-            <Controller
-              name="model.name"
-              control={control}
-              render={({ field }) => (
-                <LLMModels
-                  value={field.value}
-                  onValueChange={field.onChange}
-                  llmId={watchedProvider || ''}
-                  container={formRef}
-                />
-              )}
-            />
-            {errors.model?.name && <span className="text-accent2 text-ui-sm">{errors.model.name.message}</span>}
-          </div>
+          <FieldBlock.Layout>
+            <FieldBlock.Column>
+              <FieldBlock.Label name="model-name" required>
+                Model
+              </FieldBlock.Label>
+              <Controller
+                name="model.name"
+                control={control}
+                render={({ field }) => (
+                  <LLMModels
+                    id="input-model-name"
+                    name="model-name"
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    llmId={watchedProvider || ''}
+                    container={formRef}
+                    error={errors.model?.name?.message}
+                  />
+                )}
+              />
+            </FieldBlock.Column>
+          </FieldBlock.Layout>
 
           {/* Score Range */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-ui-sm">Score Range</Label>
+            <Label className="text-neutral5">Score Range</Label>
             <div className="flex items-center gap-2">
               <Controller
                 name="scoreRange.min"
@@ -150,7 +148,7 @@ export function ScorerEditSidebar({
 
           {/* Default Sampling */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-ui-sm">Default Sampling</Label>
+            <Label className="text-neutral5">Default Sampling</Label>
             <Controller
               name="defaultSampling.type"
               control={control}
@@ -158,13 +156,13 @@ export function ScorerEditSidebar({
                 <RadioGroup value={field.value ?? 'none'} onValueChange={field.onChange}>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="none" id="sampling-none" />
-                    <Label htmlFor="sampling-none" className="text-neutral5 text-ui-sm">
+                    <Label htmlFor="sampling-none" className="text-neutral5">
                       None
                     </Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="ratio" id="sampling-ratio" />
-                    <Label htmlFor="sampling-ratio" className="text-neutral5 text-ui-sm">
+                    <Label htmlFor="sampling-ratio" className="text-neutral5">
                       Ratio
                     </Label>
                   </div>

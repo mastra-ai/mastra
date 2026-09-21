@@ -15,7 +15,6 @@ const meta: Meta<typeof ListSearch> = {
     debounceMs: 300,
     onSearch: fn(),
     value: '',
-    variant: 'outline',
   },
 };
 

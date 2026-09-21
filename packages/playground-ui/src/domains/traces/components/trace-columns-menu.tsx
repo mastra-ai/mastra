@@ -13,8 +13,7 @@ import {
   DialogTitle,
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Input } from '@/ds/components/Input';
-import { Label } from '@/ds/components/Label';
+import { TextFieldBlock } from '@/ds/components/FormFieldBlocks';
 
 const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['input', 'entity', 'duration'];
 
@@ -143,10 +142,10 @@ export function TraceColumnsMenu({
                 Enter a top-level trace metadata key. Only the key is saved, never its values.
               </DialogDescription>
             </DialogHeader>
-            <DialogBody className="space-y-2">
-              <Label htmlFor="trace-metadata-key">Metadata key</Label>
-              <Input
-                id="trace-metadata-key"
+            <DialogBody>
+              <TextFieldBlock
+                name="trace-metadata-key"
+                label="Metadata key"
                 value={metadataKey}
                 onChange={event => {
                   setMetadataKey(event.target.value);
@@ -154,14 +153,8 @@ export function TraceColumnsMenu({
                 }}
                 placeholder="tenantId"
                 autoFocus
-                error={Boolean(metadataError)}
-                aria-describedby={metadataError ? 'trace-metadata-key-error' : undefined}
+                errorMsg={metadataError}
               />
-              {metadataError && (
-                <p id="trace-metadata-key-error" className="text-ui-xs text-error" role="alert">
-                  {metadataError}
-                </p>
-              )}
             </DialogBody>
             <DialogFooter>
               <Button icon={<X />} type="button" variant="outline" onClick={() => handleDialogOpenChange(false)}>

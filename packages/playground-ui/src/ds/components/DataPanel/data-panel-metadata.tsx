@@ -8,9 +8,9 @@ export interface DataPanelMetadataProps {
   children: React.ReactNode;
 }
 
-/** Row of small `Meta` pills under a `DataPanel.Heading`. */
+/** Row of `Meta` pills next to a `DataPanel.Heading`. Never wraps; overflowing pills are clipped. */
 export function DataPanelMetadata({ children }: DataPanelMetadataProps) {
-  return <ul className="text-ui-xs flex min-w-0 flex-wrap items-center gap-0.5 overflow-hidden">{children}</ul>;
+  return <ul className="flex min-w-0 flex-nowrap items-center gap-0.5 overflow-hidden">{children}</ul>;
 }
 
 export interface DataPanelMetaProps extends Omit<React.HTMLAttributes<HTMLElement>, 'children' | 'title'> {
@@ -36,9 +36,10 @@ export function DataPanelMeta({ as, icon, tooltip, children, className, ...props
       aria-label={!isInteractive && typeof tooltip === 'string' ? tooltip : undefined}
       tabIndex={!isInteractive && hasTooltip ? 0 : undefined}
       className={cn(
-        // Same recipe as `Crumb`, one size down so the pills sit under the heading.
-        'inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-full px-[.9em]',
-        controlSizeClasses.xs,
+        // Same box as a `size="sm"` ghost `Button` (e.g. `TraceIdButton`), so pills line up
+        // with the heading and the trace ID on the same header row.
+        'inline-flex min-w-0 items-center gap-1.5 overflow-hidden rounded-full px-2',
+        controlSizeClasses.sm,
         transitions.colors,
         isInteractive
           ? 'cursor-pointer text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10'
@@ -57,7 +58,7 @@ export function DataPanelMeta({ as, icon, tooltip, children, className, ...props
   );
 
   return (
-    <li className="group h-form-xs flex min-w-0 shrink-0 items-center">
+    <li className="group h-form-sm flex min-w-0 shrink-0 items-center">
       {!hasTooltip ? (
         root
       ) : (

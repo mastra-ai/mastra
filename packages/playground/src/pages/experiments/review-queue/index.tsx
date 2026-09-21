@@ -98,7 +98,7 @@ function ReviewQueuePage() {
         }
         toolbarEnd={
           selectedId ? (
-            <Button as={Link} href={paths.experimentLink(selectedId)} icon={<ArrowUpRight />}>
+            <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<ArrowUpRight />}>
               See experiment
             </Button>
           ) : undefined

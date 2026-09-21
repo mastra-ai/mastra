@@ -59,7 +59,12 @@ import type {
 } from './search';
 import { SearchEngine, splitIntoChunks } from './search';
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
-import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
+import {
+  WorkspaceSkillsImpl,
+  ResolvedSourceWorkspaceSkills,
+  LocalSkillSource,
+  SKILL_SCOPE_DOCUMENT_PREFIX,
+} from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
 
@@ -528,6 +533,8 @@ export interface WorkspaceInfo {
  * (`batchReadFiles`).
  */
 const FS_READ_CONCURRENCY = 8;
+/** Mirrors SearchEngine.search default when no topK is supplied. */
+const DEFAULT_SEARCH_TOP_K = 10;
 
 /**
  * Parse the user-facing `bm25` config union into the `BM25SearchConfig` shape
@@ -968,17 +975,37 @@ export class Workspace<
 
     // Lazy initialization
     if (!this._skills) {
-      // Priority: explicit skillSource > workspace filesystem > LocalSkillSource (read-only from local disk)
-      const source = this._config.skillSource ?? this._fs ?? new LocalSkillSource();
-
-      this._skills = new WorkspaceSkillsImpl({
-        source,
+      const baseConfig = {
         skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
         assertAvailable: () => this.assertSearchWritable(),
         checkSkillFileMtime: this._config.checkSkillFileMtime,
-      });
+      };
+
+      // Priority: explicit skillSource > resolved filesystem (per request) > static filesystem
+      //           > LocalSkillSource (read-only from local disk, only when no filesystem is configured)
+      if (!this._config.skillSource && this._filesystemResolver) {
+        this._skills = new ResolvedSourceWorkspaceSkills({
+          ...baseConfig,
+          source: async ({ requestContext }) => {
+            const fs = await this.resolveFilesystem({ requestContext: requestContext ?? new RequestContext() });
+            if (!fs) {
+              throw new WorkspaceError(
+                'Filesystem resolver returned no filesystem; cannot discover skills',
+                'FILESYSTEM_NOT_RESOLVED',
+                this.id,
+              );
+            }
+            return fs;
+          },
+        });
+      } else {
+        this._skills = new WorkspaceSkillsImpl({
+          ...baseConfig,
+          source: this._config.skillSource ?? this._fs ?? new LocalSkillSource(),
+        });
+      }
     }
 
     return this._skills;
@@ -1065,7 +1092,24 @@ export class Workspace<
       throw new SearchNotAvailableError();
     }
     this.lastAccessedAt = new Date();
-    return this._searchEngine.search(query, options);
+
+    // Documents tagged with `skillScope` belong to request-scoped skill views
+    // (dynamic paths or resolver-backed filesystems). They are only meaningful
+    // through `skills.getScoped(...).search()`; exposing them here would leak
+    // one request's skills into another's unscoped workspace search. Exclude
+    // them in the vector query so persisted records from previous processes do
+    // not consume topK before filtering. BM25 ignores the vector filter, so
+    // over-fetch its currently indexed scoped documents before post-filtering.
+    const scopedCount = this._searchEngine.countByPrefix(SKILL_SCOPE_DOCUMENT_PREFIX);
+    const topK = options?.topK ?? DEFAULT_SEARCH_TOP_K;
+    const unscopedFilter = { skillScope: { $exists: false } };
+    const filter = options?.filter ? { $and: [options.filter, unscopedFilter] } : unscopedFilter;
+    const results = await this._searchEngine.search(query, {
+      ...options,
+      topK: topK + scopedCount,
+      filter,
+    });
+    return results.filter(result => result.metadata?.skillScope === undefined).slice(0, topK);
   }
 
   /**

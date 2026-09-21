@@ -248,7 +248,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
         </div>
 
         <div className="text-ui-md flex items-center gap-4">
-          <label className="text-neutral4 flex items-center gap-2">
+          <label className="text-ui-sm text-neutral4 flex items-center gap-2">
             <span>Results:</span>
             <select
               value={topK}
@@ -262,7 +262,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
             </select>
           </label>
 
-          <label className="text-neutral4 flex cursor-pointer items-center gap-2">
+          <label className="text-ui-sm text-neutral4 flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               checked={includeReferences}

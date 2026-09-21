@@ -58,9 +58,9 @@ export function ComparisonSideHeader({
         </Badge>
         {experiment && (
           <Button
-            as={Link}
+            render={<Link href={`/experiments/${experiment.id}`} />}
             size="xs"
-            href={`/experiments/${experiment.id}`}
+
             aria-label={`Open experiment ${experiment.name || shortId}`}
           >
             <span className="min-w-0 truncate">{experiment.name || shortId}</span>

@@ -1,7 +1,8 @@
 /**
- * BDD coverage for the Intake swimlane's Linear gating: a board only offers the
- * Linear feed when a Linear source is explicitly bound to that board of the
- * Factory project being viewed. Nothing is routed implicitly.
+ * BDD coverage for the Intake swimlane's provider gating: a board only offers
+ * a Linear or Jira feed when one of that provider's sources is explicitly
+ * bound to that board of the Factory project being viewed. Nothing is routed
+ * implicitly.
  */
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -14,6 +15,7 @@ import type { LinkedRepositoryPayload } from '../../../workspaces/services/githu
 import type { InstalledBoardInfo } from '../../../../../api/types';
 import type { GithubIssue } from '../../services/factory';
 import type { IntakeLabelRoute, IntakeSourceBinding } from '../../services/intake';
+import type { JiraIssue } from '../../services/jira';
 import type { LinearIssue } from '../../services/linear';
 import { useBoardIntake } from '../useBoardIntake';
 
@@ -335,5 +337,175 @@ describe('useBoardIntake GitHub label routes', () => {
     await waitFor(() => expect(release.result.current.isPending).toBe(false));
     expect(release.result.current.candidates).toEqual([]);
     expect(release.result.current.feedByColumn.queued?.error).toBeInstanceOf(Error);
+  });
+});
+
+const jiraIssue: JiraIssue = {
+  id: 'jira-issue-acme-eng-42',
+  identifier: 'ENG-42',
+  title: 'Fix intake sync',
+  url: 'https://acme.atlassian.net/browse/ENG-42',
+  state: 'To Do',
+  stateType: 'unstarted',
+  priorityLabel: 'High',
+  assignee: 'ada',
+  project: 'ENG',
+  labels: ['bug'],
+  createdAt: '2026-07-01T00:00:00Z',
+  updatedAt: '2026-07-02T00:00:00Z',
+  sourceId: '10001',
+};
+
+function stubJiraIntake(
+  bindings: IntakeSourceBinding[],
+  {
+    factoryIds = ['factory-1', 'factory-2'],
+    githubEnabled = false,
+    issues = [jiraIssue],
+  }: { factoryIds?: string[]; githubEnabled?: boolean; issues?: JiraIssue[] } = {},
+) {
+  const requestedFactoryIds: Array<string | null> = [];
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({
+        projects: factoryIds.map(id => ({ id, name: id, repositories: [] })),
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+      HttpResponse.json({
+        config: {
+          github: { enabled: githubEnabled, sourceIds: githubEnabled ? ['acme/app'] : null },
+          linear: { enabled: false, sourceIds: null },
+          jira: { enabled: true, sourceIds: ['10001'] },
+        },
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings })),
+    http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
+    http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
+    http.get(`${TEST_BASE_URL}/web/jira/status`, () =>
+      HttpResponse.json({ enabled: true, configured: true, mode: 'platform', site: null, sites: [], reason: 'ready' }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/jira/issues`, ({ request }) => {
+      requestedFactoryIds.push(new URL(request.url).searchParams.get('factoryProjectId'));
+      return HttpResponse.json({ issues, nextCursor: null });
+    }),
+    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () => HttpResponse.json({ issues: [] })),
+  );
+  return requestedFactoryIds;
+}
+
+describe('useBoardIntake Jira gating', () => {
+  const workBinding: IntakeSourceBinding = {
+    integrationId: 'jira',
+    sourceId: '10001',
+    factoryProjectId: 'factory-1',
+    board: 'work',
+  };
+
+  it('given Jira is enabled but not configured, when the board loads, then the Jira feed is withheld', async () => {
+    const requestedFactoryIds = stubJiraIntake([workBinding]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/jira/status`, () =>
+        HttpResponse.json({ enabled: true, configured: false, mode: 'platform', reason: 'organization_required' }),
+      ),
+    );
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.available).not.toContain('jira');
+    expect(requestedFactoryIds).toEqual([]);
+  });
+
+  it('given a source bound to Work on the viewed project, when the board loads, then the Jira feed is offered with Factory-scoped requests', async () => {
+    const requestedFactoryIds = stubJiraIntake([workBinding]);
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.available).toContain('jira'));
+    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
+    expect(requestedFactoryIds).toEqual(['factory-1']);
+  });
+
+  it('given the source is bound to another Factory, when the board loads, then the Jira feed is withheld and nothing is fetched', async () => {
+    const requestedFactoryIds = stubJiraIntake([workBinding]);
+
+    const { result } = renderIntake('factory-2');
+
+    await waitFor(() => expect(result.current.available).toEqual([]));
+    expect(result.current.available).not.toContain('jira');
+    expect(requestedFactoryIds).toEqual([]);
+  });
+
+  it('given no routing and several Factories, when the board loads, then the Jira feed is withheld', async () => {
+    stubJiraIntake([]);
+
+    const { result } = renderIntake('factory-2');
+
+    await waitFor(() => expect(result.current.available).toEqual([]));
+  });
+
+  it('given no routing and a single Factory, when the board loads, then the Jira feed is still withheld', async () => {
+    stubJiraIntake([], { factoryIds: ['factory-1'] });
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.available).toEqual([]);
+  });
+
+  it('offers a custom board only the issues bound to it, on its initial phase', async () => {
+    stubJiraIntake([{ ...workBinding, board: 'release' }]);
+
+    const { result } = renderIntake('factory-1', releaseBoard);
+
+    await waitFor(() => expect(result.current.active).toBe('jira'));
+    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
+    expect(result.current.candidates[0]).toMatchObject({ sourceKey: 'jira-issue-acme-eng-42', column: 'queued' });
+    expect(result.current.feedByColumn).toHaveProperty('queued');
+    expect(result.current.feedByColumn).not.toHaveProperty('intake');
+  });
+
+  it('given an issue bound here, when candidates map, then they carry the jira source identity', async () => {
+    stubJiraIntake([workBinding]);
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
+    const candidate = result.current.candidates[0]!;
+    expect(candidate.sourceKey).toBe('jira-issue-acme-eng-42');
+    expect(candidate.source).toBe('jira-issue');
+    expect(candidate.url).toBe('https://acme.atlassian.net/browse/ENG-42');
+    expect(candidate.column).toBe('intake');
+    expect(candidate.metadata).toMatchObject({ identifier: 'ENG-42' });
+  });
+
+  it('given the issue is already a card, when candidates map, then the known source key is dropped', async () => {
+    stubJiraIntake([workBinding]);
+
+    const { result } = renderIntake('factory-1', workBoard, new Set(['jira-issue-acme-eng-42']));
+
+    await waitFor(() => expect(result.current.participantCandidates).toHaveLength(1));
+    expect(result.current.candidates).toEqual([]);
+  });
+
+  it('given another feed is active, when the board loads, then Jira issues still feed participant candidates', async () => {
+    stubJiraIntake([workBinding], {
+      githubEnabled: true,
+    });
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.available).toEqual(['github', 'jira']));
+    expect(result.current.active).toBe('github');
+
+    // The Jira feed is not displayed, but its issues are fetched for teammate filtering.
+    await waitFor(() =>
+      expect(result.current.participantCandidates.map(candidate => candidate.sourceKey)).toContain(
+        'jira-issue-acme-eng-42',
+      ),
+    );
+    expect(result.current.candidates.map(candidate => candidate.sourceKey)).not.toContain('jira-issue-acme-eng-42');
   });
 });

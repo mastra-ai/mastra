@@ -52,24 +52,25 @@ function ExperimentScorePanelBody({
   return (
     <>
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={onClose} tooltip="Close score panel" />
         <DataPanel.Heading>
-          Score <b>{score.scorerId}</b>
+          Score
+          <DataPanel.CopyId id={score.scorerId} />
         </DataPanel.Heading>
         <DataPanel.HeaderActions>
+          {onShowTrace && score.traceId && (
+            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+              <TraceIcon />
+            </Button>
+          )}
           {(onPrevious || onNext) && (
             <DataPanel.NextPrevNav
               onPrevious={onPrevious}
               onNext={onNext}
-              previousLabel="Previous score"
-              nextLabel="Next score"
+              previousLabel="Go to previous score"
+              nextLabel="Go to next score"
             />
           )}
-          {onShowTrace && score.traceId && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} icon={<TraceIcon />}>
-              Trace
-            </Button>
-          )}
-          <DataPanel.CloseButton onClick={onClose} tooltip="Close score panel" />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 

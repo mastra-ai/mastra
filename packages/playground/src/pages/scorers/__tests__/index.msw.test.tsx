@@ -1,10 +1,11 @@
 import type { GetScoresScorers_Response, GetSystemPackagesResponse } from '@mastra/client-js';
 import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Link, Route, Routes } from 'react-router';
+import { Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import ScorersPage from '..';
 import { LinkComponentProvider } from '@/lib/framework';
+import { Link } from '@/lib/link';
 import { RouteHeaderActionsProvider } from '@/lib/route-header';
 import { RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { stubLinkPaths } from '@/test/link-provider';

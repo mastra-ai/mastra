@@ -1,5 +1,13 @@
 # @mastra/codemod
 
+## 1.1.3-alpha.1
+
+### Patch Changes
+
+- Fixed v0 RuntimeContext imports from `@mastra/core/di` so they migrate to RequestContext. ([#24472](https://github.com/mastra-ai/mastra/pull/24472))
+
+- Fixed unknown codemod names so they fail clearly before processing files. ([#24470](https://github.com/mastra-ai/mastra/pull/24470))
+
 ## 1.1.3-alpha.0
 
 ### Patch Changes

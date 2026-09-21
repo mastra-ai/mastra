@@ -11,6 +11,8 @@ export const SOURCE_LABELS: Record<WorkItemSource, string> = {
   'github-issue': 'Issue',
   'github-pr': 'PR Review',
   'linear-issue': 'Linear',
+  'jira-issue': 'Jira',
+  'incidentio-follow-up': 'incident.io',
   'slack-thread': 'Slack',
   manual: 'Manual',
 };
@@ -43,6 +45,33 @@ export function linearIssueIdForItem(item: Pick<WorkItem, 'source' | 'metadata'>
   return item.metadata.linearIssueId;
 }
 
+export function jiraIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'jira-issue' || typeof item.metadata.identifier !== 'string') return;
+  return item.metadata.identifier;
+}
+
+export function jiraIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'jira-issue') return;
+  return nonEmptyString(item.metadata.issueRef) ?? nonEmptyString(item.metadata.issueReference);
+}
+
+/** The human reference an incident.io follow-up card carries (`INC-42` or the item id), when it has one. */
+export function incidentioIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'incidentio-follow-up' || typeof item.metadata.identifier !== 'string') return;
+  return item.metadata.identifier;
+}
+
+/** The prefixed incident.io item reference a card carries, when it has one. */
+export function incidentioIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'incidentio-follow-up') return;
+  return nonEmptyString(item.metadata.issueRef) ?? nonEmptyString(item.metadata.issueReference);
+}
+
+/** Legacy metadata may hold `issueRef: ''` beside a populated `issueReference`; skip empty values. */
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
+}
+
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
 
 export const PULL_REQUEST_STATUS_LABELS: Record<PullRequestStatus, string> = {
@@ -72,6 +101,8 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
 /** Aria label for the icon-only external link next to a card title. */
 export function externalLinkLabel(source: WorkItemSource): string {
   if (source === 'linear-issue') return 'Open in Linear';
+  if (source === 'jira-issue') return 'Open in Jira';
+  if (source === 'incidentio-follow-up') return 'Open in incident.io';
   if (source === 'slack-thread') return 'Open in Slack';
   if (source === 'manual') return 'Open link';
   return 'Open in GitHub';
@@ -79,6 +110,7 @@ export function externalLinkLabel(source: WorkItemSource): string {
 
 export function workItemMeta(item: WorkItem): string {
   const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
+  const assignee = typeof item.metadata.assignee === 'string' ? item.metadata.assignee : undefined;
   // Prefer when the issue/PR was opened upstream; `item.createdAt` is only
   // when the factory first saw it, which is "just now" for every backfilled card.
   const sourceCreatedAt =
@@ -88,8 +120,10 @@ export function workItemMeta(item: WorkItem): string {
   const age = relativeTime(sourceCreatedAt ?? item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
-  const linearIdentifier = linearIdentifierForItem(item);
-  if (linearIdentifier !== undefined) return `${linearIdentifier}${author ? ` · ${author}` : ''} · ${age}`;
+  const issueIdentifier =
+    linearIdentifierForItem(item) ?? jiraIdentifierForItem(item) ?? incidentioIdentifierForItem(item);
+  const issueOwner = assignee ?? author;
+  if (issueIdentifier !== undefined) return `${issueIdentifier}${issueOwner ? ` · ${issueOwner}` : ''} · ${age}`;
   return `${SOURCE_LABELS[item.source]} · ${age}`;
 }
 
@@ -98,7 +132,7 @@ export function cardMatchesSearch(card: Pick<WorkItem, 'source' | 'metadata' | '
   const needle = query.trim().toLowerCase();
   if (needle === '') return true;
   const number = githubNumberForItem(card);
-  const identifier = linearIdentifierForItem(card);
+  const identifier = linearIdentifierForItem(card) ?? jiraIdentifierForItem(card) ?? incidentioIdentifierForItem(card);
   const named = [card.title, number === undefined ? '' : `#${number}`, identifier ?? ''];
   return named.some(text => text.toLowerCase().includes(needle));
 }
