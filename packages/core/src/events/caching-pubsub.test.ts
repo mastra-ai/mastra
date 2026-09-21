@@ -1330,9 +1330,7 @@ describe('CachingPubSub', () => {
       expect(sourceBus.acked).toHaveLength(2);
 
       // 3. Cache write failure (falls back to uncached republish): still acked.
-      const failingPush = vi
-        .spyOn(cache, 'listPushIndexed')
-        .mockRejectedValueOnce(new Error('cache down'));
+      const failingPush = vi.spyOn(cache, 'listPushIndexed').mockRejectedValueOnce(new Error('cache down'));
       await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 3 } });
       expect(sourceBus.acked).toHaveLength(3);
       failingPush.mockRestore();
