@@ -61,12 +61,24 @@ describe('GitHub signal subscription store', () => {
       },
       storage,
     );
+    // A scoped row for the same session, thread and project must stay out of
+    // the unscoped fallback.
+    await subscribeToPullRequest(
+      {
+        ...baseInput,
+        resourceId: 'factory-project',
+        sessionId: 'session-u',
+        threadId: 'session-u',
+        sessionScope: '/x',
+      },
+      storage,
+    );
     const rows = await listPullRequestSubscriptionsForThread(
       { orgId: 'org-a', resourceId: 'session-u', threadId: 'session-u' },
       storage,
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ sessionId: 'session-u', resourceId: 'factory-project' });
+    expect(rows[0]).toMatchObject({ sessionId: 'session-u', resourceId: 'factory-project', sessionScope: '' });
     // A different org, thread or a scoped request never reaches the fallback.
     expect(
       await listPullRequestSubscriptionsForThread(
