@@ -1,6 +1,7 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { RequestContext } from '@mastra/core/request-context';
 
+import { primeTenantCredentialsForRequestContext } from '../routes/tenant-credentials.js';
 import { hasResolvedOrg, seedSessionOrg } from '../session/org-seed.js';
 import type { IntegrationSubscription } from '../storage/domains/integrations/base.js';
 
@@ -44,6 +45,14 @@ export async function subscriptionRunContext(
   if (!userId || !hasResolvedOrg(orgId)) return undefined;
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
+  // The web auth middleware primes credential snapshots per request; a
+  // webhook-triggered run has no request, so prime here or the model resolves
+  // against an empty snapshot and the run fails closed before persisting.
+  try {
+    await primeTenantCredentialsForRequestContext(requestContext);
+  } catch (error) {
+    console.warn('[factory] Unable to prime credentials for a subscribed session run.', error);
+  }
   return requestContext;
 }
 
