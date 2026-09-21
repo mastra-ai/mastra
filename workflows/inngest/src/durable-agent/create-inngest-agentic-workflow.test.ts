@@ -1405,8 +1405,14 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         modelSpanData: modelSpan.exportSpan(),
         agentSpanData: agentSpan.exportSpan(),
         state: {},
+        messageListState: new MessageList().serialize(),
       },
-      getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
+      getInitData: () => ({
+        runId: 'run-1',
+        agentId: 'agent-1',
+        state: {},
+        modelConfig: { provider: 'test', modelId: 'test-model' },
+      }),
       engine: { step: { run: skipFinishSideEffects } },
       mastra: { observability, getLogger: () => undefined },
     });
@@ -1449,8 +1455,14 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         accumulatedUsage: usage,
         lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
         state: {},
+        messageListState: new MessageList().serialize(),
       },
-      getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
+      getInitData: () => ({
+        runId: 'run-1',
+        agentId: 'agent-1',
+        state: {},
+        modelConfig: { provider: 'test', modelId: 'test-model' },
+      }),
       engine: { step: { run: skipFinishSideEffects } },
       mastra: { getLogger: () => undefined },
     });
