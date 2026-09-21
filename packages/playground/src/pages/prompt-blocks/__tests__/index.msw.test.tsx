@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptBlocksPage from '..';
-import { fewPromptBlocks, pagedPromptBlocks, systemPackages } from './fixtures/prompt-blocks';
+import { fewPromptBlocks, noPromptBlocks, pagedPromptBlocks, systemPackages } from './fixtures/prompt-blocks';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
 import { RouteHeaderActionsProvider } from '@/lib/route-header';
@@ -179,6 +179,29 @@ describe('Prompt Blocks page', () => {
       fireEvent.keyDown(window, { key: 'c' });
 
       expect(await screen.findByText('Create prompt page')).not.toBeNull();
+    });
+  });
+
+  describe('when there are no blocks and the CMS is available', () => {
+    it('shows the empty state without a New prompt header action', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/stored/prompt-blocks`, () => HttpResponse.json(noPromptBlocks)),
+        http.get(`${TEST_BASE_URL}/api/system/packages`, () =>
+          HttpResponse.json({ ...systemPackages, cmsEnabled: true }),
+        ),
+      );
+      renderWithProviders(
+        <TestLinkProvider>
+          <RouteHeaderActionsProvider>
+            <RouteHeaderActionsSlot />
+            <PromptBlocksPage />
+          </RouteHeaderActionsProvider>
+        </TestLinkProvider>,
+      );
+
+      await screen.findByText('No Prompts yet');
+
+      expect(screen.queryByRole('link', { name: 'New prompt' })).toBeNull();
     });
   });
 
