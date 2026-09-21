@@ -816,6 +816,14 @@ describe('bundled Factory skill assets', () => {
         '`references/categories/README.md` from the `factory-review` skill',
       );
     }
+
+    // The GitLab re-review recovers the design before inspecting any diff, so
+    // the independent model cannot be a restatement of the push.
+    const gitlabRereview = await read('factory-gitlab-rereview');
+    const gitlabDesignAt = gitlabRereview.indexOf('Before inspecting any diff, recover the required outcome');
+    const gitlabDiffAt = gitlabRereview.indexOf('Identify changes since the previous reviewed head');
+    expect(gitlabDesignAt).toBeGreaterThan(-1);
+    expect(gitlabDiffAt).toBeGreaterThan(gitlabDesignAt);
   });
 
   it('keeps Factory re-reviews aligned with current-head evidence requirements', async () => {
