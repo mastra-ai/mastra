@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
@@ -153,6 +153,42 @@ describe('analyzeEntry', () => {
       expect(result.dependencies.has(excludedDependency)).toBe(false);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('should not analyze explicitly externalized dependencies', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-external-'));
+    const packageDir = join(root, 'node_modules', 'analysis-unsafe');
+    const entryFilePath = join(root, 'entry.ts');
+
+    try {
+      await mkdir(packageDir, { recursive: true });
+      await Promise.all([
+        writeFile(
+          join(packageDir, 'package.json'),
+          JSON.stringify({ name: 'analysis-unsafe', version: '1.0.0', type: 'module', exports: './index.js' }),
+        ),
+        writeFile(join(packageDir, 'index.js'), 'export const broken = ;'),
+        writeFile(entryFilePath, `import { broken } from 'analysis-unsafe';\nexport { broken };\n`),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+        externals: ['analysis-unsafe'],
+      });
+
+      const external = vi.mocked(rollup).mock.calls.at(-1)?.[0].external;
+      expect(typeof external).toBe('function');
+      if (typeof external === 'function') {
+        expect(external('analysis-unsafe/subpath', undefined, false)).toBe(true);
+      }
+      expect(result.dependencies.get('analysis-unsafe')?.exports).toEqual(['broken']);
+      expect(result.output.code).toContain(`from 'analysis-unsafe'`);
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -341,10 +377,18 @@ describe('analyzeEntry', () => {
           workspaceMap,
           projectRoot: root,
           analyzeCache,
+          externals: ['analysis-unsafe', '@internal/a'],
         },
       );
 
       expect(rollup).toHaveBeenCalledTimes(3);
+      for (const [options] of vi.mocked(rollup).mock.calls) {
+        expect(typeof options.external).toBe('function');
+        if (typeof options.external === 'function') {
+          expect(options.external('analysis-unsafe/subpath', undefined, false)).toBe(true);
+          expect(options.external('@internal/a', undefined, false)).toBe(false);
+        }
+      }
       expect(result.dependencies.size).toBe(2);
       expect(result.dependencies.get('@internal/a')?.exports).toEqual(['a']);
       expect(result.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
