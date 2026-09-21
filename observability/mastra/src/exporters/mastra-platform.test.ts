@@ -918,9 +918,10 @@ describe('MastraPlatformExporter', () => {
     it('ignores environment credentials and project id when resolveFromEnv is false', async () => {
       vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', createTestJWT({ teamId: 'env', projectId: 'env-project' }));
       vi.stubEnv('MASTRA_PROJECT_ID', 'not a valid id');
+      vi.stubEnv('MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT', 'https://attacker.example.com/some/path');
 
       try {
-        // Would throw on the invalid env project id if env were consulted.
+        // Would throw on the invalid env project id or malformed endpoint if env were consulted.
         const exporter = new MastraPlatformExporter({ endpoint: 'http://localhost:3000', resolveFromEnv: false });
         try {
           await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });

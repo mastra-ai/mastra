@@ -22,10 +22,12 @@ export interface MastraPlatformExporterConfig extends BaseExporterConfig {
   accessToken?: string; // Mastra Observability access token (from env or config)
   projectId?: string; // Project ID for project-scoped collector routes
   /**
-   * When false, `accessToken` and `projectId` are taken from config only and
-   * `MASTRA_PLATFORM_ACCESS_TOKEN` / `MASTRA_CLOUD_ACCESS_TOKEN` /
-   * `MASTRA_PROJECT_ID` are ignored. Embedding hosts (e.g. Mastra Code) use
-   * this so a user project's `.env` cannot redirect the host's own telemetry.
+   * When false, `accessToken`, `projectId` and the traces endpoint are taken
+   * from config only and `MASTRA_PLATFORM_ACCESS_TOKEN` /
+   * `MASTRA_CLOUD_ACCESS_TOKEN` / `MASTRA_PROJECT_ID` /
+   * `MASTRA_CLOUD_TRACES_ENDPOINT` / `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT`
+   * are ignored. Embedding hosts (e.g. Mastra Code) use this so a user
+   * project's `.env` cannot redirect the host's own telemetry.
    * Default: true.
    */
   resolveFromEnv?: boolean;
@@ -308,7 +310,9 @@ export class MastraPlatformExporter extends BaseExporter {
     // `||` lets an empty legacy value fall through to the platform variable.
     const tracesEndpointOverride =
       config.tracesEndpoint ??
-      (process.env.MASTRA_CLOUD_TRACES_ENDPOINT || process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || undefined);
+      (resolveFromEnv
+        ? process.env.MASTRA_CLOUD_TRACES_ENDPOINT || process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || undefined
+        : undefined);
     let baseEndpoint: string | undefined;
     let tracesEndpoint: string;
 
