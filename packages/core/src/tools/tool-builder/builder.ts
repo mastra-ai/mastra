@@ -628,7 +628,7 @@ export class CoreToolBuilder extends MastraBase {
 
     const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions, toolSpan?: AnySpan) => {
       // Without a tool span (skipToolSpan), nested work attaches to the caller's span instead.
-      const contextSpan = toolSpan ?? (execOptions.tracingContext || options.tracingContext)?.currentSpan;
+      const contextSpan = toolSpan ?? (execOptions?.tracingContext || options.tracingContext)?.currentSpan;
       try {
         let result;
         let suspendData = null;

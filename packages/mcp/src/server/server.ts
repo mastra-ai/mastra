@@ -564,13 +564,13 @@ export class MCPServer extends MCPServerBase {
   private startRequestSpan(
     method: string,
     params: Record<string, unknown> | undefined,
-    connection?: { server: Server; ctx: ServerContext; requestContext?: RequestContext },
+    connection?: { server?: Server; ctx?: ServerContext; requestContext?: RequestContext },
   ): Span<SpanType.MCP_SERVER_REQUEST> | undefined {
     // A stateless HTTP request carries its own envelope; a stdio connection
     // negotiates once and the instance holds what it agreed to.
-    const envelope = connection?.ctx.mcpReq.envelope as Record<string, unknown> | undefined;
-    const protocolVersion = envelope?.[PROTOCOL_VERSION_META_KEY] ?? connection?.server.getNegotiatedProtocolVersion();
-    const client = (envelope?.[CLIENT_INFO_META_KEY] ?? connection?.server.getClientVersion()) as
+    const envelope = connection?.ctx?.mcpReq.envelope as Record<string, unknown> | undefined;
+    const protocolVersion = envelope?.[PROTOCOL_VERSION_META_KEY] ?? connection?.server?.getNegotiatedProtocolVersion();
+    const client = (envelope?.[CLIENT_INFO_META_KEY] ?? connection?.server?.getClientVersion()) as
       | Implementation
       | undefined;
     const target = params?.name ?? params?.uri;
@@ -1190,23 +1190,25 @@ export class MCPServer extends MCPServerBase {
     args: unknown,
     executionContext: Parameters<MCPServerBase['executeTool']>[2] = {},
   ): Promise<MCPToolExecutionResultV2> {
-    const tool = this.convertedTools[toolId];
-    if (!tool) {
-      this.logger.warn('Unknown tool requested', { tool: toolId, server: this.name });
-      throw new MastraError({
-        id: 'MCP_SERVER_TOOL_EXECUTE_PREPARATION_FAILED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.USER,
-        text: `Unknown tool: ${toolId}`,
-        details: { toolId },
-      });
-    }
     const requestContext = executionContext.requestContext ?? new RequestContext();
-    // A denial is reported as such, not as a failed execution.
-    await this.enforceToolExecutionFGA(toolId, requestContext);
     // The in-process caller gets the same request span a wire `tools/call` opens.
-    const requestSpan = this.startRequestSpan('tools/call', { name: toolId, arguments: args });
+    // It is opened before the tool lookup and the authorization check so an
+    // unknown tool or a denial is recorded as a failed request, not lost.
+    const requestSpan = this.startRequestSpan('tools/call', { name: toolId, arguments: args }, { requestContext });
     return this.traceRequest(requestSpan, async () => {
+      const tool = this.convertedTools[toolId];
+      if (!tool) {
+        this.logger.warn('Unknown tool requested', { tool: toolId, server: this.name });
+        throw new MastraError({
+          id: 'MCP_SERVER_TOOL_EXECUTE_PREPARATION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          text: `Unknown tool: ${toolId}`,
+          details: { toolId },
+        });
+      }
+      // A denial is reported as such, not as a failed execution.
+      await this.enforceToolExecutionFGA(toolId, requestContext);
       try {
         const execution = await this.runTool(toolId, tool, args, {
           requestContext,

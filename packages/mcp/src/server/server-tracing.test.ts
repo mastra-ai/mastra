@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { EntityType, SpanType, TracingEventType } from '@mastra/core/observability';
+import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { Observability } from '@mastra/observability';
 import type { Client } from '@modelcontextprotocol/client';
@@ -220,6 +221,23 @@ describe('MCPServer tracing', () => {
     expect(span.input).toEqual({ name: 'echoTool', arguments: { message: 'direct' } });
     expect(span.output).toEqual(execution);
     expect(span.attributes.mcpProtocolVersion).toBeUndefined();
+  });
+
+  it('records a failed request span when executeTool is given an unknown tool', async () => {
+    await expect(server.executeTool('nope', {})).rejects.toThrow('Unknown tool: nope');
+
+    expect(requestSpans()).toHaveLength(1);
+    const span = requestSpans()[0];
+    expect(span.name).toBe('tools/call nope');
+    expect(span.errorInfo?.id).toBe('MCP_SERVER_TOOL_EXECUTE_PREPARATION_FAILED');
+  });
+
+  it('carries the request context executeTool was given', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'studio-user' });
+    await server.executeTool('echoTool', { message: 'direct' }, { requestContext });
+
+    expect(requestSpans()[0].requestContext).toMatchObject({ user: { id: 'studio-user' } });
   });
 
   it('fails the request span when executeTool rejects the arguments', async () => {
