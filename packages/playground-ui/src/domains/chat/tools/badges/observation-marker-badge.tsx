@@ -152,7 +152,7 @@ const ExtractedValuesPanel = ({
                   {formatExtractedValue(value)}
                 </pre>
               ) : (
-                <div className="[&_code]:text-meta mt-1 [&_code]:rounded [&_code]:bg-fill [&_code]:px-1 [&_code]:py-0.5">
+                <div className="[&_code]:text-meta [&_code]:bg-fill mt-1 [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5">
                   <MarkdownRenderer className="text-foreground/80 text-caption">
                     {formatExtractedValue(value)}
                   </MarkdownRenderer>
@@ -353,7 +353,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                     Current Task
                   </button>
                   {isTaskExpanded && (
-                    <div className="[&_code]:text-meta mt-1 [&_code]:rounded [&_code]:bg-fill [&_code]:px-1 [&_code]:py-0.5">
+                    <div className="[&_code]:text-meta [&_code]:bg-fill mt-1 [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5">
                       <MarkdownRenderer className="text-foreground text-caption">{currentTask}</MarkdownRenderer>
                     </div>
                   )}
@@ -369,7 +369,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                     Suggested Response
                   </button>
                   {isResponseExpanded && (
-                    <div className="[&_code]:text-meta mt-1 italic [&_code]:rounded [&_code]:bg-fill [&_code]:px-1 [&_code]:py-0.5">
+                    <div className="[&_code]:text-meta [&_code]:bg-fill mt-1 italic [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5">
                       <MarkdownRenderer className="text-foreground/80 text-caption">
                         {suggestedResponse}
                       </MarkdownRenderer>

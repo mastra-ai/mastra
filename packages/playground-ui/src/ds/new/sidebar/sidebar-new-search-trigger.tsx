@@ -29,10 +29,7 @@ export const SidebarNewSearchTrigger = forwardRef<HTMLButtonElement, SidebarNewS
       >
         {children}
         {shortcut ? (
-          <Kbd
-            size="xs"
-            className={cn('bg-surface-overlay-soft active:scale-100', quietTextHoverInGroup)}
-          >
+          <Kbd size="xs" className={cn('bg-surface-overlay-soft active:scale-100', quietTextHoverInGroup)}>
             {shortcut}
           </Kbd>
         ) : null}

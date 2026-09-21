@@ -45,7 +45,7 @@ const ResizeDemo = () => {
   return (
     <div className="flex flex-col gap-2">
       <div className="bg-background h-16 rounded-md p-2">
-        <div className={cn('t-resize bg-fill-strong h-full rounded-sm', expanded ? 'w-full' : 'w-1/4')} />
+        <div className={cn('t-resize h-full rounded-sm bg-fill-strong', expanded ? 'w-full' : 'w-1/4')} />
       </div>
       <DemoButton onClick={() => setExpanded(!expanded)}>{expanded ? 'Collapse' : 'Expand'}</DemoButton>
     </div>
@@ -94,7 +94,7 @@ const stateSpecimens: UtilitySpecimen[] = [
         <input
           aria-label="Filter runs"
           placeholder="Filter runs"
-          className="bg-card shadow-raised text-body text-foreground placeholder:text-placeholder h-8 w-full rounded-full px-3 outline-hidden [&:hover:not(:focus-visible)]:[--surface-tint:var(--fill-subtle)] focus-visible:[--surface-rim:var(--surface-rim-focus)]"
+          className="bg-card text-body text-foreground shadow-raised placeholder:text-placeholder h-8 w-full rounded-full px-3 outline-hidden focus-visible:[--surface-rim:var(--surface-rim-focus)] [&:hover:not(:focus-visible)]:[--surface-tint:var(--fill-subtle)]"
         />
       </div>
     ),
@@ -107,8 +107,8 @@ const frameSpecimens: UtilitySpecimen[] = [
     note: 'Default 1.5rem, then overridden to 2.5rem',
     demo: (
       <div className="grid grid-cols-2 gap-3">
-        <div className="border-border-strong bg-fill rounded-studio-frame h-24 border" />
-        <div className="border-border-strong bg-fill rounded-studio-frame h-24 border [--studio-frame-radius:2.5rem]" />
+        <div className="rounded-studio-frame border-border-strong bg-fill h-24 border" />
+        <div className="rounded-studio-frame border-border-strong bg-fill h-24 border [--studio-frame-radius:2.5rem]" />
       </div>
     ),
   },
@@ -117,11 +117,11 @@ const frameSpecimens: UtilitySpecimen[] = [
     note: 'Inset by 0.5rem, then 1rem: frame radius minus inset',
     demo: (
       <div className="grid grid-cols-2 gap-3">
-        <div className="border-border-strong bg-fill rounded-studio-frame h-24 border p-2">
-          <div className="bg-card rounded-studio-panel h-full" />
+        <div className="rounded-studio-frame border-border-strong bg-fill h-24 border p-2">
+          <div className="rounded-studio-panel bg-card h-full" />
         </div>
-        <div className="border-border-strong bg-fill rounded-studio-frame h-24 border p-4 [--studio-frame-inset:1rem]">
-          <div className="bg-card rounded-studio-panel h-full" />
+        <div className="rounded-studio-frame border-border-strong bg-fill h-24 border p-4 [--studio-frame-inset:1rem]">
+          <div className="rounded-studio-panel bg-card h-full" />
         </div>
       </div>
     ),
@@ -130,8 +130,8 @@ const frameSpecimens: UtilitySpecimen[] = [
     tokens: ['rounded-tr-studio-panel'],
     note: 'Only the exposed corner curves; the rest sits flush',
     demo: (
-      <div className="border-border-strong bg-fill rounded-studio-frame h-24 overflow-hidden border p-2 pb-0 pl-0">
-        <div className="bg-card rounded-tr-studio-panel h-full" />
+      <div className="rounded-studio-frame border-border-strong bg-fill h-24 overflow-hidden border p-2 pb-0 pl-0">
+        <div className="rounded-tr-studio-panel bg-card h-full" />
       </div>
     ),
   },
@@ -162,7 +162,7 @@ const animationSpecimens: UtilitySpecimen[] = [
     note: 'Ascending: drawn from the bottom up, the way it points',
     demo: (
       <div className="bg-background flex h-16 items-center justify-center rounded-md">
-        <ArrowUp className="animate-sort-arrow-up text-foreground size-icon-lg" />
+        <ArrowUp className="animate-sort-arrow-up size-icon-lg text-foreground" />
       </div>
     ),
   },
@@ -171,7 +171,7 @@ const animationSpecimens: UtilitySpecimen[] = [
     note: 'Descending: the same reveal, top down',
     demo: (
       <div className="bg-background flex h-16 items-center justify-center rounded-md">
-        <ArrowDown className="animate-sort-arrow-down text-foreground size-icon-lg" />
+        <ArrowDown className="animate-sort-arrow-down size-icon-lg text-foreground" />
       </div>
     ),
   },
@@ -203,7 +203,7 @@ const wrappingSpecimens: UtilitySpecimen[] = [
     note: 'Breaks an id mid-word rather than widening its column',
     demo: (
       <div className="bg-background grid grid-cols-2 gap-3 rounded-md p-3">
-        <div className="wrap-break-word text-body-sm text-foreground font-mono">
+        <div className="text-body-sm text-foreground font-mono wrap-break-word">
           trace_01JQX8S9Z7KQ4M2VYB3NCE6WHD_span_0f3a9c1b7e2d
         </div>
         <div className="text-body-sm text-muted-foreground overflow-hidden font-mono">
@@ -242,7 +242,7 @@ export const UtilitiesFoundations: Story = {
             name="hover:bg-fill-subtle"
             note="The obvious spelling — and it moves the wrong way in one of the two themes"
           >
-            <div className="bg-card hover:bg-fill-subtle shadow-raised flex h-24 items-center justify-center rounded-lg">
+            <div className="bg-card shadow-raised hover:bg-fill-subtle flex h-24 items-center justify-center rounded-lg">
               <Txt variant="label" tone="muted">
                 Not this one
               </Txt>
@@ -256,9 +256,9 @@ export const UtilitiesFoundations: Story = {
         </Txt>
         <Txt variant="caption" tone="muted">
           --surface-tint is the mechanism those utilities share, not a colour to reach for: shadow-raised,
-          shadow-overlay and state-layer each reset it to transparent, because a custom property would otherwise
-          inherit into every raised surface nested inside a hovered one. Set it through a variant on the element
-          itself, the way a field does.
+          shadow-overlay and state-layer each reset it to transparent, because a custom property would otherwise inherit
+          into every raised surface nested inside a hovered one. Set it through a variant on the element itself, the way
+          a field does.
         </Txt>
       </FoundationSection>
 
@@ -281,9 +281,9 @@ export const UtilitiesFoundations: Story = {
         <UtilityGrid specimens={resizeSpecimens} />
         <Txt variant="caption" tone="muted">
           The sidebar changes its own width, and a width that jumps reads as a layout bug rather than a panel opening.
-          The class is scoped to that one case — width and height, on an element that owns its size — and it is the
-          only thing in the system allowed to animate geometry. A pointer-driven drag opts out, so a gesture stays in
-          the hand.
+          The class is scoped to that one case — width and height, on an element that owns its size — and it is the only
+          thing in the system allowed to animate geometry. A pointer-driven drag opts out, so a gesture stays in the
+          hand.
         </Txt>
       </FoundationSection>
 

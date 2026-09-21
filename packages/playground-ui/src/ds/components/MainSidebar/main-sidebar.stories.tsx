@@ -302,7 +302,7 @@ const StudioSidebarBody = () => {
         {state !== 'collapsed' && (
           <>
             <hr className="bg-border mx-6 my-2 h-px border-0" />
-            <span className="bg-fill text-meta text-muted-foreground ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-body leading-none">
+            <span className="bg-fill text-meta text-muted-foreground font-body ml-3 inline-flex h-5 items-center rounded-full px-2.5 leading-none">
               v0.0.0
             </span>
           </>

@@ -142,7 +142,7 @@ export const StandardDesktop: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider defaultWidth={240} minWidth={200} maxWidth={360} collapseBelow={160}>
-        <div className="bg-sidebar h-dvh w-dvw font-body lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar font-body h-dvh w-dvw lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
@@ -168,7 +168,7 @@ export const CollapsedSidebar: Story = {
         collapseBelow={160}
         storageKey="app-shell-story-collapsed"
       >
-        <div className="bg-sidebar h-dvh w-dvw font-body lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar font-body h-dvh w-dvw lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
@@ -188,7 +188,7 @@ export const Mobile: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-sidebar h-dvh w-dvw font-body lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar font-body h-dvh w-dvw lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
@@ -207,7 +207,7 @@ export const WithoutRouteHeader: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-sidebar h-dvh w-dvw font-body lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar font-body h-dvh w-dvw lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell mainLabel="Research agent content" mobileHeader={<MobileHeader />}>
             <MainContent />
@@ -230,7 +230,7 @@ export const WithFrameWrapper: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-sidebar h-dvh w-dvw font-body lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar font-body h-dvh w-dvw lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
@@ -251,7 +251,7 @@ export const LightTheme: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-sidebar h-dvh w-dvw font-body lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar font-body h-dvh w-dvw lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
@@ -271,7 +271,7 @@ export const DarkTheme: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-sidebar h-dvh w-dvw font-body lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar font-body h-dvh w-dvw lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
