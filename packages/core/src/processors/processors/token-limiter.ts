@@ -52,6 +52,8 @@ type TokenLimiterTripWireMetadata = {
   limit: number;
   remainingBudget?: number;
   messageCount?: number;
+  currentRunTokens?: number;
+  currentRunMessageCount?: number;
 };
 
 /**
@@ -252,14 +254,44 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
+    // Tool calls and results the current run produced are never trimmed. The agent loop needs them on
+    // the next step, the model gets no signal that they were removed (so it re-calls the same tool
+    // until maxSteps), and removing them also drops them from the response set, so they never reach
+    // memory. Older history gives up its budget first, and if that is not enough we trip below.
+    const currentRunIds = this.currentRunToolMessageIds(messageList, messages);
+    const currentRunMessages = messages.filter(message => currentRunIds.has(message.id));
+
     // Process non-system messages in reverse order (newest first)
-    const messagesToKeep: MastraDBMessage[] = [];
+    const messagesToKeep: MastraDBMessage[] = [...currentRunMessages];
     let currentTokens = 0;
+    for (const message of currentRunMessages) {
+      currentTokens += await this.countInputMessageTokens(message);
+    }
+
+    // The current run can exceed the budget on its own, since one large tool result is enough. Nothing
+    // remains that may be removed, so this mirrors the system-message guard above: fail loudly and
+    // non-retryably rather than sending a request that is known to be over the limit.
+    if (currentRunMessages.length > 0 && currentTokens > remainingBudget) {
+      throw new TripWire(
+        'TokenLimiterProcessor: The current run tool calls and results alone exceed the remaining token budget. They cannot be removed without breaking the agent loop.',
+        {
+          retry: false,
+          metadata: {
+            systemTokens,
+            limit,
+            remainingBudget,
+            currentRunTokens: currentTokens,
+            currentRunMessageCount: currentRunMessages.length,
+          },
+        },
+      );
+    }
 
     // Iterate through messages in reverse to prioritize recent messages
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (!message) continue;
+      if (currentRunIds.has(message.id)) continue;
 
       const messageTokens = await this.countInputMessageTokens(message);
 
@@ -290,6 +322,40 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     if (idsToRemove.length > 0) {
       messageList.removeByIds(idsToRemove);
     }
+  }
+
+  /**
+   * Ids of the messages carrying tool traffic this run has produced, grouped so a tool call and its
+   * result are protected together even when they are separate messages. The live response set is
+   * emptied whenever the save queue drains mid-run, so the persisted response set is unioned in.
+   *
+   * Only tool traffic is protected, not the whole turn as `trimMemory` does: that mode exists to trim
+   * memory alone, whereas here trimming this turn's plain text is the documented behaviour and is
+   * survivable. Losing text costs context, losing a tool call or result breaks the loop outright.
+   */
+  private currentRunToolMessageIds(
+    messageList: NonNullable<ProcessInputStepArgs['messageList']>,
+    messages: MastraDBMessage[],
+  ): Set<string> {
+    const responseIds = new Set<string>(messageList.makeMessageSourceChecker().output);
+    for (const message of messageList.getPersisted.response.db()) {
+      responseIds.add(message.id);
+    }
+
+    const protectedIds = new Set<string>();
+    // Grouping is union-find over shared toolCallIds, and only group membership is used here, so the
+    // messages do not need sorting, which matters, because `get.all.db()` hands back the live array.
+    const groups = groupLinkedToolMessages(messages);
+    for (const group of groups) {
+      if (!group.some(message => responseIds.has(message.id) && TokenLimiterProcessor.hasToolParts(message))) continue;
+      for (const message of group) protectedIds.add(message.id);
+    }
+    return protectedIds;
+  }
+
+  private static hasToolParts(message: MastraDBMessage): boolean {
+    const parts = message.content?.parts;
+    return Array.isArray(parts) && parts.some(part => part.type === 'tool-invocation');
   }
 
   /**

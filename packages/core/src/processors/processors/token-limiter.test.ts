@@ -1505,6 +1505,283 @@ describe('TokenLimiterProcessor', () => {
       expect(messageList.get.all.db()).toHaveLength(1);
     });
 
+    describe('current run tool traffic', () => {
+      const bigToolResult = {
+        rules: Array.from({ length: 200 }, (_, index) => `Rule number ${index} for the living room`),
+      };
+
+      function toolMessage(id: string, result: unknown): MastraDBMessage {
+        return {
+          id,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: `call-${id}`,
+                  toolName: 'listRules',
+                  args: {},
+                  result,
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2023-01-01T00:00:10Z'),
+        } as MastraDBMessage;
+      }
+
+      // `createTestMessage` stamps `new Date()`, and `MessageList.add` re-sorts by `createdAt`, so any
+      // fixture that does not pin timestamps is walked in an order it never declared. Pin them.
+      function at<T extends MastraDBMessage>(message: T, iso: string): T {
+        return { ...message, createdAt: new Date(iso) };
+      }
+
+      function ids(messageList: MessageList) {
+        return messageList.get.all.db().map(message => message.id);
+      }
+
+      // Measure with the processor's own counter so estimator drift fails the *premise* loudly
+      // instead of quietly making these fixtures stop discriminating.
+      async function tokensOf(processor: TokenLimiterProcessor, message: MastraDBMessage) {
+        return (processor as any).countInputMessageTokens(message) as Promise<number>;
+      }
+
+      function runStep(processor: TokenLimiterProcessor, messageList: MessageList) {
+        return processor.processInputStep({
+          messageList,
+          stepNumber: 1,
+          model: 'openai/gpt-4o',
+          steps: [],
+          systemMessages: [],
+          state: {},
+          retryCount: 0,
+          abort: mockAbort,
+        } as any);
+      }
+
+      // A newer, larger current-run message outranks the tool message under newest-first trimming,
+      // so the tool call and its result are what get dropped, mid-run, and out of the response set.
+      async function addCompetingRun(processor: TokenLimiterProcessor, messageList: MessageList) {
+        messageList.add(
+          at(createTestMessage('How many rules do I have?', 'user', 'input-1'), '2023-01-01T00:00:05Z'),
+          'input',
+        );
+        messageList.add(toolMessage('response-tool', { rules: bigToolResult.rules.slice(0, 60) }), 'response');
+        // Deliberately a separate remembered turn rather than a second assistant message: two
+        // adjacent 'response' messages merge into one in MessageList, which would erase the
+        // competition this fixture is built to create.
+        messageList.add(
+          at(createTestMessage('y '.repeat(900), 'user', 'competing-1'), '2023-01-01T00:00:20Z'),
+          'memory',
+        );
+
+        // Premise, asserted rather than narrated: user question, then the tool message, then the
+        // newer and larger message that competes with it for the budget.
+        expect(ids(messageList)).toEqual(['input-1', 'response-tool', 'competing-1']);
+
+        const [input, tool, text] = await Promise.all(
+          messageList.get.all.db().map(message => tokensOf(processor, message)),
+        );
+        const budget = 1400 - 24; // limit minus TOKENS_PER_CONVERSATION; no system messages here
+        expect(input! + text!).toBeLessThanOrEqual(budget);
+        expect(input! + tool!).toBeLessThanOrEqual(budget);
+        expect(input! + tool! + text!).toBeGreaterThan(budget);
+      }
+
+      // Exact sets, not `toContain`: a regression that protects everything (or stops trimming
+      // altogether) keeps the tool message too, and would sail past a containment check.
+      it.each([
+        // best-fit backfills past the oversized text and still affords the user question.
+        ['best-fit', ['input-1', 'response-tool']],
+        // contiguous stops at the first message that does not fit, the newest one, so only the
+        // protected tool traffic survives. Protection changes which messages are in the suffix, not
+        // the rule that the scan stops.
+        ['contiguous', ['response-tool']],
+      ] as const)(
+        'keeps the current run tool call in %s mode when a newer, larger message competes for the budget',
+        async (trimMode, expected) => {
+          const processor = new TokenLimiterProcessor({ limit: 1400, trimMode });
+          const messageList = new MessageList();
+          await addCompetingRun(processor, messageList);
+
+          await runStep(processor, messageList);
+
+          expect(ids(messageList)).toEqual([...expected]);
+        },
+      );
+
+      it('keeps the current run tool call after the save queue has drained the live response set', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 1400 });
+        const messageList = new MessageList();
+        await addCompetingRun(processor, messageList);
+        messageList.drainUnsavedMessages();
+
+        // The drain is the whole point of this test: the live output set is empty, so protection has
+        // to come from the persisted response set instead.
+        expect(messageList.makeMessageSourceChecker().output.size).toBe(0);
+        expect(messageList.getPersisted.response.db().map(message => message.id)).toContain('response-tool');
+
+        await runStep(processor, messageList);
+
+        expect(ids(messageList)).toEqual(['input-1', 'response-tool']);
+      });
+
+      // The run's own tool traffic is over budget by itself, so trimming every last remembered
+      // message still would not bring the prompt under the limit. Fail loudly with the real cause
+      // rather than drop the tool call the loop depends on, same shape as the system-message guard.
+      it('throws a non-retryable TripWire when the current run tool traffic alone exceeds the budget', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 500 });
+        const messageList = new MessageList();
+
+        messageList.add(at(createTestMessage('x'.repeat(4000), 'user', 'memory-1'), '2023-01-01T00:00:01Z'), 'memory');
+        messageList.add(
+          at(createTestMessage('How many rules do I have?', 'user', 'input-1'), '2023-01-01T00:00:05Z'),
+          'input',
+        );
+        messageList.add(toolMessage('response-1', bigToolResult), 'response');
+
+        const error = await runStep(processor, messageList).then(
+          () => undefined,
+          (thrown: unknown) => thrown,
+        );
+
+        expect(error).toBeInstanceOf(TripWire);
+        const tripWire = error as TripWire;
+        expect(tripWire.message).toContain('current run tool calls and results alone exceed');
+        expect(tripWire.options?.retry).toBe(false);
+        expect(tripWire.options?.metadata).toMatchObject({
+          limit: 500,
+          currentRunMessageCount: 1,
+        });
+        // The budget the guard compares against is the limit minus system tokens and conversation
+        // overhead, not the raw limit.
+        expect((tripWire.options?.metadata as { remainingBudget: number }).remainingBudget).toBe(500 - 24);
+        const metadata = tripWire.options?.metadata as { currentRunTokens: number; remainingBudget: number };
+        expect(metadata.currentRunTokens).toBeGreaterThan(metadata.remainingBudget);
+        // Exact set: the guard throws *before* removing anything, so nothing was mutated on the way out.
+        expect(ids(messageList)).toEqual(['memory-1', 'input-1', 'response-1']);
+      });
+
+      it('counts system tokens against the budget before deciding the tool traffic does not fit', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 1400 });
+        const withoutSystem = new MessageList();
+        withoutSystem.add(
+          at(createTestMessage('How many rules do I have?', 'user', 'input-1'), '2023-01-01T00:00:05Z'),
+          'input',
+        );
+        withoutSystem.add(toolMessage('response-1', { rules: bigToolResult.rules.slice(0, 60) }), 'response');
+
+        // Same traffic, same limit: it fits with no system prompt...
+        await expect(runStep(processor, withoutSystem)).resolves.toBeUndefined();
+
+        const withSystem = new MessageList();
+        withSystem.addSystem('s '.repeat(900));
+        withSystem.add(
+          at(createTestMessage('How many rules do I have?', 'user', 'input-1'), '2023-01-01T00:00:05Z'),
+          'input',
+        );
+        withSystem.add(toolMessage('response-1', { rules: bigToolResult.rules.slice(0, 60) }), 'response');
+
+        // ...and does not once a large system prompt has eaten the budget first.
+        const error = await runStep(processor, withSystem).then(
+          () => undefined,
+          (thrown: unknown) => thrown,
+        );
+        expect(error).toBeInstanceOf(TripWire);
+        expect((error as TripWire).message).toContain('current run tool calls and results alone exceed');
+        expect((error as TripWire).options?.metadata).toMatchObject({ limit: 1400 });
+        const metadata = (error as TripWire).options?.metadata as { systemTokens: number; remainingBudget: number };
+        expect(metadata.systemTokens).toBeGreaterThan(0);
+        expect(metadata.remainingBudget).toBe(1400 - metadata.systemTokens - 24);
+      });
+
+      it('keeps a tool call and its result together when they are separate messages', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 1400 });
+        const messageList = new MessageList();
+
+        messageList.add(
+          at(createTestMessage('How many rules do I have?', 'user', 'input-1'), '2023-01-01T00:00:05Z'),
+          'input',
+        );
+        // Only the result-bearing half is in the response set; the call must be protected with it.
+        // The call half is deliberately large, and a newer competing message sits between the halves:
+        // without grouping, the competing message wins the remaining budget and the call is evicted.
+        messageList.add(
+          {
+            id: 'call-message',
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'call',
+                    toolCallId: 'shared-call',
+                    toolName: 'listRules',
+                    args: { filter: 'f'.repeat(2400) },
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:10Z'),
+          } as MastraDBMessage,
+          'memory',
+        );
+        messageList.add(
+          at(createTestMessage('c '.repeat(1200), 'user', 'competing-1'), '2023-01-01T00:00:15Z'),
+          'memory',
+        );
+        messageList.add(
+          {
+            id: 'result-message',
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'shared-call',
+                    toolName: 'listRules',
+                    args: {},
+                    result: bigToolResult.rules.slice(0, 10),
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:20Z'),
+          } as MastraDBMessage,
+          'response',
+        );
+
+        // Premise: the competitor really does sit between the two halves of the pair.
+        expect(ids(messageList)).toEqual(['input-1', 'call-message', 'competing-1', 'result-message']);
+
+        await runStep(processor, messageList);
+
+        // Exact set: the competitor is newer than the call and would win the budget outright, so the
+        // call only survives because it is pulled in as part of the result's tool-call group.
+        expect(ids(messageList)).toEqual(['input-1', 'call-message', 'result-message']);
+      });
+
+      it('still trims an assistant tool message that did not come from the current run', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 500 });
+        const messageList = new MessageList();
+
+        messageList.add(toolMessage('memory-tool', bigToolResult), 'memory');
+        messageList.add(createTestMessage('How many rules do I have?', 'user', 'input-1'), 'input');
+
+        await runStep(processor, messageList);
+
+        expect(messageList.get.all.db().map(message => message.id)).toEqual(['input-1']);
+      });
+    });
+
     it('should handle tool call messages in token counting', async () => {
       const processor = new TokenLimiterProcessor({ limit: 100 });
 
