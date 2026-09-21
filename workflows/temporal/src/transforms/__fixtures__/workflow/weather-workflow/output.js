@@ -12,9 +12,16 @@ class TemporalExecutionEngine {
   async execute(params) {
     this.initData = params.input;
     this.executionContext = {
-      requestContext: params.requestContext,
-      runId: params.runId,
-      resourceId: params.resourceId
+      ...(params.requestContext !== undefined && {
+        requestContext: params.requestContext
+      }),
+      ...(params.runId !== undefined && {
+        runId: params.runId
+      }),
+      ...(params.resourceId !== undefined && {
+        resourceId: params.resourceId
+      }),
+      workflowId: params.workflowId
     };
     let result = params.input;
     const stepResults = {};
@@ -43,7 +50,9 @@ class TemporalExecutionEngine {
           log.info('step', {
             stepId: entry.step.id
           });
-          const out = await this.activityHandle[entry.step.id](this.activityParams(inputData));
+          const out = await this.activityHandle[entry.step.id](this.activityParams(inputData, {
+            initData: this.initData
+          }));
           stepResults[entry.step.id] = out;
           return out;
         }

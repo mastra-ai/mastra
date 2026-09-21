@@ -107,6 +107,21 @@ describe('activity transform', () => {
     expect(output).toContain('const fetchWeather = createStep({');
   });
 
+  it('avoids collisions with source bindings named RequestContext', async () => {
+    const output = await transform(`
+      import { createStep } from '@mastra/core/workflows';
+
+      const RequestContext = 'source binding';
+      export const fetchWeather = createStep({
+        id: 'fetch-weather',
+        execute: async ({ requestContext }) => ({ value: RequestContext, tenantId: requestContext.get('tenantId') }),
+      });
+    `);
+
+    expect(output).toContain("const RequestContext = 'source binding'");
+    expect(output).toMatch(/import\s*\{\s*RequestContext as [A-Za-z_$][\w$]*\s*\}\s*from\s*["']@mastra\/core\/di["']/);
+  });
+
   it('keeps supporting declarations needed by extracted activities while stripping workflow setup', async () => {
     const output = await transform(`
       import { z } from 'zod';

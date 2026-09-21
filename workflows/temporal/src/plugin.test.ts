@@ -291,7 +291,9 @@ describe('Temporal prebuild integration', () => {
     });
 
     expect(proxyActivities).toHaveBeenCalledWith({ startToCloseTimeout: '5 minutes' });
-    expect(executeChild).toHaveBeenCalledWith('innerWorkflow', { args: [{ inputData: { value: 'test-step1' } }] });
+    expect(executeChild).toHaveBeenCalledWith('innerWorkflow', {
+      args: [{ inputData: { value: 'test-step1' }, workflowId: 'complex-workflow' }],
+    });
     expect(sleep).toHaveBeenCalledWith(1000);
   });
 

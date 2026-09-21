@@ -208,6 +208,7 @@ function createMappingActivityStatements(
   filePath: string,
   staticFunctionBindings: Set<string>,
   usedExportNames: Set<string>,
+  requestContextClassName: string,
   addBinding: (exportName: string, stepId: string) => void,
 ): t.Statement[] {
   const chain = parseWorkflowChain(workflowExpression);
@@ -259,7 +260,7 @@ function createMappingActivityStatements(
       t.objectProperty(t.identifier('getInitData'), t.arrowFunctionExpression([], t.identifier('initData'))),
       t.objectProperty(
         t.identifier('requestContext'),
-        t.newExpression(t.identifier('RequestContext'), [t.identifier('requestContext')]),
+        t.newExpression(t.identifier(requestContextClassName), [t.identifier('requestContext')]),
       ),
       ...contextNames
         .filter(name => name !== 'requestContext')
@@ -353,10 +354,16 @@ function hasLocalMastraBinding(ast: t.File): boolean {
 function createTemporalActivitiesHelperStatements(
   mastraImportPath: string | null,
   hasMastraBinding: boolean,
+  requestContextClassName: string,
 ): t.Statement[] {
   const helperSource = `
     function withRequestContext(params) {
-      return { ...params, requestContext: new RequestContext(params.requestContext) };
+      const { requestContext, initData, ...rest } = params;
+      return {
+        ...rest,
+        requestContext: new ${requestContextClassName}(requestContext),
+        getInitData: () => initData,
+      };
     }
 
     ${
@@ -429,9 +436,17 @@ export async function buildTemporalActivitiesModule(
             sourceFilename: id,
           });
 
+          const usedExportNames = collectTopLevelBindingNames(ast.program);
+          let requestContextClassName = 'TemporalRequestContext';
+          let requestContextSuffix = 1;
+          while (usedExportNames.has(requestContextClassName)) {
+            requestContextClassName = `TemporalRequestContext${requestContextSuffix++}`;
+          }
+          usedExportNames.add(requestContextClassName);
+
           const statements: t.Statement[] = [
             t.importDeclaration(
-              [t.importSpecifier(t.identifier('RequestContext'), t.identifier('RequestContext'))],
+              [t.importSpecifier(t.identifier(requestContextClassName), t.identifier('RequestContext'))],
               t.stringLiteral('@mastra/core/di'),
             ),
           ];
@@ -440,7 +455,6 @@ export async function buildTemporalActivitiesModule(
           const workflowBindingNames = collectWorkflowBindingNames(ast);
           const stepFactoryBindings = collectCreateStepFactoryBindings(ast.program);
           const staticFunctionBindings = collectStaticFunctionBindings(ast.program);
-          const usedExportNames = collectTopLevelBindingNames(ast.program);
           const sourceFilePath = id;
           const hasMastraBinding = hasLocalMastraBinding(ast);
           let helperInserted = false;
@@ -450,7 +464,9 @@ export async function buildTemporalActivitiesModule(
               return;
             }
 
-            statements.push(...createTemporalActivitiesHelperStatements(null, hasMastraBinding));
+            statements.push(
+              ...createTemporalActivitiesHelperStatements(null, hasMastraBinding, requestContextClassName),
+            );
             helperInserted = true;
           };
 
@@ -568,6 +584,7 @@ export async function buildTemporalActivitiesModule(
                       sourceFilePath,
                       staticFunctionBindings,
                       usedExportNames,
+                      requestContextClassName,
                       addGeneratedActivityBinding,
                     ),
                   );
@@ -645,6 +662,7 @@ export async function buildTemporalActivitiesModule(
                       sourceFilePath,
                       staticFunctionBindings,
                       usedExportNames,
+                      requestContextClassName,
                       addGeneratedActivityBinding,
                     ),
                   );

@@ -2,9 +2,15 @@ import { RequestContext } from '@mastra/core/di';
 import { z } from 'zod';
 
 function withRequestContext(params) {
+  const {
+    requestContext,
+    initData,
+    ...rest
+  } = params;
   return {
-    ...params,
-    requestContext: new RequestContext(params.requestContext)
+    ...rest,
+    requestContext: new RequestContext(requestContext),
+    getInitData: () => initData
   };
 }
 function createStep(args) {
