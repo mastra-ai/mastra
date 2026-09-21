@@ -63,6 +63,8 @@ const accentKeys = Object.keys(Colors).filter(key => /^accent\d$/.test(key)) as 
 const accentDarkKeys = Object.keys(Colors).filter(key => /^accent\dDark$/.test(key)) as ColorToken[];
 const accentDarkerKeys = Object.keys(Colors).filter(key => /^accent\dDarker$/.test(key)) as ColorToken[];
 
+const chartSeries = [1, 2, 3, 4, 5] as const;
+
 const tokenCount =
   backgrounds.length +
   grayTokens.length +
@@ -72,7 +74,8 @@ const tokenCount =
   2 +
   accentKeys.length +
   accentDarkKeys.length +
-  accentDarkerKeys.length;
+  accentDarkerKeys.length +
+  chartSeries.length * 2;
 
 const Swatch = ({ value, height = 'h-16' }: { value: string; height?: string }) => (
   <div
@@ -222,6 +225,30 @@ export const ColorFoundations: Story = {
         <AccentRow label="Base" tokens={accentKeys} />
         <AccentRow label="Dark" tokens={accentDarkKeys} />
         <AccentRow label="Darker" tokens={accentDarkerKeys} />
+      </FoundationSection>
+
+      <FoundationSection
+        label="Charts"
+        description="Two series palettes for recharts: categorical, where neighbouring series must be told apart, and soft, one hue stepped by lightness for an ordered series."
+      >
+        <SpecimenGroup label="Categorical">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {chartSeries.map(series => (
+              <Specimen key={series} name={`--chart-${series}`}>
+                <Swatch value={`var(--chart-${series})`} />
+              </Specimen>
+            ))}
+          </div>
+        </SpecimenGroup>
+        <SpecimenGroup label="Soft, ordered by lightness">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {chartSeries.map(series => (
+              <Specimen key={series} name={`--chart-soft-${series}`}>
+                <Swatch value={`var(--chart-soft-${series})`} />
+              </Specimen>
+            ))}
+          </div>
+        </SpecimenGroup>
       </FoundationSection>
     </FoundationPage>
   ),

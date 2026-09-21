@@ -91,7 +91,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
         </div>
         <span className="border-border1 bg-surface3 text-meta text-foreground rounded-md border px-2.5 py-1">Live</span>
       </header>
-      <section className="rounded-studio-frame bg-card shadow-raised mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
+      <section className="rounded-studio-frame bg-card shadow-raised mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
         <div className="grid min-h-full grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
           <div className="grid grid-cols-3 gap-3">
             {[
