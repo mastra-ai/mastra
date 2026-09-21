@@ -1,7 +1,7 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
-import type { ScoreRowData } from '@mastra/core/evals';
 import { ScoresDataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ScoresColumnsState } from '@/domains/scores/hooks/use-scores-columns';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
@@ -16,15 +16,11 @@ type ScoresListProps = {
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   errorMsg?: string;
   columnsState: ScoresColumnsState;
+  sort?: ListSort<ScoresSortKey>;
+  onSortChange?: (sort: DataListSort, key: string) => void;
 };
 
-function mapScore(score: ClientScoreRowData): ScoreRowData {
-  return {
-    ...score,
-    createdAt: new Date(score.createdAt),
-    updatedAt: new Date(score.updatedAt),
-  };
-}
+export type ScoresSortKey = 'date' | 'score';
 
 export function ScoresList({
   scores,
@@ -36,6 +32,8 @@ export function ScoresList({
   setEndOfListElement,
   selectedScoreId: controlledSelectedId,
   columnsState: { visibleColumns, columns },
+  sort,
+  onSortChange,
 }: ScoresListProps) {
   const [internalSelectedId, setInternalSelectedId] = useState<string | undefined>(controlledSelectedId);
   const selectedScoreId = controlledSelectedId ?? internalSelectedId;
@@ -96,9 +94,29 @@ export function ScoresList({
 
   const header = (
     <ScoresDataList.Top>
-      <ScoresDataList.TopCell>Date</ScoresDataList.TopCell>
+      {onSortChange ? (
+        <ScoresDataList.SortableTopCell
+          sortKey="date"
+          sort={sort?.key === 'date' ? sort.direction : undefined}
+          onSortChange={onSortChange}
+        >
+          Date
+        </ScoresDataList.SortableTopCell>
+      ) : (
+        <ScoresDataList.TopCell>Date</ScoresDataList.TopCell>
+      )}
       <ScoresDataList.TopCell>Time</ScoresDataList.TopCell>
-      <ScoresDataList.TopCell>Score</ScoresDataList.TopCell>
+      {onSortChange ? (
+        <ScoresDataList.SortableTopCell
+          sortKey="score"
+          sort={sort?.key === 'score' ? sort.direction : undefined}
+          onSortChange={onSortChange}
+        >
+          Score
+        </ScoresDataList.SortableTopCell>
+      ) : (
+        <ScoresDataList.TopCell>Score</ScoresDataList.TopCell>
+      )}
       {visibleColumns.has('entity') && <ScoresDataList.TopCell>Entity</ScoresDataList.TopCell>}
       {visibleColumns.has('input') && <ScoresDataList.TopCell>Input</ScoresDataList.TopCell>}
     </ScoresDataList.Top>
@@ -117,12 +135,8 @@ export function ScoresList({
     return null;
   }
 
-  const hasSidePanel = !!selectedScore;
-
   return (
-    <div
-      className={cn('grid h-full max-h-full min-h-0 gap-4', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
-    >
+    <>
       <div className="flex h-full min-h-0 min-w-0 flex-col">
         <ScoresDataList columns={columns} className="min-h-0" scrollRef={containerRef}>
           {header}
@@ -150,16 +164,7 @@ export function ScoresList({
         </ScoresDataList>
       </div>
 
-      {selectedScore && (
-        <div className="grid h-full max-h-full min-h-0 grid-rows-[1fr] overflow-hidden">
-          <ScoreDataPanel
-            score={mapScore(selectedScore)}
-            onClose={handleClose}
-            onPrevious={handlePrevious}
-            onNext={handleNext}
-          />
-        </div>
-      )}
-    </div>
+      <ScoreDataPanel score={selectedScore} onClose={handleClose} onPrevious={handlePrevious} onNext={handleNext} />
+    </>
   );
 }

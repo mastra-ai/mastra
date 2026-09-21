@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { AgentSignalAttributes, AgentSignalType } from '../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { Mastra } from '../mastra';
@@ -100,6 +99,8 @@ export interface WorkflowSchedule {
   inputData?: unknown;
   initialState?: unknown;
   requestContext?: Record<string, unknown>;
+  /** Resource that runs fired by this schedule are attributed to. */
+  resourceId?: string;
   metadata?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
@@ -156,6 +157,8 @@ export interface CreateWorkflowScheduleInput {
   inputData?: unknown;
   initialState?: unknown;
   requestContext?: Record<string, unknown>;
+  /** Resource that runs fired by this schedule are attributed to. */
+  resourceId?: string;
   metadata?: Record<string, unknown>;
   /** Schedule lifecycle status. Defaults to `'active'`. */
   status?: 'active' | 'paused';
@@ -190,6 +193,8 @@ export interface UpdateWorkflowScheduleInput {
   inputData?: unknown;
   initialState?: unknown;
   requestContext?: Record<string, unknown>;
+  /** Resource that runs fired by this schedule are attributed to. */
+  resourceId?: string;
   metadata?: Record<string, unknown>;
   status?: 'active' | 'paused';
 }
@@ -205,7 +210,7 @@ export interface ListSchedulesFilter {
   workflowId?: string;
   /** Agent-schedule only: match the target threadId. */
   threadId?: string;
-  /** Agent-schedule only: match the target resourceId. */
+  /** Match the schedule's resourceId (agent thread identity or workflow run attribution). */
   resourceId?: string;
   /** Agent-schedule only: match the free-form target name. */
   name?: string;
@@ -312,7 +317,7 @@ export class Schedules {
     const id =
       input.id !== undefined
         ? normalizeScheduleId(input.id, AGENT_SCHEDULE_PREFIX)
-        : `${AGENT_SCHEDULE_PREFIX}${randomUUID()}`;
+        : `${AGENT_SCHEDULE_PREFIX}${globalThis.crypto.randomUUID()}`;
     await this.#assertIdAvailable(store, id, input.id !== undefined);
     const now = Date.now();
     const nextFireAt = computeNextFireAt(input.cron, { timezone: input.timezone, after: now });
@@ -362,7 +367,7 @@ export class Schedules {
     const id =
       input.id !== undefined
         ? normalizeScheduleId(input.id, WORKFLOW_SCHEDULE_PREFIX)
-        : `${WORKFLOW_SCHEDULE_PREFIX}${randomUUID()}`;
+        : `${WORKFLOW_SCHEDULE_PREFIX}${globalThis.crypto.randomUUID()}`;
     await this.#assertIdAvailable(store, id, input.id !== undefined);
     const now = Date.now();
     const nextFireAt = computeNextFireAt(input.cron, { timezone: input.timezone, after: now });
@@ -373,6 +378,7 @@ export class Schedules {
       ...(input.inputData !== undefined ? { inputData: input.inputData } : {}),
       ...(input.initialState !== undefined ? { initialState: input.initialState } : {}),
       ...(input.requestContext !== undefined ? { requestContext: input.requestContext } : {}),
+      ...(input.resourceId !== undefined ? { resourceId: input.resourceId } : {}),
     };
 
     const schedule: Schedule = {
@@ -426,12 +432,15 @@ export class Schedules {
       // `workflowId` filters at the store level, but an `agentId` filter must
       // not surface workflow rows (and vice versa when both are set).
       .filter(s => (filter?.agentId ? s.agentId !== undefined : true));
-    const agentOnly = filter?.threadId !== undefined || filter?.resourceId !== undefined || filter?.name !== undefined;
-    if (!agentOnly) return views;
+    const agentOnly = filter?.threadId !== undefined || filter?.name !== undefined;
+    if (!agentOnly && filter?.resourceId === undefined) return views;
     return views.filter(s => {
+      // `resourceId` exists on both kinds (agent thread identity / workflow run
+      // attribution), so it filters across both; threadId/name are agent-only.
+      if (filter?.resourceId !== undefined && s.resourceId !== filter.resourceId) return false;
+      if (!agentOnly) return true;
       if (s.agentId === undefined) return false;
       if (filter?.threadId !== undefined && s.threadId !== filter.threadId) return false;
-      if (filter?.resourceId !== undefined && s.resourceId !== filter.resourceId) return false;
       if (filter?.name !== undefined && s.name !== filter.name) return false;
       return true;
     });
@@ -546,6 +555,7 @@ export class Schedules {
       ...(wfPatch.inputData !== undefined ? { inputData: wfPatch.inputData } : {}),
       ...(wfPatch.initialState !== undefined ? { initialState: wfPatch.initialState } : {}),
       ...(wfPatch.requestContext !== undefined ? { requestContext: wfPatch.requestContext } : {}),
+      ...(wfPatch.resourceId !== undefined ? { resourceId: wfPatch.resourceId } : {}),
     };
   }
 
@@ -626,7 +636,7 @@ export class Schedules {
     // processor consumes `workflow.start` and reuses the claim id as the run
     // id, so record the trigger row here (the scheduler is not involved in
     // manual fires).
-    const { workflowId, inputData, initialState, requestContext } = existing.target;
+    const { workflowId, inputData, initialState, requestContext, resourceId } = existing.target;
     const claimId = `sched_${existing.id}_${now}`;
     await this.#mastra.pubsub.publish(TOPIC_WORKFLOWS, {
       type: 'workflow.start',
@@ -637,6 +647,7 @@ export class Schedules {
         prevResult: { status: 'success', output: inputData ?? {} },
         requestContext: requestContext ?? {},
         initialState: initialState ?? {},
+        ...(resourceId !== undefined ? { resourceId } : {}),
       },
     });
     const store = await this.#getStore();
@@ -709,6 +720,7 @@ export function toWorkflowSchedule(schedule: Schedule): WorkflowSchedule | null 
     ...(target.inputData !== undefined ? { inputData: target.inputData } : {}),
     ...(target.initialState !== undefined ? { initialState: target.initialState } : {}),
     ...(target.requestContext !== undefined ? { requestContext: target.requestContext } : {}),
+    ...(target.resourceId !== undefined ? { resourceId: target.resourceId } : {}),
     ...(schedule.metadata ? { metadata: schedule.metadata } : {}),
     createdAt: schedule.createdAt,
     updatedAt: schedule.updatedAt,

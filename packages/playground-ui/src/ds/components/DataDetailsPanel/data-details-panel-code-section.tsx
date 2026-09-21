@@ -85,6 +85,8 @@ export interface DataDetailsPanelCodeSectionProps {
   codeStr?: string;
   simplified?: boolean;
   className?: string;
+  /** Extra controls rendered in the header, before the built-in copy button. */
+  actions?: React.ReactNode;
 }
 
 export function DataDetailsPanelCodeSection({
@@ -93,6 +95,7 @@ export function DataDetailsPanelCodeSection({
   icon,
   simplified = false,
   className,
+  actions,
 }: DataDetailsPanelCodeSectionProps) {
   const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
@@ -115,29 +118,32 @@ export function DataDetailsPanelCodeSection({
       <div className="flex items-center justify-between">
         <div
           className={cn(
-            'flex items-center gap-1.5 text-ui-xs tracking-widest text-neutral2 uppercase',
+            'flex items-center gap-1.5 text-ui-xs tracking-widest text-placeholder uppercase',
             '[&>svg]:size-3.5',
           )}
         >
           {icon}
           {title}
         </div>
-        <ButtonsGroup>
-          <CopyButton content={codeStr || 'No content'} size="sm" />
-          {hasMultilineText && (
-            <Button
-              size="sm"
-              aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
-              onClick={() => setShowAsMultilineText(v => !v)}
-            >
-              {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
-            </Button>
-          )}
-        </ButtonsGroup>
+        <div className="flex items-center gap-2">
+          {actions}
+          <ButtonsGroup>
+            <CopyButton content={codeStr || 'No content'} size="sm" />
+            {hasMultilineText && (
+              <Button
+                size="sm"
+                aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
+                onClick={() => setShowAsMultilineText(v => !v)}
+              >
+                {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
+              </Button>
+            )}
+          </ButtonsGroup>
+        </div>
       </div>
-      <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+      <div className="border-border1 bg-surface3 text-ui-sm text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
         {usePlainTextView ? (
-          <div className="text-neutral4 font-mono break-all">
+          <div className="text-muted-foreground font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (

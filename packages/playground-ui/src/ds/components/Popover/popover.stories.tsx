@@ -24,7 +24,7 @@ export const Default: Story = {
         <div className="grid gap-4">
           <div className="space-y-2">
             <h4 className="leading-none font-medium">Dimensions</h4>
-            <p className="text-ui-md text-neutral3">Set the dimensions for the layer.</p>
+            <p className="text-ui-md text-muted-foreground">Set the dimensions for the layer.</p>
           </div>
           <div className="grid gap-2">
             <div className="grid grid-cols-3 items-center gap-4">
@@ -102,7 +102,7 @@ export const WithIconTrigger: Story = {
         <div className="grid gap-4">
           <div className="space-y-2">
             <h4 className="leading-none font-medium">Settings</h4>
-            <p className="text-ui-md text-neutral3">Manage your preferences.</p>
+            <p className="text-ui-md text-muted-foreground">Manage your preferences.</p>
           </div>
         </div>
       </PopoverContent>
@@ -169,7 +169,7 @@ export const SimpleText: Story = {
         <Button variant="ghost">?</Button>
       </PopoverTrigger>
       <PopoverContent className="w-60">
-        <p className="text-ui-md text-neutral5">This is helpful information about the feature.</p>
+        <p className="text-ui-md text-foreground">This is helpful information about the feature.</p>
       </PopoverContent>
     </Popover>
   ),

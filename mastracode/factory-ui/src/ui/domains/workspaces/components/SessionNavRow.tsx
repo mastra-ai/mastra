@@ -10,7 +10,7 @@ import type { RefObject } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionRowStatus } from '../services/sessionStatus';
-import { SessionActivityBelt } from './SessionActivity';
+import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
@@ -33,6 +33,7 @@ export function SessionNavRow({
   loading,
   status,
   merged,
+  changeRequestProvider = 'github',
   preview: previewDetails,
   pinned = false,
   onSelect,
@@ -49,8 +50,10 @@ export function SessionNavRow({
   disabled: boolean;
   /** True while this row's async open is in flight — shows a spinner and blocks clicks. */
   loading?: boolean;
-  /** Merged pull request for this session's branch — shown only when the row is otherwise idle. */
+  /** Merged change request for this session's branch — shown only when the row is otherwise idle. */
   merged?: boolean;
+  /** Names the merged badge: GitHub pull requests or GitLab merge requests. */
+  changeRequestProvider?: 'github' | 'gitlab';
   status?: SessionRowStatus;
   preview?: SessionPreviewDetails;
   pinned?: boolean;
@@ -87,16 +90,17 @@ export function SessionNavRow({
   );
   const belt = loading ? undefined : status;
   const trailing = trailingKind({ loading, status, merged });
+  const mergedLabel = changeRequestProvider === 'gitlab' ? 'Merge request merged' : 'Pull request merged';
   const action = (
     <>
-      {belt ? <SessionActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
+      {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
       <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
         {trailing === 'loading' ? <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3" /> : null}
         {trailing === 'merged' ? (
           <span
             role="img"
-            aria-label={`Pull request merged for ${name}`}
-            title="Pull request merged"
+            aria-label={`${mergedLabel} for ${name}`}
+            title={mergedLabel}
             className={cn('flex', yieldsToActions)}
           >
             <PullRequestStatusIcon status="merged" className="size-3!" decorative />

@@ -329,9 +329,10 @@ Custom phase signals and persisted tool-result ingestion use the item's installe
 
 ### Route intake to custom boards
 
-Intake bindings are explicit. A Linear project (Settings › Intake › Linear routing) or GitHub repository is only offered as a candidate feed once it is bound to a board; nothing is materialized just by opening a board. Review only accepts pull requests and is not offered for issue routing.
+Intake bindings are explicit. A Linear project, Jira project, or GitHub repository is only offered as a candidate feed once it is bound to a board; nothing is materialized just by opening a board. Review only accepts pull requests and is not offered for issue routing.
 
 - **Linear:** each project binding selects one installed board. Changing the board moves that source's existing cards to the new board's initial phase, skipping terminal cards and cards with an active session.
+- **Jira:** each connected-site project binding selects one installed board. The create-Factory flow can select a Jira project and initially binds it to Work. The browser checks routed projects for new issues every 30 seconds and on window focus; issues observed for a routed project materialize automatically as work items on the bound board (mirroring Linear), and closed issues transition their linked card to done or canceled. Both `JiraIntegration` and `PlatformJiraIntegration` reconcile imported cards every five minutes by default so status and metadata continue to refresh without an open browser, and both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_ENABLED=false` to disable reconciliation or `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
 - **GitHub:** Settings › Intake › GitHub routing maps a label to a board per Factory project (`GET`/`PUT /web/intake/label-routes`). Labels match case-insensitively; unrouted issues go to Work. Saving a route relocates matching cards the same way, and `issues.labeled` / `issues.unlabeled` webhooks move a card between its routed board and Work while refreshing its label metadata. Routes apply to every repository linked to the project; label input is free text (no repository label autocomplete yet).
 
 ### GitHub event rules
@@ -369,6 +370,34 @@ Board definitions own lifecycle, transition-policy, phase-semantics, and tool-re
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
 
+### GitLab intake and source control
+
+Direct deployments can use either a GitLab Personal Access Token or Group Access Token. Both authenticate the GitLab API and Git-over-HTTPS in the same way; the difference is reach: a personal token follows the user's accessible projects, while a group token is limited to its group and subgroups. Configure the token with `api` and `write_repository` scopes so Factory can manage issues and merge requests, clone repositories, and push session branches.
+
+```typescript
+import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
+
+const gitlab = new GitLabIntegration({
+  accessToken: process.env.GITLAB_ACCESS_TOKEN,
+  accessTokenType: 'group', // Or 'personal'. Defaults to 'personal'.
+  baseUrl: 'https://gitlab.example.com', // Omit for gitlab.com.
+  webhookSecret: process.env.GITLAB_WEBHOOK_SECRET,
+});
+const factory = new MastraFactory({ storage, integrations: [gitlab] });
+```
+
+With no constructor options, the integration reads `GITLAB_ACCESS_TOKEN`, `GITLAB_ACCESS_TOKEN_TYPE` (`personal` or `group`), `GITLAB_BASE_URL`, and `GITLAB_WEBHOOK_SECRET`. See GitLab's [access-token scopes](https://docs.gitlab.com/security/tokens/access_token_scopes/), [personal token](https://docs.gitlab.com/user/profile/personal_access_tokens/), and [group token](https://docs.gitlab.com/user/group/settings/group_access_tokens/) documentation when creating the credential.
+
+`GITLAB_BASE_URL` must use HTTPS. Plain HTTP is accepted only for loopback development instances (`localhost`, `127.0.0.0/8`, or `::1`), where the access token is sent without transport encryption.
+
+For a Mastra Platform/Nango connection, use `PlatformGitLabIntegration`. It proxies provider requests through `/v2/connections/{connectionId}/proxy` and reads `MASTRA_GITLAB_CONNECTION_ID` unless `connectionId` is passed to the constructor. `MastraFactory` installs it automatically when Platform credentials and that connection ID are present; an explicit integration with id `gitlab` takes precedence.
+
+```typescript
+import { PlatformGitLabIntegration } from '@mastra/factory/integrations/platform/gitlab/integration';
+
+const gitlab = new PlatformGitLabIntegration({ connectionId: 'connection-id' });
+```
+
 ### incident.io intake
 
 Use `IncidentioIntegration` with an incident.io API key to intake active incidents and outstanding follow-ups:
@@ -380,12 +409,12 @@ const incidentio = new IncidentioIntegration(); // Reads INCIDENT_IO_API_KEY.
 const factory = new MastraFactory({ storage, integrations: [incidentio] });
 ```
 
-For a Mastra Platform connection, use `PlatformIncidentioIntegration`. It proxies provider requests through `/v2/connections/{connectionId}/proxy` and reads `MASTRA_INCIDENT_IO_CONNECTION_ID` unless `connectionId` is passed to the constructor. `MastraFactory` installs it automatically when Platform credentials and that connection ID are present; an explicit integration with id `incidentio` takes precedence.
+For Mastra Platform connections, use `PlatformIncidentioIntegration`. It discovers every active `incident-io` connection at runtime and proxies provider requests through `/v2/connections/{connectionId}/proxy`. `MastraFactory` installs it automatically when Platform credentials are present; an explicit integration with id `incidentio` takes precedence.
 
 ```typescript
 import { PlatformIncidentioIntegration } from '@mastra/factory/integrations/platform/incidentio/integration';
 
-const incidentio = new PlatformIncidentioIntegration({ connectionId: 'connection-id' });
+const incidentio = new PlatformIncidentioIntegration(); // Reads Platform credentials from the environment.
 ```
 
 Both integrations expose incidents and incident follow-ups as separate Intake sources. Their provider-neutral Intake items can be imported onto any installed board, including custom boards. A reconciliation worker polls imported incidents and follow-ups every five minutes by default to refresh their provider state and metadata. Set `MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED=false` to disable it or `MASTRACODE_INCIDENT_IO_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence. Follow-up state updates map Factory completion and cancellation to incident.io's `completed` and `not_doing` statuses. incident.io does not expose Intake comments through these adapters.

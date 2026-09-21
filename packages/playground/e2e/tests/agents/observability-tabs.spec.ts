@@ -5,7 +5,7 @@ import { resetStorage } from '../__utils__/reset-storage';
 
 /**
  * FEATURE: Agent observability tabs
- * USER STORY: Platform Studio users should evaluate, review, and inspect traces when observability is injected.
+ * USER STORY: Platform Studio users should inspect traces when observability is injected.
  * BEHAVIOR UNDER TEST: Runtime observability capability unlocks agent observability workflows without package metadata.
  *
  * Data flow: /api/system/packages reports the server observability capability, AgentLayout enables tabs,
@@ -60,9 +60,6 @@ test.describe('Agent observability tabs', () => {
       await mockTraceLists(page, query => (traceQuery = query));
 
       await page.goto('/agents/weather-agent/overview');
-      await expect(page.getByRole('tab', { name: 'Evals' })).toBeVisible();
-      // Review lives inside Evals, not in the top-level tab bar.
-      await expect(page.getByRole('tab', { name: 'Review' })).toHaveCount(0);
       await page.getByRole('tab', { name: 'Traces' }).click();
 
       // The traces tab navigates to /agents/:id/traces; the page then enriches the URL
@@ -88,12 +85,11 @@ test.describe('Agent observability tabs', () => {
       await mockSystemPackages(page, false);
 
       await page.goto('/agents/weather-agent/overview');
-      await page.getByRole('tab', { name: 'Traces' }).hover();
+      await page
+        .locator('[data-base-ui-tooltip-trigger]')
+        .filter({ has: page.getByRole('tab', { name: 'Traces' }) })
+        .hover();
       await expect(page.getByRole('tooltip').getByText('Add @mastra/observability to enable this tab.')).toBeVisible();
-
-      // Evals drops out of the tab list and becomes an icon-only setup hint.
-      await expect(page.getByRole('tab', { name: 'Evals' })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: 'Evals' })).toHaveAttribute('aria-disabled', 'true');
     });
   });
 
@@ -125,31 +121,26 @@ test.describe('Agent observability tabs', () => {
   });
 
   test.describe('when the agent traces tab renders the scope filter', () => {
-    test('locks the scope pills and hides them from the creator dropdown', async ({ page }) => {
+    test('hides the scope fields from the chips and the creator dropdown', async ({ page }) => {
       await mockSystemPackages(page, true);
 
       await mockTraceLists(page);
 
       await page.goto('/agents/weather-agent/traces');
 
-      // Scope pills render as locked — read-only, no Remove (×) affordance.
-      const rootTypePill = page.locator('[data-property-filter-pill="locked"][data-locked-field-id="rootEntityType"]');
-      const entityIdPill = page.locator('[data-property-filter-pill="locked"][data-locked-field-id="entityId"]');
-      await expect(rootTypePill).toBeVisible();
-      await expect(entityIdPill).toBeVisible();
-      await expect(rootTypePill.locator('text="Agent"')).toBeVisible();
-      await expect(entityIdPill.locator('text="weather-agent"')).toBeVisible();
-      await expect(page.getByRole('button', { name: /Remove Primitive Type filter/i })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: /Remove Primitive ID filter/i })).toHaveCount(0);
+      // The scope is applied through the URL but never surfaces as chips.
+      await expect(page).toHaveURL(/filterEntityId=weather-agent/);
+      await expect(page.getByRole('group', { name: /^Primitive Type/ })).toHaveCount(0);
+      await expect(page.getByRole('group', { name: /^Primitive ID/ })).toHaveCount(0);
 
-      // Opening the Add Filter dropdown must not expose the scope-controlled fields,
+      // The filter input's field step must not expose the scope-controlled fields,
       // so users cannot recreate the filter and conflict with the scoped view.
-      await page.getByRole('button', { name: /Add Filter/i }).click();
-      await expect(page.getByRole('menuitem', { name: /Primitive Type/i })).toHaveCount(0);
-      await expect(page.getByRole('menuitem', { name: /Primitive ID/i })).toHaveCount(0);
-      await expect(page.getByRole('menuitem', { name: /Primitive Name/i })).toHaveCount(0);
-      // A non-scope field is still listed so the filter dropdown remains useful.
-      await expect(page.getByRole('menuitem', { name: /Trace ID/i })).toBeVisible();
+      await page.getByRole('combobox', { name: 'Add filter' }).click();
+      await expect(page.getByRole('option', { name: /Primitive Type/i })).toHaveCount(0);
+      await expect(page.getByRole('option', { name: /Primitive ID/i })).toHaveCount(0);
+      await expect(page.getByRole('option', { name: /Primitive Name/i })).toHaveCount(0);
+      // A non-scope field is still listed so the filter input remains useful.
+      await expect(page.getByRole('option', { name: /Trace ID/i })).toBeVisible();
     });
   });
 
@@ -196,14 +187,14 @@ test.describe('Agent observability tabs', () => {
 
       await page.goto('/traces');
 
-      // The Add Filter dropdown surfaces the entity-type field that the agent
-      // scope hides — guards against accidentally hiding it everywhere.
-      await page.getByRole('button', { name: /Add Filter/i }).click();
-      await expect(page.getByRole('menuitem', { name: /Primitive Type/i })).toBeVisible();
-      await expect(page.getByRole('menuitem', { name: /Primitive ID/i })).toBeVisible();
+      // The filter input's field step surfaces the entity-type field that the
+      // agent scope hides — guards against accidentally hiding it everywhere.
+      await page.getByRole('combobox', { name: 'Add filter' }).click();
+      await expect(page.getByRole('option', { name: /Primitive Type/i })).toBeVisible();
+      await expect(page.getByRole('option', { name: /Primitive ID/i })).toBeVisible();
 
-      // No locked pills should ever render in the global view.
-      await expect(page.locator('[data-property-filter-pill="locked"]')).toHaveCount(0);
+      // No locked chips should ever render in the global view.
+      await expect(page.locator('[data-slot="filter-bar-chip"][data-readonly]')).toHaveCount(0);
     });
   });
 });

@@ -1,6 +1,6 @@
 ---
 title: 'Advanced trace queries'
-description: 'Query completed traces and thread identities with recursive predicates, related records, ordering, and cursor pagination.'
+description: 'Query completed traces and thread identities with recursive predicates, numbered pages, keyset cursors, and delta polling.'
 packages:
   - '@mastra/client-js'
   - '@mastra/server'
@@ -136,6 +136,106 @@ curl --request POST \
   }'
 ```
 
+## Discover fields and values
+
+Use trace-query discovery to build field and value autocomplete without scanning trace payloads or copying the query grammar into your client. The configured observability store must support `trace-query-discovery`.
+
+Call `getTraceQueryFields()` for one predicate scope:
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+
+const fields = await mastraClient.getTraceQueryFields({
+  timeRange,
+  predicateScope: 'trace',
+  search: 'region',
+  limit: 25,
+})
+```
+
+The response separates canonical fields from observed metadata fields:
+
+```json
+{
+  "canonicalFields": [],
+  "observedFields": [
+    {
+      "path": "metadata.region",
+      "valueKind": "string",
+      "operators": ["eq", "ne", "in", "notIn", "exists", "notExists"],
+      "valueSuggestions": true,
+      "occurrences": 125
+    }
+  ],
+  "observedFieldsTruncated": false
+}
+```
+
+Canonical fields come from the same registry used to validate trace queries. They don't consume `limit`. The canonical order follows that registry. `observedFields` contains top-level string `metadata.<key>` paths found on qualifying current root spans. These fields are ordered by `occurrences` descending, then by path. Nested metadata, keys containing `.`, empty keys, non-string values, and oversized paths are omitted.
+
+`predicateScope` selects the local predicate grammar. It isn't an authorization scope:
+
+| `predicateScope` | Example returned path | Query usage |
+| - | - | - |
+| `trace` | `environment` or `metadata.region` | Root `where` predicate |
+| `spans` | `model` | Inside `spans.some` or `spans.none` |
+| `scores` | `scorerId` | Inside `scores.some` or `scores.none` |
+| `feedback` | `feedbackType` | Inside `feedback.some` or `feedback.none` |
+
+A global field picker can request all four scopes in parallel and qualify display labels locally. Every returned path is directly accepted by `queryTraces()` in its matching scope. `metadata` by itself isn't a field. A user interface can offer manual metadata-key entry separately.
+
+After a user selects one field with `valueSuggestions: true`, call `getTraceQueryValues()`:
+
+```typescript
+const abortController = new AbortController()
+const suggestions = await mastraClient.getTraceQueryValues(
+  {
+    timeRange,
+    predicateScope: 'trace',
+    path: 'metadata.region',
+    search: 'west',
+    limit: 25,
+  },
+  { signal: abortController.signal },
+)
+```
+
+```json
+{
+  "values": [
+    { "value": "eu-west-1", "count": 82 },
+    { "value": "us-west-2", "count": 43 }
+  ],
+  "valuesTruncated": false
+}
+```
+
+Discovery returns string values only. Missing values, empty strings, and strings larger than 4,096 UTF-8 bytes are omitted. Values are ordered by `count` descending, then by value. Suggestions are advisory: `queryTraces()` continues to accept valid manual literals that discovery doesn't return.
+
+Value suggestions are available for these canonical fields:
+
+| Scope | Fields |
+| - | - |
+| Trace | `entityName`, `entityType`, `environment`, `status` |
+| Spans | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityName` |
+| Scores | `scorerId`, `scorerVersion`, `scoreSource` |
+| Feedback | `feedbackType`, `feedbackSource` |
+
+Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, numeric score or feedback values, comments, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
+
+Both discovery requests require a half-open time range of at most 31 days. They use the same current-record semantics as `queryTraces()`: qualifying completed roots satisfy `from <= startedAt < to`, and related values come only from current records joined to those roots by `traceId`. Discovery doesn't accept or apply a draft `where` predicate.
+
+`search` defaults to the empty string, is trimmed, and matches case-insensitive literal substrings. Characters such as `%` and `_` have no wildcard meaning. An empty search returns the most frequent results. `limit` defaults to 25 and has a maximum of 100. Both endpoints fetch one extra result to set their truncation flag, but don't provide a cursor. When a flag is `true`, refine `search`. It doesn't imply that a next page is available. No matches return an empty array and `false` truncation.
+
+If discovery exceeds its execution timeout, the route returns `504 TRACE_QUERY_EXECUTION_TIMEOUT`. If the backend exceeds a memory or resource budget, it returns `503 TRACE_QUERY_RESOURCE_LIMIT`. Neither failure returns partial suggestions or sets a truncation flag. Truncation only means a complete ranking was cut to the requested response limit.
+
+ClickHouse discovery requests default to a 5-second timeout and a 256 MiB per-query memory limit. Configure these with `observability.traceQuery.discovery.timeoutMs` and `observability.traceQuery.discovery.memoryLimitBytes` on `ClickhouseStoreVNext`. Discovery falls back to `observability.traceQuery.timeoutMs` when its timeout isn't configured, without changing ordinary `queryTraces()` execution limits.
+
+Both routes require `observability:read` and use the configured observability storage boundary. Don't send organization or project authorization fields in the request. Treat discovered paths, values, and counts as observability data.
+
 ## Request fields
 
 ### Trace queries
@@ -144,8 +244,12 @@ curl --request POST \
 | - | - | - |
 | `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, `from` must be earlier than `to`, and the range can't exceed 31 days. |
 | `where` | No | Recursive trace predicate. Supports scalar conditions and `spans`, `scores`, and `feedback` `some` or `none` clauses. |
-| `orderBy` | No | One item ordering results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. |
+| `orderBy` | No | One item ordering results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted in delta mode. |
 | `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
+| `pagination` | No | Numbered pages: `{ page, perPage }`. Defaults to page 0 and 10 results. `perPage` has a maximum of 100. |
+| `mode` | No | Set to `'delta'` to poll using a delta cursor instead of `page` or `pagination`. |
+| `after` | No | Delta mode only. Opaque `deltaCursor` from a numbered page or previous poll. Omit to establish the current watermark. |
+| `limit` | No | Delta mode only. Maximum results per batch. Defaults to 10 and has a maximum of 100. |
 
 ### Thread queries
 
@@ -351,7 +455,7 @@ const messageTrace = {
 
 The key must name one top-level property. Empty keys and nested paths are rejected. Metadata keys aren't trimmed, so leading and trailing whitespace remains part of the exact key identity. When metadata duplicates a canonical trace field, such as `resourceId`, `threadId`, or `environment`, prefer the canonical field because it uses the dedicated storage column. The `metadata.<key>` form remains available when you specifically need the value from the metadata object. Metadata and canonical values may differ.
 
-Metadata fields aren't available for grouping or field discovery.
+Metadata fields aren't available for grouping. Trace-query discovery returns executable top-level string metadata fields observed in the selected time range.
 
 ### Filter by feedback
 
@@ -429,9 +533,75 @@ Related evidence isn't embedded in either response. Use the trace-detail and bra
 
 ## Pagination and errors
 
+### Choose a pagination mode
+
+Trace queries support three mutually exclusive modes:
+
+| Mode | Request fields | Response metadata |
+| - | - | - |
+| Keyset, the default | `page: { limit, after }` | `page: { next }` |
+| Numbered pages | `pagination: { page, perPage }` | `pagination: { total, page, perPage, hasMore }` and, when delta polling is supported, `deltaCursor` |
+| Delta polling | `mode: 'delta'`, optional top-level `after` and `limit` | `delta: { limit, hasMore }` and `deltaCursor` |
+
+Numbered pages are zero-based. Their total and rows are read consistently within each request. Don't combine `page`, `pagination`, or delta mode. Top-level `after` and `limit` are accepted only in delta mode. Thread queries and grouped compatibility queries remain keyset-only.
+
+### Poll after loading a numbered page
+
+Use the numbered response's `deltaCursor` to replace the numbered-page-to-delta-polling workflow of `listTracesLight()`. Results use `traces` instead of `spans` and contain completed traces only. The configured store must support delta polling.
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+const initial = await mastraClient.queryTraces({
+  timeRange,
+  pagination: { page: 0, perPage: 100 },
+})
+if (!initial.deltaCursor) throw new Error('Delta polling is unavailable')
+
+const traces = new Map(initial.traces.map(trace => [trace.traceId, trace]))
+let after = initial.deltaCursor
+
+async function poll() {
+  let hasMore: boolean
+  do {
+    const result = await mastraClient.queryTraces({
+      timeRange,
+      mode: 'delta',
+      after,
+      limit: 100,
+    })
+    for (const trace of result.traces) traces.set(trace.traceId, trace)
+    after = result.deltaCursor
+    hasMore = result.delta.hasMore
+  } while (hasMore)
+}
+
+await poll()
+```
+
+Retain `after` and call `poll()` again at your application's polling interval. A trace can appear in the initial page and a later batch, or in multiple batches, so merge results by `traceId`. To load historical traces omitted from the initial page, request the remaining numbered pages.
+
+A delta request without `after` returns an empty array and establishes the current cursor. It doesn't return historical matches. Always retain the returned cursor, including for empty batches. `hasMore` means another matching trace exists beyond the batch limit. Continue immediately while it's `true`.
+
+Delta ordering uses the storage ingestion watermark and adapter-specific tie-breakers, so matching timestamps don't make the cursor ambiguous. Don't pass `orderBy` in delta mode. Keyset and delta cursors aren't interchangeable, and delta cursors can't move between storage adapters.
+
+Keep the same normalized `where` predicate and exact `timeRange` bounds for every poll. The range continues to select root `startedAt`, even when a trace completes later. Changing `timeRange.to` to the current time invalidates the cursor. Reload a numbered page and use its cursor whenever the selection or authorization scope changes. You can change the batch limit without restarting.
+
+New completed roots and roots completing after the cursor can be returned. Related spans, scores, and feedback are evaluated when a root is selected, but later related-record writes don't guarantee that the trace is emitted again. Deleted traces and traces that stop matching aren't returned as removals or tombstones. Refresh numbered pages when you need to reconcile those changes.
+
+ClickHouse polling is best effort. Its delta index and trace records use separate materialized-view tables. Concurrent queries can observe an insert in one table before another, as described in [ClickHouse's materialized-view visibility rules](https://github.com/ClickHouse/clickhouse-docs/blob/main/knowledgebase/are_materialized_views_inserted_asynchronously.mdx). A poll can advance past an index entry before the matching trace becomes visible and miss that trace in later polls. Reload numbered pages periodically to reconcile these gaps.
+
+ClickHouse's delta index retains two days of events and doesn't backfill historical rows. Reload numbered pages after a polling interruption longer than this retention window. Delta polling isn't a durable change feed and doesn't guarantee delivery of every matching trace.
+
+### Keyset ordering and errors
+
 Ordering is deterministic. Trace ordering appends `traceId` ascending as a tie-breaker. Thread queries always use raw ordinal `threadId` ascending order. Callers can't override it.
 
-Cursors are bound to the operation, accepted normalized query, authorization state, and ordering. Reusing a cursor after changing the trace selection, predicates, or ordering returns `409`. Trace and thread cursors aren't interchangeable. A malformed cursor returns `400`.
+Keyset cursors are bound to the operation, accepted normalized query, and ordering. Reusing a keyset cursor after changing the trace selection, predicates, or ordering returns `409`. Trace and thread cursors aren't interchangeable.
+
+Numbered-page handoff cursors and delta cursors also bind the authorization state. Changes to the caller's roles or permissions invalidate these cursors and return `409`. If a delta poll returns `409`, reload the numbered pages and resume polling with the new `deltaCursor`. A malformed cursor returns `400`.
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 
@@ -442,13 +612,14 @@ PostgreSQL and ClickHouse stop advanced trace and thread queries after 15 second
 | `400` | Malformed JSON or malformed cursor. |
 | `409` | The cursor doesn't match the query. |
 | `413` | The request body exceeds 256 KiB. |
-| `422` | The JSON is well formed, but the request is structurally or semantically invalid. The response includes stable issue codes and paths. |
-| `501` | The configured observability store doesn't support the requested trace or thread query. |
-| `504` | A PostgreSQL or ClickHouse query exceeded its configured database execution timeout. |
+| `422` | The JSON is well formed, but the request is structurally or semantically invalid. The response includes stable issue codes and paths. Discovery validation uses `TRACE_QUERY_INVALID`. |
+| `501` | The installed Core or configured observability store doesn't support the requested operation. Discovery returns `TRACE_QUERY_DISCOVERY_UNSUPPORTED` unless Core provides the discovery contract and the store implements both field and value discovery. |
+| `503` | Discovery exceeded a backend memory or resource budget and returned `TRACE_QUERY_RESOURCE_LIMIT`. |
+| `504` | A PostgreSQL or ClickHouse query exceeded its configured database execution timeout. Discovery returns `TRACE_QUERY_EXECUTION_TIMEOUT`. |
 
 ## Limitations
 
-Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, counts, measures, or custom grouping.
+Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, measures, or custom grouping. Numbered trace pages include a total count.
 
 ## Related
 

@@ -4,6 +4,8 @@ import {
   compareTraceQueryStrings,
   createTraceQueryObservedFieldDescriptor,
   encodeTraceQueryCursor,
+  encodeTraceQueryDeltaCursor,
+  getTraceQueryDeltaWatermark,
   getTraceQueryCanonicalFieldDescriptors,
   getTraceQueryFieldsArgsSchema,
   getTraceQueryFieldsResponseSchema,
@@ -34,10 +36,13 @@ import {
   queryThreadsResultSchema,
   resolveTraceQueryTimeoutMs,
   traceQueryGroupResponseSchema,
+  traceQueryPaginatedTraceResponseSchema,
   traceQueryRequestSchema,
+  traceQueryResponseSchema,
   traceQueryTraceResponseSchema,
   TraceQueryCursorError,
   TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
   TraceQueryValidationError,
   type TraceQueryPredicate,
 } from './trace-query';
@@ -55,6 +60,80 @@ function parsed(request: unknown = baseRequest) {
 
 const baseThreadRequest = { traces: baseRequest };
 
+describe('trace delta contract', () => {
+  it.each([
+    { mode: 'delta', page: {} },
+    { mode: 'delta', pagination: {} },
+    { mode: 'delta', group: { by: ['threadId'] } },
+    { mode: 'delta', orderBy: [{ field: 'startedAt', direction: 'desc' }] },
+    { after: 'cursor' },
+    { limit: 10 },
+    { mode: 'delta', limit: 0 },
+    { mode: 'delta', limit: 101 },
+  ])('rejects invalid pagination combinations: %j', fields => {
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, ...fields }).success).toBe(false);
+  });
+
+  it('shares the numbered-page binding with delta while permitting different batch sizes', () => {
+    const page = planTraceQuery(
+      parsed({ ...baseRequest, pagination: {}, orderBy: [{ field: 'endedAt', direction: 'asc' }] }),
+    );
+    if (page.paginationMode !== 'page') throw new Error('Expected numbered page');
+    const after = encodeTraceQueryDeltaCursor(page, 'pg', '42:3');
+    const delta = planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after }));
+    expect(delta).toMatchObject({
+      paginationMode: 'delta',
+      limit: 10,
+      deltaCursor: { adapter: 'pg', watermark: '42:3' },
+    });
+    if (delta.paginationMode !== 'delta') throw new Error('Expected delta');
+    expect(getTraceQueryDeltaWatermark(delta, 'pg')).toBe('42:3');
+    expect(() => getTraceQueryDeltaWatermark(delta, 'duckdb')).toThrow(TraceQueryCursorError);
+    expect(planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after, limit: 100 }))).toMatchObject({ limit: 100 });
+  });
+
+  it('rejects malformed, keyset, predicate, time-range and authorization mismatches', () => {
+    const plan = planTraceQuery(parsed({ ...baseRequest, pagination: {} }), { authorizationBinding: 'tenant-a' });
+    if (plan.paginationMode !== 'page') throw new Error('Expected numbered page');
+    const after = encodeTraceQueryDeltaCursor(plan, 'pg', '42:3');
+    for (const fields of [
+      { after: 'garbage' },
+      { after, where: { op: 'exists', path: 'threadId' } },
+      { after, timeRange: { ...baseRequest.timeRange, to: '2026-08-31T00:00:00Z' } },
+    ]) {
+      expect(() =>
+        planTraceQuery(parsed({ ...baseRequest, mode: 'delta', ...fields }), { authorizationBinding: 'tenant-a' }),
+      ).toThrow(TraceQueryCursorError);
+    }
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after }), { authorizationBinding: 'tenant-b' }),
+    ).toThrow(TraceQueryCursorError);
+    const keyset = planTraceQuery(parsed());
+    if (keyset.result !== 'traces' || keyset.paginationMode !== 'keyset') throw new Error('Expected keyset');
+    const keysetCursor = encodeTraceQueryCursor(keyset, {
+      result: 'traces',
+      traceId: 'trace-a',
+      sortValue: '2026-08-01T00:00:00Z',
+    });
+    expect(() => planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after: keysetCursor }))).toThrow(
+      TraceQueryCursorError,
+    );
+    expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after } }))).toThrow(TraceQueryCursorError);
+  });
+
+  it('requires exactly one metadata shape and rejects thread delta', () => {
+    const delta = { traces: [], delta: { limit: 10, hasMore: false }, deltaCursor: 'cursor' };
+    expect(traceQueryResponseSchema.safeParse(delta).success).toBe(true);
+    expect(traceQueryResponseSchema.safeParse({ ...delta, page: { next: null } }).success).toBe(false);
+    expect(
+      traceQueryResponseSchema.safeParse({ ...delta, pagination: { total: 0, page: 0, perPage: 10, hasMore: false } })
+        .success,
+    ).toBe(false);
+    expect(traceQueryResponseSchema.safeParse({ traces: [], delta: delta.delta }).success).toBe(false);
+    expect(queryThreadsInputSchema.safeParse({ ...baseThreadRequest, mode: 'delta' }).success).toBe(false);
+  });
+});
+
 function parsedThreads(request: unknown = baseThreadRequest) {
   return parseQueryThreadsInput(request);
 }
@@ -70,9 +149,61 @@ function validationError(fn: () => unknown): TraceQueryValidationError {
 }
 
 describe('traceQueryRequestSchema', () => {
-  it('normalizes page defaults without coercing values', () => {
-    expect(parsed()).toMatchObject({ page: { limit: 100 } });
+  it('leaves omitted keyset pagination for the planner and normalizes page-mode defaults', () => {
+    expect(parsed()).not.toHaveProperty('page');
+    expect(planTraceQuery(parsed())).toMatchObject({ paginationMode: 'keyset', limit: 100 });
+    expect(parsed({ ...baseRequest, pagination: {} })).toMatchObject({ pagination: { page: 0, perPage: 10 } });
+    expect(parsed({ ...baseRequest, pagination: { page: 2, perPage: 100 } })).toMatchObject({
+      pagination: { page: 2, perPage: 100 },
+    });
     expect(traceQueryRequestSchema.safeParse({ ...baseRequest, page: { limit: '10' } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { page: -1 } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { perPage: 0 } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { perPage: 101 } }).success).toBe(false);
+  });
+
+  it('rejects mixed and grouped list-compatible pagination in the request schema', () => {
+    const mixedRequest = { ...baseRequest, page: { limit: 10 }, pagination: { page: 0, perPage: 10 } };
+    const mixedResult = traceQueryRequestSchema.safeParse(mixedRequest);
+    expect(mixedResult.error?.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'custom',
+        path: ['pagination'],
+        message: 'Trace queries cannot combine keyset and page pagination',
+      }),
+    );
+    const mixed = validationError(() => parsed(mixedRequest));
+    expect(mixed.issues).toContainEqual(
+      expect.objectContaining({ code: 'pagination_mode_conflict', path: ['pagination'] }),
+    );
+
+    const groupedRequest = {
+      ...baseRequest,
+      group: { by: ['threadId'] },
+      pagination: { page: 0, perPage: 10 },
+    };
+    const groupedResult = traceQueryRequestSchema.safeParse(groupedRequest);
+    expect(groupedResult.error?.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'custom',
+        path: ['pagination'],
+        message: 'Grouped trace queries do not support page pagination',
+      }),
+    );
+    const grouped = validationError(() => parsed(groupedRequest));
+    expect(grouped.issues).toContainEqual(
+      expect.objectContaining({ code: 'group_pagination_not_supported', path: ['pagination'] }),
+    );
+  });
+
+  it('builds a normalized page plan without cursor state', () => {
+    expect(planTraceQuery(parsed({ ...baseRequest, pagination: { page: 3, perPage: 25 } }))).toMatchObject({
+      result: 'traces',
+      paginationMode: 'page',
+      page: 3,
+      perPage: 25,
+      orderBy: { field: 'startedAt', direction: 'desc' },
+    });
   });
 
   it('rejects unknown and experimental request properties', () => {
@@ -1451,10 +1582,14 @@ describe('trace-query execution timeout contract', () => {
     }
   });
 
-  it('exposes a stable timeout identity without a driver message', () => {
+  it('exposes stable execution-budget identities without driver messages', () => {
     expect(new TraceQueryExecutionError()).toMatchObject({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
       message: 'The trace query exceeded its execution timeout',
+    });
+    expect(new TraceQueryResourceLimitError()).toMatchObject({
+      code: 'TRACE_QUERY_RESOURCE_LIMIT',
+      message: 'The trace query exceeded its resource limit',
     });
   });
 });
@@ -1480,6 +1615,22 @@ describe('trace-query responses and storage capability', () => {
       status: 'success',
     };
     expect(traceQueryTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(true);
+    expect(
+      traceQueryPaginatedTraceResponseSchema.safeParse({
+        traces: [trace],
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+      }).success,
+    ).toBe(true);
+    expect(
+      traceQueryTraceResponseSchema.safeParse({
+        traces: [trace],
+        page: { next: null },
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+      }).success,
+    ).toBe(false);
+    expect(traceQueryPaginatedTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(
+      false,
+    );
     expect(
       traceQueryTraceResponseSchema.safeParse({ traces: [{ ...trace, scores: [] }], page: { next: null } }).success,
     ).toBe(false);

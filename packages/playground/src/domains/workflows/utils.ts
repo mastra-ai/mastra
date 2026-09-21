@@ -1,68 +1,137 @@
-import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
+import type { GetWorkflowRunByIdResponse } from '@mastra/client-js';
+import type { WorkflowRunState, WorkflowStateStepResult } from '@mastra/core/workflows';
 
-import type { WorkflowRunStreamResult } from './context/workflow-run-context';
+import type { WorkflowRunSnapshot, WorkflowRunStreamResult } from './context/workflow-run-context';
 
-export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState): WorkflowRunStreamResult {
-  // Extract step information from the context
-  const steps: Record<string, any> = {};
-  const context = runState.context || {};
+type RecordedRun = WorkflowRunState | GetWorkflowRunByIdResponse;
+type RecordedStep = WorkflowRunState['context'][string] | WorkflowStateStepResult;
+type RecordedStepResult = Exclude<RecordedStep, unknown[]>;
+type StreamStep = WorkflowRunStreamResult['steps'][string];
 
-  // Convert each step in the context to the expected format
-  Object.entries(context).forEach(([stepId, stepResult]) => {
-    if (stepId !== 'input' && 'status' in stepResult) {
-      const result = stepResult as StepResult<any, any, any, any>;
-      // Check if this is a tripwire (failed step with tripwire property)
-      const hasTripwire = result.status === 'failed' && result.tripwire !== undefined;
+const FINISHED_RUN_STATUSES = ['success', 'failed', 'canceled', 'bailed', 'tripwire'];
 
-      steps[stepId] = {
-        status: result.status,
-        output: 'output' in result ? result.output : undefined,
-        payload: 'payload' in result ? result.payload : undefined,
-        suspendPayload: 'suspendPayload' in result ? result.suspendPayload : undefined,
-        suspendOutput: 'suspendOutput' in result ? result.suspendOutput : undefined,
-        resumePayload: 'resumePayload' in result ? result.resumePayload : undefined,
-        // Don't include error when tripwire is present - tripwire takes precedence
-        error: hasTripwire ? undefined : 'error' in result ? result.error : undefined,
-        tripwire: hasTripwire ? result.tripwire : undefined,
-        startedAt: 'startedAt' in result ? result.startedAt : Date.now(),
-        endedAt: 'endedAt' in result ? result.endedAt : undefined,
-        suspendedAt: 'suspendedAt' in result ? result.suspendedAt : undefined,
-        resumedAt: 'resumedAt' in result ? result.resumedAt : undefined,
-      };
-    }
-  });
+export function isPersistedRunState(run: RecordedRun): run is WorkflowRunState {
+  return 'context' in run;
+}
 
-  const suspendedStepIds = Object.entries(steps as Record<string, StepResult<any, any, any, any>>).flatMap(
-    ([stepId, stepResult]) => {
-      if (stepResult?.status === 'suspended') {
-        const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
-        return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
-      }
+function readRecordedRun(run: RecordedRun) {
+  if (isPersistedRunState(run)) {
+    const { input, ...steps } = run.context;
+    return { input, steps };
+  }
+  return { input: run.payload, steps: run.steps ?? {} };
+}
 
-      return [];
-    },
-  );
+function pickIterationToShow(iterations: RecordedStepResult[]) {
+  return iterations.find(iteration => iteration?.status === 'suspended') ?? iterations[0];
+}
 
-  const suspendedStep = suspendedStepIds?.[0]?.[0];
+function stripTripwireError(step: RecordedStepResult): StreamStep {
+  const failedByTripwire = step.status === 'failed' && 'tripwire' in step && step.tripwire !== undefined;
+  return failedByTripwire ? { ...step, error: undefined } : step;
+}
 
-  const suspendPayload = suspendedStep ? steps[suspendedStep]?.suspendPayload : undefined;
-
+function toStreamStep(recorded: RecordedStep): StreamStep | undefined {
+  if (!Array.isArray(recorded)) return recorded ? stripTripwireError(recorded) : undefined;
+  const shown = pickIterationToShow(recorded);
+  if (!shown) return undefined;
   return {
-    input: context.input,
-    steps: steps,
-    status: runState.status,
-    ...(runState.status === 'success' ? { result: runState.result } : {}),
-    ...(runState.status === 'failed' ? { error: runState.error } : {}),
-    ...(runState.status === 'suspended' ? { suspended: suspendedStepIds, suspendPayload: suspendPayload } : {}),
-    ...(runState.status === 'tripwire' && runState.tripwire
-      ? {
-          tripwire: {
-            reason: runState.tripwire.reason,
-            retry: runState.tripwire.retry,
-            metadata: runState.tripwire.metadata,
-            processorId: runState.tripwire.processorId,
-          },
-        }
-      : {}),
-  } as WorkflowRunStreamResult;
+    ...stripTripwireError(shown),
+    payload: recorded.map(iteration => iteration?.payload),
+    output: recorded.map(iteration => iteration?.output),
+  };
+}
+
+function toStreamSteps(recordedSteps: Record<string, RecordedStep>): WorkflowRunStreamResult['steps'] {
+  return Object.fromEntries(
+    Object.entries(recordedSteps).flatMap(([stepId, recorded]) => {
+      const step = toStreamStep(recorded);
+      return step ? [[stepId, step] as const] : [];
+    }),
+  );
+}
+
+function suspendedPathOf(stepId: string, step: StreamStep): string[] {
+  const path = step.suspendPayload?.__workflow_meta?.path;
+  const nestedPath = Array.isArray(path) ? path.filter((part): part is string => typeof part === 'string') : [];
+  return nestedPath[0] === stepId ? nestedPath : [stepId, ...nestedPath];
+}
+
+function collectSuspendedPaths(steps: WorkflowRunStreamResult['steps']) {
+  return Object.entries(steps)
+    .filter(([, step]) => step.status === 'suspended')
+    .map(([stepId, step]) => suspendedPathOf(stepId, step));
+}
+
+function readRunOutcome(run: RecordedRun, steps: WorkflowRunStreamResult['steps']): Partial<WorkflowRunStreamResult> {
+  switch (run.status) {
+    case 'success':
+      return { result: run.result };
+    case 'failed':
+      return { error: run.error };
+    case 'suspended': {
+      const suspended = collectSuspendedPaths(steps);
+      const suspendedStepId = suspended[0]?.[0];
+      return { suspended, suspendPayload: suspendedStepId ? steps[suspendedStepId]?.suspendPayload : undefined };
+    }
+    case 'tripwire':
+      return 'tripwire' in run && run.tripwire ? { tripwire: run.tripwire } : {};
+    default:
+      return {};
+  }
+}
+
+export function convertWorkflowRunStateToStreamResult(run: RecordedRun): WorkflowRunStreamResult {
+  const { input, steps: recordedSteps } = readRecordedRun(run);
+  const steps = toStreamSteps(recordedSteps);
+  return { input, steps, status: run.status, ...readRunOutcome(run, steps) };
+}
+
+function mergeStepResults(liveSteps: WorkflowRunStreamResult['steps'], storedSteps: WorkflowRunStreamResult['steps']) {
+  const mergedLiveSteps = Object.entries(liveSteps).map(
+    ([stepId, liveStep]) => [stepId, { ...storedSteps[stepId], ...liveStep }] as const,
+  );
+  return { ...storedSteps, ...Object.fromEntries(mergedLiveSteps) };
+}
+
+export function resolveWorkflowRunResult(
+  liveResult: WorkflowRunStreamResult | null,
+  storedResult: WorkflowRunStreamResult | null,
+) {
+  if (!liveResult) return storedResult;
+  if (!storedResult) return liveResult;
+  return {
+    ...liveResult,
+    input: liveResult.input ?? storedResult.input,
+    steps: mergeStepResults(liveResult.steps, storedResult.steps),
+  };
+}
+
+function readInitialState(runSnapshot: WorkflowRunSnapshot) {
+  return isPersistedRunState(runSnapshot) ? runSnapshot.value : runSnapshot.initialState;
+}
+
+export function readStoredPayload(runSnapshot: WorkflowRunSnapshot, storedInput: WorkflowRunStreamResult['input']) {
+  const initialState = readInitialState(runSnapshot);
+  const hasInitialState = initialState && Object.keys(initialState).length > 0;
+  return hasInitialState ? { initialState, inputData: storedInput } : storedInput;
+}
+
+export function isWorkflowRunFinished(status?: string) {
+  return FINISHED_RUN_STATUSES.includes(status ?? '');
+}
+
+export function isIdleRunStatus(status: WorkflowRunStreamResult['status'] | undefined) {
+  return status === 'paused' || status === 'suspended';
+}
+
+export function getRunTimestamp(value: Date | string | number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+export function getRunResourceId(run: unknown): string | undefined {
+  if (!run || typeof run !== 'object' || !('resourceId' in run)) return undefined;
+  return typeof run.resourceId === 'string' && run.resourceId.length > 0 ? run.resourceId : undefined;
 }

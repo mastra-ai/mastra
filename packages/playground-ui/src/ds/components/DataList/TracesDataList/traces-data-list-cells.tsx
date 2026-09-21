@@ -26,11 +26,11 @@ export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }:
   const label = isRoot ? 'Trace' : 'Subtrace';
   const icon = (
     <span aria-label={label} className="inline-flex shrink-0">
-      <Icon className={cn('size-4 shrink-0', isRoot ? 'text-neutral3' : 'text-neutral2')} aria-hidden />
+      <Icon className={cn('size-4 shrink-0', isRoot ? 'text-muted-foreground' : 'text-placeholder')} aria-hidden />
     </span>
   );
   return (
-    <DataListCell className="text-ui-smd text-neutral4 flex min-w-0 items-center gap-2">
+    <DataListCell className="text-ui-smd text-muted-foreground flex min-w-0 items-center gap-2">
       {showLevelTooltip ? (
         <Tooltip>
           <TooltipTrigger asChild>{icon}</TooltipTrigger>
@@ -61,7 +61,7 @@ export function TracesDataListInputCell({ input }: TracesDataListInputCellProps)
 // ---------------------------------------------------------------------------
 
 function EntityTypeIcon({ entityType, className }: { entityType: string; className?: string }) {
-  const iconClass = cn('size-3.5 shrink-0 text-neutral2', className);
+  const iconClass = cn('size-3.5 shrink-0 text-placeholder', className);
   const normalizedEntityType = entityType.toLowerCase();
 
   switch (normalizedEntityType) {

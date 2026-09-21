@@ -1,7 +1,5 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowLeftIcon } from 'lucide-react';
+import { useState } from 'react';
 
 import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
 
@@ -11,25 +9,31 @@ export interface TraceThreadPanelProps {
   onBack: () => void;
   /** Close the whole side panel. */
   onClose: () => void;
-  className?: string;
+  /** Accessible drawer name; defaults to the thread id. */
+  title?: string;
 }
 
-/** The trace side panel swapped for the full thread: every turn as traces, anchored on the URL's `traceId`. */
-export function TraceThreadPanel({ threadId, onBack, onClose, className }: TraceThreadPanelProps) {
+/** The trace drawer swapped for the full thread: every turn as traces, anchored on the URL's `traceId`. */
+export function TraceThreadPanel({ threadId, onBack, onClose, title }: TraceThreadPanelProps) {
+  // Like the trace panel: the drawer only takes the full frame while a span detail is open.
+  const [hasSelectedSpan, setHasSelectedSpan] = useState(false);
   return (
-    <DataPanel className={cn('h-full min-h-0', className)}>
+    <DataPanel open onClose={onClose} title={title ?? `Thread ${threadId}`} size={hasSelectedSpan ? 'full' : 'wide'}>
       <DataPanel.Header>
-        <Button size="md" variant="ghost" onClick={onBack} aria-label="Back to trace" tooltip="Back to trace">
-          <ArrowLeftIcon />
-        </Button>
-        <DataPanel.Heading className="min-w-0 items-center">
-          Thread <b className="truncate">{threadId}</b>
-        </DataPanel.Heading>
-        <DataPanel.CloseButton onClick={onClose} className="ml-auto shrink-0" />
+        {/* The leading arrow leaves this view for the trace it replaced; the drawer itself still closes via Escape / backdrop. */}
+        <DataPanel.CloseButton onClick={onBack} label="Back to trace" tooltip="Back to trace" />
+        <DataPanel.HeaderContent>
+          <DataPanel.Heading>
+            Thread
+            <DataPanel.CopyId id={threadId} />
+          </DataPanel.Heading>
+        </DataPanel.HeaderContent>
       </DataPanel.Header>
-      {/* Inside the framed panel the turns' details columns read as one strip: no top rounding, no horizontal borders. */}
-      <div className="min-h-0 flex-1 [&_[data-slot=thread-trace-details]]:rounded-t-none [&_[data-slot=thread-trace-details]]:border-y-0">
-        <ThreadViewByTrace threadId={threadId} />
+      <div className="min-h-0 flex-1">
+        <ThreadViewByTrace
+          threadId={threadId}
+          onSelectedSpanChange={selected => setHasSelectedSpan(selected !== null)}
+        />
       </div>
     </DataPanel>
   );

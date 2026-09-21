@@ -64,7 +64,24 @@
   --neutral5: oklch(0.92 0 0);
   --neutral6: oklch(0.985 0 0);
 
+  --background: var(--background-2);
+  --sidebar: var(--background-1);
+  --card: var(--background-3);
+  --popover: var(--background-3);
+  --muted: var(--gray-1);
+  --foreground: var(--gray-10);
+  --muted-foreground: var(--gray-9);
+  --placeholder: var(--gray-7);
+  --border: var(--gray-alpha-2);
+  --ring: var(--gray-8);
+  --sidebar-accent: var(--gray-alpha-1);
+  --selected: var(--gray-alpha-2);
+  --destructive: oklch(0.637 0.237 25.331);
+  --destructive-foreground: oklch(0 0 0);
+
   --error: oklch(0.637 0.237 25.331);
+  /* Lightness for hue-only generated accents (e.g. per-filter colors) — legible on each theme. */
+  --generated-accent-lightness: 72%;
   --overlay: oklch(0% 0 0deg / 75%);
   --border1: oklch(100% 0 0deg / 7%);
   --border2: oklch(100% 0 0deg / 11%);
@@ -80,6 +97,7 @@
   --shadow-main-frame: 0 14px 48px -36px oklch(0% 0 0deg / 85%);
   --sidebar-nav-hover: oklch(100% 0 0deg / 7%);
   --sidebar-nav-active: oklch(100% 0 0deg / 11%);
+  --sidebar-divider: oklch(100% 0 0deg / 11%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -205,7 +223,12 @@ html.light {
   --neutral5: oklch(0.208 0 0);
   --neutral6: oklch(0.13 0 0);
 
+  --border: var(--gray-alpha-3);
+  --destructive: oklch(0.47 0.19 27.325);
+  --destructive-foreground: oklch(1 0 0);
+
   --error: oklch(0.577 0.245 27.325);
+  --generated-accent-lightness: 38%;
   --overlay: oklch(20.8% 0 0deg / 45%);
   --border1: oklch(20.8% 0 0deg / 10%);
   --border2: oklch(20.8% 0 0deg / 16%);
@@ -221,6 +244,7 @@ html.light {
   --shadow-main-frame: 0 1px 2px oklch(24% 0 0deg / 4%), 0 18px 48px -34px oklch(24% 0 0deg / 22%);
   --sidebar-nav-hover: oklch(20.8% 0 0deg / 5.5%);
   --sidebar-nav-active: oklch(20.8% 0 0deg / 8.5%);
+  --sidebar-divider: oklch(20.8% 0 0deg / 16%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -382,10 +406,11 @@ html.light {
   --height-icon-default: 16px;
   --height-icon-lg: 20px;
   --height-icon-sm: 12px;
+  --height-icon-smd: 14px;
   --spacing-form-xs: 1.25rem;
   --spacing-form-sm: 1.5rem;
   --spacing-form-md: 1.75rem;
-  --spacing-form-lg: 1.75rem;
+  --spacing-form-lg: 2rem;
   --height-header-default: 40px;
   --height-table-header: 28px;
   --height-table-row: 40px;
@@ -399,6 +424,7 @@ html.light {
   --max-height-icon-default: 16px;
   --max-height-icon-lg: 20px;
   --max-height-icon-sm: 12px;
+  --max-height-icon-smd: 14px;
   --max-height-header-default: 40px;
   --max-height-table-header: 28px;
   --max-height-table-row: 40px;
@@ -409,9 +435,12 @@ html.light {
   --max-height-avatar-lg: 40px;
   --max-height-dropdown-max-height: 300px;
 
+  --min-height-header-default: 40px;
+
   --width-icon-default: 16px;
   --width-icon-lg: 20px;
   --width-icon-sm: 12px;
+  --width-icon-smd: 14px;
   /* Using --spacing-form-* for both height and width */
   --width-header-default: 40px;
   --width-table-header: 28px;
@@ -475,6 +504,7 @@ html.light {
   --color-button-default-bg-active: var(--button-default-bg-active);
   --color-button-default-border: var(--button-default-border);
   --color-surface-row-featured: var(--surface-row-featured);
+  --color-sidebar-divider: var(--sidebar-divider);
 
   /* Semantic color aliases */
   --color-text1: var(--text1);
@@ -565,10 +595,47 @@ html.light {
   }
 }
 
+:root {
+  --resize-dur: 300ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-resize {
+  transition:
+    width var(--resize-dur) var(--resize-ease),
+    height var(--resize-dur) var(--resize-ease);
+  will-change: width, height;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-resize {
+    transition: none !important;
+  }
+}
+
 @utility duration-normal {
   transition-duration: var(--duration-normal);
 }
 
 @utility duration-slow {
   transition-duration: var(--duration-slow);
+}
+
+/* Semantic aliases stay inline so utilities resolve var(--token) on the styled
+   element and honor scoped overrides such as `.new-theme`. */
+@theme inline {
+  --color-background: var(--background);
+  --color-sidebar: var(--sidebar);
+  --color-card: var(--card);
+  --color-popover: var(--popover);
+  --color-muted: var(--muted);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-placeholder: var(--placeholder);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-selected: var(--selected);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
 }

@@ -103,3 +103,62 @@ describe('LocalProcessManager Windows argv boundary', () => {
     sandbox.processes.release(handle.pid);
   });
 });
+
+describe('LocalProcessManager stdin wiring', () => {
+  const spawnSandbox = async () => {
+    const { LocalSandbox } = await import('./local-sandbox');
+    const sandbox = new LocalSandbox({ workingDirectory: process.cwd(), isolation: 'none' });
+    vi.spyOn(sandbox, 'ensureRunning').mockResolvedValue();
+
+    // Mirror what execa does: a `stdio[0] === 'ignore'` child has no stdin stream.
+    const subprocesses: any[] = [];
+    execa.mockImplementation((_command: string, _args: string[], options: any) => {
+      const stdinIgnored = Array.isArray(options?.stdio) && options.stdio[0] === 'ignore';
+      const subprocess = Object.assign(new EventEmitter(), {
+        pid: 12345,
+        stdin: stdinIgnored ? null : new PassThrough(),
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        catch: vi.fn(),
+      });
+      subprocesses.push(subprocess);
+      return subprocess;
+    });
+
+    return { sandbox, lastSubprocess: () => subprocesses.at(-1)! };
+  };
+
+  it('keeps stdin writable by default so spawned processes can be driven', async () => {
+    const { sandbox, lastSubprocess } = await spawnSandbox();
+
+    const handle = await sandbox.processes.spawn('node server.js');
+    expect(execa.mock.calls[0]?.[2]).toMatchObject({ stdio: 'pipe' });
+    await expect(handle.sendStdin('data\n')).resolves.toBeUndefined();
+
+    lastSubprocess().emit('close', 0, null);
+    await handle.wait();
+    sandbox.processes.release(handle.pid);
+  });
+
+  it('closes stdin when stdinMode is ignore', async () => {
+    const { sandbox, lastSubprocess } = await spawnSandbox();
+
+    const handle = await sandbox.processes.spawn('cat', { stdinMode: 'ignore' });
+    expect(execa.mock.calls[0]?.[2]).toMatchObject({ stdio: ['ignore', 'pipe', 'pipe'] });
+
+    lastSubprocess().emit('close', 0, null);
+    await handle.wait();
+    sandbox.processes.release(handle.pid);
+  });
+
+  it('rejects sendStdin on a process spawned with stdin ignored', async () => {
+    const { sandbox, lastSubprocess } = await spawnSandbox();
+
+    const handle = await sandbox.processes.spawn('cat', { stdinMode: 'ignore' });
+    await expect(handle.sendStdin('data')).rejects.toThrow(/stdin/i);
+
+    lastSubprocess().emit('close', 0, null);
+    await handle.wait();
+    sandbox.processes.release(handle.pid);
+  });
+});

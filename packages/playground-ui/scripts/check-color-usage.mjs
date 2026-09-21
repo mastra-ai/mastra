@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const sourceExtensions = new Set(['.cjs', '.css', '.html', '.js', '.jsx', '.mdx', '.mjs', '.scss', '.ts', '.tsx']);
 const legacyTokenPattern = '(?:surface[1-6]|neutral[1-6]|border[12]|text1)';
 const semanticTokenPattern =
-  '(?:sidebar-accent-foreground|popover-foreground|secondary-foreground|tertiary-foreground|disabled-foreground|contrast-foreground|sidebar-foreground|sidebar-accent|sidebar-border|sidebar-ring|card-foreground|muted-foreground|accent-foreground|background|secondary|foreground|selected|popover|sidebar|accent|border|input|muted|card|ring)';
+  '(?:sidebar-accent-foreground|popover-foreground|secondary-foreground|tertiary-foreground|disabled-foreground|contrast-foreground|sidebar-foreground|sidebar-accent|sidebar-border|sidebar-divider|sidebar-ring|card-foreground|muted-foreground|accent-foreground|background|secondary|foreground|selected|popover|sidebar|accent|border|input|muted|card|ring)';
 const foundationTokenPattern = '(?:background-[1-3]|gray-(?:10|[1-9])|gray-alpha-(?:10|[1-9]))';
 const colorUtilityPattern = '(?:bg|text|border|ring|outline|fill|stroke|from|via|to)';
 const approvedFoundationFiles = new Set(['packages/playground-ui/theme.css', 'packages/playground-ui/new-theme.css']);

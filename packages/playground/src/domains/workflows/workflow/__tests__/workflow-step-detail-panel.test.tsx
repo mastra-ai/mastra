@@ -1,102 +1,157 @@
-import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
+import { http, HttpResponse } from 'msw';
+import { useContext } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-
-import { WorkflowStepDetailPanel } from '../../components/workflow-step-detail';
+import { WorkflowStepDetailContent } from '../../components/workflow-step-detail';
+import { WorkflowRunContext } from '../../context/workflow-run-context';
+import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-provider';
 import { WorkflowGraphNode } from '../workflow-graph-node';
 import { resolveWorkflowGraphStep, WORKFLOW_STEP_NODE_TYPE } from '../workflow-step-node-utils';
 import type { WorkflowStepNode, WorkflowStepNodeData } from '../workflow-step-node-utils';
+import { twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
+import { graphRun } from './fixtures/workflow-graph-runtime';
+import { server } from '@/test/msw-server';
 
-afterEach(() => cleanup());
+const BASE_URL = 'http://localhost:4111';
+afterEach(cleanup);
 
-const nestedStepGraph: SerializedStepFlowEntry[] = [{ type: 'step', step: { id: 'inner-step', description: '' } }];
+function RunStatus() {
+  const { result } = useContext(WorkflowRunContext);
+  return <output aria-label="Loaded run status">{result?.status}</output>;
+}
 
-// Covers the panel mechanism itself: the action bar (rendered inside the graph nodes)
-// and the WorkflowStepDetailPanel sharing one WorkflowStepDetailProvider, plus the
-// View/Hide toggle. It mirrors how `workflow-graph.tsx` composes the two, but mounts
-// them explicitly. It does NOT reproduce #18346 ("panel never mounted in the graph"):
-// that wiring lives inside ReactFlow nodes, which only render once measured, and jsdom
-// has no layout — so the original bug is only reachable via a real browser (Playwright).
-const renderNodeWithPanel = (data: WorkflowStepNodeData) => {
-  const props = {
-    id: data.label,
+async function renderNode(data: WorkflowStepNodeData, parentWorkflowName?: string, siblingWorkflowName?: string) {
+  server.use(
+    http.get(`${BASE_URL}/api/workflows/two-step-workflow`, () => HttpResponse.json(twoStepWorkflow)),
+    http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/graph-run`, () => HttpResponse.json(graphRun)),
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const props: NodeProps<WorkflowStepNode> = {
+    id: data.stepId ?? data.label,
     type: WORKFLOW_STEP_NODE_TYPE,
     data,
     selected: false,
+    selectable: true,
+    deletable: false,
+    draggable: false,
     isConnectable: true,
     dragging: false,
     zIndex: 0,
     positionAbsoluteX: 0,
     positionAbsoluteY: 0,
-  } as NodeProps<WorkflowStepNode>;
-
-  return render(
-    <ReactFlowProvider>
-      <WorkflowSelectedStepProvider>
+  };
+  render(
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={client}>
         <WorkflowStepDetailProvider>
-          <WorkflowGraphNode {...props} stepsFlow={{}} />
-          <WorkflowStepDetailPanel />
+          <WorkflowRunProvider workflowId="two-step-workflow" initialRunId="graph-run">
+            <WorkflowSelectedStepProvider>
+              <ReactFlowProvider>
+                <RunStatus />
+                <WorkflowGraphNode {...props} parentWorkflowName={parentWorkflowName} stepsFlow={{}} />
+                {siblingWorkflowName && (
+                  <WorkflowGraphNode
+                    {...props}
+                    id={`${props.id}-sibling`}
+                    parentWorkflowName={siblingWorkflowName}
+                    stepsFlow={{}}
+                  />
+                )}
+                <WorkflowStepDetailContent />
+              </ReactFlowProvider>
+            </WorkflowSelectedStepProvider>
+          </WorkflowRunProvider>
         </WorkflowStepDetailProvider>
-      </WorkflowSelectedStepProvider>
-    </ReactFlowProvider>,
+      </QueryClientProvider>
+    </MastraReactProvider>,
   );
-};
+  await waitFor(() => expect(screen.getByLabelText('Loaded run status').textContent).toBe('running'));
+}
 
-describe('WorkflowStepDetailPanel', () => {
-  it('opens the nested graph panel from the step action menu and toggles it closed', async () => {
-    renderNodeWithPanel({
-      label: 'extract-customer',
-      stepId: 'extract-customer',
-      description: 'Extracts customer data',
-      stepGraph: nestedStepGraph,
-      workflowStep: resolveWorkflowGraphStep({
-        type: 'step',
-        step: {
-          id: 'extract-customer',
-          description: '',
-          component: 'WORKFLOW',
-          serializedStepFlow: nestedStepGraph,
-        },
-      } as SerializedStepFlowEntry),
+describe('Workflow step detail panel', () => {
+  describe('when a nested graph is opened from its step action', () => {
+    it('inspects the nested workflow and toggles back to its parent canvas', async () => {
+      const workflowStep = resolveWorkflowGraphStep({
+        type: 'workflow',
+        id: 'extract-customer',
+        workflowId: 'customer-workflow',
+        serializedStepFlow: [],
+      });
+      await renderNode({ label: 'extract-customer', stepId: 'extract-customer', stepGraph: [], workflowStep });
+      fireEvent.click(screen.getByRole('button', { name: 'Step actions' }));
+      fireEvent.click(await screen.findByText('View nested graph'));
+      expect(await screen.findByText('extract-customer Workflow')).not.toBeNull();
+      expect(screen.getByText('This workflow has no steps to display.')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Step actions' }));
+      fireEvent.click(await screen.findByText('Hide nested graph'));
+      await waitFor(() => expect(screen.queryByText('extract-customer Workflow')).toBeNull());
     });
-
-    // Panel is hidden until the action is triggered.
-    expect(screen.queryByText('extract-customer Workflow')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Step actions' }));
-    fireEvent.click(await screen.findByText('View nested graph'));
-
-    // The detail panel now renders the nested workflow.
-    expect(await screen.findByText('extract-customer Workflow')).not.toBeNull();
-
-    // The action label flips to "Hide nested graph" and toggles the panel back off.
-    fireEvent.click(screen.getByRole('button', { name: 'Step actions' }));
-    fireEvent.click(await screen.findByText('Hide nested graph'));
-
-    await waitFor(() => expect(screen.queryByText('extract-customer Workflow')).toBeNull());
   });
 
-  it('opens the map config panel from the step action menu', async () => {
-    renderNodeWithPanel({
-      label: 'map-step',
-      stepId: 'map-step',
-      description: 'Map the previous output',
-      mapConfig: 'return input',
-      workflowStep: resolveWorkflowGraphStep({
-        type: 'step',
-        step: { id: 'map-step', description: 'Map the previous output', mapConfig: 'return input' },
-      }),
+  describe('when sibling scopes reuse the same nested workflow label', () => {
+    it('opens the second scope instead of treating it as the already-open graph', async () => {
+      const workflowStep = resolveWorkflowGraphStep({
+        type: 'workflow',
+        id: 'shared-child',
+        workflowId: 'child',
+        serializedStepFlow: [],
+      });
+      await renderNode(
+        { label: 'shared-child', stepId: 'shared-child', stepGraph: [], workflowStep },
+        'first',
+        'second',
+      );
+      fireEvent.click(screen.getAllByRole('button', { name: 'Step actions' })[0]);
+      fireEvent.click(await screen.findByText('View nested graph'));
+      fireEvent.click(screen.getAllByRole('button', { name: 'Step actions' })[1]);
+      fireEvent.click(await screen.findByText('View nested graph'));
+      expect(screen.getByText('shared-child Workflow')).not.toBeNull();
     });
+  });
 
-    expect(screen.queryByText('map-step Config')).toBeNull();
+  describe('when a mapping configuration is inspected', () => {
+    it('shows the actual mapping source and closes without a dialog', async () => {
+      const mapConfig = 'return input.customerId';
+      await renderNode({
+        label: 'Map customer',
+        stepId: 'mapping_customer',
+        mapConfig,
+        workflowStep: resolveWorkflowGraphStep({ type: 'mapping', id: 'mapping_customer', mapConfig }),
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Step actions' }));
+      fireEvent.click(await screen.findByText('Map config'));
+      expect(await screen.findByText('Map customer Config')).not.toBeNull();
+      expect(screen.getByTestId('workflow-step-detail-panel').textContent).toContain(mapConfig);
+      expect(screen.queryByRole('dialog')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      expect(screen.queryByTestId('workflow-step-detail-panel')).toBeNull();
+    });
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Step actions' }));
-    fireEvent.click(await screen.findByText('Map config'));
-
-    expect(await screen.findByText('map-step Config')).not.toBeNull();
+  describe('when a condition belongs to a nested workflow scope', () => {
+    it('uses that scope rather than a same-named root predecessor', async () => {
+      await renderNode(
+        {
+          label: 'condition',
+          nodeRole: 'condition',
+          previousStepId: 'extract',
+          nextStepId: 'transform',
+          conditions: [{ type: 'when', fnString: 'input.customerId' }],
+          workflowStep: resolveWorkflowGraphStep({
+            type: 'conditional',
+            steps: [],
+            serializedConditions: [{ id: 'condition', fn: 'input.customerId' }],
+          }),
+        },
+        'nested',
+      );
+      expect(screen.getByTestId('workflow-condition-node').getAttribute('data-workflow-step-status')).toBe('idle');
+    });
   });
 });

@@ -21,6 +21,7 @@ import type {
 
 import type { DuckDBConnection } from '../../db/index';
 import { parseJson } from './helpers';
+import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 
 type ParameterType = 'scalar' | 'timestamp';
 type FieldDefinition = { sql: string; parameterType: ParameterType };
@@ -424,7 +425,7 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
   const ctes = compileDuckDBTraceScope(relatedCollections);
 
   ctes.push(`candidates AS (
-    SELECT ${TRACE_SELECT}
+    SELECT ${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r.cursorId AS deltaWatermark' : ''}
     FROM root_scope r
     WHERE ${conditions.slice(3).join('\n      AND ') || 'TRUE'}
   )`);
@@ -447,8 +448,53 @@ LIMIT ?`,
     };
   }
 
+  if (plan.paginationMode === 'delta') {
+    const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'duckdb');
+    if (watermark !== undefined && (!/^\d+$/.test(watermark) || BigInt(watermark) > 9223372036854775807n)) {
+      throw new coreStorage.TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+    }
+    values.push(watermark ?? '0', plan.limit + 1);
+    return {
+      sql: `${candidates},
+  delta_head AS (SELECT coalesce(max(cursorId), 0) AS streamHead FROM root_events),
+  delta_rows AS (
+    SELECT * FROM candidates
+    WHERE deltaWatermark > CAST(? AS BIGINT) ${watermark === undefined ? 'AND FALSE' : ''}
+    ORDER BY deltaWatermark ASC, traceId ASC
+    LIMIT ?
+  )
+SELECT delta_rows.*, delta_head.streamHead
+FROM delta_head
+LEFT JOIN delta_rows ON TRUE
+ORDER BY delta_rows.deltaWatermark ASC NULLS LAST, delta_rows.traceId ASC`,
+      values,
+    };
+  }
+
   const orderField = plan.orderBy.field;
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  if (plan.paginationMode === 'page') {
+    values.push(plan.perPage, plan.page * plan.perPage);
+    return {
+      sql: `${candidates},
+  page_rows AS (
+    SELECT *, row_number() OVER (ORDER BY ${orderField} ${direction}, traceId ASC) AS __row_position
+    FROM candidates
+    ORDER BY ${orderField} ${direction}, traceId ASC
+    LIMIT ? OFFSET ?
+  ),
+  page_total AS (
+    SELECT COUNT(*) AS total
+    FROM candidates
+  )
+SELECT page_rows.*, page_total.total${deltaPollingFeatureEnabled() ? ', (SELECT coalesce(max(cursorId), 0) FROM root_events) AS streamHead' : ''}
+FROM page_total
+LEFT JOIN page_rows ON TRUE
+ORDER BY page_rows.__row_position ASC NULLS LAST`,
+      values,
+    };
+  }
+
   let pageCondition = '';
   if (plan.cursor) {
     const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
@@ -591,13 +637,29 @@ LIMIT ?`,
   };
 }
 
+function isDuckDBResourceLimit(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes('out of memory');
+}
+
+async function runDuckDBDiscoveryQuery(
+  db: DuckDBConnection,
+  query: CompiledDuckDBTraceQuery,
+): Promise<Record<string, unknown>[]> {
+  try {
+    return await db.query<Record<string, unknown>>(query.sql, query.values);
+  } catch (error) {
+    if (isDuckDBResourceLimit(error)) throw new coreStorage.TraceQueryResourceLimitError();
+    throw error;
+  }
+}
+
 export async function getTraceQueryObservedFields(
   db: DuckDBConnection,
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): Promise<TraceQueryObservedFieldsResult> {
   if (plan.predicateScope !== 'trace') return { observedFields: [], observedFieldsTruncated: false };
   const query = compileDuckDBTraceQueryObservedFields(plan);
-  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  const rows = await runDuckDBDiscoveryQuery(db, query);
   return {
     observedFields: rows
       .slice(0, plan.limit)
@@ -611,7 +673,7 @@ export async function getTraceQueryValues(
   plan: TrustedTraceQueryValuesPlan,
 ): Promise<GetTraceQueryValuesResponse> {
   const query = compileDuckDBTraceQueryValues(plan);
-  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  const rows = await runDuckDBDiscoveryQuery(db, query);
   return coreStorage.getTraceQueryValuesResponseSchema.parse({
     values: rows.slice(0, plan.limit).map(row => ({ value: String(row.value), count: Number(row.count) })),
     valuesTruncated: rows.length > plan.limit,
@@ -623,9 +685,50 @@ function asIsoTimestamp(value: unknown): string {
 }
 
 export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+  if (plan.paginationMode === 'delta') assertDeltaPollingEnabled();
+  if (plan.paginationMode === 'page') {
+    const query = compileDuckDBTraceQuery(plan);
+    const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+    const total = Number(rows[0]?.total ?? 0);
+    const traces = rows
+      .filter(row => row.traceId != null)
+      .map(row => ({
+        traceId: String(row.traceId),
+        rootSpanId: String(row.rootSpanId),
+        name: row.name,
+        entityId: row.entityId ?? null,
+        parentSpanId: row.parentSpanId ?? null,
+        createdAt: asIsoTimestamp(row.startedAt),
+        metadata: parseJson(row.metadata) ?? null,
+        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+        threadId: row.threadId == null ? null : String(row.threadId),
+        resourceId: row.resourceId == null ? null : String(row.resourceId),
+        startedAt: asIsoTimestamp(row.startedAt),
+        endedAt: asIsoTimestamp(row.endedAt),
+        entityName: row.entityName == null ? null : String(row.entityName),
+        entityType: row.entityType == null ? null : String(row.entityType),
+        environment: row.environment == null ? null : String(row.environment),
+        status: row.status,
+      }));
+    return coreStorage.traceQueryResponseSchema.parse({
+      traces,
+      // The list-polling feature predates the trace-query cursor encoder.
+      ...(deltaPollingFeatureEnabled() && typeof coreStorage.encodeTraceQueryDeltaCursor === 'function'
+        ? { deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'duckdb', String(rows[0]?.streamHead ?? 0)) }
+        : {}),
+      pagination: {
+        total,
+        page: plan.page,
+        perPage: plan.perPage,
+        hasMore: (plan.page + 1) * plan.perPage < total,
+      },
+    });
+  }
+
   const query = compileDuckDBTraceQuery(plan);
   const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
-  const visibleRows = rows.slice(0, plan.limit);
+  const matchingRows = plan.paginationMode === 'delta' ? rows.filter(row => row.traceId != null) : rows;
+  const visibleRows = matchingRows.slice(0, plan.limit);
 
   if (plan.result === 'groups') {
     const groups = visibleRows.map(row => ({ threadId: String(row.threadId) }));
@@ -659,6 +762,20 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
   }));
+  if (plan.paginationMode === 'delta') {
+    const previous = coreStorage.getTraceQueryDeltaWatermark(plan, 'duckdb') ?? '0';
+    const head = String(rows[0]?.streamHead ?? 0);
+    const watermark = visibleRows.length
+      ? String(visibleRows.at(-1)!.deltaWatermark)
+      : BigInt(head) > BigInt(previous)
+        ? head
+        : previous;
+    return coreStorage.traceQueryResponseSchema.parse({
+      traces,
+      delta: { limit: plan.limit, hasMore: matchingRows.length > plan.limit },
+      deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'duckdb', watermark),
+    });
+  }
   const last = traces.at(-1);
   return coreStorage.traceQueryResponseSchema.parse({
     traces,

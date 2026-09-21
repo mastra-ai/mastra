@@ -13,7 +13,8 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-import { postRepositoryGitOp, readJsonOrThrow } from './http';
+import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
+import type { GitLabRepository } from '../../factory/services/gitlab';
 
 export interface GithubInstallation {
   installationId: number;
@@ -80,6 +81,12 @@ export interface GithubRepo {
   installationStorageId: string;
   sandboxProvider: string;
   sandboxWorkdir: string;
+}
+
+export type SourceControlRepository = GithubRepo | GitLabRepository;
+
+export function isGitLabRepository(repo: SourceControlRepository): repo is GitLabRepository {
+  return 'provider' in repo && repo.provider === 'gitlab';
 }
 
 /**
@@ -218,6 +225,7 @@ interface ProjectRepositoryPayload {
 /** A source-control connection (with linked repos) from the Factory project routes. */
 interface ProjectConnectionPayload {
   id: string;
+  integrationId?: string;
   installationId: string;
   repositories: ProjectRepositoryPayload[];
 }
@@ -225,6 +233,7 @@ interface ProjectConnectionPayload {
 /** Browser-shaped view of a repository linked to a Factory project. */
 export interface LinkedRepositoryPayload {
   projectRepositoryId: string;
+  provider?: 'github' | 'gitlab';
   slug: string;
   gitBranch?: string;
   sandboxWorkdir?: string;
@@ -240,9 +249,11 @@ export type FactoryProject = FactoryProjectSnapshot;
 function toLinkedRepositoryPayload(
   project: FactoryProjectPayload,
   link: ProjectRepositoryPayload,
+  integrationId?: string,
 ): LinkedRepositoryPayload {
   return {
     projectRepositoryId: link.id,
+    provider: integrationId === 'gitlab' ? 'gitlab' : 'github',
     slug: link.repository?.slug ?? project.name,
     gitBranch: link.branch ?? link.repository?.defaultBranch,
     sandboxWorkdir: link.sandboxWorkdir,
@@ -280,7 +291,7 @@ export async function listFactoryProjects(baseUrl: string): Promise<FactoryProje
       return {
         ...project,
         repositories: connections.flatMap(connection =>
-          connection.repositories.map(link => toLinkedRepositoryPayload(project, link)),
+          connection.repositories.map(link => toLinkedRepositoryPayload(project, link, connection.integrationId)),
         ),
       };
     }),
@@ -376,6 +387,7 @@ export async function connectInstallation(
   baseUrl: string,
   factoryProjectId: string,
   installationId: string,
+  integrationId: 'github' | 'gitlab' = GITHUB_INTEGRATION_ID,
 ): Promise<string> {
   const connections = await listProjectConnections(baseUrl, factoryProjectId);
   const existing = connections.find(connection => connection.installationId === installationId);
@@ -387,12 +399,12 @@ export async function connectInstallation(
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ integrationId: GITHUB_INTEGRATION_ID, installationId }),
+      body: JSON.stringify({ integrationId, installationId }),
     },
   );
   const { connection } = await readJsonOrThrow<{ connection: { id: string } }>(
     res,
-    'Failed to connect GitHub installation',
+    `Failed to connect ${integrationId === 'gitlab' ? 'GitLab' : 'GitHub'} installation`,
   );
   return connection.id;
 }
@@ -405,8 +417,9 @@ export async function linkRepository(
   baseUrl: string,
   factoryProjectId: string,
   connectionId: string,
-  repo: GithubRepo,
+  repo: SourceControlRepository,
 ): Promise<LinkedRepositoryPayload> {
+  const gitlab = isGitLabRepository(repo);
   const res = await fetch(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/source-control-connections/${encodeURIComponent(connectionId)}/repositories`,
     {
@@ -414,7 +427,7 @@ export async function linkRepository(
       credentials: 'include',
       headers: { 'content-type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
-        repository: { externalId: String(repo.id), slug: repo.fullName },
+        repository: { externalId: gitlab ? repo.externalId : String(repo.id), slug: repo.fullName },
         branch: repo.defaultBranch,
         sandboxProvider: repo.sandboxProvider,
         sandboxWorkdir: repo.sandboxWorkdir,
@@ -423,9 +436,13 @@ export async function linkRepository(
   );
   const { projectRepository } = await readJsonOrThrow<{ projectRepository: ProjectRepositoryPayload }>(
     res,
-    'Failed to link GitHub repository',
+    `Failed to link ${gitlab ? 'GitLab' : 'GitHub'} repository`,
   );
-  return toLinkedRepositoryPayload({ id: factoryProjectId, name: repo.fullName }, projectRepository);
+  return toLinkedRepositoryPayload(
+    { id: factoryProjectId, name: repo.fullName },
+    projectRepository,
+    gitlab ? 'gitlab' : 'github',
+  );
 }
 
 /**
@@ -523,10 +540,13 @@ export async function fetchRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,
 ): Promise<RepositorySettings> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/settings`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
+  const res = await fetch(
+    `${baseUrl}/web/source-control/projects/${encodeURIComponent(projectRepositoryId)}/settings`,
+    {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    },
+  );
   if (!res.ok) throw new Error(`Failed to load repository settings (${res.status})`);
   return (await res.json()) as RepositorySettings;
 }
@@ -537,5 +557,5 @@ export async function saveRepositorySettings(
   projectRepositoryId: string,
   settings: RepositorySettings,
 ): Promise<RepositorySettings> {
-  return postRepositoryGitOp<RepositorySettings>(baseUrl, projectRepositoryId, 'settings', settings);
+  return postSourceControlRepositoryOp<RepositorySettings>(baseUrl, projectRepositoryId, 'settings', settings);
 }

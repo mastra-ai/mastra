@@ -134,14 +134,30 @@ export { recordDeletionRequest } from './deletion-requests';
 export type { DeletionRequestRow, RecordDeletionRequestArgs } from './deletion-requests';
 export type { RetentionConfig } from './ddl';
 
-/** Extended config for v-next observability, adding per-signal retention. */
-export type VNextObservabilityConfig = ClickhouseDomainConfig & {
-  retention?: RetentionConfig;
+export interface TraceQueryConfig {
   /** Maximum execution time for one advanced trace query. Default 15 seconds. */
-  traceQueryTimeoutMs?: number;
-  /** @internal Test-only override for the ClickHouse delta cursor strategy. */
-  deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
-};
+  timeoutMs?: number;
+  discovery?: {
+    /** Maximum execution time for one trace-query discovery request. Default 5 seconds. */
+    timeoutMs?: number;
+    /** Maximum memory for one trace-query discovery request. Default 256 MiB. */
+    memoryLimitBytes?: number;
+  };
+}
+
+export interface VNextObservabilityOptions {
+  retention?: RetentionConfig;
+  traceQuery?: TraceQueryConfig;
+}
+
+/** Extended config for v-next observability. */
+export type VNextObservabilityConfig = ClickhouseDomainConfig &
+  VNextObservabilityOptions & {
+    /** @deprecated Use `traceQuery.timeoutMs` instead. */
+    traceQueryTimeoutMs?: number;
+    /** @internal Test-only override for the ClickHouse delta cursor strategy. */
+    deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
+  };
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
@@ -155,6 +171,7 @@ import {
 } from './migration';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
+import { backfillCurrentScores } from './score-current';
 import * as scoresOps from './scores';
 import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
@@ -577,12 +594,25 @@ async function detectExistingDeltaCursorStrategy(
   }
 }
 
+const TRACE_QUERY_DISCOVERY_DEFAULT_TIMEOUT_MS = 5_000;
+const TRACE_QUERY_DISCOVERY_DEFAULT_MEMORY_LIMIT_BYTES = 256 * 1024 * 1024;
+
+function resolveTraceQueryDiscoveryMemoryLimitBytes(
+  memoryLimitBytes = TRACE_QUERY_DISCOVERY_DEFAULT_MEMORY_LIMIT_BYTES,
+): number {
+  if (!Number.isSafeInteger(memoryLimitBytes) || memoryLimitBytes <= 0) {
+    throw new RangeError('traceQuery.discovery.memoryLimitBytes must be a positive safe integer');
+  }
+  return memoryLimitBytes;
+}
+
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
   readonly #retention?: RetentionConfig;
   readonly #replication?: ClickhouseReplicationConfig;
   readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
   readonly #traceQueryTimeoutMs: number;
+  readonly #traceQueryDiscoveryLimits: traceQueryOps.ClickHouseTraceQueryExecutionLimits;
   #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
   constructor(config: VNextObservabilityConfig) {
@@ -592,7 +622,18 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     this.#replication = replication;
     this.#retention = config.retention;
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
-    this.#traceQueryTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(config.traceQueryTimeoutMs);
+    this.#traceQueryTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(
+      config.traceQuery?.timeoutMs ?? config.traceQueryTimeoutMs,
+    );
+    this.#traceQueryDiscoveryLimits = {
+      timeoutMs: coreStorage.resolveTraceQueryTimeoutMs(
+        config.traceQuery?.discovery?.timeoutMs ??
+          config.traceQuery?.timeoutMs ??
+          config.traceQueryTimeoutMs ??
+          TRACE_QUERY_DISCOVERY_DEFAULT_TIMEOUT_MS,
+      ),
+      memoryLimitBytes: resolveTraceQueryDiscoveryMemoryLimitBytes(config.traceQuery?.discovery?.memoryLimitBytes),
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -656,12 +697,11 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // to recreate them in place when the engine doesn't match.
       await reconcileDiscoveryTables(this.#client, this.#replication);
 
-      // Core tables + incremental MVs (must succeed)
-      const coreDdl =
-        this.#deltaCursorStrategy === null
-          ? [...BASE_TABLE_DDL, ...BASE_MV_DDL]
-          : [...buildAllTableDDL(), ...buildAllMvDDL(this.#deltaCursorStrategy)];
-      for (const ddl of coreDdl) {
+      // Create tables before migrations and views. Existing score tables need
+      // the additive writeVersion migration before the current-state MV can
+      // select that column.
+      const coreTableDdl = this.#deltaCursorStrategy === null ? BASE_TABLE_DDL : buildAllTableDDL();
+      for (const ddl of coreTableDdl) {
         await this.#client.command({ query: applyReplicationToDDL(ddl, this.#replication) });
       }
 
@@ -674,6 +714,16 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       for (const migration of pendingMigrations) {
         await this.#client.command({ query: addOnClusterToDDL(migration.sql, this.#replication) });
       }
+
+      const coreMvDdl = this.#deltaCursorStrategy === null ? BASE_MV_DDL : buildAllMvDDL(this.#deltaCursorStrategy);
+      for (const ddl of coreMvDdl) {
+        await this.#client.command({ query: applyReplicationToDDL(ddl, this.#replication) });
+      }
+
+      // The current-state MV is live before this one-time backfill, so writes
+      // arriving during initialization are captured. ReplacingMergeTree uses
+      // writeVersion to prevent an older backfill row from replacing them.
+      await backfillCurrentScores(this.#client);
 
       // Apply retention TTL if configured (per design doc: per-signal, day increments).
       // Skip statements whose current TTL already matches: `MODIFY TTL` bumps the
@@ -971,9 +1021,15 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     try {
-      return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs);
+      return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs, this.#deltaCursorStrategy);
     } catch (error) {
-      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryCursorError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'QUERY_TRACES', 'FAILED'),
@@ -989,9 +1045,14 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     plan: TrustedTraceQueryObservedFieldsPlan,
   ): Promise<TraceQueryObservedFieldsResult> {
     try {
-      return await traceQueryOps.getTraceQueryObservedFields(this.#client, plan, this.#traceQueryTimeoutMs);
+      return await traceQueryOps.getTraceQueryObservedFields(this.#client, plan, this.#traceQueryDiscoveryLimits);
     } catch (error) {
-      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_QUERY_OBSERVED_FIELDS', 'FAILED'),
@@ -1005,9 +1066,14 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getTraceQueryValues(plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
     try {
-      return await traceQueryOps.getTraceQueryValues(this.#client, plan, this.#traceQueryTimeoutMs);
+      return await traceQueryOps.getTraceQueryValues(this.#client, plan, this.#traceQueryDiscoveryLimits);
     } catch (error) {
-      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_QUERY_VALUES', 'FAILED'),
@@ -1023,7 +1089,12 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     try {
       return await traceQueryOps.queryThreads(this.#client, plan, this.#traceQueryTimeoutMs);
     } catch (error) {
-      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'QUERY_THREADS', 'FAILED'),

@@ -129,6 +129,8 @@ function actorId(actor: FactoryRuleActor): string {
       return `agent:${actor.bindingId}`;
     case 'github':
       return `github:${actor.login}`;
+    case 'gitlab':
+      return `gitlab:${actor.username}`;
   }
 }
 
@@ -137,6 +139,7 @@ export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorT
   const id = actorId(actor);
   switch (actor.type) {
     case 'github':
+    case 'gitlab':
       return { actorId: id, actorType: 'human' };
     case 'human':
       return { actorId: id, actorType: isAgentActor(id) ? 'agent' : 'human' };
@@ -333,7 +336,8 @@ export class FactoryTransitionService {
     }
     const itemSource = workItemSource(item.externalSource);
     const source = factoryRuleSourceForWorkItem(itemSource);
-    const legacyBoard = source === 'pullRequest' ? 'review' : 'work';
+    const isPullRequest = source === 'pullRequest' || source === 'gitlabPullRequest';
+    const legacyBoard = isPullRequest ? 'review' : 'work';
     if (item.board === null && !this.#boards.has(legacyBoard)) {
       return this.#commitRejection(
         request,
@@ -351,7 +355,7 @@ export class FactoryTransitionService {
         `The work item belongs to board "${itemBoard}", not "${request.board}".`,
       );
     }
-    if ((itemBoard === 'review' && source !== 'pullRequest') || (itemBoard === 'work' && source === 'pullRequest')) {
+    if ((itemBoard === 'review' && !isPullRequest) || (itemBoard === 'work' && isPullRequest)) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -590,16 +594,20 @@ export class FactoryTransitionService {
       committed.item?.acceptedAt
     ) {
       const item = committed.item;
-      void Promise.resolve(
-        this.#onAccepted({
-          orgId: request.orgId,
-          factoryProjectId: request.factoryProjectId,
-          workItemId: request.workItemId,
-          item,
-        }),
-      ).catch(error => {
-        console.warn(`[factory] acceptance hook failed for work item ${request.workItemId}:`, error);
-      });
+      const onAccepted = this.#onAccepted;
+      // Invoke inside the chain so a synchronous throw is isolated the same way an async rejection is.
+      void Promise.resolve()
+        .then(() =>
+          onAccepted({
+            orgId: request.orgId,
+            factoryProjectId: request.factoryProjectId,
+            workItemId: request.workItemId,
+            item,
+          }),
+        )
+        .catch(error => {
+          console.warn(`[factory] acceptance hook failed for work item ${request.workItemId}:`, error);
+        });
     }
     // Only an installed board's declaration releases resources; an unknown board or phase never does.
     if (

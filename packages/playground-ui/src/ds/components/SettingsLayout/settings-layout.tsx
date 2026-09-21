@@ -43,7 +43,7 @@ export function SettingsLayout({
               <Txt
                 as="h1"
                 variant="header-md"
-                className={cn('min-w-0 truncate', 'font-sans font-medium tracking-normal text-neutral4')}
+                className={cn('min-w-0 truncate', 'font-sans font-medium tracking-normal text-muted-foreground')}
               >
                 {title}
               </Txt>
@@ -52,7 +52,7 @@ export function SettingsLayout({
               ) : null}
             </div>
             {description !== undefined && description !== null ? (
-              <Txt as="p" variant="ui-md" className="text-neutral4 m-0 wrap-break-word">
+              <Txt as="p" variant="ui-md" className="text-muted-foreground m-0 wrap-break-word">
                 {description}
               </Txt>
             ) : null}

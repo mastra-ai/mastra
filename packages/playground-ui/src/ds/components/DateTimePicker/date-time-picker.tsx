@@ -1,5 +1,5 @@
 import { format, formatDate, isValid } from 'date-fns';
-import { CalendarIcon, CircleAlertIcon, Check, X } from 'lucide-react';
+import { CalendarIcon, Check, X } from 'lucide-react';
 import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
@@ -223,18 +223,8 @@ export const DateTimePickerContent = ({
         onChange={handleInputChange}
         placeholder={placeholder}
         className="m-4 mb-0 w-auto!"
+        errorMsg={localErrorMsg}
       />
-
-      {localErrorMsg && (
-        <div
-          className={cn(
-            'm-4 mb-0 text-ui-md text-neutral3',
-            '[&>svg]:float-left [&>svg]:mt-0.5 [&>svg]:mr-2 [&>svg]:size-[1.1em] [&>svg]:text-red-500',
-          )}
-        >
-          <CircleAlertIcon /> {localErrorMsg}
-        </div>
-      )}
 
       <DatePicker
         mode="single"
@@ -292,9 +282,9 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
         {...props}
       >
         {value ? (
-          <span className="text-neutral6">{format(value, 'PP p')}</span>
+          <span className="text-foreground">{format(value, 'PP p')}</span>
         ) : (
-          <span className="text-neutral3">{placeholder ?? 'Pick a date'}</span>
+          <span className="text-muted-foreground">{placeholder ?? 'Pick a date'}</span>
         )}
       </Button>
     );

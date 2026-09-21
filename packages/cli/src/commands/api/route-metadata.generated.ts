@@ -208,6 +208,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "expectedRunId",
       "resourceId",
       "threadId"
     ],
@@ -1248,7 +1249,8 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
-      "listProperty": "messages"
+      "listProperty": "messages",
+      "paginationProperty": "page"
     }
   },
   "GET /memory/threads/:threadId/working-memory": {
@@ -1511,7 +1513,8 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
-      "listProperty": "messages"
+      "listProperty": "messages",
+      "paginationProperty": "page"
     }
   },
   "POST /memory/network/save-messages": {
@@ -2001,9 +2004,13 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "after",
       "group",
+      "limit",
+      "mode",
       "orderBy",
       "page",
+      "pagination",
       "timeRange",
       "where"
     ],
@@ -2029,6 +2036,42 @@ export const API_ROUTE_METADATA = {
       "kind": "object-property",
       "listProperty": "threads",
       "paginationProperty": "page"
+    }
+  },
+  "POST /observability/traces/query/fields": {
+    "method": "POST",
+    "path": "/observability/traces/query/fields",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "limit",
+      "predicateScope",
+      "search",
+      "timeRange"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /observability/traces/query/values": {
+    "method": "POST",
+    "path": "/observability/traces/query/values",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "limit",
+      "path",
+      "predicateScope",
+      "search",
+      "timeRange"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "values"
     }
   },
   "GET /observability/metrics": {
@@ -2855,20 +2898,6 @@ export const API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "embedders"
-    }
-  },
-  "GET /.well-known/:agentId/agent-card.json": {
-    "method": "GET",
-    "path": "/.well-known/:agentId/agent-card.json",
-    "pathParams": [
-      "agentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
     }
   },
   "GET /workspaces": {
@@ -4986,6 +5015,7 @@ export const API_ROUTE_METADATA = {
     "path": "/datasets",
     "pathParams": [],
     "queryParams": [
+      "orderBy",
       "page",
       "perPage",
       "targetIds",
@@ -5091,6 +5121,7 @@ export const API_ROUTE_METADATA = {
       "datasetId"
     ],
     "queryParams": [
+      "orderBy",
       "page",
       "perPage",
       "search",
@@ -5294,6 +5325,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [
       "comparisonId",
       "experimentSetId",
+      "orderBy",
       "page",
       "perPage",
       "targetId",
@@ -5349,6 +5381,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [
       "comparisonId",
       "experimentSetId",
+      "orderBy",
       "page",
       "perPage",
       "targetId",
@@ -5516,6 +5549,7 @@ export const API_ROUTE_METADATA = {
       "experimentId"
     ],
     "queryParams": [
+      "orderBy",
       "page",
       "perPage",
       "tags"
@@ -6059,6 +6093,7 @@ export const API_ROUTE_METADATA = {
       "prompt",
       "providerOptions",
       "requestContext",
+      "resourceId",
       "signalType",
       "status",
       "tagName",

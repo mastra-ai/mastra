@@ -36,11 +36,11 @@ export function ScatterPlotChartTooltip({
       {label !== undefined && <p className="text-icon6 mb-1 font-medium">{String(label)}</p>}
       <div className="text-icon2 grid gap-1">
         <p>
-          <span className="text-neutral3">X:</span>{' '}
+          <span className="text-muted-foreground">X:</span>{' '}
           <span className="font-mono">{formatX ? formatX(xValue, point) : String(xValue)}</span>
         </p>
         <p>
-          <span className="text-neutral3">Y:</span>{' '}
+          <span className="text-muted-foreground">Y:</span>{' '}
           <span className="font-mono">{formatY ? formatY(yValue, point) : String(yValue)}</span>
         </p>
       </div>

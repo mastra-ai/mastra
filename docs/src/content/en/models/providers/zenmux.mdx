@@ -7,7 +7,7 @@ description: "Browse ZenMux model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/zenmux.svg" alt="ZenMux logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />ZenMux
 
-Access 120 ZenMux models through Mastra's model router. Authentication is handled automatically using the `ZENMUX_API_KEY` environment variable.
+Access 122 ZenMux models through Mastra's model router. Authentication is handled automatically using the `ZENMUX_API_KEY` environment variable.
 
 Learn more in the [ZenMux documentation](https://docs.zenmux.ai).
 
@@ -997,25 +997,25 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "model": "zenmux/x-ai/grok-4.2-fast",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 2000000,
     "maxOutput": 30000,
-    "inputCost": 3,
-    "outputCost": 9
+    "inputCost": 2,
+    "outputCost": 6
   },
   {
     "model": "zenmux/x-ai/grok-4.2-fast-non-reasoning",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 2000000,
     "maxOutput": 30000,
-    "inputCost": 3,
-    "outputCost": 9
+    "inputCost": 2,
+    "outputCost": 6
   },
   {
     "model": "zenmux/x-ai/grok-4.3",
@@ -1042,16 +1042,64 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 6
   },
   {
-    "model": "zenmux/x-ai/grok-build-0.1",
+    "model": "zenmux/x-ai/grok-4.6",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
+    "contextWindow": 500000,
+    "maxOutput": 500000,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "zenmux/x-ai/grok-build-0.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
     "contextWindow": 256000,
     "maxOutput": 256000,
     "inputCost": 1,
     "outputCost": 2
+  },
+  {
+    "model": "zenmux/x-ai/grok-imagine-image-2.0",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 66000,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zenmux/x-ai/grok-voice-stt-1.0",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 15000,
+    "maxOutput": 15000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zenmux/x-ai/grok-voice-tts-1.0",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 15000,
+    "maxOutput": 15000,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "zenmux/xiaomi/mimo-v2-flash",
@@ -1121,9 +1169,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": 0.35,
-    "outputCost": 1.54
+    "maxOutput": 96000,
+    "inputCost": 0.2911,
+    "outputCost": 1.1645
   },
   {
     "model": "zenmux/z-ai/glm-4.5-air",
@@ -1133,9 +1181,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": 0.11,
-    "outputCost": 0.56
+    "maxOutput": 96000,
+    "inputCost": 0.1165,
+    "outputCost": 0.2911
   },
   {
     "model": "zenmux/z-ai/glm-4.6",
@@ -1145,9 +1193,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 0.35,
-    "outputCost": 1.54
+    "maxOutput": 128000,
+    "inputCost": 0.2911,
+    "outputCost": 1.1645
   },
   {
     "model": "zenmux/z-ai/glm-4.6v",
@@ -1157,9 +1205,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 0.14,
-    "outputCost": 0.42
+    "maxOutput": 128000,
+    "inputCost": 0.1456,
+    "outputCost": 0.4367
   },
   {
     "model": "zenmux/z-ai/glm-4.6v-flash",
@@ -1169,9 +1217,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 0.02,
-    "outputCost": 0.21
+    "maxOutput": 128000,
+    "inputCost": 0.0218,
+    "outputCost": 0.2184
   },
   {
     "model": "zenmux/z-ai/glm-4.6v-flash-free",
@@ -1181,7 +1229,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 64000,
+    "maxOutput": 128000,
     "inputCost": null,
     "outputCost": null
   },
@@ -1193,9 +1241,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 0.28,
-    "outputCost": 1.14
+    "maxOutput": 128000,
+    "inputCost": 0.2911,
+    "outputCost": 1.1645
   },
   {
     "model": "zenmux/z-ai/glm-4.7-flash-free",
@@ -1205,7 +1253,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 64000,
+    "maxOutput": 128000,
     "inputCost": null,
     "outputCost": null
   },
@@ -1217,9 +1265,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 0.07,
-    "outputCost": 0.42
+    "maxOutput": 128000,
+    "inputCost": 0.0728,
+    "outputCost": 0.4367
   },
   {
     "model": "zenmux/z-ai/glm-5",
@@ -1242,8 +1290,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 128000,
-    "inputCost": 0.88,
-    "outputCost": 3.48
+    "inputCost": 0.73,
+    "outputCost": 3.19
   },
   {
     "model": "zenmux/z-ai/glm-5.1",
@@ -1253,7 +1301,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 131072,
+    "maxOutput": 128000,
     "inputCost": 0.8781,
     "outputCost": 3.5126
   },
@@ -1265,21 +1313,45 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 131072,
-    "inputCost": 1.4,
-    "outputCost": 4.5
+    "maxOutput": 128000,
+    "inputCost": 0.98,
+    "outputCost": 3.08
   },
   {
-    "model": "zenmux/z-ai/glm-5.2-free",
+    "model": "zenmux/z-ai/glm-5.3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
+    "maxOutput": 128000,
+    "inputCost": 1.4,
+    "outputCost": 4.4
+  },
+  {
+    "model": "zenmux/z-ai/glm-5.3-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.15,
+    "outputCost": 0.5
+  },
+  {
+    "model": "zenmux/z-ai/glm-5.3-flashx",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.375,
+    "outputCost": 1.25
   },
   {
     "model": "zenmux/z-ai/glm-5v-turbo",
@@ -1292,6 +1364,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.726,
     "outputCost": 3.1946
+  },
+  {
+    "model": "zenmux/z-ai/glm-image",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 10240,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -1326,7 +1410,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zenmux/z-ai/glm-5v-turbo"
+      ? "zenmux/z-ai/glm-image"
       : "zenmux/anthropic/claude-3.5-haiku";
   }
 });

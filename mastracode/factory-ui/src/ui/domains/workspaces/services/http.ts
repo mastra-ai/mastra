@@ -23,18 +23,8 @@ export interface GitOpError extends Error {
   authRequired?: boolean;
 }
 
-/**
- * POST helper for the per-project git endpoints. Parses the server's JSON body,
- * surfacing `error`/`message` codes on failure (and `authRequired` for 401) so
- * callers can react without re-implementing the parsing dance each time.
- */
-export async function postRepositoryGitOp<T>(
-  baseUrl: string,
-  projectRepositoryId: string,
-  action: string,
-  payload: unknown,
-): Promise<T> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/${action}`, {
+async function postRepositoryOperation<T>(url: string, payload: unknown): Promise<T> {
+  const res = await fetch(url, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
@@ -58,4 +48,30 @@ export async function postRepositoryGitOp<T>(
     throw err;
   }
   return (await res.json()) as T;
+}
+
+/** POST a GitHub-specific repository operation while preserving structured errors. */
+export function postRepositoryGitOp<T>(
+  baseUrl: string,
+  projectRepositoryId: string,
+  action: string,
+  payload: unknown,
+): Promise<T> {
+  return postRepositoryOperation<T>(
+    `${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/${action}`,
+    payload,
+  );
+}
+
+/** POST a provider-neutral repository operation while preserving structured errors. */
+export function postSourceControlRepositoryOp<T>(
+  baseUrl: string,
+  projectRepositoryId: string,
+  action: string,
+  payload: unknown,
+): Promise<T> {
+  return postRepositoryOperation<T>(
+    `${baseUrl}/web/source-control/projects/${encodeURIComponent(projectRepositoryId)}/${action}`,
+    payload,
+  );
 }

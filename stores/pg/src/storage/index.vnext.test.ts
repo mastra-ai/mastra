@@ -201,6 +201,8 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
     sharedStorage = new ObservabilityStoragePostgresVNext({
       client: sharedClient,
       schemaName: sharedSchema,
+      // Shared conformance fixtures use fixed dates, outside the rolling discovery window.
+      discovery: { lookbackSeconds: 0 },
     });
     await sharedStorage.init();
   });

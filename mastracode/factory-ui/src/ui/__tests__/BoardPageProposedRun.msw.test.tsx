@@ -79,7 +79,7 @@ const userSession = {
   baseBranch: 'main',
   sandboxId: null,
   sandboxWorkdir: null,
-  materializedAt: null,
+  materializedAt: '2026-08-10T00:00:00.000Z',
   createdAt: '2026-08-10T00:00:00.000Z',
   updatedAt: '2026-08-10T00:00:00.000Z',
 };
@@ -173,7 +173,7 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/metrics`, () =>
       HttpResponse.json({ error: 'Metrics unavailable in this scenario' }, { status: 500 }),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+    http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
       HttpResponse.json({ session: userSession }),
     ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/${DECISION_ID}/approve`, () => {
@@ -221,7 +221,7 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions })),
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),
     ),

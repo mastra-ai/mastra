@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
+import {
+  defaultDeltaLimit,
+  deltaCursorSchema,
+  deltaInfoSchema,
+  deltaLimitSchema,
+  paginationArgsSchema,
+  paginationInfoSchema,
+} from '../shared';
 import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
@@ -16,6 +24,8 @@ export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
 const PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
+const PAGINATION_MODE_CONFLICT_MESSAGE = 'Trace queries cannot combine keyset and page pagination';
+const GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE = 'Grouped trace queries do not support page pagination';
 
 export function compareTraceQueryStrings(left: string, right: string): number {
   if (left < right) return -1;
@@ -250,8 +260,7 @@ const pageSchema = z
     limit: z.number().int().min(1).max(1000).default(100),
     after: z.string().min(1).nullable().optional(),
   })
-  .strict()
-  .default({ limit: 100 });
+  .strict();
 
 const traceQueryRequestObjectSchema = z
   .object({
@@ -272,9 +281,42 @@ const traceQueryRequestObjectSchema = z
       )
       .length(1)
       .optional(),
-    page: pageSchema,
+    page: pageSchema.optional(),
+    pagination: paginationArgsSchema.optional(),
+    mode: z.literal('delta').optional(),
+    after: deltaCursorSchema.optional(),
+    limit: deltaLimitSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((request, context) => {
+    if (request.mode === 'delta') {
+      for (const field of ['page', 'pagination', 'group', 'orderBy'] as const) {
+        if (request[field] !== undefined) {
+          context.addIssue({ code: 'custom', path: [field], message: `Delta trace queries do not support ${field}` });
+        }
+      }
+    } else {
+      for (const field of ['after', 'limit'] as const) {
+        if (request[field] !== undefined) {
+          context.addIssue({ code: 'custom', path: [field], message: `${field} requires delta mode` });
+        }
+      }
+    }
+    if (request.page && request.pagination) {
+      context.addIssue({
+        code: 'custom',
+        path: ['pagination'],
+        message: PAGINATION_MODE_CONFLICT_MESSAGE,
+      });
+    }
+    if (request.group && request.pagination) {
+      context.addIssue({
+        code: 'custom',
+        path: ['pagination'],
+        message: GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE,
+      });
+    }
+  });
 
 export const traceQueryRequestSchema = z.preprocess((input, context) => {
   const issuePath = findPredicateComplexityIssue(input, [['where']]);
@@ -289,7 +331,7 @@ const queryThreadsInputObjectSchema = z
   .object({
     traces: traceSelectionSchema,
     where: threadPredicateSchema.optional(),
-    page: pageSchema,
+    page: pageSchema.default({ limit: 100 }),
   })
   .strict();
 
@@ -328,13 +370,28 @@ const responsePageSchema = z.object({ next: z.string().nullable() }).strict();
 export const traceQueryTraceResponseSchema = z
   .object({ traces: z.array(traceQueryTraceSchema), page: responsePageSchema })
   .strict();
+export const traceQueryPaginatedTraceResponseSchema = z
+  .object({
+    traces: z.array(traceQueryTraceSchema),
+    pagination: paginationInfoSchema,
+    deltaCursor: deltaCursorSchema.optional(),
+  })
+  .strict();
+export const traceQueryDeltaTraceResponseSchema = z
+  .object({ traces: z.array(traceQueryTraceSchema), delta: deltaInfoSchema, deltaCursor: deltaCursorSchema })
+  .strict();
 export const traceQueryGroupResponseSchema = z
   .object({
     groups: z.array(z.object({ threadId: z.string() }).strict()),
     page: responsePageSchema,
   })
   .strict();
-export const traceQueryResponseSchema = z.union([traceQueryTraceResponseSchema, traceQueryGroupResponseSchema]);
+export const traceQueryResponseSchema = z.union([
+  traceQueryTraceResponseSchema,
+  traceQueryPaginatedTraceResponseSchema,
+  traceQueryDeltaTraceResponseSchema,
+  traceQueryGroupResponseSchema,
+]);
 
 export const threadIdentitySchema = z.object({ threadId: z.string() }).strict();
 export const queryThreadsResultSchema = z
@@ -382,6 +439,8 @@ export type TraceQueryRequest = z.input<typeof traceQueryRequestObjectSchema>;
 export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjectSchema>;
 export type TraceQueryTrace = z.infer<typeof traceQueryTraceSchema>;
 export type TraceQueryTraceResponse = z.infer<typeof traceQueryTraceResponseSchema>;
+export type TraceQueryPaginatedTraceResponse = z.infer<typeof traceQueryPaginatedTraceResponseSchema>;
+export type TraceQueryDeltaTraceResponse = z.infer<typeof traceQueryDeltaTraceResponseSchema>;
 export type TraceQueryGroupResponse = z.infer<typeof traceQueryGroupResponseSchema>;
 export type TraceQueryResponse = z.infer<typeof traceQueryResponseSchema>;
 
@@ -543,24 +602,49 @@ export type TrustedThreadPredicate =
 export interface TrustedTraceQueryBasePlan {
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryPredicate;
+}
+
+export interface TrustedTraceQueryKeysetPlan {
+  paginationMode: 'keyset';
   limit: number;
   binding: string;
 }
 
-export interface TrustedTraceQueryTracesPlan extends TrustedTraceQueryBasePlan {
+export interface TrustedTraceQueryPagePlan {
+  paginationMode: 'page';
+  page: number;
+  perPage: number;
+  deltaBinding: string;
+}
+
+interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
   result: 'traces';
   orderBy: {
     field: 'startedAt' | 'endedAt';
     direction: 'asc' | 'desc';
   };
-  cursor?: { sortValue: string; traceId: string };
 }
 
-export interface TrustedTraceQueryGroupsPlan extends TrustedTraceQueryBasePlan {
-  result: 'groups';
-  orderBy: { field: 'threadId'; direction: 'asc' };
-  cursor?: { threadId: string };
-}
+export type TrustedTraceQueryKeysetTracesPlan = TrustedTraceQueryTracesBasePlan &
+  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: string; traceId: string } };
+export type TrustedTraceQueryPaginatedTracesPlan = TrustedTraceQueryTracesBasePlan & TrustedTraceQueryPagePlan;
+export type TrustedTraceQueryDeltaTracesPlan = TrustedTraceQueryTracesBasePlan & {
+  paginationMode: 'delta';
+  limit: number;
+  binding: string;
+  deltaCursor?: { adapter: string; watermark: string };
+};
+export type TrustedTraceQueryTracesPlan =
+  | TrustedTraceQueryKeysetTracesPlan
+  | TrustedTraceQueryPaginatedTracesPlan
+  | TrustedTraceQueryDeltaTracesPlan;
+
+export type TrustedTraceQueryGroupsPlan = TrustedTraceQueryBasePlan &
+  TrustedTraceQueryKeysetPlan & {
+    result: 'groups';
+    orderBy: { field: 'threadId'; direction: 'asc' };
+    cursor?: { threadId: string };
+  };
 
 export type TrustedTraceQueryPlan = TrustedTraceQueryTracesPlan | TrustedTraceQueryGroupsPlan;
 
@@ -593,7 +677,10 @@ export interface TraceQueryObservedFieldsResult {
   observedFieldsTruncated: boolean;
 }
 
-export type TraceQueryCursorPlan = TrustedTraceQueryPlan | TrustedThreadQueryPlan;
+export type TraceQueryCursorPlan =
+  | TrustedTraceQueryKeysetTracesPlan
+  | TrustedTraceQueryGroupsPlan
+  | TrustedThreadQueryPlan;
 export type TraceQueryCursorValues =
   | { result: 'traces'; sortValue: string; traceId: string }
   | { result: 'groups'; threadId: string }
@@ -609,7 +696,9 @@ export type TraceQueryIssueCode =
   | 'operator_not_allowed'
   | 'invalid_operands'
   | 'invalid_literal'
-  | 'group_order_not_supported';
+  | 'group_order_not_supported'
+  | 'pagination_mode_conflict'
+  | 'group_pagination_not_supported';
 
 export interface TraceQueryIssue {
   code: TraceQueryIssueCode;
@@ -643,6 +732,15 @@ export class TraceQueryExecutionError extends Error {
   constructor() {
     super('The trace query exceeded its execution timeout');
     this.name = 'TraceQueryExecutionError';
+  }
+}
+
+export class TraceQueryResourceLimitError extends Error {
+  readonly code = 'TRACE_QUERY_RESOURCE_LIMIT';
+
+  constructor() {
+    super('The trace query exceeded its resource limit');
+    this.name = 'TraceQueryResourceLimitError';
   }
 }
 
@@ -805,13 +903,20 @@ export function planTraceQueryValues(args: NormalizedGetTraceQueryValuesArgs): T
 
 export function formatTraceQuerySchemaIssues(error: z.ZodError): TraceQueryIssue[] {
   return error.issues.map(issue => {
-    const predicateTooComplex = issue.code === 'custom' && issue.message === PREDICATE_COMPLEXITY_MESSAGE;
+    const customIssueCode =
+      issue.code === 'custom'
+        ? issue.message === PREDICATE_COMPLEXITY_MESSAGE
+          ? 'predicate_too_complex'
+          : issue.message === PAGINATION_MODE_CONFLICT_MESSAGE
+            ? 'pagination_mode_conflict'
+            : issue.message === GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE
+              ? 'group_pagination_not_supported'
+              : undefined
+        : undefined;
     return {
-      code: predicateTooComplex ? 'predicate_too_complex' : 'invalid_request',
+      code: customIssueCode ?? 'invalid_request',
       path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
-      message: predicateTooComplex
-        ? PREDICATE_COMPLEXITY_MESSAGE
-        : 'The value does not match the trace-query request contract',
+      message: customIssueCode ? issue.message : 'The value does not match the trace-query request contract',
     };
   });
 }
@@ -858,25 +963,25 @@ export function planTraceQuery(
       message: 'Grouped trace queries use fixed threadId ordering',
     });
   }
-
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   const where = request.where ? planPredicate(request.where, 'trace', ['where'], 1, state) : undefined;
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
   const timeRange = { from: from.toISOString(), to: to.toISOString() };
-  const limit = request.page.limit;
 
   if (request.group) {
     const result = 'groups' as const;
     const orderBy = { field: 'threadId', direction: 'asc' } as const;
     const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
-    const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
+    const page = request.page ?? { limit: 100 };
+    const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
     return {
       result,
       timeRange,
       where,
       orderBy,
-      limit,
+      paginationMode: 'keyset',
+      limit: page.limit,
       binding,
       cursor: cursor?.result === 'groups' ? { threadId: cursor.threadId } : undefined,
     };
@@ -884,14 +989,47 @@ export function planTraceQuery(
 
   const result = 'traces' as const;
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
+  const deltaBinding = digestBinding({
+    timeRange,
+    where,
+    result: 'trace-delta',
+    authorization: options.authorizationBinding,
+  });
+  if (request.mode === 'delta') {
+    return {
+      result,
+      timeRange,
+      where,
+      orderBy,
+      paginationMode: 'delta',
+      limit: request.limit ?? defaultDeltaLimit,
+      binding: deltaBinding,
+      deltaCursor: request.after === undefined ? undefined : decodeTraceQueryDeltaCursor(request.after, deltaBinding),
+    };
+  }
+  if (request.pagination) {
+    return {
+      result,
+      timeRange,
+      where,
+      orderBy,
+      paginationMode: 'page',
+      page: request.pagination.page,
+      perPage: request.pagination.perPage,
+      deltaBinding,
+    };
+  }
+
+  const page = request.page ?? { limit: 100 };
   const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
-  const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
+  const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
   return {
     result,
     timeRange,
     where,
     orderBy,
-    limit,
+    paginationMode: 'keyset',
+    limit: page.limit,
     binding,
     cursor: cursor?.result === 'traces' ? { sortValue: cursor.sortValue, traceId: cursor.traceId } : undefined,
   };
@@ -954,6 +1092,56 @@ export function planThreadQuery(
 export function encodeTraceQueryCursor(plan: TraceQueryCursorPlan, values: TraceQueryCursorValues): string {
   if (values.result !== plan.result) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
   return Buffer.from(JSON.stringify({ version: 1, binding: plan.binding, values }), 'utf8').toString('base64url');
+}
+
+const deltaCursorEnvelopeSchema = z
+  .object({
+    version: z.literal(1),
+    kind: z.literal('trace-delta'),
+    binding: z.string().length(64),
+    adapter: z.string().min(1).max(100),
+    watermark: z.string().min(1).max(4096),
+  })
+  .strict();
+
+/** Wraps a storage-native watermark in a query-bound, delta-only cursor. */
+export function encodeTraceQueryDeltaCursor(
+  plan: TrustedTraceQueryPaginatedTracesPlan | TrustedTraceQueryDeltaTracesPlan,
+  adapter: string,
+  watermark: string,
+): string {
+  const envelope = deltaCursorEnvelopeSchema.parse({
+    version: 1,
+    kind: 'trace-delta',
+    binding: 'deltaBinding' in plan ? plan.deltaBinding : plan.binding,
+    adapter,
+    watermark,
+  });
+  return Buffer.from(JSON.stringify(envelope), 'utf8').toString('base64url');
+}
+
+function decodeTraceQueryDeltaCursor(cursor: string, binding: string): { adapter: string; watermark: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+  } catch {
+    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  }
+  const envelope = deltaCursorEnvelopeSchema.safeParse(parsed);
+  if (!envelope.success) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  if (envelope.data.binding !== binding) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
+  return { adapter: envelope.data.adapter, watermark: envelope.data.watermark };
+}
+
+/** Storage adapters must check cursor ownership before interpreting the native watermark. */
+export function getTraceQueryDeltaWatermark(
+  plan: TrustedTraceQueryDeltaTracesPlan,
+  adapter: string,
+): string | undefined {
+  if (plan.deltaCursor && plan.deltaCursor.adapter !== adapter) {
+    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
+  }
+  return plan.deltaCursor?.watermark;
 }
 
 function decodeTraceQueryCursor(

@@ -7,12 +7,10 @@ import type { ThreadTraceRowContextValue } from './thread-trace-row-context';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
 
-export const THREAD_TRACE_SPANS_TAB = 'spans';
+export const THREAD_TRACE_MESSAGES_TAB = 'messages';
 
 export interface ThreadTraceRowProps extends ComponentProps<'div'> {
   traceId: string;
-  /** The oldest trace; its details column gets the top border of the list. */
-  isFirst?: boolean;
 }
 
 // Module-level so the callback ref keeps its identity and React only invokes it on mount/unmount.
@@ -25,7 +23,7 @@ const scrollIntoViewOnMount = (row: HTMLDivElement | null) => {
  * row is dimmed unless it is the first one in view, hovered, or its span is open in the side panel,
  * so the reader keeps track of which turn they are on without hovering.
  */
-export function ThreadTraceRow({ traceId, isFirst = false, className, children, ...props }: ThreadTraceRowProps) {
+export function ThreadTraceRow({ traceId, className, children, ...props }: ThreadTraceRowProps) {
   const root = useThreadTrace();
 
   const selectedSpanId = root.selected?.traceId === traceId ? root.selected.spanId : undefined;
@@ -43,16 +41,19 @@ export function ThreadTraceRow({ traceId, isFirst = false, className, children, 
   const timeline = useMeasuredAutoHeight<HTMLDivElement>();
   const detailsHeader = useMeasuredAutoHeight<HTMLDivElement>();
 
-  // Controlled so a highlight can bring the span tree back: the timeline is unmounted on other
-  // tabs, and a highlight nobody can see is just a no-op.
-  const [tab, setTab] = useState<string>(THREAD_TRACE_SPANS_TAB);
+  // Which view the messages column shows (Messages / Feedback / Scores), one per row.
+  const [tab, setTab] = useState<string>(THREAD_TRACE_MESSAGES_TAB);
+  // The clamp budget is the height of the *Messages* view: a short Feedback or Scores view
+  // must not squash the span tree next to it, so the last Messages height is kept while
+  // another view is showing.
+  const [messagesViewHeight, setMessagesViewHeight] = useState<number | null>(null);
+  if (tab === THREAD_TRACE_MESSAGES_TAB && messages.height !== messagesViewHeight) {
+    setMessagesViewHeight(messages.height);
+  }
 
   const { highlightSpans: rootHighlightSpans, setTraceExpanded } = root;
   const highlightSpans = useCallback(
-    (spanIds: string[]) => {
-      setTab(THREAD_TRACE_SPANS_TAB);
-      rootHighlightSpans(traceId, spanIds);
-    },
+    (spanIds: string[]) => rootHighlightSpans(traceId, spanIds),
     [rootHighlightSpans, traceId],
   );
   const setExpanded = useCallback(
@@ -63,7 +64,6 @@ export function ThreadTraceRow({ traceId, isFirst = false, className, children, 
   const contextValue = useMemo<ThreadTraceRowContextValue>(
     () => ({
       traceId,
-      isFirst,
       isActive,
       isCurrent,
       isExpanded,
@@ -78,13 +78,12 @@ export function ThreadTraceRow({ traceId, isFirst = false, className, children, 
       messagesRef: messages.ref,
       timelineRef: timeline.ref,
       detailsHeaderRef: detailsHeader.ref,
-      messagesHeight: messages.height,
+      messagesHeight: messagesViewHeight,
       timelineHeight: timeline.height,
       detailsHeaderHeight: detailsHeader.height,
     }),
     [
       traceId,
-      isFirst,
       isActive,
       isCurrent,
       isExpanded,
@@ -98,7 +97,7 @@ export function ThreadTraceRow({ traceId, isFirst = false, className, children, 
       messages.ref,
       timeline.ref,
       detailsHeader.ref,
-      messages.height,
+      messagesViewHeight,
       timeline.height,
       detailsHeader.height,
     ],
@@ -109,7 +108,8 @@ export function ThreadTraceRow({ traceId, isFirst = false, className, children, 
       <div
         data-slot="thread-trace-row"
         className={cn(
-          'group grid grid-cols-[1fr_1fr] pr-4 pl-14 transition-opacity hover:opacity-100',
+          // Same fixed messages width as the trace panel; the details column takes the rest.
+          'group grid grid-cols-[24rem_minmax(0,1fr)] border-b border-border1 pr-4 pl-14 transition-opacity hover:opacity-100',
           isActive || isCurrent ? 'opacity-100' : 'opacity-50',
           className,
         )}

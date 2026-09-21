@@ -3,6 +3,9 @@ import { relativeTime } from '../../../lib/date/relativeTime';
 import { hasLabel } from './boardItems';
 import { itemAppearsInStage } from './boardStages';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
+import type { GitLabIssue, GitLabMergeRequest } from './services/gitlab';
+import type { IncidentioIssue } from './services/incidentio';
+import type { JiraIssue } from './services/jira';
 import type { LinearIssue } from './services/linear';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 import type { BoardStageId } from './stages';
@@ -15,7 +18,11 @@ import type { BoardStageId } from './stages';
 export const INTAKE_SOURCES = [
   { id: 'github', label: 'Issues' },
   { id: 'github-prs', label: 'PRs' },
+  { id: 'gitlab-prs', label: 'MRs' },
+  { id: 'gitlab', label: 'GitLab' },
   { id: 'linear', label: 'Linear' },
+  { id: 'jira', label: 'Jira' },
+  { id: 'incidentio', label: 'incident.io' },
 ] as const;
 
 export type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
@@ -76,6 +83,48 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
   };
 }
 
+export function gitlabCandidate(issue: GitLabIssue): BoardCandidate {
+  return {
+    sourceKey: issue.externalId,
+    source: 'gitlab-issue',
+    title: issue.title,
+    url: issue.url,
+    meta: issue.identifier + ' · ' + issue.state + (issue.assignee ? ' · ' + issue.assignee : ''),
+    column: 'intake',
+    metadata: {
+      gitlabIssueId: issue.id,
+      identifier: issue.identifier,
+      state: issue.state,
+      assignee: issue.assignee,
+      assignees: issue.assignees ?? [],
+      author: issue.author,
+      sourceId: issue.sourceId,
+      labels: issue.labels,
+      labelColors: issue.labelColors ?? {},
+      sourceCreatedAt: issue.createdAt,
+    },
+  };
+}
+
+export function gitlabMergeRequestCandidate(pr: GitLabMergeRequest): BoardCandidate {
+  return {
+    sourceKey: pr.externalId,
+    source: 'gitlab-pr',
+    title: pr.title,
+    url: pr.url,
+    meta: `!${pr.number}${pr.author ? ` · ${pr.author}` : ''} · ${pr.headBranch} → ${pr.baseBranch}`,
+    column: 'intake',
+    metadata: {
+      gitlabMergeRequestIid: pr.number,
+      author: pr.author,
+      assignees: pr.assignees,
+      requestedReviewers: pr.requestedReviewers,
+      headBranch: pr.headBranch,
+      baseBranch: pr.baseBranch,
+    },
+  };
+}
+
 export function linearCandidate(issue: LinearIssue): BoardCandidate {
   return {
     sourceKey: `linear:${issue.identifier}`,
@@ -90,6 +139,59 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
       state: issue.state,
       assignee: issue.assignee,
       creator: issue.creator ?? null,
+    },
+  };
+}
+
+export function jiraCandidate(issue: JiraIssue): BoardCandidate {
+  return {
+    sourceKey: issue.id,
+    source: 'jira-issue',
+    title: issue.title,
+    url: issue.url,
+    meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
+    column: 'intake',
+    metadata: {
+      identifier: issue.identifier,
+      issueRef: issue.id,
+      state: issue.state,
+      stateType: issue.stateType,
+      priority: issue.priorityLabel,
+      project: issue.project,
+      site: issue.site ?? null,
+      assignee: issue.assignee,
+      assignees: issue.assignee ? [issue.assignee] : [],
+      creator: issue.author ?? null,
+      author: issue.author ?? null,
+      labels: issue.labels,
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
+    },
+  };
+}
+
+export function incidentioCandidate(issue: IncidentioIssue): BoardCandidate {
+  return {
+    sourceKey: issue.id,
+    source: 'incidentio-follow-up',
+    title: issue.title,
+    url: issue.url,
+    meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
+    column: 'intake',
+    metadata: {
+      identifier: issue.identifier,
+      issueRef: issue.id,
+      state: issue.state,
+      stateType: issue.stateType,
+      priority: issue.priorityLabel,
+      incident: issue.incident,
+      assignee: issue.assignee,
+      assignees: issue.assignee ? [issue.assignee] : [],
+      creator: issue.author ?? null,
+      author: issue.author ?? null,
+      labels: issue.labels,
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
     },
   };
 }
