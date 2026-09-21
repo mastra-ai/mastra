@@ -80,7 +80,7 @@ export const AgentBuilderStarter = () => {
   return (
     <div className="starter-aurora bg-sidebar flex min-h-full flex-col items-center justify-center px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
-        <h1 className="starter-heading text-foreground text-title md:text-display text-center font-serif tracking-tight">
+        <h1 className="starter-heading text-foreground text-title md:text-display font-display text-center tracking-tight">
           What should we build today?
         </h1>
 

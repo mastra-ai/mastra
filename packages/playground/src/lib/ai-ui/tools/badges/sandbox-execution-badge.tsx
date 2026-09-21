@@ -42,7 +42,7 @@ const getStatusColor = (status?: string) => {
       return 'bg-yellow-500';
     case 'stopped':
     case 'paused':
-      return 'bg-gray-500';
+      return 'bg-muted-foreground';
     case 'error':
     case 'failed':
       return 'bg-red-500';

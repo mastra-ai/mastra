@@ -15,7 +15,7 @@ function ConnectionRow({
     <li className="flex items-center justify-between border-b py-2">
       <div>
         <div className="font-mono text-caption">{connection.connectionId}</div>
-        <div className="text-caption text-gray-500">
+        <div className="text-caption text-muted-foreground">
           {connection.label ?? '(no label)'} · {connection.status}
           {connection.scope ? ` · ${connection.scope}` : ''}
           {isAdmin && connection.authorId ? ` · author: ${connection.authorId}` : ''}
@@ -23,7 +23,7 @@ function ConnectionRow({
       </div>
       <button
         type="button"
-        className="text-red-600 underline disabled:opacity-50"
+        className="text-destructive underline disabled:opacity-50"
         onClick={onDisconnect}
         disabled={disconnectPending}
       >
@@ -74,7 +74,7 @@ function ConnectionGroups({
     <div className="space-y-4">
       {groups.map(([authorKey, rows]) => (
         <div key={authorKey}>
-          <h3 className="text-subheading text-gray-700" data-testid={`integration-author-group-${authorKey}`}>
+          <h3 className="text-subheading text-foreground" data-testid={`integration-author-group-${authorKey}`}>
             {authorKey === 'shared' ? 'Shared' : `Owned by ${authorKey}`}
           </h3>
           <ConnectionList
@@ -118,13 +118,13 @@ export function ExistingConnectionsPanel({
     <div className="space-y-2 border rounded p-4">
       <h2 className="text-heading">Existing connections</h2>
       {!providerId || !toolkit ? (
-        <p className="text-gray-500">Pick a provider and toolkit to list connections.</p>
+        <p className="text-muted-foreground">Pick a provider and toolkit to list connections.</p>
       ) : isLoading ? (
-        <p className="text-gray-500">Loading…</p>
+        <p className="text-muted-foreground">Loading…</p>
       ) : error ? (
-        <p className="text-red-600">{String(error)}</p>
+        <p className="text-destructive">{String(error)}</p>
       ) : connections.length === 0 ? (
-        <p className="text-gray-500">No connections.</p>
+        <p className="text-muted-foreground">No connections.</p>
       ) : groupedByAuthor ? (
         <ConnectionGroups
           groups={groupedByAuthor}
@@ -140,7 +140,7 @@ export function ExistingConnectionsPanel({
           onDisconnect={onDisconnect}
         />
       )}
-      {disconnectError ? <p className="text-red-600">{String(disconnectError)}</p> : null}
+      {disconnectError ? <p className="text-destructive">{String(disconnectError)}</p> : null}
     </div>
   );
 }

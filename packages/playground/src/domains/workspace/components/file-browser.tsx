@@ -91,7 +91,7 @@ function getMountIcon(mount: FileEntry['mount']) {
     case 'folder':
       return <Folder className="h-4 w-4 text-amber-400" />;
     case 'hard-drive':
-      return <HardDrive className="h-4 w-4 text-slate-400" />;
+      return <HardDrive className="text-muted-foreground h-4 w-4" />;
     case 'cloud':
       return <Cloud className="h-4 w-4 text-sky-400" />;
     default:

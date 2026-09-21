@@ -142,7 +142,7 @@ export const AgentMetadataModelSwitcher = ({
     return (
       <div className="flex items-center gap-2">
         <Spinner />
-        <span className="text-body text-gray-500">Loading providers...</span>
+        <span className="text-body text-muted-foreground">Loading providers...</span>
       </div>
     );
   }
