@@ -65,6 +65,7 @@ function makeInitData(overrides: Record<string, any> = {}) {
 
 function makeMessageList() {
   return {
+    get: { all: { db: vi.fn().mockReturnValue([]) } },
     updateToolInvocation: vi.fn().mockReturnValue(true),
     updateMessageMetadataByToolCallId: vi.fn().mockReturnValue(true),
     add: vi.fn(),
@@ -99,13 +100,13 @@ function setupRegistry(overrides: Record<string, any> = {}) {
   return { messageList, saveQueueManager, bgManager, entry };
 }
 
-function executeStep(pubsub: any, initData: any, input?: any) {
+function executeStep(pubsub: any, initData: any, input?: any, resumeData?: unknown) {
   const step = createDurableToolCallStep();
   return (step as any).execute({
     inputData: input ?? baseInput(),
     mastra: { getLogger: () => undefined },
     suspend: vi.fn(),
-    resumeData: undefined,
+    resumeData,
     requestContext: new Map(),
     getInitData: () => initData,
     [PUBSUB_SYMBOL]: pubsub,
@@ -146,6 +147,200 @@ describe('durable tool-call background task dispatch', () => {
     expect(result.result).toContain('Background task started');
     expect(result.result).toContain('task-abc');
     expect(result.result).toContain(TOOL_NAME);
+  });
+
+  it('waits for fresh awaited background tasks and returns the reconciled terminal result', async () => {
+    const pubsub = mockPubsub();
+    setupRegistry();
+    const initData = makeInitData();
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    let capturedOnResult: any;
+    const waitForCompletion = vi.fn().mockResolvedValue({
+      id: 'task-awaited',
+      status: 'completed',
+      result: { summary: 'finished' },
+    });
+    vi.mocked(createBackgroundTask).mockImplementation((_manager: any, options: any) => {
+      capturedOnResult = options.context.onResult;
+      return {
+        dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-awaited' }, fallbackToSync: false }),
+        checkIfRunning: vi.fn().mockResolvedValue(false),
+        restart: vi.fn(),
+        task: { id: 'task-awaited' },
+        cancel: vi.fn(),
+        waitForCompletion,
+      } as any;
+    });
+
+    let settled = false;
+    const execution = executeStep(pubsub, initData).finally(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => expect(waitForCompletion).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+
+    await capturedOnResult({
+      runId: RUN_ID,
+      taskId: 'task-awaited',
+      toolCallId: TOOL_CALL_ID,
+      toolName: TOOL_NAME,
+      agentId: AGENT_ID,
+      result: { summary: 'finished' },
+      status: 'completed',
+      startedAt: new Date(),
+      completedAt: new Date(),
+    });
+
+    await expect(execution).resolves.toMatchObject({ result: { summary: 'finished' } });
+  });
+
+  it('propagates awaited background task failures without executing the tool again', async () => {
+    const pubsub = mockPubsub();
+    const execute = vi.fn().mockResolvedValue({ summary: 'sync fallback' });
+    setupRegistry({
+      tools: {
+        [TOOL_NAME]: {
+          execute,
+          backgroundConfig: { enabled: true },
+        },
+      },
+    });
+    const initData = makeInitData();
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    const waitForCompletion = vi.fn().mockResolvedValue({
+      id: 'task-failed',
+      status: 'failed',
+      error: { message: 'background failure' },
+    });
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-failed' }, fallbackToSync: false }),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
+      task: { id: 'task-failed' },
+      cancel: vi.fn(),
+      waitForCompletion,
+    } as any);
+
+    await expect(executeStep(pubsub, initData)).rejects.toThrow('background failure');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('waits for resumed awaited background tasks', async () => {
+    const pubsub = mockPubsub();
+    setupRegistry();
+    const initData = makeInitData();
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    let capturedOnResult: any;
+    const resume = vi.fn().mockResolvedValue({ id: 'task-resumed' });
+    const waitForCompletion = vi.fn().mockResolvedValue({
+      id: 'task-resumed',
+      status: 'completed',
+      result: { summary: 'resumed result' },
+    });
+    vi.mocked(createBackgroundTask).mockImplementation((_manager: any, options: any) => {
+      capturedOnResult = options.context.onResult;
+      return {
+        dispatch: vi.fn(),
+        checkIfSuspended: vi.fn().mockResolvedValue(true),
+        checkIfRunning: vi.fn(),
+        resume,
+        restart: vi.fn(),
+        task: { id: 'task-resumed' },
+        cancel: vi.fn(),
+        waitForCompletion,
+      } as any;
+    });
+
+    const execution = executeStep(pubsub, initData, undefined, { approved: true });
+    await vi.waitFor(() => expect(waitForCompletion).toHaveBeenCalledOnce());
+    await capturedOnResult({
+      runId: RUN_ID,
+      taskId: 'task-resumed',
+      toolCallId: TOOL_CALL_ID,
+      toolName: TOOL_NAME,
+      agentId: AGENT_ID,
+      result: { summary: 'resumed result' },
+      status: 'completed',
+      startedAt: new Date(),
+      completedAt: new Date(),
+    });
+
+    await expect(execution).resolves.toMatchObject({ result: { summary: 'resumed result' } });
+    expect(resume).toHaveBeenCalledWith({ approved: true });
+  });
+
+  it('waits for restarted awaited background tasks', async () => {
+    const pubsub = mockPubsub();
+    setupRegistry();
+    const initData = makeInitData();
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    let capturedOnResult: any;
+    const dispatch = vi.fn();
+    const restart = vi.fn().mockResolvedValue({ id: 'task-restarted' });
+    const waitForCompletion = vi.fn().mockResolvedValue({
+      id: 'task-restarted',
+      status: 'completed',
+      result: { summary: 'restarted result' },
+    });
+    vi.mocked(createBackgroundTask).mockImplementation((_manager: any, options: any) => {
+      capturedOnResult = options.context.onResult;
+      return {
+        dispatch,
+        checkIfSuspended: vi.fn().mockResolvedValue(false),
+        checkIfRunning: vi.fn().mockResolvedValue(true),
+        resume: vi.fn(),
+        restart,
+        task: { id: 'task-restarted' },
+        cancel: vi.fn(),
+        waitForCompletion,
+      } as any;
+    });
+
+    const execution = executeStep(pubsub, initData);
+    await vi.waitFor(() => expect(waitForCompletion).toHaveBeenCalledOnce());
+    await capturedOnResult({
+      runId: RUN_ID,
+      taskId: 'task-restarted',
+      toolCallId: TOOL_CALL_ID,
+      toolName: TOOL_NAME,
+      agentId: AGENT_ID,
+      result: { summary: 'restarted result' },
+      status: 'completed',
+      startedAt: new Date(),
+      completedAt: new Date(),
+    });
+
+    await expect(execution).resolves.toMatchObject({ result: { summary: 'restarted result' } });
+    expect(restart).toHaveBeenCalledOnce();
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('exposes the adoption bridge to durable background tools and waits for completion', async () => {

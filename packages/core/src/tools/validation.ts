@@ -16,6 +16,7 @@ export function registerToolOutputValidationSchema(tool: object, schema: unknown
 
   Object.defineProperty(tool, TOOL_OUTPUT_VALIDATION_SCHEMA, {
     configurable: true,
+    enumerable: true,
     value: schema,
   });
 }
