@@ -1342,7 +1342,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         this.#client,
         args,
         this.#replication,
-        this.#deltaCursorStrategy,
+        deltaPollingSupported(this.#deltaCursorStrategy) ? this.#deltaCursorStrategy : null,
       );
     } catch (error) {
       if (error instanceof MastraError) throw error;

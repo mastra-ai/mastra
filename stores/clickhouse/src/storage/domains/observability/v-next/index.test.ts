@@ -5159,6 +5159,57 @@ LIMIT 1`,
         await client.close();
       }
     });
+
+    it('re-applies the review to a newer version ingested during the update', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const originalCommand = client.command.bind(client);
+      let mutations = 0;
+      const feedback = {
+        feedbackId: 'supersede-feedback-1',
+        timestamp: new Date('2026-09-01T12:00:02Z'),
+        traceId: 'supersede-trace-1',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'rating',
+        value: 1,
+        comment: 'original',
+        experimentId: null,
+        organizationId: 'org-1',
+        resourceId: 'resource-1',
+        metadata: null,
+      } as const;
+      let store!: ObservabilityStorageClickhouseVNext;
+      // Ingest a newer version of the row between the update's read and its mutation.
+      const commandSpy = vi.spyOn(client, 'command').mockImplementation(async args => {
+        const query = (args as { query: string }).query;
+        if (query.includes(`ALTER TABLE ${TABLE_FEEDBACK_EVENTS} UPDATE`) && mutations++ === 0) {
+          await store.createFeedback({ feedback: { ...feedback, comment: 'newer' } });
+        }
+        return originalCommand(args);
+      });
+
+      try {
+        store = new ObservabilityStorageClickhouseVNext({ client });
+        await store.init();
+        await store.createFeedback({ feedback });
+
+        await expect(
+          store.updateFeedbackReviewStatus({ feedbackId: feedback.feedbackId, reviewStatus: 'reviewed' }),
+        ).resolves.toMatchObject({ feedbackId: feedback.feedbackId, reviewStatus: 'reviewed', comment: 'newer' });
+
+        expect(mutations).toBe(2);
+        expect((await store.listFeedback({})).feedback).toMatchObject([
+          { feedbackId: feedback.feedbackId, reviewStatus: 'reviewed', comment: 'newer' },
+        ]);
+      } finally {
+        commandSpy.mockRestore();
+        await client.close();
+      }
+    });
   });
 
   // ==========================================================================

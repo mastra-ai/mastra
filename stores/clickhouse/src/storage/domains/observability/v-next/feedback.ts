@@ -304,6 +304,19 @@ function feedbackNotFoundError(feedbackId: string): MastraError {
   });
 }
 
+function feedbackConflictError(feedbackId: string): MastraError {
+  return new MastraError({
+    id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT',
+    domain: ErrorDomain.MASTRA_OBSERVABILITY,
+    category: ErrorCategory.USER,
+    text: 'Feedback record changed while its review status was being updated; retry the update',
+    details: { feedbackId },
+  });
+}
+
+/** Re-reads before giving up when ingestion keeps superseding the observed row. */
+const REVIEW_UPDATE_ATTEMPTS = 3;
+
 /**
  * Applied markers are inserted with quorum. On replicated clusters the guard
  * reads with `select_sequential_consistency` so it cannot answer from a replica
@@ -344,6 +357,28 @@ export async function updateFeedbackReviewStatus(
 ): Promise<FeedbackRecord> {
   const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
 
+  // The mutation targets the exact writeVersion observed. Ingestion can insert
+  // a newer version at any time, which turns that mutation into a no-op; re-read
+  // and re-apply to the newest row instead of reporting a false not-found.
+  for (let attempt = 1; ; attempt++) {
+    const updated = await applyReviewStatus(client, feedbackId, reviewStatus, replication, strategy);
+    if (updated) return updated;
+    if (attempt >= REVIEW_UPDATE_ATTEMPTS) throw feedbackConflictError(feedbackId);
+  }
+}
+
+/**
+ * One read-guard-mutate-verify pass. Returns `null` when the observed version
+ * vanished under `FINAL` before the read-back: a newer version superseded it,
+ * or a delete hid it after the guard read (the next pass then reports not found).
+ */
+async function applyReviewStatus(
+  client: ClickHouseClient,
+  feedbackId: string,
+  reviewStatus: FeedbackRecord['reviewStatus'],
+  replication: ClickhouseReplicationConfig | undefined,
+  strategy: ClickHouseDeltaCursorStrategy | null,
+): Promise<FeedbackRecord | null> {
   const existing = await queryJson<Record<string, any>>(
     client,
     `SELECT *, toString(writeVersion) AS reviewWriteVersion FROM ${TABLE_FEEDBACK_EVENTS} FINAL
@@ -423,8 +458,7 @@ export async function updateFeedbackReviewStatus(
     `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE ${identity} LIMIT 1`,
     params,
   );
-  if (!current[0]) throw feedbackNotFoundError(feedbackId);
-  return rowToFeedbackRecord(current[0]);
+  return current[0] ? rowToFeedbackRecord(current[0]) : null;
 }
 
 // ============================================================================

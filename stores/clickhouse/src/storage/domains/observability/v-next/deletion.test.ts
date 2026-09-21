@@ -219,6 +219,64 @@ describe('ClickHouse deletion lifecycle', () => {
     });
   });
 
+  it('re-applies the review to a newer version ingested during the update', async () => {
+    const { client, command, query } = createClient();
+    const base = {
+      feedbackId: 'feedback-1',
+      timestamp: new Date('2026-09-03T12:00:00Z'),
+      traceId: 'trace-1',
+      feedbackSource: 'user',
+      feedbackType: 'rating',
+      value: 1,
+      reviewStatus: 'needs-review',
+    } as const;
+    const v1 = { ...feedbackRecordToRow(base), reviewWriteVersion: '1' };
+    const v2 = { ...feedbackRecordToRow({ ...base, comment: 'newer' }), reviewWriteVersion: '2' };
+    query
+      // attempt 1: observed v1, no request, no request, v1 gone under FINAL
+      .mockResolvedValueOnce(queryResult([v1]))
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([]))
+      // attempt 2: observed v2, no request, no request, v2 read back
+      .mockResolvedValueOnce(queryResult([v2]))
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([{ ...v2, reviewStatus: 'reviewed' }]));
+
+    await expect(
+      updateFeedbackReviewStatus(client, { feedbackId: 'feedback-1', reviewStatus: 'reviewed' }),
+    ).resolves.toMatchObject({ feedbackId: 'feedback-1', reviewStatus: 'reviewed', comment: 'newer' });
+
+    expect(command).toHaveBeenCalledTimes(2);
+    expect(command.mock.calls[0]?.[0].query_params).toMatchObject({ writeVersion: '1' });
+    expect(command.mock.calls[1]?.[0].query_params).toMatchObject({ writeVersion: '2' });
+  });
+
+  it('reports a conflict instead of not-found when ingestion keeps superseding the row', async () => {
+    const { client, command, query } = createClient();
+    const row = {
+      ...feedbackRecordToRow({
+        feedbackId: 'feedback-1',
+        timestamp: new Date('2026-09-03T12:00:00Z'),
+        traceId: 'trace-1',
+        feedbackSource: 'user',
+        feedbackType: 'rating',
+        value: 1,
+        reviewStatus: 'needs-review',
+      }),
+      reviewWriteVersion: '1',
+    };
+    query.mockImplementation(async (args: { query: string }) =>
+      queryResult(args.query.includes('ORDER BY writeVersion DESC') ? [row] : []),
+    );
+
+    await expect(
+      updateFeedbackReviewStatus(client, { feedbackId: 'feedback-1', reviewStatus: 'reviewed' }),
+    ).rejects.toMatchObject({ id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT' });
+    expect(command).toHaveBeenCalledTimes(3);
+  });
+
   it('reads the guard without sequential consistency when replication is not configured', async () => {
     const { client, query } = createClient();
     const existingRow = feedbackRecordToRow({
