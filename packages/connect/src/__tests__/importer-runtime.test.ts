@@ -58,7 +58,7 @@ describe('importer-runtime helpers', () => {
     });
 
     it('surfaces dynamic scopes as resolveBindings mapped to the provider source', async () => {
-      const trigger = importerCronTrigger('jira:c3', {
+      const trigger = importerCronTrigger('linear:c3', {
         access: { 'resource:$projectId': 'owner' },
         schedule: '0 * * * *',
         scopes: async () => ['resource:one', 'resource:two'],
@@ -67,8 +67,8 @@ describe('importer-runtime helpers', () => {
       expect(trigger.bindings).toBeUndefined();
       expect(trigger.resolveBindings).toBeTypeOf('function');
       await expect(trigger.resolveBindings!()).resolves.toEqual([
-        { source: 'jira:c3', scope: 'resource:one' },
-        { source: 'jira:c3', scope: 'resource:two' },
+        { source: 'linear:c3', scope: 'resource:one' },
+        { source: 'linear:c3', scope: 'resource:two' },
       ]);
     });
 
