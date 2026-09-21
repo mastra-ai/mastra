@@ -5,11 +5,14 @@ import {
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
+import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { ChevronRightIcon, PauseIcon, WorkflowIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { SyntheticEvent } from 'react';
+import { sortWorkflows } from './workflows-sort';
+import type { WorkflowsSort, WorkflowsSortKey } from './workflows-sort';
 import { useWorkflowsRunCounts } from '@/domains/workflows/hooks/use-workflows-run-counts';
 import { flattenWorkflowTree } from '@/domains/workflows/utils/nested-workflows';
 import type { WorkflowTreeRow } from '@/domains/workflows/utils/nested-workflows';
@@ -19,6 +22,8 @@ export interface WorkflowsListProps {
   workflows: Record<string, GetWorkflowResponse>;
   isLoading: boolean;
   search?: string;
+  sort?: WorkflowsSort;
+  onSortChange?: (direction: DataListSort, key: WorkflowsSortKey) => void;
 }
 
 // Leading fixed expander column (outside the row link), then Name /
@@ -73,7 +78,7 @@ function TreeToggleCell({
           type="button"
           aria-expanded={isExpanded}
           aria-label={`${isExpanded ? 'Collapse' : 'Expand'} nested workflows of ${workflowName}`}
-          className="text-neutral4 hover:text-neutral2 relative grid size-5 shrink-0 place-items-center before:absolute before:-inset-1.5 before:content-['']"
+          className="text-muted-foreground hover:text-placeholder relative grid size-5 shrink-0 place-items-center before:absolute before:-inset-1.5 before:content-['']"
           onClick={event => {
             event.stopPropagation();
             onToggle();
@@ -89,6 +94,25 @@ function TreeToggleCell({
 }
 
 const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
+
+/** Sortable header when the parent owns sort state; plain header otherwise. */
+function SortHeader({
+  sortKey,
+  sort,
+  onSortChange,
+  children,
+}: Pick<WorkflowsListProps, 'sort' | 'onSortChange'> & { sortKey: WorkflowsSortKey; children: string }) {
+  if (!onSortChange) return <EntityList.TopCell>{children}</EntityList.TopCell>;
+  return (
+    <EntityList.SortableTopCell
+      sortKey={sortKey}
+      sort={sort?.key === sortKey ? sort.direction : undefined}
+      onSortChange={direction => onSortChange(direction, sortKey)}
+    >
+      {children}
+    </EntityList.SortableTopCell>
+  );
+}
 
 /**
  * Wrapper owns focus/roving and activation so the expander gutter also
@@ -141,7 +165,7 @@ function WorkflowRow({
             {hasNested ? (
               <span
                 title={`Nested workflows: ${nestedIds.join(', ')}`}
-                className="text-ui-smd text-neutral4 inline-flex shrink-0 items-center gap-1"
+                className="text-ui-smd text-muted-foreground inline-flex shrink-0 items-center gap-1"
               >
                 <WorkflowIcon aria-hidden className="size-3.5" />
                 {nestedIds.length}
@@ -182,8 +206,9 @@ function WorkflowRow({
   );
 }
 
-export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsListProps) {
+export function WorkflowsList({ workflows, isLoading, search = '', sort, onSortChange }: WorkflowsListProps) {
   const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(new Set());
+  const runCounts = useWorkflowsRunCounts();
 
   const workflowData = useMemo(
     () =>
@@ -201,12 +226,13 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
     );
   }, [workflowData, search]);
 
-  const rows = useMemo(
-    () => flattenWorkflowTree(filteredData, workflows, expandedPaths),
-    [filteredData, workflows, expandedPaths],
-  );
+  // Sort applies to root workflows only; nested rows keep their tree order.
+  const sortedData = useMemo(() => sortWorkflows(filteredData, sort, runCounts), [filteredData, sort, runCounts]);
 
-  const runCounts = useWorkflowsRunCounts();
+  const rows = useMemo(
+    () => flattenWorkflowTree(sortedData, workflows, expandedPaths),
+    [sortedData, workflows, expandedPaths],
+  );
 
   // Inline rows are non-interactive; keyboard navigation only visits workflow rows.
   const interactiveIndexByPathKey = useMemo(() => {
@@ -241,11 +267,19 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
         <EntityList.TopCell>
           <span className="sr-only">Expand</span>
         </EntityList.TopCell>
-        <EntityList.TopCell>Name</EntityList.TopCell>
+        <SortHeader sortKey="name" sort={sort} onSortChange={onSortChange}>
+          Name
+        </SortHeader>
         <EntityList.TopCell>Description</EntityList.TopCell>
-        <EntityList.TopCell>Running</EntityList.TopCell>
-        <EntityList.TopCell>Pending input</EntityList.TopCell>
-        <EntityList.TopCell>Number of steps</EntityList.TopCell>
+        <SortHeader sortKey="running" sort={sort} onSortChange={onSortChange}>
+          Running
+        </SortHeader>
+        <SortHeader sortKey="suspended" sort={sort} onSortChange={onSortChange}>
+          Pending input
+        </SortHeader>
+        <SortHeader sortKey="steps" sort={sort} onSortChange={onSortChange}>
+          Number of steps
+        </SortHeader>
       </EntityList.Top>
 
       {rows.length === 0 && search ? <EntityList.NoMatch message="No Workflows match your search" /> : null}
@@ -268,7 +302,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
                     <span className="truncate">{truncateString(row.stepId, 50)}</span>
                     <span
                       title="Nested workflow not registered standalone"
-                      className="text-ui-smd text-neutral4 shrink-0"
+                      className="text-ui-smd text-muted-foreground shrink-0"
                     >
                       inline
                     </span>

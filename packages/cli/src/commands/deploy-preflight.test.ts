@@ -77,6 +77,19 @@ describe('preflightBuildOutput', () => {
         provider: 'redis',
         envVarName: 'REDIS_URL',
       });
+      // Managed redis is not released yet: the structured autofix stays (it's
+      // gated by the platform's provider catalog), but printed remediation
+      // must not advertise provisioning a managed redis.
+      expect(issue?.fix).toBe('Add REDIS_URL to your env file.');
+    });
+
+    it('advertises managed provisioning in the fix text for self-serve providers (DATABASE_URL)', async () => {
+      writeBundle(`const url = process.env.DATABASE_URL;`);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      const issue = issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('DATABASE_URL'));
+      expect(issue?.fix).toBe(
+        'Add DATABASE_URL to your env file, or let `mastra deploy` provision a managed neon for this environment.',
+      );
     });
 
     it('does not attach an autofix to non-provider missing env vars', async () => {

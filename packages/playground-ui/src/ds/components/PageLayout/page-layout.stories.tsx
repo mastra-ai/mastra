@@ -43,7 +43,7 @@ export const FullPage: Story = {
               {resources.map(resource => (
                 <div
                   key={resource}
-                  className="border-border1 bg-surface2 text-ui-md text-neutral5 rounded-xl border p-5"
+                  className="border-border1 bg-surface2 text-ui-md text-foreground rounded-xl border p-5"
                 >
                   {resource}
                 </div>
@@ -67,8 +67,10 @@ export const NarrowSettings: Story = {
           </PageHeader>
         </PageLayout.TopArea>
         <PageLayout.MainArea className="grid gap-3">
-          <div className="border-border1 bg-surface2 text-neutral4 rounded-xl border p-5">General settings</div>
-          <div className="border-border1 bg-surface2 text-neutral4 rounded-xl border p-5">Environment variables</div>
+          <div className="border-border1 bg-surface2 text-muted-foreground rounded-xl border p-5">General settings</div>
+          <div className="border-border1 bg-surface2 text-muted-foreground rounded-xl border p-5">
+            Environment variables
+          </div>
         </PageLayout.MainArea>
       </PageLayout>
     </div>

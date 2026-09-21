@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../api/keys';
-import type { FactoryProject, FactoryProjectPayload, GithubRepo } from '../services/github';
+import type { FactoryProject, FactoryProjectPayload, SourceControlRepository } from '../services/github';
 
 // Separate sessionStorage keys from onboarding so the two flows never collide.
 const STEP_KEY = 'mastracode.factory-create.step';
 const NAME_KEY = 'mastracode.factory-create.name';
 const REPO_KEY = 'mastracode.factory-create.repository';
 const LINEAR_PROJECT_KEY = 'mastracode.factory-create.linear-project-id';
+const JIRA_PROJECT_KEY = 'mastracode.factory-create.jira-project-id';
 const FACTORY_KEY = 'mastracode.factory-create.factory-id';
 const LINKED_KEY = 'mastracode.factory-create.linked-repository-id';
 const HOST_KEY = 'mastracode.factory-create.host-factory-id';
@@ -25,18 +26,22 @@ function canResume(step: Exclude<CreateFactoryFlowStep, 'name'>, draft: Omit<Cre
   return step === 'vcs' ? Boolean(draft.name) : Boolean(draft.name && draft.repository);
 }
 
-function isGithubRepo(value: unknown): value is GithubRepo {
+function isSourceControlRepository(value: unknown): value is SourceControlRepository {
   if (typeof value !== 'object' || value === null) return false;
-  const candidate: Partial<Record<keyof GithubRepo, unknown>> = value;
+  const candidate = value as Record<string, unknown>;
   return (
-    typeof candidate.id === 'number' &&
+    (typeof candidate.id === 'number' || typeof candidate.id === 'string') &&
     typeof candidate.fullName === 'string' &&
     typeof candidate.defaultBranch === 'string' &&
-    typeof candidate.installationStorageId === 'string'
+    ((candidate.provider === undefined && typeof candidate.installationStorageId === 'string') ||
+      (candidate.provider === 'gitlab' &&
+        typeof candidate.externalId === 'string' &&
+        typeof candidate.sandboxProvider === 'string' &&
+        typeof candidate.sandboxWorkdir === 'string'))
   );
 }
 
-function readRepository(): GithubRepo | undefined {
+function readRepository(): SourceControlRepository | undefined {
   const stored = sessionStorage.getItem(REPO_KEY);
   if (!stored) return undefined;
 
@@ -46,7 +51,7 @@ function readRepository(): GithubRepo | undefined {
   } catch {
     parsed = undefined;
   }
-  if (isGithubRepo(parsed)) return parsed;
+  if (isSourceControlRepository(parsed)) return parsed;
 
   sessionStorage.removeItem(REPO_KEY);
   return undefined;
@@ -61,9 +66,11 @@ function readRepository(): GithubRepo | undefined {
 export interface CreateFactoryDraft {
   step: CreateFactoryFlowStep;
   name?: string;
-  repository?: GithubRepo;
+  repository?: SourceControlRepository;
   /** The Linear project whose issues feed the new board, when the user picked one. */
   linearProjectId?: string;
+  /** The Jira project whose issues feed the new board, when the user picked one. */
+  jiraProjectId?: string;
   factoryId?: string;
   linkedRepositoryId?: string;
   /** The Factory whose shell hosts the wizard, so an OAuth return comes back to it. */
@@ -75,6 +82,7 @@ function readDraft(): CreateFactoryDraft {
     name: sessionStorage.getItem(NAME_KEY) ?? undefined,
     repository: readRepository(),
     linearProjectId: sessionStorage.getItem(LINEAR_PROJECT_KEY) ?? undefined,
+    jiraProjectId: sessionStorage.getItem(JIRA_PROJECT_KEY) ?? undefined,
     factoryId: sessionStorage.getItem(FACTORY_KEY) ?? undefined,
     linkedRepositoryId: sessionStorage.getItem(LINKED_KEY) ?? undefined,
     hostFactoryId: sessionStorage.getItem(HOST_KEY) ?? undefined,
@@ -90,6 +98,7 @@ function writeDraft({
   name,
   repository,
   linearProjectId,
+  jiraProjectId,
   factoryId,
   linkedRepositoryId,
   hostFactoryId,
@@ -98,6 +107,7 @@ function writeDraft({
   writeEntry(NAME_KEY, name);
   writeEntry(REPO_KEY, repository && JSON.stringify(repository));
   writeEntry(LINEAR_PROJECT_KEY, linearProjectId);
+  writeEntry(JIRA_PROJECT_KEY, jiraProjectId);
   writeEntry(FACTORY_KEY, factoryId);
   writeEntry(LINKED_KEY, linkedRepositoryId);
   writeEntry(HOST_KEY, hostFactoryId);
@@ -109,7 +119,16 @@ function writeEntry(key: string, value: string | undefined): void {
 }
 
 function clearDraft(): void {
-  for (const key of [STEP_KEY, NAME_KEY, REPO_KEY, LINEAR_PROJECT_KEY, FACTORY_KEY, LINKED_KEY, HOST_KEY])
+  for (const key of [
+    STEP_KEY,
+    NAME_KEY,
+    REPO_KEY,
+    LINEAR_PROJECT_KEY,
+    JIRA_PROJECT_KEY,
+    FACTORY_KEY,
+    LINKED_KEY,
+    HOST_KEY,
+  ])
     sessionStorage.removeItem(key);
 }
 
@@ -149,10 +168,14 @@ export function useCreateFactoryFlow() {
   return {
     draft: draftQuery.data,
     startVcs: (name: string) => patchDraft.mutateAsync({ step: 'vcs', name }),
-    chooseRepository: (repository: GithubRepo) => patchDraft.mutateAsync({ step: 'project-management', repository }),
+    chooseRepository: (repository: SourceControlRepository) =>
+      patchDraft.mutateAsync({ step: 'project-management', repository }),
     chooseLinearProject: (linearProjectId: string) =>
-      patchDraft.mutateAsync({ step: 'model-provider', linearProjectId }),
-    skipLinear: () => patchDraft.mutateAsync({ step: 'model-provider', linearProjectId: undefined }),
+      patchDraft.mutateAsync({ step: 'model-provider', linearProjectId, jiraProjectId: undefined }),
+    chooseJiraProject: (jiraProjectId: string) =>
+      patchDraft.mutateAsync({ step: 'model-provider', jiraProjectId, linearProjectId: undefined }),
+    skipProjectManagement: () =>
+      patchDraft.mutateAsync({ step: 'model-provider', linearProjectId: undefined, jiraProjectId: undefined }),
     /** Keep what the final commit already achieved, so a retry resumes instead of duplicating. */
     rememberFactory: (factory: FactoryProject | FactoryProjectPayload) =>
       patchDraft.mutateAsync({ factoryId: factory.id }),

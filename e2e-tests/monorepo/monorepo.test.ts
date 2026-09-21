@@ -1071,6 +1071,54 @@ export const mastra = new Mastra({
 
   describe.sequential('workspace subpath externals', () => {
     it(
+      'should not analyze dependencies listed in bundler externals',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-analysis-external-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+          await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+          await writeFile(
+            join(corePath, 'runtime-context', 'index.js'),
+            `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+          );
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const unsafePackageDir = join(appDir, 'node_modules', 'analysis-unsafe');
+          await mkdir(unsafePackageDir, { recursive: true });
+          await Promise.all([
+            writeFile(
+              join(unsafePackageDir, 'package.json'),
+              JSON.stringify({ name: 'analysis-unsafe', version: '1.0.0', type: 'module', exports: './index.js' }),
+            ),
+            writeFile(join(unsafePackageDir, 'index.js'), 'export const broken = ;'),
+          ]);
+
+          const mastraConfigPath = join(appDir, 'src', 'mastra', 'index.ts');
+          const mastraConfig = await readFile(mastraConfigPath, 'utf-8');
+          await writeFile(
+            mastraConfigPath,
+            `import 'analysis-unsafe';\n${mastraConfig.replace(
+              "externals: ['bcrypt', '@inner/subpath-only']",
+              "externals: ['analysis-unsafe', 'bcrypt', '@inner/subpath-only']",
+            )}`,
+          );
+
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+          });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
+    it(
       'should build a workspace subpath imported transitively when the app imports the package root',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-subpath-test-${pkgManager}-`));
@@ -1153,6 +1201,43 @@ export const mastra = new Mastra({
           }
 
           await writeFile(mastraConfigPath, originalMastraConfig);
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
+    it(
+      'should reject an unresolved subpath from an externalized workspace package',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-missing-dep-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+          await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+          await writeFile(
+            join(corePath, 'runtime-context', 'index.js'),
+            `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+          );
+
+          const transitiveDependencyPath = join(isolatedFixturePath, 'packages', 'transitive-c', 'src', 'index.js');
+          const transitiveDependencySource = await readFile(transitiveDependencyPath, 'utf-8');
+          await writeFile(
+            transitiveDependencyPath,
+            transitiveDependencySource.replace('@inner/subpath-only/value', '@inner/subpath-only/missing'),
+          );
+
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            reject: false,
+            env: process.env,
+          });
+          const output = `${buildResult.stdout}\n${buildResult.stderr}`;
+
+          expect(buildResult.exitCode, output).toBe(1);
+          expect(output).toContain('Could not resolve workspace package subpath "@inner/subpath-only/missing".');
+        } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
       },

@@ -24,6 +24,8 @@ interface AgentChatPanelProviderProps {
 
 interface AgentChatMeta {
   isConversationLoading: boolean;
+  loadPrevious?: () => void;
+  isLoadingPrevious?: boolean;
   agentName?: string;
   agentDescription?: string;
   agentAvatarUrl?: string;
@@ -70,17 +72,31 @@ export const AgentChatPanelProvider = ({
   const { data: currentUser } = useCurrentUser();
   const threadId = currentUser?.id ? `${currentUser.id}-${agentId}` : agentId;
 
-  const { data, isLoading: isConversationLoading } = useAgentMessages({
+  const {
+    data,
+    isLoading: isConversationLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useAgentMessages({
     agentId,
     threadId,
     memory: true,
   });
 
   const storedMessages = data?.messages ?? EMPTY_MESSAGES;
+  const loadPrevious = hasNextPage ? fetchNextPage : undefined;
 
   const meta = useMemo<AgentChatMeta>(
-    () => ({ isConversationLoading, agentName, agentDescription, agentAvatarUrl }),
-    [isConversationLoading, agentName, agentDescription, agentAvatarUrl],
+    () => ({
+      isConversationLoading,
+      loadPrevious,
+      isLoadingPrevious: isFetchingNextPage,
+      agentName,
+      agentDescription,
+      agentAvatarUrl,
+    }),
+    [isConversationLoading, loadPrevious, isFetchingNextPage, agentName, agentDescription, agentAvatarUrl],
   );
 
   return (
@@ -139,13 +155,16 @@ interface AgentChatMessageListProps {
 const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListProps) => {
   const messages = useStreamMessages();
   const isRunning = useStreamRunning();
-  const { isConversationLoading, agentName, agentDescription, agentAvatarUrl } = useContext(AgentChatMetaContext);
+  const { isConversationLoading, loadPrevious, isLoadingPrevious, agentName, agentDescription, agentAvatarUrl } =
+    useContext(AgentChatMetaContext);
 
   return (
     <MessageList
       messages={messages}
       isLoading={isConversationLoading}
       isRunning={isRunning}
+      onLoadPrevious={loadPrevious}
+      isLoadingPrevious={isLoadingPrevious}
       skeletonTestId="agent-builder-agent-chat-messages-skeleton"
       emptyState={
         <div
@@ -157,7 +176,11 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
               <Avatar name={agentName ?? 'Agent'} src={agentAvatarUrl} size="lg" />
             </div>
             <div className="starter-chip" style={{ animationDelay: '150ms' }}>
-              <Txt variant="ui-lg" className="text-neutral6 font-semibold" style={{ viewTransitionName: 'agent-name' }}>
+              <Txt
+                variant="ui-lg"
+                className="text-foreground font-semibold"
+                style={{ viewTransitionName: 'agent-name' }}
+              >
                 {agentName ?? 'your agent'}
               </Txt>
             </div>
@@ -165,7 +188,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
               <div className="starter-chip" style={{ animationDelay: '220ms' }}>
                 <Txt
                   variant="ui-sm"
-                  className="text-neutral4 max-w-[40ch]"
+                  className="text-muted-foreground max-w-[40ch]"
                   style={{ viewTransitionName: 'agent-description' }}
                 >
                   {agentDescription}
@@ -184,17 +207,20 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 style={{ animationDelay: `${280 + index * 40}ms` }}
                 className="starter-chip group border-border1 bg-surface2 duration-normal ease-out-custom hover:border-border2 hover:bg-surface3 focus-visible:ring-accent1 flex gap-3 rounded-3xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
               >
-                <span className="bg-surface3 text-neutral4 group-hover:text-neutral6 mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors">
+                <span className="bg-surface3 text-muted-foreground group-hover:text-foreground mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors">
                   <starterPrompt.Icon className="size-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
                   <Txt
                     variant="ui-sm"
-                    className="text-neutral6 group-hover:text-neutral6 font-medium transition-colors"
+                    className="text-foreground group-hover:text-foreground font-medium transition-colors"
                   >
                     {starterPrompt.title}
                   </Txt>
-                  <Txt variant="ui-xs" className="text-neutral4 group-hover:text-neutral5 mt-1 transition-colors">
+                  <Txt
+                    variant="ui-xs"
+                    className="text-muted-foreground group-hover:text-foreground mt-1 transition-colors"
+                  >
                     {starterPrompt.description}
                   </Txt>
                 </span>

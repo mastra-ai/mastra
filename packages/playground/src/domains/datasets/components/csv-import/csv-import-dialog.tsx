@@ -9,6 +9,7 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Check, Upload, ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -336,7 +337,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'preview':
         return parsedCSV ? (
           <div className="flex flex-col gap-4">
-            <div className="text-neutral4 text-ui-md">Preview of your CSV data. Click Next to map columns.</div>
+            <div className="text-muted-foreground text-ui-md">Preview of your CSV data. Click Next to map columns.</div>
             <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={5} />
           </div>
         ) : null;
@@ -354,7 +355,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* Compact preview */}
             <div className="border-border1 border-t pt-4">
-              <div className="text-neutral4 text-ui-sm mb-2">Data Preview</div>
+              <div className="text-muted-foreground text-ui-sm mb-2">Data Preview</div>
               <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={3} />
             </div>
           </div>
@@ -363,7 +364,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'validation':
         return schemaValidation ? (
           <div className="flex flex-col gap-4">
-            <div className="text-neutral4 text-ui-md">
+            <div className="text-muted-foreground text-ui-md">
               {dataset?.inputSchema || dataset?.groundTruthSchema
                 ? 'Rows have been validated against the dataset schema.'
                 : 'Ready to import. No schema validation required.'}
@@ -391,9 +392,11 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* No valid rows warning */}
             {schemaValidation.validCount === 0 && (
-              <p className="text-destructive text-ui-md">
-                No valid rows to import. Please fix the data or adjust the schema.
-              </p>
+              <div role="alert">
+                <Notice variant="destructive">
+                  No valid rows to import. Please fix the data or adjust the schema.
+                </Notice>
+              </div>
             )}
 
             {/* Detailed validation report (only show table if there are invalid rows) */}
@@ -406,8 +409,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
           <div className="flex flex-col items-center gap-4 py-5">
             <Spinner />
             <div className="text-center">
-              <div className="text-neutral1 text-header-sm font-medium">Importing items...</div>
-              <div className="text-neutral4 text-ui-md mt-1">
+              <div className="text-placeholder text-header-sm font-medium">Importing items...</div>
+              <div className="text-muted-foreground text-ui-md mt-1">
                 {importProgress.current} of {importProgress.total}
               </div>
             </div>
@@ -419,8 +422,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
           <div className="flex flex-col items-center gap-4 py-5">
             <div className="text-header-xl">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
             <div className="text-center">
-              <div className="text-neutral1 text-header-sm font-medium">Import Complete</div>
-              <div className="text-neutral4 text-ui-md mt-1">
+              <div className="text-placeholder text-header-sm font-medium">Import Complete</div>
+              <div className="text-muted-foreground text-ui-md mt-1">
                 {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
                 {importResult && importResult.errors > 0 && (
                   <span className="text-accent2">

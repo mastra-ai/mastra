@@ -631,23 +631,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/minimax-cn',
+          label: 'MiniMax (minimax.cn)',
+        },
+        {
+          type: 'doc',
           id: 'providers/minimax',
           label: 'MiniMax (minimax.io)',
         },
         {
           type: 'doc',
-          id: 'providers/minimax-cn',
-          label: 'MiniMax (minimaxi.com)',
+          id: 'providers/minimax-cn-coding-plan',
+          label: 'MiniMax Token Plan (minimax.cn)',
         },
         {
           type: 'doc',
           id: 'providers/minimax-coding-plan',
           label: 'MiniMax Token Plan (minimax.io)',
-        },
-        {
-          type: 'doc',
-          id: 'providers/minimax-cn-coding-plan',
-          label: 'MiniMax Token Plan (minimaxi.com)',
         },
         {
           type: 'doc',

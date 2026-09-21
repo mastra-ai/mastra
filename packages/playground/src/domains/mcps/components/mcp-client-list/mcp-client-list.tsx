@@ -146,7 +146,7 @@ export function MCPClientList() {
             <EmptyState
               className="py-4!"
               iconSlot={
-                <div className="text-neutral3 bg-surface3 flex size-6 items-center justify-center rounded-full p-2">
+                <div className="text-muted-foreground bg-surface3 flex size-6 items-center justify-center rounded-full p-2">
                   <LaptopMinimal className="size-6" />
                 </div>
               }

@@ -38,7 +38,7 @@ const BackgroundSwatch = ({ token, role }: { token: string; role: string }) => (
       <Txt variant="ui-sm" font="mono" className="truncate">
         {token}
       </Txt>
-      <Txt variant="ui-sm" className="text-neutral3 shrink-0">
+      <Txt variant="ui-sm" className="text-muted-foreground shrink-0">
         {role}
       </Txt>
     </div>
@@ -53,7 +53,7 @@ const ScaleSwatch = ({ token, step }: { token: string; step: number }) => (
       className="border-border1 h-16 border"
       style={{ background: `var(--${token})` }}
     />
-    <Txt variant="ui-xs" font="mono" className="text-neutral3">
+    <Txt variant="ui-xs" font="mono" className="text-muted-foreground">
       {step}
     </Txt>
   </div>
@@ -65,7 +65,7 @@ const ScaleRow = ({ label, description, tokens }: { label: string; description: 
       <Txt as="h2" variant="header-xs" className="font-medium">
         {label}
       </Txt>
-      <Txt variant="ui-sm" className="text-neutral3">
+      <Txt variant="ui-sm" className="text-muted-foreground">
         {description}
       </Txt>
     </div>
@@ -76,11 +76,11 @@ const ScaleRow = ({ label, description, tokens }: { label: string; description: 
         ))}
       </div>
       <div className="flex items-center justify-between gap-4">
-        <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
+        <Txt variant="ui-xs" font="mono" className="text-muted-foreground uppercase">
           Subtle
         </Txt>
         <div className="bg-border1 h-px flex-1" />
-        <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
+        <Txt variant="ui-xs" font="mono" className="text-muted-foreground uppercase">
           Strong
         </Txt>
       </div>
@@ -96,18 +96,18 @@ export const ColorFoundations: Story = {
     return (
       <div className="max-w-320 px-5 sm:px-8" style={{ background: 'var(--background-2)' }}>
         <header className="border-border1 grid gap-5 border-y py-6 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:py-8">
-          <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
+          <Txt variant="ui-xs" font="mono" className="text-muted-foreground uppercase">
             Neutrals / 23 tokens
           </Txt>
           <div className="flex max-w-180 flex-col gap-2">
             <Txt as="h1" variant="header-lg" className="font-semibold">
               Color foundations
             </Txt>
-            <Txt variant="ui-md" className="text-neutral4">
+            <Txt variant="ui-md" className="text-muted-foreground">
               Backgrounds encode nesting. Gray encodes contrast. The same step keeps its role across themes.
             </Txt>
           </div>
-          <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
+          <Txt variant="ui-xs" font="mono" className="text-muted-foreground uppercase">
             Mode / {activeTheme}
           </Txt>
         </header>
@@ -117,7 +117,7 @@ export const ColorFoundations: Story = {
             <Txt as="h2" variant="header-xs" className="font-medium">
               Backgrounds
             </Txt>
-            <Txt variant="ui-sm" className="text-neutral3">
+            <Txt variant="ui-sm" className="text-muted-foreground">
               Outer to inner
             </Txt>
           </div>
@@ -141,7 +141,7 @@ export const ColorFoundations: Story = {
 
         <footer className="flex flex-col gap-1 py-5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8">
           <Txt variant="ui-sm">Foundation CSS properties. No generated utilities.</Txt>
-          <Txt variant="ui-sm" className="text-neutral3">
+          <Txt variant="ui-sm" className="text-muted-foreground">
             Gray runs from subtle 1 to strong 10.
           </Txt>
         </footer>

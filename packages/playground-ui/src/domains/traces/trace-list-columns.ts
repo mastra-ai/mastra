@@ -1,6 +1,6 @@
 export const TRACE_OPTIONAL_COLUMNS = [
+  'type',
   'input',
-  'entity',
   'duration',
   'inputTokens',
   'outputTokens',
@@ -28,11 +28,12 @@ export type TraceUsageSummary = {
 };
 
 export const DEFAULT_TRACE_COLUMN_PREFERENCES: TraceColumnPreferences = {
-  visibleColumns: ['input', 'entity'],
+  visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
   metadataKeys: [],
 };
 
-const TRACE_COLUMN_PREFERENCES_VERSION = 1;
+// v2: 'entity' became 'type' and moved before Name; duration + cost joined the defaults.
+const TRACE_COLUMN_PREFERENCES_VERSION = 2;
 const TRACE_COLUMN_SET = new Set<string>(TRACE_OPTIONAL_COLUMNS);
 const TRACE_USAGE_COLUMN_SET = new Set<TraceOptionalColumn>(TRACE_USAGE_COLUMNS);
 
@@ -89,10 +90,11 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
   const visible = new Set(preferences.visibleColumns);
   // Name is bounded when Input is visible so Input (1fr) absorbs the free space;
   // without Input, Name is the flexible track that fills the grid.
-  const columns = ['11rem', visible.has('input') ? '14rem' : 'minmax(8rem,1fr)'];
+  const columns = ['11rem'];
 
+  if (visible.has('type')) columns.push('7rem');
+  columns.push(visible.has('input') ? '14rem' : 'minmax(8rem,1fr)');
   if (visible.has('input')) columns.push('minmax(8rem,1fr)');
-  if (visible.has('entity')) columns.push('14rem');
 
   columns.push('6rem');
 
@@ -106,6 +108,15 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
   }
 
   return columns.join(' ');
+}
+
+const RUN_PREFIX_PATTERN = /^(?:agent|workflow|scorer) run: '(.+?)'(.*)$/;
+
+/** Core names root spans `agent run: 'id'` (+ optional ` (resumed)`); the Type column already carries
+ *  the kind, so the list shows just the id and any suffix. Core names are untouched for exporters. */
+export function displayTraceName<T extends string | null | undefined>(name: T): T {
+  if (!name) return name;
+  return name.replace(RUN_PREFIX_PATTERN, '$1$2') as T;
 }
 
 export function formatTraceMetadataValue(

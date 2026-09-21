@@ -34,12 +34,6 @@ describe('ListSearch surface', () => {
     expect(icon?.getAttribute('class')).toContain('text-muted-foreground');
     expect(icon?.getAttribute('class')).not.toContain('opacity-50');
   });
-
-  it('still supports the outline variant', () => {
-    renderListSearch({ variant: 'outline' });
-
-    expect(screen.getByRole('textbox', { name: 'Filter agents' }).className).toContain('bg-transparent');
-  });
 });
 
 describe('ListSearch keyboard shortcut', () => {

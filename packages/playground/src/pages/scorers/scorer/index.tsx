@@ -5,6 +5,8 @@ import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { sortBy } from '@mastra/playground-ui/sort/sort-by';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { MoreVertical, Pencil, Play } from 'lucide-react';
@@ -15,11 +17,14 @@ import { ExperimentTriggerDialog } from '@/domains/datasets/components/experimen
 import { NoScoresInfo } from '@/domains/scores/components/no-scores-info';
 import { ScoresColumnsMenu } from '@/domains/scores/components/scores-columns';
 import { ScoresList } from '@/domains/scores/components/scores-list';
+import type { ScoresSortKey } from '@/domains/scores/components/scores-list';
 import { ScoresTools } from '@/domains/scores/components/scores-tools';
 import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/components/scores-tools';
 import { useScorer, useScoresByScorerId } from '@/domains/scores/hooks/use-scorers';
 import { useScoresColumns } from '@/domains/scores/hooks/use-scores-columns';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+
+const SCORES_SORT_KEYS: readonly ScoresSortKey[] = ['date', 'score'];
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
@@ -39,8 +44,9 @@ export default function Scorer() {
 
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
   const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
+  const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: SCORES_SORT_KEYS });
   const {
-    data: scores = [],
+    data: loadedScores = [],
     isLoading: isLoadingScores,
     error: scoresError,
     isFetchingNextPage,
@@ -51,6 +57,15 @@ export default function Scorer() {
     entityId: selectedEntityOption?.value === 'all' ? undefined : selectedEntityOption?.value,
     entityType: selectedEntityOption?.type === 'ALL' ? undefined : selectedEntityOption?.type,
   });
+  // The legacy scorer route has no server-side sort, so only loaded pages are ordered.
+  const scores = useMemo(
+    () =>
+      sortBy(loadedScores, sort, {
+        date: score => score.createdAt,
+        score: score => (typeof score.score === 'number' ? score.score : undefined),
+      }),
+    [loadedScores, sort],
+  );
 
   const agentOptions: EntityOptions[] = useMemo(
     () =>
@@ -259,6 +274,8 @@ export default function Scorer() {
         onScoreClick={handleScoreClick}
         errorMsg={scoresError?.message}
         columnsState={columnsState}
+        sort={sort}
+        onSortChange={onSortChange}
       />
       {runDialog}
     </PageLayout>

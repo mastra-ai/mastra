@@ -31,7 +31,10 @@ import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
+import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
+import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -168,6 +171,22 @@ const github =
       })
     : undefined;
 
+// Direct GitLab fallback for self-hosted / local deploys. GitLab Personal
+// and Group Access Tokens use the same API/Git authentication; the explicit
+// type records the credential's reach for diagnostics and setup guidance.
+const gitlabAccessToken = process.env.GITLAB_ACCESS_TOKEN?.trim();
+const gitlabAccessTokenType = process.env.GITLAB_ACCESS_TOKEN_TYPE?.trim();
+const gitlab = gitlabAccessToken
+  ? new GitLabIntegration({
+      accessToken: gitlabAccessToken,
+      ...(gitlabAccessTokenType === 'personal' || gitlabAccessTokenType === 'group'
+        ? { accessTokenType: gitlabAccessTokenType }
+        : {}),
+      ...(process.env.GITLAB_BASE_URL?.trim() ? { baseUrl: process.env.GITLAB_BASE_URL.trim() } : {}),
+      ...(process.env.GITLAB_WEBHOOK_SECRET?.trim() ? { webhookSecret: process.env.GITLAB_WEBHOOK_SECRET.trim() } : {}),
+    })
+  : undefined;
+
 // Direct Linear OAuth fallback for self-hosted / local deploys. As with the
 // GitHub fallback, only a complete credential group enables the integration;
 // partial configuration remains available to the diagnostics routes.
@@ -180,6 +199,35 @@ const linear =
         clientSecret: linearClientSecret,
       })
     : undefined;
+
+// Jira Cloud intake. A complete direct Basic-auth credential group takes
+// precedence. Otherwise Platform credentials enable automatic discovery of
+// visible `jira` connections. Partial direct configuration falls back
+// to Platform Jira when Platform credentials are available.
+const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
+const jiraEmail = process.env.JIRA_EMAIL?.trim();
+const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
+const platformJiraConfigured = Boolean(
+  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
+);
+const jiraDirectVars = [jiraBaseUrl, jiraEmail, jiraApiToken];
+if (jiraDirectVars.some(Boolean) && !jiraDirectVars.every(Boolean)) {
+  // A partial group silently disables direct Jira (no /web/jira routes mount),
+  // so tell the operator which knob is missing instead of showing nothing.
+  console.warn(
+    'Direct Jira intake is disabled: JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN must all be set together.',
+  );
+}
+const jira =
+  jiraBaseUrl && jiraEmail && jiraApiToken
+    ? new JiraIntegration({
+        baseUrl: jiraBaseUrl,
+        email: jiraEmail,
+        apiToken: jiraApiToken,
+      })
+    : platformJiraConfigured
+      ? new PlatformJiraIntegration()
+      : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
@@ -276,7 +324,13 @@ const slack = slackSigningSecret
     })
   : undefined;
 
-const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
+const integrations = [
+  ...(github ? [github] : []),
+  ...(gitlab ? [gitlab] : []),
+  ...(linear ? [linear] : []),
+  ...(jira ? [jira] : []),
+  ...(slack ? [slack] : []),
+];
 
 export const factoryConfigVersion = 'mastracode-web-v1';
 

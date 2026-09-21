@@ -128,14 +128,39 @@ export interface LegacyGetTracesResponse {
 
 export type ListScoresBySpanParams = SpanIds & PaginationArgs;
 
-type QueryTracesBaseInput = Omit<TraceQueryRequest, 'group' | 'where' | 'page' | 'pagination'> & {
+type QueryTracesBaseInput = Omit<
+  TraceQueryRequest,
+  'group' | 'where' | 'page' | 'pagination' | 'mode' | 'after' | 'limit'
+> & {
   where?: TraceQueryPredicate;
 };
 
-type QueryTracesKeysetInput = QueryTracesBaseInput & {
+export type QueryTracesKeysetInput = QueryTracesBaseInput & {
   group?: never;
   page?: TraceQueryRequest['page'];
   pagination?: never;
+  mode?: never;
+  after?: never;
+  limit?: never;
+};
+
+export type QueryTracesPaginatedInput = QueryTracesBaseInput & {
+  group?: never;
+  page?: never;
+  pagination: NonNullable<TraceQueryRequest['pagination']>;
+  mode?: never;
+  after?: never;
+  limit?: never;
+};
+
+export type QueryTracesDeltaInput = Omit<QueryTracesBaseInput, 'orderBy'> & {
+  group?: never;
+  mode: 'delta';
+  after?: string;
+  limit?: number;
+  page?: never;
+  pagination?: never;
+  orderBy?: never;
 };
 
 export type QueryTracesGroupedInput = QueryTracesBaseInput & {
@@ -145,15 +170,12 @@ export type QueryTracesGroupedInput = QueryTracesBaseInput & {
   group: NonNullable<TraceQueryRequest['group']>;
   page?: TraceQueryRequest['page'];
   pagination?: never;
+  mode?: never;
+  after?: never;
+  limit?: never;
 };
 
-type QueryTracesPaginatedInput = QueryTracesBaseInput & {
-  group?: never;
-  page?: never;
-  pagination: NonNullable<TraceQueryRequest['pagination']>;
-};
-
-export type QueryTracesUngroupedInput = QueryTracesKeysetInput | QueryTracesPaginatedInput;
+export type QueryTracesUngroupedInput = QueryTracesKeysetInput | QueryTracesPaginatedInput | QueryTracesDeltaInput;
 export type QueryTracesInput = QueryTracesUngroupedInput | QueryTracesGroupedInput;
 export type QueryTraceThreadsInput = QueryThreadsInput;
 export type QueryTraceThreadsResult = QueryThreadsResult;
@@ -278,7 +300,9 @@ export class Observability extends BaseResource {
    * @returns Matching lightweight traces
    */
   queryTraces(params: QueryTracesGroupedInput): Promise<TraceQueryGroupResponse>;
-  queryTraces(params: QueryTracesUngroupedInput): Promise<TraceQueryTraceResponse>;
+  queryTraces(params: QueryTracesDeltaInput): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
+  queryTraces(params: QueryTracesPaginatedInput): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
+  queryTraces(params: QueryTracesKeysetInput): Promise<Extract<TraceQueryTraceResponse, { page: unknown }>>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.request('/observability/traces/query', { method: 'POST', body: params });

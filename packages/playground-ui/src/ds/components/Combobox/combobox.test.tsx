@@ -297,12 +297,19 @@ describe('Combobox', () => {
 
   it('applies the error border when an error is provided', () => {
     render(<Combobox options={options} placeholder="Pick provider" error="Required" />);
-    expect(screen.getByRole('combobox').className).toContain('border-error');
+    expect(screen.getByRole('combobox').className).toContain('border-destructive');
+    expect(screen.getByRole('combobox').className).toContain('font-normal');
   });
 
   it('says what went wrong under the field, and nothing when nothing did', () => {
-    const withError = render(<Combobox options={options} error="Required" />);
-    expect(screen.getByText('Required')).toBeTruthy();
+    const withError = render(<Combobox options={options} name="provider" error="Required" />);
+    const field = screen.getByRole('combobox');
+    const message = screen.getByRole('alert');
+
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    expect(field.getAttribute('aria-describedby')).toBe('error-provider');
+    expect(message.id).toBe('error-provider');
+    expect(message.textContent).toContain('Required');
     const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
 
     cleanup();

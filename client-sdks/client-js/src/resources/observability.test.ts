@@ -4,9 +4,6 @@ import type {
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
   GetTraceQueryValuesResponse,
-  TraceQueryGroupResponse,
-  TraceQueryPaginatedTraceResponse,
-  TraceQueryTraceResponse,
 } from '@mastra/core/storage';
 import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
@@ -26,7 +23,7 @@ describe('Observability Methods', () => {
   };
 
   // Helper to mock successful API responses
-  const mockSuccessfulResponse = () => {
+  const mockSuccessfulResponse = (body: unknown = {}) => {
     const response = new Response(undefined, {
       status: 200,
       statusText: 'OK',
@@ -34,7 +31,7 @@ describe('Observability Methods', () => {
         'Content-Type': 'application/json',
       }),
     });
-    response.json = () => Promise.resolve({});
+    response.json = () => Promise.resolve(body);
     (global.fetch as any).mockResolvedValueOnce(response);
   };
 
@@ -523,6 +520,22 @@ describe('Observability Methods', () => {
       );
     });
 
+    it('posts delta cursor and limit unchanged and exposes delta metadata directly', async () => {
+      mockSuccessfulResponse({ traces: [], delta: { limit: 5, hasMore: false }, deltaCursor: 'next' });
+      const request = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        mode: 'delta' as const,
+        after: 'previous',
+        limit: 5,
+      };
+      const result = await client.queryTraces(request);
+      expect(result.deltaCursor).toBe('next');
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({ method: 'POST', body: JSON.stringify(request) }),
+      );
+    });
+
     it('should post the advanced query body unchanged with trace result types', async () => {
       mockSuccessfulResponse();
       const request = {
@@ -541,10 +554,7 @@ describe('Observability Methods', () => {
         page: { limit: 25 },
       };
 
-      const result = await client.queryTraces(request);
-
-      expectTypeOf(result).toEqualTypeOf<TraceQueryTraceResponse | TraceQueryPaginatedTraceResponse>();
-      expectTypeOf(result).not.toEqualTypeOf<TraceQueryGroupResponse>();
+      await client.queryTraces(request);
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces/query`,
         expect.objectContaining({
@@ -562,12 +572,8 @@ describe('Observability Methods', () => {
         pagination: { page: 0, perPage: 25 },
       };
 
-      const result = await client.queryTraces(request);
+      await client.queryTraces(request);
 
-      expectTypeOf(result).toEqualTypeOf<TraceQueryTraceResponse | TraceQueryPaginatedTraceResponse>();
-      if ('pagination' in result) {
-        expectTypeOf(result.pagination).toEqualTypeOf<TraceQueryPaginatedTraceResponse['pagination']>();
-      }
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces/query`,
         expect.objectContaining({

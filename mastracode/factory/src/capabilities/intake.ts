@@ -47,6 +47,8 @@ export interface IntakeIssue {
   title: string;
   url: string;
   author: string | null;
+  /** Stable provider login for access checks; `author` is a display name. */
+  authorUsername?: string | null;
   state: string | null;
   stateType: string | null;
   priority: string | null;
@@ -56,6 +58,8 @@ export interface IntakeIssue {
   /** Provider source id the issue was read from (Linear project id); lets callers map issues back to intake bindings. */
   sourceId?: string | null;
   labels: string[];
+  /** Provider label name to its display color, when supplied by the upstream API. */
+  labelColors?: Record<string, string>;
   commentCount: number | null;
   createdAt: string;
   updatedAt: string;

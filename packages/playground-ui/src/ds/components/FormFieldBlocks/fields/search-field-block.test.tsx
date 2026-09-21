@@ -47,7 +47,7 @@ describe('SearchFieldBlock', () => {
 });
 
 /** The column holding the field, and whatever the caller put under it. */
-const fieldColumn = (container: HTMLElement) => container.firstElementChild?.firstElementChild;
+const fieldColumn = (container: HTMLElement) => container.firstElementChild?.firstElementChild?.firstElementChild;
 
 describe('SearchFieldBlock — the field itself', () => {
   it('invites a search unless the caller says otherwise', () => {
@@ -77,15 +77,14 @@ describe('SearchFieldBlock — the field itself', () => {
     expect(screen.getByRole<HTMLInputElement>('textbox').disabled).toBe(true);
   });
 
-  it('explains itself and its complaints', () => {
+  it('replaces its help text with a complaint', () => {
     const { container } = render(
       <SearchFieldBlock name="search" helpText="Matches names and ids" errorMsg="Too short" />,
     );
 
-    expect(screen.getByText('Matches names and ids')).toBeTruthy();
+    expect(screen.queryByText('Matches names and ids')).toBeNull();
     expect(screen.getByText('Too short')).toBeTruthy();
-    // The field, its help text and its complaint.
-    expect(fieldColumn(container)?.childElementCount).toBe(3);
+    expect(fieldColumn(container)?.childElementCount).toBe(2);
   });
 
   it('preserves an explicit error state without a message', () => {
@@ -95,10 +94,17 @@ describe('SearchFieldBlock — the field itself', () => {
     expect(screen.getByRole('textbox').getAttribute('aria-describedby')).toBeNull();
   });
 
-  it('puts nothing under the field when it has nothing to say', () => {
+  it('renders no message line when it has nothing to say', () => {
     const { container } = render(<SearchFieldBlock name="search" />);
 
     expect(fieldColumn(container)?.childElementCount).toBe(1);
+  });
+
+  it('renders a message line when given help text', () => {
+    const { container } = render(<SearchFieldBlock name="search" helpText="Matches names and ids" />);
+
+    expect(fieldColumn(container)?.childElementCount).toBe(2);
+    expect(screen.getByText('Matches names and ids')).toBeTruthy();
   });
 
   it('leaves out a label it was never given', () => {

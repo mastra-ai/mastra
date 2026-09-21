@@ -133,7 +133,7 @@ export const WorkflowInputData = ({
   }
 
   const defaultHeading = (
-    <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold">
+    <Txt as="span" variant="ui-md" className="text-foreground font-semibold">
       Trigger a run
     </Txt>
   );
@@ -153,7 +153,7 @@ export const WorkflowInputData = ({
     <>
       {!hideInputTypeLabel && (
         <div className="flex justify-between gap-3 px-5 py-3">
-          <Txt as="p" variant="ui-sm" className="text-neutral3">
+          <Txt as="p" variant="ui-sm" className="text-muted-foreground">
             {inputTypeLabel}
           </Txt>
           {toggleSitsInLabelRow && <div className="shrink-0">{inputTypeToggle}</div>}
@@ -239,7 +239,7 @@ export const WorkflowInputData = ({
   return (
     <Collapsible defaultOpen>
       <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
-        <ChevronRight className="text-neutral3 h-4 w-4 shrink-0" />
+        <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
         {headingSlot ?? defaultHeading}
       </CollapsibleTrigger>
 
