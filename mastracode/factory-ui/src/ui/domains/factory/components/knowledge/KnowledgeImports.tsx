@@ -5,7 +5,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Unplug } from 'lucide-react';
+import { Loader2, Unplug } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -320,6 +320,37 @@ function ImportRuns({
   );
 }
 
+/**
+ * Manual sync trigger. Stays in its loading state for the whole life of the
+ * sync, not just the trigger request: the importers query (polled every 5s)
+ * reports the importer's latest run, so the button reads "Syncing…" while that
+ * run is queued or running and returns to "Sync now" once it settles.
+ */
+function SyncNowButton({
+  importer,
+  pending,
+  onSync,
+}: {
+  importer: KnowledgeImporterSummary;
+  pending: boolean;
+  onSync: () => void;
+}) {
+  const runStatus = importer.lastRun?.status;
+  const syncing = pending || runStatus === 'queued' || runStatus === 'running';
+  return (
+    <Button variant="outline" size="sm" disabled={syncing} onClick={onSync}>
+      {syncing ? (
+        <>
+          <Loader2 size={14} aria-hidden className="motion-safe:animate-spin motion-reduce:animate-none" />
+          Syncing…
+        </>
+      ) : (
+        'Sync now'
+      )}
+    </Button>
+  );
+}
+
 export function KnowledgeImports({
   factoryProjectId,
   threadId,
@@ -375,14 +406,7 @@ export function KnowledgeImports({
         </Select>
         <Badge size="xs">{importer.importKind}</Badge>
         {importer.triggers.includes('cron') ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={trigger.isPending}
-            onClick={() => trigger.mutate(importer.id)}
-          >
-            {trigger.isPending ? 'Starting sync…' : 'Sync now'}
-          </Button>
+          <SyncNowButton importer={importer} pending={trigger.isPending} onSync={() => trigger.mutate(importer.id)} />
         ) : null}
       </div>
       {trigger.isError ? <Notice variant="destructive">{trigger.error.message}</Notice> : null}

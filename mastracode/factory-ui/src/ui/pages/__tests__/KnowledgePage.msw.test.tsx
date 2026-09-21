@@ -763,9 +763,23 @@ describe('KnowledgePage', () => {
     expect(screen.queryByText('connect:notion:conn-abc123')).toBeNull();
   });
 
-  it('triggers a manual import run from the Sync now button', async () => {
+  it('triggers a manual import run and stays in its loading state while the run is live', async () => {
     stubKnowledgeRoute();
     const triggered: string[] = [];
+    // Stateful handler: before the trigger the importer is idle; afterwards its
+    // latest run reports as running, which is what must keep the button loading.
+    let liveRun = false;
+    const runningRun = {
+      id: 'kh_run_manual',
+      reference: 'run-manual',
+      importerId: 'connect:notion:conn-abc123',
+      binding: 'kh_binding',
+      source: 'notion:workspace',
+      importKind: 'static',
+      triggerKind: 'cron',
+      status: 'running',
+      queuedAt: '2026-09-21T09:52:00.000Z',
+    };
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
         HttpResponse.json({
@@ -775,36 +789,21 @@ describe('KnowledgePage', () => {
               importKind: 'static',
               triggers: ['cron'],
               bindings: [{ source: 'notion:workspace', binding: 'kh_binding' }],
+              ...(liveRun ? { lastRun: runningRun } : {}),
             },
           ],
         }),
       ),
       http.get(
         `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/runs`,
-        () => HttpResponse.json({ runs: [] }),
+        () => HttpResponse.json({ runs: liveRun ? [runningRun] : [] }),
       ),
       http.post(
         `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/run`,
         ({ request }) => {
           triggered.push(new URL(request.url).pathname);
-          return HttpResponse.json(
-            {
-              runs: [
-                {
-                  id: 'kh_run_manual',
-                  reference: 'run-manual',
-                  importerId: 'connect:notion:conn-abc123',
-                  binding: 'kh_binding',
-                  source: 'notion:workspace',
-                  importKind: 'static',
-                  triggerKind: 'cron',
-                  status: 'queued',
-                  queuedAt: '2026-09-21T09:52:00.000Z',
-                },
-              ],
-            },
-            { status: 202 },
-          );
+          liveRun = true;
+          return HttpResponse.json({ runs: [{ ...runningRun, status: 'queued' }] }, { status: 202 });
         },
       ),
     );
@@ -816,8 +815,52 @@ describe('KnowledgePage', () => {
     await user.click(syncButton);
 
     await waitFor(() => expect(triggered).toHaveLength(1));
-    // The button settles back into its idle state so another sync can be requested.
-    expect(await screen.findByRole('button', { name: 'Sync now' })).toBeEnabled();
+    // The mutation settling is NOT the end of the sync: the refetched importer
+    // reports a live run, so the button stays disabled and loading until the
+    // run itself completes — no double-triggering a sync already in flight.
+    const loadingButton = await screen.findByRole('button', { name: 'Syncing…' });
+    expect(loadingButton).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull();
+  });
+
+  it('shows the Sync now button already loading when a run is in flight on arrival', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json({
+          importers: [
+            {
+              id: 'connect:notion:conn-abc123',
+              importKind: 'static',
+              triggers: ['cron'],
+              bindings: [{ source: 'notion:workspace', binding: 'kh_binding' }],
+              lastRun: {
+                id: 'kh_run_cron',
+                reference: 'run-cron',
+                importerId: 'connect:notion:conn-abc123',
+                binding: 'kh_binding',
+                source: 'notion:workspace',
+                importKind: 'static',
+                triggerKind: 'cron',
+                status: 'queued',
+                queuedAt: '2026-09-21T09:52:00.000Z',
+              },
+            },
+          ],
+        }),
+      ),
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/runs`,
+        () => HttpResponse.json({ runs: [] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    // A cron- or connect-triggered run that's already live reads the same as a
+    // manual one: the button arrives loading instead of inviting a duplicate sync.
+    expect(await screen.findByRole('button', { name: 'Syncing…' })).toBeDisabled();
   });
 
   it('surfaces the server error when a manual sync cannot start', async () => {
