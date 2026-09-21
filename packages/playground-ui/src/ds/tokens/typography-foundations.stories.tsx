@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useCallback, useState } from 'react';
 import { Txt } from '../components/Txt/Txt';
-import { FontSizes, FontWeights, LineHeights } from './fonts';
+import type { TextRole } from './fonts';
 import { FoundationPage, FoundationSection, Specimen } from './foundations-layout';
 import { cn } from '@/lib/utils';
 
@@ -13,8 +14,6 @@ const meta: Meta = {
 
 export default meta;
 type Story = StoryObj;
-
-type TextRole = keyof typeof FontSizes;
 
 const headingRoles: TextRole[] = ['display', 'title', 'heading', 'subheading'];
 const textRoles: TextRole[] = ['body', 'label', 'body-sm', 'column', 'caption', 'meta'];
@@ -56,9 +55,19 @@ const samples: Record<TextRole, string> = {
   meta: 'METADATA · 12:42 PM',
 };
 
+// The numbers are read off the rendered element rather than mirrored from a TypeScript
+// copy of the tokens: the row then reports what the browser actually applied, and cannot
+// drift from theme/typography.css.
 const RoleRow = ({ role }: { role: TextRole }) => {
-  const fontSizePx = Number.parseFloat(FontSizes[role]) * 16;
-  const lineHeightPx = Math.round((fontSizePx * Number.parseFloat(LineHeights[role])) / 100);
+  const [applied, setApplied] = useState('');
+
+  const measure = useCallback((element: HTMLElement | null) => {
+    if (!element) return;
+    const { fontSize, lineHeight, fontWeight } = getComputedStyle(element);
+    setApplied(
+      `${Math.round(Number.parseFloat(fontSize))}/${Math.round(Number.parseFloat(lineHeight))} · ${fontWeight}`,
+    );
+  }, []);
 
   return (
     <div className="border-border grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b py-3 last:border-b-0 sm:grid-cols-[7rem_5.5rem_minmax(0,1fr)] sm:gap-3">
@@ -66,9 +75,9 @@ const RoleRow = ({ role }: { role: TextRole }) => {
         --text-{role}
       </Txt>
       <Txt variant="meta" font="mono" tone="faint">
-        {Math.round(fontSizePx)}/{lineHeightPx} · {FontWeights[role]}
+        {applied}
       </Txt>
-      <Txt variant={role} className="min-w-0 truncate">
+      <Txt ref={measure} variant={role} className="min-w-0 truncate">
         {samples[role]}
       </Txt>
     </div>

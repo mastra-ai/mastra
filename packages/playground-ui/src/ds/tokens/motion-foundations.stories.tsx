@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Txt } from '../components/Txt/Txt';
-import { Durations, Easings } from './animations';
+import { Durations } from './animations';
 import { FoundationPage, FoundationSection, Specimen } from './foundations-layout';
 
 const meta: Meta = {
@@ -19,8 +19,7 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj;
 
-type DurationToken = keyof typeof Durations;
-type EasingToken = keyof typeof Easings;
+type DurationToken = (typeof Durations)[number];
 
 const durationNotes: Record<DurationToken, string> = {
   fast: 'Control state: hover, press, focus',
@@ -28,9 +27,7 @@ const durationNotes: Record<DurationToken, string> = {
   slow: 'Something the reader watches arrive or leave',
 };
 
-const easingTokens: Record<EasingToken, { token: string; note: string }> = {
-  outCustom: { token: '--ease-out-custom', note: 'Leaves fast, settles slow — the only curve' },
-};
+const easings = [{ token: '--ease-out-custom', note: 'Leaves fast, settles slow — the only curve' }];
 
 const FadeBox = ({ duration, easing }: { duration: string; easing: string }) => (
   <div
@@ -43,7 +40,7 @@ export const MotionFoundations: Story = {
   name: 'Motion foundations',
   render: () => (
     <FoundationPage
-      eyebrow={`Motion / ${Object.keys(Durations).length + Object.keys(Easings).length} tokens`}
+      eyebrow={`Motion / ${Durations.length + easings.length} tokens`}
       title="Motion foundations"
       description="Hover each specimen: the only property the shell animates is colour. Nothing in a control moves, resizes or slides, so a fade is the whole motion language and a duration is the only choice left."
       note="Policy: colour fades only, --duration-fast for control state. Anything longer belongs to a surface arriving, not to a control reacting."
@@ -54,7 +51,7 @@ export const MotionFoundations: Story = {
         description="Three rungs. A control answers in --duration-fast; slower reads as lag, not polish."
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {(Object.keys(Durations) as DurationToken[]).map(token => (
+          {Durations.map(token => (
             <Specimen key={token} name={`--duration-${token}`} note={durationNotes[token]}>
               <FadeBox duration={`var(--duration-${token})`} easing="var(--ease-out-custom)" />
             </Specimen>
@@ -70,9 +67,9 @@ export const MotionFoundations: Story = {
         description="One curve for everything, applied here over --duration-slow so the shape of the fade is visible."
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {(Object.keys(Easings) as EasingToken[]).map(token => (
-            <Specimen key={token} name={easingTokens[token].token} note={easingTokens[token].note}>
-              <FadeBox duration="var(--duration-slow)" easing={`var(${easingTokens[token].token})`} />
+          {easings.map(easing => (
+            <Specimen key={easing.token} name={easing.token} note={easing.note}>
+              <FadeBox duration="var(--duration-slow)" easing={`var(${easing.token})`} />
             </Specimen>
           ))}
         </div>

@@ -1,11 +1,12 @@
 import type { HTMLAttributes, ReactNode, Ref } from 'react';
 
+import type { TextRole } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
 export interface TxtProps extends HTMLAttributes<HTMLDivElement | HTMLLabelElement> {
   as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label' | 'div';
   ref?: Ref<HTMLElement>;
-  variant?: keyof typeof roles;
+  variant?: TextRole;
   tone?: keyof typeof tones;
   font?: 'mono';
   htmlFor?: string;
@@ -18,10 +19,11 @@ const fonts = {
   mono: 'font-mono',
 };
 
-// One class per role: size, line height, weight and tracking come from the
-// `--text-*` tokens in theme.css, so nothing here can drift from a component
-// that writes the same role by hand.
-const roles = {
+// One class per role, written out so Tailwind's scanner finds it: size, line height,
+// weight and tracking come from the `--text-*` tokens in theme/typography.css, so nothing
+// here can drift from a component that writes the same role by hand. Typed against
+// `TextRole`, so a role added to the token list has to land here too.
+const roles: Record<TextRole, string> = {
   display: 'text-display',
   title: 'text-title',
   heading: 'text-heading',

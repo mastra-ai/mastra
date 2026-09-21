@@ -1,11 +1,11 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { compile } from 'tailwindcss';
 import { resolveConfig } from 'vite';
 import { describe, expect, it } from 'vitest';
 import { BorderColors, Colors } from './ds/tokens/colors';
-import { FontSizes } from './ds/tokens/fonts';
+import { TextRoles } from './ds/tokens/fonts';
 import { Shadows } from './ds/tokens/shadows';
 import { Sizes } from './ds/tokens/sizes';
 
@@ -90,12 +90,21 @@ const parseVariables = (css: string) => {
   return variables;
 };
 
+const inlineImports = (path: string): string =>
+  readFileSync(path, 'utf8').replace(/@import\s+'(\.[^']+)';/g, (_, specifier: string) =>
+    inlineImports(resolve(dirname(path), specifier)),
+  );
+
+// The theme ships as an entry importing one file per layer, so the declarations
+// for a selector have to be gathered across the whole graph before being read.
+const blocksOf = (css: string, selector: string) =>
+  [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(new RegExp(`^${selector}\\s*\\{([^{}]*)\\}`, 'gm'))]
+    .map(([, body = '']) => body)
+    .join('\n');
+
 const getThemeVariables = (themeCss: string) => {
-  const themeRootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('html.light'));
-  const themeLightStart = themeCss.indexOf('html.light');
-  const themeLightBlock = themeCss.slice(themeLightStart, themeCss.indexOf('\n}\n\n@theme', themeLightStart) + 2);
-  const darkVariables = parseVariables(themeRootBlock);
-  const lightVariables = new Map([...darkVariables, ...parseVariables(themeLightBlock)]);
+  const darkVariables = parseVariables(blocksOf(themeCss, ':root'));
+  const lightVariables = new Map([...darkVariables, ...parseVariables(blocksOf(themeCss, 'html\\.light'))]);
 
   return { darkVariables, lightVariables };
 };
@@ -162,7 +171,10 @@ const apcaContrast = (foreground: number, background: number) => {
 };
 
 describe('theme.css export', () => {
-  const themeCss = readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8');
+  const themeEntry = readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8');
+  const themeCss = inlineImports(resolve(pkgRoot, 'theme.css'));
+  const darkTheme = blocksOf(themeCss, ':root');
+  const lightTheme = blocksOf(themeCss, 'html\\.light');
   const productionCss = readFileSync(resolve(pkgRoot, 'src/index.css'), 'utf8');
 
   it('ships raw (uncompiled) with the @theme directive intact', () => {
@@ -178,7 +190,6 @@ describe('theme.css export', () => {
   });
 
   it('exposes the background and gray foundation scales', () => {
-    const [darkTheme, lightTheme] = themeCss.split('html.light');
     const darkColors = [
       ['background-1', 'oklch(0.1382 0 0)'],
       ['background-2', 'oklch(0.1591 0 0)'],
@@ -255,7 +266,6 @@ describe('theme.css export', () => {
   });
 
   it('declares one interaction ladder for both themes, flipped by the tint alone', () => {
-    const [darkTheme, lightTheme] = themeCss.split('html.light');
     const ladder = ['fill-subtle', 'fill', 'fill-hover', 'fill-active', 'fill-strong'];
     const boundaries = ['border', 'border-strong', 'border-hover'];
 
@@ -281,7 +291,19 @@ describe('theme.css export', () => {
     const colorNames = new Set(Object.keys({ ...Colors, ...BorderColors }));
 
     expect(Object.keys(Shadows).filter(name => colorNames.has(name))).toEqual([]);
-    expect(Object.keys(FontSizes).filter(name => colorNames.has(name))).toEqual([]);
+    expect(TextRoles.filter(name => colorNames.has(name))).toEqual([]);
+  });
+
+  // `TextRoles` is the whole reason `cn()` can treat `text-label` and `text-body` as one
+  // conflict group. A role declared only in CSS is a class no merge can replace, and the
+  // drift is silent at every call site.
+  it('registers every text role with tailwind-merge, so cn() can resolve a conflict between two of them', () => {
+    // `--text-meta--letter-spacing` and friends are modifiers on a role, not roles.
+    const declared = [...themeCss.matchAll(/--text-([\w-]+):/g)]
+      .map(([, name = '']) => name)
+      .filter(name => !name.includes('--'));
+
+    expect(declared.toSorted()).toEqual([...TextRoles].toSorted());
   });
 
   // The rim has to be assembled by the utility, on the element. A custom property
@@ -291,7 +313,6 @@ describe('theme.css export', () => {
   it('assembles both elevations on the element, rim from its own token', async () => {
     const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
     const output = compiler.build(['shadow-raised', 'shadow-overlay']);
-    const [darkTheme, lightTheme] = themeCss.split('html.light');
 
     for (const elevation of ['raised', 'overlay']) {
       const rim = 'inset 0 0 0 1px var(--surface-rim)';
@@ -395,7 +416,7 @@ describe('theme.css export', () => {
   // two from one another, which is how `control-lg` came to say 1.75rem while the
   // CSS said 2rem, and how `icon-smd` existed only in CSS.
   it('mirrors every size rung between theme.css and the TypeScript scale', () => {
-    const themeBlock = themeCss.slice(themeCss.indexOf('@theme'));
+    const themeBlock = blocksOf(themeCss, '@theme(?: inline)?');
 
     for (const [rung, value] of Object.entries(Sizes)) {
       expect(themeBlock).toContain(`--spacing-${rung}: ${value};`);
@@ -512,9 +533,19 @@ describe('theme.css export', () => {
     expect(themed.filter(name => !exported.has(name))).toEqual([]);
   });
 
-  it('ships the theme layer as a raw stylesheet', () => {
+  // A layer left out of `files` publishes an entry whose @import resolves to
+  // nothing, and every consumer's Tailwind build loses the tokens in it.
+  it('ships the theme layer, and every file it imports, as raw stylesheets', () => {
     expect(pkg.exports['./theme.css']).toBe('./theme.css');
     expect(pkg.exports['./theme.css']).not.toContain('dist');
     expect(pkg.files).toContain('theme.css');
+
+    const layers = [...themeEntry.matchAll(/@import\s+'\.\/([^']+)';/g)].map(([, path = '']) => path);
+
+    expect(layers.length).toBeGreaterThan(0);
+    for (const layer of layers) {
+      expect(existsSync(resolve(pkgRoot, layer))).toBe(true);
+      expect(pkg.files.some((entry: string) => layer.startsWith(`${entry}/`) || layer === entry)).toBe(true);
+    }
   });
 });

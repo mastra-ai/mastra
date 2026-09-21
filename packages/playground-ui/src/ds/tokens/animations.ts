@@ -1,13 +1,7 @@
-/** Named durations, one per rung in `theme.css`. Keys are the utility suffix (`duration-fast`). */
-export const Durations = {
-  fast: '150ms',
-  normal: '200ms',
-  slow: '300ms',
-};
-
-export const Easings = {
-  outCustom: 'cubic-bezier(0.33, 1, 0.68, 1)',
-};
+/** Named duration rungs, one per `@utility duration-*` in `theme/motion.css`. Tailwind cannot
+ * infer a custom utility, so `lib/tw-merge-config.ts` registers these names to keep
+ * `duration-fast` and `duration-slow` from both surviving a merge. */
+export const Durations = ['fast', 'normal', 'slow'] as const;
 
 /** Entrance played by anything the reader watches arrive. Defined in `ds/components/Arrival/arrival.css`. */
 export const ARRIVING_CLASS = 'mastra-arriving';

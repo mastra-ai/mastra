@@ -4,7 +4,7 @@
  * hover animates (see `controlStateColorTransition`).
  *
  * Size and weight are not here: they arrive as one `text-<role>` class from
- * the roles in theme.css, so a component never assembles a text style.
+ * the roles in theme/typography.css, so a component never assembles a text style.
  */
 export const quietTextHover = 'text-muted-foreground hover:text-foreground';
 
