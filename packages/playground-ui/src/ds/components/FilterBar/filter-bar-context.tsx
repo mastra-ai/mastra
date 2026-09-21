@@ -37,6 +37,10 @@ export type FilterBarContextValue = {
   settleCommit: () => void;
   updateItem: (id: string, patch: Partial<Omit<FilterBarItem, 'id'>>) => void;
   removeItem: (id: string) => void;
+  /** Ids of removed items still rendered while their chip plays its exit animation. */
+  leaving: ReadonlySet<string>;
+  /** Called by a leaving chip once its exit animation has finished (or when nothing animates). */
+  settleRemove: (id: string) => void;
   /** Removes every removable item (chips rendered with `removable={false}` stay). */
   clear: () => void;
   /** Whether at least one item can be removed, i.e. whether Clear has anything to do. */
@@ -126,11 +130,43 @@ export function FilterBarProvider({
   draftRef.current = draft;
   const [lastCommit, setLastCommit] = useState<FilterBarCommit | null>(null);
   const settleCommit = useCallback(() => setLastCommit(prev => (prev ? { ...prev, glint: false } : null)), []);
-  // Until the consumer reflects the commit in `value`, the committed item is ours to show.
-  const items = useMemo(
-    () => (lastCommit && !value.some(item => item.id === lastCommit.item.id) ? [...value, lastCommit.item] : value),
-    [value, lastCommit],
+  // Removed items stay rendered at their old position until their chip has animated out.
+  const [leavingItems, setLeavingItems] = useState<ReadonlyMap<string, { item: FilterBarItem; index: number }>>(
+    () => new Map(),
   );
+  const settleRemove = useCallback((id: string) => {
+    setLeavingItems(prev => {
+      if (!prev.has(id)) return prev;
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+  const markLeaving = useCallback((removed: { item: FilterBarItem; index: number }[]) => {
+    if (removed.length === 0) return;
+    setLeavingItems(prev => {
+      const next = new Map(prev);
+      for (const entry of removed) next.set(entry.item.id, entry);
+      return next;
+    });
+  }, []);
+
+  // Until the consumer reflects the commit in `value`, the committed item is ours to show;
+  // items on their way out are spliced back in where they were. An id the consumer put back
+  // in `value` while it was leaving is simply shown as a live item again.
+  const { items, leaving } = useMemo(() => {
+    const present = new Set(value.map(item => item.id));
+    const items = lastCommit && !present.has(lastCommit.item.id) ? [...value, lastCommit.item] : [...value];
+    const leaving = new Set<string>();
+    const pending = [...leavingItems.values()]
+      .filter(entry => !present.has(entry.item.id))
+      .sort((a, b) => a.index - b.index);
+    for (const entry of pending) {
+      items.splice(Math.min(entry.index, items.length), 0, entry.item);
+      leaving.add(entry.item.id);
+    }
+    return { items, leaving };
+  }, [value, lastCommit, leavingItems]);
 
   // The draft chip is keyed by the id the committed item will carry, so React keeps the same
   // element through the commit. Consumers who derive ids themselves supply `createItemId` so
@@ -174,17 +210,24 @@ export function FilterBarProvider({
 
   const removeItem = useCallback(
     (id: string) => {
+      const index = itemsRef.current.findIndex(item => item.id === id);
+      const item = itemsRef.current[index];
+      if (item) markLeaving([{ item, index }]);
       onValueChange(itemsRef.current.filter(item => item.id !== id));
       setLastCommit(null);
       announce('Filter removed');
     },
-    [onValueChange, announce],
+    [onValueChange, announce, markLeaving],
   );
 
   const clear = useCallback(() => {
+    const removed = itemsRef.current
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => !nonRemovableIds.has(item.id));
+    markLeaving(removed);
     onValueChange(itemsRef.current.filter(item => nonRemovableIds.has(item.id)));
     announce('All filters removed');
-  }, [onValueChange, announce, nonRemovableIds]);
+  }, [onValueChange, announce, nonRemovableIds, markLeaving]);
 
   const hasRemovableItems = value.some(item => !nonRemovableIds.has(item.id));
 
@@ -212,8 +255,12 @@ export function FilterBarProvider({
     inputRef.current?.focus();
   }, []);
 
+  // Chip indices refer to the rendered list (which may still hold leaving chips), not `value`.
+  const renderedRef = useRef(items);
+  renderedRef.current = items;
+
   const focusChip = useCallback((fromIndex: number, direction: -1 | 1, segment: FilterBarSegment) => {
-    const items = itemsRef.current;
+    const items = renderedRef.current;
     // Custom chips may register only some segments (e.g. just `value`): when the
     // requested one is missing, land on the chip's outermost segment on the side
     // we arrive from.
@@ -234,19 +281,13 @@ export function FilterBarProvider({
 
   const focusAfterRemove = useCallback(
     (removedIndex: number) => {
-      // Called synchronously after `removeItem`, before React re-renders: itemsRef still
-      // holds the pre-removal list and every neighbour's DOM node is still mounted.
-      const next = itemsRef.current[removedIndex + 1] ?? itemsRef.current[removedIndex - 1];
-      if (next) {
-        const el = segments.current.get(`${next.id}:value`) ?? segments.current.get(`${next.id}:field`);
-        if (el) {
-          el.focus();
-          return;
-        }
-      }
+      // Called synchronously after `removeItem`, before React re-renders: the rendered list
+      // still holds the removed chip and every neighbour's DOM node is still mounted.
+      // Leaving neighbours register no segments, so they are skipped over.
+      if (focusChip(removedIndex + 1, 1, 'value') || focusChip(removedIndex - 1, -1, 'value')) return;
       focusInput();
     },
-    [focusInput],
+    [focusChip, focusInput],
   );
 
   const ctx = useMemo<FilterBarContextValue>(
@@ -261,6 +302,8 @@ export function FilterBarProvider({
       settleCommit,
       updateItem,
       removeItem,
+      leaving,
+      settleRemove,
       clear,
       hasRemovableItems,
       registerNonRemovable,
@@ -287,6 +330,8 @@ export function FilterBarProvider({
       settleCommit,
       updateItem,
       removeItem,
+      leaving,
+      settleRemove,
       clear,
       hasRemovableItems,
       registerNonRemovable,
