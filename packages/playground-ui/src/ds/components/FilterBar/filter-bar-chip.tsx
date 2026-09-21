@@ -154,10 +154,10 @@ export function FilterBarChip({
   // The provider records where each draft step (and the final commit) started from, so
   // the entrance stagger resumes after the segments already on screen and the chip
   // glints once when it lands as a filter (see filter-bar-chip.css).
-  const commit = !draft && ctx.lastCommit?.id === item.id ? ctx.lastCommit : null;
+  const commit = !draft && ctx.lastCommit?.item.id === item.id ? ctx.lastCommit : null;
   const from = draft ? (ctx.draft?.from ?? 'none') : (commit?.from ?? 'none');
   const settled = settledSegments(from, operatorImplied);
-  const shine = commit !== null;
+  const shine = commit?.glint ?? false;
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {

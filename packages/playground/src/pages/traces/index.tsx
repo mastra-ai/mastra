@@ -278,6 +278,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         operators={TRACE_FILTER_BAR_OPERATORS}
         value={filterBarValue}
         onValueChange={handleFilterBarChange}
+        // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
+        // draft that id so the chip survives the round trip without remounting.
+        createItemId={fieldId => fieldId}
         aria-label="Trace filters"
         className="min-w-64 flex-1"
       >

@@ -13,6 +13,12 @@ export type FilterBarProps = {
   operators: FilterBarOperator[];
   value: FilterBarItem[];
   onValueChange: (items: FilterBarItem[]) => void;
+  /**
+   * Id given to a newly added item. Defaults to a random id. Consumers that rebuild `value` from
+   * their own store (URL, query params…) should return the id they will rebuild it with, so the
+   * draft chip and the committed chip are the same element.
+   */
+  createItemId?: (fieldId: string) => string;
   'aria-label'?: string;
   /** Accessible label of the trailing "remove every filter" button. */
   clearLabel?: string;
@@ -71,6 +77,7 @@ export function FilterBar({
   operators,
   value,
   onValueChange,
+  createItemId,
   'aria-label': ariaLabel = 'Filters',
   clearLabel = 'Clear filters',
   className,
@@ -82,6 +89,7 @@ export function FilterBar({
       operators={operators}
       value={value}
       onValueChange={onValueChange}
+      createItemId={createItemId}
       ariaLabel={ariaLabel}
     >
       <FilterBarSurface className={className} clearLabel={clearLabel}>

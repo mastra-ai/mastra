@@ -358,6 +358,82 @@ describe('FilterBar', () => {
         expect(committed.hasAttribute('data-shine')).toBe(false);
       });
 
+      it('keeps the draft chip element when the consumer derives item ids itself', async () => {
+        // Consumers that round-trip filters through a URL rebuild items on every change, so the
+        // id they hand back is theirs, not ours. `createItemId` lets the draft carry that id up front.
+        function DerivedIds() {
+          const [fieldIds, setFieldIds] = useState<string[]>([]);
+          const items = fieldIds.map(fieldId => ({ id: fieldId, fieldId, operatorId: 'is', value: 'Running' }));
+          return (
+            <FilterBar
+              fields={FIELDS}
+              operators={OPERATORS}
+              value={items}
+              onValueChange={next => setFieldIds(next.map(item => item.fieldId))}
+              createItemId={fieldId => fieldId}
+            >
+              <FilterBar.Chips />
+              <FilterBar.Input placeholder="Filter…" />
+            </FilterBar>
+          );
+        }
+        render(<DerivedIds />);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        const draftNode = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
+        key('Enter');
+
+        const committed = screen.getByRole('group', { name: 'Status is Running' });
+        expect(committed).toBe(draftNode);
+        expect(committed.hasAttribute('data-shine')).toBe(true);
+      });
+
+      it('keeps showing the committed chip while the consumer has not reflected it in value yet', async () => {
+        // URL-backed consumers update `value` a tick later (router round trip). The chip must not
+        // disappear in between, and must still be the same element once value catches up.
+        let flush: (() => void) | undefined;
+        function Deferred() {
+          const [items, setItems] = useState<FilterBarItem[]>([]);
+          return (
+            <FilterBar
+              fields={FIELDS}
+              operators={OPERATORS}
+              value={items}
+              onValueChange={next => {
+                flush = () => setItems(next);
+              }}
+            >
+              <FilterBar.Chips />
+              <FilterBar.Input placeholder="Filter…" />
+            </FilterBar>
+          );
+        }
+        render(<Deferred />);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        const draftNode = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
+        key('Enter');
+
+        const committed = screen.getByRole('group', { name: 'Status is Running' });
+        expect(committed).toBe(draftNode);
+        expect(getChips()).toHaveLength(1);
+
+        act(() => flush?.());
+
+        expect(screen.getByRole('group', { name: 'Status is Running' })).toBe(draftNode);
+        expect(getChips()).toHaveLength(1);
+      });
+
       it('keeps the draft chip element with a custom renderChip that skips some items', async () => {
         function Custom() {
           const [items, setItems] = useState<FilterBarItem[]>([

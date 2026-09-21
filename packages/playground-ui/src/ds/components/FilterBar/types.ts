@@ -88,10 +88,14 @@ export type FilterBarDraft = {
 /** How far a draft had progressed: nothing yet, its field, or its field and operator. */
 export type DraftStage = 'none' | 'field' | 'operator';
 
-/** The draft that just became an item — the chip glints once, then settles. */
+/**
+ * The draft that just became an item. The provider keeps showing it until the consumer's
+ * `value` includes it (URL-backed consumers update a tick later); the chip glints once, then settles.
+ */
 export type FilterBarCommit = {
-  id: string;
+  item: FilterBarItem;
   from: DraftStage;
+  glint: boolean;
 };
 
 export type FilterBarSegment = 'field' | 'operator' | 'value' | 'remove';
