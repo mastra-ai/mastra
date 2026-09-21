@@ -142,6 +142,24 @@ function sanitizeBroadcastPart(part: unknown): unknown {
   return part;
 }
 
+/**
+ * Tear down a per-request reply topic once its request has settled. The
+ * requester mints the topic name (it embeds a fresh UUID), is its only
+ * subscriber, and nothing will publish to it again — so beyond unsubscribing,
+ * ask the broker to drop the topic entirely. On persistent backends (e.g.
+ * Redis Streams) merely subscribing creates a real key; without the
+ * `clearTopic` every discovery/acceptance round trip would leak one stream
+ * forever. Best-effort and fire-and-forget: `clearTopic` is a no-op on
+ * in-memory brokers and failures here must never affect the request outcome.
+ */
+function releaseReplyTopic(pubsub: PubSub, replyTopic: string, cb: EventCallback): void {
+  void pubsub
+    .unsubscribe(replyTopic, cb)
+    .catch(() => {})
+    .then(() => pubsub.clearTopic(replyTopic))
+    .catch(() => {});
+}
+
 function withThreadMemory(memory: unknown, resourceId: string, threadId: string) {
   return {
     ...((memory && typeof memory === 'object' ? memory : {}) as Record<string, unknown>),
@@ -1035,7 +1053,7 @@ export class AgentThreadStreamRuntime {
         settled = true;
         clearTimeout(timeout);
         resolve();
-        void resolvedPubSub.unsubscribe(replyTopic, onReply).catch(() => {});
+        releaseReplyTopic(resolvedPubSub, replyTopic, onReply);
       };
       const onReply: EventCallback = withAck(event => {
         const data = event.data as AgentThreadPeerDiscoveryEvent | undefined;
@@ -1200,7 +1218,7 @@ export class AgentThreadStreamRuntime {
         clearTimeout(timeout);
         if ('error' in result) reject(result.error);
         else resolve(result.runId);
-        void pubsub.unsubscribe(replyTopic, onReply).catch(() => {});
+        releaseReplyTopic(pubsub, replyTopic, onReply);
       };
       const onReply: EventCallback = withAck(event => {
         const data = event.data as AgentThreadIdleSignalAcceptanceEvent | undefined;
@@ -1277,7 +1295,7 @@ export class AgentThreadStreamRuntime {
         settled = true;
         clearTimeout(timeout);
         resolve(sourceId);
-        void pubsub.unsubscribe(replyTopic, onReply).catch(() => {});
+        releaseReplyTopic(pubsub, replyTopic, onReply);
       };
       const onReply: EventCallback = withAck(event => {
         const data = event.data as AgentThreadOwnerDiscoveryEvent | undefined;

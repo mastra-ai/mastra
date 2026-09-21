@@ -157,4 +157,46 @@ describe('unsubscribe acquired batches', () => {
     expect(writer.xClaim).toHaveBeenCalledTimes(1);
     expect(cb).not.toHaveBeenCalled();
   });
+
+  it('tears down a subscription whose subscribe round trip was still in flight when unsubscribe ran', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const sub = ps.subscribe('topic', cb);
+    const stop = ps.unsubscribe('topic', cb); // subscribe has not registered yet
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reader.quit).not.toHaveBeenCalled();
+    connectGate.resolve();
+    read.resolve(null);
+    await Promise.all([sub, stop]);
+    // Without awaiting the pending subscribe, unsubscribe would no-op and leak
+    // the reader connection plus its blocked read loop.
+    expect(reader.quit).toHaveBeenCalledTimes(1);
+    expect(writer.xGroupDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('close() tears down a subscription registered by an in-flight subscribe', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const sub = ps.subscribe('topic', cb);
+    const close = ps.close();
+    connectGate.resolve();
+    read.resolve(null);
+    await Promise.all([sub, close]);
+    expect(reader.quit).toHaveBeenCalledTimes(1);
+    expect(writer.quit).toHaveBeenCalledTimes(1);
+  });
+
+  it('deduplicates concurrent subscribes for the same topic and callback', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const first = ps.subscribe('topic', cb);
+    const second = ps.subscribe('topic', cb);
+    connectGate.resolve();
+    await Promise.all([first, second]);
+    expect(writer.xGroupCreate).toHaveBeenCalledTimes(1);
+    expect(writer.duplicate).toHaveBeenCalledTimes(1);
+  });
 });

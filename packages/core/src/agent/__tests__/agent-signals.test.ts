@@ -2411,6 +2411,31 @@ describe('Agent signals', () => {
     claim.unsubscribe();
   });
 
+  it('clears the per-request discovery reply topic once discovery settles', async () => {
+    const cleared: string[] = [];
+    class RecordingPubSub extends EventEmitterPubSub {
+      override async clearTopic(topic: string): Promise<void> {
+        cleared.push(topic);
+      }
+    }
+    const pubsub = new RecordingPubSub();
+    const discoveryAgent = new Agent({
+      id: 'reply-topic-discovery-agent',
+      name: 'Reply Topic Discovery Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('discovery response'),
+      pubsub,
+    });
+
+    await discoveryAgent.discoverThreadPeers({ timeoutMs: 10 });
+    // releaseReplyTopic is fire-and-forget; let its unsubscribe → clearTopic chain flush.
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // On persistent brokers the reply stream would otherwise outlive the
+    // request forever — every discovery must drop its own reply topic.
+    expect(cleared).toEqual([expect.stringMatching(/^agent\.thread-peer-discovery\./)]);
+  });
+
   it('updates advertised peer metadata without replacing thread ownership', async () => {
     const pubsub = new EventEmitterPubSub();
     const ownerAgent = new Agent({

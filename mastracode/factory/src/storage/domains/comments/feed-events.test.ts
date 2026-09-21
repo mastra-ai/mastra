@@ -181,6 +181,40 @@ describe('feed events stream', () => {
     await feed.stop();
   });
 
+  it('acknowledges every delivery so durable brokers can settle it', async () => {
+    // On Redis Streams an unacked event stays pending (broker PEL + client
+    // in-flight map) for the life of the SSE connection — a per-tab leak.
+    const seed = await createFactoryStorageForTests();
+    const { project, item } = await seedProjectItem(seed);
+    const captured: EventCallback[] = [];
+    class CapturingPubSub extends EventEmitterPubSub {
+      override async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+        captured.push(cb);
+        await super.subscribe(topic, cb, options);
+      }
+    }
+    const { app } = buildApp(seed, new CapturingPubSub(), asAlice);
+
+    const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
+    await vi.waitFor(() => expect(captured).toHaveLength(1));
+
+    const ack = vi.fn(async () => {});
+    await captured[0]!(
+      {
+        id: 'evt-1',
+        type: 'factory.feed.touched',
+        runId: project.id,
+        data: { workItemId: item.id },
+        createdAt: new Date(),
+      },
+      ack,
+    );
+    expect(ack).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(feed.frames).toHaveLength(1));
+
+    await feed.stop();
+  });
+
   it('carries no frame for a comment in another project', async () => {
     const seed = await createFactoryStorageForTests();
     const { project, item } = await seedProjectItem(seed);

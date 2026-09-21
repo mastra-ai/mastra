@@ -4,6 +4,7 @@
  * result status to a status code, then emit audit.
  */
 
+import { withAck } from '@mastra/core/events';
 import type { EventCallback, PubSub } from '@mastra/core/events';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -300,12 +301,18 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
 
         const topic = feedTopic(tenant.orgId, projectId);
         return streamSSE(c, async stream => {
-          const onEvent: EventCallback = async event => {
+          // `withAck` settles every delivery: on a durable broker (Redis
+          // Streams) an unacked event stays in the subscription's pending set
+          // and in the broker client's in-flight bookkeeping for the life of
+          // this connection — a leak that grows with every feed touch on
+          // long-lived dashboard tabs. Feed frames are fire-and-forget
+          // invalidations, so a delivery is acked even when the tab is gone.
+          const onEvent: EventCallback = withAck(async event => {
             if (stream.aborted) return;
             const data = event.data;
             const workItemId = isRecord(data) && typeof data.workItemId === 'string' ? data.workItemId : undefined;
             await stream.writeSSE({ event: 'feed', data: JSON.stringify(workItemId ? { workItemId } : {}) });
-          };
+          });
           // Claimed before any await: `onAbort` handlers registered after the
           // reader is gone never run, and a broker subscribe is a round trip.
           const closed = new Promise<void>(resolve => stream.onAbort(resolve));
