@@ -147,6 +147,9 @@ function getJsonSchemaComplexityError(schema: unknown): string | undefined {
 
 /** MCP 2026-07-28 schemas default to JSON Schema 2020-12 when they declare no dialect. */
 function withDefaultDialect(schema: JSONSchema7): JSONSchema7 {
+  // Boolean schemas are valid (2020-12) and must be preserved verbatim —
+  // spreading `false` would produce an unconstrained object schema.
+  if (typeof schema === 'boolean') return schema;
   return schema.$schema ? schema : { ...schema, $schema: JSON_SCHEMA_2020_12 };
 }
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
@@ -1247,8 +1250,17 @@ export class InternalMastraMCPClient extends MastraBase {
     }
     const node = schema as Record<string, unknown>;
 
-    if (node.type !== undefined && typeof node.type !== 'string' && !Array.isArray(node.type)) {
-      return '"type" must be a string or string array';
+    if (node.type !== undefined) {
+      const typeEntries = Array.isArray(node.type) ? node.type : [node.type];
+      if (typeEntries.length === 0) {
+        return '"type" must be a non-empty string or string array';
+      }
+      if (typeEntries.some((entry: unknown) => typeof entry !== 'string')) {
+        return '"type" entries must be strings';
+      }
+      if (Array.isArray(node.type) && new Set(typeEntries).size !== typeEntries.length) {
+        return '"type" array must not contain duplicates';
+      }
     }
     if (node.enum !== undefined && !Array.isArray(node.enum)) {
       return '"enum" must be an array';
@@ -1285,15 +1297,85 @@ export class InternalMastraMCPClient extends MastraBase {
         }
       }
     }
+    if (node.patternProperties !== undefined) {
+      if (node.patternProperties === null || typeof node.patternProperties !== 'object' || Array.isArray(node.patternProperties)) {
+        return '"patternProperties" must be an object';
+      }
+      for (const [pattern, propertySchema] of Object.entries(node.patternProperties)) {
+        const propertyError = this.getInputSchemaShapeError(propertySchema, depth + 1);
+        if (propertyError) {
+          return `patternProperty "${pattern}" ${propertyError}`;
+        }
+      }
+    }
+    if (node.additionalProperties !== undefined && typeof node.additionalProperties !== 'boolean') {
+      const additionalError = this.getInputSchemaShapeError(node.additionalProperties, depth + 1);
+      if (additionalError) return `"additionalProperties" ${additionalError}`;
+    }
+    if (node.prefixItems !== undefined) {
+      if (!Array.isArray(node.prefixItems)) {
+        return '"prefixItems" must be an array';
+      }
+      for (const [index, itemSchema] of node.prefixItems.entries()) {
+        const itemError = this.getInputSchemaShapeError(itemSchema, depth + 1);
+        if (itemError) return `"prefixItems" entry ${index} ${itemError}`;
+      }
+    }
+    if (node.contains !== undefined) {
+      const containsError = this.getInputSchemaShapeError(node.contains, depth + 1);
+      if (containsError) return `"contains" ${containsError}`;
+    }
+    for (const conditional of ['if', 'then', 'else'] as const) {
+      if (node[conditional] !== undefined) {
+        const conditionalError = this.getInputSchemaShapeError(node[conditional], depth + 1);
+        if (conditionalError) return `"${conditional}" ${conditionalError}`;
+      }
+    }
+    if (node.$defs !== undefined) {
+      if (node.$defs === null || typeof node.$defs !== 'object' || Array.isArray(node.$defs)) {
+        return '"$defs" must be an object';
+      }
+      for (const [defName, defSchema] of Object.entries(node.$defs)) {
+        const defError = this.getInputSchemaShapeError(defSchema, depth + 1);
+        if (defError) return `$defs entry "${defName}" ${defError}`;
+      }
+    }
+    if (node.definitions !== undefined) {
+      if (node.definitions === null || typeof node.definitions !== 'object' || Array.isArray(node.definitions)) {
+        return '"definitions" must be an object';
+      }
+      for (const [defName, defSchema] of Object.entries(node.definitions)) {
+        const defError = this.getInputSchemaShapeError(defSchema, depth + 1);
+        if (defError) return `definitions entry "${defName}" ${defError}`;
+      }
+    }
     return null;
   }
 
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
-    const rawSchema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+    // Boolean schemas are valid JSON Schema (2020-12); `in` would throw on them.
+    const rawSchema = (
+      typeof inputSchema === 'boolean' ? inputSchema : 'jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema
+    ) as JSONSchema7;
 
-    const schema = this.normalizeMisplacedRequired(rawSchema);
+    const schema = typeof rawSchema === 'boolean' ? rawSchema : this.normalizeMisplacedRequired(rawSchema);
 
     const dialectSchema = withDefaultDialect(schema);
+    // toStandardSchema cannot represent boolean schemas; wrap them directly —
+    // `true` accepts everything, `false` rejects everything (JSON Schema 2020-12).
+    if (typeof dialectSchema === 'boolean') {
+      return {
+        '~standard': {
+          version: 1,
+          vendor: 'mastra-mcp-client',
+          jsonSchema: {
+            input: () => (dialectSchema ? {} : { not: {} }),
+            output: () => (dialectSchema ? {} : { not: {} }),
+          },
+          validate: (value: unknown) => (dialectSchema ? { value } : { issues: [{ message: 'schema rejects all values (false)' }] }),
+        },
+      };
+    }
     const standardSchema = toStandardSchema(dialectSchema);
     const complexityError = getJsonSchemaComplexityError(dialectSchema);
     if (!complexityError) return standardSchema;
@@ -1423,7 +1505,9 @@ export class InternalMastraMCPClient extends MastraBase {
       // Validate before building so one malformed schema cannot poison the
       // whole tools array at the provider. The malformed tool is skipped with
       // a warning naming the server and the tool; valid siblings stay usable.
-      const rawInputSchema = ('jsonSchema' in tool.inputSchema ? tool.inputSchema.jsonSchema : tool.inputSchema) as JSONSchema7;
+      const rawInputSchema = (
+        typeof tool.inputSchema === 'boolean' ? tool.inputSchema : 'jsonSchema' in tool.inputSchema ? tool.inputSchema.jsonSchema : tool.inputSchema
+      ) as JSONSchema7;
       const inputSchemaShapeError = this.getInputSchemaShapeError(this.normalizeMisplacedRequired(rawInputSchema));
       if (inputSchemaShapeError) {
         this.log('warning', `Skipping MCP tool "${tool.name}" from server "${this.name}": invalid input schema (${inputSchemaShapeError})`);

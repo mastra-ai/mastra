@@ -661,6 +661,68 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(tools.deep_tool).toBeUndefined();
   });
 
+  it('should reject invalid type arrays before conversion', async () => {
+    const sdkClient = (client as any).client as Client;
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        { name: 'bad_type_entry', inputSchema: { type: 'object', properties: { a: { type: [42] } } } as any },
+        { name: 'empty_type', inputSchema: { type: [] } as any },
+        { name: 'dup_type', inputSchema: { type: ['string', 'string'] } as any },
+        { name: 'good_tool', inputSchema: { type: 'object', properties: { a: { type: 'string' } } } as any },
+      ],
+    });
+
+    const tools = await client.tools();
+
+    expect(Object.keys(tools)).toEqual(['good_tool']);
+    const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
+    expect(warnMessages).toContain('bad_type_entry');
+    expect(warnMessages).toContain('empty_type');
+    expect(warnMessages).toContain('dup_type');
+  });
+
+  it('should traverse schema-bearing keywords when validating shapes', async () => {
+    const sdkClient = (client as any).client as Client;
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        { name: 'bad_pattern_property', inputSchema: { type: 'object', patternProperties: { '^a': ['not-a-schema'] } } as any },
+        { name: 'bad_additional', inputSchema: { type: 'object', additionalProperties: { required: 'nope' } } as any },
+        { name: 'bad_prefix_item', inputSchema: { type: 'array', prefixItems: [{ type: 1 }] } as any },
+        { name: 'bad_contains', inputSchema: { type: 'array', contains: { enum: 'nope' } } as any },
+        { name: 'bad_if', inputSchema: { type: 'object', if: { properties: [] } } as any },
+        { name: 'bad_def', inputSchema: { type: 'object', $defs: { x: { type: ['object', 7] } } } as any },
+        { name: 'good_tool', inputSchema: { type: 'object', properties: { a: { type: 'string' } } } as any },
+      ],
+    });
+
+    const tools = await client.tools();
+
+    expect(Object.keys(tools)).toEqual(['good_tool']);
+    const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
+    for (const name of ['bad_pattern_property', 'bad_additional', 'bad_prefix_item', 'bad_contains', 'bad_if', 'bad_def']) {
+      expect(warnMessages).toContain(name);
+    }
+  });
+
+  it('should accept boolean input schemas without throwing and preserve false', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        { name: 'always_valid', inputSchema: true as any },
+        { name: 'always_invalid', inputSchema: false as any },
+      ],
+    });
+
+    const tools = await client.tools();
+
+    expect(tools.always_valid).toBeDefined();
+    expect(tools.always_invalid).toBeDefined();
+    const storedSchema = tools.always_invalid.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
+    expect(storedSchema).toEqual({ not: {} });
+  });
+
   it('should preserve recursive $ref input schemas when creating tools', async () => {
     const sdkClient = (client as any).client as Client;
     const recursiveInputSchema = {
