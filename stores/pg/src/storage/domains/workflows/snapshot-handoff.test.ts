@@ -1,7 +1,33 @@
 import { randomUUID } from 'node:crypto';
-import type { WorkflowRunState } from '@mastra/core/workflows';
+import { createEmptyWorkflowSnapshot, createWorkflowTerminalGraphFingerprint } from '@mastra/core/storage';
+import type { WorkflowRunState, WorkflowTerminalRecoveryAncestryV1 } from '@mastra/core/workflows';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { PostgresStore } from '../../index';
+
+const NESTED_PARENT_GRAPH: WorkflowRunState['serializedStepGraph'] = [
+  { type: 'step', step: { id: 'nested', component: 'WORKFLOW' } },
+];
+const EMPTY_CHILD_GRAPH_FINGERPRINT = createWorkflowTerminalGraphFingerprint([]);
+
+function nestedAncestry(
+  child: { workflowName: string; runId: string },
+  parent: { workflowName: string; runId: string },
+): WorkflowTerminalRecoveryAncestryV1 {
+  return [
+    {
+      version: 1,
+      childWorkflowName: child.workflowName,
+      childRunId: child.runId,
+      parentWorkflowName: parent.workflowName,
+      parentRunId: parent.runId,
+      parentGraphFingerprint: createWorkflowTerminalGraphFingerprint(NESTED_PARENT_GRAPH),
+      source: { kind: 'step', stepId: 'nested', executionPath: [0] },
+      inputPointer: { kind: 'parent-source-payload', stepId: 'nested' },
+      resultPointer: { kind: 'retained-terminal-result', workflowName: child.workflowName, runId: child.runId },
+      resumeMetadata: { wasResume: false, resumeSteps: [] },
+    },
+  ];
+}
 
 const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
 
@@ -54,6 +80,14 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     expect(claims.map((claim: any) => claim.status).sort()).toEqual(['created', 'existing']);
 
     const transitioned = snapshot(runId, 'waiting', { phase: 'transitioned' });
+    await expect(
+      workflows.transitionWorkflowSnapshotHandoff({
+        ...input,
+        expectedResourceId: 'resource-stale',
+        expectedSnapshot: pending,
+        snapshot: transitioned,
+      }),
+    ).resolves.toMatchObject({ status: 'conflict', record: { resourceId: 'resource-1' } });
     await expect(
       workflows.transitionWorkflowSnapshotHandoff({
         ...input,
@@ -195,5 +229,298 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
       records: [{ workflowName, runId, status: 'pending' }],
       hasMore: false,
     });
+  });
+
+  it('serializes a pre-native claim against a concurrent first snapshot write', async () => {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const workflowName = `race-${attempt}-${randomUUID()}`;
+      const runId = randomUUID();
+      const canonical = snapshot(runId, 'running', { native: true });
+      const [claim, persist] = await Promise.allSettled([
+        workflows.claimWorkflowSnapshotHandoff({
+          workflowName,
+          runId,
+          expectedCanonical: { kind: 'absent' },
+          snapshot: snapshot(runId, 'waiting'),
+          mutationFence: 'race-owner',
+        }),
+        workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: canonical }),
+      ]);
+
+      const claimCreated = claim.status === 'fulfilled' && claim.value.status === 'created';
+      const persistWon = persist.status === 'fulfilled';
+      // Exactly one ordering may win: either the claim lands first and fences
+      // the native write, or the native row commits and the claim conflicts.
+      expect(claimCreated !== persistWon).toBe(true);
+      if (claimCreated) {
+        expect(persist.status).toBe('rejected');
+        expect((persist as PromiseRejectedResult).reason.message).toMatch(/handoff fence/);
+      } else {
+        expect(claim.status).toBe('fulfilled');
+        expect((claim as PromiseFulfilledResult<any>).value).toMatchObject({
+          status: 'conflict',
+          observedCanonical: { kind: 'present' },
+        });
+      }
+
+      // Regardless of ordering the durable state is consistent: a handoff row
+      // and a mutable snapshot row never coexist.
+      const rows = await store.db.any<{ handoffs: number; snapshots: number }>(
+        `SELECT
+           (SELECT count(*)::int FROM mastra_workflow_snapshot_handoffs
+             WHERE workflow_name = $1 AND run_id = $2) AS handoffs,
+           (SELECT count(*)::int FROM mastra_workflow_snapshot
+             WHERE workflow_name = $1 AND run_id = $2) AS snapshots`,
+        [workflowName, runId],
+      );
+      expect(rows).toEqual([{ handoffs: claimCreated ? 1 : 0, snapshots: persistWon ? 1 : 0 }]);
+    }
+  });
+
+  it('fences late step, resume, nested, and delete writes after completion', async () => {
+    const workflowName = `lifecycle-${randomUUID()}`;
+    const runId = randomUUID();
+    const nestedChild = { workflowName: `nested-${randomUUID()}`, runId: randomUUID() };
+    const terminal: WorkflowRunState = {
+      ...createEmptyWorkflowSnapshot(runId),
+      status: 'success',
+      serializedStepGraph: NESTED_PARENT_GRAPH,
+      context: {
+        nested: { status: 'running', payload: {}, metadata: {} },
+      } as WorkflowRunState['context'],
+      value: { native: true },
+    };
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: terminal });
+    const claimed = snapshot(runId, 'waiting', { product: true });
+    await workflows.claimWorkflowSnapshotHandoff({
+      workflowName,
+      runId,
+      expectedCanonical: { kind: 'present', snapshot: terminal },
+      mutationFence: 'opaque-owner',
+      snapshot: claimed,
+    });
+    await workflows.completeWorkflowSnapshotHandoff({
+      workflowName,
+      runId,
+      expectedSnapshot: claimed,
+      mutationFence: 'opaque-owner',
+      snapshot: snapshot(runId, 'success', { product: 'final' }),
+    });
+
+    const resumeInput = {
+      workflowName,
+      runId,
+      resumeOperationHash: `sha256:${'0'.repeat(64)}`,
+      executionGeneration: 'gen-1',
+      lifecycleResumeAttempt: 0,
+      lifecycleStepStates: {},
+      nextLifecycleResumeAttempt: 1,
+      operationReplayContext: { version: 1, steps: [] },
+    };
+    const nestedInput = {
+      workflowName,
+      runId,
+      stepId: 'nested',
+      nestedWorkflowName: nestedChild.workflowName,
+      nestedRunId: nestedChild.runId,
+      expectedChildGraphFingerprint: EMPTY_CHILD_GRAPH_FINGERPRINT,
+      result: { status: 'running', payload: {} },
+      requestContext: {},
+      recoveryAncestry: nestedAncestry(nestedChild, { workflowName, runId }),
+    };
+    const fenced = [
+      expect(
+        workflows.persistWorkflowStepUpdate({ workflowName, runId, snapshot: snapshot(runId, 'running') }),
+      ).rejects.toThrow(/handoff fence/),
+      expect(workflows.admitWorkflowResume(resumeInput)).rejects.toThrow(/handoff fence/),
+      expect(workflows.bindWorkflowNestedRunOwnership(nestedInput)).rejects.toThrow(/handoff fence/),
+      expect(workflows.admitWorkflowNestedRun(nestedInput)).rejects.toThrow(/handoff fence/),
+      expect(
+        workflows.updateWorkflowResults({
+          workflowName,
+          runId,
+          stepId: 'step',
+          result: { status: 'success', output: {} },
+          requestContext: {},
+        }),
+      ).rejects.toThrow(/handoff fence/),
+      expect(
+        workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, 'failed') }),
+      ).rejects.toThrow(/handoff fence/),
+      expect(workflows.deleteWorkflowRunById({ workflowName, runId })).rejects.toThrow(/handoff fence/),
+    ];
+    await Promise.all(fenced);
+
+    // A completed sentinel keeps the canonical terminal row readable and
+    // rejects a different owner's claim without resurrecting the run.
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: terminal },
+        mutationFence: 'other-owner',
+        snapshot: snapshot(runId, 'waiting'),
+      }),
+    ).resolves.toMatchObject({ status: 'conflict', record: { status: 'completed' } });
+    await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({ status: 'success' });
+    await expect(workflows.getWorkflowRunTerminalStatus({ workflowName, runId })).resolves.toEqual({
+      status: 'terminal',
+      terminalStatus: 'success',
+    });
+  });
+
+  it('rolls back a crashed claim transaction and replays a lost completion acknowledgement', async () => {
+    const workflowName = `crash-${randomUUID()}`;
+    const runId = randomUUID();
+    const injected = new Error('injected commit loss');
+    const original = (workflows as any).lockWorkflowSnapshotHandoff;
+    (workflows as any).lockWorkflowSnapshotHandoff = async () => {
+      throw injected;
+    };
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'crash-owner',
+      }),
+    ).rejects.toBe(injected);
+    delete (workflows as any).lockWorkflowSnapshotHandoff;
+
+    // The provisional parent revision and the handoff row roll back together.
+    const left = await store.db.any<{ handoffs: number; revisions: number }>(
+      `SELECT
+         (SELECT count(*)::int FROM mastra_workflow_snapshot_handoffs
+           WHERE workflow_name = $1 AND run_id = $2) AS handoffs,
+         (SELECT count(*)::int FROM mastra_workflow_parent_revisions
+           WHERE workflow_name = $1 AND run_id = $2) AS revisions`,
+      [workflowName, runId],
+    );
+    expect(left).toEqual([{ handoffs: 0, revisions: 0 }]);
+
+    const input = {
+      workflowName,
+      runId,
+      expectedCanonical: { kind: 'absent' as const },
+      resourceId: 'resource-1',
+      snapshot: snapshot(runId, 'waiting', { phase: 'claimed' }),
+      mutationFence: 'crash-owner',
+    };
+    await expect(workflows.claimWorkflowSnapshotHandoff(input)).resolves.toMatchObject({ status: 'created' });
+    // A completion whose acknowledgement is lost replays idempotently.
+    await expect(
+      workflows.completeWorkflowSnapshotHandoff({
+        ...input,
+        expectedResourceId: input.resourceId,
+        expectedSnapshot: input.snapshot,
+        snapshot: snapshot(runId, 'success', { product: 'final' }),
+      }),
+    ).resolves.toMatchObject({ status: 'completed' });
+    await expect(
+      workflows.completeWorkflowSnapshotHandoff({
+        ...input,
+        expectedResourceId: input.resourceId,
+        expectedSnapshot: input.snapshot,
+        snapshot: snapshot(runId, 'success', { product: 'final' }),
+      }),
+    ).resolves.toMatchObject({ status: 'already_completed' });
+    await expect(workflows.claimWorkflowSnapshotHandoff(input)).resolves.toMatchObject({
+      status: 'completed',
+      record: { status: 'completed' },
+    });
+  });
+
+  it('paginates handoffs deterministically across equal timestamps and isolates workflows', async () => {
+    const prefix = `page-${randomUUID()}`;
+    const runIds = [`${prefix}-c`, `${prefix}-a`, `${prefix}-b`];
+    for (const runId of runIds) {
+      await workflows.claimWorkflowSnapshotHandoff({
+        workflowName: `${prefix}-shared`,
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        resourceId: `resource-${runId}`,
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: `${prefix}-owner`,
+      });
+    }
+    await workflows.claimWorkflowSnapshotHandoff({
+      workflowName: `${prefix}-other`,
+      runId: `${prefix}-a`,
+      expectedCanonical: { kind: 'absent' },
+      snapshot: snapshot(`${prefix}-a`, 'waiting'),
+      mutationFence: `${prefix}-other-owner`,
+    });
+    // Force identical updated_at so ordering must resolve on the key tiebreak.
+    await store.db.none(
+      `UPDATE mastra_workflow_snapshot_handoffs SET created_at = 424242, updated_at = 424242
+       WHERE workflow_name LIKE $1`,
+      [`${prefix}-%`],
+    );
+
+    const expected = [
+      `${prefix}-other/${prefix}-a`,
+      `${prefix}-shared/${prefix}-a`,
+      `${prefix}-shared/${prefix}-b`,
+      `${prefix}-shared/${prefix}-c`,
+    ];
+    const seen: string[] = [];
+    let cursor: any;
+    do {
+      const page = await workflows.listWorkflowSnapshotHandoffs({
+        workflowName: undefined,
+        status: 'pending',
+        limit: 2,
+        after: cursor,
+      });
+      for (const record of page.records) {
+        if (record.workflowName.startsWith(prefix)) seen.push(`${record.workflowName}/${record.runId}`);
+      }
+      cursor = page.nextCursor;
+      if (!page.hasMore) break;
+    } while (cursor);
+    expect(seen).toEqual(expected);
+
+    await expect(workflows.listWorkflowSnapshotHandoffs({ workflowName: `${prefix}-shared` })).resolves.toMatchObject({
+      records: { length: 3 },
+    });
+    // A sibling workflow's runs stay mutable even when a same-runId handoff exists.
+    await workflows.persistWorkflowSnapshot({
+      workflowName: `${prefix}-untouched`,
+      runId: `${prefix}-a`,
+      snapshot: snapshot(`${prefix}-a`, 'running'),
+    });
+  });
+
+  it('retains the completed sentinel and canonical row through pruning', async () => {
+    const workflowName = `retained-${randomUUID()}`;
+    const runId = randomUUID();
+    const canonical = snapshot(runId, 'success', { native: true });
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: canonical });
+    const claimed = snapshot(runId, 'waiting', { product: true });
+    await workflows.claimWorkflowSnapshotHandoff({
+      workflowName,
+      runId,
+      expectedCanonical: { kind: 'present', snapshot: canonical },
+      mutationFence: 'opaque-owner',
+      snapshot: claimed,
+    });
+    await workflows.completeWorkflowSnapshotHandoff({
+      workflowName,
+      runId,
+      expectedSnapshot: claimed,
+      mutationFence: 'opaque-owner',
+      snapshot: snapshot(runId, 'success', { product: 'final' }),
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await workflows.prune({ workflowSnapshot: { maxAge: '0ms' } });
+
+    await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({ status: 'success' });
+    await expect(workflows.listWorkflowSnapshotHandoffs({ workflowName, status: 'completed' })).resolves.toMatchObject({
+      records: [{ workflowName, runId, status: 'completed' }],
+      hasMore: false,
+    });
+    await expect(workflows.deleteWorkflowRunById({ workflowName, runId })).rejects.toThrow(/handoff fence/);
   });
 });
