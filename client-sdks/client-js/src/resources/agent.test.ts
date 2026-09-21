@@ -8,7 +8,6 @@ import type { Body } from '../route-types.generated';
 import type {
   AbortAgentThreadParams,
   ClientOptions,
-  AbortAgentThreadParams,
   CancelQueuedAgentMessagesParams,
   QueueAgentMessageParams,
   SendAgentMessageParams,
