@@ -9,16 +9,14 @@ goal: true
 Manage one open GitHub issue or active PR through three explicit phases:
 
 1. **Triage** — classify, route, and always end by posting/updating either a Maintainer's Triage Note or an issue/PR comment.
-2. **Review** — create one scoped working file and activate `understand-pr` or `understand-issue` with `--working-file`.
+2. **Review** — activate `understand-pr` or `understand-issue` with only the PR or issue reference, then read the skill's review record.
 3. **Approve** — mark the note as waiting for final approval with a final approver, then stop.
 
 Start with **Triage** only. In `--headless` mode, choose the next step, post the required Triage output, and exit.
 
 ## Rules
 
-- [ ] Triage creates no local files. Review may create/update exactly one scoped working file:
-  - PR review: `.pr-review/GH_TRIAGE_PR_<pr-number>.md`
-  - Issue review: `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md`
+- [ ] Triage creates no local files. Review creates none either: the skill keeps its own ignored record at `.mastracode/scratch/reviews/<owner>-<repo>-<pr>.md` (PR) or `.mastracode/scratch/issues/<owner>-<repo>-<n>.md` (issue).
 - [ ] Triage must always end with one GitHub-visible output: either a Maintainer's Triage Note or an issue/PR comment.
 - [ ] Issue Triage label policy is delegated to `triage-issue`; PR Triage label writes remain limited to removing `status: needs triage` after a successful Triage post unless critical-path rules require otherwise.
 - [ ] If posting/updating a Maintainer's Triage Note on a PR that has linked/closing issue(s), also post a short comment on each linked issue saying the issue has been triaged and routed to the PR, then remove `status: needs triage` from those linked issues if present.
@@ -180,7 +178,7 @@ Use when an active PR's changed files match `.mastracode/resources/CRITICAL_PATH
 Output:
 
 - Follow the resource: auto-close/comment for listed external-contributor paths; otherwise request/add the listed owner(s) and post/update a concise Maintainer's Triage Note that calls out the matched path, owner(s), and reason.
-- Skip the Review step by default; do not activate `understand-pr` or create a review working file for this route unless the user explicitly asks.
+- Skip the Review step by default; do not activate `understand-pr` for this route unless the user explicitly asks.
 - Interactive ask: `This touches a critical path. Post the critical-path triage output and stop here?`
 
 #### Case C: One PR to review
@@ -259,43 +257,25 @@ Only offer D for Cases C-E. Never offer D for Cases A-B. If output was already p
 
 ## Phase 2: Review
 
-Only enter after explicit user selection. Do not stop after writing the working file; continue into the matching skill, finish its interactive Review flow, then update the existing Maintainer's Triage Note.
+Only enter after explicit user selection. Activate the matching skill, let it finish its review, then update the existing Maintainer's Triage Note.
 
-### 1. Prepare Review working file
+### 1. Activate the matching skill
 
-Create/update exactly one file using the selected route:
-
-- PR Review: `.pr-review/GH_TRIAGE_PR_<pr-number>.md`
-- Issue Review: `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md`
-
-For PR Review, build the file from the PR diff and routing context:
-
-```bash
-gh pr diff "$PR" --patch
-gh pr view "$PR" --comments --json number,title,url,author,body,comments,reviews,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
-```
-
-For Issue Review, build the file from the issue body, comments, timeline, labels, candidate PRs, and routing question.
-
-The file should contain only Review context: input URL/number, selected route, Maintainer's Triage Note comment URL/id if available, relevant facts, and questions for the skill. Do not embed the Maintainer's Triage Note template or issue/PR comment template in the working file.
-
-The working file is internal Review context only. It is never the final Phase 2 output.
-
-### 2. Activate the matching skill and continue through Review
-
-After writing the working file, immediately activate the matching skill with `--working-file`. Do not end with a prep summary.
+Pass only the PR or issue reference. Do not pre-read the diff, prepare a context file, or summarize the thread for the skill: both skills form an independent model before reading the change or the thread's theories, and hand-fed context defeats that step. Triage findings stay in the note.
 
 ```text
 Activate skill: understand-pr
-Arguments: <PR number or URL> --working-file .pr-review/GH_TRIAGE_PR_<pr-number>.md
+Arguments: <PR number or URL>
 ```
 
 ```text
 Activate skill: understand-issue
-Arguments: <issue number or URL> --working-file .issue-review/GH_TRIAGE_ISSUE_<issue-number>.md
+Arguments: <issue number or URL>
 ```
 
-After the skill finishes, return to this command and update/ask about the existing note.
+### 2. Read the skill's record
+
+When the skill finishes, its briefing is in the conversation and its full record is at `.mastracode/scratch/reviews/<owner>-<repo>-<pr>.md` (PR) or `.mastracode/scratch/issues/<owner>-<repo>-<n>.md` (issue). Use the verdict, requests, and verification from there for the note update. The skill posts nothing to GitHub on its own outside `gh-review`'s autonomous draft-review exception; the note update below is this command's output.
 
 For multiple PRs, ask which PR first. No-action routes do not enter Review unless the user corrects the route.
 
@@ -329,7 +309,7 @@ Only enter after Review is complete enough for final maintainer routing. Do not 
 
 ### 1. Identify one final approver
 
-- [ ] Use reviewed files/area from the working file.
+- [ ] Use reviewed files/area from the skill's record.
 - [ ] Check CODEOWNERS first: `.github/CODEOWNERS`, `CODEOWNERS`, then `docs/CODEOWNERS`.
 - [ ] Do not list docs maintainers unless the PR explicitly changes docs or introduces/changes a feature that needs docs follow-up.
 - [ ] If CODEOWNERS is clear, use one matching `@user` or `@org/team` mention.
