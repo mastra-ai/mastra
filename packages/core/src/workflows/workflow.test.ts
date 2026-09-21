@@ -65,7 +65,8 @@ createWorkflowTestSuite({
   getStorage: () => sharedStorage,
 
   beforeAll: async () => {
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockRestore();
+    vi.unmock('crypto');
+    vi.unmock('node:crypto');
   },
 
   afterAll: async () => {
@@ -73,6 +74,11 @@ createWorkflowTestSuite({
   },
 
   beforeEach: async () => {
+    // These workflows share a single storage instance and rely on real, unique run
+    // IDs so a previous test's snapshot can never be mistaken for the current run.
+    // The shared test setup installs a deterministic `globalThis.crypto.randomUUID`
+    // spy before every test, so undo it for this suite.
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockRestore();
     vi.clearAllMocks();
   },
 
