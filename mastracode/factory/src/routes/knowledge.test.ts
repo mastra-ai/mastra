@@ -779,6 +779,168 @@ describe('KnowledgeRoutes', () => {
     expect(body.edges[0]?.source).toBe(solo.id);
   });
 
+  // Importer record links (`metadata.links`) — address- and name-resolved
+  // render-time edges alongside wikilinks.
+  it('derives an edge from a record metadata.links address to a window node carrying that metadata.address', async () => {
+    const h = await createHarness();
+    const page = await h.knowledge.createNode({
+      name: 'Imported Page',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:aaa' },
+    });
+    const parent = await h.knowledge.createNode({
+      name: 'Parent Page',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:bbb' },
+    });
+    await record(h.knowledge, page, 'Imported body text.', h.projectScope, 'thread-a', {
+      links: [{ address: 'notion:page:bbb', rel: 'child-of' }],
+    });
+
+    const { status, body } = await graph(h);
+    expect(status).toBe(200);
+    expect(body.edges).toHaveLength(1);
+    expect(body.edges[0]).toMatchObject({ source: page.id, target: parent.id, type: 'wikilink' });
+  });
+
+  it('resolves a metadata.links address against a node addressAlias', async () => {
+    const h = await createHarness();
+    const doc = await h.knowledge.createNode({
+      name: 'Linked Doc',
+      kind: 'connect:linear:document',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'linear:document:uuid-1', addressAliases: ['linear:document:slug:abc12345'] },
+    });
+    const source = await h.knowledge.createNode({
+      name: 'Source Doc',
+      kind: 'connect:linear:document',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'linear:document:uuid-2' },
+    });
+    await record(h.knowledge, source, 'References another doc.', h.projectScope, 'thread-a', {
+      links: [{ address: 'linear:document:slug:abc12345', rel: 'references' }],
+    });
+
+    const { body } = await graph(h);
+    expect(body.edges).toHaveLength(1);
+    expect(body.edges[0]).toMatchObject({ source: source.id, target: doc.id });
+  });
+
+  it('resolves a name-only metadata.links entry via the name resolver', async () => {
+    const h = await createHarness();
+    const source = await node(h.knowledge, 'Linking Page', h.projectScope);
+    const target = await node(h.knowledge, 'Titled Target', h.projectScope);
+    await record(h.knowledge, source, 'Confluence-style body.', h.projectScope, 'thread-a', {
+      links: [{ name: 'titled target', rel: 'references' }],
+    });
+
+    const { body } = await graph(h);
+    expect(body.edges).toHaveLength(1);
+    expect(body.edges[0]).toMatchObject({ source: source.id, target: target.id });
+  });
+
+  it('silently skips a metadata.links address that resolves to no window node', async () => {
+    const h = await createHarness();
+    const source = await node(h.knowledge, 'Dangling Source', h.projectScope);
+    await record(h.knowledge, source, 'Body.', h.projectScope, 'thread-a', {
+      links: [{ address: 'notion:page:nonexistent', rel: 'references' }],
+    });
+
+    const { status, body } = await graph(h);
+    expect(status).toBe(200);
+    expect(body.edges).toEqual([]);
+    expect(body.page.truncated).toBe(false);
+  });
+
+  it('ignores malformed metadata.links values without error', async () => {
+    const h = await createHarness();
+    const a = await node(h.knowledge, 'Malformed A', h.projectScope);
+    const b = await node(h.knowledge, 'Malformed B', h.projectScope);
+    const c = await node(h.knowledge, 'Malformed C', h.projectScope);
+    await record(h.knowledge, a, 'Links is a string.', h.projectScope, 'thread-a', { links: 'not-an-array' });
+    await record(h.knowledge, b, 'Links is an object.', h.projectScope, 'thread-a', { links: { address: 'x' } });
+    await record(h.knowledge, c, 'Entries are junk.', h.projectScope, 'thread-a', {
+      links: [null, 42, 'str', {}, { rel: 'references' }, { address: 7 }, { name: [] }],
+    });
+
+    const { status, body } = await graph(h);
+    expect(status).toBe(200);
+    expect(body.edges).toEqual([]);
+  });
+
+  it('skips a metadata.links self-link', async () => {
+    const h = await createHarness();
+    const selfish = await h.knowledge.createNode({
+      name: 'Self Linker',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:self' },
+    });
+    await record(h.knowledge, selfish, 'Points at itself.', h.projectScope, 'thread-a', {
+      links: [{ address: 'notion:page:self', rel: 'references' }],
+    });
+
+    const { body } = await graph(h);
+    expect(body.edges).toEqual([]);
+  });
+
+  it('renders metadata.links and wikilinks from the same record, deduped', async () => {
+    const h = await createHarness();
+    const source = await node(h.knowledge, 'Combo Source', h.projectScope);
+    const wikiTarget = await node(h.knowledge, 'Wiki Target', h.projectScope);
+    const linkTarget = await h.knowledge.createNode({
+      name: 'Link Target',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:link-target' },
+    });
+    await record(h.knowledge, source, 'Mentions [[Wiki Target]] and links elsewhere.', h.projectScope, 'thread-a', {
+      links: [
+        { address: 'notion:page:link-target', rel: 'references' },
+        // Duplicate of the wikilink target by name — must dedupe to one edge.
+        { name: 'Wiki Target', rel: 'references' },
+      ],
+    });
+
+    const { body } = await graph(h);
+    expect(body.edges).toHaveLength(2);
+    expect(body.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: source.id, target: wikiTarget.id }),
+        expect.objectContaining({ source: source.id, target: linkTarget.id }),
+      ]),
+    );
+  });
+
+  it('derives pin-path edges from a pinned record with metadata.links', async () => {
+    const h = await createHarness();
+    const relA = await h.knowledge.createNode({
+      name: 'Pinned Rel A',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:rel-a' },
+    });
+    const relB = await h.knowledge.createNode({
+      name: 'Pinned Rel B',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:rel-b' },
+    });
+    const pinnedNode = await node(h.knowledge, 'pinned', h.projectScope, 'system');
+    await record(h.knowledge, pinnedNode, 'Pinned relationship record.', h.projectScope, 't-any', {
+      links: [
+        { address: 'notion:page:rel-a', rel: 'references' },
+        { address: 'notion:page:rel-b', rel: 'references' },
+      ],
+    });
+
+    const { body } = await graph(h);
+    const pinnedEdge = body.edges.find(edge => edge.pinned);
+    expect(pinnedEdge).toMatchObject({ source: relA.id, target: relB.id, type: 'wikilink', pinned: true });
+  });
+
   // 5
   it('keeps every edge page-local and marks cross-page same-scope links terminally bounded', async () => {
     const h = await createHarness({ limits: { maxNodes: 1 } });

@@ -644,6 +644,56 @@ class WikilinkResolver {
   }
 }
 
+/**
+ * Record-metadata link contract, parsed defensively. Importers (e.g.
+ * `@mastra/connect`) attach `metadata.links: [{ address?, name?, rel? }]` to
+ * records; the graph route derives render-time edges from them exactly like
+ * wikilinks. This is an intentionally decoupled local parse — not an import
+ * from `@mastra/connect` — so malformed or foreign metadata never throws.
+ * `rel` is render-neutral in v1 and ignored here.
+ */
+interface RecordLinkEntry {
+  address?: string;
+  name?: string;
+}
+
+function parseRecordLinks(metadata: unknown): RecordLinkEntry[] {
+  if (!metadata || typeof metadata !== 'object') return [];
+  const links = (metadata as { links?: unknown }).links;
+  if (!Array.isArray(links)) return [];
+  const parsed: RecordLinkEntry[] = [];
+  for (const entry of links) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { address, name } = entry as { address?: unknown; name?: unknown };
+    if (typeof address === 'string' && address) parsed.push({ address });
+    else if (typeof name === 'string' && name) parsed.push({ name });
+  }
+  return parsed;
+}
+
+/**
+ * Address → node map over the loaded window. Importers stamp each node's own
+ * stable address into `metadata.address` (plus optional
+ * `metadata.addressAliases`) at upsert time; address-links resolve against
+ * this map ONLY — a miss is a silent skip, since a dangling target and an
+ * out-of-window target are indistinguishable here by design. Duplicate
+ * addresses across window nodes keep the first and continue.
+ */
+function buildNodesByAddress(nodes: KnowledgeNode[]): Map<string, KnowledgeNode> {
+  const byAddress = new Map<string, KnowledgeNode>();
+  for (const node of nodes) {
+    const metadata = node.metadata as { address?: unknown; addressAliases?: unknown } | undefined;
+    if (!metadata || typeof metadata !== 'object') continue;
+    const keys: unknown[] = [metadata.address];
+    if (Array.isArray(metadata.addressAliases)) keys.push(...metadata.addressAliases);
+    for (const key of keys) {
+      if (typeof key !== 'string' || !key) continue;
+      if (!byAddress.has(key)) byAddress.set(key, node);
+    }
+  }
+  return byAddress;
+}
+
 type KnowledgeSurfaceHandleKind =
   | 'scope'
   | 'node'
@@ -2087,6 +2137,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           recordWindow.sort((a, b) => b.id.localeCompare(a.id));
 
           const resolver = WikilinkResolver.create(view.knowledge, nodes, selected.id, this.#limits.maxFallbackLookups);
+          const nodesByAddress = buildNodesByAddress(nodes);
           const pinnedRecords = await this.#pinnedRecords(selectedView, pinnedNodeIds);
           const accented = new Set<string>();
           const edges: KnowledgeGraphEdge[] = [];
@@ -2114,7 +2165,15 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           for (const { record } of pinnedRecords) {
             const targets: string[] = [];
             let targetsTruncated = false;
-            for (const name of parseKnowledgeWikilinks(record.text)) {
+            const linkEntries = parseRecordLinks(record.metadata);
+            // Name-links get exactly the wikilink treatment (in-window-only
+            // with truncation signaling); address-links resolve via the
+            // window address map only, so hits are in-window by construction.
+            const names = [
+              ...parseKnowledgeWikilinks(record.text),
+              ...linkEntries.flatMap(entry => (entry.name ? [entry.name] : [])),
+            ];
+            for (const name of names) {
               const target = await resolver.resolve(name, view.scopeIds);
               if (!target) continue;
               if (!resolver.inWindowId(target.id)) {
@@ -2122,6 +2181,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 targetsTruncated = true;
                 continue;
               }
+              if (!targets.includes(target.id)) targets.push(target.id);
+            }
+            for (const entry of linkEntries) {
+              if (!entry.address) continue;
+              const target = nodesByAddress.get(entry.address);
+              if (!target) continue;
               if (!targets.includes(target.id)) targets.push(target.id);
             }
             for (const target of targets) addRecordNode(record.id, target);
@@ -2154,7 +2219,33 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               continue;
             }
             addRecordNode(record.id, record.nodeId);
-            for (const name of parseKnowledgeWikilinks(record.text)) {
+            const linkEntries = parseRecordLinks(record.metadata);
+            // Name-links follow the wikilink path below (boundary promotion
+            // included); address-links resolve via the window address map
+            // only, so hits are in-window by construction (boundary: false).
+            const names = [
+              ...parseKnowledgeWikilinks(record.text),
+              ...linkEntries.flatMap(entry => (entry.name ? [entry.name] : [])),
+            ];
+            const emitEdge = (target: KnowledgeNode, boundary: boolean) => {
+              addRecordNode(record.id, target.id);
+              const key = `${record.nodeId}\u0000${target.id}`;
+              if (edgeSeen.has(key)) return;
+              if (edges.length >= this.#limits.maxEdges) {
+                edgesTruncated = true;
+                return;
+              }
+              edgeSeen.add(key);
+              edges.push({
+                id: `wikilink:${record.nodeId}:${target.id}`,
+                source: record.nodeId,
+                target: target.id,
+                type: 'wikilink',
+                recordId: record.id,
+                ...(boundary ? { boundary: true } : {}),
+              });
+            };
+            for (const name of names) {
               const target = await resolver.resolve(name, view.scopeIds);
               if (!target || target.id === record.nodeId) continue;
               const outsideWindow = !resolver.inWindowId(target.id);
@@ -2178,22 +2269,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                   boundaryNodes.set(target.id, { node: target, scope: targetScope });
                 }
               }
-              addRecordNode(record.id, target.id);
-              const key = `${record.nodeId}\u0000${target.id}`;
-              if (edgeSeen.has(key)) continue;
-              if (edges.length >= this.#limits.maxEdges) {
-                edgesTruncated = true;
-                continue;
-              }
-              edgeSeen.add(key);
-              edges.push({
-                id: `wikilink:${record.nodeId}:${target.id}`,
-                source: record.nodeId,
-                target: target.id,
-                type: 'wikilink',
-                recordId: record.id,
-                ...(boundary ? { boundary: true } : {}),
-              });
+              emitEdge(target, boundary);
+            }
+            for (const entry of linkEntries) {
+              if (!entry.address) continue;
+              const target = nodesByAddress.get(entry.address);
+              if (!target || target.id === record.nodeId) continue;
+              emitEdge(target, false);
             }
           }
 
