@@ -158,8 +158,8 @@ export function MessageScrollerProvider({
   // tell the reader taking over from its own writes landing.
   const tripAnimationRef = React.useRef<TripAnimation | null>(null);
   const lastScrollTopRef = React.useRef(0);
-  // Mount sits at scrollTop 0 before the default scroll lands, indistinguishable
-  // from a reader asking for older history. Arms only once settled at the end.
+  // Only a reader moving backwards asks for older history: a mount sitting at
+  // scrollTop 0 before the default scroll lands has not moved.
   const reachStartArmedRef = React.useRef(false);
   const reachStartFiredRef = React.useRef(false);
   const prependAnchorRef = React.useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
@@ -243,7 +243,7 @@ export function MessageScrollerProvider({
       if (!viewportElement) {
         atEndRef.current = true;
         publishScrollable(DEFAULT_SCROLLABLE);
-        return;
+        return false;
       }
 
       const { scrollTop } = viewportElement;
@@ -262,6 +262,8 @@ export function MessageScrollerProvider({
         start: scrollTop > scrollEdgeThreshold,
         end: remainingScroll > scrollEdgeThreshold && !(autoScroll && followingRef.current),
       });
+
+      return wentBack;
     },
     [autoScroll, followTarget, publishScrollable, scrollEdgeThreshold, viewportElement],
   );
@@ -337,11 +339,11 @@ export function MessageScrollerProvider({
 
   const notifyScroll = React.useCallback(() => {
     const wasScrollable = Boolean(viewportElement && viewportElement.scrollHeight > viewportElement.clientHeight);
-    updateScrollable({ fromScroll: true });
+    const readerWentBack = updateScrollable({ fromScroll: true });
     updateVisibility();
     if (!viewportElement) return;
 
-    if (atEndRef.current && wasScrollable) reachStartArmedRef.current = true;
+    if (readerWentBack && wasScrollable) reachStartArmedRef.current = true;
 
     if (!reachStartArmedRef.current) return;
     if (!wasScrollable) return;

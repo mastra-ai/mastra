@@ -10,6 +10,7 @@ import {
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
   checkRouteFGA,
+  getFGAProvider,
   getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
@@ -774,24 +775,26 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
         // Check FGA authorization (EE feature)
         let bodyParams: Record<string, unknown> = {};
-        const contentType = c.req.header('content-type');
-        if (contentType?.includes('application/json')) {
-          try {
-            const body = (await pristineRequest.clone().json()) as unknown;
-            if (body && typeof body === 'object' && !Array.isArray(body)) {
-              bodyParams = body as Record<string, unknown>;
+        if (getFGAProvider(this.mastra, c.get('requestContext'))) {
+          const contentType = c.req.header('content-type');
+          if (contentType?.includes('application/json')) {
+            try {
+              const body = (await pristineRequest.clone().json()) as unknown;
+              if (body && typeof body === 'object' && !Array.isArray(body)) {
+                bodyParams = body as Record<string, unknown>;
+              }
+            } catch {
+              bodyParams = {};
             }
-          } catch {
-            bodyParams = {};
-          }
-        } else if (
-          contentType?.includes('application/x-www-form-urlencoded') ||
-          contentType?.includes('multipart/form-data')
-        ) {
-          try {
-            bodyParams = Object.fromEntries(await pristineRequest.clone().formData());
-          } catch {
-            bodyParams = {};
+          } else if (
+            contentType?.includes('application/x-www-form-urlencoded') ||
+            contentType?.includes('multipart/form-data')
+          ) {
+            try {
+              bodyParams = Object.fromEntries(await pristineRequest.clone().formData());
+            } catch {
+              bodyParams = {};
+            }
           }
         }
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {

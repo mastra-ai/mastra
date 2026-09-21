@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
@@ -24,7 +23,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model'
  */
 describe('Structured output with memory - assistant message in final position (#12800)', () => {
   it('should not send prompt ending with assistant message when input is assistant-role with structuredOutput and memory', async () => {
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-12800';
 
     const mockMemory = new MockMemory();
@@ -107,7 +106,7 @@ describe('Structured output with memory - assistant message in final position (#
     await mockMemory.saveMessages({
       messages: [
         {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           role: 'user',
           content: { format: 2, parts: [{ type: 'text', text: 'Which agent should research dolphins?' }] },
           threadId,
@@ -115,7 +114,7 @@ describe('Structured output with memory - assistant message in final position (#
           createdAt: new Date(),
         },
         {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           role: 'assistant',
           content: { format: 2, parts: [{ type: 'text', text: 'Let me route this request.' }] },
           threadId,
@@ -522,7 +521,7 @@ describe('Structured output with memory - assistant message in final position (#
   });
 
   it('should not send prompt ending with assistant message when using stream with assistant-role input, structuredOutput and memory', async () => {
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-12800-stream';
 
     const mockMemory = new MockMemory();
@@ -606,7 +605,7 @@ describe('Structured output with memory - assistant message in final position (#
     await mockMemory.saveMessages({
       messages: [
         {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           role: 'user' as const,
           content: {
             format: 2 as const,
@@ -618,7 +617,7 @@ describe('Structured output with memory - assistant message in final position (#
           type: 'text' as const,
         },
         {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           role: 'assistant' as const,
           content: {
             format: 2 as const,
@@ -670,8 +669,8 @@ describe('Structured output with memory - assistant message in final position (#
 
 describe('Structured output memory inheritance', () => {
   it('includes prior memory context when useAgent is true for a separate structuring model', async () => {
-    const threadId = randomUUID();
-    const resourceId = `structured-output-memory-${randomUUID()}`;
+    const threadId = globalThis.crypto.randomUUID();
+    const resourceId = `structured-output-memory-${globalThis.crypto.randomUUID()}`;
     const mockMemory = new MockMemory();
 
     const mainModel = new MockLanguageModelV2({
@@ -845,8 +844,8 @@ describe('Structured output memory inheritance', () => {
   });
 
   it('keeps memory context but excludes rejected output when useAgent retries', async () => {
-    const threadId = randomUUID();
-    const resourceId = `structured-output-retry-memory-${randomUUID()}`;
+    const threadId = globalThis.crypto.randomUUID();
+    const resourceId = `structured-output-retry-memory-${globalThis.crypto.randomUUID()}`;
     const mockMemory = new MockMemory();
     const mainModel = new MockLanguageModelV2({
       doGenerate: async () => ({
@@ -928,8 +927,8 @@ describe('Structured output memory inheritance', () => {
   });
 
   it('does not leak the structuring agent readOnly memory config into the parent request context', async () => {
-    const threadId = randomUUID();
-    const resourceId = `structured-output-memory-${randomUUID()}`;
+    const threadId = globalThis.crypto.randomUUID();
+    const resourceId = `structured-output-memory-${globalThis.crypto.randomUUID()}`;
     const mockMemory = new MockMemory();
 
     const mainModel = new MockLanguageModelV2({
@@ -1033,8 +1032,8 @@ describe('Structured output memory inheritance', () => {
   });
 
   it('does not include prior memory context when useAgent is omitted for a separate structuring model', async () => {
-    const threadId = randomUUID();
-    const resourceId = `structured-output-memory-${randomUUID()}`;
+    const threadId = globalThis.crypto.randomUUID();
+    const resourceId = `structured-output-memory-${globalThis.crypto.randomUUID()}`;
     const mockMemory = new MockMemory();
 
     const mainModel = new MockLanguageModelV2({
@@ -1179,8 +1178,8 @@ describe('Structured output memory inheritance', () => {
   });
 
   it('keeps main-agent text chunks in the outer stream while suppressing structuring-agent text chunks', async () => {
-    const threadId = randomUUID();
-    const resourceId = `structured-output-streaming-${randomUUID()}`;
+    const threadId = globalThis.crypto.randomUUID();
+    const resourceId = `structured-output-streaming-${globalThis.crypto.randomUUID()}`;
     const mockMemory = new MockMemory();
 
     const mainModel = new MockLanguageModelV2({
@@ -1323,7 +1322,7 @@ describe('Structured output memory inheritance', () => {
  */
 describe('Structured output stream memory persistence (#14659)', () => {
   it('should persist well-formed text when using stream with structuredOutput, not "[object Object]"', async () => {
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-14659';
 
     const mockMemory = new MockMemory();

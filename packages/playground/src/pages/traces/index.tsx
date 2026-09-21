@@ -20,7 +20,10 @@ import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
-import { useTraceMetadataFilterFields } from '@mastra/playground-ui/domains/traces/hooks/use-trace-metadata-filter-fields';
+import {
+  createTraceQueryValuesResolver,
+  useTraceMetadataFilterFields,
+} from '@mastra/playground-ui/domains/traces/hooks/use-trace-metadata-filter-fields';
 import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
@@ -36,8 +39,10 @@ import {
   clampTraceDiscoveryTimeRange,
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from '@mastra/playground-ui/domains/traces/trace-query-filters';
+import type { TraceQueryRelatedScope } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
+import { useMastraClient } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useTracesListSource } from './hooks/use-traces-list-source';
@@ -178,6 +183,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const { fields: metadataFields, isLoading: isDiscoveryLoading } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
   });
+  const client = useMastraClient();
+  const valueSuggestions = useCallback(
+    (scope: TraceQueryRelatedScope, path: string) =>
+      createTraceQueryValuesResolver(client, discoveryTimeRange, scope, path),
+    [client, discoveryTimeRange],
+  );
 
   const filterBarFields = useMemo(
     () => [
@@ -187,9 +198,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         availableEnvironments: discoveredEnvironments,
         hiddenFieldIds,
         metadataFields,
+        valueSuggestions,
       }),
     ],
-    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds, metadataFields],
+    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds, metadataFields, valueSuggestions],
   );
   const allFilterBarItems = useMemo(() => traceTokensToFilterBarItems(url.filterTokens), [url.filterTokens]);
   const filterBarItems = useMemo(

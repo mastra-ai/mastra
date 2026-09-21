@@ -1249,7 +1249,8 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
-      "listProperty": "messages"
+      "listProperty": "messages",
+      "paginationProperty": "page"
     }
   },
   "GET /memory/threads/:threadId/working-memory": {
@@ -1512,7 +1513,8 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
-      "listProperty": "messages"
+      "listProperty": "messages",
+      "paginationProperty": "page"
     }
   },
   "POST /memory/network/save-messages": {
