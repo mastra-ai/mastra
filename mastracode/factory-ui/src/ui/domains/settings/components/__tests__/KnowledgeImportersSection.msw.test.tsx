@@ -436,5 +436,58 @@ describe('KnowledgeImportersSection', () => {
         expect(nangoAuthCalls[0]?.integrationId).toBe('notion');
       });
     });
+
+    it('collects the Fireflies API key in the shared dialog and submits it as credentials', async () => {
+      useFeaturesHandler(true);
+      useConnectionHandlers({});
+      const minted = useConnectSessionSpy();
+
+      renderSection();
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: 'Connect Fireflies' }));
+
+      // Fireflies is an API_KEY integration in the Nango catalog — no OAuth
+      // popup exists. The click must open the same in-app ApiKeyDialog that
+      // incident.io uses, and mint no session until the key is submitted.
+      expect(await screen.findByLabelText('Fireflies API key')).toBeInTheDocument();
+      expect(minted).toHaveLength(0);
+
+      await user.type(screen.getByLabelText('Fireflies API key'), 'ff-key-123');
+      await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+      // Session minted at the fireflies endpoint, and the key travels to
+      // nango.auth as credentials — never through our server.
+      await waitFor(() => {
+        expect(minted.map(m => m.provider)).toContain('fireflies');
+        expect(nangoAuthCalls[0]?.integrationId).toBe('fireflies');
+        expect(nangoAuthCalls[0]?.options.credentials).toEqual({ apiKey: 'ff-key-123' });
+      });
+    });
+
+    it('collects the Zendesk subdomain and passes it to nango.auth as connection params', async () => {
+      useFeaturesHandler(true);
+      useConnectionHandlers({});
+      const minted = useConnectSessionSpy();
+
+      renderSection();
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: 'Connect Zendesk' }));
+
+      // Zendesk's authorization URL is tenant-scoped, so headless auth needs
+      // the subdomain up front. The dialog collects it before any popup.
+      expect(await screen.findByLabelText('Zendesk subdomain')).toBeInTheDocument();
+      expect(minted).toHaveLength(0);
+
+      // Continue is disabled until the subdomain is filled in.
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+      await user.type(screen.getByLabelText('Zendesk subdomain'), 'acme');
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+      await waitFor(() => {
+        expect(minted.map(m => m.provider)).toContain('zendesk');
+        expect(nangoAuthCalls[0]?.integrationId).toBe('zendesk');
+        expect(nangoAuthCalls[0]?.options.params).toEqual({ subdomain: 'acme' });
+      });
+    });
   });
 });
