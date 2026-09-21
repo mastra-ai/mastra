@@ -56,7 +56,6 @@ function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRou
   const workspaceReady = new Promise<void>(resolve => {
     releaseWorkspace = resolve;
   });
-  let threadCreated = false;
   const route: DraftRoute = {
     createBodies: [],
     posted: [],
@@ -103,10 +102,11 @@ function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRou
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () => HttpResponse.json({ packs: [] })),
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [] }),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, async ({ request }) => {
+    http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, async ({ request }) => {
       route.createBodies.push(await request.json());
       return HttpResponse.json({ session: createdSession });
     }),
@@ -116,7 +116,6 @@ function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRou
     ),
     http.post(`${AGENT_CONTROLLER_API}/sessions`, async () => {
       await workspaceReady;
-      threadCreated = true;
       return HttpResponse.json({ controllerId: 'code', resourceId: DRAFT_SESSION_ID, threadId: DRAFT_SESSION_ID });
     }),
     http.get(`${AGENT_CONTROLLER_API}/modes`, () =>
@@ -147,10 +146,8 @@ function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRou
     http.put(`${AGENT_CONTROLLER_API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, ({ params }) =>
-      threadCreated
-        ? HttpResponse.json({ messages: [] })
-        : HttpResponse.json({ error: `Thread not found: ${String(params.threadId)}` }, { status: 500 }),
+    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, () =>
+      HttpResponse.json({ messages: [] }),
     ),
     http.get(
       `${AGENT_CONTROLLER_API}/sessions/:resourceId/stream`,

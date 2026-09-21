@@ -70,6 +70,9 @@ describe('cardMoves', () => {
     const pullRequest = { source: 'github-pr' as const, metadata: { state: 'open' }, stages: ['done'] };
     expect(cardMoves(pullRequest, 'done')).toEqual([{ label: 'Re-review', role: 'review', stage: 'review' }]);
     expect(cardMoves(pullRequest, 'review')).toEqual([review]);
+    const mergeRequest = { ...pullRequest, source: 'gitlab-pr' as const };
+    expect(cardMoves(mergeRequest, 'done')).toEqual([{ label: 'Re-review', role: 'review', stage: 'review' }]);
+    expect(cardMoves(mergeRequest, 'review')).toEqual([review]);
   });
 
   it('offers a Work card in Review no lane, so its session is the action', () => {

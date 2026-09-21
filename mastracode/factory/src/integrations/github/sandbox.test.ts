@@ -18,6 +18,8 @@ import {
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
   pushBranch,
+  pushRepositoryBranch,
+  refreshMergeRequestCheckout,
   resolveGitIdentity,
   runSetupCommand,
   runTeardownCommand,
@@ -143,6 +145,30 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
+  it('clones a self-hosted GitLab subgroup without exposing provider credentials', async () => {
+    const sandbox = new FakeSandbox();
+    await materializeRepo(
+      makeRow({ materializedAt: null }),
+      makeRepoInfo({
+        repoFullName: 'acme/platform/app',
+        cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+        authUsername: 'oauth2',
+      }),
+      sandbox,
+      'glpat-secret@value',
+    );
+
+    const clone = sandbox.executions.find(entry => entry.command === 'git' && entry.args[0] === 'clone')!;
+    expect(clone.args).toContain('https://gitlab.example.com/acme/platform/app.git');
+    expect(clone.args.join('\n')).not.toContain('glpat-secret');
+    expect(clone.options?.env).toMatchObject({
+      GIT_CONFIG_KEY_0: 'http.https://gitlab.example.com/acme/platform/app.git.extraHeader',
+      GIT_TERMINAL_PROMPT: '0',
+    });
+    expect(sandbox.calls.join('\n')).not.toContain('glpat-secret');
+    expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
+  });
+
   it('leaves an existing checkout of this repo untouched on re-open, whatever it is on', async () => {
     // A repo template image sits detached at its pinned sha; a resumed session
     // sits on its branch. Neither gets a fetch or a pull here: the branch
@@ -160,6 +186,48 @@ describe('materializeRepo', () => {
     expect(gitCalls).toEqual([expect.stringContaining('remote get-url origin')]);
     expect(sandbox.calls.join('\n')).not.toContain('tok-xyz');
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
+  it('preserves an existing GitHub checkout when only repository path casing differs', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('remote get-url origin')
+        ? { exitCode: 0, stdout: 'https://github.com/Acme/App.git\n', stderr: '' }
+        : OK,
+    );
+    await materializeRepo(
+      makeRow({ materializedAt: new Date() }),
+      makeRepoInfo({ repoFullName: 'acme/app' }),
+      sandbox,
+      'tok',
+    );
+    expect(sandbox.calls.some(call => call.includes('git clone'))).toBe(false);
+  });
+
+  it('matches self-hosted HTTPS remotes with ports without accepting a different repository', async () => {
+    const cloneUrl = 'https://gitlab.example.com:8443/acme/platform/app.git';
+    const sameRepo = new FakeSandbox(script =>
+      script.includes('remote get-url origin') ? { exitCode: 0, stdout: cloneUrl + '\n', stderr: '' } : OK,
+    );
+    await materializeRepo(
+      makeRow({ materializedAt: new Date() }),
+      makeRepoInfo({ repoFullName: 'acme/platform/app', cloneUrl, authUsername: 'oauth2' }),
+      sameRepo,
+      'glpat-token',
+    );
+    expect(sameRepo.calls.some(call => call.includes('git clone'))).toBe(false);
+
+    const wrongRepo = new FakeSandbox(script =>
+      script.includes('remote get-url origin')
+        ? { exitCode: 0, stdout: 'https://gitlab.example.com:8443/acme/platform/other.git\n', stderr: '' }
+        : OK,
+    );
+    await materializeRepo(
+      makeRow({ materializedAt: new Date() }),
+      makeRepoInfo({ repoFullName: 'acme/platform/app', cloneUrl, authUsername: 'oauth2' }),
+      wrongRepo,
+      'glpat-token',
+    );
+    expect(wrongRepo.calls.some(call => call.includes('git clone'))).toBe(true);
   });
 
   it('leaves the checkout alone when the DB says first open but the workdir already holds this repo', async () => {
@@ -344,6 +412,28 @@ describe('materializeRepo', () => {
 describe('checkoutSessionBranch', () => {
   const opts = { branch: 'factory/pr-1', baseBranch: 'main', token: 'tok-secret', repoFullName: 'octocat/hello' };
 
+  it('removes the legacy environment credential helper for GitLab sessions', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'factory/pr-1\n', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', {
+      ...opts,
+      token: 'glpat-secret',
+      repoFullName: 'acme/platform/app',
+      cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+      authUsername: 'oauth2',
+    });
+
+    const helper = sandbox.calls.find(call => call.includes('credential.https://gitlab.example.com'));
+    expect(helper).toContain('config --unset-all');
+    expect(helper).toContain('credential.https://gitlab.example.com/acme/platform/app.git.helper');
+    expect(helper).not.toContain('MASTRA_SOURCE_CONTROL_USERNAME');
+    expect(helper).not.toContain('MASTRA_SOURCE_CONTROL_TOKEN');
+    expect(sandbox.calls.join('\\n')).not.toContain('glpat-secret');
+  });
+
   it('keeps the current branch when uncommitted work blocks the switch', async () => {
     // The session's agent switched branches itself (e.g. `gh pr checkout`)
     // and left uncommitted edits; git refuses to switch back over them.
@@ -475,6 +565,35 @@ describe('checkoutSessionBranch', () => {
     expect(sandbox.calls).toContain('git -C /workspace/repo checkout -b factory/pr-42 FETCH_HEAD');
     expect(sandbox.calls).toContain('git -C /workspace/repo config credential.helper !gh auth git-credential');
   });
+
+  it('starts a GitLab merge-request session on the MR head using transient OAuth credentials', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('--is-shallow-repository')) return { exitCode: 0, stdout: 'true\n', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', {
+      ...opts,
+      branch: 'factory/gitlab-mr-6-2c3b494988ac',
+      mergeRequestNumber: 6,
+      cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+      authUsername: 'oauth2',
+    });
+
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch --unshallow origin main');
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch origin refs/merge-requests/6/head');
+    expect(sandbox.calls).toContain('git -C /workspace/repo checkout -b factory/gitlab-mr-6-2c3b494988ac FETCH_HEAD');
+    const checkout = sandbox.executions.find(execution => execution.args.includes('checkout'));
+    expect(checkout?.options?.env).toMatchObject({
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.https://gitlab.example.com/acme/platform/app.git.extraHeader',
+      GIT_TERMINAL_PROMPT: '0',
+    });
+    expect(sandbox.calls.join('\n')).not.toContain('!gh auth git-credential');
+    expect(sandbox.calls.join('\n')).not.toContain('tok-secret');
+  });
   it('keeps the history fetch plain when the clone is not shallow', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
@@ -550,6 +669,53 @@ describe('checkoutSessionBranch', () => {
     const err = await checkoutSessionBranch(sandbox, '/workspace/repo', opts).catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('clone-failed');
+  });
+});
+
+describe('refreshMergeRequestCheckout', () => {
+  const oldHead = 'a'.repeat(40);
+  const newHead = 'b'.repeat(40);
+  const input = {
+    branch: 'factory/gitlab-mr-7-abc123',
+    mergeRequestNumber: 7,
+    expectedHeadSha: newHead,
+    access: { cloneUrl: 'https://gitlab.com/acme/repo.git', authorization: { scheme: 'bearer' as const, token: 'secret-token', username: 'oauth2' } },
+  };
+
+  it('fetches the provider MR ref with an ephemeral credential and moves only a clean bound checkout', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { ...OK, stdout: `${input.branch}\n` };
+      if (script.includes('rev-parse HEAD')) return { ...OK, stdout: `${oldHead}\n` };
+      if (script.includes('rev-parse FETCH_HEAD')) return { ...OK, stdout: `${newHead}\n` };
+      return OK;
+    });
+    await expect(refreshMergeRequestCheckout(sandbox, '/workspace/repo', input)).resolves.toEqual({ headSha: newHead, changed: true });
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch origin refs/merge-requests/7/head');
+    expect(sandbox.calls).toContain(`git -C /workspace/repo checkout -B ${input.branch} FETCH_HEAD`);
+    expect(sandbox.calls.join('\n')).not.toContain('secret-token');
+    const fetch = sandbox.executions.find(entry => entry.args.includes('fetch'));
+    expect(fetch?.options?.env).toMatchObject({ GIT_TERMINAL_PROMPT: '0' });
+  });
+
+  it('refuses to overwrite local review work before fetching', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { ...OK, stdout: `${input.branch}\n` };
+      if (script.includes('status --porcelain')) return { ...OK, stdout: '?? review-notes.txt\n' };
+      return OK;
+    });
+    await expect(refreshMergeRequestCheckout(sandbox, '/workspace/repo', input)).rejects.toThrow('local changes');
+    expect(sandbox.calls.join('\n')).not.toContain('fetch origin');
+  });
+
+  it('refuses a fetched head that differs from current provider metadata', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { ...OK, stdout: `${input.branch}\n` };
+      if (script.includes('rev-parse HEAD')) return { ...OK, stdout: `${oldHead}\n` };
+      if (script.includes('rev-parse FETCH_HEAD')) return { ...OK, stdout: `${'c'.repeat(40)}\n` };
+      return OK;
+    });
+    await expect(refreshMergeRequestCheckout(sandbox, '/workspace/repo', input)).rejects.toThrow('differs');
+    expect(sandbox.calls.join('\n')).not.toContain('checkout -B');
   });
 });
 
@@ -688,6 +854,58 @@ describe('pushBranch', () => {
     expect(err.code).toBe('egress-blocked');
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
     expect(sandbox.calls.join('\n')).not.toContain('tok-secret');
+  });
+});
+
+describe('pushRepositoryBranch', () => {
+  const access = {
+    cloneUrl: 'https://gitlab.com/acme/hello.git',
+    authorization: { scheme: 'bearer' as const, token: 'glpat-secret', username: 'oauth2' },
+  };
+
+  it('uses provider repository access without exposing or persisting credentials', async () => {
+    const sandbox = new FakeSandbox();
+    await pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello');
+
+    const push = sandbox.executions.find(entry => entry.command === 'git' && entry.args.includes('push'))!;
+    expect(push.args).toEqual(['-C', '/workspace/hello', 'push', '-u', 'origin', 'feat/gitlab']);
+    expect(push.options?.env).toMatchObject({
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.https://gitlab.com/acme/hello.git.extraHeader',
+      GIT_TERMINAL_PROMPT: '0',
+    });
+    expect(push.options?.env?.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
+    expect(sandbox.calls.join('\n')).not.toContain('glpat-secret');
+    expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
+  });
+
+  it('keeps a failed push credential-free in argv and persistent config', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('push -u origin') ? { exitCode: 1, stdout: '', stderr: 'rejected' } : OK,
+    );
+    const error = await pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello').catch(
+      value => value,
+    );
+
+    expect(error).toBeInstanceOf(MaterializeError);
+    expect(error.code).toBe('push-failed');
+    expect(sandbox.calls.join('\n')).not.toContain('glpat-secret');
+    expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
+  });
+
+  it('rejects missing credentials before running git', async () => {
+    const sandbox = new FakeSandbox();
+    const error = await pushRepositoryBranch(
+      sandbox,
+      '/workspace/hello',
+      'feat/gitlab',
+      { cloneUrl: 'https://gitlab.com/acme/hello.git' },
+      'acme/hello',
+    ).catch(value => value);
+
+    expect(error).toBeInstanceOf(MaterializeError);
+    expect(error.code).toBe('push-failed');
+    expect(sandbox.calls).toHaveLength(0);
   });
 });
 

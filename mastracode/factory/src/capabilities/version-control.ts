@@ -21,7 +21,11 @@ export interface RepositoryInput {
 
 export interface RepositoryAccess {
   cloneUrl: string;
-  authorization?: { scheme: 'bearer'; token: string };
+  authorization?: { scheme: 'bearer'; token: string; username?: string };
+}
+export interface RepositoryTarget {
+  connection: IntegrationConnection;
+  sourceId: string;
 }
 
 export type PullRequestState = 'open' | 'closed';
@@ -221,6 +225,9 @@ export type CreateReviewCommentInput = CreateReviewCommentBase &
 
 export type UpdateReviewCommentInput = UpdatePullRequestCommentInput;
 export type DeleteReviewCommentInput = DeletePullRequestCommentInput;
+export interface ResolveReviewThreadInput extends DeleteReviewCommentInput {
+  resolved: boolean;
+}
 
 export interface RequestedReviewers {
   users: string[];
@@ -245,6 +252,8 @@ export interface VersionControl {
     installationId: string;
     repositories: RepositoryInput[];
   }): Promise<SourceControlRepository[]>;
+  /** Resolve the provider-owned reference for a durably registered repository. */
+  getRepositoryTarget(input: { orgId: string; repositoryId: string }): Promise<RepositoryTarget>;
   getRepositoryAccess(input: { orgId: string; repositoryId: string }): Promise<RepositoryAccess>;
   listPullRequests(input: ListPullRequestsInput): Promise<PullRequestPage>;
   getPullRequest(input: PullRequestRef): Promise<PullRequest | null>;
@@ -263,6 +272,8 @@ export interface VersionControl {
   submitReview(input: SubmitReviewInput): Promise<Review>;
   dismissReview(input: DismissReviewInput): Promise<Review>;
   deletePendingReview(input: ReviewRef): Promise<void>;
+  /** Optional because not every provider exposes resolvable review threads. */
+  resolveReviewThread?(input: ResolveReviewThreadInput): Promise<void>;
   listReviewComments(input: ListReviewCommentsInput): Promise<ReviewCommentPage>;
   createReviewComment(input: CreateReviewCommentInput): Promise<ReviewComment>;
   updateReviewComment(input: UpdateReviewCommentInput): Promise<ReviewComment>;

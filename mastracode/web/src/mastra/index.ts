@@ -31,6 +31,7 @@ import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
 import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
 import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
@@ -169,6 +170,22 @@ const github =
         authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
       })
     : undefined;
+
+// Direct GitLab fallback for self-hosted / local deploys. GitLab Personal
+// and Group Access Tokens use the same API/Git authentication; the explicit
+// type records the credential's reach for diagnostics and setup guidance.
+const gitlabAccessToken = process.env.GITLAB_ACCESS_TOKEN?.trim();
+const gitlabAccessTokenType = process.env.GITLAB_ACCESS_TOKEN_TYPE?.trim();
+const gitlab = gitlabAccessToken
+  ? new GitLabIntegration({
+      accessToken: gitlabAccessToken,
+      ...(gitlabAccessTokenType === 'personal' || gitlabAccessTokenType === 'group'
+        ? { accessTokenType: gitlabAccessTokenType }
+        : {}),
+      ...(process.env.GITLAB_BASE_URL?.trim() ? { baseUrl: process.env.GITLAB_BASE_URL.trim() } : {}),
+      ...(process.env.GITLAB_WEBHOOK_SECRET?.trim() ? { webhookSecret: process.env.GITLAB_WEBHOOK_SECRET.trim() } : {}),
+    })
+  : undefined;
 
 // Direct Linear OAuth fallback for self-hosted / local deploys. As with the
 // GitHub fallback, only a complete credential group enables the integration;
@@ -309,6 +326,7 @@ const slack = slackSigningSecret
 
 const integrations = [
   ...(github ? [github] : []),
+  ...(gitlab ? [gitlab] : []),
   ...(linear ? [linear] : []),
   ...(jira ? [jira] : []),
   ...(slack ? [slack] : []),

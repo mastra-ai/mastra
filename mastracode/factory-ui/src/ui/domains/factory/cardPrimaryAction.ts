@@ -41,18 +41,23 @@ const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
   if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
-  if (columnStage === 'review' && item.source !== 'github-pr') return [];
+  if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
   if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
-  if (item.source === 'linear-issue' || item.source === 'jira-issue' || item.source === 'incidentio-follow-up') {
+  if (
+    item.source === 'gitlab-issue' ||
+    item.source === 'linear-issue' ||
+    item.source === 'jira-issue' ||
+    item.source === 'incidentio-follow-up'
+  ) {
     return [INVESTIGATE, BUILD];
   }
-  return item.source === 'github-pr' ? [REVIEW] : [];
+  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [REVIEW] : [];
 }
 
 function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): boolean {
   return (
     columnStage === 'done' &&
-    item.source === 'github-pr' &&
+    (item.source === 'github-pr' || item.source === 'gitlab-pr') &&
     ['open', 'draft'].includes(pullRequestStatusForItem({ ...item, stages: item.stages ?? [] }))
   );
 }

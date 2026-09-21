@@ -51,7 +51,7 @@ const session: FactoryUserSession = {
 function stubRegistry(runningSessionIds: () => string[]) {
   const sessionsList = { requests: 0 };
   server.use(
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () => {
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, () => {
       sessionsList.requests += 1;
       return HttpResponse.json({ sessions: [session] });
     }),

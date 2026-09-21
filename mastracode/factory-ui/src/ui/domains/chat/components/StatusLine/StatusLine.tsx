@@ -2,6 +2,7 @@ import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../../hooks/useFactories';
 import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
+import { isPullRequestSource } from '../../../factory/services/workItems';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { PullRequestLinks } from '../PullRequestLinks';
 import { ModelPicker } from './ModelPicker';
@@ -45,7 +46,7 @@ export function StatusLine() {
       <ConnectionActivity />
       <QueuedFollowUps />
       <GoalStatus />
-      {!workItemsPending && currentItem?.source !== 'github-pr' ? (
+      {!workItemsPending && (!currentItem || !isPullRequestSource(currentItem.source)) ? (
         <PullRequestLinks repository={repository} threadId={threadId} />
       ) : null}
     </div>
