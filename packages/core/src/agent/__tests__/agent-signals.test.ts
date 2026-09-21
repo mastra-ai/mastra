@@ -1,3 +1,4 @@
+import { fork } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6213,6 +6214,40 @@ describe('Agent signals', () => {
 
     subscription.unsubscribe();
   });
+
+  it('lets a run start immediately after a persisted idle signal without starving the event loop', async () => {
+    // Runs in a child process on purpose: the regression starves the macrotask queue, so an
+    // in-process timeout would never fire. The parent bounds it with SIGKILL instead.
+    const fixture = new URL('./fixtures/persisted-signal-immediate-run.ts', import.meta.url);
+    const child = fork(fixture, { execArgv: ['--import', import.meta.resolve('tsx')], silent: true });
+    const stderr: Buffer[] = [];
+    child.stderr?.on('data', chunk => stderr.push(chunk));
+    let reachedWait = false;
+    let completed = false;
+    child.on('message', message => {
+      if (message === 'waiting') reachedWait = true;
+      if (message === 'ok') completed = true;
+    });
+
+    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      const timeout = setTimeout(() => child.kill('SIGKILL'), 10_000);
+      child.once('error', error => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      child.once('close', (code, signal) => {
+        clearTimeout(timeout);
+        resolve({ code, signal });
+      });
+    });
+
+    const diagnostics = `reached wait: ${reachedWait}\n${Buffer.concat(stderr).toString() || 'child produced no stderr'}`;
+    expect({ ...result, completed }, diagnostics).toEqual({
+      code: 0,
+      signal: null,
+      completed: true,
+    });
+  }, 20_000);
 
   it('persists an idle signal without waking the agent when idle behavior is persist', async () => {
     let streamCount = 0;

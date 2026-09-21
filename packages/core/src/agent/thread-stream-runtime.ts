@@ -2846,6 +2846,13 @@ export class AgentThreadStreamRuntime {
           return;
         }
         await activeRecord.output._waitUntilFinished().catch(() => {});
+        // Awaiting a record that is already settled but still blocking (a persisted-signal
+        // broadcast, a suspended run) does not yield the macrotask queue, so re-checking here would
+        // spin on microtasks and starve the timers that end the wait. Force a macrotask whenever the
+        // same run is still active after the await.
+        if (state.activeThreadRunIds.get(key) === activeRunId) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
         continue;
       }
 
