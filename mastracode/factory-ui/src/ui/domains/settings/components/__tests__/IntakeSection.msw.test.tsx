@@ -494,6 +494,38 @@ describe('IntakeSection', () => {
       expect(screen.getByRole('switch', { name: 'Sync GitHub issues' })).toBeDisabled();
       expect(screen.queryByRole('checkbox', { name: 'mastra' })).not.toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'GitHub routing' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('given the GitHub status endpoint fails', () => {
+    it('reports the status as unavailable with a retry instead of claiming GitHub is not configured', async () => {
+      seedGithubProject();
+      useIntakeHandlers();
+      const statusRequests: number[] = [];
+      server.use(
+        http.get(GITHUB_STATUS_URL, () => {
+          statusRequests.push(statusRequests.length + 1);
+          // First call fails; the retry reaches a healthy server.
+          if (statusRequests.length === 1) return HttpResponse.json({ error: 'boom' }, { status: 500 });
+          return HttpResponse.json(githubReadyStatus);
+        }),
+      );
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('GitHub status could not be loaded.')).toBeInTheDocument();
+      expect(screen.queryByText('GitHub is not configured on this server.')).not.toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync GitHub issues' })).toBeDisabled();
+      expect(screen.queryByRole('checkbox', { name: 'mastra' })).not.toBeInTheDocument();
+      expect(statusRequests).toHaveLength(1);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+      await waitFor(() => expect(statusRequests).toHaveLength(2));
+      expect(await screen.findByRole('checkbox', { name: 'mastra' })).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync GitHub issues' })).toBeEnabled();
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     });
   });
 

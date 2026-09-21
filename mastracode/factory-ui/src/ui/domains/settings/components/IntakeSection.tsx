@@ -51,22 +51,40 @@ function GithubIntakeSection({
   slugs,
   status,
   statusPending,
-}: SourceSectionProps & { slugs: string[]; status: GithubStatus | undefined; statusPending: boolean }) {
+  statusRefetching,
+  onRetryStatus,
+}: SourceSectionProps & {
+  slugs: string[];
+  status: GithubStatus | undefined;
+  statusPending: boolean;
+  statusRefetching: boolean;
+  onRetryStatus: () => void;
+}) {
   const connected = status?.connected === true;
+  // 'unavailable' is set by the browser when the status request failed, not
+  // by the server, so it must not read as "not configured".
+  const statusUnavailable = status?.reason === 'unavailable';
   const description = statusPending
     ? 'Checking the GitHub connection…'
-    : status?.reason === 'auth_required'
-      ? 'Sign in again to manage GitHub issue syncing.'
-      : status?.reason === 'organization_required'
-        ? 'Select an organization to manage GitHub issue syncing.'
-        : status?.enabled !== true
-          ? 'GitHub is not configured on this server.'
-          : !connected
-            ? 'Connect GitHub to sync issues from this organization.'
-            : "Open issues from the selected repositories feed every member's board. Pull requests always appear in Review.";
+    : statusUnavailable
+      ? 'GitHub status could not be loaded.'
+      : status?.reason === 'auth_required'
+        ? 'Sign in again to manage GitHub issue syncing.'
+        : status?.reason === 'organization_required'
+          ? 'Select an organization to manage GitHub issue syncing.'
+          : status?.enabled !== true
+            ? 'GitHub is not configured on this server.'
+            : !connected
+              ? 'Connect GitHub to sync issues from this organization.'
+              : "Open issues from the selected repositories feed every member's board. Pull requests always appear in Review.";
+  const action = statusUnavailable ? (
+    <Button size="xs" variant="ghost" disabled={statusRefetching} onClick={onRetryStatus}>
+      Retry
+    </Button>
+  ) : undefined;
 
   return (
-    <SettingsSubsection scope="org" title="GitHub issues" description={description}>
+    <SettingsSubsection scope="org" title="GitHub issues" description={description} action={action}>
       <SettingsContainer>
         <SettingsRow label="Sync GitHub issues">
           <Switch
@@ -576,6 +594,8 @@ export function IntakeSection() {
         slugs={linkedSlugs}
         status={githubStatusQuery.data}
         statusPending={githubStatusQuery.isPending}
+        statusRefetching={githubStatusQuery.isFetching}
+        onRetryStatus={() => void githubStatusQuery.refetch()}
       />
       {githubConnected && config.github.enabled && linkedSlugs.length > 0 && (factoriesQuery.data?.length ?? 0) > 0 && (
         <SettingsSubsection

@@ -56,7 +56,28 @@ describe('useGithubStatusQuery', () => {
     const { result } = renderHookWithProviders(() => useGithubStatusQuery());
 
     await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(result.current.data).toEqual(disabledStatus);
+    expect(result.current.data).toEqual({ ...disabledStatus, reason: 'unavailable' });
+    expect(result.current.isError).toBe(false);
+  });
+
+  it('given the server returns 500, when the hook resolves, then the status is unavailable rather than missing config', async () => {
+    server.use(http.get(STATUS_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
+
+    const { result } = renderHookWithProviders(() => useGithubStatusQuery());
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data).toEqual({ ...disabledStatus, reason: 'unavailable' });
+    expect(result.current.data?.reason).not.toBe('missing_config');
+    expect(result.current.isError).toBe(false);
+  });
+
+  it('given the request fails at the network layer, when the hook resolves, then the status is unavailable', async () => {
+    server.use(http.get(STATUS_URL, () => HttpResponse.error()));
+
+    const { result } = renderHookWithProviders(() => useGithubStatusQuery());
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data).toEqual({ ...disabledStatus, reason: 'unavailable' });
     expect(result.current.isError).toBe(false);
   });
 
