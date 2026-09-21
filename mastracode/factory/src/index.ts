@@ -20,6 +20,9 @@ export type {
 } from './boards/index.js';
 export { MastraFactory } from './factory.js';
 export type { MastraArgs, MastraFactoryConfig, MastraFactorySandboxConfig, FactorySandboxStart } from './factory.js';
+// The option type for `MastraFactoryConfig.github.rules`, so callers can
+// annotate a custom handler without importing the deep integration subpath.
+export type { GithubRuleOverrides } from './integrations/github/default-rules.js';
 export type { FactorySandboxContext, SessionSetupGate, SessionSetupRun } from './sandbox/session-sandbox.js';
 export { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 export type {
