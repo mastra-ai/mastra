@@ -1,9 +1,9 @@
 # Refactor
 
 **Reviewing:** an equivalence proof — behavior before equals behavior after.
-**Read first:** the tests. They should be unchanged and green.
-**Done means:** behavior provably identical; the diff is mechanically checkable; tests untouched.
-**Trap:** tests changed (then it wasn't a refactor); a behavior change smuggled in.
+**Read first:** the tests. Assertions should be unchanged and green.
+**Done means:** behavior provably identical; the diff is mechanically checkable; test behavior untouched.
+**Trap:** test assertions changed (then it wasn't a refactor); a behavior change smuggled in. Test-file edits that only follow a rename or move (imports, fixtures, paths) with assertions untouched do not break the equivalence claim.
 **Attention:** 100% implementation. The interface is unchanged by definition — if it isn't, this isn't a refactor.
 
 ## Questions
