@@ -398,7 +398,10 @@ async function applyReviewStatus(
 
   // Mutate the observed row instead of inserting a replacement. ClickHouse
   // mutations preserve the delete mask, so even a failed post-write guard
-  // cannot leave a deleted record visible again.
+  // cannot leave a deleted record visible again. Wait for the server that
+  // receives the write only: other replicas apply the mutation through the
+  // replication log, and waiting for all of them fails with UNFINISHED while
+  // any replica is inactive even though the status already changed.
   const identity = `feedbackId = {feedbackId:String}
     AND timestamp = parseDateTime64BestEffort({timestamp:String}, 3, 'UTC')
     AND (traceId = {traceId:Nullable(String)} OR (isNull(traceId) AND isNull({traceId:Nullable(String)})))
@@ -413,7 +416,7 @@ async function applyReviewStatus(
   await client.command({
     query: `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} UPDATE reviewStatus = {reviewStatus:String} WHERE ${identity}`,
     query_params: params,
-    clickhouse_settings: { ...CH_SETTINGS, mutations_sync: isReplicationConfigured(replication) ? '2' : '1' },
+    clickhouse_settings: { ...CH_SETTINGS, mutations_sync: '1' },
   });
 
   // UPDATE mutations do not trigger the insert materialized view. Publish the
