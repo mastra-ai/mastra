@@ -1971,6 +1971,10 @@ export class MastraClient extends BaseResource {
     if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
     if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
     for (const id of params?.targetIds ?? []) searchParams.append('targetIds', id);
+    if (params?.orderBy) {
+      searchParams.set('orderBy[field]', params.orderBy.field);
+      searchParams.set('orderBy[direction]', params.orderBy.direction);
+    }
     const qs = searchParams.toString();
     return this.request(`/datasets${qs ? `?${qs}` : ''}`);
   }
@@ -2041,6 +2045,10 @@ export class MastraClient extends BaseResource {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.version != null) {
       searchParams.set('version', String(params.version));
+    }
+    if (params?.orderBy) {
+      searchParams.set('orderBy[field]', params.orderBy.field);
+      searchParams.set('orderBy[direction]', params.orderBy.direction);
     }
     const qs = searchParams.toString();
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/items${qs ? `?${qs}` : ''}`);
@@ -2221,6 +2229,10 @@ export class MastraClient extends BaseResource {
     if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
     if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
     if (params?.targetId !== undefined) searchParams.set('targetId', params.targetId);
+    if (params?.orderBy) {
+      searchParams.set('orderBy[field]', params.orderBy.field);
+      searchParams.set('orderBy[direction]', params.orderBy.direction);
+    }
     const qs = searchParams.toString();
     return this.request(`/experiments${qs ? `?${qs}` : ''}`);
   }
@@ -2248,6 +2260,10 @@ export class MastraClient extends BaseResource {
     if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
     if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
     if (params?.targetId !== undefined) searchParams.set('targetId', params.targetId);
+    if (params?.orderBy) {
+      searchParams.set('orderBy[field]', params.orderBy.field);
+      searchParams.set('orderBy[direction]', params.orderBy.direction);
+    }
     const qs = searchParams.toString();
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments${qs ? `?${qs}` : ''}`);
   }
@@ -2330,6 +2346,10 @@ export class MastraClient extends BaseResource {
     if (options?.page !== undefined) searchParams.set('page', String(options.page));
     if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
     for (const tag of options?.tags ?? []) searchParams.append('tags', tag);
+    if (options?.orderBy) {
+      searchParams.set('orderBy[field]', options.orderBy.field);
+      searchParams.set('orderBy[direction]', options.orderBy.direction);
+    }
     const qs = searchParams.toString();
     return this.request(
       `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results${qs ? `?${qs}` : ''}`,
