@@ -153,7 +153,7 @@ export function SearchFieldBlock({
               </Button>
             )}
           </div>
-          <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} />
+          {helpText || errorMsg ? <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} /> : null}
         </FieldBlock.Column>
       </FieldBlock.Column>
     </FieldBlock.Layout>
