@@ -6,6 +6,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
+import { persistGeneratedMessages } from '../memory/internal';
 import { parseMemoryRequestContext } from '../memory/types';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -1802,9 +1803,8 @@ export class AgentThreadStreamRuntime {
     if (signal.transient) return;
     const memory = await agent.getMemory({ requestContext });
     if (!memory) return;
-    await memory.saveMessages({
-      messages: [signal.toDBMessage({ resourceId, threadId })],
-    });
+    const message = signal.toDBMessage({ resourceId, threadId });
+    await persistGeneratedMessages(memory, { messages: [message] }, [message.id]);
   }
 
   #broadcastPersistedSignal(
