@@ -1191,8 +1191,12 @@ describe('Standalone thread page', () => {
     it('retains real composer edits through the first send, navigation, and reload', async () => {
       installHandlers();
       const sent = vi.fn();
+      const providersServed = vi.fn();
       server.use(
-        http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(preferenceModelProviders)),
+        http.get(`${BASE_URL}/api/agents/providers`, () => {
+          providersServed();
+          return HttpResponse.json(preferenceModelProviders);
+        }),
         http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfig)),
         http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(workingMemory)),
         http.get(`${BASE_URL}/api/memory/threads/:threadId`, ({ params }) =>
@@ -1214,6 +1218,8 @@ describe('Standalone thread page', () => {
         }),
       );
       const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
+      // The switcher lists only the agent's own model until the providers query resolves.
+      await waitFor(() => expect(providersServed).toHaveBeenCalled());
       fireEvent.click(await screen.findByText('gpt-5-mini'));
       fireEvent.click(await screen.findByRole('option', { name: /gpt-4o-mini/ }));
       fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
