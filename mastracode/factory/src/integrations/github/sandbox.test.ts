@@ -571,6 +571,12 @@ describe('isValidGitRef', () => {
   it('rejects leading-dash refs that git could parse as options', () => {
     expect(isValidGitRef('--mirror')).toBe(false);
     expect(isValidGitRef('-D')).toBe(false);
+    expect(isValidGitRef('topic..fix')).toBe(false);
+    expect(isValidGitRef('topic/')).toBe(false);
+    expect(isValidGitRef('topic//fix')).toBe(false);
+    expect(isValidGitRef('topic.lock')).toBe(false);
+    expect(isValidGitRef('topic/foo.LOCK')).toBe(false);
+    expect(isValidGitRef('topic/.fix')).toBe(false);
   });
 });
 
