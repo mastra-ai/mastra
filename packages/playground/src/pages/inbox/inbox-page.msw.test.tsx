@@ -254,6 +254,37 @@ describe('InboxPage', () => {
     expect(screen.getByText('Feedback 7')).toBeTruthy();
   });
 
+  describe('when feedback is sorted from the Date column', () => {
+    it('asks the server for newest-first by default', async () => {
+      const { feedbackRequests } = seedHandlers();
+      renderInbox();
+
+      await screen.findByText('Feedback 0');
+      expect(feedbackRequests[0].searchParams.get('field')).toBe('timestamp');
+      expect(feedbackRequests[0].searchParams.get('direction')).toBe('DESC');
+    });
+
+    it('asks the server for oldest-first when toggled and writes it to the URL', async () => {
+      const { feedbackRequests } = seedHandlers();
+      renderInbox();
+
+      await screen.findByText('Feedback 0');
+      fireEvent.click(screen.getByRole('button', { name: 'Date, sorted descending, sort ascending' }));
+
+      await waitFor(() => expect(feedbackRequests.at(-1)?.searchParams.get('direction')).toBe('ASC'));
+      expect(screen.getByTestId('location').textContent).toBe('/inbox?sort=timestamp&dir=asc');
+    });
+
+    it('restores the sort from the URL', async () => {
+      const { feedbackRequests } = seedHandlers();
+      renderInbox('/inbox?sort=timestamp&dir=asc');
+
+      await screen.findByText('Feedback 0');
+      expect(feedbackRequests[0].searchParams.get('direction')).toBe('ASC');
+      expect(screen.getByRole('button', { name: 'Date, sorted ascending, sort descending' })).toBeTruthy();
+    });
+  });
+
   it('lists dataset items needing review on the dataset tab', async () => {
     seedHandlers();
     renderInbox('/inbox?tab=dataset');

@@ -5012,6 +5012,7 @@ export const API_ROUTE_METADATA = {
     "path": "/datasets",
     "pathParams": [],
     "queryParams": [
+      "orderBy",
       "page",
       "perPage",
       "targetIds",
@@ -5117,6 +5118,7 @@ export const API_ROUTE_METADATA = {
       "datasetId"
     ],
     "queryParams": [
+      "orderBy",
       "page",
       "perPage",
       "search",
@@ -5320,6 +5322,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [
       "comparisonId",
       "experimentSetId",
+      "orderBy",
       "page",
       "perPage",
       "targetId",
@@ -5375,6 +5378,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [
       "comparisonId",
       "experimentSetId",
+      "orderBy",
       "page",
       "perPage",
       "targetId",
@@ -5542,6 +5546,7 @@ export const API_ROUTE_METADATA = {
       "experimentId"
     ],
     "queryParams": [
+      "orderBy",
       "page",
       "perPage",
       "tags"

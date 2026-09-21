@@ -66,6 +66,28 @@ describe('useLogs', () => {
     expect(params.get('direction')).toBe('DESC');
   });
 
+  describe('when the caller asks for oldest-first', () => {
+    it('forwards an ascending timestamp order to the server', async () => {
+      const urls: string[] = [];
+      server.use(
+        http.get(LOGS_URL, ({ request }) => {
+          urls.push(request.url);
+          return HttpResponse.json(page([log()], false));
+        }),
+      );
+
+      const { result } = renderHook(() => useLogs({ orderBy: { field: 'timestamp', direction: 'ASC' } }), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      const params = new URL(urls[0] ?? '').searchParams;
+      expect(params.get('field')).toBe('timestamp');
+      expect(params.get('direction')).toBe('ASC');
+    });
+  });
+
   it('forwards the caller filters', async () => {
     const urls: string[] = [];
     server.use(

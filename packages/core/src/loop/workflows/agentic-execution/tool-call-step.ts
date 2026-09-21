@@ -841,6 +841,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
           resolveReconciliation = resolve;
         });
+        const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') => ({
+          ...inputData.providerMetadata,
+          mastra: {
+            ...inputData.providerMetadata?.mastra,
+            backgroundTask: { taskId, status },
+          },
+        });
         const bgOutcome = await dispatchBackgroundTool({
           backgroundTaskManager: readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager'),
           agentBackgroundConfig: agentBgConfig,
@@ -1006,7 +1013,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                             toolName: chunk.payload.toolName,
                             args: inputData.args,
                             result: chunk.payload.result,
-                            providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                            providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'completed'),
                             providerExecuted: inputData.providerExecuted,
                           },
                         }),
@@ -1023,7 +1030,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                             toolName: chunk.payload.toolName,
                             error: chunk.payload.error,
                             args: inputData.args,
-                            providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                            providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'failed'),
                             providerExecuted: inputData.providerExecuted,
                           },
                         }),
@@ -1182,6 +1189,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             return {
               result: ensureSerializable(completedTask.result),
               ...inputData,
+              providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
               ...(approvalGrant ?? {}),
             };
           }
@@ -1190,12 +1198,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             return {
               result: bgOutcome.placeholder,
               ...inputData,
+              providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'running'),
               ...(approvalGrant ?? {}),
             };
           }
           return {
             result: bgOutcome.placeholder,
             ...inputData,
+            providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'running'),
           };
         }
 

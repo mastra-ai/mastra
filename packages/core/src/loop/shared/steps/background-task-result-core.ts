@@ -99,7 +99,11 @@ export async function applyBackgroundToolResult(deps: {
   }
   const providerMetadata = {
     ...transformed.providerMetadata,
-    mastra: { ...(transformed.providerMetadata as any)?.mastra, modelOutput },
+    mastra: {
+      ...(transformed.providerMetadata as any)?.mastra,
+      modelOutput,
+      backgroundTask: { taskId: params.taskId, status: failed ? 'failed' : 'completed' },
+    },
   } as ProviderMetadata;
 
   const updated = messageList.updateToolInvocation(
@@ -169,6 +173,7 @@ export async function applyBackgroundToolResult(deps: {
               toolName: params.toolName,
               result: transformed.transcriptResult,
               isError: failed,
+              providerOptions: providerMetadata,
             },
           ],
         },

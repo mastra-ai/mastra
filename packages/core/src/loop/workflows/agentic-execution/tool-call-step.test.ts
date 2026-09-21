@@ -186,12 +186,17 @@ describe('createToolCallStep background task resume with falsy payload', () => {
       },
     } as any);
 
-    await toolCallStep.execute(
+    const result = await toolCallStep.execute(
       makeBaseExecuteParams(vi.fn(), {
         resumeData,
         inputData: { toolCallId: 'call-1', toolName: 'background-tool', args: { query: 'customers' } },
       }),
     );
+    if (resumeData != null) {
+      expect(result).toMatchObject({
+        providerMetadata: { mastra: { backgroundTask: { taskId: 'suspended-task-1', status: 'running' } } },
+      });
+    }
 
     return backgroundTaskManager;
   };
@@ -262,6 +267,16 @@ describe('createToolCallStep background task resume with falsy payload', () => {
       .map(([chunk]: [any]) => chunk)
       .filter((chunk: any) => chunk.type === 'tool-call');
     expect(replayed).toHaveLength(1);
+    await vi.waitFor(() => {
+      expect(controller.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'tool-result',
+          payload: expect.objectContaining({
+            providerMetadata: { mastra: { backgroundTask: { taskId: 'task-1', status: 'completed' } } },
+          }),
+        }),
+      );
+    });
   });
 
   it('records the background result to memory on a same-run resume with a falsy payload', async () => {
@@ -329,6 +344,20 @@ describe('createToolCallStep background task resume with falsy payload', () => {
       .filter((message: any) => message?.role === 'tool')
       .filter((message: any) => (message.content ?? []).some((part: any) => part.type === 'tool-call'));
     expect(callRecords).toHaveLength(1);
+    const persisted = new MessageList();
+    persisted.add(added.flat(), 'response');
+    const results = persisted.get.all.db().flatMap(message => message.content.parts ?? []);
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool-invocation',
+          toolInvocation: expect.objectContaining({ state: 'result', result: { ok: true } }),
+          providerMetadata: expect.objectContaining({
+            mastra: expect.objectContaining({ backgroundTask: { taskId: 'task-1', status: 'completed' } }),
+          }),
+        }),
+      ]),
+    );
   });
 
   it('resumes the suspended task when the resume payload is an object', async () => {
@@ -602,7 +631,10 @@ describe('createToolCallStep background task stream replay', () => {
       result: { authoritative: true },
     });
 
-    expect(result).toMatchObject({ result: { authoritative: true } });
+    expect(result).toMatchObject({
+      result: { authoritative: true },
+      providerMetadata: { mastra: { backgroundTask: { taskId: 'task-resumed-awaited', status: 'completed' } } },
+    });
     expect(backgroundTaskManager.registerTaskContext).toHaveBeenCalledWith('task-resumed-awaited', expect.any(Object));
     expect(backgroundTaskManager.resume).toHaveBeenCalledWith('task-resumed-awaited', { approved: true });
     expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-resumed-awaited'], {
@@ -707,7 +739,18 @@ describe('createToolCallStep background task stream replay', () => {
       }),
     );
 
-    expect(result).toMatchObject({ result: { answer: 42, authoritative: true } });
+    expect(result).toMatchObject({
+      result: { answer: 42, authoritative: true },
+      providerMetadata: { mastra: { backgroundTask: { taskId: 'task-awaited', status: 'completed' } } },
+    });
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMetadata: {
+          mastra: { modelOutput: null, backgroundTask: { taskId: 'task-awaited', status: 'completed' } },
+        },
+      }),
+      expect.any(Object),
+    );
     expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-awaited'], {
       abortSignal: undefined,
     });
@@ -927,7 +970,10 @@ describe('createToolCallStep background task stream replay', () => {
       }),
     );
 
-    expect(result).toMatchObject({ result: expect.stringContaining('Background task started') });
+    expect(result).toMatchObject({
+      result: expect.stringContaining('Background task started'),
+      providerMetadata: { mastra: { backgroundTask: { taskId: 'task-deferred', status: 'running' } } },
+    });
     await executionComplete;
     expect(onOutput).toHaveBeenCalledOnce();
     expect(onOutput).toHaveBeenCalledWith({

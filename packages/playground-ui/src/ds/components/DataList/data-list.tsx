@@ -9,6 +9,7 @@ import {
   DataListNumberCell,
   DataListSelectCell,
   DataListDateCell,
+  DataListCreatedCell,
   DataListTimeCell,
 } from './data-list-cells';
 import { DataListNextPageLoading } from './data-list-next-page-loading';
@@ -55,6 +56,7 @@ export const DataList = Object.assign(DataListRoot, {
   RowHeaderCell: DataListRowHeaderCell,
   NumberCell: DataListNumberCell,
   DateCell: DataListDateCell,
+  CreatedCell: DataListCreatedCell,
   TimeCell: DataListTimeCell,
   SelectCell: DataListSelectCell,
   TopSelectCell: DataListTopSelectCell,

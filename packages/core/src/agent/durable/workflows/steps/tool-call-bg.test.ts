@@ -146,6 +146,9 @@ describe('durable tool-call background task dispatch', () => {
     expect(result.result).toContain('Background task started');
     expect(result.result).toContain('task-abc');
     expect(result.result).toContain(TOOL_NAME);
+    expect(result.providerMetadata).toMatchObject({
+      mastra: { backgroundTask: { taskId: 'task-abc', status: 'running' } },
+    });
   });
 
   it('falls back to sync execution when fallbackToSync is true', async () => {
@@ -236,63 +239,98 @@ describe('durable tool-call background task dispatch', () => {
     );
   });
 
-  it('onResult hook injects real result into MessageList and flushes to memory', async () => {
-    const pubsub = mockPubsub();
-    const { messageList, saveQueueManager } = setupRegistry();
-    const initData = makeInitData();
+  it.each([
+    { status: 'completed', existingInvocation: true },
+    { status: 'failed', existingInvocation: true },
+    { status: 'completed', existingInvocation: false },
+    { status: 'failed', existingInvocation: false },
+  ])(
+    'onResult persists $status metadata (existing invocation: $existingInvocation)',
+    async ({ status, existingInvocation }) => {
+      const pubsub = mockPubsub();
+      const { messageList, saveQueueManager } = setupRegistry();
+      const initData = makeInitData();
+      messageList.updateToolInvocation.mockReturnValue(existingInvocation);
+      const providerMetadata = { vendor: { trace: 'keep' }, mastra: { custom: 'keep' } };
 
-    let capturedOnResult: any;
-    vi.mocked(resolveBackgroundConfig).mockReturnValue({
-      runInBackground: true,
-      timeoutMs: 30_000,
-      maxRetries: 0,
-    } as any);
+      let capturedOnResult: any;
+      vi.mocked(resolveBackgroundConfig).mockReturnValue({
+        runInBackground: true,
+        timeoutMs: 30_000,
+        maxRetries: 0,
+      } as any);
 
-    vi.mocked(createBackgroundTask).mockImplementation((_mgr: any, opts: any) => {
-      capturedOnResult = opts.context.onResult;
-      return {
-        dispatch: vi.fn().mockResolvedValue({ task: { id: 't-r' }, fallbackToSync: false }),
-        checkIfRunning: vi.fn().mockResolvedValue(false),
-        restart: vi.fn(),
-        task: { id: 't-r' },
-        cancel: vi.fn(),
-        waitForCompletion: vi.fn(),
-      } as any;
-    });
+      vi.mocked(createBackgroundTask).mockImplementation((_mgr: any, opts: any) => {
+        capturedOnResult = opts.context.onResult;
+        return {
+          dispatch: vi.fn().mockResolvedValue({ task: { id: 't-r' }, fallbackToSync: false }),
+          checkIfRunning: vi.fn().mockResolvedValue(false),
+          restart: vi.fn(),
+          task: { id: 't-r' },
+          cancel: vi.fn(),
+          waitForCompletion: vi.fn(),
+        } as any;
+      });
 
-    await executeStep(pubsub, initData);
+      await executeStep(pubsub, initData, { ...baseInput(), providerMetadata });
 
-    // Simulate bg task completion
-    await capturedOnResult({
-      runId: RUN_ID,
-      taskId: 't-r',
-      toolCallId: TOOL_CALL_ID,
-      toolName: TOOL_NAME,
-      agentId: AGENT_ID,
-      result: { summary: 'real result' },
-      status: 'completed',
-      startedAt: new Date(),
-      completedAt: new Date(),
-    });
+      // Simulate bg task completion
+      await capturedOnResult({
+        runId: RUN_ID,
+        taskId: 't-r',
+        toolCallId: TOOL_CALL_ID,
+        toolName: TOOL_NAME,
+        agentId: AGENT_ID,
+        result: { summary: 'real result' },
+        status,
+        error: status === 'failed' ? { message: 'boom' } : undefined,
+        startedAt: new Date(),
+        completedAt: new Date(),
+      });
 
-    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'tool-invocation',
-        toolInvocation: expect.objectContaining({
-          state: 'result',
-          toolCallId: TOOL_CALL_ID,
-          result: { summary: 'real result' },
+      expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'tool-invocation',
+          providerMetadata: {
+            vendor: { trace: 'keep' },
+            mastra: { custom: 'keep', modelOutput: null, backgroundTask: { taskId: 't-r', status } },
+          },
+          toolInvocation: expect.objectContaining({
+            toolCallId: TOOL_CALL_ID,
+            ...(status === 'failed'
+              ? { state: 'output-error', errorText: 'Background task failed: boom' }
+              : { state: 'result', result: { summary: 'real result' } }),
+          }),
         }),
-      }),
-      expect.objectContaining({
-        backgroundTasks: expect.objectContaining({
-          [TOOL_CALL_ID]: expect.objectContaining({ taskId: 't-r' }),
+        expect.objectContaining({
+          backgroundTasks: expect.objectContaining({
+            [TOOL_CALL_ID]: expect.objectContaining({ taskId: 't-r' }),
+          }),
         }),
-      }),
-    );
+      );
 
-    expect(saveQueueManager.flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined);
-  });
+      if (!existingInvocation) {
+        expect(messageList.add).toHaveBeenCalledWith(
+          [
+            expect.objectContaining({
+              role: 'tool',
+              content: [
+                expect.objectContaining({
+                  type: 'tool-result',
+                  providerOptions: {
+                    vendor: { trace: 'keep' },
+                    mastra: { custom: 'keep', modelOutput: null, backgroundTask: { taskId: 't-r', status } },
+                  },
+                }),
+              ],
+            }),
+          ],
+          'response',
+        );
+      }
+      expect(saveQueueManager.flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined);
+    },
+  );
 
   it('onExecution hook updates message metadata with startedAt/taskId', async () => {
     const pubsub = mockPubsub();
@@ -376,6 +414,7 @@ describe('durable tool-call background task dispatch', () => {
       type: 'background-task-completed',
       payload: {
         runId: 'run-bg-2',
+        taskId: 't-c',
         toolCallId: TOOL_CALL_ID,
         toolName: TOOL_NAME,
         result: { summary: 'done' },
@@ -386,6 +425,9 @@ describe('durable tool-call background task dispatch', () => {
     const types = calls.map(c => c[2].type);
     expect(types).toContain('tool-call');
     expect(types).toContain('tool-result');
+    expect(calls.find(c => c[2].type === 'tool-result')?.[2]).toMatchObject({
+      payload: { providerMetadata: { mastra: { backgroundTask: { taskId: 't-c', status: 'completed' } } } },
+    });
   });
 
   it('onChunk emits tool-call + tool-error chunks via PubSub on failure', async () => {
@@ -419,6 +461,7 @@ describe('durable tool-call background task dispatch', () => {
       type: 'background-task-failed',
       payload: {
         runId: 'run-bg-3',
+        taskId: 't-f',
         toolCallId: TOOL_CALL_ID,
         toolName: TOOL_NAME,
         error: { message: 'boom' },
@@ -429,6 +472,9 @@ describe('durable tool-call background task dispatch', () => {
     const types = calls.map(c => c[2].type);
     expect(types).toContain('tool-call');
     expect(types).toContain('tool-error');
+    expect(calls.find(c => c[2].type === 'tool-error')?.[2]).toMatchObject({
+      payload: { providerMetadata: { mastra: { backgroundTask: { taskId: 't-f', status: 'failed' } } } },
+    });
   });
 
   it('passes threadId and resourceId in the task payload', async () => {
@@ -530,6 +576,9 @@ describe('durable tool-call background resume with falsy payload (#22363 parity)
     expect(resume).toHaveBeenCalledWith(payload);
     expect(dispatch).not.toHaveBeenCalled();
     expect(result.result).toContain('Background task resumed');
+    expect(result.providerMetadata).toMatchObject({
+      mastra: { backgroundTask: { taskId: 'resumed-task', status: 'running' } },
+    });
   });
 
   it('dispatches a fresh task when resumeData is absent', async () => {

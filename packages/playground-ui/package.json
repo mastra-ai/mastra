@@ -85,6 +85,16 @@
         "default": "./dist/resize/*.cjs.js"
       }
     },
+    "./sort/*": {
+      "import": {
+        "types": "./dist/sort/*.d.ts",
+        "default": "./dist/sort/*.es.js"
+      },
+      "require": {
+        "types": "./dist/sort/*.d.ts",
+        "default": "./dist/sort/*.cjs.js"
+      }
+    },
     "./lib/*": {
       "import": {
         "types": "./dist/lib/*.d.ts",

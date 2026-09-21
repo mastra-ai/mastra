@@ -986,3 +986,50 @@ describe('Traces page metadata filter discovery', () => {
     });
   });
 });
+
+describe('Traces page sorting', () => {
+  const orderBys: unknown[] = [];
+
+  const captureTraceQueries = () => {
+    orderBys.length = 0;
+    setTracePageHandlers(metricsUnavailableSystemPackages);
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+        const body = (await request.json()) as { orderBy?: unknown };
+        orderBys.push(body.orderBy);
+        return HttpResponse.json(traceQueryPage);
+      }),
+    );
+  };
+
+  describe('when traces are sorted from the Created column', () => {
+    it('asks the server for newest-first by default', async () => {
+      captureTraceQueries();
+      const { queryClient } = renderPage();
+
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'desc' }]);
+      expect(screen.getByRole('button', { name: 'Created, sorted descending, sort ascending' })).not.toBeNull();
+    });
+
+    it('asks the server for oldest-first when toggled and writes it to the URL', async () => {
+      captureTraceQueries();
+      const { queryClient } = renderPage();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Created, sorted descending, sort ascending' }));
+
+      await waitFor(() => expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'asc' }]));
+      expect(screen.getByTestId('location').textContent).toContain('sort=startedAt');
+      expect(screen.getByTestId('location').textContent).toContain('dir=asc');
+    });
+
+    it('restores the sort from the URL', async () => {
+      captureTraceQueries();
+      const { queryClient } = renderPage('/traces?sort=startedAt&dir=asc');
+
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'asc' }]);
+    });
+  });
+});

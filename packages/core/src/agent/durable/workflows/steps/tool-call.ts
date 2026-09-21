@@ -1184,6 +1184,13 @@ export function createDurableToolCallStep() {
         },
       };
 
+      const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') => ({
+        ...typedInput.providerMetadata,
+        mastra: {
+          ...(typeof typedInput.providerMetadata?.mastra === 'object' ? typedInput.providerMetadata.mastra : {}),
+          backgroundTask: { taskId, status },
+        },
+      });
       // Background task dispatch via the shared dispatch ladder (the
       // checkIfRunning restart gate and fallback-to-sync now live in the core).
       const bgOutcome = await dispatchBackgroundTool({
@@ -1266,6 +1273,7 @@ export function createDurableToolCallStep() {
                     toolName: chunk.payload.toolName,
                     args: cleanedArgs,
                     result: chunk.payload.result,
+                    providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'completed'),
                   },
                 });
               } else if (chunk.type === 'background-task-failed') {
@@ -1278,6 +1286,7 @@ export function createDurableToolCallStep() {
                     toolName: chunk.payload.toolName,
                     error: chunk.payload.error,
                     args: cleanedArgs,
+                    providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'failed'),
                   },
                 });
               }
@@ -1403,6 +1412,7 @@ export function createDurableToolCallStep() {
             ...typedInput,
             args: cleanedArgs,
             result: bgOutcome.placeholder,
+            providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'running'),
             ...(approvalGrant ?? {}),
           };
         }
@@ -1410,6 +1420,7 @@ export function createDurableToolCallStep() {
           ...typedInput,
           args: cleanedArgs,
           result: bgOutcome.placeholder,
+          providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'running'),
         };
       }
 
