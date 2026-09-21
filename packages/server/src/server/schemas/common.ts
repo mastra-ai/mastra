@@ -109,6 +109,7 @@ export const createCombinedPaginationSchema = () => {
  * Used by agents and workflows
  */
 export const tracingOptionsSchema = z.object({
+  name: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   requestContextKeys: z.array(z.string()).optional(),
   traceId: z.string().optional(),

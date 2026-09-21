@@ -291,6 +291,25 @@ const result = await agent.generate([{ role: 'user', content: 'Analyze this' }],
 - **Priority levels**: `"priority-high"`, `"priority-low"`
 - **Experiments**: `"experiment-v1"`, `"control-group"`, `"treatment-a"`
 
+### Naming a trace
+
+Every run of the same agent or workflow gets the same root span name by default, for example `workflow run: 'skill-analyze'`. When one workflow runs over many subjects, set `name` in `tracingOptions` to label each run. The name replaces the root span name in Studio's trace list and in exporters that display span names.
+
+```ts
+const run = await mastra.getWorkflow('skillAnalyze').createRun()
+
+await run.start({
+  inputData: { skillId: 'typescript' },
+  tracingOptions: {
+    name: 'skill-analyze: typescript',
+  },
+})
+```
+
+The name applies to the root span only. Child spans keep their default names. Entity filters keep working because the workflow or agent id is stored separately as `entityId` and `entityName`.
+
+OpenTelemetry-based exporters and the Langfuse exporter build their span and trace names from the entity id, so they are not affected. To name a Langfuse trace, set `metadata.traceName` as described in the [Langfuse integration](/integrations/observability/langfuse).
+
 ### Hiding sensitive input/output
 
 When processing sensitive data, you may want to prevent input and output values from being logged to your observability platforms. Use `hideInput` and `hideOutput` in `tracingOptions` to exclude this data from all spans in a trace:

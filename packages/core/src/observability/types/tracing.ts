@@ -1775,6 +1775,12 @@ export interface TraceState {
  * Options passed when starting a new agent or workflow execution
  */
 export interface TracingOptions {
+  /**
+   * Display name for the root span of this trace, replacing the default
+   * `agent run: '<id>'` / `workflow run: '<id>'` name. Use it to tell runs of the
+   * same agent or workflow apart in trace lists. Only applied to the root span.
+   */
+  name?: string;
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
   /**

@@ -56,6 +56,13 @@ const result = await workflow.getWorkflowRunExecutionResult(runId)
       {
         parameters: [
           {
+            name: 'name',
+            type: 'string',
+            isOptional: true,
+            description:
+              "Display name for the root span of this trace, replacing the default `workflow run: '<id>'` or `agent run: '<id>'` name. Use it to tell runs apart in trace lists.",
+          },
+          {
             name: 'metadata',
             type: 'Record<string, any>',
             isOptional: true,

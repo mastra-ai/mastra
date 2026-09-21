@@ -262,6 +262,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Tags are only passed for root spans (no parent)
     const tags = !options.parent ? tracingOptions?.tags : undefined;
 
+    // A caller-supplied name replaces the default entity name on root spans only,
+    // so one workflow or agent can label each run for trace lists.
+    const name = !options.parent && tracingOptions?.name ? tracingOptions.name : rest.name;
+
     // Extract traceId and parent ids from tracingOptions for root spans (no parent)
     // These allow nested workflows to join the parent workflow's trace.
     // tracingOptions.parentSpanId is the public external-correlation channel,
@@ -274,6 +278,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     const span = this.createSpan<TType>({
       ...rest,
+      name,
       traceId,
       parentSpanId,
       externalParentSpanId,

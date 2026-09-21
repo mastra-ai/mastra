@@ -1,6 +1,12 @@
 import { RequestContext } from '@mastra/core/di';
 import { MastraError } from '@mastra/core/error';
-import { InternalSpans, SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
+import {
+  EntityType,
+  InternalSpans,
+  SpanType,
+  SamplingStrategyType,
+  TracingEventType,
+} from '@mastra/core/observability';
 import type {
   AnySpan,
   TracingEvent,
@@ -1554,6 +1560,75 @@ describe('Tracing', () => {
 
       internalStep.end();
       agentSpan.end();
+    });
+  });
+
+  describe('Root span name override', () => {
+    it('should replace the root span name via tracingOptions.name', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: "workflow run: 'skill-analyze'",
+        entityType: EntityType.WORKFLOW_RUN,
+        entityId: 'skill-analyze',
+        entityName: 'skill-analyze',
+        tracingOptions: { name: 'skill-analyze: typescript' },
+      });
+
+      expect(span.name).toBe('skill-analyze: typescript');
+      expect(span.entityName).toBe('skill-analyze');
+      expect(span.exportSpan().name).toBe('skill-analyze: typescript');
+
+      span.end();
+    });
+
+    it('should keep the default name when tracingOptions.name is empty', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: "workflow run: 'skill-analyze'",
+        tracingOptions: { name: '' },
+      });
+
+      expect(span.name).toBe("workflow run: 'skill-analyze'");
+
+      span.end();
+    });
+
+    it('should not rename child spans', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: "workflow run: 'skill-analyze'",
+        tracingOptions: { name: 'skill-analyze: typescript' },
+      });
+
+      const childSpan = observability.startSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: "workflow step: 'analyze'",
+        parent: rootSpan,
+        tracingOptions: { name: 'ignored' },
+      });
+
+      expect(childSpan.name).toBe("workflow step: 'analyze'");
+
+      childSpan.end();
+      rootSpan.end();
     });
   });
 
