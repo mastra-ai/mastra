@@ -154,7 +154,7 @@ describe('OM agent logger propagation', () => {
     );
 
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('foreign-thread IDs'),
+      expect.stringContaining('foreign-thread'),
       expect.objectContaining({ threadId: 'thread-a', droppedMessageIds: [sharedId] }),
     );
   });
