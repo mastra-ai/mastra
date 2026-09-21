@@ -35,3 +35,20 @@
   font-style: normal;
   font-display: swap;
 }
+
+/*
+ * Studio's mapping of the design-system role tokens onto those faces. Unlayered
+ * so it wins over the package defaults in playground-ui/theme/typography.css,
+ * and imported by the playground-ui Storybook so specimens render the fonts the
+ * product actually ships.
+ */
+:root {
+  --font-display:
+    'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Noto Color Emoji';
+  --font-body:
+    'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Noto Color Emoji';
+  --font-mono:
+    'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
+}
