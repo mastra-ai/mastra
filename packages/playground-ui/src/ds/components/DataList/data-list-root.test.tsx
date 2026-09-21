@@ -300,9 +300,10 @@ describe('DataListRoot', () => {
       );
       const [errorRow, defaultRow] = container.querySelectorAll<HTMLButtonElement>('.data-list-row');
       expect(errorRow.dataset.variant).toBe('error');
-      expect(errorRow.className).toContain('bg-surface2');
+      expect(errorRow.className).toContain('before:bg-surface2');
       expect(errorRow.className).toContain('data-[variant=error]:bg-notice-destructive/10');
-      expect(errorRow.className).toContain('hover:bg-surface3');
+      // Hover is the root's fluid highlight, not a per-row fill.
+      expect(errorRow.className).not.toContain('hover:bg-surface3');
       expect(errorRow.className).toContain('active:bg-surface4');
       expect(errorRow.className).toContain('focus-visible:ring-accent1');
       expect(defaultRow.dataset.variant).toBe('default');
@@ -318,8 +319,8 @@ describe('DataListRoot', () => {
       );
       const row = container.querySelector<HTMLButtonElement>('.data-list-row');
       expect(row?.dataset.featured).toBe('true');
-      expect(row?.className).toContain('bg-surface2');
-      expect(row?.className).toContain('data-featured:bg-surface3');
+      expect(row?.className).toContain('before:bg-surface2');
+      expect(row?.className).toContain('data-featured:before:bg-surface3');
     });
 
     it('does not leak the variant prop onto the DOM element', () => {
