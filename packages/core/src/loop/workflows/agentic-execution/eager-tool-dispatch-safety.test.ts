@@ -5,6 +5,7 @@ import { Agent } from '../../../agent';
 import { prepareForDurableExecution } from '../../../agent/durable/preparation';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { Mastra } from '../../../mastra';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import type { ToolCallConcurrency } from '../../types';
 import {
@@ -19,6 +20,21 @@ type Recorder = {
   events: string[];
   record: (event: string) => void;
 };
+
+/**
+ * Per-iteration suspend state lives at `__workflow_meta.foreachOutput` on the suspending
+ * step's context entry, so find the step that actually suspended rather than hard-coding
+ * the tool-call step's id.
+ */
+function findForeachOutputWithSuspension(snapshot: any): any[] | undefined {
+  for (const stepCtx of Object.values(snapshot?.context ?? {}) as any[]) {
+    const foreachOutput = stepCtx?.suspendPayload?.__workflow_meta?.foreachOutput;
+    if (Array.isArray(foreachOutput) && foreachOutput.some((entry: any) => entry?.suspendPayload)) {
+      return foreachOutput;
+    }
+  }
+  return undefined;
+}
 
 function createRecorder(): Recorder {
   const events: string[] = [];
@@ -73,6 +89,27 @@ function createToolCallModel(
         },
       }),
     }),
+  });
+}
+
+/**
+ * Same model, but it only emits the tool calls on its first stream. A resumed run drives the
+ * model again, and a model that re-emits the same call every time would have the tool suspend
+ * a second time — a fixture artifact that has nothing to do with eager dispatch.
+ */
+function createOneShotToolCallModel(
+  calls: Array<{ toolCallId: string; toolName: string; input: unknown }>,
+  record: Recorder['record'],
+) {
+  let streams = 0;
+  const withCalls = createToolCallModel(calls, record);
+  const withoutCalls = createToolCallModel([], record);
+  return new MockLanguageModelV2({
+    doStream: async (...doStreamArgs: any[]) => {
+      streams += 1;
+      const delegate: any = streams === 1 ? withCalls : withoutCalls;
+      return delegate.doStream(...doStreamArgs);
+    },
   });
 }
 
@@ -537,7 +574,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
     // announces the same toolCallId twice, which is one more call than the tool gets
     // with eager dispatch off.
     const run = async (eager: boolean) => {
-      const { record } = createRecorder();
+      const { record, events } = createRecorder();
       let inputAvailable = 0;
       let bodyRuns = 0;
       const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
@@ -557,6 +594,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
             },
             execute: async ({ value }, options?: any) => {
               bodyRuns += 1;
+              record('body');
               await options?.agent?.suspend?.({ reason: 'needs input' });
               return { value };
             },
@@ -565,7 +603,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
       });
 
       const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
-      return { inputAvailable, bodyRuns, types: chunks.map(chunk => chunk.type) };
+      return { inputAvailable, bodyRuns, events, types: chunks.map(chunk => chunk.type) };
     };
 
     // Explicitly off: eager is the default, so an omitted option compares eager to itself.
@@ -574,11 +612,16 @@ describe('eager tool dispatch — excluded tool classes', () => {
 
     expect(base.inputAvailable).toBe(1);
     expect(eager.inputAvailable).toBe(base.inputAvailable);
-    // The hook count is only evidence if the call really was dispatched eagerly and
-    // then handed back: the body runs twice on that path and once without the option,
-    // so this also fails if eager dispatch silently did not happen.
+    // The handed-back attempt raises the real suspension itself, so the body is never run
+    // a second time: the eager path now matches the non-eager one exactly.
     expect(base.bodyRuns).toBe(1);
-    expect(eager.bodyRuns).toBe(2);
+    expect(eager.bodyRuns).toBe(base.bodyRuns);
+    // Body-run parity no longer proves the call was dispatched eagerly, so prove it
+    // separately: only an eager dispatch can start the body before the model stream
+    // finishes. Without this the test would still pass if eager dispatch stopped happening.
+    expect(eager.events.indexOf('body')).toBeGreaterThanOrEqual(0);
+    expect(eager.events.indexOf('body')).toBeLessThan(eager.events.indexOf('finish'));
+    expect(base.events.indexOf('body')).toBeGreaterThan(base.events.indexOf('finish'));
     // The handback has to end in a real suspension, not a skipped call.
     expect(eager.types).toEqual(base.types);
     expect(eager.types).toContain('tool-call-suspended');
@@ -676,11 +719,13 @@ describe('eager tool dispatch — excluded tool classes', () => {
 
     expect(eager.types).toEqual(base.types);
     expect(eager.types).toContain('tool-call-suspended');
-    // The tool swallows the suspend on both paths, so its `onOutput` hook fires once for the
-    // value it returns afterwards. The denied eager attempt must not add a second firing:
-    // the value it produced belongs to a call the foreach is about to run again.
+    // The carried suspension intent wins over the value the tool returned after swallowing
+    // the bailout: the eager path suspends from that intent and discards the value, so
+    // `onOutput` never fires for it. The non-eager path's `suspend()` returns normally, the
+    // tool returns, and its hook fires once. The divergence is the fix, not a regression —
+    // the swallowed value is exactly what must never be adopted.
     expect(base.onOutputCalls).toBe(1);
-    expect(eager.onOutputCalls).toBe(base.onOutputCalls);
+    expect(eager.onOutputCalls).toBe(0);
   });
 
   it('suspends normally when the tool swallows the eager bailout and throws its own error', async () => {
@@ -2159,4 +2204,224 @@ describe('eager suspension intent carrier', () => {
     expect(eagerToolCallSuspensionIntent(new EagerToolExecutionNotRun('cancelled'))).toBeUndefined();
     expect(eagerToolCallSuspensionIntent(new Error('unrelated'))).toBeUndefined();
   });
+});
+
+describe('eager tool dispatch — runtime suspension handback', () => {
+  it('runs a pre-suspend side effect exactly once and resumes the call', async () => {
+    // The headline regression. Before the handback the eager attempt was discarded and the
+    // foreach re-ran the body from the top, so everything the tool did before `suspend()`
+    // happened twice. The append is guarded on `resumeData` because a resumed call re-enters
+    // the body from the top rather than continuing the interrupted invocation.
+    const storage = new InMemoryStore();
+    const appends: string[] = [];
+    let bodyEntries = 0;
+    const { record } = createRecorder();
+    const model = createOneShotToolCallModel(
+      [{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }],
+      record,
+    );
+    const agent = new Agent({
+      id: 'eager-handback-once-agent',
+      name: 'Eager handback once agent',
+      instructions: 'Call tool-a once.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Performs a side effect, then suspends at runtime',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }, options?: any) => {
+            bodyEntries += 1;
+            if (options?.agent?.resumeData === undefined) {
+              appends.push(value);
+              await options?.agent?.suspend?.({ reason: 'needs input' });
+            }
+            return { value };
+          },
+        }),
+      },
+    });
+    new Mastra({ agents: { agent }, logger: false, storage });
+
+    const stream = await agent.stream('go', { maxSteps: 1, eagerToolExecution: true });
+    const types = (await drain(stream)).map(chunk => chunk.type);
+
+    expect(types).toContain('tool-call-suspended');
+    // One append, not two: the eager attempt's side effect is the only one that happened.
+    expect(appends).toEqual(['a']);
+    expect(bodyEntries).toBe(1);
+
+    const resumed = await agent.resumeStream({ ok: true }, { runId: stream.runId, toolCallId: 'call-a' });
+    await drain(resumed);
+
+    // Resume re-enters the body, which is the pre-existing resume contract — but it takes the
+    // guarded branch, so the pre-suspend side effect still happened exactly once overall.
+    expect(appends).toEqual(['a']);
+    expect(bodyEntries).toBe(2);
+  }, 30000);
+
+  it('lands the suspension on the suspending call’s own foreach iteration', async () => {
+    // A suspension raised outside the owning iteration writes a step-level payload that
+    // aliases to iteration 0, so the wrong call would resume. The later-indexed call is the
+    // one that suspends here, so index 0 carrying the payload would be the bug.
+    const runBatch = async (eagerToolExecution: boolean) => {
+      const storage = new InMemoryStore();
+      const { record } = createRecorder();
+      const model = createOneShotToolCallModel(
+        [
+          { toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } },
+          { toolCallId: 'call-b', toolName: 'tool-b', input: { value: 'b' } },
+        ],
+        record,
+      );
+      const agent = new Agent({
+        id: `eager-handback-coordinate-agent-${eagerToolExecution}`,
+        name: 'Eager handback coordinate agent',
+        instructions: 'Call both tools.',
+        model,
+        tools: {
+          'tool-a': createTool({
+            id: 'tool-a',
+            description: 'Completes normally',
+            inputSchema: z.object({ value: z.string() }),
+            outputSchema: z.object({ value: z.string() }),
+            execute: async ({ value }) => ({ value }),
+          }),
+          'tool-b': createTool({
+            id: 'tool-b',
+            description: 'Suspends at runtime',
+            inputSchema: z.object({ value: z.string() }),
+            outputSchema: z.object({ value: z.string() }),
+            execute: async ({ value }, options?: any) => {
+              if (options?.agent?.resumeData === undefined) {
+                await options?.agent?.suspend?.({ reason: 'needs input' });
+              }
+              return { value };
+            },
+          }),
+        },
+      });
+      new Mastra({ agents: { agent }, logger: false, storage });
+
+      const stream = await agent.stream('go', { maxSteps: 1, eagerToolExecution });
+      await drain(stream);
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const run = await workflowsStore.getWorkflowRunById({ runId: stream.runId, workflowName: 'agentic-loop' });
+      expect(run).not.toBeNull();
+      return findForeachOutputWithSuspension(run!.snapshot);
+    };
+
+    const baseForeachOutput = await runBatch(false);
+    const foreachOutput = await runBatch(true);
+
+    expect(foreachOutput).not.toBeUndefined();
+    // Iteration 1 is tool-b's; iteration 0 belongs to the call that already finished.
+    expect(foreachOutput![0]?.suspendPayload).toBeUndefined();
+    expect(foreachOutput![1]?.suspendPayload).toBeDefined();
+    const payload = foreachOutput![1].suspendPayload as Record<string, unknown>;
+    expect(payload).toMatchObject({ toolCallId: 'call-b', toolName: 'tool-b' });
+    // The handback builds the pre-existing envelope and adds no bookkeeping field of its own.
+    // `__streamState` is serialized once, on the step-level payload — the per-iteration copy
+    // deliberately does not carry it, and a second copy here would be snapshot bloat
+    // multiplied by iteration count.
+    expect(payload.__streamState).toBeUndefined();
+    // Pinned against the non-eager path rather than a literal: the handback must build the
+    // envelope the foreach already builds, not a variant of it.
+    expect(Object.keys(payload).sort()).toEqual(
+      Object.keys(baseForeachOutput![1].suspendPayload as Record<string, unknown>).sort(),
+    );
+  }, 30000);
+
+  it('resumes the suspended call without re-running its completed siblings', async () => {
+    // Snapshot placement alone does not prove the resume coordinate works end to end.
+    const storage = new InMemoryStore();
+    let siblingRuns = 0;
+    const { record } = createRecorder();
+    const model = createOneShotToolCallModel(
+      [
+        { toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } },
+        { toolCallId: 'call-b', toolName: 'tool-b', input: { value: 'b' } },
+      ],
+      record,
+    );
+    const agent = new Agent({
+      id: 'eager-handback-targeted-resume-agent',
+      name: 'Eager handback targeted resume agent',
+      instructions: 'Call both tools.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Completes normally',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            siblingRuns += 1;
+            return { value };
+          },
+        }),
+        'tool-b': createTool({
+          id: 'tool-b',
+          description: 'Suspends at runtime',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }, options?: any) => {
+            if (options?.agent?.resumeData === undefined) {
+              await options?.agent?.suspend?.({ reason: 'needs input' });
+            }
+            return { value };
+          },
+        }),
+      },
+    });
+    new Mastra({ agents: { agent }, logger: false, storage });
+
+    const stream = await agent.stream('go', { maxSteps: 1, eagerToolExecution: true });
+    await drain(stream);
+    expect(siblingRuns).toBe(1);
+
+    const resumed = await agent.resumeStream({ ok: true }, { runId: stream.runId, toolCallId: 'call-b' });
+    await drain(resumed);
+
+    // The sibling already produced its result; resuming call-b must not run it again.
+    expect(siblingRuns).toBe(1);
+  }, 30000);
+
+  it('routes a runtime suspension that asks for approval through the approval path', async () => {
+    // The handback carries the options the tool suspended with, and the approval branch is
+    // gated on `options.requireToolApproval` — so an approval-flavoured intent has to emit
+    // `tool-call-approval`, not the plain suspension chunk.
+    const { record } = createRecorder();
+    const model = createOneShotToolCallModel(
+      [{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }],
+      record,
+    );
+    const agent = new Agent({
+      id: 'eager-handback-approval-agent',
+      name: 'Eager handback approval agent',
+      instructions: 'Call tool-a once.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Asks for approval at runtime',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }, options?: any) => {
+            await options?.agent?.suspend?.({ reason: 'needs approval' }, { requireToolApproval: true });
+            return { value };
+          },
+        }),
+      },
+    });
+
+    const types = (await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }))).map(
+      chunk => chunk.type,
+    );
+
+    expect(types).toContain('tool-call-approval');
+    expect(types).not.toContain('tool-call-suspended');
+  }, 30000);
 });

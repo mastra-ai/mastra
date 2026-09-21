@@ -581,6 +581,158 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }),
         );
 
+        // The real suspension sequence, extracted so it has exactly one implementation with
+        // two entry points: the tool's own `suspend()` closure below, and the hand-back of an
+        // eager attempt that suspended at runtime. Defined here because it closes over
+        // `args`, `transformChunk`, `flushMessagesBeforeSuspension` and `approvalSchema`, and
+        // called before approval gating so a handed-back call is never re-gated or re-run.
+        const raiseToolSuspension = async (suspendPayload: any, options?: SuspendOptions): Promise<any> => {
+          if (options?.requireToolApproval) {
+            const innerApproval =
+              typeof options.requireToolApproval === 'object' && options.requireToolApproval
+                ? options.requireToolApproval
+                : typeof suspendPayload?.requireToolApproval === 'object' && suspendPayload?.requireToolApproval
+                  ? suspendPayload.requireToolApproval
+                  : null;
+
+            const approvalToolName = innerApproval?.toolName ?? inputData.toolName;
+            const approvalArgs = innerApproval?.args !== undefined ? innerApproval.args : inputData.args;
+
+            await stopGoalActivity({
+              agentId,
+              runId,
+              now: readScoped(scopeCtx, NOW_KEY, 'now'),
+            });
+            const approvalChunk = await transformChunk(
+              {
+                type: 'tool-call-approval',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: approvalToolName,
+                  args: approvalArgs,
+                  resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                },
+              },
+              'approval',
+            );
+            if (outputWriter) {
+              await outputWriter(approvalChunk);
+            } else {
+              safeEnqueue(controller, approvalChunk);
+            }
+
+            // Add approval metadata to message before persisting
+            addToolMetadata({
+              toolCallId: inputData.toolCallId,
+              toolName: approvalToolName,
+              args: approvalArgs,
+              ...(approvalToolName !== inputData.toolName || approvalArgs !== inputData.args
+                ? { parentToolName: inputData.toolName, parentArgs: inputData.args }
+                : {}),
+              type: 'approval',
+              suspendedToolRunId: options.runId,
+              resumeSchema: JSON.stringify(
+                standardSchemaToJSONSchema(
+                  toStandardSchema(
+                    z.object({
+                      approved: z
+                        .boolean()
+                        .describe(
+                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                        ),
+                    }),
+                  ),
+                ),
+              ),
+              metadata: approvalChunk.metadata,
+            });
+
+            // Flush messages before suspension to ensure they are persisted
+            await flushMessagesBeforeSuspension();
+
+            return suspend(
+              {
+                type: 'approval',
+                requireToolApproval: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: approvalToolName,
+                  args: approvalArgs,
+                },
+                __streamState: streamState.serialize(),
+                __agentId: agentId,
+                ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                // Persist the inner suspended run id in the workflow snapshot, partitioned per
+                // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
+                // same id as delegatedRunId for cold reloads, while the snapshot remains the
+                // runtime source for routing this targeted resume.
+                suspendedToolRunId: options.runId,
+              },
+              {
+                resumeLabel: inputData.toolCallId,
+              },
+            );
+          } else {
+            const suspensionChunk = await transformChunk(
+              {
+                type: 'tool-call-suspended',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  suspendPayload,
+                  args: inputData.args,
+                  resumeSchema: options?.resumeSchema,
+                },
+              },
+              'suspend',
+              { suspendPayload },
+            );
+            safeEnqueue(controller, suspensionChunk);
+
+            // Add suspension metadata to message before persisting
+            addToolMetadata({
+              toolCallId: inputData.toolCallId,
+              toolName: inputData.toolName,
+              args,
+              suspendPayload,
+              suspendedToolRunId: options?.runId,
+              type: 'suspension',
+              resumeSchema: options?.resumeSchema,
+              metadata: suspensionChunk.metadata,
+            });
+
+            // Flush messages before suspension to ensure they are persisted
+            await flushMessagesBeforeSuspension();
+
+            return await suspend(
+              {
+                toolCallSuspended: suspendPayload,
+                __streamState: streamState.serialize(),
+                __agentId: agentId,
+                ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                resumeLabel: options?.resumeLabel,
+                suspendedToolRunId: options?.runId,
+              },
+              {
+                resumeLabel: inputData.toolCallId,
+              },
+            );
+          }
+        };
+
+        // An eager attempt that suspended at runtime hands its intent back here. The body
+        // already ran once on that attempt, so raise the real suspension from this — the
+        // owning foreach iteration — instead of running the tool again. The intent wins over
+        // any value or error the tool produced after swallowing the bailout.
+        if (eagerSuspensionIntent) {
+          return await raiseToolSuspension(eagerSuspensionIntent.suspendPayload, eagerSuspensionIntent.options);
+        }
+
         if (approvalGated) {
           if (!approvalDecision) {
             await stopGoalActivity({
@@ -738,142 +890,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 suspension,
               });
             }
-            if (options?.requireToolApproval) {
-              const innerApproval =
-                typeof options.requireToolApproval === 'object' && options.requireToolApproval
-                  ? options.requireToolApproval
-                  : typeof suspendPayload?.requireToolApproval === 'object' && suspendPayload?.requireToolApproval
-                    ? suspendPayload.requireToolApproval
-                    : null;
-
-              const approvalToolName = innerApproval?.toolName ?? inputData.toolName;
-              const approvalArgs = innerApproval?.args !== undefined ? innerApproval.args : inputData.args;
-
-              await stopGoalActivity({
-                agentId,
-                runId,
-                now: readScoped(scopeCtx, NOW_KEY, 'now'),
-              });
-              const approvalChunk = await transformChunk(
-                {
-                  type: 'tool-call-approval',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId: inputData.toolCallId,
-                    toolName: approvalToolName,
-                    args: approvalArgs,
-                    resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
-                  },
-                },
-                'approval',
-              );
-              if (outputWriter) {
-                await outputWriter(approvalChunk);
-              } else {
-                safeEnqueue(controller, approvalChunk);
-              }
-
-              // Add approval metadata to message before persisting
-              addToolMetadata({
-                toolCallId: inputData.toolCallId,
-                toolName: approvalToolName,
-                args: approvalArgs,
-                ...(approvalToolName !== inputData.toolName || approvalArgs !== inputData.args
-                  ? { parentToolName: inputData.toolName, parentArgs: inputData.args }
-                  : {}),
-                type: 'approval',
-                suspendedToolRunId: options.runId,
-                resumeSchema: JSON.stringify(
-                  standardSchemaToJSONSchema(
-                    toStandardSchema(
-                      z.object({
-                        approved: z
-                          .boolean()
-                          .describe(
-                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                          ),
-                      }),
-                    ),
-                  ),
-                ),
-                metadata: approvalChunk.metadata,
-              });
-
-              // Flush messages before suspension to ensure they are persisted
-              await flushMessagesBeforeSuspension();
-
-              return suspend(
-                {
-                  type: 'approval',
-                  requireToolApproval: {
-                    toolCallId: inputData.toolCallId,
-                    toolName: approvalToolName,
-                    args: approvalArgs,
-                  },
-                  __streamState: streamState.serialize(),
-                  __agentId: agentId,
-                  ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
-                  // Persist the inner suspended run id in the workflow snapshot, partitioned per
-                  // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
-                  // same id as delegatedRunId for cold reloads, while the snapshot remains the
-                  // runtime source for routing this targeted resume.
-                  suspendedToolRunId: options.runId,
-                },
-                {
-                  resumeLabel: inputData.toolCallId,
-                },
-              );
-            } else {
-              const suspensionChunk = await transformChunk(
-                {
-                  type: 'tool-call-suspended',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    suspendPayload,
-                    args: inputData.args,
-                    resumeSchema: options?.resumeSchema,
-                  },
-                },
-                'suspend',
-                { suspendPayload },
-              );
-              safeEnqueue(controller, suspensionChunk);
-
-              // Add suspension metadata to message before persisting
-              addToolMetadata({
-                toolCallId: inputData.toolCallId,
-                toolName: inputData.toolName,
-                args,
-                suspendPayload,
-                suspendedToolRunId: options?.runId,
-                type: 'suspension',
-                resumeSchema: options?.resumeSchema,
-                metadata: suspensionChunk.metadata,
-              });
-
-              // Flush messages before suspension to ensure they are persisted
-              await flushMessagesBeforeSuspension();
-
-              return await suspend(
-                {
-                  toolCallSuspended: suspendPayload,
-                  __streamState: streamState.serialize(),
-                  __agentId: agentId,
-                  ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
-                  toolCallId: inputData.toolCallId,
-                  toolName: inputData.toolName,
-                  resumeLabel: options?.resumeLabel,
-                  suspendedToolRunId: options?.runId,
-                },
-                {
-                  resumeLabel: inputData.toolCallId,
-                },
-              );
-            }
+            return await raiseToolSuspension(suspendPayload, options);
           },
           resumeData: resumeDataToPassToToolOptions,
           // The payload this tool call suspended with (see `toolCallSuspended` above), so a
