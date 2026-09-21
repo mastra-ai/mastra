@@ -63,7 +63,7 @@ const makeVariantStep = (kind: ResolvedWorkflowStep['kind']): ResolvedWorkflowSt
         kind,
         id: kind,
         step,
-        flow: { type: 'foreach', step, opts: { concurrency: 2 } },
+        flow: { type: 'foreach', step: { type: 'step', step }, opts: { concurrency: 2 } },
         result: successResult,
         workflowStatus: 'success',
       };
@@ -94,7 +94,12 @@ const makeVariantStep = (kind: ResolvedWorkflowStep['kind']): ResolvedWorkflowSt
         kind,
         id: kind,
         step,
-        flow: { type: 'loop', step, serializedCondition: { id: 'loop-1', fn: 'true' }, loopType: 'dountil' },
+        flow: {
+          type: 'loop',
+          step: { type: 'step', step },
+          serializedCondition: { id: 'loop-1', fn: 'true' },
+          loopType: 'dountil',
+        },
         result: successResult,
         workflowStatus: 'success',
       };

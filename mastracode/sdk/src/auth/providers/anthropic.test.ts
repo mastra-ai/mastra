@@ -87,9 +87,11 @@ describe('completeAnthropicLogin', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('throws with the response body when the exchange fails', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('invalid_grant', { status: 400 }));
-    await expect(completeAnthropicLogin('code#v', 'v')).rejects.toThrow('Token exchange failed: invalid_grant');
+  it('throws without exposing the response body when the exchange fails', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('upstream-secret', { status: 400 }));
+    // Anchored: a plain string only substring-matches, so upstream body text
+    // appended to the message would still pass.
+    await expect(completeAnthropicLogin('code#v', 'v')).rejects.toThrow(/^Token exchange failed: 400$/);
   });
 });
 
@@ -129,8 +131,8 @@ describe('refreshAnthropicToken', () => {
     expect(body).toMatchObject({ grant_type: 'refresh_token', refresh_token: 'old-rt' });
   });
 
-  it('throws with the response body on failure', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('bad refresh', { status: 400 }));
-    await expect(refreshAnthropicToken('rt')).rejects.toThrow('Anthropic token refresh failed: bad refresh');
+  it('throws without exposing the response body on failure', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('upstream-secret', { status: 400 }));
+    await expect(refreshAnthropicToken('rt')).rejects.toThrow(/^Anthropic token refresh failed: 400$/);
   });
 });

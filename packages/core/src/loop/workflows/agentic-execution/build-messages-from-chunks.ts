@@ -2,6 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart } from '../../../agent/message-list';
 import { isSpanChunk, MessagePartSpans } from '../../../agent/message-list/message-part-spans';
+import { preserveResponseItemIdsOnMerge } from '../../../agent/message-list/utils/response-item-metadata';
 import { getErrorFromUnknown } from '../../../error';
 import type {
   FilePayload,
@@ -28,7 +29,10 @@ export type CollectedChunk = { type: string; payload: any; metadata?: Record<str
  * 1. Produce exactly one text part per text-start/text-end span (no duplicates)
  * 2. Produce exactly one reasoning part per reasoning-start/reasoning-end span
  * 3. Preserve correct stream ordering (text before tool-call if that's how they arrived)
- * 4. Use providerMetadata with "last seen wins" semantics per AI SDK convention
+ * 4. Use providerMetadata with "last seen wins" semantics per AI SDK convention.
+ *    Exception: Responses item ids — a hosted tool (e.g. OpenAI `tool_search`)
+ *    gives its call and output distinct ids, and replay needs both, so the call's
+ *    id is kept as `itemId` and the result's stashed as `resultItemId`.
  * 5. Skip empty text spans (empty-string deltas only) — no more empty text parts in DB
  * 6. Merge tool-call + tool-result into a single part with state: 'result' when applicable
  */
@@ -125,7 +129,11 @@ export function buildMessagesFromChunks({
               args: p.args,
               result: result.result,
             },
-            providerMetadata: result.providerMetadata ?? providerMetadata,
+            providerMetadata: preserveResponseItemIdsOnMerge(
+              providerMetadata,
+              result.providerMetadata,
+              result.providerMetadata ?? providerMetadata,
+            ),
             providerExecuted: resultProviderExecuted,
           } as MastraMessagePart);
         } else {

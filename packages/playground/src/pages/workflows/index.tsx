@@ -10,11 +10,13 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
 import { WorkflowsList } from '@/domains/workflows/components/workflows-list/workflows-list';
+import type { WorkflowsSort } from '@/domains/workflows/components/workflows-list/workflows-sort';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<WorkflowsSort>();
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -56,8 +58,8 @@ function Workflows() {
             <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
           </div>
           <Button
-            as={Link}
-            to="/workflows/schedules"
+            render={<Link to="/workflows/schedules" />}
+
             variant="primary"
             className="shrink-0"
             icon={<CalendarClockIcon />}
@@ -67,7 +69,13 @@ function Workflows() {
         </PageLayout.Row>
       </PageLayout.TopArea>
 
-      <WorkflowsList workflows={workflows || {}} isLoading={isLoading} search={search} />
+      <WorkflowsList
+        workflows={workflows || {}}
+        isLoading={isLoading}
+        search={search}
+        sort={sort}
+        onSortChange={(direction, key) => setSort({ key, direction })}
+      />
     </PageLayout>
   );
 }

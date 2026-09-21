@@ -678,7 +678,7 @@ export class MemoryPG extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY COALESCE("${field}Z", "${field}") ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY COALESCE("${field}Z", "${field}") ${direction}, "id" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       const rows = await this.#db.readClient.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
@@ -905,12 +905,14 @@ export class MemoryPG extends MemoryStorage {
       const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
       const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 
-      if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
+      const idOrder = direction === 'ASC' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
+
+      if (aValue == null && bValue == null) return idOrder;
       if (aValue == null) return 1;
       if (bValue == null) return -1;
 
       if (aValue === bValue) {
-        return a.id.localeCompare(b.id);
+        return idOrder;
       }
 
       if (typeof aValue === 'number' && typeof bValue === 'number') {
@@ -1232,7 +1234,7 @@ export class MemoryPG extends MemoryStorage {
       // instead of materializing/seq-scanning the whole thread. createdAt and createdAtZ
       // always store the same instant (createdAtZ is a TIMESTAMPTZ copy), so row selection
       // under LIMIT is identical. This mirrors the index-safe ordering in _getIncludedMessages.
-      const orderByStatement = `ORDER BY "${field}" ${direction}`;
+      const orderByStatement = `ORDER BY "${field}" ${direction}, "id" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1443,7 +1445,7 @@ export class MemoryPG extends MemoryStorage {
       // instead of materializing/seq-scanning the whole thread. createdAt and createdAtZ
       // always store the same instant (createdAtZ is a TIMESTAMPTZ copy), so row selection
       // under LIMIT is identical. This mirrors the index-safe ordering in _getIncludedMessages.
-      const orderByStatement = `ORDER BY "${field}" ${direction}`;
+      const orderByStatement = `ORDER BY "${field}" ${direction}, "id" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });

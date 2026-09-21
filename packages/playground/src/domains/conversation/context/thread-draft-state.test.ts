@@ -29,6 +29,25 @@ afterEach(async () => {
 });
 
 describe('draft persistence lifecycle', () => {
+  describe('when an update leaves the text and attachments unchanged', () => {
+    it('does not notify subscribers or schedule a save', async () => {
+      const { state } = mount();
+      await ready(state);
+      state.updateDraft(previous => ({ ...previous, text: 'Same' }));
+      await saved(state);
+      const listener = vi.fn();
+      unmounts.push(state.subscribe(listener));
+      const put = vi.spyOn(IDBObjectStore.prototype, 'put');
+      // Dictation re-applies the current transcript on every render; a new object with
+      // identical content must not re-render the composer or the loop never settles.
+      state.updateDraft(previous => ({ ...previous, text: 'Same' }));
+      state.updateDraft({ text: 'Same', attachments: state.getSnapshot().draft.attachments });
+      expect(listener).not.toHaveBeenCalled();
+      expect(state.getSnapshot().status.saving).toBe(false);
+      expect(put).not.toHaveBeenCalled();
+    });
+  });
+
   describe('when typing pauses', () => {
     it('updates memory immediately and saves after 300ms without edits', async () => {
       const { state } = mount();

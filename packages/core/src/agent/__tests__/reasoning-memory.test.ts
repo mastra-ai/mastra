@@ -1,20 +1,3 @@
-/**
- * Reasoning + Memory Integration Tests
- *
- * Tests for GitHub issue #11103:
- * OpenAI reasoning models fail with "reasoning item without required following item"
- *
- * When sending a message in a thread that contains a reasoning part followed by a text part,
- * the second request fails because OpenAI requires that when a reasoning item has an `id` field,
- * the following assistant message must also have a matching `id` field to link them together.
- *
- * The bug was that reasoning providerMetadata (containing openai.itemId) was leaking into
- * subsequent text parts because runState.providerOptions wasn't being reset after reasoning-end.
- *
- * @see https://github.com/mastra-ai/mastra/issues/11103
- */
-
-import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
@@ -123,6 +106,7 @@ function createReasoningMockModelWithTextItemId(reasoningItemId: string, textIte
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+
         content: [
           {
             type: 'reasoning',
@@ -146,6 +130,7 @@ function createReasoningMockModelWithTextItemId(reasoningItemId: string, textIte
             },
           },
         ],
+
         warnings: [],
       }) as any,
     doStream: async () => ({
@@ -273,7 +258,7 @@ describe('Reasoning + Memory Integration', () => {
    * part had an rs_ ID which OpenAI rejected (expecting msg_ for assistant messages).
    */
   it('should not leak reasoning providerMetadata into text parts', async () => {
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-1234';
     const reasoningItemId = 'rs_test123456789';
 
@@ -334,7 +319,7 @@ describe('Reasoning + Memory Integration', () => {
    * @see https://github.com/mastra-ai/mastra/issues/11481
    */
   it('should capture text-start providerMetadata for text parts (issue #11481)', async () => {
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-1234';
     const reasoningItemId = 'rs_test123456789';
     const textItemId = 'msg_test987654321'; // The itemId that OpenAI sends with text-start
@@ -391,7 +376,7 @@ describe('Reasoning + Memory Integration', () => {
    * @see https://github.com/mastra-ai/mastra/issues/11481
    */
   it('should handle follow-up messages with both reasoning and text itemIds (issue #11481)', async () => {
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-1234';
     const reasoningItemId = 'rs_test123456789';
     const textItemId = 'msg_test987654321';
@@ -468,7 +453,7 @@ describe('Reasoning + Memory Integration', () => {
    * The second call should not fail due to mismatched IDs.
    */
   it('should handle follow-up messages after reasoning response with memory', async () => {
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-1234';
     const reasoningItemId = 'rs_test123456789';
 
@@ -534,7 +519,7 @@ describe('Reasoning + Memory Integration', () => {
    * @see https://github.com/mastra-ai/mastra/issues/11481
    */
   it('should capture text providerMetadata when using generate() (issue #11481)', async () => {
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-1234';
     const reasoningItemId = 'rs_test123456789';
     const textItemId = 'msg_test987654321';
@@ -610,7 +595,7 @@ describe('Reasoning + Memory Integration', () => {
    * the text's providerMetadata doesn't leak into the subsequent part.
    */
   it('should clear text providerMetadata after text-end to prevent leaking', async () => {
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-1234';
     const textItemId = 'msg_text123';
 
@@ -621,6 +606,7 @@ describe('Reasoning + Memory Integration', () => {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+
           content: [
             {
               type: 'text',
@@ -638,6 +624,7 @@ describe('Reasoning + Memory Integration', () => {
               args: {},
             },
           ],
+
           warnings: [],
         }) as any,
       doStream: async () => ({
@@ -732,7 +719,7 @@ describe('Reasoning + Memory Integration', () => {
    * So neither reasoning nor text metadata leaks into subsequent parts.
    */
   it('should properly clean up providerMetadata through reasoning → text → tool call sequence', async () => {
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-1234';
     const reasoningItemId = 'rs_reasoning123';
     const textItemId = 'msg_text123';
@@ -744,6 +731,7 @@ describe('Reasoning + Memory Integration', () => {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+
           content: [
             {
               type: 'reasoning',
@@ -771,6 +759,7 @@ describe('Reasoning + Memory Integration', () => {
               args: {},
             },
           ],
+
           warnings: [],
         }) as any,
       doStream: async () => ({
@@ -909,7 +898,7 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
    * and OpenAI resolves them server-side. Reasoning and itemIds must be preserved.
    */
   it('should preserve OpenAI reasoning and providerMetadata through round-trip', async () => {
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-spy-openai';
     const reasoningItemId = 'rs_spy_reasoning_123';
     const textItemId = 'msg_spy_text_456';

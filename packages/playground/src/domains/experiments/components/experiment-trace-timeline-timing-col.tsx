@@ -57,11 +57,13 @@ export function ExperimentTraceTimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-neutral3 text-ui-sm')}>{(span.latency / 1000).toFixed(3)}&nbsp;s</div>
+        <div className={cn('flex justify-end text-muted-foreground text-ui-sm')}>
+          {(span.latency / 1000).toFixed(3)}&nbsp;s
+        </div>
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="bg-surface4 text-ui-sm text-neutral5 border-border1 z-50 w-auto max-w-[25rem] rounded-md border p-2 px-4 pr-6 text-center"
+          className="bg-surface4 text-ui-sm text-foreground border-border1 z-50 w-auto max-w-[25rem] rounded-md border p-2 px-4 pr-6 text-center"
           sideOffset={5}
           side="top"
         >

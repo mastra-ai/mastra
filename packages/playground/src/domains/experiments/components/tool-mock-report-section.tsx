@@ -37,9 +37,7 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
 
   return (
     <div className="grid gap-2" data-testid="tool-mock-report">
-      <DataPanel.SectionHeading icon={<WrenchIcon />} className="mb-2">
-        Tool Mocks
-      </DataPanel.SectionHeading>
+      <DataPanel.SectionHeading icon={<WrenchIcon />}>Tool Mocks</DataPanel.SectionHeading>
 
       {failure && (
         <Notice variant="destructive" title="Mock mismatch">
@@ -64,8 +62,8 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
             className="flex items-center justify-between gap-2 px-3 py-1.5"
           >
             <span className="min-w-0 truncate">
-              <span className="text-neutral4 font-mono">{row.toolName}</span>
-              <span className="text-neutral3 text-ui-sm ml-2 font-mono">{formatArgs(row.args)}</span>
+              <span className="text-muted-foreground font-mono">{row.toolName}</span>
+              <span className="text-muted-foreground text-ui-sm ml-2 font-mono">{formatArgs(row.args)}</span>
             </span>
             <span className={`text-ui-sm shrink-0 rounded px-2 py-0.5 ${outcomeClass(row.outcome)}`}>
               {row.outcome}
@@ -84,6 +82,6 @@ function outcomeClass(outcome: ReportRow['outcome']): string {
     case 'live':
       return 'bg-orange-500/10 text-orange-400';
     case 'unconsumed':
-      return 'bg-neutral3/10 text-neutral4';
+      return 'bg-neutral3/10 text-muted-foreground';
   }
 }

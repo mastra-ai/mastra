@@ -11,7 +11,7 @@ const STATUS_LABELS: Record<TraceStatusValueStatus, string> = {
 const STATUS_STYLES: Record<TraceStatusValueStatus, string> = {
   success: 'text-accent1',
   error: 'text-error',
-  running: 'text-neutral4',
+  running: 'text-muted-foreground',
 };
 
 export interface TraceStatusValueProps {

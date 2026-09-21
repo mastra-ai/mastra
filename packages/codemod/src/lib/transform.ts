@@ -4,8 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import util from 'node:util';
 import debug from 'debug';
+import { BUNDLE } from './bundle';
 
 const execFile = util.promisify(child_process.execFile);
+const availableCodemods = new Set(BUNDLE);
 
 interface TransformOptions {
   dry?: boolean;
@@ -28,8 +30,9 @@ function getJscodeshiftBin(): string {
 }
 
 function buildArgs(codemodPath: string, targetPath: string, options: TransformOptions): string[] {
-  // Ignoring everything under `.*/` covers `.mastra/` along with any other
-  // framework build related or otherwise intended-to-be-hidden directories.
+  // Ignore hidden directories inside the target without matching hidden
+  // directories that contain the target itself.
+  const hiddenDirectoryPattern = path.join(targetPath, '**/.*/**');
   const args = [
     '-t',
     codemodPath,
@@ -37,7 +40,7 @@ function buildArgs(codemodPath: string, targetPath: string, options: TransformOp
     '--parser',
     'tsx',
     '--ignore-pattern=**/node_modules/**',
-    '--ignore-pattern=**/.*/**',
+    `--ignore-pattern=${hiddenDirectoryPattern}`,
     '--ignore-pattern=**/dist/**',
     '--ignore-pattern=**/build/**',
     '--ignore-pattern=**/*.min.js',
@@ -53,7 +56,7 @@ function buildArgs(codemodPath: string, targetPath: string, options: TransformOp
   }
 
   if (options.verbose) {
-    args.push('--verbose');
+    args.push('--verbose=2');
   }
 
   if (options.jscodeshift) {
@@ -107,6 +110,10 @@ export async function transform(
   transformOptions: TransformOptions,
   options: { logStatus: boolean } = { logStatus: true },
 ): Promise<{ errors: TransformErrors; notImplementedErrors: TransformErrors }> {
+  if (!availableCodemods.has(codemod)) {
+    throw new Error(`Unknown codemod "${codemod}". Available codemods: ${BUNDLE.join(', ')}`);
+  }
+
   if (options.logStatus) {
     log(`Applying codemod '${codemod}': ${source}`);
   }

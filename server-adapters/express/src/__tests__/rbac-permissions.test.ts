@@ -10,9 +10,9 @@
  */
 
 import type { Server } from 'node:http';
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
 import express from 'express';
 import type { Application } from 'express';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

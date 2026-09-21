@@ -14,6 +14,7 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -67,7 +68,11 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-destructive text-ui-md">Failed to parse request context schema</p>;
+    return (
+      <div role="alert">
+        <Notice variant="destructive">Failed to parse request context schema</Notice>
+      </div>
+    );
   }
 
   return (
@@ -96,7 +101,7 @@ function PipelineStep({
           aria-hidden="true"
           className={cn(
             'flex size-6 shrink-0 items-center justify-center rounded-full border text-ui-xs font-medium',
-            done ? 'border-accent1 bg-accent1 text-white' : 'border-border1 text-neutral3',
+            done ? 'border-accent1 bg-accent1 text-white' : 'border-border1 text-muted-foreground',
           )}
         >
           {index}
@@ -248,7 +253,7 @@ export function ExperimentTriggerDialog({
       >
         <DialogHeader className="border-border1 border-b px-4 py-4">
           <DialogTitle>Run experiment</DialogTitle>
-          <DialogDescription className="text-ui-sm text-neutral3 not-sr-only">
+          <DialogDescription className="text-ui-sm text-muted-foreground not-sr-only">
             Pick a dataset, choose what to run it against, and optionally score the results.
           </DialogDescription>
         </DialogHeader>
@@ -300,7 +305,7 @@ export function ExperimentTriggerDialog({
                 )}
               </div>
               {datasetId && itemCount !== undefined && (
-                <p className="text-ui-xs text-neutral3">
+                <p className="text-ui-xs text-muted-foreground">
                   {itemCount} {itemCount === 1 ? 'item' : 'items'}
                 </p>
               )}
@@ -315,7 +320,7 @@ export function ExperimentTriggerDialog({
                 container={contentRef}
               />
               {targetType && !targetId && (
-                <p className="text-ui-xs text-neutral3">
+                <p className="text-ui-xs text-muted-foreground">
                   Choose {targetType === 'agent' ? 'an' : 'a'} {targetType} to run
                 </p>
               )}
@@ -369,7 +374,7 @@ export function ExperimentTriggerDialog({
                 <Badge variant="green" indicator="dot">
                   Ready
                 </Badge>
-                <span className="text-ui-xs text-neutral3">
+                <span className="text-ui-xs text-muted-foreground">
                   {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
                 </span>
               </>

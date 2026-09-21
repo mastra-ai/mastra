@@ -1,10 +1,10 @@
+import { Fragment } from 'react';
 import type { ReactNode } from 'react';
 import { FilterBarChip } from './filter-bar-chip';
 import { FilterBarClear } from './filter-bar-clear';
 import { FilterBarProvider, useFilterBarContext } from './filter-bar-context';
 import { FilterBarInput } from './filter-bar-input';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from './types';
-import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
@@ -13,12 +13,28 @@ export type FilterBarProps = {
   operators: FilterBarOperator[];
   value: FilterBarItem[];
   onValueChange: (items: FilterBarItem[]) => void;
+  /**
+   * Id given to a newly added item. Defaults to a random id. Consumers that rebuild `value` from
+   * their own store (URL, query params…) should return the id they will rebuild it with, so the
+   * draft chip and the committed chip are the same element.
+   */
+  createItemId?: (fieldId: string) => string;
   'aria-label'?: string;
+  /** Accessible label of the trailing "remove every filter" button. */
+  clearLabel?: string;
   className?: string;
   children: ReactNode;
 };
 
-function FilterBarSurface({ className, children }: { className?: string; children: ReactNode }) {
+function FilterBarSurface({
+  className,
+  clearLabel,
+  children,
+}: {
+  className?: string;
+  clearLabel: string;
+  children: ReactNode;
+}) {
   const ctx = useFilterBarContext();
   return (
     <div
@@ -26,20 +42,17 @@ function FilterBarSurface({ className, children }: { className?: string; childre
       aria-label={ctx.ariaLabel}
       data-slot="filter-bar"
       className={cn(
-        // Same surface/hover/focus recipe as InputGroup (wrapper whose focus lives on the nested input),
-        // Concentric corners: chips are 24px pills (12px radius) inset by p-1 (4px), so the
-        // surface radius is 12 + 4 = 16px (rounded-2xl). Keep padding uniform for this to hold.
-        'flex min-h-form-md w-full flex-wrap items-center gap-1 rounded-2xl border border-border1 bg-surface-overlay-soft p-1',
-        'cursor-text transition-all duration-normal ease-out-custom',
-        'hover:bg-surface-overlay-strong',
-        inputHoverBorderWithin,
-        'outline-hidden focus-within:bg-surface-overlay-strong focus-within:outline-hidden',
-        inputFocusBorderWithin,
+        // No chrome of its own: chips and the typeahead input sit directly on the parent surface.
+        // Layout: chips, input, then Clear right beside the input — all in one wrapping row so
+        // Clear never drifts to the far edge of a wide container.
+        'flex w-full flex-wrap items-center gap-1',
         className,
       )}
-      onClick={ctx.focusInput}
     >
       {children}
+      <span className="flex shrink-0 items-center empty:hidden">
+        <FilterBarClear label={clearLabel} />
+      </span>
       <VisuallyHidden aria-live="polite">{ctx.announcement}</VisuallyHidden>
     </div>
   );
@@ -54,7 +67,6 @@ function FilterBarSurface({ className, children }: { className?: string; childre
  * <FilterBar value={items} onValueChange={setItems} fields={fields} operators={DEFAULT_FILTER_OPERATORS}>
  *   <FilterBar.Chips />
  *   <FilterBar.Input />
- *   <FilterBar.Clear />
  * </FilterBar>
  */
 export function FilterBar({
@@ -62,7 +74,9 @@ export function FilterBar({
   operators,
   value,
   onValueChange,
+  createItemId,
   'aria-label': ariaLabel = 'Filters',
+  clearLabel = 'Clear filters',
   className,
   children,
 }: FilterBarProps) {
@@ -72,26 +86,47 @@ export function FilterBar({
       operators={operators}
       value={value}
       onValueChange={onValueChange}
+      createItemId={createItemId}
       ariaLabel={ariaLabel}
     >
-      <FilterBarSurface className={className}>{children}</FilterBarSurface>
+      <FilterBarSurface className={className} clearLabel={clearLabel}>
+        {children}
+      </FilterBarSurface>
     </FilterBarProvider>
   );
 }
 
-/** Default layout: one editable chip per item, in order. */
-export function FilterBarChips() {
+/**
+ * Default layout: one editable chip per item, in order, then the chip of the filter
+ * being built in the input (which becomes the last item's chip once committed).
+ */
+export function FilterBarChips({ renderChip = defaultRenderChip }: FilterBarChipsProps) {
   const ctx = useFilterBarContext();
-  return (
-    <>
-      {ctx.items.map(item => (
-        <FilterBarChip key={item.id} item={item} />
-      ))}
-    </>
-  );
+  // One keyed array: the draft chip and the item it becomes share a key, so React
+  // keeps the element across the commit instead of mounting a new chip.
+  const chips = ctx.items.map(item => <Fragment key={item.id}>{renderChip(item)}</Fragment>);
+  if (ctx.draft) {
+    // `FilterBarChip` needs a full item; the draft's missing parts are blank until picked.
+    const { id, fieldId, operatorId = '' } = ctx.draft;
+    chips.push(
+      <Fragment key={id}>
+        <FilterBarChip draft item={{ id, fieldId, operatorId, value: '' }} />
+      </Fragment>,
+    );
+  }
+  return <>{chips}</>;
 }
+
+export type FilterBarChipsProps = {
+  /**
+   * Chip for an item; return `null` to render none (e.g. an item only held in the
+   * value for scoping). Defaults to a plain editable `FilterBar.Chip`.
+   */
+  renderChip?: (item: FilterBarItem) => ReactNode;
+};
+
+const defaultRenderChip = (item: FilterBarItem) => <FilterBarChip item={item} />;
 
 FilterBar.Chips = FilterBarChips;
 FilterBar.Chip = FilterBarChip;
 FilterBar.Input = FilterBarInput;
-FilterBar.Clear = FilterBarClear;

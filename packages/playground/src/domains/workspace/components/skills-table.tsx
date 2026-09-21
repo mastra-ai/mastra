@@ -1,14 +1,23 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { sortBy } from '@mastra/playground-ui/sort/sort-by';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { AlertTriangle, BookOpen, CircleSlashIcon, Plus } from 'lucide-react';
+import { useMemo } from 'react';
 import type { SyntheticEvent } from 'react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
 import { useLinkComponent } from '@/lib/framework';
 
+export type SkillsSortKey = 'name' | 'path';
+export type SkillsSort = ListSort<SkillsSortKey>;
+
 export interface SkillsTableProps {
   skills: SkillMetadata[];
   isLoading: boolean;
+  sort?: SkillsSort;
+  onSortChange?: (direction: DataListSort, key: SkillsSortKey) => void;
   isSkillsConfigured?: boolean;
   /** True if .agents/skills has skills that aren't being discovered */
   hasUndiscoveredAgentSkills?: boolean;
@@ -30,18 +39,25 @@ export interface SkillsTableProps {
 const DOWNLOADED_SKILLS_PATH = '.agents/skills/';
 
 const baseColumns = [
-  { label: 'Skill', size: 'minmax(8rem,auto)' },
-  { label: 'Path', size: 'minmax(8rem,1fr)' },
+  { label: 'Skill', size: 'minmax(8rem,auto)', sortKey: 'name' },
+  { label: 'Path', size: 'minmax(8rem,1fr)', sortKey: 'path' },
   { label: 'Description', size: 'minmax(0,2fr)' },
 ] as const;
 
 const columnsWithActions = [...baseColumns, { label: '', size: 'auto' }] as const;
 
+const sortAccessors = {
+  name: (skill: SkillMetadata) => skill.name,
+  path: (skill: SkillMetadata) => skill.path,
+};
+
 const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
 
 export function SkillsTable({
-  skills,
+  skills: unsortedSkills,
   isLoading,
+  sort,
+  onSortChange,
   isSkillsConfigured = true,
   hasUndiscoveredAgentSkills = false,
   basePath = '/workspace/skills',
@@ -52,6 +68,15 @@ export function SkillsTable({
   removingSkillName,
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
+  const skills = useMemo(
+    () =>
+      sortBy(
+        unsortedSkills.map(skill => ({ ...skill, id: skill.path })),
+        sort,
+        sortAccessors,
+      ),
+    [unsortedSkills, sort],
+  );
   const { containerRef, getRowProps } = useDataListKeyboard({ count: skills.length, global: true });
 
   const isDownloaded = (skill: SkillMetadata) => skill.path?.includes(DOWNLOADED_SKILLS_PATH) ?? false;
@@ -82,7 +107,7 @@ export function SkillsTable({
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
           <div className="text-ui-md">
             <p className="font-medium text-amber-500">Skills installed but not discovered</p>
-            <p className="text-neutral4 mt-1">
+            <p className="text-muted-foreground mt-1">
               You have skills in <code className="bg-surface4 text-ui-sm rounded px-1 py-0.5">.agents/skills</code> that
               aren&apos;t being discovered. Add this path to your workspace skills configuration to see them.
             </p>
@@ -92,9 +117,20 @@ export function SkillsTable({
 
       <DataList columns={gridColumns} scrollRef={containerRef}>
         <DataList.Top>
-          {activeColumns.map(col => (
-            <DataList.TopCell key={col.label}>{col.label}</DataList.TopCell>
-          ))}
+          {activeColumns.map(col =>
+            onSortChange && 'sortKey' in col ? (
+              <DataList.SortableTopCell
+                key={col.label}
+                sortKey={col.sortKey}
+                sort={sort?.key === col.sortKey ? sort.direction : undefined}
+                onSortChange={onSortChange}
+              >
+                {col.label}
+              </DataList.SortableTopCell>
+            ) : (
+              <DataList.TopCell key={col.label}>{col.label}</DataList.TopCell>
+            ),
+          )}
         </DataList.Top>
 
         {skills.length === 0 ? (
@@ -113,7 +149,7 @@ export function SkillsTable({
 
             const rowContent = (
               <>
-                <DataList.Cell className="text-neutral6 font-medium">{skill.name}</DataList.Cell>
+                <DataList.Cell className="text-foreground font-medium">{skill.name}</DataList.Cell>
                 <DataList.TextCell font="mono">{skill.path}</DataList.TextCell>
                 <DataList.Cell className="min-w-0">
                   <span className="block truncate">{skill.description || '—'}</span>
@@ -179,10 +215,10 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
     <div className="grid place-items-center py-16">
       <div className="flex max-w-md flex-col items-center text-center">
         <div className="bg-surface4 mb-4 rounded-full p-4">
-          <CircleSlashIcon className="text-neutral3 h-8 w-8" />
+          <CircleSlashIcon className="text-muted-foreground h-8 w-8" />
         </div>
-        <h2 className="text-neutral6 text-header-sm mb-2 font-medium">Skills Not Configured</h2>
-        <p className="text-neutral4 text-ui-md mb-6">
+        <h2 className="text-foreground text-header-sm mb-2 font-medium">Skills Not Configured</h2>
+        <p className="text-muted-foreground text-ui-md mb-6">
           No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
           agent skills.
         </p>
@@ -195,9 +231,8 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
           <Button
             size="lg"
             variant="default"
-            as="a"
-            href="https://mastra.ai/en/docs/workspace/skills"
-            target="_blank"
+            render={<a href="https://mastra.ai/en/docs/workspace/skills" target="_blank" />}
+
             icon={<BookOpen />}
           >
             Learn about Skills

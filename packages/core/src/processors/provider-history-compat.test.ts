@@ -11,6 +11,7 @@ import {
   isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeAzure,
   isMaybeCerebras,
+  isMaybeGoogleWithoutTrailingModelTurn,
   ProviderHistoryCompat,
   stripForeignProviderExecutedTools,
 } from './provider-history-compat';
@@ -360,6 +361,53 @@ describe('isMaybeAnthropicWithoutAssistantPrefill', () => {
         { model: 'anthropic/claude-opus-5' },
       ]),
     ).toBe(true);
+  });
+});
+
+describe('isMaybeGoogleWithoutTrailingModelTurn', () => {
+  it('matches Gemini 3 and later Google, Vertex, and gateway-routed models', () => {
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'google.generative-ai', modelId: 'gemini-3.5-flash-lite' }),
+    ).toBe(true);
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'vertex-ai.google-ai', modelId: 'gemini-3.1-pro-preview' }),
+    ).toBe(true);
+    expect(isMaybeGoogleWithoutTrailingModelTurn('google/gemini-3-pro-preview')).toBe(true);
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'openrouter.chat', modelId: 'google/gemini-3.5-flash-lite' }),
+    ).toBe(true);
+  });
+
+  it('does not match Gemini 2.x, which accepts a trailing model turn', () => {
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'google.generative-ai', modelId: 'gemini-2.5-flash' }),
+    ).toBe(false);
+    expect(isMaybeGoogleWithoutTrailingModelTurn('google/gemini-2.0-flash')).toBe(false);
+  });
+
+  it('does not match non-Google models, including Google models behind another provider', () => {
+    expect(isMaybeGoogleWithoutTrailingModelTurn({ provider: 'openai.chat', modelId: 'gpt-5' })).toBe(false);
+    expect(isMaybeGoogleWithoutTrailingModelTurn({ provider: 'anthropic.messages', modelId: 'claude-opus-5' })).toBe(
+      false,
+    );
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'openai.chat', modelId: 'google/gemini-3.5-flash-lite' }),
+    ).toBe(false);
+  });
+
+  it('uses a conservative result for unresolved Google model versions and fallback arrays', () => {
+    expect(isMaybeGoogleWithoutTrailingModelTurn({ provider: 'google.generative-ai' })).toBe(true);
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'google.generative-ai', modelId: 'gemini-next-flash' }),
+    ).toBe(true);
+    expect(isMaybeGoogleWithoutTrailingModelTurn(() => 'google/gemini-3.5-flash-lite')).toBe(true);
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn([
+        { model: 'google/gemini-2.5-flash' },
+        { model: 'google/gemini-3.5-flash-lite' },
+      ]),
+    ).toBe(true);
+    expect(isMaybeGoogleWithoutTrailingModelTurn([{ model: 'google/gemini-2.5-flash' }])).toBe(false);
   });
 });
 
@@ -1286,5 +1334,612 @@ describe('anthropicStripForeignSignedReasoning', () => {
 
       expect(result).toBeUndefined();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// openai-orphan-item-id (#22291)
+// ---------------------------------------------------------------------------
+
+describe('openaiOrphanItemId', () => {
+  const ORPHAN_ID = 'msg_68ab1c9f0orphan';
+  const REASONING_ID = 'rs_68ab1c9f0reason';
+
+  /** The real OpenAI 400 from #22291. */
+  function createOrphanItemError() {
+    const message =
+      `Item '${ORPHAN_ID}' of type 'message' was provided without its required ` +
+      `'reasoning' item: '${REASONING_ID}'.`;
+    return new APICallError({
+      message,
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message, type: 'invalid_request_error', code: null } }),
+      isRetryable: false,
+    });
+  }
+
+  /** The sibling `fc_…` variant already fixed by #19408 — must NOT match this rule. */
+  function createOrphanFunctionCallError() {
+    const message =
+      `Item 'fc_68ab1c9f0tool' of type 'function_call' was provided without its required ` +
+      `'reasoning' item: '${REASONING_ID}'.`;
+    return new APICallError({
+      message,
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message, type: 'invalid_request_error' } }),
+      isRetryable: false,
+    });
+  }
+
+  /** Assistant message carrying an OpenAI itemId on its text part and no reasoning part. */
+  function orphanAssistant(itemId: string = ORPHAN_ID) {
+    return {
+      id: `msg-orphan-${itemId}`,
+      role: 'assistant' as const,
+      content: {
+        format: 2 as const,
+        parts: [
+          {
+            type: 'text' as const,
+            text: 'Lyon has a population of 522,969.',
+            providerMetadata: {
+              openai: {
+                itemId,
+                cachedPromptTokens: 1024,
+                reasoningTokens: 256,
+                logprobs: [{ token: 'Lyon', logprob: -0.01 }],
+              },
+            },
+          },
+        ],
+      },
+      createdAt: new Date(),
+    };
+  }
+
+  /** A healthy assistant message: itemId present AND a reasoning part alongside it. */
+  function healthyAssistant() {
+    return {
+      id: 'msg-healthy',
+      role: 'assistant' as const,
+      content: {
+        format: 2 as const,
+        parts: [
+          {
+            type: 'reasoning' as const,
+            text: 'Recall the population figure.',
+            providerMetadata: { openai: { itemId: REASONING_ID } },
+          },
+          {
+            type: 'text' as const,
+            text: 'About 522,969.',
+            providerMetadata: { openai: { itemId: 'msg_healthy_text' } },
+          },
+        ],
+      },
+      createdAt: new Date(),
+    };
+  }
+
+  function orphanArgs(
+    build: (list: MessageList) => void,
+    overrides: Partial<ProcessAPIErrorArgs> = {},
+  ): ProcessAPIErrorArgs {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    build(messageList);
+    return {
+      error: createOrphanItemError(),
+      messages: messageList.get.all.db(),
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('abort');
+      }) as any,
+      ...overrides,
+    };
+  }
+
+  function textPartMetadata(args: ProcessAPIErrorArgs, messageId: string) {
+    const msg = args.messageList.get.all.db().find(m => m.id === messageId);
+    const part = msg!.content.parts.find(p => p.type === 'text');
+    return (part as { providerMetadata?: { openai?: Record<string, unknown> } }).providerMetadata?.openai;
+  }
+
+  // --- SC4: the corrupted history recovers instead of hard-failing -----------
+
+  it('A1: signals a retry when OpenAI rejects an orphaned message item', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+  });
+
+  it('A2: strips the orphaned itemId so the replay no longer sends an item_reference', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).not.toHaveProperty('itemId');
+  });
+
+  // --- SC5: nothing else under providerMetadata.openai is collateral --------
+
+  it('A3: preserves every other providerMetadata.openai field', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).toEqual({
+      cachedPromptTokens: 1024,
+      reasoningTokens: 256,
+      logprobs: [{ token: 'Lyon', logprob: -0.01 }],
+    });
+  });
+
+  // --- Blast-radius guards --------------------------------------------------
+
+  it('A4: leaves a healthy itemId+reasoning message untouched', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([healthyAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, 'msg-healthy')).toEqual({ itemId: 'msg_healthy_text' });
+  });
+
+  it('A5: does not fire on a rate-limit error', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(
+      list => {
+        list.add([createUserMessage('population of Lyon?')], 'input');
+        list.add([orphanAssistant()], 'memory');
+        list.add([createUserMessage('and Paris?')], 'input');
+      },
+      { error: createRateLimitError() },
+    );
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toBeUndefined();
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).toHaveProperty('itemId', ORPHAN_ID);
+  });
+
+  it('A6: does not claim the fc_… variant already handled by #19408', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(
+      list => {
+        list.add([createUserMessage('population of Lyon?')], 'input');
+        list.add([orphanAssistant()], 'memory');
+        list.add([createUserMessage('and Paris?')], 'input');
+      },
+      { error: createOrphanFunctionCallError() },
+    );
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toBeUndefined();
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).toHaveProperty('itemId', ORPHAN_ID);
+  });
+
+  it('A7b: repairs the orphan anyway when the preceding assistant row already paired its own reasoning with its own text', async () => {
+    // A preceding row that is self-consistent is not cover for the row after it. Treating it as
+    // cover would leave a genuine orphan unrepaired, and the retry would hit the same 400 with
+    // retryCount === 1 -- a hard failure instead of a recovery.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([healthyAssistant()], 'memory');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).not.toHaveProperty('itemId');
+    // ...and the healthy row is still untouched.
+    expect(textPartMetadata(args, 'msg-healthy')).toEqual({ itemId: 'msg_healthy_text' });
+  });
+
+  it('A8: repairs every orphan-shaped message in a mixed history, and only those', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([healthyAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Rome?')], 'input');
+      list.add([orphanAssistant('msg_second_orphan')], 'memory');
+      list.add([createUserMessage('and Oslo?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).not.toHaveProperty('itemId');
+    expect(textPartMetadata(args, 'msg-orphan-msg_second_orphan')).not.toHaveProperty('itemId');
+    expect(textPartMetadata(args, 'msg-healthy')).toEqual({ itemId: 'msg_healthy_text' });
+  });
+
+  it('A9: strips every orphaned text part on a multi-part message', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-multi',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                { type: 'text' as const, text: 'first', providerMetadata: { openai: { itemId: 'msg_a', usage: 1 } } },
+                { type: 'text' as const, text: 'second', providerMetadata: { openai: { itemId: 'msg_b', usage: 2 } } },
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    const parts = args.messageList.get.all.db().find(m => m.id === 'msg-multi')!.content.parts;
+    expect(parts.map((p: any) => p.providerMetadata.openai)).toEqual([{ usage: 1 }, { usage: 2 }]);
+  });
+
+  it('A10: does not fire on an unrelated 400', async () => {
+    const handler = new ProviderHistoryCompat();
+    const unrelated400 = new APICallError({
+      message: "Invalid value for 'temperature': expected a number between 0 and 2",
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message: 'Invalid value for temperature' } }),
+      isRetryable: false,
+    });
+    const args = orphanArgs(
+      list => {
+        list.add([createUserMessage('population of Lyon?')], 'input');
+        list.add([orphanAssistant()], 'memory');
+        list.add([createUserMessage('and Paris?')], 'input');
+      },
+      { error: unrelated400 },
+    );
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toBeUndefined();
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).toHaveProperty('itemId', ORPHAN_ID);
+  });
+
+  it('A11: documents the collateral — a valid reasoning-free message in a mixed history also loses its itemId', async () => {
+    // A non-reasoning Responses model produces messages that are orphan-shaped but perfectly
+    // valid. Since `fix` never sees the error, it cannot tell them apart, so they are stripped
+    // too. They still replay correctly, by value rather than by reference: what is lost is the
+    // item reference, not the turn. Under-stripping, by contrast, ends it.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('earlier, on a non-reasoning model')], 'input');
+      list.add([orphanAssistant('msg_from_gpt41')], 'memory');
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, 'msg-orphan-msg_from_gpt41')).not.toHaveProperty('itemId');
+  });
+
+  it('A12: documents the guard false-negative — an orphan behind an unrelated reasoning row is left alone', async () => {
+    // The guard reasons about shape, because the required `rs_…` id named in the error is not
+    // available to `fix`. An unrelated reasoning-only row therefore reads as cover and the
+    // orphan is skipped. That degrades to today's behavior (the turn fails as it already does);
+    // it cannot cause a failure that was not already happening.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-unrelated-reasoning',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'reasoning' as const,
+                  text: 'unrelated',
+                  providerMetadata: { openai: { itemId: 'rs_unrelated' } },
+                },
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).toHaveProperty('itemId', ORPHAN_ID);
+  });
+
+  it('A7: split-history guard — keeps the itemId when the reasoning sits on the preceding assistant message', async () => {
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-split-reasoning',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'reasoning' as const,
+                  text: 'Recall the figure.',
+                  providerMetadata: { openai: { itemId: REASONING_ID } },
+                },
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([orphanAssistant('msg_split_text')], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    await handler.processAPIError(args);
+
+    expect(textPartMetadata(args, 'msg-orphan-msg_split_text')).toHaveProperty('itemId', 'msg_split_text');
+  });
+
+  it('A13: the fix is idempotent — a second call over already-stripped history asks for no retry', async () => {
+    // The rule reports a mutation only when it actually stripped something. A `fix` that reported
+    // one unconditionally would ask for a retry that cannot change the request, so pin it: once the
+    // itemIds are gone, a further call over the same history is silent.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add([orphanAssistant()], 'memory');
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const first = await handler.processAPIError(args);
+    const second = await handler.processAPIError(args);
+
+    expect(first).toEqual({ retry: true });
+    expect(second).toBeUndefined();
+    expect(textPartMetadata(args, `msg-orphan-${ORPHAN_ID}`)).not.toHaveProperty('itemId');
+  });
+
+  // --- Every item reference on the orphan, not only the text one ------------
+
+  it('A14: strips the item id from a tool-invocation part on the same orphaned message', async () => {
+    // The error names the `msg_…` item, but the tool call beside it is orphaned for the same
+    // reason. Leaving its `fc_…` reference behind spends the one available retry to arrive at
+    // the same 400, one item further down the list.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-orphan-mixed',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: 'call-1',
+                    toolName: 'lookup',
+                    args: {},
+                    result: { population: 522969 },
+                  },
+                  providerMetadata: { openai: { itemId: 'fc_orphaned' } },
+                },
+                {
+                  type: 'text' as const,
+                  text: 'About 522,969.',
+                  providerMetadata: { openai: { itemId: 'msg_orphaned' } },
+                },
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+    const parts = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-mixed')!.content.parts;
+    const metadataOf = (type: string) =>
+      (parts.find(p => p.type === type) as { providerMetadata?: { openai?: Record<string, unknown> } }).providerMetadata
+        ?.openai;
+
+    expect(result).toEqual({ retry: true });
+    expect(metadataOf('tool-invocation')).not.toHaveProperty('itemId');
+    expect(metadataOf('text')).not.toHaveProperty('itemId');
+  });
+
+  it('A15: repairs an Azure-namespaced orphan on the same footing as an OpenAI one', async () => {
+    // Azure serves the same Responses API and raises the same 400; the repo treats the two as
+    // one family (`RESPONSE_ITEM_ID_PROVIDERS`), so reading and stripping go through the shared
+    // helpers rather than a hard-coded `openai` key.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-orphan-azure',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'text' as const,
+                  text: 'About 522,969.',
+                  providerMetadata: { azure: { itemId: 'msg_azure', cachedPromptTokens: 1024 } },
+                },
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+    const part = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-azure')!.content.parts[0];
+    const azure = (part as { providerMetadata?: { azure?: Record<string, unknown> } }).providerMetadata?.azure;
+
+    expect(result).toEqual({ retry: true });
+    expect(azure).toEqual({ cachedPromptTokens: 1024 });
+  });
+
+  it('A16: strips ids from both metadata containers on the same part', async () => {
+    // The shared lookup reads an id from either container, so a part repaired in only one of
+    // them would still report as item-bearing — and would still send the reference that failed.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-orphan-options',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'text' as const,
+                  text: 'About 522,969.',
+                  providerMetadata: { openai: { itemId: 'msg_via_metadata', cachedPromptTokens: 1024 } },
+                  providerOptions: { openai: { itemId: 'msg_via_options', reasoningTokens: 256 } },
+                } as any,
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+    const part = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-options')!.content.parts[0] as {
+      providerMetadata?: { openai?: Record<string, unknown> };
+      providerOptions?: { openai?: Record<string, unknown> };
+    };
+
+    expect(result).toEqual({ retry: true });
+    expect(part.providerMetadata?.openai).toEqual({ cachedPromptTokens: 1024 });
+    expect(part.providerOptions?.openai).toEqual({ reasoningTokens: 256 });
+  });
+
+  it('A17: clears the result half of a tool pair, not just the call id', async () => {
+    // A merged tool part keeps the result item under `resultItemId`, and
+    // `splitResponsesToolItemReferences` turns that back into an `itemId` on the tool-result
+    // part during conversion. Stripping only the call id would leave a live reference into the
+    // response that was just rejected, and the repaired request would fail the same way.
+    const handler = new ProviderHistoryCompat();
+    const args = orphanArgs(list => {
+      list.add([createUserMessage('population of Lyon?')], 'input');
+      list.add(
+        [
+          {
+            id: 'msg-orphan-pair',
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: 'call-1',
+                    toolName: 'tool_search',
+                    args: {},
+                    result: { hits: [] },
+                  },
+                  providerMetadata: { openai: { itemId: 'tso_call', resultItemId: 'tso_result' } },
+                },
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: 'call-2',
+                    toolName: 'tool_search',
+                    args: {},
+                    result: { hits: [] },
+                  },
+                  providerOptions: { azure: { itemId: 'tso_call_2', resultItemId: 'tso_result_2' } },
+                } as any,
+              ],
+            },
+            createdAt: new Date(),
+          },
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('and Paris?')], 'input');
+    });
+
+    const result = await handler.processAPIError(args);
+    const parts = args.messageList.get.all.db().find(m => m.id === 'msg-orphan-pair')!.content.parts;
+    const openai = (parts[0] as { providerMetadata?: { openai?: Record<string, unknown> } }).providerMetadata?.openai;
+    const azure = (parts[1] as { providerOptions?: { azure?: Record<string, unknown> } }).providerOptions?.azure;
+
+    expect(result).toEqual({ retry: true });
+    for (const namespace of [openai, azure]) {
+      expect(namespace).not.toHaveProperty('itemId');
+      expect(namespace).not.toHaveProperty('resultItemId');
+    }
   });
 });

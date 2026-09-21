@@ -8,7 +8,6 @@ import type {
   UpdateExperimentResultParams,
   BatchInsertDatasetItemsParams,
   BatchDeleteDatasetItemsParams,
-  GenerateDatasetItemsParams,
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -127,10 +126,6 @@ export const useDatasetMutations = () => {
     },
   });
 
-  const generateItems = useMutation({
-    mutationFn: (params: GenerateDatasetItemsParams) => client.generateDatasetItems(params),
-  });
-
   const triggerExperiment = useMutation({
     mutationFn: (params: TriggerDatasetExperimentParams) => client.triggerDatasetExperiment(params),
     onSuccess: (_, variables) => {
@@ -142,7 +137,6 @@ export const useDatasetMutations = () => {
     mutationFn: (experimentId: string) => client.deleteExperiment(experimentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['experiments'] });
-      void queryClient.invalidateQueries({ queryKey: ['agent-experiments'] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiments'] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiment'] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiment-results'] });
@@ -188,7 +182,6 @@ export const useDatasetMutations = () => {
     deleteItems,
     batchInsertItems,
     batchDeleteItems,
-    generateItems,
     triggerExperiment,
     deleteExperiment,
     updateExperiment,

@@ -4,14 +4,16 @@ import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
-import { Link, Outlet, useNavigate, useParams } from 'react-router';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
+import { ExperimentItemPanel } from '@/domains/experiments/components/experiment-item-panel';
 import { ExperimentResultsBulkActions } from '@/domains/experiments/components/experiment-results-bulk-actions';
 import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
 import { ExperimentSideRail } from '@/domains/experiments/components/experiment-side-rail';
@@ -22,6 +24,8 @@ import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-e
 
 // Stable fallback so the selection hook's memoised filters don't churn while results load.
 const EMPTY_RESULTS: never[] = [];
+
+const RESULTS_SORT_KEYS = ['startedAt'] as const;
 
 function ExperimentPageShell({ children }: { children?: ReactNode }) {
   return (
@@ -36,6 +40,15 @@ function ExperimentPage() {
   const { experimentId } = useParams<{ experimentId: string }>();
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: RESULTS_SORT_KEYS });
+  const orderBy = useMemo(
+    () =>
+      sort
+        ? { field: sort.key, direction: sort.direction === 'asc' ? ('ASC' as const) : ('DESC' as const) }
+        : undefined,
+    [sort],
+  );
 
   // Resolve datasetId from experimentId (the URL has only the experiment id).
   const { data: experimentsData, isLoading: experimentsListLoading } = useExperiments();
@@ -58,6 +71,7 @@ function ExperimentPage() {
     datasetId,
     experimentId: experimentId ?? '',
     experimentStatus: experiment?.status,
+    orderBy,
   });
 
   const experimentMetrics = useExperimentMetrics({ experimentId, experimentStatus: experiment?.status });
@@ -94,7 +108,7 @@ function ExperimentPage() {
         titleSlot="Experiment not found"
         descriptionSlot={`No experiment with id "${experimentId}".`}
         actionSlot={
-          <Button as={Link} to="/experiments" icon={<ArrowLeft />}>
+          <Button render={<Link to="/experiments" />} icon={<ArrowLeft />}>
             Back to Experiments
           </Button>
         }
@@ -150,13 +164,15 @@ function ExperimentPage() {
               hasNextPage={hasNextPage}
               selectedIds={selection.selectedIds}
               onToggleSelect={selection.toggleSelect}
+              sort={sort}
+              onSortChange={onSortChange}
             />
             <ExperimentSideRail experiment={experiment} metrics={experimentMetrics} className="w-80 overflow-y-auto" />
           </PageLayout.MainArea>
         </PageLayout>
 
-        {/* Item detail sub-route renders here as an absolute overlay panel */}
-        <Outlet />
+        {/* Item detail drawer; the `items/:itemId` child route only carries the breadcrumb. */}
+        <ExperimentItemPanel />
 
         <DeleteExperimentDialog
           open={deleteDialogOpen}

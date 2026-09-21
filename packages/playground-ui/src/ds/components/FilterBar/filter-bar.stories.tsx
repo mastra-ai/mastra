@@ -1,15 +1,19 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { CircleIcon, GlobeIcon, HashIcon, PlayIcon, TagIcon, TimerIcon, TriangleAlertIcon } from 'lucide-react';
 import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
 import type { FilterBarField, FilterBarItem } from './types';
 import { Txt } from '@/ds/components/Txt';
+import { themedHueColor } from '@/lib/colors';
 
 const FIELDS: FilterBarField[] = [
   {
     id: 'status',
     label: 'Status',
+    icon: CircleIcon,
+    color: themedHueColor(0),
     operators: ['is', 'is-not', 'in', 'is-empty', 'is-not-empty'],
     suggestions: [
       { value: 'running', label: 'Running' },
@@ -20,20 +24,44 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'environment',
     label: 'Environment',
+    icon: GlobeIcon,
+    color: themedHueColor(120),
     operators: ['is', 'is-not', 'in'],
     suggestions: [{ value: 'prod' }, { value: 'staging' }, { value: 'dev' }],
   },
   {
     id: 'tags',
     label: 'Tags',
+    icon: TagIcon,
+    color: themedHueColor(280),
     operators: ['in'],
     strict: true,
     suggestions: [{ value: 'production' }, { value: 'experiment' }, { value: 'regression' }, { value: 'canary' }],
   },
-  { id: 'traceId', label: 'Trace ID', operators: ['is', 'contains', 'starts-with'] },
-  { id: 'runId', label: 'Run ID', operators: ['is', 'contains'] },
-  { id: 'duration', label: 'Duration (ms)', type: 'number', operators: ['gt', 'gte', 'lt', 'lte'] },
-  { id: 'hasError', label: 'Has error', type: 'boolean', operators: ['is'] },
+  {
+    id: 'traceId',
+    label: 'Trace ID',
+    icon: HashIcon,
+    color: themedHueColor(220),
+    operators: ['is', 'contains', 'starts-with'],
+  },
+  { id: 'runId', label: 'Run ID', icon: PlayIcon, color: themedHueColor(180), operators: ['is', 'contains'] },
+  {
+    id: 'duration',
+    label: 'Duration (ms)',
+    icon: TimerIcon,
+    color: themedHueColor(40),
+    type: 'number',
+    operators: ['gt', 'gte', 'lt', 'lte'],
+  },
+  {
+    id: 'hasError',
+    label: 'Has error',
+    icon: TriangleAlertIcon,
+    color: themedHueColor(330),
+    type: 'boolean',
+    operators: ['is'],
+  },
 ];
 
 const meta: Meta = {
@@ -72,10 +100,11 @@ function Demo({
       <FilterBar fields={fields} operators={DEFAULT_FILTER_OPERATORS} value={items} onValueChange={setItems}>
         <FilterBar.Chips />
         <FilterBar.Input placeholder="Filter traces…" />
-        <FilterBar.Clear />
       </FilterBar>
       {children?.(items)}
-      <pre className="bg-surface3 text-ui-xs text-neutral4 rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
+      <pre className="bg-surface3 text-ui-xs text-muted-foreground rounded-lg p-3">
+        {JSON.stringify(items, null, 2)}
+      </pre>
     </div>
   );
 }
@@ -137,10 +166,10 @@ export const LazyValues: Story = {
       <Demo fields={fields}>
         {() => (
           <div className="border-border1 rounded-lg border p-3">
-            <Txt variant="ui-xs" className="text-neutral3">
+            <Txt variant="ui-xs" className="text-muted-foreground">
               Resolver calls ({calls.length}) — none until a field and operator are chosen:
             </Txt>
-            <ul className="text-ui-sm text-neutral5 mt-1">
+            <ul className="text-ui-sm text-foreground mt-1">
               {calls.map((c, i) => (
                 <li key={i}>{c}</li>
               ))}
@@ -165,7 +194,6 @@ export const LockedChip: Story = {
           <FilterBar.Chip key={item.id} item={item} readOnly={item.id === 'scope'} />
         ))}
         <FilterBar.Input />
-        <FilterBar.Clear />
       </FilterBar>
     );
   },
@@ -221,7 +249,8 @@ export const KeyboardOnly: Story = {
     await user.keyboard('{ArrowDown}{Enter}');
     await user.type(input, 'abc');
     await user.keyboard('{Enter}');
-    // Walk back into the chips, open the last value editor, close it, then remove that chip.
+    // Walk back into the chips (remove button, then value), open the last value editor, close it, then remove that chip.
+    await user.keyboard('{ArrowLeft}');
     await user.keyboard('{ArrowLeft}');
     await user.keyboard('{Enter}');
     await user.keyboard('{Escape}');

@@ -498,6 +498,8 @@ describe('built-in board and integration handlers', () => {
   it.each([
     ['issue', 'github-issue'],
     ['linearIssue', 'linear-issue'],
+    ['jiraIssue', 'jira-issue'],
+    ['incidentioFollowUp', 'incidentio-follow-up'],
     ['manual', 'manual'],
   ] as const)('starts factory planning when a %s item enters Planning', async (source, itemSource) => {
     const rule = workBoard.rules.planning?.[source]?.onEnter;
@@ -522,6 +524,8 @@ describe('built-in board and integration handlers', () => {
   it.each([
     ['issue', 'github-issue'],
     ['linearIssue', 'linear-issue'],
+    ['jiraIssue', 'jira-issue'],
+    ['incidentioFollowUp', 'incidentio-follow-up'],
     ['manual', 'manual'],
   ] as const)('starts building a %s item from a prompt, with no skill to activate', async (source, itemSource) => {
     // The approved plan is the specification, and opening the pull request is
@@ -568,7 +572,10 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  function buildPrompt(source: 'issue' | 'linearIssue' | 'manual', metadata: Record<string, unknown> | null) {
+  function buildPrompt(
+    source: 'issue' | 'linearIssue' | 'jiraIssue' | 'incidentioFollowUp' | 'manual',
+    metadata: Record<string, unknown> | null,
+  ) {
     const rule = workBoard.rules.execute?.[source]?.onEnter;
     const context = {
       ...stageContext({ type: 'human', id: 'user-1' }, 'work'),

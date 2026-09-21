@@ -83,7 +83,7 @@ export function createThreadDraftState(initialKey?: string) {
     }
     const previous = snapshot.draft;
     const next = typeof value === 'function' ? value(previous) : value;
-    if (next === previous) return;
+    if (next.text === previous.text && next.attachments === previous.attachments) return;
     dirty = storageKey !== undefined;
     snapshot = { draft: next, status: { ...snapshot.status, saving: dirty } };
     notify();

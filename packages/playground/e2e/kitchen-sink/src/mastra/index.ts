@@ -64,6 +64,31 @@ export const mastra = new Mastra({
   server: {
     ...(process.env.E2E_STUDIO_BASE_PATH ? { studioBase: process.env.E2E_STUDIO_BASE_PATH } : {}),
     apiRoutes: [
+      // Seeds a weather-agent thread with `count` user messages ("seed message N",
+      // one second apart) so the Studio history pagination can be exercised.
+      registerApiRoute('/e2e/seed-thread', {
+        method: 'POST',
+        handler: async c => {
+          const { threadId, count } = (await c.req.json()) as { threadId: string; count: number };
+          const memory = await weatherAgent.getMemory();
+          if (!memory) return c.json({ error: 'weather-agent has no memory' }, 500);
+
+          const resourceId = weatherAgent.id;
+          await memory.createThread({ threadId, resourceId, title: 'Seeded thread' });
+          const base = Date.parse('2026-01-01T00:00:00.000Z');
+          await memory.saveMessages({
+            messages: Array.from({ length: count }, (_, index) => ({
+              id: `seed-${index}`,
+              threadId,
+              resourceId,
+              role: 'user' as const,
+              createdAt: new Date(base + index * 1000),
+              content: { format: 2 as const, parts: [{ type: 'text' as const, text: `seed message ${index}` }] },
+            })),
+          });
+          return c.json({ threadId, count }, 201);
+        },
+      }),
       registerApiRoute('/e2e/reset-storage', {
         method: 'POST',
         handler: async c => {

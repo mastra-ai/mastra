@@ -1,6 +1,6 @@
 'use client';
 
-import type { DatasetItemToolMock } from '@mastra/client-js';
+import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
@@ -150,7 +150,7 @@ export function SaveAsDatasetItemDialog({
       }
     }
 
-    let parsedTrajectory: unknown | undefined;
+    let parsedTrajectory: AddDatasetItemParams['expectedTrajectory'];
     if (expectedTrajectory.trim()) {
       try {
         parsedTrajectory = JSON.parse(expectedTrajectory);
@@ -239,7 +239,7 @@ export function SaveAsDatasetItemDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="text-neutral4 text-ui-md px-2 py-4 text-center">No datasets available</div>
+                  <div className="text-muted-foreground text-ui-md px-2 py-4 text-center">No datasets available</div>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>

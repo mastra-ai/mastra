@@ -636,6 +636,51 @@ describe('MastraFactory.prepare', () => {
     expect(paths).not.toContain('/web/channel-accounts');
   });
 
+  it('registers Platform Jira with an access token and no explicit connection ID', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('registers Platform Jira with a secret key and no explicit connection ID', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'platform-secret');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps an explicit Jira integration instead of registering Platform Jira', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({
+            id: 'jira',
+            routes: () => [{ path: '/web/custom-jira', method: 'GET', handler: () => new Response() }],
+          }),
+        ],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/custom-jira');
+      expect(paths).not.toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('omits auth routes when auth is explicitly disabled (auth: null)', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;

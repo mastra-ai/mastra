@@ -25,13 +25,13 @@ export function JSONFormatPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-ui-sm text-neutral5 flex h-8 items-center font-medium">Each item looks like this</p>
+      <p className="text-ui-sm text-foreground flex h-8 items-center font-medium">Each item looks like this</p>
 
       <dl className="border-border1 divide-border1 divide-y rounded-lg border">
         {FIELDS.map(field => (
           <div key={field.name} className="grid grid-cols-[7rem_1fr] gap-3 px-3 py-2.5">
-            <dt className="text-ui-xs text-neutral6 font-mono">{field.name}</dt>
-            <dd className="text-ui-xs text-neutral4 flex flex-col items-start gap-1.5">
+            <dt className="text-ui-xs text-foreground font-mono">{field.name}</dt>
+            <dd className="text-ui-xs text-muted-foreground flex flex-col items-start gap-1.5">
               <span>{field.description}</span>
               {field.required ? (
                 <Badge variant="green" size="xs">
@@ -49,7 +49,7 @@ export function JSONFormatPanel() {
 
       <div className="border-border1 overflow-hidden rounded-lg border">
         <div className="border-border1 bg-surface3 flex items-center justify-between border-b py-1.5 pr-1.5 pl-3">
-          <span className="text-ui-xs text-neutral4 font-mono">example.json</span>
+          <span className="text-ui-xs text-muted-foreground font-mono">example.json</span>
           <Button icon={isCopied ? <Check /> : <Copy />} variant="ghost" size="xs" onClick={handleCopy}>
             {isCopied ? 'Copied' : 'Copy'}
           </Button>
@@ -67,10 +67,8 @@ export function JSONFormatPanel() {
 
       <Button
         variant="ghost"
-        as="a"
-        href={DOCS_URL}
-        target="_blank"
-        rel="noopener noreferrer"
+        render={<a href={DOCS_URL} target="_blank" rel="noopener noreferrer" />}
+
         className="self-start"
         icon={<ExternalLinkIcon />}
       >

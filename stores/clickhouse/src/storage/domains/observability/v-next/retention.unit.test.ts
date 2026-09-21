@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildRetentionDDL, TABLE_DELETION_REQUESTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS } from './ddl';
+import {
+  buildRetentionDDL,
+  TABLE_DELETION_REQUESTS,
+  TABLE_LOG_EVENTS,
+  TABLE_SCORE_EVENTS,
+  TABLE_SCORE_EVENTS_CURRENT,
+} from './ddl';
 import { applyClickHouseRetention } from '.';
 
 describe('buildRetentionDDL', () => {
@@ -126,8 +132,9 @@ describe('applyClickHouseRetention', () => {
 
     await expect(
       applyClickHouseRetention({ client: { query, command } as any, retention: { scores: 30 } }),
-    ).resolves.toHaveLength(1);
-    expect(command).toHaveBeenCalledOnce();
+    ).resolves.toHaveLength(2);
+    expect(command).toHaveBeenCalledTimes(2);
+    expect(command.mock.calls[1]?.[0].query).toContain(`ALTER TABLE ${TABLE_SCORE_EVENTS_CURRENT}`);
   });
 
   it('confirms a matching TTL on every cluster host before suppressing an ALTER conflict', async () => {
@@ -151,8 +158,9 @@ describe('applyClickHouseRetention', () => {
         retention: { scores: 30 },
         replication: { cluster: 'retention-cluster' },
       }),
-    ).resolves.toHaveLength(1);
-    expect(command).toHaveBeenCalledOnce();
+    ).resolves.toHaveLength(2);
+    expect(command).toHaveBeenCalledTimes(2);
+    expect(command.mock.calls[1]?.[0].query).toContain(`ALTER TABLE ${TABLE_SCORE_EVENTS_CURRENT}`);
     expect(query.mock.calls[3]?.[0]).toMatchObject({
       query_params: { cluster: 'retention-cluster', tables: [TABLE_SCORE_EVENTS] },
     });

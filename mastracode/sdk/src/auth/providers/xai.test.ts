@@ -65,10 +65,12 @@ describe('startXAIDeviceLogin', () => {
     await expect(startXAIDeviceLogin()).rejects.toThrow(/non-https verification_uri/);
   });
 
-  it('throws on a failed device code request with the response body', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('nope', { status: 400 }));
+  it('throws on a failed device code request without exposing the response body', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('upstream-secret', { status: 400 }));
 
-    await expect(startXAIDeviceLogin()).rejects.toThrow(/400 nope/);
+    // Anchored: a plain string only substring-matches, so upstream body text
+    // appended to the message would still pass.
+    await expect(startXAIDeviceLogin()).rejects.toThrow(/^Failed to initiate xAI device authorization: 400$/);
   });
 });
 
@@ -133,13 +135,15 @@ describe('pollXAIDeviceLogin', () => {
     expect(result).toMatchObject({ status: 'failed', error: expect.stringContaining('denied') });
   });
 
-  it('fails loudly with the response body on unknown errors', async () => {
+  it('fails with a status-only error on unknown upstream errors', async () => {
     const pending = await startPending();
-    fetchMock.mockResolvedValueOnce(new Response('{"error":"server_error"}', { status: 500 }));
+    fetchMock.mockResolvedValueOnce(new Response('{"error":"upstream-secret"}', { status: 500 }));
 
     const result = await pollXAIDeviceLogin(pending);
 
-    expect(result).toMatchObject({ status: 'failed', error: expect.stringContaining('server_error') });
+    // The upstream `error` string is provider-controlled text; it must never
+    // reach the user-visible flow state.
+    expect(result).toMatchObject({ status: 'failed', error: 'xAI device authorization failed: 500' });
   });
 
   it('fails with a timeout after the deadline passes', async () => {
@@ -215,10 +219,10 @@ describe('refreshXAIToken', () => {
     expect(creds.refresh).toBe('new-rt');
   });
 
-  it('throws with the response body on failure', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('invalid_grant', { status: 400 }));
+  it('throws without exposing the response body on failure', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('upstream-secret', { status: 400 }));
 
-    await expect(refreshXAIToken('old-rt')).rejects.toThrow(/400 invalid_grant/);
+    await expect(refreshXAIToken('old-rt')).rejects.toThrow(/^xAI token refresh failed: 400$/);
   });
 });
 
@@ -227,5 +231,48 @@ describe('xaiOAuthProvider', () => {
     expect(xaiOAuthProvider.id).toBe('xai');
     expect(xaiOAuthProvider.name).toContain('xAI');
     expect(xaiOAuthProvider.getApiKey({ access: 'at', refresh: 'rt', expires: 0 })).toBe('at');
+  });
+});
+
+describe('xaiOAuthProvider.getAccountLabel', () => {
+  function idTokenWithEmail(email: string): string {
+    const b64url = (input: string) => Buffer.from(input, 'utf8').toString('base64url');
+    return `${b64url(JSON.stringify({ alg: 'none' }))}.${b64url(JSON.stringify({ email }))}.${b64url('{}')}`;
+  }
+
+  it('resolves the email claim from the persisted id_token', async () => {
+    await expect(
+      xaiOAuthProvider.getAccountLabel?.({
+        access: 'at',
+        refresh: 'rt',
+        expires: 0,
+        idToken: idTokenWithEmail('dev@x.ai'),
+      }),
+    ).resolves.toBe('dev@x.ai');
+  });
+
+  it('returns undefined without an id_token or email claim', async () => {
+    await expect(
+      xaiOAuthProvider.getAccountLabel?.({ access: 'at', refresh: 'rt', expires: 0 }),
+    ).resolves.toBeUndefined();
+    await expect(
+      xaiOAuthProvider.getAccountLabel?.({ access: 'at', refresh: 'rt', expires: 0, idToken: idTokenWithEmail('') }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('carries the id_token through a refresh that does not re-issue one', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ access_token: 'new-at', refresh_token: 'new-rt', expires_in: 3600 }),
+    );
+
+    const creds = await xaiOAuthProvider.refreshToken({
+      access: 'old-at',
+      refresh: 'old-rt',
+      expires: 0,
+      idToken: idTokenWithEmail('dev@x.ai'),
+    });
+
+    expect(creds.idToken).toBe(idTokenWithEmail('dev@x.ai'));
+    await expect(xaiOAuthProvider.getAccountLabel?.(creds)).resolves.toBe('dev@x.ai');
   });
 });

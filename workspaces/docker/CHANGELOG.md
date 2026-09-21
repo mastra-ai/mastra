@@ -1,5 +1,93 @@
 # @mastra/docker
 
+## 0.9.0-alpha.2
+
+### Minor Changes
+
+- Added AbortSignal cancellation for Docker template builds, repository template resolution, and lazy sandbox starts. Cancelling startup stops local template-preparation streams and sessions, rejects with `SandboxAbortError` while preserving the signal's custom reason as the error cause, and leaves the template retryable. ([#24451](https://github.com/mastra-ai/mastra/pull/24451))
+
+  ```typescript
+  const startController = new AbortController();
+  const start = sandbox.start({ abortSignal: startController.signal });
+  startController.abort(new Error('request cancelled'));
+  try {
+    await start;
+  } catch (error) {
+    if (!(error instanceof SandboxAbortError)) throw error;
+  }
+
+  const buildController = new AbortController();
+  const build = template.build({ abortSignal: buildController.signal });
+  buildController.abort(new Error('request cancelled'));
+  try {
+    await build;
+  } catch (error) {
+    if (!(error instanceof SandboxAbortError)) throw error;
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`d21aa84`](https://github.com/mastra-ai/mastra/commit/d21aa84aac0dc61bbc43434af7a3b3180373a8a7), [`a0fbeab`](https://github.com/mastra-ai/mastra/commit/a0fbeabf6298854bcc6d64c8b31530bedd1ea934), [`79385bb`](https://github.com/mastra-ai/mastra/commit/79385bbd8a52ed5e5536b16190dd8b8ac1ee0840), [`5014bf6`](https://github.com/mastra-ai/mastra/commit/5014bf6a52f04304c30b4e572df4052085e3ac02), [`58c88c4`](https://github.com/mastra-ai/mastra/commit/58c88c4e58504176ccb06d52df9440105aca788d), [`fc1e4f2`](https://github.com/mastra-ai/mastra/commit/fc1e4f2d4e0c1caa9d29de02f7be6a7d69ee2ea2), [`aee580d`](https://github.com/mastra-ai/mastra/commit/aee580d98976560e68e401c36790ce0cc6443aad), [`7c73bac`](https://github.com/mastra-ai/mastra/commit/7c73baccc8336a4fb0db92614bf778bae5459e24)]:
+  - @mastra/core@1.68.0-alpha.8
+
+## 0.9.0-alpha.1
+
+### Patch Changes
+
+- Fixed Docker sandbox process kills keeping helper response streams open. ([#24448](https://github.com/mastra-ai/mastra/pull/24448))
+
+- **Fixed commands that read stdin hanging until timeout** ([#24336](https://github.com/mastra-ai/mastra/pull/24336))
+
+  Commands that read standard input without being given anything to read — a bare `cat`, or `grep`/`rg` with no path argument — blocked until the command timeout expired. The exec no longer attaches stdin unless something will feed it, so these commands see end-of-input and exit immediately.
+
+  `processes.spawn()` is unchanged: it still attaches stdin by default so long-running processes can be driven with `sendStdin()`.
+
+- Updated dependencies [[`11560f5`](https://github.com/mastra-ai/mastra/commit/11560f54627055f5ae541a6825669778983a23c9), [`9fe69d6`](https://github.com/mastra-ai/mastra/commit/9fe69d6566c3e6d1e5c9f5bf5e9848b35c73e182), [`15d3e76`](https://github.com/mastra-ai/mastra/commit/15d3e7647636c7286650ef517953c9885806c3dd), [`3c86726`](https://github.com/mastra-ai/mastra/commit/3c867260be59d3cd8337bc0af9a76bac517fe16f), [`0a989ab`](https://github.com/mastra-ai/mastra/commit/0a989abf37c409040ee2ce9a9ccfcfb5a700508e), [`ed24c7f`](https://github.com/mastra-ai/mastra/commit/ed24c7f654bb193a0c503469f4f19dda9d687ecb), [`0894a0e`](https://github.com/mastra-ai/mastra/commit/0894a0e6ede48058b547aab5bb8a2a3d71c3878a), [`5968b71`](https://github.com/mastra-ai/mastra/commit/5968b718044f8dd21bab6ce4ae7da3590729842b), [`dafabf2`](https://github.com/mastra-ai/mastra/commit/dafabf22e4f4b0aabecb09839de5abe54e03151a), [`150a670`](https://github.com/mastra-ai/mastra/commit/150a67086539eea91cac3550fc068e6ac5c7e79b), [`9fe69d6`](https://github.com/mastra-ai/mastra/commit/9fe69d6566c3e6d1e5c9f5bf5e9848b35c73e182), [`c6999e2`](https://github.com/mastra-ai/mastra/commit/c6999e2b4ab805301e66723ca8ba9fe30faa82ca)]:
+  - @mastra/core@1.68.0-alpha.7
+
+## 0.9.0-alpha.0
+
+### Minor Changes
+
+- Add a `DockerTemplate` API for preparing reusable, content-addressed baseline images for the local Docker sandbox, with the same builder and repo-template contract as the E2B and platform providers. ([#24199](https://github.com/mastra-ai/mastra/pull/24199))
+
+  Prepare an environment once — a base image plus ordered setup commands, env vars, and package installs — then spawn multiple disposable `DockerSandbox`es from it via the new `template` option. Each sandbox is a fresh container with its own writable layer over the shared read-only image, so their filesystems are independent. The baseline is produced by synthesizing a `Dockerfile` and running `docker build`, so setup is baked into reproducible, cached layers.
+
+  ```typescript
+  import { DockerSandbox, DockerTemplate, createDockerRepoTemplate } from '@mastra/docker';
+
+  const template = new DockerTemplate({ baseImage: 'node:22-slim' })
+    .aptInstall(['git', 'ca-certificates'])
+    .runCmd('git clone --depth=1 https://example.com/repo /workspace/app')
+    .setWorkdir('/workspace/app')
+    .runCmd('npm ci');
+
+  // Builds the image on first start() and reuses it afterwards; the sandbox's
+  // working directory follows the template's setWorkdir().
+  const a = new DockerSandbox({ template });
+  const b = new DockerSandbox({ template });
+
+  // Repository checkout pinned to the current head of a branch, rebuilt when it moves.
+  const sandbox = new DockerSandbox({
+    template: createDockerRepoTemplate({
+      getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/app.git' }),
+      setupCommand: ['npm ci', 'npm run build'],
+    }),
+  });
+  ```
+
+  - Immutable, chainable builder methods (`from`, `setWorkdir`, `setEnvs`, `runCmd`, `runWithSecrets`, `aptInstall`, `pipInstall`, `npmInstall`) matching the E2B/platform builders.
+  - Content-addressed image tag (`mastra-template:<hash>`); `build()` is idempotent and reuses an existing image unless `{ force: true }` is passed. Build failures are returned as `{ status: 'failed' }` and retried on the next attempt.
+  - `DockerSandbox({ template })` accepts a template or an async template factory resolved once per container-creating `start()`.
+  - Build-time secrets via `runWithSecrets(command, { secrets, output })`: the step runs in a throwaway build stage forked from the steps before it, secret values are passed by value (`{ secrets }` on the template or `build()`) and delivered through BuildKit secret mounts, and only `output` is copied into the image, so values never land in any layer, history entry, or build-cache metadata, nor in the template identity.
+  - `createDockerRepoTemplate({ getRepositoryAccess, ref, setupCommand, buildEnv, workingDirectory })` prepares a repository checkout and setup as a template factory, resolving the head of `ref` on each sandbox start and pinning it into the identity. The credential from `getRepositoryAccess` is used only for the head lookup and the clone stage.
+
+### Patch Changes
+
+- Updated dependencies [[`b246a1b`](https://github.com/mastra-ai/mastra/commit/b246a1ba0cec1ca2781c661a6b90c777520b64c7), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`b2942c0`](https://github.com/mastra-ai/mastra/commit/b2942c0f3c99dd1edba9dc8c2c17bfa55c851ae8), [`99fab39`](https://github.com/mastra-ai/mastra/commit/99fab399c35952ae15427ea64845d4762e9ec144), [`d65d4d4`](https://github.com/mastra-ai/mastra/commit/d65d4d40a24a482d5b0ee83d9bab6042702ca1be), [`4fb5ae9`](https://github.com/mastra-ai/mastra/commit/4fb5ae9e2cba9b14ba6c5cef0894e49bccf6f607), [`e581e66`](https://github.com/mastra-ai/mastra/commit/e581e66e14bb1b2863698aecca7324fbf1ec4ff5), [`a3f8f05`](https://github.com/mastra-ai/mastra/commit/a3f8f05ecb60c52056c590325e3821ecfc85afe3), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`9cd9b4e`](https://github.com/mastra-ai/mastra/commit/9cd9b4eca69a3db0a0c415d0dcedf266cc7d5ec6), [`3589cde`](https://github.com/mastra-ai/mastra/commit/3589cde4ea8dd210df6b9a2355a3e568210965fc), [`783e48a`](https://github.com/mastra-ai/mastra/commit/783e48aba82489a085230f6b8539a9fb338c326b), [`07a81c8`](https://github.com/mastra-ai/mastra/commit/07a81c8be0cbdb5413ffa5c289d32765d80f4ea4), [`07ff1b8`](https://github.com/mastra-ai/mastra/commit/07ff1b8eafbd9c7786ef77decc6be3b63497cfd9), [`0ca5d6d`](https://github.com/mastra-ai/mastra/commit/0ca5d6d58a24e73a364451660a5a8696883eba45)]:
+  - @mastra/core@1.68.0-alpha.3
+
 ## 0.8.0
 
 ### Minor Changes

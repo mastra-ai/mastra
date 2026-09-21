@@ -1,51 +1,30 @@
-import type { WorkflowStepStatus } from '@mastra/core/workflows';
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
+import type { WorkflowRunStreamStep } from './workflow-run-context';
 import { WorkflowRunContext } from './workflow-run-context';
 
-/**
- * Tripwire data from workflow steps.
- * This matches the core TripwireData schema in packages/core/src/agent/trip-wire.ts
- */
 export type TripwireData = {
-  /** The reason for the tripwire */
   reason: string;
-  /** If true, the agent should retry with the tripwire reason as feedback */
   retry?: boolean;
-  /** Strongly typed metadata from the processor */
   metadata?: unknown;
-  /** The ID of the processor that triggered the tripwire */
   processorId?: string;
 };
 
-export type ForeachProgress = {
-  completedCount: number;
-  totalCount: number;
-  currentIndex: number;
-  iterationStatus: 'success' | 'failed' | 'suspended';
-  iterationOutput?: any;
-};
-
-type StepStatus = Extract<WorkflowStepStatus, 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'skipped'>;
-
-export type Step = {
-  error?: any;
-  tripwire?: TripwireData;
-  startedAt: number;
-  endedAt?: number;
-  status: StepStatus;
-  output?: any;
-  input?: any;
-  resumeData?: any;
-  suspendOutput?: any;
-  suspendPayload?: any;
-  foreachProgress?: ForeachProgress;
-  duration?: number;
-  date?: Date;
-  isForEach?: boolean;
-  mapConfig?: string;
-  canSuspend?: boolean;
-  isParallel?: boolean;
-  stepGraph?: unknown;
+export type Step = Pick<
+  WorkflowRunStreamStep,
+  | 'status'
+  | 'error'
+  | 'tripwire'
+  | 'startedAt'
+  | 'endedAt'
+  | 'suspendedAt'
+  | 'resumedAt'
+  | 'output'
+  | 'suspendOutput'
+  | 'suspendPayload'
+  | 'foreachProgress'
+> & {
+  input?: WorkflowRunStreamStep['payload'];
+  resumeData?: WorkflowRunStreamStep['resumePayload'];
 };
 
 type UseCurrentRunReturnType = {
@@ -53,39 +32,29 @@ type UseCurrentRunReturnType = {
   runId?: string;
 };
 
+const toRunStep = (step: WorkflowRunStreamStep): Step => ({
+  status: step.status,
+  error: step.tripwire ? undefined : step.error,
+  tripwire: step.tripwire,
+  startedAt: step.startedAt,
+  endedAt: step.endedAt,
+  suspendedAt: step.suspendedAt,
+  resumedAt: step.resumedAt,
+  output: step.output,
+  input: step.payload,
+  resumeData: step.resumePayload,
+  suspendOutput: step.suspendOutput,
+  suspendPayload: step.suspendPayload,
+  foreachProgress: step.foreachProgress,
+});
+
 export const useCurrentRun = (): UseCurrentRunReturnType => {
   const context = useContext(WorkflowRunContext);
-
-  const workflowCurrentSteps = context.result?.steps ?? {};
-  const steps = Object.entries(workflowCurrentSteps).reduce((acc, [key, value]: [string, any]) => {
-    // Check if this is a tripwire (failed step with tripwire property)
-    const hasTripwire = 'tripwire' in value && value.tripwire;
-
-    return {
-      ...acc,
-      [key]: {
-        // Don't include error when tripwire is present - tripwire takes precedence
-        error: hasTripwire ? undefined : 'error' in value ? value.error : undefined,
-        tripwire: hasTripwire ? value.tripwire : undefined,
-        startedAt: value.startedAt,
-        endedAt: 'endedAt' in value ? value.endedAt : undefined,
-        status: value.status,
-        output: 'output' in value ? value.output : undefined,
-        input: value.payload,
-        resumeData: 'resumePayload' in value ? value.resumePayload : undefined,
-        suspendOutput: 'suspendOutput' in value ? value.suspendOutput : undefined,
-        suspendPayload: 'suspendPayload' in value ? value.suspendPayload : undefined,
-        foreachProgress: 'foreachProgress' in value ? value.foreachProgress : undefined,
-        duration: 'duration' in value ? value.duration : undefined,
-        date: 'date' in value ? value.date : undefined,
-        isForEach: 'isForEach' in value ? value.isForEach : undefined,
-        mapConfig: 'mapConfig' in value ? value.mapConfig : undefined,
-        canSuspend: 'canSuspend' in value ? value.canSuspend : undefined,
-        isParallel: 'isParallel' in value ? value.isParallel : undefined,
-        stepGraph: 'stepGraph' in value ? value.stepGraph : undefined,
-      },
-    };
-  }, {});
+  const workflowCurrentSteps = context.result?.steps;
+  const steps = useMemo(
+    () => Object.fromEntries(Object.entries(workflowCurrentSteps ?? {}).map(([key, value]) => [key, toRunStep(value)])),
+    [workflowCurrentSteps],
+  );
 
   return { steps, runId: context.runId };
 };

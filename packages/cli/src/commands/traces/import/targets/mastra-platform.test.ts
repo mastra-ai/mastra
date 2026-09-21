@@ -322,4 +322,172 @@ describe('MastraPlatformTraceTarget', () => {
       'request timeout must be an integer',
     );
   });
+
+  it('reads lightweight stored spans from the project-scoped query API', async () => {
+    const fetch = vi.fn(async () =>
+      Response.json({
+        traceId: '00000000000000000000000000000001',
+        spans: [
+          {
+            traceId: '00000000000000000000000000000001',
+            spanId: '0000000000000001',
+            parentSpanId: null,
+            name: 'root',
+            spanType: 'generic',
+            startedAt: '2026-09-10T12:00:00.000Z',
+            endedAt: '2026-09-10T12:00:01.000Z',
+            isEvent: false,
+            error: null,
+            entityId: null,
+          },
+        ],
+      }),
+    );
+    const target = new MastraPlatformTraceTarget({ accessToken: 'secret-token', projectId: 'project_1' }, { fetch });
+
+    const result = await target.readTrace('00000000000000000000000000000001');
+
+    expect(result).toEqual({
+      kind: 'found',
+      spans: [
+        {
+          traceId: '00000000000000000000000000000001',
+          spanId: '0000000000000001',
+          parentSpanId: null,
+          name: 'root',
+          spanType: 'generic',
+          startedAt: '2026-09-10T12:00:00.000Z',
+          endedAt: '2026-09-10T12:00:01.000Z',
+          isEvent: false,
+          error: null,
+        },
+      ],
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://observability.mastra.ai/api/observability/traces/00000000000000000000000000000001/light',
+      expect.objectContaining({
+        method: 'GET',
+        redirect: 'manual',
+        headers: {
+          Authorization: 'Bearer secret-token',
+          'X-Mastra-Project-Id': 'project_1',
+        },
+      }),
+    );
+  });
+
+  it.each([
+    [404, { kind: 'pending' }],
+    [401, { kind: 'unavailable', reason: 'Mastra Platform query authentication failed with HTTP 401.' }],
+    [429, { kind: 'retryable', reason: 'Mastra Platform query returned HTTP 429.', retryAfterMs: 2_000 }],
+    [503, { kind: 'retryable', reason: 'Mastra Platform query returned HTTP 503.' }],
+  ])('classifies query HTTP %s without retrying inside the target', async (status, expected) => {
+    const fetch = vi.fn(
+      async () => new Response(null, { status, headers: status === 429 ? { 'Retry-After': '2' } : undefined }),
+    );
+    const target = new MastraPlatformTraceTarget({ accessToken: 'secret-token', projectId: 'project_1' }, { fetch });
+
+    await expect(target.readTrace('00000000000000000000000000000001')).resolves.toEqual(expected);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('classifies a response body stream failure as retryable', async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error('socket failed'));
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const target = new MastraPlatformTraceTarget({ accessToken: 'secret-token', projectId: 'project_1' }, { fetch });
+
+    await expect(target.readTrace('00000000000000000000000000000001')).resolves.toEqual({
+      kind: 'retryable',
+      reason: 'Could not read the Mastra Platform query response.',
+    });
+  });
+
+  it('preserves caller cancellation while reading a response body', async () => {
+    const controller = new AbortController();
+    const reason = new Error('customer cancelled');
+    const fetch = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) =>
+        new Response(
+          new ReadableStream({
+            start(streamController) {
+              init?.signal?.addEventListener('abort', () => streamController.error(init.signal?.reason), {
+                once: true,
+              });
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const target = new MastraPlatformTraceTarget({ accessToken: 'secret-token', projectId: 'project_1' }, { fetch });
+
+    const result = target.readTrace('00000000000000000000000000000001', { signal: controller.signal });
+    await Promise.resolve();
+    controller.abort(reason);
+
+    await expect(result).rejects.toBe(reason);
+  });
+
+  it('treats an oversized lightweight response as unavailable without retrying it', async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 200,
+          headers: { 'Content-Length': String(16 * 1024 * 1024 + 1) },
+        }),
+    );
+    const target = new MastraPlatformTraceTarget({ accessToken: 'secret-token', projectId: 'project_1' }, { fetch });
+
+    await expect(target.readTrace('00000000000000000000000000000001')).resolves.toEqual({
+      kind: 'unavailable',
+      reason: 'Mastra Platform query response exceeds the 16 MiB verification limit.',
+    });
+  });
+
+  it('preserves the oversized response result when stream cancellation fails', async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array(16 * 1024 * 1024 + 1));
+            },
+            cancel() {
+              throw new Error('socket already closed');
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const target = new MastraPlatformTraceTarget({ accessToken: 'secret-token', projectId: 'project_1' }, { fetch });
+
+    await expect(target.readTrace('00000000000000000000000000000001')).resolves.toEqual({
+      kind: 'unavailable',
+      reason: 'Mastra Platform query response exceeds the 16 MiB verification limit.',
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('treats malformed or inconsistent lightweight responses as unavailable', async () => {
+    const fetch = vi.fn(async () =>
+      Response.json({
+        traceId: 'another-trace',
+        spans: [{ spanId: 'missing-required-fields' }],
+      }),
+    );
+    const target = new MastraPlatformTraceTarget({ accessToken: 'secret-token', projectId: 'project_1' }, { fetch });
+
+    await expect(target.readTrace('00000000000000000000000000000001')).resolves.toEqual({
+      kind: 'unavailable',
+      reason: 'Mastra Platform query returned an invalid lightweight trace.',
+    });
+  });
 });

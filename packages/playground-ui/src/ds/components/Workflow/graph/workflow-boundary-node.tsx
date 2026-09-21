@@ -3,6 +3,7 @@ import type { NodeProps } from '@xyflow/react';
 
 import type { WorkflowBoundaryNodeModel } from './types';
 import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/utils/cn';
 
 export const WorkflowBoundaryNode = ({ data }: NodeProps<WorkflowBoundaryNodeModel>) => {
   const isStart = data.boundaryRole === 'start';
@@ -13,7 +14,12 @@ export const WorkflowBoundaryNode = ({ data }: NodeProps<WorkflowBoundaryNodeMod
       <div
         data-workflow-boundary-node
         data-testid={`workflow-boundary-${data.boundaryRole}`}
-        className="border-border1 bg-surface3 text-neutral5 flex size-14 items-center justify-center rounded-full border"
+        className={cn(
+          'relative flex h-[38px] w-28 items-center justify-center text-muted-foreground after:absolute after:inset-x-0 after:mask-x-from-60%',
+          isStart
+            ? 'after:bottom-0 after:h-px after:bg-neutral3'
+            : 'after:top-0 after:h-1 after:border-y after:border-neutral3',
+        )}
       >
         <Txt variant="ui-xs" className="font-medium">
           {data.label}

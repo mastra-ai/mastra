@@ -1,0 +1,100 @@
+import type { WorkflowRunStatus } from '@mastra/core/workflows';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
+import { formatDistanceToNowStrict } from 'date-fns';
+import { Pause, Timer } from 'lucide-react';
+import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
+import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
+import type { WorkflowRunTiming } from '../context/workflow-step-timing';
+import { resolveRunTiming } from '../context/workflow-step-timing';
+import { useTimeDiff } from '@/lib/ai-ui/hooks/use-time-diff';
+
+function formatRunStatus(status?: WorkflowRunStatus) {
+  if (!status) return 'Run';
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+export function WorkflowRunStatusBadge({ status }: { status?: WorkflowRunStatus }) {
+  return (
+    <Badge
+      size="md"
+      variant={status === 'paused' ? 'yellow' : 'neutral'}
+      emphasis="muted"
+      icon={status && <WorkflowRunStatusIcon status={status} />}
+    >
+      {formatRunStatus(status)}
+    </Badge>
+  );
+}
+
+function RunDuration({ span, spansSuspension }: Omit<WorkflowRunTiming, 'waitingSince'>) {
+  const elapsed = formatDuration(useTimeDiff(span));
+
+  return (
+    <span
+      className="text-ui-xs text-muted-foreground flex items-center gap-1.5 tabular-nums"
+      title={spansSuspension ? 'Run duration, including time spent suspended' : 'Run duration'}
+    >
+      <Timer aria-hidden className="size-3.5" />
+      {elapsed}
+    </span>
+  );
+}
+
+function RunWaiting({ since }: { since: number }) {
+  const waiting = formatDuration(useTimeDiff({ startedAt: since }));
+
+  return (
+    <span className="text-ui-xs text-accent3 flex items-center gap-1.5 tabular-nums" title="Waiting for input">
+      <Pause aria-hidden className="size-3.5" />
+      {waiting}
+    </span>
+  );
+}
+
+export function RunWorkflowHeader({
+  runId,
+  status,
+  result,
+  timestamp,
+  resourceId,
+}: {
+  runId: string;
+  status?: WorkflowRunStatus;
+  result: WorkflowRunStreamResult | null;
+  timestamp?: number;
+  resourceId?: string;
+}) {
+  const timing = resolveRunTiming(result?.steps, status);
+
+  return (
+    <div className="flex w-full flex-col gap-2 px-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <WorkflowRunStatusBadge status={status} />
+          {resourceId && (
+            <Badge size="md" variant="neutral" emphasis="muted" className="min-w-0">
+              <span className="min-w-0 truncate" title={`Resource ${resourceId}`}>
+                {resourceId}
+              </span>
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {timing?.waitingSince !== undefined && <RunWaiting since={timing.waitingSince} />}
+          {timing && <RunDuration span={timing.span} spansSuspension={timing.spansSuspension} />}
+        </div>
+      </div>
+      <div className="text-ui-xs text-muted-foreground flex min-w-0 items-center gap-1">
+        <span className="min-w-0 truncate font-mono" title={runId}>
+          {runId}
+        </span>
+        <CopyButton content={runId} tooltip="Copy run ID" variant="ghost" size="icon-sm" className="shrink-0" />
+        {timestamp !== undefined && Number.isFinite(timestamp) ? (
+          <span className="ml-auto shrink-0">{formatDistanceToNowStrict(timestamp, { addSuffix: true })}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}

@@ -31,7 +31,7 @@ export function ComparisonSection({
         <CollapsibleTrigger
           className={cn(
             'text-ui-md flex items-center gap-1.5 font-semibold [&>svg]:size-4',
-            tone === 'negative' ? 'text-negative1' : 'text-neutral5',
+            tone === 'negative' ? 'text-negative1' : 'text-foreground',
           )}
         >
           <ChevronRightIcon />

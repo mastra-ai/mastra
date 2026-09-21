@@ -2,7 +2,7 @@
  * @internal/workspace-test-utils
  *
  * Shared test utilities for workspace providers (filesystems and sandboxes).
- * Follows patterns from stores/_test-utils and server-adapters/_test-utils.
+ * Follows patterns from stores/_test-utils and server-adapters/server-adapters-test-suite.
  */
 
 // Filesystem test utilities
