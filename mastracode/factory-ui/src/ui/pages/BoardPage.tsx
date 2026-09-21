@@ -1,9 +1,8 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Plus } from 'lucide-react';
+import { GitBranch, Plus } from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import type { InstalledBoardInfo } from '../../api/types';
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
@@ -96,12 +95,12 @@ function InstalledBoard({ factory, definition }: { factory: FactoryProject; defi
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto py-8">
         <EmptyState
           as="h2"
-          iconSlot={<GithubIcon className="text-icon3 size-10" />}
+          iconSlot={<GitBranch className="text-icon3 size-10" />}
           titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
           descriptionSlot={
             review
-              ? 'Link a GitHub repository in Repository settings. Its pull requests will appear in Intake, ready to move through review.'
-              : 'Link a GitHub repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
+              ? 'Link a repository in Repository settings. Its change requests will appear in Intake, ready to move through review.'
+              : 'Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
           }
           actionSlot={
             <Link
@@ -246,6 +245,7 @@ function BoardContent({
       if (item.id === targetItemId) return true;
       if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
+      if (intake.active === 'gitlab') return item.source === 'gitlab-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
       if (intake.active === 'jira') return item.source === 'jira-issue';
       if (intake.active === 'incidentio') return item.source === 'incidentio-follow-up';

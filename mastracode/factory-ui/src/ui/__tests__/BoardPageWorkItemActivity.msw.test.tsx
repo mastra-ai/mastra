@@ -278,7 +278,9 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+      HttpResponse.json({ sessions: [] }),
+    ),
   );
 }
 
@@ -553,7 +555,7 @@ describe('Board work-item activity', () => {
     const { client } = renderBoard('review', '?teammate=github%3Anobody');
     await waitForMutationsIdle(client);
 
-    expect(await screen.findByText('No pull requests match filters')).toBeInTheDocument();
+    expect(await screen.findByText('No change requests match filters')).toBeInTheDocument();
   });
 
   it('shows distinct draft, open, closed, and merged pull request icons', async () => {

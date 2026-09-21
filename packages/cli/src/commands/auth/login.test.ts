@@ -1,8 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import http from 'node:http';
+import { select } from '@clack/prompts';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // Stub out side-effects so login() doesn't open a browser or write to disk.
+vi.mock('@clack/prompts', () => ({
+  select: vi.fn(),
+  isCancel: () => false,
+}));
+
 vi.mock('./client.js', () => ({
   MASTRA_PLATFORM_API_URL: 'http://localhost:0',
   createApiClient: vi.fn(),
@@ -26,30 +32,30 @@ vi.mock('node:child_process', () => ({
 }));
 
 const execFileSyncMock = vi.mocked(execFileSync);
+const selectMock = vi.mocked(select);
 
 /** Extract the URL that openBrowser passed to execFileSync. */
-function extractUrl(): string {
-  for (const call of execFileSyncMock.mock.calls) {
-    const args = call[1] as string[] | undefined;
-    if (args) {
-      const url = args.find(a => a.includes('cli_port='));
-      if (url) return url;
-    }
-  }
+function extractUrl(index = 0): string {
+  const urls = execFileSyncMock.mock.calls.flatMap(call => {
+    const args = call[1];
+    return args?.filter(arg => arg.includes('cli_port=')) ?? [];
+  });
+  const url = urls[index];
+  if (url) return url;
   throw new Error('Could not find login URL in execFileSync calls');
 }
 
 /** Extract the port from the openBrowser URL. */
-function extractPort(): number {
-  const url = extractUrl();
+function extractPort(index = 0): number {
+  const url = extractUrl(index);
   const match = url.match(/cli_port=(\d+)/);
   if (match) return Number(match[1]);
   throw new Error('Could not find cli_port in URL');
 }
 
 /** Extract the state nonce from the openBrowser URL. */
-function extractState(): string {
-  const url = extractUrl();
+function extractState(index = 0): string {
+  const url = extractUrl(index);
   const match = url.match(/state=([a-f0-9]+)/);
   if (match) return match[1];
   throw new Error('Could not find state in URL');
@@ -76,14 +82,17 @@ const validParams = {
   org: 'org-1',
 };
 
-function mockInteractiveStdin() {
+function mockTerminal(isTTY = true) {
+  vi.stubEnv('CI', '');
   const isTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+  const stdoutIsTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
   const setRawModeDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'setRawMode');
   const setRawMode = vi.fn().mockReturnValue(process.stdin);
   Object.defineProperties(process.stdin, {
-    isTTY: { configurable: true, value: true },
+    isTTY: { configurable: true, value: isTTY },
     setRawMode: { configurable: true, value: setRawMode },
   });
+  Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: isTTY });
   vi.spyOn(process.stdin, 'isPaused').mockReturnValue(true);
   vi.spyOn(process.stdin, 'resume').mockReturnValue(process.stdin);
   vi.spyOn(process.stdin, 'pause').mockReturnValue(process.stdin);
@@ -91,10 +100,13 @@ function mockInteractiveStdin() {
   return {
     setRawMode,
     restore() {
+      vi.unstubAllEnvs();
       if (isTTYDescriptor) Object.defineProperty(process.stdin, 'isTTY', isTTYDescriptor);
-      else delete (process.stdin as Partial<NodeJS.ReadStream>).isTTY;
+      else Reflect.deleteProperty(process.stdin, 'isTTY');
+      if (stdoutIsTTYDescriptor) Object.defineProperty(process.stdout, 'isTTY', stdoutIsTTYDescriptor);
+      else Reflect.deleteProperty(process.stdout, 'isTTY');
       if (setRawModeDescriptor) Object.defineProperty(process.stdin, 'setRawMode', setRawModeDescriptor);
-      else delete (process.stdin as Partial<NodeJS.ReadStream>).setRawMode;
+      else Reflect.deleteProperty(process.stdin, 'setRawMode');
     },
   };
 }
@@ -106,6 +118,7 @@ beforeEach(() => {
   // Without this, isolate:false lets a cached credentials.js bypass the mocks.
   vi.resetModules();
   execFileSyncMock.mockReset();
+  selectMock.mockReset();
 });
 
 describe('login() server lifecycle', () => {
@@ -184,7 +197,7 @@ describe('login() server lifecycle', () => {
   });
 
   it('skips login when any key is pressed', async () => {
-    const stdin = mockInteractiveStdin();
+    const stdin = mockTerminal();
     try {
       const { login, LoginCancelledError } = await import('./credentials.js');
       const loginPromise = login(undefined, { skipOnInput: true });
@@ -209,7 +222,7 @@ describe('login() server lifecycle', () => {
   });
 
   it('forwards Ctrl+C as SIGINT instead of treating it as a skip key', async () => {
-    const stdin = mockInteractiveStdin();
+    const stdin = mockTerminal();
     const controller = new AbortController();
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => {
       controller.abort();
@@ -231,6 +244,83 @@ describe('login() server lifecycle', () => {
       expect(kill).toHaveBeenCalledWith(process.pid, 'SIGINT');
     } finally {
       stdin.restore();
+    }
+  });
+
+  it('retries with a fresh callback server after login times out', async () => {
+    const terminal = mockTerminal();
+    try {
+      selectMock.mockResolvedValueOnce('retry');
+      const { login } = await import('./credentials.js');
+      const loginPromise = login(undefined, { timeoutMs: 1000 });
+
+      await vi.waitFor(() => expect(selectMock).toHaveBeenCalledOnce(), { timeout: 5000 });
+      await vi.waitFor(() => expect(execFileSyncMock).toHaveBeenCalledTimes(2), { timeout: 5000 });
+
+      await sendCallback(extractPort(1), { ...validParams, state: extractState(1) });
+
+      await expect(loginPromise).resolves.toMatchObject({ token: 'test-token' });
+    } finally {
+      terminal.restore();
+    }
+  });
+
+  it('offers to cancel a standalone login after it times out', async () => {
+    const terminal = mockTerminal();
+    try {
+      selectMock.mockResolvedValueOnce('cancel');
+      const { login, LoginCancelledError } = await import('./credentials.js');
+
+      await expect(login(undefined, { timeoutMs: 10 })).rejects.toBeInstanceOf(LoginCancelledError);
+      expect(selectMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.arrayContaining([expect.objectContaining({ value: 'cancel', label: 'Cancel login' })]),
+        }),
+      );
+    } finally {
+      terminal.restore();
+    }
+  });
+
+  it('offers to skip platform setup after it times out during project creation', async () => {
+    const terminal = mockTerminal();
+    try {
+      selectMock.mockResolvedValueOnce('skip');
+      const { login, LoginCancelledError } = await import('./credentials.js');
+
+      await expect(login(undefined, { skipOnInput: true, timeoutMs: 10 })).rejects.toBeInstanceOf(LoginCancelledError);
+      expect(selectMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.arrayContaining([expect.objectContaining({ value: 'skip', label: 'Skip platform setup' })]),
+        }),
+      );
+    } finally {
+      terminal.restore();
+    }
+  });
+
+  it('cancels a timed-out login without prompting in a non-interactive terminal', async () => {
+    const terminal = mockTerminal(false);
+    try {
+      const { login, LoginCancelledError } = await import('./credentials.js');
+
+      await expect(login(undefined, { timeoutMs: 10 })).rejects.toBeInstanceOf(LoginCancelledError);
+      expect(selectMock).not.toHaveBeenCalled();
+    } finally {
+      terminal.restore();
+    }
+  });
+
+  it('cancels a timed-out login without prompting in CI with TTY streams', async () => {
+    const terminal = mockTerminal();
+    vi.stubEnv('CI', 'true');
+    try {
+      const { login, LoginCancelledError } = await import('./credentials.js');
+
+      await expect(login(undefined, { timeoutMs: 10 })).rejects.toBeInstanceOf(LoginCancelledError);
+      expect(selectMock).not.toHaveBeenCalled();
+    } finally {
+      terminal.restore();
     }
   });
 

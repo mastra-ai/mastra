@@ -697,6 +697,37 @@ describe('api command executor', () => {
     expect(JSON.parse(stdout)).toEqual({ data: response });
   });
 
+  it.each([
+    [
+      { pagination: { page: 0, perPage: 25 } },
+      { pagination: { total: 0, page: 0, perPage: 25, hasMore: false }, deltaCursor: 'bootstrap' },
+    ],
+    [
+      { mode: 'delta', after: 'bootstrap', limit: 25 },
+      { delta: { limit: 25, hasMore: true }, deltaCursor: 'continuation' },
+    ],
+  ])('preserves numbered-to-delta query inputs and polling metadata', async (paginationInput, metadata) => {
+    const input = {
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+      ...paginationInput,
+    };
+    const response = { traces: [], ...metadata };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+    await executeDescriptor(API_COMMANDS.traceQuery, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://observability.mastra.ai/api/observability/traces/query',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    );
+    expect(JSON.parse(stdout)).toEqual({ data: response });
+  });
+
   it('gets lightweight trace details by default, full trace details with --verbose, and a specific trace span', async () => {
     fetchMock
       .mockResolvedValueOnce(

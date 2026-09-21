@@ -1,4 +1,4 @@
-import type { Intake, IntakeIssue } from '../capabilities/intake.js';
+import type { Intake, IntakeIssue, ResolvedIntakeDispatch } from '../capabilities/intake.js';
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
@@ -30,13 +30,22 @@ export interface IssueReconcilerOptions<TScope = void> {
   storage: WorkItemsStorage;
   externalSource?(item: WorkItemRow): { type: string; externalId: string };
   issueId(item: WorkItemRow): string | undefined;
-  metadata(item: WorkItemRow, issue: IntakeIssue): Record<string, unknown>;
+  metadata(
+    item: WorkItemRow,
+    issue: IntakeIssue,
+    dispatch: ResolvedIntakeDispatch,
+  ): Record<string, unknown> | Promise<Record<string, unknown>>;
   /**
    * Called when a closed issue (stateType 'completed' or 'canceled') is detected
    * on a non-terminal work item. Use this to replay the close event through
    * the provider's rules ingress.
    */
-  onClosed?(item: WorkItemRow, issue: IntakeIssue, project: FactoryProject): Promise<void>;
+  onClosed?(
+    item: WorkItemRow,
+    issue: IntakeIssue,
+    project: FactoryProject,
+    dispatch: ResolvedIntakeDispatch,
+  ): Promise<Record<string, unknown> | void>;
   /** Whether the item already rests in a terminal phase of its board. Unknown phases are not terminal. */
   isTerminal(item: WorkItemRow): boolean;
 }
@@ -48,9 +57,28 @@ export type IssueReconciler<TScope = void> = TScope extends void
 function sameValue(left: unknown, right: unknown): boolean {
   if (Array.isArray(right)) {
     if (!Array.isArray(left)) return right.length === 0;
-    const leftStrings = left.filter((value): value is string => typeof value === 'string').slice().sort();
-    const rightStrings = right.filter((value): value is string => typeof value === 'string').slice().sort();
-    return leftStrings.length === rightStrings.length && leftStrings.every((value, index) => value === rightStrings[index]);
+    const leftStrings = left
+      .filter((value): value is string => typeof value === 'string')
+      .slice()
+      .sort();
+    const rightStrings = right
+      .filter((value): value is string => typeof value === 'string')
+      .slice()
+      .sort();
+    return (
+      leftStrings.length === rightStrings.length && leftStrings.every((value, index) => value === rightStrings[index])
+    );
+  }
+  if (right !== null && typeof right === 'object') {
+    if (left === null || typeof left !== 'object' || Array.isArray(left)) return false;
+    const leftRecord = left as Record<string, unknown>;
+    const rightRecord = right as Record<string, unknown>;
+    const leftKeys = Object.keys(leftRecord);
+    const rightKeys = Object.keys(rightRecord);
+    return (
+      leftKeys.length === rightKeys.length &&
+      rightKeys.every(key => Object.hasOwn(leftRecord, key) && sameValue(leftRecord[key], rightRecord[key]))
+    );
   }
   return left === right;
 }
@@ -81,9 +109,7 @@ function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId
   );
 }
 
-export function createIssueReconciler<TScope = void>(
-  options: IssueReconcilerOptions<TScope>,
-): IssueReconciler<TScope> {
+export function createIssueReconciler<TScope = void>(options: IssueReconcilerOptions<TScope>): IssueReconciler<TScope> {
   const run = async (scope?: IssueReconcileScope<TScope>): Promise<IssueReconcileSummary> => {
     const summary: IssueReconcileSummary = {
       projects: 0,
@@ -130,12 +156,21 @@ export function createIssueReconciler<TScope = void>(
           // Close detection for Linear: replay through rules ingress if closed
           const isClosed = issue.stateType === 'completed' || issue.stateType === 'canceled';
           if (isClosed && !options.isTerminal(item) && options.onClosed) {
-            await options.onClosed(item, issue, project);
+            const closedMetadata = withoutUndefined((await options.onClosed(item, issue, project, resolved)) ?? {});
+            if (!metadataMatches(item.metadata, closedMetadata)) {
+              await options.storage.update({
+                orgId: project.orgId,
+                id: item.id,
+                userId: 'factory-rule-dispatcher',
+                patch: { metadata: { ...(item.metadata ?? {}), ...closedMetadata } },
+              });
+              summary.updated += 1;
+            }
             summary.closed += 1;
-            continue; // Skip metadata patch for closed issues
+            continue;
           }
 
-          const metadata = withoutUndefined(options.metadata(item, issue));
+          const metadata = withoutUndefined(await options.metadata(item, issue, resolved));
           if (metadataMatches(item.metadata, metadata)) continue;
           await options.storage.update({
             orgId: project.orgId,
