@@ -46,9 +46,8 @@ export const PLATFORM_CONNECT_PROVIDERS: Record<string, PlatformConnectProvider>
   'incident-io': { integrationId: 'incident-io', connectionIntegrationIds: ['incident-io'] },
   // Knowledge-importer providers. Each maps 1:1 to a `@mastra/connect`
   // importer registration; the connect-session flow itself is provider-
-  // agnostic so these entries are pure metadata additions. `jira` is
-  // intentionally shared with the intake registration above — one Jira
-  // connection powers both intake and knowledge imports.
+  // agnostic so these entries are pure metadata additions. `jira` above is
+  // intake-only — it has no knowledge importer.
   notion: { integrationId: 'notion', connectionIntegrationIds: ['notion'] },
   confluence: { integrationId: 'confluence', connectionIntegrationIds: ['confluence'] },
   linear: { integrationId: 'linear', connectionIntegrationIds: ['linear'] },

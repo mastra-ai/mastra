@@ -26,7 +26,7 @@ export const factory3 = new MastraFactory({ storage, importers: false });
 **Why this matters**
 
 - The presence of a `Knowledge` instance on the Factory — auto-constructed or user-supplied — now drives the `/web/config/features` `knowledge` flag. `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1` still works as a dev override, but is no longer the sole gate.
-- `PLATFORM_CONNECT_PROVIDERS` now includes `notion`, `confluence`, `linear`, `zendesk`, and `fireflies` alongside the existing `jira` and `incident-io` entries. One connection powers both the intake integration and the knowledge importer where they share a provider (Jira).
+- `PLATFORM_CONNECT_PROVIDERS` now includes `notion`, `confluence`, `linear`, `zendesk`, and `fireflies` alongside the existing `jira` and `incident-io` entries. Jira stays intake-only — it has no knowledge importer.
 - A new Knowledge Importers section on the Factory Settings → Work Intake page lists every knowledge-eligible provider with live connection status and a Connect button. Connecting a provider starts syncing on the next importer tick — no Factory restart.
 
 Auto-construction is silently skipped when the platform environment is absent, so local dev projects boot without needing a platform token.

@@ -287,8 +287,8 @@ const demoRepositoryMatch = /^([^/]+)\/([^/]+)$/.exec(demoRepository);
 if (demoKnowledgeEnabled && !demoRepositoryMatch) {
   throw new Error('MASTRACODE_DEMO_GITHUB_REPOSITORY must use the form owner/repository.');
 }
-// If the platform env is present, wire the six Connect importers (Notion,
-// Confluence, Jira, Linear, Zendesk, Fireflies) into the demo Knowledge.
+// If the platform env is present, wire the five Connect importers (Notion,
+// Confluence, Linear, Zendesk, Fireflies) into the demo Knowledge.
 // Each source syncs into its own sub-scope under the project — the same
 // topology as the GitHub repository scope — so sources show up as distinct
 // nodes in the knowledge graph. Missing connections warn-and-skip inside
@@ -317,7 +317,6 @@ const demoImportersResolver = (() => {
       integrations: {
         notion: integrationConfig('notion', 'owner'),
         confluence: integrationConfig('confluence', 'owner'),
-        jira: integrationConfig('jira', 'edit'),
         // Document-shaped sources (Linear Documents, Zendesk Help Center
         // articles) own their nodes so archived/draft content gets removed.
         linear: integrationConfig('linear', 'owner'),

@@ -1,6 +1,6 @@
 ---
 title: 'Connect importers'
-description: 'Sync Notion, Confluence, Zendesk, Linear, Jira, and Fireflies into Knowledge through the Mastra Platform connection proxy.'
+description: 'Sync Notion, Confluence, Zendesk, Linear, and Fireflies into Knowledge through the Mastra Platform connection proxy.'
 packages:
   - '@mastra/core'
   - '@mastra/connect'
@@ -8,7 +8,7 @@ packages:
 
 # Connect importers
 
-`@mastra/connect` ships a hardcoded set of Knowledge importers for six third-party sources: Notion, Confluence, Zendesk, Linear, Jira, and Fireflies. Each importer runs as a deterministic cursor-based sync through the Mastra Platform HTTP proxy — source credentials never enter your process, and importers do not reuse Connect toolset definitions.
+`@mastra/connect` ships a hardcoded set of Knowledge importers for five third-party sources: Notion, Confluence, Zendesk, Linear, and Fireflies. Each importer runs as a deterministic cursor-based sync through the Mastra Platform HTTP proxy — source credentials never enter your process, and importers do not reuse Connect toolset definitions. Jira is deliberately not a knowledge importer — it is a work-intake source (see the Factory intake integrations).
 
 Pass the resolver returned by `importers()` straight to `KnowledgeConfig.importers`. It is a live async resolver: attaching a connection on the platform makes the corresponding importer appear on the next scheduling tick, and detaching one stops it — no process restart.
 
@@ -41,7 +41,6 @@ Only the providers you list under `integrations` are considered. A provider with
 | - | - | - | - |
 | `notion` | `0 * * * *` | `notion:page:<id>`, `notion:database:<id>` | `POST /v1/search` sorted by `last_edited_time`; archived pages remove records under an `owner` binding. |
 | `confluence` | `0 * * * *` | `confluence:page:<id>` | CQL `lastmodified >= "<watermark>"`; storage-format body stripped to plain text. |
-| `jira` | `*/30 * * * *` | `jira:issue:<key>` | JQL `updated >= "<watermark>" ORDER BY updated ASC`. |
 | `linear` | `*/30 * * * *` | `linear:document:<id>` | GraphQL `documents(filter: { updatedAt: { gte: $watermark } })` — Documents (project docs, PRDs), not issues; archived documents remove records. |
 | `zendesk` | `*/30 * * * *` | `zendesk:article:<id>` | Help Center incremental export (`/api/v2/help_center/incremental/articles.json`) — Guide articles, not tickets; HTML bodies stripped to plain text; drafts remove records. |
 | `fireflies` | `0 */2 * * *` | `fireflies:transcript:<id>` | GraphQL `transcripts(fromDate: $watermark)`; one record per summary facet (overview, action items, keywords) with a `metadata.citation` deep link. |
@@ -95,7 +94,7 @@ All provider HTTP goes through `proxyRequest` against the platform's connection 
 Every importer is written for at-least-once execution:
 
 - Cursor or watermark state lives in `context.state` — the importer's durable KV store. It is written exactly once per run, after every mutation for that window has committed. A mid-run failure leaves the watermark low, so the next run replays that window; deterministic record ids keep the replay idempotent.
-- Date-based watermarks (Notion, Confluence, Jira, Linear, Fireflies) re-process the boundary timestamp inclusively.
+- Date-based watermarks (Notion, Confluence, Linear, Fireflies) re-process the boundary timestamp inclusively.
 - Zendesk's watermark is the incremental export's `end_time` (epoch seconds) — stored verbatim and passed back as the next `start_time`.
 - Every run is bounded: at most 50 HTTP pages and 500 records per invocation, and every handler honors `context.signal` for cancellation.
 - Descending walkers (Notion, Linear, Fireflies) persist a resume cursor alongside the watermark. When a run hits the per-run bound before draining back to the previous watermark, the next scheduled run resumes deeper into the tail instead of restarting from the newest page — so an initial backfill larger than one bounded run still converges. During the multi-run backfill the walker also persists the newest timestamp it observed on the first-fetched page, so the final drain run (which by construction only sees older items via its resume cursor) still writes the correct high-water watermark rather than regressing it to the older tail. Once the walk exhausts pagination, the watermark advances, and both the resume cursor and the high-water candidate are cleared.
@@ -139,7 +138,7 @@ The following forms are all supported:
 | `importers: false` | Explicit opt-out — no Knowledge is auto-constructed even if the platform env is present. |
 | _(neither field set)_ | Auto-construct when the platform env is present; otherwise skip silently. `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1` enables an empty-importer Knowledge as a dev override. |
 
-When the Factory auto-constructs with `importers()` and you did not pass `importersOptions.integrations`, every catalogue provider defaults to per-project, per-source destinations: scopes are resolved from the Factory project inventory at each cron fire, one `resource:<projectId>:<provider>:<connectionId>` sub-scope per project per connected account, so newly created projects start syncing without a restart and each source shows up as its own scope in the knowledge graph. The rung grammar is `provider:resource` — the same topology as repository knowledge under `resource:<projectId>:github:<owner/repo>` — where the resource is the connected account or workspace, addressed by its stable connection id. The scope's display name carries the human label (`Notion — Acme Workspace` when the platform reports an account label, the provider name otherwise). Missing sub-scopes are materialized on demand during resolution — including the parent `org` and `resource` rungs for projects nobody has visited yet. Document sources (Notion, Confluence, Linear Documents, Zendesk Help Center) default to the `owner` role; ticket and transcript sources (Jira, Fireflies) default to `edit`. Hosts that construct `Knowledge` themselves can reuse the same topology via `factoryProjectScopes(storage, { knowledge })` from `@mastra/factory`.
+When the Factory auto-constructs with `importers()` and you did not pass `importersOptions.integrations`, every catalogue provider defaults to per-project, per-source destinations: scopes are resolved from the Factory project inventory at each cron fire, one `resource:<projectId>:<provider>:<connectionId>` sub-scope per project per connected account, so newly created projects start syncing without a restart and each source shows up as its own scope in the knowledge graph. The rung grammar is `provider:resource` — the same topology as repository knowledge under `resource:<projectId>:github:<owner/repo>` — where the resource is the connected account or workspace, addressed by its stable connection id. The scope's display name carries the human label (`Notion — Acme Workspace` when the platform reports an account label, the provider name otherwise). Missing sub-scopes are materialized on demand during resolution — including the parent `org` and `resource` rungs for projects nobody has visited yet. Document sources (Notion, Confluence, Linear Documents, Zendesk Help Center) default to the `owner` role; transcript sources (Fireflies) default to `edit`. Hosts that construct `Knowledge` themselves can reuse the same topology via `factoryProjectScopes(storage, { knowledge })` from `@mastra/factory`.
 
 The default resolver enumerates projects across every org in the storage backend — the platform connection feeding the importers is deployment-level, so in a multi-org deployment its content lands in all orgs' projects. Pass your own `importersOptions.integrations` with an org-filtered `scopes` resolver when you need a tenant boundary.
 
@@ -151,4 +150,4 @@ The presence of a `Knowledge` instance on the Factory — auto-constructed or us
 
 Auto-construction gives you a `Knowledge` instance with live importers but no access model. Importer-driven ingestion works because each definition carries its own `access` map, but the Knowledge Canvas and Search read routes need a `knowledgeAccessProfile` to serve results — pass `knowledgeAccessProfile` alongside `importers` (or `knowledge`) when you plan to expose the read surfaces.
 
-Jira is registered in Factory's platform-connect provider set as a shared slug: one Jira connection powers both the intake integration and the knowledge importer. To avoid confusion, the Knowledge Importers settings section lists Notion, Confluence, Linear, Zendesk, and Fireflies; Jira stays exposed via the intake connections above.
+Jira remains in Factory's platform-connect provider set for work intake only — it has no knowledge importer, so the Knowledge Importers settings section lists Notion, Confluence, Linear, Zendesk, and Fireflies while Jira stays exposed via the intake connections above.

@@ -76,10 +76,9 @@ export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, Platf
 
 /**
  * Subset of {@link PlatformConnectProviderId} that Factory's Knowledge
- * Importers settings section exposes. `jira` is intentionally excluded — it's
- * already surfaced via the intake/general Connections section, so listing it
- * twice would confuse the connection-state semantics (one connection powering
- * two features).
+ * Importers settings section exposes. `jira` is excluded because it has no
+ * knowledge importer — it's a work-intake source, surfaced via the
+ * intake/general Connections section.
  */
 export const KNOWLEDGE_IMPORTER_PROVIDER_IDS: readonly PlatformConnectProviderId[] = [
   'notion',
