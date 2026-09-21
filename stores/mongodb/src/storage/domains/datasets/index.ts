@@ -10,6 +10,7 @@ import {
   TABLE_EXPERIMENT_RESULTS,
   createStorageErrorId,
   normalizePerPage,
+  resolveListOrderBy,
   calculatePagination,
   safelyParseJSON,
   ensureDate,
@@ -412,6 +413,10 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt', 'name'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
       const collection = await this.getCollection(TABLE_DATASETS);
 
@@ -448,7 +453,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       const rows = await collection
         .find(filter)
-        .sort({ createdAt: -1, id: 1 })
+        .sort({ [orderBy.field]: orderBy.direction === 'DESC' ? -1 : 1, id: 1 })
         .skip(offset)
         .limit(limitValue)
         .toArray();
@@ -1213,6 +1218,10 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   async listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
       const collection = await this.getCollection(TABLE_DATASET_ITEMS);
 
@@ -1269,7 +1278,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       const rows = await collection
         .find(filter)
-        .sort({ createdAt: -1, id: 1 })
+        .sort({ [orderBy.field]: orderBy.direction === 'DESC' ? -1 : 1, id: 1 })
         .skip(offset)
         .limit(limitValue)
         .toArray();

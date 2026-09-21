@@ -25,7 +25,7 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
       <MetricsPageLayout filterFields={filterFieldsWithoutDiscovery} isLoading>
         <div className="flex h-full items-center justify-center gap-2">
           <Spinner aria-label="Loading storage capabilities" />
-          <span className="text-ui-sm text-neutral4">Loading storage capabilities</span>
+          <span className="text-ui-sm text-muted-foreground">Loading storage capabilities</span>
         </div>
       </MetricsPageLayout>
     );
@@ -49,10 +49,14 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
           actionSlot={
             <Button
               variant="ghost"
-              as="a"
-              href="https://mastra.ai/docs/observability/metrics/overview"
-              target="_blank"
-              rel="noopener noreferrer"
+              render={
+                <a
+                  href="https://mastra.ai/docs/observability/metrics/overview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
+
               icon={<ExternalLinkIcon />}
             >
               Metrics Documentation

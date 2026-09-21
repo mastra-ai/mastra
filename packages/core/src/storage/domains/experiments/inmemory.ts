@@ -1,4 +1,4 @@
-import { calculatePagination, normalizePerPage } from '../../base';
+import { calculatePagination, compareByField, normalizePerPage, resolveListOrderBy } from '../../base';
 import type {
   Experiment,
   ExperimentResult,
@@ -146,8 +146,11 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       experiments = experiments.filter(r => (r.projectId ?? null) === args.filters!.projectId);
     }
 
-    // Sort by createdAt descending (newest first)
-    experiments.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'status'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
+    experiments.sort(compareByField(orderBy.field, orderBy.direction));
 
     const { page, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
@@ -317,8 +320,11 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       results = results.filter(r => (r.projectId ?? null) === args.filters!.projectId);
     }
 
-    // Sort by startedAt ascending (execution order)
-    results.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+    const orderBy = resolveListOrderBy(args.orderBy, ['startedAt', 'createdAt'], {
+      field: 'startedAt',
+      direction: 'ASC',
+    });
+    results.sort(compareByField(orderBy.field, orderBy.direction));
 
     const { page, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);

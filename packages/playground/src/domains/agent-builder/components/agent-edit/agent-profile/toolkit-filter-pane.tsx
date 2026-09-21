@@ -47,7 +47,7 @@ const ToolkitFilterRow = memo(
           data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
           data-checked={checked ? 'true' : 'false'}
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-neutral6 transition-colors hover:bg-surface4',
+            'flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-foreground transition-colors hover:bg-surface4',
             disabled && 'cursor-not-allowed opacity-60',
           )}
         >
@@ -146,7 +146,7 @@ const ProviderToolkitSection = ({
       <Txt
         variant="ui-xs"
         data-testid={`tools-provider-section-${provider.providerId}`}
-        className="text-neutral3 px-2 pt-1 tracking-wide uppercase"
+        className="text-muted-foreground px-2 pt-1 tracking-wide uppercase"
       >
         {provider.providerName}
       </Txt>
@@ -232,11 +232,11 @@ export const ToolkitFilterPane = ({
           onClick={onSelectAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-select-all`}
-          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className="text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
         >
           Select all
         </button>
-        <span className="text-neutral2" aria-hidden>
+        <span className="text-placeholder" aria-hidden>
           ·
         </span>
         <button
@@ -244,7 +244,7 @@ export const ToolkitFilterPane = ({
           onClick={onClearAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-clear-all`}
-          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className="text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
         >
           Clear all
         </button>

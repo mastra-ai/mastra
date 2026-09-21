@@ -21,11 +21,16 @@ export function TraceInsightView({ traceId, onBack }: TraceInsightViewProps) {
         <Button icon={<ChevronLeft />} variant="outline" size="sm" onClick={onBack}>
           Back to examples
         </Button>
-        <Button icon={<TraceIcon />} as={LinkComponent} href={getTraceHref(traceId)} variant="outline" size="sm">
+        <Button
+          icon={<TraceIcon />}
+          render={<LinkComponent href={getTraceHref(traceId)} />}
+          variant="outline"
+          size="sm"
+        >
           Open full trace
         </Button>
       </div>
-      {insightQuery.isPending && <p className="text-ui-md text-neutral3">Loading trace insight…</p>}
+      {insightQuery.isPending && <p className="text-ui-md text-muted-foreground">Loading trace insight…</p>}
       {insightQuery.isError && <p className="text-ui-md text-red-500">Unable to load the trace insight.</p>}
       {insightQuery.data && <TraceInsightBody insight={insightQuery.data} />}
     </div>
@@ -74,7 +79,7 @@ function ObservationItem({ observation }: { observation: string }) {
   return (
     <li className={`text-ui-md rounded-md border p-3 ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
       {kind !== undefined && (
-        <p className="text-ui-xs text-neutral3 font-mono tracking-wider uppercase">
+        <p className="text-ui-xs text-muted-foreground font-mono tracking-wider uppercase">
           {severity === 'problem' && (
             <>
               <span className="text-red-400">problem</span>
@@ -84,7 +89,7 @@ function ObservationItem({ observation }: { observation: string }) {
           <span>{kind}</span>
         </p>
       )}
-      <p className={`text-neutral5 ${kind === undefined ? '' : 'mt-1'}`}>{text}</p>
+      <p className={`text-foreground ${kind === undefined ? '' : 'mt-1'}`}>{text}</p>
     </li>
   );
 }
@@ -94,20 +99,20 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
   return (
     <>
       {insight.summary === undefined ? (
-        <p className="text-ui-md text-neutral3">No insight available yet for this trace.</p>
+        <p className="text-ui-md text-muted-foreground">No insight available yet for this trace.</p>
       ) : (
         <section aria-labelledby="trace-insight-summary-heading">
           <h2
             id="trace-insight-summary-heading"
-            className="text-ui-sm text-neutral3 font-mono tracking-wider uppercase"
+            className="text-ui-sm text-muted-foreground font-mono tracking-wider uppercase"
           >
             Trace summary
           </h2>
-          <p className="text-ui-md text-neutral5 mt-3">{insight.summary.summary}</p>
+          <p className="text-ui-md text-foreground mt-3">{insight.summary.summary}</p>
           {insight.summary.currentTask !== undefined && (
             <dl className="text-ui-md mt-4">
-              <dt className="text-neutral3">Current task</dt>
-              <dd className="text-neutral5 mt-1">{insight.summary.currentTask}</dd>
+              <dt className="text-muted-foreground">Current task</dt>
+              <dd className="text-foreground mt-1">{insight.summary.currentTask}</dd>
             </dl>
           )}
           {insight.summary.degenerate === true && (
@@ -117,7 +122,7 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
             <>
               <h3
                 id="trace-insight-observations-heading"
-                className="text-ui-sm text-neutral3 mt-4 font-mono tracking-wider uppercase"
+                className="text-ui-sm text-muted-foreground mt-4 font-mono tracking-wider uppercase"
               >
                 Observations
               </h3>
@@ -134,15 +139,15 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
         <section aria-labelledby="trace-insight-signals-heading">
           <h2
             id="trace-insight-signals-heading"
-            className="text-ui-sm text-neutral3 font-mono tracking-wider uppercase"
+            className="text-ui-sm text-muted-foreground font-mono tracking-wider uppercase"
           >
             Trace signal summaries
           </h2>
           <ul className="mt-3 space-y-3">
             {insight.signals.map(signal => (
               <li key={signal.signalName} className="border-border1 bg-surface3 text-ui-md rounded-md border p-3">
-                <p className="text-neutral3">{signalLabel(signalCatalog, signal.signalName)}</p>
-                <p className="text-neutral5 mt-1">{signal.signalText}</p>
+                <p className="text-muted-foreground">{signalLabel(signalCatalog, signal.signalName)}</p>
+                <p className="text-foreground mt-1">{signal.signalText}</p>
               </li>
             ))}
           </ul>

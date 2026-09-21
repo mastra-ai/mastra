@@ -13,7 +13,7 @@ Use it when an agent may switch between model providers or reuse message history
 
 ## Usage example
 
-Add `ProviderHistoryCompat` to `inputProcessors` when you want all built-in compatibility rules available for an agent:
+Add `ProviderHistoryCompat` to both lists when you want all built-in compatibility rules available for an agent. `inputProcessors` drives the preemptive rewrites, `errorProcessors` drives the reactive recovery:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -25,10 +25,18 @@ export const agent = new Agent({
   instructions: 'You are a helpful assistant.',
   model: 'anthropic/claude-sonnet-4-5',
   inputProcessors: [new ProviderHistoryCompat()],
+  errorProcessors: [new ProviderHistoryCompat()],
 })
 ```
 
 Mastra agents don't add this processor automatically. Add it explicitly when you need provider history compatibility rules, reactive API error recovery, custom rules, or predictable processor ordering.
+
+The placement decides which half of the processor works:
+
+- **Reactive rules need `errorProcessors`.** On the standard loop, `processAPIError` runs from any of the three lists, so an input-processor registration does repair the message list, but the retry it asks for is only honored when the agent has a retry budget, and that budget is left `undefined` unless the agent configures `errorProcessors` or sets `maxProcessorRetries` explicitly. Registered only as an input processor and without an explicit `maxProcessorRetries`, a reactive rule repairs the history and the request still fails. On the durable path the API-error pass additionally requires a non-empty `errorProcessors` list. If that list is empty, an input-processor registration can't trigger reactive recovery there at all, even with `maxProcessorRetries` set.
+- **Preemptive rules need `inputProcessors`.** `processLLMRequest` runs over the input processors only, so prompt rewrites don't happen from the error list.
+
+An agent that wants both registers the processor in both lists, as the example above does. Double registration can't cause a double retry: the runner stops at the first processor that asks for one, and each reactive rule bails once `retryCount` is above zero, so a repaired turn is attempted exactly once more.
 
 ## Constructor parameters
 
@@ -101,6 +109,7 @@ Mastra agents don't add this processor automatically. Add it explicitly when you
 | `anthropic-strip-foreign-reasoning-content` | Anthropic | Preemptive prompt rewrite | Removes non-Anthropic assistant `reasoning` parts from the outbound prompt. Anthropic-native thinking history is preserved. |
 | `anthropic-strip-foreign-signed-reasoning` | Anthropic-compatible | Preemptive prompt rewrite | Drops signed thinking from the outbound prompt when its origin turn was stamped with a different provider (for example Kimi For Coding ↔ `__GATEWAY_ANTHROPIC_MODEL_SONNET__`), since the receiving provider can't verify another provider's signature. Turns emptied of all content by the drop are removed from the prompt. Unstamped history is left untouched. |
 | `azure-system-reminder-transform` | Azure OpenAI | Preemptive prompt rewrite | Renames `<system-reminder>` wrappers in user text and system instructions to `<memory-context>` for the outbound request. Stored history remains unchanged. |
+| `openai-orphan-item-id` | OpenAI, Azure OpenAI (Responses) | Reactive API error recovery | Recovers history that OpenAI rejects with `Item 'msg_…' of type 'message' was provided without its required 'reasoning' item`. Drops the Responses `itemId` from every item-bearing part of an assistant message that carries one but has no `reasoning` part, so the message replays by value instead of as an unsatisfiable `item_reference`, and retries. The repair is applied to the in-memory list for the current turn. |
 
 Preemptive rules run through `processLLMRequest` after Mastra converts messages to the model prompt format and before the prompt is sent to the provider. These rewrites affect only the current provider call.
 

@@ -12,6 +12,7 @@ import {
   DatasetsStorage,
   calculatePagination,
   normalizePerPage,
+  resolveListOrderBy,
   safelyParseJSON,
   ensureDate,
   hasErrorCode,
@@ -486,6 +487,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt', 'name'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
 
       const filterConditions: string[] = [];
@@ -544,7 +549,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} ${whereClause} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} ${whereClause} ORDER BY ${orderBy.field} ${orderBy.direction}, id ASC LIMIT ? OFFSET ?`,
         args: [...filterParams, limitValue, start],
       });
 
@@ -998,6 +1003,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
   async listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
     try {
       const { page, perPage: perPageInput } = args.pagination;
+      const itemsOrderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
 
       if (args.version !== undefined) {
         // SCD-2 time-travel query — T3.14, T3.22 (no window functions)
@@ -1045,7 +1054,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         const end = perPageInput === false ? total : start + perPage;
 
         const result = await this.#client.execute({
-          sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
+          sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY ${itemsOrderBy.field} ${itemsOrderBy.direction}, id ASC LIMIT ? OFFSET ?`,
           args: [...queryParams, limitValue, start],
         });
 
@@ -1100,7 +1109,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY ${itemsOrderBy.field} ${itemsOrderBy.direction}, id ASC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
 

@@ -4,6 +4,7 @@ export type {
   MastraMessageV1,
   MastraMessageContentV2,
   MastraMessagePart,
+  MastraStepStartPart,
   UIMessageV4Part,
   UIMessageWithMetadata,
   MemoryInfo,

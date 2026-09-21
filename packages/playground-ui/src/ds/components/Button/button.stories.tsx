@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Plus, Settings, Trash } from 'lucide-react';
+import { Fragment } from 'react';
 import { TooltipProvider } from '../Tooltip';
+import { Txt } from '../Txt';
 import type { ButtonVariant } from './Button';
 import { Button } from './Button';
 
@@ -168,10 +170,18 @@ export const IconButtonDisabled: Story = {
 
 export const VariantSizeMatrix: Story = {
   render: () => (
-    <div className="flex flex-col gap-3">
+    <div className="new-theme grid grid-cols-[6rem_repeat(4,max-content)_max-content] items-center gap-3">
+      <span />
+      {['xs', 'sm', 'default', 'lg', 'with icon'].map(label => (
+        <Txt key={label} as="span" variant="ui-xs" className="text-muted-foreground text-center">
+          {label}
+        </Txt>
+      ))}
       {ALL_VARIANTS.map(variant => (
-        <div key={variant} className="flex flex-wrap items-center gap-3">
-          <span className="text-ui-sm text-neutral3 w-24">{variant}</span>
+        <Fragment key={variant}>
+          <Txt as="span" variant="ui-xs" className="text-muted-foreground">
+            {variant}
+          </Txt>
           <Button variant={variant} size="xs">
             xs
           </Button>
@@ -188,7 +198,7 @@ export const VariantSizeMatrix: Story = {
             <Trash />
             with icon
           </Button>
-        </div>
+        </Fragment>
       ))}
     </div>
   ),

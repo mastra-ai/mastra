@@ -11,6 +11,11 @@ import type {
   MastraToolInvocationPart,
 } from '../state/types';
 import type { AIV5Type, AIV6Type, MessageSource } from '../types';
+import {
+  getResponseResultProviderMetadata,
+  omitResponseResultItemIds,
+  preserveResponseItemIdsOnMerge,
+} from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
 import { AIV5Adapter } from './AIV5Adapter';
 
@@ -83,7 +88,10 @@ function getToolNameFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolU
  * v6 splits tool provider metadata across `callProviderMetadata` and
  * `resultProviderMetadata`, but a Mastra part has one slot. Reading only the call half
  * dropped the `toModelOutput` projection prompt building looks for (issue #22012).
- * The result half wins on conflict, being the later of the two.
+ * The result half wins on conflict, being the later of the two — except for Responses
+ * item ids: a hosted tool (e.g. OpenAI `tool_search`) gives its call and output distinct
+ * ids and replay needs both, so the call's stays as `itemId` and the result's is kept
+ * beside it as `resultItemId`.
  */
 function mergeToolUIPartProviderMetadata(
   part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolUIPart,
@@ -102,7 +110,13 @@ function mergeToolUIPartProviderMetadata(
     merged[providerKey] = callValue ? { ...callValue, ...resultValue } : resultValue;
   }
 
-  return toMastraProviderMetadata(merged);
+  return toMastraProviderMetadata(
+    preserveResponseItemIdsOnMerge(
+      callMetadata as Record<string, unknown>,
+      resultMetadata as Record<string, unknown>,
+      merged as Record<string, unknown>,
+    ) as AIV6Type.ProviderMetadata,
+  );
 }
 
 function createToolInvocationPartFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolUIPart) {
@@ -600,7 +614,14 @@ export class AIV6Adapter {
           providerExecuted: part.providerExecuted,
         },
         {
-          callProviderMetadata: part.providerMetadata,
+          // `resultItemId` is how a single-slot Mastra part carries the result's
+          // Responses item id. v6 has a real slot for it (`resultProviderMetadata`
+          // below), so the internal key must not ride along on the public call
+          // metadata — v6's own convertToModelMessages would forward it to the
+          // provider as `providerOptions.openai.resultItemId`.
+          callProviderMetadata: omitResponseResultItemIds(
+            part.providerMetadata as Record<string, unknown> | undefined,
+          ) as typeof part.providerMetadata,
           title: part.title,
         },
       );
@@ -656,6 +677,12 @@ export class AIV6Adapter {
             },
             {
               rawInput: part.toolInvocation.rawInput,
+              // A failed hosted call replays by item reference like a successful
+              // one, so its result id needs the same dedicated slot (see the
+              // `result` case below).
+              resultProviderMetadata: getResponseResultProviderMetadata(
+                part.providerMetadata as Record<string, unknown> | undefined,
+              ),
               approval:
                 part.toolInvocation.approval?.approved === true
                   ? {
@@ -693,6 +720,12 @@ export class AIV6Adapter {
             },
             {
               preliminary: part.preliminary,
+              // v6 has a dedicated slot for result-side metadata. Surface the result's
+              // Responses item id there when it differs from the call's, so a
+              // toUIMessage → fromUIMessage round trip keeps both ids.
+              resultProviderMetadata: getResponseResultProviderMetadata(
+                part.providerMetadata as Record<string, unknown> | undefined,
+              ),
               approval:
                 part.toolInvocation.approval?.approved === true
                   ? {

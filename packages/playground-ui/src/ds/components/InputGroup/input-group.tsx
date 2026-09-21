@@ -1,3 +1,4 @@
+import '../../../../new-theme.css';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
@@ -6,7 +7,8 @@ import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
-import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
+import { inputFocusBorderWithin, inputHoverBorderWithin, resolveFieldVariant } from '@/ds/primitives/form-element';
+import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -19,11 +21,11 @@ const inputGroupBaseClassName = cn(
   // so it never collapses to 0. `items-center` centres the control: it carries its own
   // h-form-* (2px taller than the root's content box), so stretch would push its text low
   // / overflow the bottom border, while centring overlaps the (transparent) borders cleanly.
-  'group/input-group relative flex w-full flex-1 items-center',
-  'border border-border1 text-neutral6',
+  'new-theme group/input-group relative flex w-full flex-1 items-center',
+  'border border-border text-foreground',
   transitions.all,
-  'has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
-  'has-[[aria-invalid=true]]:border-error',
+  'has-[:disabled]:cursor-not-allowed has-[:disabled]:border-border has-[:disabled]:bg-muted has-[:disabled]:text-muted-foreground',
+  'has-[[aria-invalid=true]]:border-destructive',
   // Height is on the root (border-box) so the group matches a same-size sibling control.
   // Auto height when vertical (block-* addon) or wrapping a textarea.
   'has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col',
@@ -44,14 +46,15 @@ const inputGroupRoundedTextareaClassName = cn(
   'has-[textarea]:rounded-xl',
 );
 
-// `default` and `filled` are the same filled surface on purpose (the default look IS
-// the filled treatment; `filled` is an explicit alias). Share the string so they can't
-// drift. Focus brightens the border (inputFocusBorderWithin) for WCAG-visible focus.
+// The default look is the filled surface: a fill inside the box, as opposed to
+// `outline`, which leaves the inside transparent and lets the border draw the shape.
+// Focus brightens the border (inputFocusBorderWithin) for WCAG-visible focus.
 const inputGroupFilledVariant = cn(
-  'rounded-full bg-surface-overlay-soft',
-  'hover:bg-surface-overlay-strong',
-  inputHoverBorderWithin,
-  'outline-hidden focus-within:bg-surface-overlay-strong focus-within:outline-hidden',
+  'rounded-full bg-foreground/10',
+  // Guarded on descendants, not the wrapper: a div is never `:disabled`, so an
+  // unguarded hover fill paints over the muted surface of a disabled group.
+  'not-has-[:disabled]:hover:bg-foreground/14',
+  'outline-hidden focus-within:bg-foreground/14 focus-within:outline-hidden',
   inputFocusBorderWithin,
   inputGroupRoundedTextareaClassName,
 );
@@ -60,9 +63,8 @@ const inputGroupVariants = cva(inputGroupBaseClassName, {
   variants: {
     variant: {
       default: inputGroupFilledVariant,
-      filled: inputGroupFilledVariant,
       outline: cn(
-        'rounded-full bg-transparent',
+        'rounded-full border-foreground/30 bg-transparent',
         inputHoverBorderWithin,
         'outline-hidden focus-within:outline-hidden',
         inputFocusBorderWithin,
@@ -77,7 +79,9 @@ const inputGroupVariants = cva(inputGroupBaseClassName, {
 
 export type InputGroupProps = React.ComponentPropsWithoutRef<'div'> & {
   size?: ControlSize;
-} & VariantProps<typeof inputGroupVariants>;
+  /** `filled` is a deprecated alias for `default`; both render the filled surface. */
+  variant?: VariantProps<typeof inputGroupVariants>['variant'] | DeprecatedFilledVariant;
+} & Omit<VariantProps<typeof inputGroupVariants>, 'variant'>;
 
 const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(
   ({ className, size = 'md', variant, ...props }, ref) => {
@@ -87,7 +91,7 @@ const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(
         role="group"
         data-slot="input-group"
         data-size={size}
-        className={cn(inputGroupVariants({ variant }), controlHeight[size], className)}
+        className={cn(inputGroupVariants({ variant: resolveFieldVariant(variant) }), controlHeight[size], className)}
         {...props}
       />
     );
@@ -97,8 +101,8 @@ InputGroup.displayName = 'InputGroup';
 
 const inputGroupAddonVariants = cva(
   cn(
-    'flex items-center justify-center gap-2 text-neutral3 select-none',
-    'group-has-[:disabled]/input-group:opacity-50',
+    'flex items-center justify-center gap-2 text-muted-foreground select-none',
+    'group-has-[:disabled]/input-group:text-muted-foreground',
     "[&>svg:not([class*='size-'])]:size-4",
   ),
   {
@@ -106,8 +110,8 @@ const inputGroupAddonVariants = cva(
       align: {
         'inline-start': 'order-first pr-1 pl-3 has-[>button]:pl-1',
         'inline-end': 'order-last pr-3 pl-1 has-[>button]:pr-1',
-        'block-start': 'order-first w-full justify-start border-b border-border1 px-3 pt-2 pb-1',
-        'block-end': 'order-last w-full justify-start border-t border-border1 px-3 pt-1 pb-2',
+        'block-start': 'order-first w-full justify-start border-b border-border px-3 pt-2 pb-1',
+        'block-end': 'order-last w-full justify-start border-t border-border px-3 pt-1 pb-2',
       },
     },
     defaultVariants: {
@@ -181,10 +185,10 @@ const InputGroupInput = React.forwardRef<HTMLInputElement, InputGroupInputProps>
         aria-invalid={error}
         className={cn(
           // Height fits the root's content box (see inputGroupControlHeightBySize).
-          'min-w-0 flex-1 bg-transparent px-3 text-neutral6 outline-hidden',
+          'min-w-0 flex-1 bg-transparent px-3 text-foreground outline-hidden',
           inputGroupControlHeightBySize,
           inputGroupControlTextBySize,
-          'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
+          'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
           'focus:placeholder:opacity-70',
           'disabled:cursor-not-allowed',
           // Hide native number-spinner arrows so consumers can compose their own
@@ -219,9 +223,9 @@ const InputGroupTextarea = React.forwardRef<HTMLTextAreaElement, InputGroupTexta
         data-testid={testId}
         aria-invalid={error}
         className={cn(
-          'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-neutral6 outline-hidden',
+          'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-foreground outline-hidden',
           inputGroupControlTextBySize,
-          'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
+          'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
           'focus:placeholder:opacity-70',
           'disabled:cursor-not-allowed',
           className,
@@ -240,7 +244,7 @@ const InputGroupText = React.forwardRef<HTMLSpanElement, InputGroupTextProps>(({
     <span
       ref={ref}
       className={cn(
-        'flex items-center gap-2 text-ui-sm text-neutral3 [&_svg]:pointer-events-none',
+        'flex items-center gap-2 text-ui-sm text-muted-foreground [&_svg]:pointer-events-none',
         "[&_svg:not([class*='size-'])]:size-4",
         className,
       )}

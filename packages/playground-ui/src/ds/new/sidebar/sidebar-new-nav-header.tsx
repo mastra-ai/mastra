@@ -28,7 +28,7 @@ export function SidebarNewNavHeader({
   const Link = LinkProp ?? context?.LinkComponent ?? 'a';
 
   return (
-    <div className={cn('mt-2 mb-0.5 flex min-h-8 min-w-0 items-center', className)}>
+    <div className={cn('mt-1 flex min-h-7 min-w-0 items-center', className)}>
       {showTitle ? (
         <header
           {...props}
@@ -56,7 +56,7 @@ export function SidebarNewNavHeader({
           <VisuallyHidden asChild>
             <header {...props}>{children}</header>
           </VisuallyHidden>
-          <div aria-hidden="true" className="bg-border mx-3 h-px flex-1" />
+          <div aria-hidden="true" className="bg-sidebar-divider mx-3 h-px flex-1" />
         </>
       )}
     </div>

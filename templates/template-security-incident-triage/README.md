@@ -1,4 +1,4 @@
-# Security incident triage and response
+# Security Incident Triage and Response
 
 Give your team the context to act on a security alert. This Mastra template gathers evidence, checks the relevant runbook, and prepares an incident summary and response plan for review. It handles unexpected privilege changes, logins from disallowed countries, and unfamiliar devices. Containment waits for approval.
 
