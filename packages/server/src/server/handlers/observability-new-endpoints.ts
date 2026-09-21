@@ -253,6 +253,18 @@ const throwTraceQueryDiscoveryCoreUnsupported = () =>
     message: 'Trace query discovery requires a newer @mastra/core. Please upgrade.',
   });
 
+/**
+ * Trusted tenant scope for trace queries. `organizationId` is a reserved request-context
+ * key that only server-side auth may establish (see `isReservedRequestContextKey`), so a
+ * caller can't widen it through the request body. Absent key means self-hosted: no scope.
+ */
+function resolveTraceQueryScope(requestContext: {
+  get(key: string): unknown;
+}): coreStorage.TraceQueryTenantScope | undefined {
+  const organizationId = requestContext.get('organizationId');
+  return typeof organizationId === 'string' && organizationId.length > 0 ? { organizationId } : undefined;
+}
+
 export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
   bodySchema: coreStorage.traceQueryRequestSchema,
   responseSchema: coreStorage.traceQueryResponseSchema,
@@ -292,7 +304,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
           : undefined;
       plan = coreStorage.planTraceQuery(
         { timeRange, where, group, orderBy, page, pagination, mode, after, limit },
-        { authorizationBinding },
+        { authorizationBinding, scope: resolveTraceQueryScope(requestContext) },
       );
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -377,9 +389,9 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
   preserveHttpExceptions: true,
   isCoreSupported: supportsTraceQueryDiscoveryCore,
   onUnsupportedCore: throwTraceQueryDiscoveryCoreUnsupported,
-  handler: async ({ mastra, timeRange, predicateScope, search, limit }) => {
+  handler: async ({ mastra, requestContext, timeRange, predicateScope, search, limit }) => {
     const args = { timeRange, predicateScope, search, limit };
-    const plan = coreStorage.planTraceQueryObservedFields(args);
+    const plan = coreStorage.planTraceQueryObservedFields(args, { scope: resolveTraceQueryScope(requestContext) });
     let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
     try {
       observabilityStore = await getObservabilityStore(mastra);
@@ -417,8 +429,11 @@ export const GET_TRACE_QUERY_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
   preserveHttpExceptions: true,
   isCoreSupported: supportsTraceQueryDiscoveryCore,
   onUnsupportedCore: throwTraceQueryDiscoveryCoreUnsupported,
-  handler: async ({ mastra, timeRange, predicateScope, path, search, limit }) => {
-    const plan = coreStorage.planTraceQueryValues({ timeRange, predicateScope, path, search, limit });
+  handler: async ({ mastra, requestContext, timeRange, predicateScope, path, search, limit }) => {
+    const plan = coreStorage.planTraceQueryValues(
+      { timeRange, predicateScope, path, search, limit },
+      { scope: resolveTraceQueryScope(requestContext) },
+    );
     let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
     try {
       observabilityStore = await getObservabilityStore(mastra);
@@ -479,10 +494,10 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
       code: 'TRACE_QUERY_UNSUPPORTED',
       message: 'Thread queries require a newer @mastra/core with observability thread-query support. Please upgrade.',
     }),
-  handler: async ({ mastra, traces, where, page }) => {
+  handler: async ({ mastra, requestContext, traces, where, page }) => {
     let plan;
     try {
-      plan = coreStorage.planThreadQuery({ traces, where, page });
+      plan = coreStorage.planThreadQuery({ traces, where, page }, { scope: resolveTraceQueryScope(requestContext) });
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
         throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });

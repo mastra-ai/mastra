@@ -302,7 +302,12 @@ describe('QUERY_TRACES', () => {
     observabilityStore.queryTraces.mockImplementation(plan => evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, plan));
 
     for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
-      const response = await QUERY_TRACES.handler(params(mastra, testCase.request));
+      // The server resolves only `organizationId` from the request context; resource-level
+      // scope is a storage-boundary concern covered by the shared store suite.
+      if (testCase.scope?.resourceId !== undefined) continue;
+      const context = createTestServerContext({ mastra });
+      if (testCase.scope) context.requestContext.set('organizationId', testCase.scope.organizationId);
+      const response = await QUERY_TRACES.handler({ ...context, ...traceQueryRequestSchema.parse(testCase.request) });
       expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
     }
   });
@@ -458,6 +463,71 @@ describe('QUERY_TRACES', () => {
           page: { after },
         }),
       ),
+    );
+    expect(conflict.status).toBe(409);
+    expect(getDeclaredErrorSchema(409).parse(await conflict.getResponse().json())).toMatchObject({
+      code: 'TRACE_QUERY_CURSOR_CONFLICT',
+    });
+    expect(conflictHarness.getStore).not.toHaveBeenCalled();
+  });
+
+  it('applies the trusted tenant scope from the request context and binds it into cursors', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-discovery']);
+    const scoped = (organizationId: string | undefined, request: unknown) => {
+      const context = createTestServerContext({ mastra });
+      if (organizationId) context.requestContext.set('organizationId', organizationId);
+      return { ...context, ...traceQueryRequestSchema.parse(request) };
+    };
+
+    await QUERY_TRACES.handler(scoped('org-a', { timeRange: TIME_RANGE }));
+    expect(observabilityStore.queryTraces).toHaveBeenLastCalledWith(
+      expect.objectContaining({ scope: { organizationId: 'org-a' } }),
+    );
+
+    await QUERY_TRACES.handler(scoped(undefined, { timeRange: TIME_RANGE }));
+    expect(observabilityStore.queryTraces.mock.calls.at(-1)?.[0]?.scope).toBeUndefined();
+
+    const fieldsContext = createTestServerContext({ mastra });
+    fieldsContext.requestContext.set('organizationId', 'org-a');
+    await GET_TRACE_QUERY_FIELDS.handler({
+      ...fieldsContext,
+      ...getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    });
+    expect(observabilityStore.getTraceQueryObservedFields).toHaveBeenLastCalledWith(
+      expect.objectContaining({ scope: { organizationId: 'org-a' } }),
+    );
+    await GET_TRACE_QUERY_VALUES.handler({
+      ...fieldsContext,
+      ...getTraceQueryValuesArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'environment' }),
+    });
+    expect(observabilityStore.getTraceQueryValues).toHaveBeenLastCalledWith(
+      expect.objectContaining({ scope: { organizationId: 'org-a' } }),
+    );
+
+    const orgAPlan = planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE }), {
+      scope: { organizationId: 'org-a' },
+    });
+    const after = encodeTraceQueryCursor(orgAPlan, {
+      result: 'traces',
+      sortValue: '2026-08-20T10:00:00.000Z',
+      traceId: 'trace-a',
+    });
+    await QUERY_TRACES.handler(scoped('org-a', { timeRange: TIME_RANGE, page: { after } }));
+    expect(observabilityStore.queryTraces).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scope: { organizationId: 'org-a' },
+        cursor: { sortValue: '2026-08-20T10:00:00.000Z', traceId: 'trace-a' },
+      }),
+    );
+
+    const conflictHarness = createHarness();
+    const conflictContext = createTestServerContext({ mastra: conflictHarness.mastra });
+    conflictContext.requestContext.set('organizationId', 'org-b');
+    const conflict = await captureHttpException(
+      QUERY_TRACES.handler({
+        ...conflictContext,
+        ...traceQueryRequestSchema.parse({ timeRange: TIME_RANGE, page: { after } }),
+      }),
     );
     expect(conflict.status).toBe(409);
     expect(getDeclaredErrorSchema(409).parse(await conflict.getResponse().json())).toMatchObject({
