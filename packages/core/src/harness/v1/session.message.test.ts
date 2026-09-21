@@ -14,7 +14,11 @@ import { z } from 'zod';
 
 import { Agent } from '../../agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import { HarnessStorageAdmissionConflictError, harnessTerminalIntentId } from '../../storage/domains/harness';
+import {
+  HarnessStorageAdmissionConflictError,
+  harnessTerminalAdmissionId,
+  harnessTerminalIntentId,
+} from '../../storage/domains/harness';
 import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 
@@ -408,7 +412,13 @@ describe('Session.message() — default path', () => {
     expect(finalizerCalls).toEqual([{ seed, finalizerId: 'doxa.chat', finalizerVersion: '2026-09-20' }]);
     const intent = await storage.loadTerminalIntent({
       harnessName: 'default',
-      intentId: harnessTerminalIntentId('native-terminal-admission'),
+      intentId: harnessTerminalIntentId(
+        harnessTerminalAdmissionId({
+          harnessName: 'default',
+          sessionId: session.id,
+          executionGrant: { key: 'usage-claim-1', generation: 7 },
+        }),
+      ),
     });
     expect(intent).toMatchObject({
       projection: {
@@ -419,6 +429,310 @@ describe('Session.message() — default path', () => {
     });
     expect(intent).toBeDefined();
     await expect(session.lookupMessageResult(intent!.signalId)).resolves.toMatchObject({ status: 'completed' });
+  });
+
+  it('holds a live duplicate behind the durable terminal commit barrier', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    let releaseRun!: () => void;
+    let releaseFinalizer!: () => void;
+    let finalizerEntered!: () => void;
+    const runGate = new Promise<void>(resolve => {
+      releaseRun = resolve;
+    });
+    const finalizerGate = new Promise<void>(resolve => {
+      releaseFinalizer = resolve;
+    });
+    const finalizerStarted = new Promise<void>(resolve => {
+      finalizerEntered = resolve;
+    });
+    agent.enqueueRun({ holdUntil: runGate, text: 'terminal done' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async input => {
+              finalizerEntered();
+              await finalizerGate;
+              return {
+                projectionKind: 'chat.summary',
+                projectionId: 'response-1',
+                payload: { terminalStatus: input.result.status },
+              };
+            },
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-live', generation: 3 };
+    const opts = {
+      content: 'go',
+      admissionId: 'live-duplicate',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    } as const;
+    const first = session.message({ ...opts });
+    await vi.waitFor(() => expect(agent.streamCalls).toHaveLength(1));
+
+    // The provider run is still live — the duplicate attaches to it.
+    const second = session.message({ ...opts });
+    let secondSettled = false;
+    void second.then(
+      () => {
+        secondSettled = true;
+      },
+      () => {
+        secondSettled = true;
+      },
+    );
+
+    // The run completes, but the durable commit stays blocked behind the
+    // finalizer: the duplicate must not report provider completion early.
+    releaseRun();
+    await finalizerStarted;
+    await new Promise(resolve => setTimeout(resolve, 25));
+    expect(secondSettled).toBe(false);
+    const pendingAdmission = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'live-duplicate',
+      executionGrant: grant,
+    });
+    expect(pendingAdmission?.status).toBe('pending');
+    await expect(
+      storage.loadTerminalIntent({
+        harnessName: 'default',
+        intentId: harnessTerminalIntentId(
+          harnessTerminalAdmissionId({
+            harnessName: 'default',
+            sessionId: session.id,
+            executionGrant: grant,
+          }),
+        ),
+      }),
+    ).resolves.toBeNull();
+
+    releaseFinalizer();
+    await expect(first).resolves.toMatchObject({ text: 'terminal done' });
+    await expect(second).resolves.toMatchObject({ text: 'terminal done' });
+    const committed = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'live-duplicate',
+      executionGrant: grant,
+    });
+    expect(committed?.status).toBe('committed');
+    expect(agent.streamCalls).toHaveLength(1);
+  });
+
+  it('defers terminal settlement while suspended and commits on resume completion', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    agent.enqueueRun({ finishReason: 'stop', text: 'resumed answer' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async input => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: { terminalStatus: input.result.status },
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-suspended', generation: 1 };
+    const result = await session.message({
+      content: 'needs approval',
+      admissionId: 'suspendable-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(result.finishReason).toBe('suspended');
+
+    // Suspension is not a terminal winner: the admission stays pending and no
+    // delivery intent is minted while approval is outstanding.
+    const admission = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'suspendable-admission',
+      executionGrant: grant,
+    });
+    expect(admission?.status).toBe('pending');
+    await expect(
+      storage.loadTerminalIntent({
+        harnessName: 'default',
+        intentId: harnessTerminalIntentId(
+          harnessTerminalAdmissionId({
+            harnessName: 'default',
+            sessionId: session.id,
+            executionGrant: grant,
+          }),
+        ),
+      }),
+    ).resolves.toBeNull();
+
+    // The approval-gated resume is the admission's real terminal outcome.
+    await session.respondToToolApproval({ approved: true });
+    const settled = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'suspendable-admission',
+      executionGrant: grant,
+    });
+    expect(settled?.status).toBe('committed');
+    expect(settled?.terminalResult).toMatchObject({ status: 'completed', runId: admission!.runId });
+    const intent = await storage.loadTerminalIntent({
+      harnessName: 'default',
+      intentId: harnessTerminalIntentId(admission!.id),
+    });
+    expect(intent?.terminalResult).toMatchObject({ status: 'completed' });
+  });
+
+  it('commits a failed terminal result for an error-finished run', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({ finishReason: 'error', text: '' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async input => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: { terminalStatus: input.result.status },
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-error', generation: 1 };
+    const result = await session.message({
+      content: 'will fail',
+      admissionId: 'error-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+
+    const admission = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'error-admission',
+      executionGrant: grant,
+    });
+    expect(admission?.status).toBe('committed');
+    expect(admission?.terminalResult).toMatchObject({
+      status: 'failed',
+      finishReason: 'error',
+      runId: result.runId,
+    });
+    expect(admission?.terminalResult?.error).toBeDefined();
+  });
+
+  it('re-drives dispatch when a prior attempt stranded between reservation and terminal admission', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default', defaultOutput: { text: 'recovered' } });
+    let admitAttempts = 0;
+    const realAdmit = storage.admitTerminalHandoff.bind(storage);
+    vi.spyOn(storage, 'admitTerminalHandoff').mockImplementation(async input => {
+      admitAttempts += 1;
+      if (admitAttempts === 1) {
+        throw new Error('transient admission failure');
+      }
+      return realAdmit(input);
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async input => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: { terminalStatus: input.result.status },
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-retry', generation: 1 };
+    const opts = {
+      content: 'retry me',
+      admissionId: 'stranded-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    } as const;
+
+    // The first attempt reserves pending evidence, then dies inside terminal
+    // admission before the provider run ever dispatches.
+    await expect(session.message({ ...opts })).rejects.toBeTruthy();
+    expect(agent.streamCalls).toHaveLength(0);
+    await expect(
+      storage.loadTerminalAdmission({
+        harnessName: 'default',
+        sessionId: session.id,
+        admissionId: 'stranded-admission',
+        executionGrant: grant,
+      }),
+    ).resolves.toBeNull();
+
+    // The retry must recover the stranded reservation instead of waiting on a
+    // settlement that can never arrive.
+    const second = await session.message({ ...opts });
+    expect(second.text).toBe('recovered');
+    expect(agent.streamCalls).toHaveLength(1);
+    const committed = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'stranded-admission',
+      executionGrant: grant,
+    });
+    expect(committed?.status).toBe('committed');
+    const intent = await storage.loadTerminalIntent({
+      harnessName: 'default',
+      intentId: harnessTerminalIntentId(committed!.id),
+    });
+    expect(intent?.terminalResult).toMatchObject({ status: 'completed' });
   });
 
   it('binds logical identity to the admitted message hash', async () => {

@@ -78,6 +78,8 @@ import {
   HarnessTerminalHandoffError,
   HarnessTerminalHandoffCancelledError,
   HarnessTerminalHandoffFencedError,
+  HarnessTerminalHandoffIdentityConflictError,
+  harnessTerminalIntentId,
   HarnessTerminalHandoffUnsupportedError,
   HarnessTerminalHandoffValidationError,
   HarnessTerminalFinalizationPendingError,
@@ -99,6 +101,7 @@ import type {
   HarnessTerminalExecutionGrant,
   HarnessTerminalFinalizer,
   HarnessTerminalIdentity,
+  HarnessTerminalIntent,
   HarnessTerminalProjection,
   HarnessTerminalResult,
   HarnessStorageAttachmentUnavailableError,
@@ -7928,15 +7931,35 @@ export class Session {
             }));
           if (existing) {
             admissionStart.resolve(existing);
-            try {
-              return await this._returnDuplicateMessageResult(existing, opts);
-            } finally {
-              finishOwnedMessageTurn();
+            // The original attempt may have died after the durable reservation
+            // but before terminal admission/dispatch. Retrying through the
+            // duplicate path would wait on a settlement that can never arrive,
+            // so re-drive the admission and fall through into dispatch.
+            const terminalAdmissionMissing =
+              terminalIdentity !== undefined &&
+              this._terminalFinalizer !== undefined &&
+              'status' in existing &&
+              existing.status === 'pending' &&
+              (await this._storage.loadTerminalAdmission({
+                harnessName: this._record.harnessName,
+                sessionId: this.id,
+                admissionId: opts.admissionId!,
+                executionGrant: opts.executionAuthorityGrant!,
+              })) === null;
+            if (!terminalAdmissionMissing) {
+              try {
+                return await this._returnDuplicateMessageResult(existing, opts);
+              } finally {
+                finishOwnedMessageTurn();
+              }
             }
+            // Fall through — the shared admission below re-drives the missing
+            // terminal admission and this attempt continues into dispatch.
+          } else {
+            const conflict = new HarnessAdmissionConflictError(this.id, opts.admissionId!, '', admissionHash);
+            admissionStart.reject(conflict);
+            throw conflict;
           }
-          const conflict = new HarnessAdmissionConflictError(this.id, opts.admissionId!, '', admissionHash);
-          admissionStart.reject(conflict);
-          throw conflict;
         }
         if (terminalIdentity !== undefined && this._terminalFinalizer !== undefined) {
           await this._admitTerminalHandoff(terminalIdentity, opts.terminalAdmissionSeed!, opts.onTerminalCommitError);
@@ -8765,7 +8788,25 @@ export class Session {
           if (!this._hasLiveMessageRun(agent, runId)) {
             return this._raceActiveTurnWaiter(this._awaitDurableMessageResult(evidence, opts), activeDeleted);
           }
-          return this._raceActiveTurnWaiter(this._awaitRunCompletion(runId), activeDeleted);
+          const live = await this._raceActiveTurnWaiter(this._awaitRunCompletion(runId), activeDeleted);
+          if (evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
+            await this._prepareCachedDuplicateMessageCompletion(live, evidence, opts, activeDeleted);
+            const terminalCommitted = await this._commitCachedDuplicateTerminal(live, evidence, opts, activeDeleted);
+            if (!terminalCommitted) {
+              await this._writeMessageResultEvidenceBestEffort({
+                status: 'completed',
+                signalId: evidence.signalId,
+                runId,
+                modeId: duplicateModeId,
+                modelId: duplicateModelId,
+                operationKind: 'message',
+                result: live,
+                admissionId: evidence.admissionId,
+                admissionHash: evidence.admissionHash,
+              });
+            }
+          }
+          return live;
         }
       }
       throw new HarnessValidationError('message().admissionId', 'duplicate message result evidence has expired');
@@ -8845,6 +8886,27 @@ export class Session {
     }
   }
 
+  /**
+   * Deferred terminal settlement for a message that suspended. The admission's
+   * deterministic `runId` is the resumed run's id, so the durable pending row
+   * is recoverable without persisting extra correlation on `pendingResume`.
+   * A non-pending or absent row means another path already settled the grant.
+   */
+  private async _settleResumedTerminalHandoff(
+    pending: PendingResume,
+    full: FullOutput<unknown>,
+    options: { modeId?: string; modelId?: string },
+  ): Promise<void> {
+    if (this._terminalFinalizer === undefined) return;
+    const admission = await this._storage.loadPendingTerminalAdmission({
+      harnessName: this._record.harnessName,
+      sessionId: this.id,
+      runId: pending.runId,
+    });
+    if (!admission) return;
+    await this._commitTerminalHandoff(admission, full, options);
+  }
+
   private _messageDuplicateModeId(evidence: AgentSignalResultEvidence, opts: MessageOptions): string {
     const starting = evidence.admissionId ? this._messageAdmissionStarts.get(evidence.admissionId) : undefined;
     return starting?.modeId ?? evidence.modeId ?? opts.mode ?? this._record.modeId;
@@ -8885,7 +8947,16 @@ export class Session {
         throw new HarnessValidationError('message().admissionId', 'duplicate message result evidence has expired');
       }
       if (Date.now() >= deadline) {
-        throw new HarnessValidationError('message().admissionId', 'pending message admission is not live');
+        // A terminal-mode message whose run is parked in `pendingResume`
+        // legitimately stays pending until the approval-gated resume settles
+        // the deferred admission — waiting past the probe deadline is correct.
+        const suspendedOnThisRun =
+          this._terminalFinalizer !== undefined &&
+          evidence.runId !== undefined &&
+          this._record.pendingResume?.runId === evidence.runId;
+        if (!suspendedOnThisRun) {
+          throw new HarnessValidationError('message().admissionId', 'pending message admission is not live');
+        }
       }
       await delay(MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS, opts.abortSignal);
     }
@@ -9014,7 +9085,7 @@ export class Session {
       onReceipt?: (receipt: HarnessTerminalCommitReceipt) => void;
       onFailure?: (error: HarnessTerminalHandoffError) => void;
     },
-  ): Promise<HarnessTerminalCommitReceipt> {
+  ): Promise<HarnessTerminalCommitReceipt | undefined> {
     const finalizer = this._terminalFinalizer;
     if (finalizer === undefined) {
       throw new HarnessTerminalHandoffValidationError('terminalHandoff', 'finalizer is not registered');
@@ -9050,12 +9121,63 @@ export class Session {
     if (admission.status === 'cancelled') {
       return reportFailure(new HarnessTerminalHandoffCancelledError(identity.executionGrant.key));
     }
+    if (admission.status === 'committed') {
+      // The durable winner is already sealed. Replay its stored receipt rather
+      // than recomputing a result whose wall-clock `completedAt` could never
+      // match — a live duplicate or lost-ack retry must converge on the winner,
+      // not collide with it. Fail closed when the caller's identity is not the
+      // recorded winner's.
+      if (
+        admission.admissionId !== identity.admissionId ||
+        admission.admissionHash !== identity.admissionHash ||
+        admission.signalId !== identity.signalId ||
+        admission.runId !== identity.runId ||
+        admission.sessionIncarnation !== identity.sessionIncarnation
+      ) {
+        return reportFailure(new HarnessTerminalHandoffIdentityConflictError(identity.executionGrant.key));
+      }
+      let intent: HarnessTerminalIntent | null = null;
+      try {
+        intent = await this._storage.loadTerminalIntent({
+          harnessName: identity.harnessName,
+          intentId: harnessTerminalIntentId(admission.id),
+        });
+      } catch (error) {
+        return reportFailure(error);
+      }
+      const receipt: HarnessTerminalCommitReceipt = {
+        status: 'duplicate',
+        admission,
+        ...(intent !== null ? { intent } : {}),
+      };
+      try {
+        options.onReceipt?.(receipt);
+      } catch {
+        // Receipt observers are diagnostics only and cannot change the durable winner.
+      }
+      return receipt;
+    }
     const finishReason = typeof full.finishReason === 'string' ? full.finishReason : undefined;
+    const endReason = this._agentEndReasonForFullOutput(full);
+    if (endReason === 'suspended') {
+      // A suspended run has not reached a terminal outcome — the approval-gated
+      // resume settles this admission later, so defer instead of sealing a
+      // false 'completed' winner.
+      return undefined;
+    }
     const terminalResult: HarnessTerminalResult = {
-      status: finishReason === 'aborted' || finishReason === 'abort' ? 'aborted' : 'completed',
+      status:
+        endReason === 'aborted' || finishReason === 'abort'
+          ? 'aborted'
+          : endReason === 'error'
+            ? 'failed'
+            : 'completed',
       runId: identity.runId,
       ...(finishReason !== undefined ? { finishReason } : {}),
       completedAt: Date.now(),
+      ...(endReason === 'error'
+        ? { error: projectHarnessPublicError(full.error ?? new Error('agent run failed')) }
+        : {}),
     };
     let projection: HarnessTerminalProjection;
     try {
@@ -14317,6 +14439,15 @@ export class Session {
             result: full as AgentResult,
           });
         }
+
+        // A terminal-handoff `message()` that suspended deferred its durable
+        // admission rather than sealing a false 'completed' winner. The resumed
+        // run's terminal outcome is that admission's answer — the deterministic
+        // run id is the same — so settle it through the commit barrier now.
+        await this._settleResumedTerminalHandoff(pending, full, {
+          modeId: resumeModeId,
+          modelId: resumeRuntimeDependencies.modelId,
+        });
 
         // If this was the terminal completion of a queued turn, settle the
         // resolver, remove the head item, clear current, then kick the drain

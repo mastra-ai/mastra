@@ -5,6 +5,7 @@ import { InMemoryDB } from '../inmemory-db';
 import {
   HarnessTerminalHandoffClaimConflictError,
   HarnessTerminalHandoffFencedError,
+  HarnessTerminalHandoffIdentityConflictError,
   HarnessTerminalFinalizationPendingError,
   InMemoryHarness,
   harnessTerminalAdmissionId,
@@ -101,7 +102,7 @@ describe('native chat terminal handoff', () => {
     });
     expect(committed.status).toBe('committed');
     expect(committed.intent).toMatchObject({
-      id: harnessTerminalIntentId(input.admissionId),
+      id: harnessTerminalIntentId(harnessTerminalAdmissionId(input)),
       projection: expect.objectContaining({ payloadHash: expect.any(String), payloadJson: '{"text":"done"}' }),
     });
     await expect(
@@ -121,7 +122,7 @@ describe('native chat terminal handoff', () => {
       projection,
     });
     expect(replay.status).toBe('duplicate');
-    expect(replay.intent?.id).toBe(harnessTerminalIntentId(input.admissionId));
+    expect(replay.intent?.id).toBe(harnessTerminalIntentId(harnessTerminalAdmissionId(input)));
     expect(committed.admission.id).toBe(harnessTerminalAdmissionId(input));
 
     await expect(storage.getTerminalQueuePressure({ harnessName: input.harnessName })).resolves.toEqual({
@@ -475,6 +476,155 @@ describe('native chat terminal handoff', () => {
     const error = new HarnessTerminalFinalizationPendingError(4_000, new Error('provider detail'));
     expect(projectHarnessPublicError(error)).toMatchObject({
       code: 'harness.terminal_pending',
+    });
+  });
+
+  it('mints and preserves a session incarnation when only terminal handoff is enabled', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true } });
+    await storage.saveSession(session({ sessionIncarnation: undefined }), { ownerId: 'owner-1', ifVersion: 0 });
+    const stored = await storage.loadSession({ harnessName: 'default', sessionId: 'session-1' });
+    expect(stored?.sessionIncarnation).toEqual(expect.any(String));
+
+    // An update that omits the incarnation preserves the minted fence.
+    await storage.saveSession(session({ sessionIncarnation: undefined }), { ownerId: 'owner-1', ifVersion: 1 });
+    await expect(storage.loadSession({ harnessName: 'default', sessionId: 'session-1' })).resolves.toMatchObject({
+      sessionIncarnation: stored!.sessionIncarnation,
+    });
+
+    const input = admission();
+    input.sessionIncarnation = stored!.sessionIncarnation!;
+    await storage.writeMessageResultEvidence(pendingEvidence(input));
+    await expect(storage.admitTerminalHandoff(input)).resolves.toMatchObject({ status: 'created' });
+    await expect(
+      storage.commitTerminalHandoff({
+        admission: input,
+        resultEvidence: { ...pendingEvidence(input), status: 'completed', result: { text: 'ok' }, updatedAt: 3_000 },
+        terminalResult: { status: 'completed', runId: input.runId, completedAt: 3_000 },
+        projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: { text: 'ok' } },
+      }),
+    ).resolves.toMatchObject({ status: 'committed' });
+  });
+
+  it('namespaces delivery intents by the durable admission identity across sessions', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const other = session({
+      id: 'session-2',
+      resourceId: 'resource-2',
+      threadId: 'thread-2',
+      sessionIncarnation: 'incarnation-2',
+    });
+    await storage.saveSession(other, { ownerId: 'owner-2', ifVersion: 0 });
+
+    // Both sessions reuse the same caller admissionId under different grants.
+    const first = admission();
+    const secondInput = {
+      ...admission(),
+      sessionId: 'session-2',
+      resourceId: 'resource-2',
+      threadId: 'thread-2',
+      sessionIncarnation: 'incarnation-2',
+      executionGrant: { key: 'grant-2', generation: 1 },
+    };
+    for (const input of [first, secondInput]) {
+      await storage.writeMessageResultEvidence(pendingEvidence(input));
+      await storage.admitTerminalHandoff(input);
+      const committed = await storage.commitTerminalHandoff({
+        admission: input,
+        resultEvidence: {
+          ...pendingEvidence(input),
+          status: 'completed',
+          result: { text: `done ${input.sessionId}` },
+          updatedAt: 3_000,
+        },
+        terminalResult: { status: 'completed', runId: input.runId, completedAt: 3_000 },
+        projection: { projectionKind: 'chat.summary', projectionId: `summary-${input.sessionId}`, payload: {} },
+      });
+      expect(committed.status).toBe('committed');
+      expect(committed.intent?.id).toBe(harnessTerminalIntentId(harnessTerminalAdmissionId(input)));
+    }
+    await expect(storage.getTerminalQueuePressure({ harnessName: 'default' })).resolves.toMatchObject({
+      pendingIntents: 2,
+    });
+  });
+
+  it('binds a grant generation to one admission across sessions', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const other = session({
+      id: 'session-2',
+      resourceId: 'resource-2',
+      threadId: 'thread-2',
+      sessionIncarnation: 'incarnation-2',
+    });
+    await storage.saveSession(other, { ownerId: 'owner-2', ifVersion: 0 });
+
+    const first = admission();
+    await expect(storage.admitTerminalHandoff(first)).resolves.toMatchObject({ status: 'created' });
+
+    // The same grant admitted under a different session conflicts rather than
+    // creating a second competing admission.
+    const competing = {
+      ...admission(),
+      sessionId: 'session-2',
+      resourceId: 'resource-2',
+      threadId: 'thread-2',
+      sessionIncarnation: 'incarnation-2',
+      admissionId: 'admission-2',
+      admissionHash: 'admission-hash-2',
+    };
+    const conflict = await storage.admitTerminalHandoff(competing);
+    expect(conflict.status).toBe('conflict');
+    expect(conflict.admission.id).toBe(harnessTerminalAdmissionId(first));
+  });
+
+  it('resolves a committed grant winner across sessions before cancelling', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const other = session({
+      id: 'session-2',
+      resourceId: 'resource-2',
+      threadId: 'thread-2',
+      sessionIncarnation: 'incarnation-2',
+    });
+    await storage.saveSession(other, { ownerId: 'owner-2', ifVersion: 0 });
+
+    const winner = admission();
+    await storage.writeMessageResultEvidence(pendingEvidence(winner));
+    await storage.admitTerminalHandoff(winner);
+    await storage.commitTerminalHandoff({
+      admission: winner,
+      resultEvidence: { ...pendingEvidence(winner), status: 'completed', result: { text: 'done' }, updatedAt: 3_000 },
+      terminalResult: { status: 'completed', runId: winner.runId, completedAt: 3_000 },
+      projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: { text: 'done' } },
+    });
+
+    // Cancelling the same grant under another session cannot tombstone over the
+    // committed winner — the grant-scoped resolution validates the caller's
+    // claimed identity and fails closed instead.
+    await expect(
+      storage.cancelTerminalHandoff({
+        harnessName: 'default',
+        sessionId: 'session-2',
+        sessionIncarnation: 'incarnation-2',
+        admissionId: 'admission-2',
+        admissionHash: 'admission-hash-2',
+        executionGrant: winner.executionGrant,
+        reason: { code: 'cancelled', message: 'stale cancel' },
+        cancelledAt: 4_000,
+      }),
+    ).rejects.toBeInstanceOf(HarnessTerminalHandoffIdentityConflictError);
+    await expect(
+      storage.loadTerminalAdmission({
+        harnessName: 'default',
+        sessionId: winner.sessionId,
+        admissionId: winner.admissionId,
+        executionGrant: winner.executionGrant,
+      }),
+    ).resolves.toMatchObject({ status: 'committed' });
+    // The committed intent stays deliverable — no split committed+cancelled outcome.
+    await expect(storage.getTerminalQueuePressure({ harnessName: 'default' })).resolves.toMatchObject({
+      pendingIntents: 1,
     });
   });
 });

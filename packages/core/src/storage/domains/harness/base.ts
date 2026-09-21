@@ -9,6 +9,7 @@ import {
   type HarnessTerminalAckReceipt,
   type HarnessTerminalAdmissionInput,
   type HarnessTerminalAdmissionLoadInput,
+  type HarnessPendingTerminalAdmissionLoadInput,
   type HarnessTerminalAdmissionReceipt,
   type HarnessTerminalCancelInput,
   type HarnessTerminalCancelReceipt,
@@ -1168,6 +1169,12 @@ export abstract class HarnessStorage extends StorageDomain {
 
   async loadTerminalAdmission(
     _input: HarnessTerminalAdmissionLoadInput,
+  ): Promise<import('./terminal-handoff').HarnessTerminalAdmissionRecord | null> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  async loadPendingTerminalAdmission(
+    _input: HarnessPendingTerminalAdmissionLoadInput,
   ): Promise<import('./terminal-handoff').HarnessTerminalAdmissionRecord | null> {
     throw new HarnessTerminalHandoffUnsupportedError();
   }

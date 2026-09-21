@@ -27,13 +27,18 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const HARNESS = 'default';
 
-function terminalStore(id: string, schemaName: string, terminalHandoff?: Record<string, unknown>) {
+function terminalStore(
+  id: string,
+  schemaName: string,
+  terminalHandoff?: Record<string, unknown>,
+  sessionRecordProjection: Record<string, unknown> = { enabled: true },
+) {
   return new PostgresStore({
     ...TEST_CONFIG,
     id,
     schemaName,
     enabledDomains: ['harness'],
-    sessionRecordProjection: { enabled: true },
+    sessionRecordProjection,
     terminalHandoff: { enabled: true, ...terminalHandoff },
   });
 }
@@ -210,7 +215,7 @@ describe('HarnessPG native terminal handoff', () => {
     const args = commitInput(input, 'commit');
     const committed = await harness().commitTerminalHandoff(args);
     expect(committed.status).toBe('committed');
-    expect(committed.intent?.id).toBe(harnessTerminalIntentId(input.admissionId));
+    expect(committed.intent?.id).toBe(harnessTerminalIntentId(harnessTerminalAdmissionId(input)));
     expect(committed.intent?.projection.payloadJson).toBe('{"text":"done commit"}');
     expect(committed.admission.status).toBe('committed');
 
@@ -712,5 +717,178 @@ describe('HarnessPG native terminal handoff', () => {
     await expect(
       harness().claimTerminalIntents({ harnessName: HARNESS, consumerId: 'worker-a', limit: 1 }),
     ).resolves.toMatchObject({ intents: [] });
+  });
+
+  it('mints session incarnations when only terminal handoff is enabled', async () => {
+    const terminalOnly = terminalStore('pg-harness-terminal-only-store', schemaName, {}, { enabled: false });
+    await terminalOnly.init();
+    try {
+      const th = terminalOnly.stores.harness!;
+      const session = await createNativeSession(th, 'terminal-only-session');
+      expect(session.sessionIncarnation).toEqual(expect.any(String));
+
+      // An update that omits the incarnation preserves the minted fence.
+      await th.saveSession(
+        { ...session, sessionIncarnation: undefined },
+        { ownerId: session.ownerId, ifVersion: session.version },
+      );
+      const reloaded = await th.loadSession({ harnessName: HARNESS, sessionId: session.id });
+      expect(reloaded?.sessionIncarnation).toBe(session.sessionIncarnation);
+
+      const input = admissionFor(reloaded!, 'terminal-only');
+      await th.writeMessageResultEvidence(pendingEvidence(input));
+      await expect(th.admitTerminalHandoff(input)).resolves.toMatchObject({ status: 'created' });
+      await expect(th.commitTerminalHandoff(commitInput(input, 'terminal-only'))).resolves.toMatchObject({
+        status: 'committed',
+      });
+    } finally {
+      await terminalOnly.close();
+    }
+  });
+
+  it('namespaces delivery intents by the durable admission identity across sessions', async () => {
+    const first = await createNativeSession(harness(), 'session-intent-a');
+    const second = await createNativeSession(harness(), 'session-intent-b');
+
+    // Both sessions reuse the same caller admissionId under different grants —
+    // the durable admission record id scopes the intent, so they cannot collide.
+    const inputs = [first, second].map((session, i) => ({
+      ...admissionFor(session, `shared-${i}`),
+      admissionId: 'shared-caller-admission',
+      admissionHash: `shared-hash-${i}`,
+      signalId: `signal-shared-${i}`,
+      runId: `run-shared-${i}`,
+    }));
+    const committedIds: string[] = [];
+    for (const input of inputs) {
+      await harness().writeMessageResultEvidence(pendingEvidence(input));
+      await harness().admitTerminalHandoff(input);
+      const committed = await harness().commitTerminalHandoff(commitInput(input, `shared-${input.sessionId}`));
+      expect(committed.status).toBe('committed');
+      committedIds.push(committed.intent!.id);
+      expect(committed.intent!.id).toBe(harnessTerminalIntentId(harnessTerminalAdmissionId(input)));
+    }
+    expect(new Set(committedIds).size).toBe(2);
+    await expect(harness().getTerminalQueuePressure({ harnessName: HARNESS })).resolves.toMatchObject({
+      pendingIntents: 2,
+    });
+  });
+
+  it('binds a grant generation to one admission across sessions', async () => {
+    const first = await createNativeSession(harness(), 'session-bind-a');
+    const second = await createNativeSession(harness(), 'session-bind-b');
+
+    const winner = admissionFor(first, 'bind');
+    await expect(harness().admitTerminalHandoff(winner)).resolves.toMatchObject({ status: 'created' });
+
+    // The same grant admitted under a different session conflicts rather than
+    // creating a second competing admission for the grant.
+    const competing = {
+      ...admissionFor(second, 'bind-competing'),
+      executionGrant: winner.executionGrant,
+    };
+    const conflict = await harness().admitTerminalHandoff(competing);
+    expect(conflict.status).toBe('conflict');
+    expect(conflict.admission.id).toBe(harnessTerminalAdmissionId(winner));
+  });
+
+  it('resolves a committed grant winner across sessions before cancelling', async () => {
+    const first = await createNativeSession(harness(), 'session-cancel-a');
+    const second = await createNativeSession(harness(), 'session-cancel-b');
+
+    const winner = admissionFor(first, 'cancel-winner');
+    await harness().writeMessageResultEvidence(pendingEvidence(winner));
+    await harness().admitTerminalHandoff(winner);
+    const committed = await harness().commitTerminalHandoff(commitInput(winner, 'cancel-winner'));
+    expect(committed.status).toBe('committed');
+
+    // Cancelling the same grant under another session must not tombstone over
+    // the committed winner — the grant-scoped resolution validates the caller's
+    // claimed identity and fails closed instead.
+    await expect(
+      harness().cancelTerminalHandoff({
+        harnessName: HARNESS,
+        sessionId: second.id,
+        sessionIncarnation: second.sessionIncarnation!,
+        admissionId: 'admission-other',
+        admissionHash: 'admission-hash-other',
+        executionGrant: winner.executionGrant,
+        reason: { code: 'cancelled', message: 'stale cancel' },
+      }),
+    ).rejects.toBeInstanceOf(HarnessTerminalHandoffIdentityConflictError);
+    await expect(
+      harness().loadTerminalAdmission({
+        harnessName: HARNESS,
+        sessionId: first.id,
+        admissionId: winner.admissionId,
+        executionGrant: winner.executionGrant,
+      }),
+    ).resolves.toMatchObject({ status: 'committed' });
+    await expect(harness().getTerminalQueuePressure({ harnessName: HARNESS })).resolves.toMatchObject({
+      pendingIntents: 1,
+    });
+  });
+
+  it('rejects a fenced admission on commit', async () => {
+    const session = await createNativeSession(harness(), 'session-fenced-commit');
+    const input = admissionFor(session, 'fenced-commit');
+    await harness().writeMessageResultEvidence(pendingEvidence(input));
+    await harness().admitTerminalHandoff(input);
+
+    await harness().fenceTerminalHandoffsForSession({
+      harnessName: HARNESS,
+      sessionId: session.id,
+      sessionIncarnation: session.sessionIncarnation!,
+    });
+
+    await expect(harness().commitTerminalHandoff(commitInput(input, 'fenced-commit'))).rejects.toBeInstanceOf(
+      HarnessTerminalHandoffFencedError,
+    );
+  });
+
+  it('resolves a pending admission by run id for suspended-resume settlement', async () => {
+    const first = await createNativeSession(harness(), 'session-resume-a');
+    const second = await createNativeSession(harness(), 'session-resume-b');
+    const input = admissionFor(first, 'resume-probe');
+    const other = { ...admissionFor(second, 'resume-other'), runId: input.runId };
+
+    await harness().admitTerminalHandoff(input);
+    await harness().admitTerminalHandoff(other);
+
+    // The probe is scoped by session — a second session holding the same runId
+    // must not leak into the suspended run's settlement path.
+    await expect(
+      harness().loadPendingTerminalAdmission({
+        harnessName: HARNESS,
+        sessionId: first.id,
+        runId: input.runId,
+      }),
+    ).resolves.toMatchObject({ id: harnessTerminalAdmissionId(input), status: 'pending' });
+    await expect(
+      harness().loadPendingTerminalAdmission({
+        harnessName: HARNESS,
+        sessionId: second.id,
+        runId: input.runId,
+      }),
+    ).resolves.toMatchObject({ id: harnessTerminalAdmissionId(other), status: 'pending' });
+    await expect(
+      harness().loadPendingTerminalAdmission({
+        harnessName: HARNESS,
+        sessionId: first.id,
+        runId: 'run-unknown',
+      }),
+    ).resolves.toBeNull();
+
+    // Once committed the admission is no longer pending — the probe goes quiet
+    // so a late resume replay cannot re-settle the winner.
+    await harness().writeMessageResultEvidence(pendingEvidence(input));
+    await harness().commitTerminalHandoff(commitInput(input, 'resume-probe'));
+    await expect(
+      harness().loadPendingTerminalAdmission({
+        harnessName: HARNESS,
+        sessionId: first.id,
+        runId: input.runId,
+      }),
+    ).resolves.toBeNull();
   });
 });

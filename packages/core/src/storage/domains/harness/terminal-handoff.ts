@@ -213,6 +213,17 @@ export interface HarnessTerminalAdmissionLoadInput {
   executionGrant: HarnessTerminalExecutionGrant;
 }
 
+/**
+ * Recovery probe for a suspended-then-resumed run: the durable admission
+ * identity is keyed by the deterministic run id the admission was minted with,
+ * so a terminal resume can find the still-pending admission it must settle.
+ */
+export interface HarnessPendingTerminalAdmissionLoadInput {
+  harnessName?: string;
+  sessionId: string;
+  runId: string;
+}
+
 export interface HarnessTerminalIntentLoadInput {
   harnessName: string;
   intentId: string;
@@ -446,9 +457,9 @@ export function harnessTerminalGrantTombstoneId(
   );
 }
 
-export function harnessTerminalIntentId(admissionId: string): string {
-  boundedId(admissionId, 'admissionId');
-  return sha256(canonicalJson({ protocolVersion: HARNESS_TERMINAL_HANDOFF_VERSION, admissionId }));
+export function harnessTerminalIntentId(admissionRecordId: string): string {
+  boundedId(admissionRecordId, 'admissionRecordId');
+  return sha256(canonicalJson({ protocolVersion: HARNESS_TERMINAL_HANDOFF_VERSION, admissionId: admissionRecordId }));
 }
 
 export function cloneHarnessTerminal<T>(value: T): T {
