@@ -7,7 +7,7 @@ import { MODEL_TOKENS } from '../../../../../../docs/src/plugins/remark-model-to
 import { MessageList } from '../../../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { SpanType } from '../../../observability';
-import { StreamErrorRetryProcessor } from '../../../processors';
+import { StreamErrorRetryProcessor, TokenLimiterProcessor } from '../../../processors';
 import { ProviderHistoryCompat } from '../../../processors/provider-history-compat';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
@@ -1614,6 +1614,108 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         }),
       }),
     );
+    expect(result).toMatchObject({
+      stepResult: { reason: 'tripwire', isContinued: false },
+      output: { text: '' },
+    });
+  });
+
+  it("bails with a tripwire response when TokenLimiter rejects the current run's tool traffic", async () => {
+    // processInputStep runs before the prompt is assembled, so this exits a
+    // different catch than the processLLMRequest test above. Uses the real
+    // processor so the chain from TokenLimiter through the runner to the bail
+    // response is covered, not just the catch.
+    messageList.add(
+      {
+        id: 'oversized-tool',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-oversized',
+                toolName: 'listRules',
+                args: {},
+                result: { rules: Array.from({ length: 400 }, (_, i) => `rule number ${i} must be followed`) },
+              },
+            },
+          ],
+        },
+        createdAt: new Date('2023-01-01T00:00:10Z'),
+      } as any,
+      'response',
+    );
+
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [new TokenLimiterProcessor({ limit: 500 })],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(doStream).not.toHaveBeenCalled();
+    const tripwireChunk = (controller.enqueue as Mock).mock.calls
+      .map(([chunk]) => chunk)
+      .find(chunk => chunk?.type === 'tripwire');
+    expect(tripwireChunk).toBeDefined();
+    expect(tripwireChunk.payload.retry).toBe(false);
+    expect(tripwireChunk.payload.reason).toMatch(/^TokenLimiterProcessor: The current run tool calls/);
+    expect(tripwireChunk.payload.metadata.currentRunTokens).toBeGreaterThan(
+      tripwireChunk.payload.metadata.remainingBudget,
+    );
+    expect(tripwireChunk.payload.metadata.limit).toBe(500);
     expect(result).toMatchObject({
       stepResult: { reason: 'tripwire', isContinued: false },
       output: { text: '' },
