@@ -51,12 +51,11 @@ describe('subscriptionRunContext', () => {
     expect(prime).not.toHaveBeenCalled();
   });
 
-  it('survives a priming failure', async () => {
-    prime.mockRejectedValueOnce(new Error('storage down'));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const context = await subscriptionRunContext(row(), undefined);
-    expect(context?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+  it('rejects when priming fails, naming the subscription and keeping the cause', async () => {
+    const cause = new Error('storage down');
+    prime.mockRejectedValueOnce(cause);
+    const attempt = subscriptionRunContext(row(), undefined);
+    await expect(attempt).rejects.toThrow('Unable to prime tenant credentials for subscription sub-1; not delivered.');
+    await expect(attempt).rejects.toMatchObject({ cause });
   });
 });

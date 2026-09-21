@@ -524,6 +524,39 @@ describe('dispatchGithubWebhook', () => {
     expect(onTargetError).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }), expect.any(Error));
   });
 
+  it('fails a terminal delivery, without retiring, when no tenant identity can be resolved', async () => {
+    const sendNotificationSignal = vi.fn();
+    const session = { thread: { getId: () => 'thread-a', switch: vi.fn() }, sendNotificationSignal };
+    const retire = vi.fn(async () => {});
+    const onTargetError = vi.fn();
+    const unattributed = subscription('a', '/worktrees/a');
+    unattributed.data.subscribedByUserId = null;
+
+    const result = await dispatchGithubWebhook(
+      parsed('pull_request', 'closed', { pull_request: { number: 34, merged: false } }),
+      {
+        controller: controllerStub({ getSessionByResource: async () => session, createSession: vi.fn() }),
+        // The row names no subscriber and the Factory session row is gone, so
+        // there is no user to run as.
+        github: githubWithSessionRow(null),
+        listSubscriptions: async () => [unattributed],
+        retireSubscription: retire,
+        onTargetError,
+      },
+    );
+
+    // Sending anyway would let routing accept a run that fails closed on
+    // credentials, and the closed notification would retire the subscription
+    // with nothing left to redeliver to.
+    expect(result).toEqual({ delivered: 0, failed: 1, skipped: 0, ignored: false });
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect(retire).not.toHaveBeenCalled();
+    expect(onTargetError).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'a' }),
+      expect.objectContaining({ message: 'GitHub subscription a has no resolvable tenant identity; not delivered.' }),
+    );
+  });
+
   it('skips a subscription whose thread this deployment does not hold', async () => {
     const getSessionByResource = vi.fn();
     const createSession = vi.fn();

@@ -47,11 +47,16 @@ export async function subscriptionRunContext(
   requestContext.set('user', { workosId: userId, organizationId: orgId });
   // The web auth middleware primes credential snapshots per request; a
   // webhook-triggered run has no request, so prime here or the model resolves
-  // against an empty snapshot and the run fails closed before persisting.
+  // against an empty snapshot and the run fails closed before persisting. A
+  // priming failure propagates: handing back an unprimed context would let the
+  // caller accept the delivery, and retire a terminal subscription, for a run
+  // that then fails without its credentials and cannot be redelivered.
   try {
     await primeTenantCredentialsForRequestContext(requestContext);
   } catch (error) {
-    console.warn('[factory] Unable to prime credentials for a subscribed session run.', error);
+    throw new Error(`Unable to prime tenant credentials for subscription ${subscription.id}; not delivered.`, {
+      cause: error,
+    });
   }
   return requestContext;
 }

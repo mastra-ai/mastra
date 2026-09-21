@@ -516,6 +516,13 @@ export async function dispatchGithubWebhook(
       }
       const overrides = managedInlineReviewOverrides(notification, subscription);
       const runContext = await subscriptionRunContext(subscription, dependencies.github?.sourceControlStorage);
+      // Without a tenant identity the run fails closed on credential resolution
+      // after routing has accepted the signal, and a terminal notification would
+      // already have retired the subscription. Fail before sending so the target
+      // is counted as failed and the subscription stays open for redelivery.
+      if (!runContext) {
+        throw new Error(`GitHub subscription ${subscription.id} has no resolvable tenant identity; not delivered.`);
+      }
       const result = await session.sendNotificationSignal(
         {
           source: 'github',
@@ -536,7 +543,7 @@ export async function dispatchGithubWebhook(
             deliveryId: parsed.deliveryId,
           },
         },
-        ...(runContext ? [{ requestContext: runContext }] : []),
+        { requestContext: runContext },
       );
       await Promise.all([result.persisted, result.accepted].filter(Boolean));
       if (notification.terminal) {
