@@ -80,7 +80,7 @@ describe('Composer on a lazy user-session draft', () => {
   it('restores an interrupted first prompt as a draft without sending it twice', async () => {
     const preparation = stubPreparingSession({ createdSessionTitle: 'recover this prompt' });
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
         HttpResponse.json({ session: createdDraftSession('recover this prompt') }),
       ),
     );
