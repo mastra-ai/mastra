@@ -1,3 +1,4 @@
+import pMap from 'p-map';
 import { MastraError } from '../../../error/index.js';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import type { GatewayAuthRequest, GatewayAuthResult, MastraModelGatewayInterface, ProviderConfig } from './base.js';
@@ -50,7 +51,7 @@ export interface GatewayModel {
   provider: string;
   /** Model name without provider prefix */
   modelName: string;
-  /** Whether the provider has valid authentication */
+  /** Whether this model has valid authentication */
   hasApiKey: boolean;
   /** Environment variable for the provider's API key */
   apiKeyEnvVar?: string;
@@ -212,8 +213,8 @@ export class GatewayManager {
   }
 
   /**
-   * Build the model catalog from gateway providers, resolving auth per
-   * provider (using the first model). Returns models without use-count.
+   * Build the catalog using routing ownership and each model's own auth.
+   * A failed credential check cannot make another model unavailable.
    */
   async listAvailableModels(): Promise<GatewayModel[]> {
     const registry = await this.listProviders();
@@ -226,22 +227,35 @@ export class GatewayManager {
       const modelNames = providerConfig.models;
       if (!Array.isArray(modelNames)) continue;
 
-      // Auth is resolved once per provider (using the first model) via the
-      // gateway chain, then applied to every model the provider exposes.
-      const hasApiKey = modelNames[0] ? await this.hasAuth(`${provider}/${modelNames[0]}`) : false;
-
       for (const modelName of modelNames) {
+        const id = `${provider}/${modelName}`;
+        // A registry must not advertise models under a namespace owned by
+        // another gateway. That gateway's own catalog is authoritative.
+        if (getGatewayId(this.findGatewayForModel(id)) !== providerConfig.gateway) continue;
         models.push({
-          id: `${provider}/${modelName}`,
+          id,
           provider,
           modelName,
-          hasApiKey,
+          hasApiKey: false,
           apiKeyEnvVar: apiKeyEnvVar || undefined,
         });
       }
     }
 
-    return models;
+    return pMap(
+      models,
+      async model => {
+        try {
+          return { ...model, hasApiKey: await this.hasAuth(model.id) };
+        } catch {
+          // Listing is a best-effort read. Direct hasAuth/resolveAuth calls
+          // still throw; an unavailable model remains unavailable here.
+          console.warn(`Failed to check authentication for model ${model.id}`);
+          return model;
+        }
+      },
+      { concurrency: 8 },
+    );
   }
 
   /** Provider key used for catalog ids: prefix with the gateway id unless it's the prefix-less models.dev registry. */
