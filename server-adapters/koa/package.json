@@ -1,6 +1,6 @@
 {
   "name": "@mastra/koa",
-  "version": "1.7.12-alpha.0",
+  "version": "1.7.12-alpha.9",
   "description": "Mastra Koa adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -27,13 +27,13 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@fastify/busboy": "^3.2.0",
+    "@fastify/busboy": "^3.2.2",
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.115",
     "@internal/lint": "workspace:*",
-    "@internal/server-adapter-test-utils": "workspace:*",
+    "@mastra/server-adapters-test-suite": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

@@ -142,7 +142,7 @@ export function ScorersPage() {
                             type="text"
                             disabled={isDisabled}
                             className={cn(
-                              'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
+                              'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent',
                               !isDisabled && 'border-border1 border-dashed ',
                             )}
                             value={
@@ -217,7 +217,7 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
   return (
     <div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-ui-sm">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-muted-foreground">
           Sampling
         </Label>
         <RadioGroup
@@ -229,13 +229,13 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-ui-xs text-neutral5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-none`} className="text-foreground cursor-pointer">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-ui-xs text-neutral5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-ratio`} className="text-foreground cursor-pointer">
               Ratio (percentage)
             </Label>
           </div>
@@ -243,7 +243,7 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
 
         {samplingType === 'ratio' && (
           <div className="mt-2 flex flex-col gap-1.5">
-            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-ui-sm">
+            <Label htmlFor={`rate-${scorerId}`} className="text-muted-foreground">
               Sample Rate (0-1)
             </Label>
             <Input

@@ -97,13 +97,13 @@ export function FlameTooltip({
         {time && (
           <div className="flex items-center justify-between gap-3">
             <span className="text-icon3">time</span>
-            <span className="text-neutral6">{time}</span>
+            <span className="text-foreground">{time}</span>
           </div>
         )}
         {visibleEntries.map(entry => (
           <div key={entry.name} className="flex items-center justify-between gap-3">
             <span className="text-icon3">{entry.name}</span>
-            <span className="text-neutral6">
+            <span className="text-foreground">
               {typeof entry.value === 'number' ? Math.round(entry.value).toLocaleString() : String(entry.value)}
             </span>
           </div>
@@ -114,7 +114,7 @@ export function FlameTooltip({
 
   return (
     <div className="border-border1 bg-surface3 text-ui-xs rounded border px-2 py-1 font-mono shadow">
-      {time && <span className="text-neutral6">{time}</span>}
+      {time && <span className="text-foreground">{time}</span>}
     </div>
   );
 }

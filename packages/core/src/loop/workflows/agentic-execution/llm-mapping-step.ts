@@ -1,5 +1,6 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { TripWire } from '../../../agent/trip-wire';
@@ -19,7 +20,7 @@ import { readScoped, writeScoped } from '../../run-scope-access';
 import type { RunScopeContext } from '../../run-scope-access';
 import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
-import { deserializeToolError } from '../errors';
+import { deserializeToolError, getSubAgentErrorResult } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 /**
@@ -243,52 +244,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
        * When toModelOutput is defined, the transform runs under a MAPPING child span so
        * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
        */
-      /**
-       * Normalize modelOutput from toModelOutput() into the AI SDK's
-       * LanguageModelV2ToolResultOutput shape.
-       *
-       * The AI SDK's content array only accepts type 'text' or 'media'.
-       * Mastra's createTool docs show type 'image-url' as a convenience shorthand,
-       * so we normalize that here into type 'media' with the correct structure.
-       *
-       * Previously this converted 'media' -> 'image-data'/'file-data' which was wrong
-       * (those types are not valid in LanguageModelV2ToolResultOutput).
-       * See: https://github.com/mastra-ai/mastra/issues/17876
-       */
-      function normalizeModelOutput(output: unknown): unknown {
-        if (output == null || typeof output !== 'object') return output;
-
-        const obj = output as Record<string, unknown>;
-        if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
-
-        return {
-          ...obj,
-          value: (obj.value as unknown[]).map(item => {
-            if (item == null || typeof item !== 'object') return item;
-            const part = item as Record<string, unknown>;
-            // Normalize 'image-url' convenience type -> 'media' as AI SDK expects
-            if (part.type === 'image-url' && typeof part.url === 'string') {
-              // Prefer caller-supplied mediaType; fall back to parsing data: URI or defaulting to image/jpeg
-              const mediaType =
-                typeof part.mediaType === 'string' && part.mediaType
-                  ? part.mediaType
-                  : part.url.startsWith('data:')
-                    ? part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg'
-                    : 'image/jpeg';
-              return { type: 'media', data: part.url, mediaType };
-            }
-            // 'image-data'/'file-data' from old normalizeModelOutput — convert back to 'media'
-            if (part.type === 'image-data' && typeof part.data === 'string') {
-              return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'image/jpeg' };
-            }
-            if (part.type === 'file-data' && typeof part.data === 'string') {
-              return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'application/octet-stream' };
-            }
-            return part;
-          }),
-        };
-      }
-
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
         toolCallId?: string;
@@ -319,7 +274,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           });
           try {
             modelOutput = await tool.toModelOutput(toolCall.result);
-            // Normalize media parts to image-data/file-data as AI SDK expects
+            // Normalize into the lossless V2-authored storage shape (Base64 -> media,
+            // remote URLs kept as-is for the spec-boundary prompt converters)
             modelOutput = normalizeModelOutput(modelOutput);
             mappingSpan?.end({ output: modelOutput });
           } catch (err) {
@@ -407,6 +363,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // serializes (Error instances become `{}` over the pubsub bus). Reify here so
             // chunk consumers see a real Error with name/message/stack intact.
             const reifiedError = deserializeToolError(toolCall.error);
+            const subAgentResult = getSubAgentErrorResult(reifiedError);
             const chunk = await transformToolChunk(
               {
                 type: 'tool-error',
@@ -437,7 +394,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 // plain {name,message,stack} shape after the pubsub JSON round-trip).
                 // Without reification the `instanceof Error` check below falls through to
                 // `safeStringify`, dumping the whole stringified payload into the history.
-                errorText: reifiedError.message || 'Tool execution failed',
+                errorText: reifiedError.message ?? 'Tool execution failed',
+                ...(subAgentResult ? { result: subAgentResult } : {}),
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,
@@ -570,6 +528,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // so the model will see them and can retry with correct tool names
           initialResult.stepResult.isContinued = true;
           initialResult.stepResult.reason = 'tool-calls';
+          // A delegation hook may still bail on a failed delegation (e.g. the sub-agent
+          // threw); honor it here too so the loop stops instead of retrying.
+          if (rest.requestContext?.get('__mastra_delegationBailed')) {
+            writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
+            rest.requestContext.set('__mastra_delegationBailed', false);
+          }
           return {
             ...initialResult,
             messages: {

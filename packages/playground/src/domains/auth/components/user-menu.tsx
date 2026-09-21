@@ -62,7 +62,7 @@ export function UserMenu({ user }: UserMenuProps) {
                 {displayName}
               </Txt>
               {user.email && (
-                <Txt variant="ui-sm" className="text-neutral3 truncate">
+                <Txt variant="ui-sm" className="text-muted-foreground truncate">
                   {user.email}
                 </Txt>
               )}
@@ -73,7 +73,7 @@ export function UserMenu({ user }: UserMenuProps) {
         {/* Preview as role section — only for admins with available roles */}
         {availableRoles && availableRoles.length > 0 && (
           <div className="border-border1 border-b p-2">
-            <Txt variant="ui-xs" className="text-neutral3 px-2 py-1 tracking-wider uppercase">
+            <Txt variant="ui-xs" className="text-muted-foreground px-2 py-1 tracking-wider uppercase">
               Preview as role
             </Txt>
             {availableRoles.map(role => {
@@ -97,7 +97,7 @@ export function UserMenu({ user }: UserMenuProps) {
                 >
                   {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   <span className="flex-1 capitalize">{role.name}</span>
-                  {isActive && <X className="text-neutral3 hover:text-neutral1 h-3.5 w-3.5" />}
+                  {isActive && <X className="text-muted-foreground hover:text-placeholder h-3.5 w-3.5" />}
                 </button>
               );
             })}
@@ -106,8 +106,8 @@ export function UserMenu({ user }: UserMenuProps) {
 
         <div className="flex flex-col gap-1 p-2">
           <Button
-            as={Link}
-            to="/settings"
+            render={<Link to="/settings" />}
+
             variant="ghost"
             className="w-full justify-start"
             onClick={() => setOpen(false)}

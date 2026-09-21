@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { WorkflowGraphPlaceholder } from '../graph/workflow-graph-placeholder';
+import { WorkflowCanvasInsetContext } from '../workflow-canvas-inset';
 import {
   sequentialNodes,
   sequentialEdges,
@@ -40,13 +41,34 @@ type Story = StoryObj<typeof meta>;
 
 export const Sequential: Story = {};
 export const Branching: Story = { args: { nodes: branchNodes, edges: branchEdges } };
-export const Parallel: Story = { args: { nodes: parallelNodes, edges: parallelEdges } };
+export const Parallel: Story = {
+  args: {
+    nodes: parallelNodes,
+    edges: parallelEdges,
+    groups: [
+      { id: 'load-context', label: 'Parallel', description: '2 paths · Run together', nodeIds: ['orders', 'tickets'] },
+    ],
+  },
+};
 export const Loop: Story = { args: { nodes: loopNodes, edges: loopEdges } };
 export const Nested: Story = { args: { nodes: nestedNodes, edges: nestedEdges } };
 export const Narrow: Story = {
   render: args => (
     <div className="h-full max-w-full" style={{ width: 360 }}>
       <GraphExample {...args} />
+    </div>
+  ),
+};
+export const Inline: Story = { args: { variant: 'inline' } };
+export const WithOverlay: Story = {
+  render: args => (
+    <div className="relative size-full">
+      <WorkflowCanvasInsetContext.Provider value={280}>
+        <GraphExample {...args} />
+      </WorkflowCanvasInsetContext.Provider>
+      <aside className="border-border1 bg-surface2 text-ui-sm text-foreground absolute inset-y-0 left-0 w-[280px] border-r p-4">
+        Run input panel
+      </aside>
     </div>
   ),
 };

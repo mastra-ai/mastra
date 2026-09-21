@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getConnectionContext, getCredential, listProjectConnections, proxyRequest, resolveClient } from '../client.js';
+import {
+  getConnectionContext,
+  getCredential,
+  listIntegrations,
+  listProjectConnections,
+  proxyRequest,
+  proxyRequestWithResponse,
+  resolveClient,
+} from '../client.js';
 import { MastraConnectError } from '../errors.js';
 
 const TOKEN = 'fake-test-token';
@@ -163,6 +171,36 @@ describe('listProjectConnections', () => {
   });
 });
 
+describe('listIntegrations', () => {
+  it('returns the MCP capability from the public catalog', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        integrations: [
+          {
+            id: 'catalog-mcp',
+            provider: 'generic',
+            displayName: 'Catalog MCP',
+            logoUrl: null,
+            authType: 'MCP_OAUTH2_GENERIC',
+            capabilities: { proxy: true, webhooks: false, mcp: true },
+          },
+        ],
+      }),
+    );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await expect(listIntegrations(client)).resolves.toEqual([{ id: 'catalog-mcp', capabilities: { mcp: true } }]);
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/integrations');
+  });
+
+  it('rejects a malformed integration catalog', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ integrations: [{ id: 'broken' }] }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await expect(listIntegrations(client)).rejects.toMatchObject({ code: 'platform_error' });
+  });
+});
+
 describe('getConnectionContext', () => {
   it('returns connection config and metadata without credentials', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
@@ -298,6 +336,22 @@ describe('proxyRequest', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('sends a pre-encoded string body unchanged with the caller content type', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    const multipart = '--b\r\nContent-Disposition: form-data; name="file"\r\n\r\nemail\r\n--b--\r\n';
+    await proxyRequest(client, 'c_1', {
+      method: 'POST',
+      path: 'contacts/imports',
+      headers: { 'Content-Type': 'multipart/form-data; boundary=b' },
+      body: multipart,
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.body).toBe(multipart);
+    expect(init.headers['Content-Type']).toBe('multipart/form-data; boundary=b');
+    expect(init.headers['content-type']).toBeUndefined();
+  });
+
   it('keeps a provider 404 as proxy_error (never connection_not_found)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: 'page not found' }, { status: 404 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
@@ -380,12 +434,24 @@ describe('proxyRequest', () => {
     }
   });
 
-  it('returns parsed JSON on 2xx and null on empty bodies', async () => {
+  it('returns parsed JSON with the relayed status on 2xx and null data on empty bodies', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ data: 1 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
-    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'x' })).resolves.toEqual({ data: 1 });
+    await expect(proxyRequestWithResponse(client, 'c_1', { method: 'GET', path: 'x' })).resolves.toMatchObject({
+      data: { data: 1 },
+      status: 200,
+    });
+
+    fetchMock.mockResolvedValue(Response.json({ statementHandle: 'h-1' }, { status: 202 }));
+    await expect(proxyRequestWithResponse(client, 'c_1', { method: 'POST', path: 'x' })).resolves.toMatchObject({
+      data: { statementHandle: 'h-1' },
+      status: 202,
+    });
 
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
-    await expect(proxyRequest(client, 'c_1', { method: 'DELETE', path: 'x' })).resolves.toBeNull();
+    await expect(proxyRequestWithResponse(client, 'c_1', { method: 'DELETE', path: 'x' })).resolves.toMatchObject({
+      data: null,
+      status: 204,
+    });
   });
 });

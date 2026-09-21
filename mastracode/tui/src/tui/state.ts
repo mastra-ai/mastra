@@ -7,6 +7,7 @@
 import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
 import type { KnowledgeInspector } from '@mastra/code-sdk';
+import type { BackgroundCompletionEvents } from '@mastra/code-sdk/agents/background-completion-events';
 import type { MastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { HookManager } from '@mastra/code-sdk/hooks/index';
@@ -22,9 +23,11 @@ import type { AgentController, MastraDBMessage, Session } from '@mastra/core/age
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
 import { AssistantRenderRegistry } from './assistant-render-registry.js';
+import type { BackgroundActivity, BackgroundToolContext } from './background-activity.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
+import { GlobalBackgroundNoticeComponent } from './components/global-background-notice.js';
 import type { IdleCounterComponent } from './components/idle-counter.js';
 import type { JudgeDisplayComponent } from './components/judge-display.js';
 import type { GradientAnimator } from './components/obi-loader.js';
@@ -147,6 +150,12 @@ export interface MastraTUIOptions {
   /** GitHub PR signal processor used for status-line polling state. */
   githubSignals?: GithubSignals;
 
+  /** Whether native background work and its TUI controls are enabled. */
+  backgroundToolsEnabled?: boolean;
+
+  /** Process-local background completion events used for cross-thread discovery. */
+  backgroundCompletionEvents?: BackgroundCompletionEvents;
+
   /** Storage maintenance handle for /prune (retention pruning + disk reclamation). */
   storageMaintenance?: StorageMaintenance;
 
@@ -190,6 +199,10 @@ export interface TUIState {
   editor: CustomEditor;
   footer: Container;
   terminal: Terminal;
+  globalBackgroundNoticeContainer: Container;
+  globalBackgroundNotice: GlobalBackgroundNoticeComponent;
+  backgroundActivities: Map<string, BackgroundActivity>;
+  backgroundToolContexts: Map<string, BackgroundToolContext>;
   voiceController?: VoiceController;
 
   // ── Agent / streaming ─────────────────────────────────────────────────
@@ -233,6 +246,8 @@ export interface TUIState {
   pendingNewThread: boolean;
   /** Current thread title (for display in status line) */
   currentThreadTitle?: string;
+  /** Landed model-pack fallback for the current thread. */
+  fallbackStatus?: { usingPack: string; failedPack: string };
   /** GitHub PR subscriptions for the current thread. */
   activeGithubPrSubscriptions: GithubPrSubscriptionBadge[];
   /** Cached thread previews for the current TUI session */
@@ -350,6 +365,7 @@ export interface TUIState {
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   unsubscribe?: () => void;
+  waitForAgentControllerEvents?: () => Promise<void>;
 }
 
 // =============================================================================
@@ -382,6 +398,9 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const chatContainer = new Container();
   const editorContainer = new Container();
   const footer = new Container();
+  const globalBackgroundNoticeContainer = new Container();
+  const globalBackgroundNotice = new GlobalBackgroundNoticeComponent();
+  globalBackgroundNoticeContainer.addChild(globalBackgroundNotice);
   const editor = new CustomEditor(ui, getEditorTheme());
   editor.requestRender = () => ui.requestRender();
   result = {
@@ -404,6 +423,10 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     editor,
     footer,
     terminal,
+    globalBackgroundNoticeContainer,
+    globalBackgroundNotice,
+    backgroundActivities: new Map(),
+    backgroundToolContexts: new Map(),
 
     // Agent / streaming
     isInitialized: false,

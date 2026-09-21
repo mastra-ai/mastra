@@ -1,4 +1,4 @@
-import type { DatasetItem } from '@mastra/client-js';
+import type { DatasetItem, UpdateDatasetItemParams } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
@@ -131,7 +131,7 @@ export function ItemDetailDialog({
     }
 
     // Parse expectedTrajectory: empty string means explicitly clear (null), omitted means keep existing
-    let parsedTrajectory: unknown | null = null;
+    let parsedTrajectory: UpdateDatasetItemParams['expectedTrajectory'] = null;
     if (trajectoryValue.trim()) {
       try {
         parsedTrajectory = JSON.parse(trajectoryValue);

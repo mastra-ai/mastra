@@ -1,10 +1,12 @@
-import type { BuilderModelPolicy, Provider } from '@mastra/client-js';
+import type { BuilderSettingsResponse, Provider } from '@mastra/client-js';
 import { useMemo } from 'react';
 
 import { providerMatches } from './llm/hooks/use-filtered-models';
 import type { ModelInfo } from './llm/hooks/use-filtered-models';
 
 export { useBuilderModelPolicy, useBuilderPickerVisibility } from './agent-builder/hooks/use-builder-settings';
+
+type BuilderModelPolicy = NonNullable<BuilderSettingsResponse['modelPolicy']>;
 
 const modelAllowed = (policy: BuilderModelPolicy, provider: string, modelId?: string) => {
   if (!policy.active || !policy.allowed?.length) return true;

@@ -1,9 +1,9 @@
 import { Separator } from 'react-resizable-panels';
+import type { SeparatorProps } from 'react-resizable-panels';
 import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
 import { cn } from '@/lib/utils';
 
-export type PanelSeparatorProps = {
-  /** `line` fits a visible container edge; `pill` floats when there is none. */
+export type PanelSeparatorProps = Omit<SeparatorProps, 'children'> & {
   variant?: 'line' | 'pill';
 };
 
@@ -22,15 +22,16 @@ const stateClasses = {
   ),
 };
 
-export const PanelSeparator = ({ variant = 'line' }: PanelSeparatorProps) => {
+export const PanelSeparator = ({ variant = 'line', className, ...props }: PanelSeparatorProps) => {
   return (
     <Separator
+      {...props}
       className={cn(
         'group/separator relative z-10 w-0 bg-transparent',
         'focus:outline-hidden focus-visible:outline-hidden',
+        className,
       )}
     >
-      {/* Hit zone wider than the 0px separator; indicator centered inside. */}
       <span
         aria-hidden
         className="absolute -inset-x-1 inset-y-0 flex cursor-col-resize touch-none items-center justify-center"

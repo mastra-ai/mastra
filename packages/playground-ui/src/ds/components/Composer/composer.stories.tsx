@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowUp, Paperclip } from 'lucide-react';
+import { expect, userEvent, within } from 'storybook/test';
+import { ComposerModeStates, ComposerPreview } from '../../../../.storybook/fixtures/composer';
 
 import { Badge } from '../Badge/Badge';
 import { Button } from '../Button';
@@ -10,6 +12,12 @@ const meta: Meta<typeof Composer> = {
   component: Composer,
   parameters: {
     layout: 'padded',
+    docs: {
+      description: {
+        component:
+          'ComposerRing owns the pointer spotlight and busy rotation. Its typed tone defaults to green; purple and orange select the same light/dark colors used by ComposerToneLabel. The default tone uses the accent ring and a neutral label. Applications map their own modes to tones. ComposerInput uses the inline height by default, or variant="textarea" for a taller draft; maxHeight remains available. Compose the shared surface, input, and actions with application-owned controls, draft state, attachments, and send/cancel callbacks. Changing mode never implies a running state. The interactive previews simulate sending and stopping; they do not call an agent.',
+      },
+    },
   },
 };
 
@@ -59,7 +67,7 @@ export const DisabledAndRunning: Story = {
       <ComposerBox sendingPulseKey={1}>
         <ComposerInput aria-label="Message" value="Waiting for the current run..." disabled readOnly />
         <ComposerActions>
-          <span className="text-ui-sm text-neutral3">Running</span>
+          <span className="text-ui-sm text-muted-foreground">Running</span>
           <Button type="button" size="md">
             Cancel
           </Button>
@@ -85,11 +93,58 @@ const RingStory = ({ busy }: { busy: boolean }) => (
   </Composer>
 );
 
-/** Hover the box and move around: the lit arc follows the cursor. */
 export const RingIdle: Story = {
   render: () => <RingStory busy={false} />,
 };
 
 export const RingBusy: Story = {
   render: () => <RingStory busy />,
+};
+
+export const ModeStates: Story = {
+  render: () => <ComposerModeStates />,
+};
+
+export const ModeStatesLight: Story = {
+  ...ModeStates,
+  globals: { backgrounds: { value: 'light' } },
+};
+
+export const WithModeControls: Story = {
+  render: () => <ComposerPreview />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('combobox', { name: 'Session mode' }));
+    await userEvent.click(await within(canvasElement.ownerDocument.body).findByRole('option', { name: 'Plan' }));
+    const label = canvas.getByText('Plan');
+    const ring = canvasElement.querySelector('[data-slot="composer-ring"]');
+    if (!ring) throw new Error('Composer ring is missing');
+    await expect(getComputedStyle(ring).getPropertyValue('--composer-tone-color')).toBe(
+      getComputedStyle(label).getPropertyValue('--composer-tone-color'),
+    );
+    const input = canvas.getByRole('textbox', { name: 'Message' });
+    await userEvent.type(input, 'Review this plan.{shift>}{enter}{/shift}Keep both lines.');
+    await expect(input).toHaveValue('Review this plan.\nKeep both lines.');
+    await userEvent.keyboard('{enter}');
+    await expect(input).toHaveValue('');
+    await userEvent.click(canvas.getByRole('button', { name: 'Stop response' }));
+    await expect(input).toHaveFocus();
+    await expect(canvas.getByRole('combobox', { name: 'Session mode' })).toHaveTextContent('Plan');
+  },
+};
+
+export const WithModelAndVoiceControls: Story = {
+  render: () => <ComposerPreview controls="model" />,
+};
+
+export const TallDraft: Story = {
+  render: () => <ComposerPreview variant="textarea" mode="plan" />,
+};
+
+export const Disabled: Story = {
+  render: () => <ComposerPreview disabled />,
+};
+
+export const CustomMode: Story = {
+  render: () => <ComposerPreview mode="review" />,
 };

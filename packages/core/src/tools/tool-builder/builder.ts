@@ -261,6 +261,7 @@ export class CoreToolBuilder extends MastraBase {
    * parameters (issue #22843).
    */
   private injectedInputSchema?: StandardSchemaWithJSON;
+  private isResumableTool: boolean;
 
   constructor(input: {
     originalTool: ToolToConvert;
@@ -289,13 +290,14 @@ export class CoreToolBuilder extends MastraBase {
         toolConfig: this.options.backgroundConfig,
         agentConfig: this.options.agentBackgroundConfig,
       });
-    const isResumableTool =
+    this.isResumableTool = Boolean(
       input.autoResumeSuspendedTools ||
       (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
-      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-');
+      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-'),
+    );
 
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
-      if (isBackgroundEligible || isResumableTool) {
+      if (isBackgroundEligible || this.isResumableTool) {
         let schema = this.originalTool.inputSchema;
         if (typeof schema === 'function') {
           schema = schema();
@@ -322,8 +324,13 @@ export class CoreToolBuilder extends MastraBase {
               _background: backgroundOverrideZodSchema,
             });
           }
-          if (isResumableTool) {
+          if (this.isResumableTool) {
             nextSchema = safeExtendZodObject(nextSchema, {
+              suspendedToolCallId: z
+                .string()
+                .describe('The toolCallId of the suspended tool to resume')
+                .nullable()
+                .optional(),
               suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
               resumeData: z
                 .any()
@@ -345,9 +352,11 @@ export class CoreToolBuilder extends MastraBase {
               properties._background = backgroundOverrideJsonSchema;
               injectedKeys.push('_background');
             }
-            if (isResumableTool) {
-              // Match the pre-PR JSON Schema shape so existing provider compat
-              // layers + LLM recordings collapse it identically.
+            if (this.isResumableTool) {
+              properties.suspendedToolCallId = {
+                type: ['string', 'null'],
+                description: 'The toolCallId of the suspended tool to resume',
+              };
               properties.suspendedToolRunId = {
                 type: ['string', 'null'],
                 description: 'The runId of the suspended tool',
@@ -355,7 +364,7 @@ export class CoreToolBuilder extends MastraBase {
               properties.resumeData = {
                 description: 'The resumeData object created from the resumeSchema of suspended tool',
               };
-              injectedKeys.push('suspendedToolRunId', 'resumeData');
+              injectedKeys.push('suspendedToolCallId', 'suspendedToolRunId', 'resumeData');
             }
 
             // Preserve the original schema's runtime validator (Zod v3
@@ -651,7 +660,19 @@ export class CoreToolBuilder extends MastraBase {
           const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
 
           const resumeSchema = this.getResumeSchema();
-          // Pass raw args as first parameter, context as second
+          let executionArgs = args;
+          if (this.isResumableTool && args && typeof args === 'object' && !Array.isArray(args)) {
+            const {
+              suspendedToolCallId: _modelAuthoredToolCallId,
+              suspendedToolRunId: _modelAuthoredRunId,
+              ...cleanedArgs
+            } = args as Record<string, unknown>;
+            executionArgs = execOptions.suspendedToolRunId
+              ? { ...cleanedArgs, suspendedToolRunId: execOptions.suspendedToolRunId }
+              : cleanedArgs;
+          }
+
+          // Pass sanitized args as first parameter, context as second
           // Properly structure context based on execution source
           const baseContext = {
             threadId: options.threadId,
@@ -691,6 +712,7 @@ export class CoreToolBuilder extends MastraBase {
               return execOptions.suspend?.(args, newSuspendOptions);
             },
             resumeData: execOptions.resumeData,
+            suspendPayload: execOptions.suspendPayload,
           };
 
           // Check if this is agent execution
@@ -712,7 +734,7 @@ export class CoreToolBuilder extends MastraBase {
             // (agents use workflows internally but tools should see agent context)
             // Preserve MCP context when the agent run originated from an MCP tools/call
             // so nested tools can use elicitation/log/progress.
-            const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
+            const { suspend, resumeData, suspendPayload, threadId, resourceId, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
               ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
@@ -722,6 +744,8 @@ export class CoreToolBuilder extends MastraBase {
                 messages: execOptions.messages || [],
                 suspend,
                 resumeData,
+                suspendedToolRunId: execOptions.suspendedToolRunId,
+                suspendPayload,
                 threadId,
                 resourceId,
                 outputWriter: options.outputWriter || execOptions.outputWriter,
@@ -731,18 +755,22 @@ export class CoreToolBuilder extends MastraBase {
             };
           } else if (isWorkflowExecution) {
             // Nest workflow-specific properties under 'workflow' key
-            const { suspend, resumeData, ...restBaseContext } = baseContext;
+            const { suspend, resumeData, suspendPayload, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
               ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
-              workflow: options.workflow || {
-                runId: options.runId,
-                workflowId: options.workflowId,
-                state: options.state,
-                setState: options.setState,
-                suspend,
-                resumeData,
-              },
+              workflow: options.workflow
+                ? { ...options.workflow, suspendedToolRunId: execOptions.suspendedToolRunId }
+                : {
+                    runId: options.runId,
+                    workflowId: options.workflowId,
+                    state: options.state,
+                    setState: options.setState,
+                    suspend,
+                    resumeData,
+                    suspendedToolRunId: execOptions.suspendedToolRunId,
+                    suspendPayload,
+                  },
             };
           } else if (execOptions.mcp) {
             // MCP execution context
@@ -757,7 +785,7 @@ export class CoreToolBuilder extends MastraBase {
 
           const resumeData = execOptions.resumeData;
 
-          if (resumeData) {
+          if (resumeData != null) {
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);
@@ -779,7 +807,7 @@ export class CoreToolBuilder extends MastraBase {
                 // that second validation.
                 markBuilderValidatedInput(toolContext);
               }
-              return tool?.execute?.(args, toolContext);
+              return tool?.execute?.(executionArgs, toolContext);
             },
           });
         }
@@ -897,7 +925,7 @@ export class CoreToolBuilder extends MastraBase {
         // validation unless the builder injected additional fields. The original args
         // were already validated during the initial execution, but builder-local fields
         // still need validation before Tool.execute skips its own validation.
-        const isResuming = !!execOptions?.resumeData;
+        const isResuming = execOptions?.resumeData != null;
 
         const parameters = inputValidationSchema ?? this.getParameters();
         if (!isResuming || this.injectedInputSchema) {

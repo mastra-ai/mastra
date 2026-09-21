@@ -28,21 +28,21 @@ export function SidebarNewNavHeader({
   const Link = LinkProp ?? context?.LinkComponent ?? 'a';
 
   return (
-    <div className={cn('mt-2 mb-0.5 flex min-h-8 min-w-0 items-center', className)}>
+    <div className={cn('mt-1 flex min-h-7 min-w-0 items-center', className)}>
       {showTitle ? (
         <header
           {...props}
           className={cn('max-w-full min-w-0 truncate pl-3 text-ui-sm font-medium', {
-            'text-neutral5': isActive,
-            'text-neutral3': !isActive,
+            'text-foreground': isActive,
+            'text-muted-foreground': !isActive,
           })}
         >
           {href ? (
             <Link
               href={href}
               className={cn('block min-w-0 truncate transition-colors duration-normal', {
-                'hover:text-neutral5': !isActive,
-                'text-neutral5': isActive,
+                'hover:text-foreground': !isActive,
+                'text-foreground': isActive,
               })}
             >
               {children}
@@ -56,7 +56,7 @@ export function SidebarNewNavHeader({
           <VisuallyHidden asChild>
             <header {...props}>{children}</header>
           </VisuallyHidden>
-          <div aria-hidden="true" className="bg-neutral4/40 mx-3 h-px flex-1" />
+          <div aria-hidden="true" className="bg-sidebar-divider mx-3 h-px flex-1" />
         </>
       )}
     </div>

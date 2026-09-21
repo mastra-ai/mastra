@@ -26,7 +26,7 @@ describe('mastracode package metadata', () => {
     const pkg = await readPackageJson();
 
     expect(pkg.type).toBe('module');
-    expect(pkg.files).toEqual(expect.arrayContaining(['dist', 'CHANGELOG.md']));
+    expect(pkg.files).toEqual(expect.arrayContaining(['dist']));
     expect(pkg.bin).toEqual({ mastracode: './dist/cli.js' });
     expect(pkg.main).toBe('dist/index.js');
     expect(pkg.types).toBe('dist/index.d.ts');

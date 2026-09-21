@@ -3,11 +3,12 @@
     "name": "test-6e44f5e0",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Tool suspension and resumption > should call findUserWorkflow with suspend and resume via generate when autoResumeSuspendedTools is true",
-    "createdAt": "2026-07-14T17:16:49.995Z"
+    "createdAt": "2026-07-14T17:16:49.995Z",
+    "updatedAt": "2026-09-17T15:17:39.171Z"
   },
   "recordings": [
     {
-      "hash": "4eb4bf160b9cc8e3",
+      "hash": "e571d06d33ded6a4",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
@@ -37,17 +38,25 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": ["inputData"],
+                    "required": [
+                      "inputData"
+                    ],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": ["name"],
+                        "required": [
+                          "name"
+                        ],
                         "type": "object",
                         "properties": {
                           "name": {
                             "type": "string"
                           }
                         }
+                      },
+                      "suspendedToolCallId": {
+                        "description": "The toolCallId of the suspended tool to resume",
+                        "type": "string"
                       },
                       "suspendedToolRunId": {
                         "description": "The runId of the suspended tool",
@@ -70,9 +79,30 @@
                           },
                           {
                             "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "object"
+                                }
+                              ]
+                            }
                           }
-                        ],
-                        "nullable": true
+                        ]
                       }
                     }
                   }
@@ -86,7 +116,7 @@
             }
           }
         },
-        "timestamp": 1784049406415
+        "timestamp": 1789658253627
       },
       "response": {
         "status": 200,
@@ -94,9 +124,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Tue, 14 Jul 2026 17:16:47 GMT",
+          "date": "Thu, 17 Sep 2026 15:17:34 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=946",
+          "server-timing": "gfet4t7; dur=900",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -117,7 +147,7 @@
                         }
                       }
                     },
-                    "thoughtSignature": "CtMCARFNMg9yAahftWgR79AXeIbfxSeR7XGs0lGT9YixMz3/+VNLaIGH1yhCvVrap7vHnYfLZXTmCYX5E022CLB7r2f5YTJaZpzhUcbF1DS4Wom2G7Svnf6d3abzwluxaKHYvBZzGjyjmBIeCus+ZoJp3xe6hLrBVruEO1QEXR8A5hG5qH3niU0JVkmS40CamwLiNvEv5aPWNREN9aWT/EwCUxZOR1xN6aSRKkdESDBasku/Ew5u7Zj9A7uKgAt6IwjL3mTjKZ756UsDvPNIpY2ZWqH9OsTJgH3n/Zw4bt3O2ppDlW2h7XJo2SZLOLKaNwGI7cIEUjIrQ2AtQA3s8cV8Eu8+sxi1e3d6Oj7y16muy4k+d/6dAZUvBfqagkmYvfbdt+th0uOzibZvYV1z4HqgjSyAcQazV5K4JA3WN2VfaMSdYkIPTGVmmRr5jjAZ4PJqa96w"
+                    "thoughtSignature": "CvgCARFNMg+i8GOSdVVxmXtPveyynz3U2RnVhakO5y9Y0+Z4HtZvF6j/LWdQ4UwBY64eqSPHBIlCNUxfMYXPRX0I9PuHxH8rU5sLWSXhtgDIIfk61MQbtWjgLlONMzAWl4WnRT0yv6VgocdF6eUYAC1m9QEkLf5HE2+7Zrj6YfEzHqZFvaJPMvTOKBQEH/3OzIwdAuLKv7P8C9cvTfyjIwFyXQix7nTP+n3tWSPKJHcDUld3UwP2ooskJU4B+ws1Ra+PxVlR+mPlgm3IJYcOXUhTUwEev261Cv3sE+ISgwlgwPejCNlzJKO318LtJSeB0T9NhlenaOFPvs6XEK6ieudcFwsLAHNL4HedoSgMGgMhiu1iT5m9wy/l91fW3T3cN+ZMeRghgClmtrI83THEcnDRdGXE86Y1hEpj3KcQoL5N7lZ7RoY6YNQd/qrUYooG4b+eMuZ1kE+FDzVmHrSYMcokBkE6IDfBaqYuoTKjj6WPUy0UFNmnoKBcng=="
                   }
                 ],
                 "role": "model"
@@ -128,26 +158,26 @@
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 186,
+            "promptTokenCount": 229,
             "candidatesTokenCount": 24,
-            "totalTokenCount": 286,
+            "totalTokenCount": 338,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 186
+                "tokenCount": 229
               }
             ],
-            "thoughtsTokenCount": 76,
+            "thoughtsTokenCount": 85,
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.5-flash",
-          "responseId": "_m5Waof1HOCwkdUPvvadgQs"
+          "responseId": "jQSsauGXMMjRvdIPrcCR-Q0"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "8cffe434f78963d1",
+      "hash": "84804038821d4e08",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
@@ -174,7 +204,7 @@
           "systemInstruction": {
             "parts": [
               {
-                "text": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"CxjjpoxTTjWidINh\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"}},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000058\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+                "text": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"G0D9SXceSaF6uPie\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"}},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000039\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the toolCallId of the suspended tool as suspendedToolCallId to the tool call arguments/input. This identifies the exact framework-persisted suspension to resume.\n                      You may also add the runId as suspendedToolRunId for compatibility, but it does not select the suspension and must match the runId associated with suspendedToolCallId.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolCallId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data.\n                      "
               }
             ]
           },
@@ -185,17 +215,25 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": ["inputData"],
+                    "required": [
+                      "inputData"
+                    ],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": ["name"],
+                        "required": [
+                          "name"
+                        ],
                         "type": "object",
                         "properties": {
                           "name": {
                             "type": "string"
                           }
                         }
+                      },
+                      "suspendedToolCallId": {
+                        "description": "The toolCallId of the suspended tool to resume",
+                        "type": "string"
                       },
                       "suspendedToolRunId": {
                         "description": "The runId of the suspended tool",
@@ -218,9 +256,30 @@
                           },
                           {
                             "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "object"
+                                }
+                              ]
+                            }
                           }
-                        ],
-                        "nullable": true
+                        ]
                       }
                     }
                   }
@@ -234,7 +293,7 @@
             }
           }
         },
-        "timestamp": 1784049407384
+        "timestamp": 1789658254559
       },
       "response": {
         "status": 200,
@@ -242,9 +301,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Tue, 14 Jul 2026 17:16:49 GMT",
+          "date": "Thu, 17 Sep 2026 15:17:38 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=2069",
+          "server-timing": "gfet4t7; dur=4051",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -260,16 +319,17 @@
                     "functionCall": {
                       "name": "workflow-findUserWorkflow",
                       "args": {
+                        "suspendedToolCallId": "G0D9SXceSaF6uPie",
                         "resumeData": {
                           "age": 25
                         },
+                        "suspendedToolRunId": "00000000-0000-4000-8000-000000000039",
                         "inputData": {
                           "name": "Dero Israel"
-                        },
-                        "suspendedToolRunId": "00000000-0000-4000-8000-000000000058"
+                        }
                       }
                     },
-                    "thoughtSignature": "Cs0HARFNMg+Y/hwLWJOTV7WPdfmLDenXTWsBPhPqL7fxdEEDEKKOWXfNT6t+tin6J7KCQou0v/8/9MAIf8v7HggWEu1OVesLYIZZUO9Xb4ru9NCbj36Escvh3dv2Bc/L9MI7j+5SA44OFBcGZZAPmRowUUIpSaakWat8WYVORsF+PEqqxoa7f+r09emdqXjjPcMnd2OHtr2kdH0Iv22PcScvYZswR27KipxYRPACH/M00Tgu2PTrmTxEl959cf7iwKZTK3XB8XiRSa5h+GHuIXVqfAk2xyKWjYawhMMj+0pqs8mHoC65wn4jF3XGvJ2vSjR0+ts3F67IpCDSalmaL0lncdLarI3RqnA2/BSiHpPMpwYvAYW9m8es6jM4CaiOGniw2xfgHY1ATPZJJuWGncGd2R/U47QIY8XjGTic05no4BSUTdLZ+7ew2ssyusaks+NYsIozQvsnRfMdchAwYAKEdjn9tYLut9tGZtirmWrMpdWy5XNj26RjgL0O2miGTYTwoz6MnHaPwsdudOx5nPpoOuZw4AgY/ecz0Wr1gTOmEOYi8ux9Dc+eyd2bcvzOpT2ZcZSbH4OBgC0xzfn3sndM8IqbMA/CpYgNHGEZPvPAwTNSdf98k7xWGmPW+kXKS6SXslI+U/AC7ETHKtdcY6ZKulrDUGmc90X378hBk30s5kA8y4xZhNCIx+6XI+XQrXEO0TcxreeG8jWA1ABezdqsf2aUtde3dXlx8R43oB79wf8UH4wBT4nJrPjZdnRaSjOI/prXeZJEKTc0pLBdQN03PALaV6+eVfzvB0/av+yjqujnJQU2H1gl+jcormRLJ4bvOU/Uk53nl2FAENS3Z+LmB6QzBftB/SCVkaHd9CEZ9rxDATIptCCzfGh4ZQiYLDQLpdFpNo0ze23hd8Murg3lJwWATXeIEU94f4jaWJZUGFt68sAXdgqm/baMgDDOraKlHC2eKeCDtAbAUcwmsFZm7XaVE5XA6uPKyRcdbHitYmnKZND1HikvbZu0S+WE6iJ3VESlleUEBvJpQzIt4awu101cY3dra6QFuxLUpCaNhetCG11SnRuarLTBkNkxQKOjhbHr0r+/AOXEJwramZnGOGtcxOSi28+lmQjWxXyvDCYVATJft6Ozep4GGcOKsLXDXvE0IW0DL3fWNeq7hidOfMcTcgoAXCKZpj91UZfxyLSMVush0mIed0PQHCTvnpWyRFVN2qM12GDaq/wcGAbuvdsGpjZzduYHV/DuXIB/4B/JnNBxgT+hfN0ETJWS6mjrqNbSLxk1CBKGHIkuwg=="
+                    "thoughtSignature": "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"
                   }
                 ],
                 "role": "model"
@@ -280,26 +340,26 @@
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 572,
-            "candidatesTokenCount": 76,
-            "totalTokenCount": 977,
+            "promptTokenCount": 666,
+            "candidatesTokenCount": 94,
+            "totalTokenCount": 1519,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 572
+                "tokenCount": 666
               }
             ],
-            "thoughtsTokenCount": 329,
+            "thoughtsTokenCount": 759,
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.5-flash",
-          "responseId": "_25WapWKG9C0nsEP7MzR-Q0"
+          "responseId": "jgSsauboLK2JvdIPw9O30Qc"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "4db73dd00a92af34",
+      "hash": "9633693fc7a29cbc",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
@@ -327,19 +387,20 @@
               "parts": [
                 {
                   "functionCall": {
-                    "id": "QgBQXl7b4SXCAHRs",
+                    "id": "ncZ7EoK5muYTM6kW",
                     "name": "workflow-findUserWorkflow",
                     "args": {
+                      "suspendedToolCallId": "G0D9SXceSaF6uPie",
                       "resumeData": {
                         "age": 25
                       },
+                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000039",
                       "inputData": {
                         "name": "Dero Israel"
-                      },
-                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000058"
+                      }
                     }
                   },
-                  "thoughtSignature": "Cs0HARFNMg+Y/hwLWJOTV7WPdfmLDenXTWsBPhPqL7fxdEEDEKKOWXfNT6t+tin6J7KCQou0v/8/9MAIf8v7HggWEu1OVesLYIZZUO9Xb4ru9NCbj36Escvh3dv2Bc/L9MI7j+5SA44OFBcGZZAPmRowUUIpSaakWat8WYVORsF+PEqqxoa7f+r09emdqXjjPcMnd2OHtr2kdH0Iv22PcScvYZswR27KipxYRPACH/M00Tgu2PTrmTxEl959cf7iwKZTK3XB8XiRSa5h+GHuIXVqfAk2xyKWjYawhMMj+0pqs8mHoC65wn4jF3XGvJ2vSjR0+ts3F67IpCDSalmaL0lncdLarI3RqnA2/BSiHpPMpwYvAYW9m8es6jM4CaiOGniw2xfgHY1ATPZJJuWGncGd2R/U47QIY8XjGTic05no4BSUTdLZ+7ew2ssyusaks+NYsIozQvsnRfMdchAwYAKEdjn9tYLut9tGZtirmWrMpdWy5XNj26RjgL0O2miGTYTwoz6MnHaPwsdudOx5nPpoOuZw4AgY/ecz0Wr1gTOmEOYi8ux9Dc+eyd2bcvzOpT2ZcZSbH4OBgC0xzfn3sndM8IqbMA/CpYgNHGEZPvPAwTNSdf98k7xWGmPW+kXKS6SXslI+U/AC7ETHKtdcY6ZKulrDUGmc90X378hBk30s5kA8y4xZhNCIx+6XI+XQrXEO0TcxreeG8jWA1ABezdqsf2aUtde3dXlx8R43oB79wf8UH4wBT4nJrPjZdnRaSjOI/prXeZJEKTc0pLBdQN03PALaV6+eVfzvB0/av+yjqujnJQU2H1gl+jcormRLJ4bvOU/Uk53nl2FAENS3Z+LmB6QzBftB/SCVkaHd9CEZ9rxDATIptCCzfGh4ZQiYLDQLpdFpNo0ze23hd8Murg3lJwWATXeIEU94f4jaWJZUGFt68sAXdgqm/baMgDDOraKlHC2eKeCDtAbAUcwmsFZm7XaVE5XA6uPKyRcdbHitYmnKZND1HikvbZu0S+WE6iJ3VESlleUEBvJpQzIt4awu101cY3dra6QFuxLUpCaNhetCG11SnRuarLTBkNkxQKOjhbHr0r+/AOXEJwramZnGOGtcxOSi28+lmQjWxXyvDCYVATJft6Ozep4GGcOKsLXDXvE0IW0DL3fWNeq7hidOfMcTcgoAXCKZpj91UZfxyLSMVush0mIed0PQHCTvnpWyRFVN2qM12GDaq/wcGAbuvdsGpjZzduYHV/DuXIB/4B/JnNBxgT+hfN0ETJWS6mjrqNbSLxk1CBKGHIkuwg=="
+                  "thoughtSignature": "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"
                 }
               ]
             },
@@ -348,7 +409,7 @@
               "parts": [
                 {
                   "functionResponse": {
-                    "id": "QgBQXl7b4SXCAHRs",
+                    "id": "ncZ7EoK5muYTM6kW",
                     "name": "workflow-findUserWorkflow",
                     "response": {
                       "name": "workflow-findUserWorkflow",
@@ -358,7 +419,7 @@
                           "email": "test@test.com",
                           "age": 25
                         },
-                        "runId": "00000000-0000-4000-8000-000000000058"
+                        "runId": "00000000-0000-4000-8000-000000000039"
                       }
                     }
                   }
@@ -380,17 +441,25 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": ["inputData"],
+                    "required": [
+                      "inputData"
+                    ],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": ["name"],
+                        "required": [
+                          "name"
+                        ],
                         "type": "object",
                         "properties": {
                           "name": {
                             "type": "string"
                           }
                         }
+                      },
+                      "suspendedToolCallId": {
+                        "description": "The toolCallId of the suspended tool to resume",
+                        "type": "string"
                       },
                       "suspendedToolRunId": {
                         "description": "The runId of the suspended tool",
@@ -413,9 +482,30 @@
                           },
                           {
                             "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "object"
+                                }
+                              ]
+                            }
                           }
-                        ],
-                        "nullable": true
+                        ]
                       }
                     }
                   }
@@ -429,7 +519,7 @@
             }
           }
         },
-        "timestamp": 1784049409475
+        "timestamp": 1789658258666
       },
       "response": {
         "status": 200,
@@ -437,9 +527,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Tue, 14 Jul 2026 17:16:49 GMT",
+          "date": "Thu, 17 Sep 2026 15:17:39 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=433",
+          "server-timing": "gfet4t7; dur=480",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -452,7 +542,7 @@
               "content": {
                 "parts": [
                   {
-                    "text": "The name of the user is Dero Israel and the age is 25."
+                    "text": "The name of the user is Dero Israel and he is 25 years old. His email is test@test.com."
                   }
                 ],
                 "role": "model"
@@ -462,19 +552,19 @@
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 364,
-            "candidatesTokenCount": 17,
-            "totalTokenCount": 381,
+            "promptTokenCount": 425,
+            "candidatesTokenCount": 27,
+            "totalTokenCount": 452,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 364
+                "tokenCount": 425
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.5-flash",
-          "responseId": "AW9War_JIPPinsEPm5eG4Qg"
+          "responseId": "kgSsar3UMKn6vdIPlNK3wQ4"
         },
         "isStreaming": false
       }

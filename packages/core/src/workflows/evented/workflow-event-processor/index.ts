@@ -64,6 +64,12 @@ export type ProcessorArgs = {
   };
   forEachIndex?: number;
   nestedRunId?: string; // runId of nested workflow when reporting back to parent
+  /**
+   * Resource the run is attributed to. Carried on the `workflow.start` event
+   * for schedule-fired runs (which have no pre-existing snapshot to derive it
+   * from) so the persisted run snapshot records the schedule's `resourceId`.
+   */
+  resourceId?: string;
 };
 
 export type ParentWorkflow = {
@@ -404,6 +410,49 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
+   * Resolves the live, in-process workflow instance described by
+   * `{ workflowId, runId, parentWorkflow }`. Run-scoped internal registrations
+   * win (closure-bound instances like `agentic-loop`). When a parent
+   * descriptor exists the target is a *nested* workflow — possibly
+   * closure-bound and never publicly registered — so descent from the parent
+   * descriptor is authoritative: a miss propagates instead of degrading to an
+   * id lookup, because dispatch relies on failing loudly when a descriptor no
+   * longer matches this worker's topology (cf. the stale-build fence below).
+   * Only descriptors without a parent are resolved via the public registry.
+   *
+   * Misses come in two modes: `getNestedWorkflow` *throws* when the ancestor
+   * chain root isn't in any registry, and returns `null` when the chain
+   * resolves but the `executionPath` doesn't land on a workflow-bearing
+   * entry. Call sites that can degrade gracefully (see `processWorkflowEnd`)
+   * must handle both.
+   *
+   * Note: `parentWorkflow` must be the descriptor of the *parent* of the
+   * workflow being resolved — `getNestedWorkflow` descends one level from the
+   * descriptor it's given (and into the loop *body* for `loop`/`foreach`
+   * entries), so calling it on the target's own descriptor would resolve one
+   * level too deep. To resolve the workflow a `ParentWorkflow` descriptor
+   * itself refers to, pass the descriptor's fields (its `parentWorkflow` is
+   * the grandparent, whose descent lands back on the descriptor's workflow).
+   */
+  #resolveLiveWorkflow({
+    workflowId,
+    runId,
+    parentWorkflow,
+  }: {
+    workflowId: string;
+    runId: string;
+    parentWorkflow?: ParentWorkflow;
+  }): Workflow | null | undefined {
+    if (this.mastra.__hasInternalWorkflow(workflowId, runId)) {
+      return this.mastra.__getInternalWorkflow(workflowId, runId);
+    }
+    if (parentWorkflow) {
+      return getNestedWorkflow(this.mastra, parentWorkflow);
+    }
+    return this.#tryResolveWorkflow(workflowId);
+  }
+
+  /**
    * Stale-build fence for scheduled fires (#19169).
    *
    * A `workflow.start` published by the scheduler carries no step graph —
@@ -535,6 +584,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     state,
     outputOptions,
     forEachIndex,
+    resourceId: eventResourceId,
   }: ProcessorArgs & { initialState?: Record<string, any> }) {
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
     const initialState = (arguments[0] as any).initialState ?? state ?? {};
@@ -551,10 +601,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (parentWorkflow?.runId) {
       this.parentChildRelationships.set(runId, parentWorkflow.runId);
     }
-    // Preserve resourceId from existing snapshot if present
+    // Preserve resourceId from an existing snapshot if present (resume /
+    // timeTravel / restart keep their original attribution); otherwise fall
+    // back to the resourceId carried on the event, which is how schedule-fired
+    // runs — that have no pre-existing snapshot — get attributed.
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const existingRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
-    const resourceId = existingRun?.resourceId;
+    const resourceId = existingRun?.resourceId ?? eventResourceId;
 
     // Check shouldPersistSnapshot option - default to true if not specified
     // This is particularly important for resume: if shouldPersist returns false for 'running',
@@ -759,8 +812,27 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // handle nested workflow
     if (parentWorkflow) {
-      // get the step from the parent workflow and process it if it's a loop
-      const step = parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
+      // get the step from the parent workflow and process it if it's a loop.
+      // `parentWorkflow` came over the pubsub wire: a serializing pubsub (Redis
+      // Streams etc.) strips the loop `condition` function from its stepGraph
+      // copy, so resolve the live loop-owning workflow from the registry and
+      // only fall back to the payload copy if it can't be found (#23111).
+      // When grandparent descent misses (either mode — see #resolveLiveWorkflow),
+      // degrade to a public-registry lookup by the loop owner's id: the same
+      // resolution the 2-level case (no grandparent) already uses, and strictly
+      // better than the function-stripped payload copy of last resort.
+      let liveParentWorkflow: Workflow | null | undefined;
+      try {
+        liveParentWorkflow = this.#resolveLiveWorkflow(parentWorkflow);
+      } catch {
+        // Registry lookups throw when the ancestor chain root isn't registered
+        // on this worker; fall through to resolving the loop owner by id.
+        liveParentWorkflow = undefined;
+      }
+      liveParentWorkflow ??= this.#tryResolveWorkflow(parentWorkflow.workflowId);
+      const step =
+        liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!] ??
+        parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
       if (step?.type === 'loop') {
         // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
         await processWorkflowLoop(
@@ -3092,14 +3164,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    let workflow;
-    if (this.mastra.__hasInternalWorkflow(workflowData.workflowId, workflowData.runId)) {
-      workflow = this.mastra.__getInternalWorkflow(workflowData.workflowId, workflowData.runId);
-    } else if (workflowData.parentWorkflow) {
-      workflow = getNestedWorkflow(this.mastra, workflowData.parentWorkflow);
-    } else {
-      workflow = this.#tryResolveWorkflow(workflowData.workflowId);
-    }
+    const workflow = this.#resolveLiveWorkflow(workflowData);
 
     if (!workflow) {
       // For terminal/cleanup events (`workflow.fail`, `workflow.end`,

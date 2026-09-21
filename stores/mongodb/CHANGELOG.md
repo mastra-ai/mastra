@@ -1,5 +1,23 @@
 # @mastra/mongodb
 
+## 1.18.9-alpha.1
+
+### Patch Changes
+
+- Fixed the type of `documentFilter` on `MongoDBVector.query()`. It is applied to the single `document` field, so it now accepts a condition such as `{ $regex: /astronaut/ }` or a plain value. Previously it was typed as a whole filter, which rejected those correct calls and accepted a field-map shape that produced a query against a field inside the document text. ([#24365](https://github.com/mastra-ai/mastra/pull/24365))
+
+- Updated dependencies [[`6ef8186`](https://github.com/mastra-ai/mastra/commit/6ef8186ade9c8ca69269deed07fd47a942ecf70d), [`34e4d21`](https://github.com/mastra-ai/mastra/commit/34e4d21e62c61e11e52aa7d6c39748b1120fbb93), [`8702f39`](https://github.com/mastra-ai/mastra/commit/8702f39331322ef0296fd3d68c0bd0997079faaa), [`e6072cb`](https://github.com/mastra-ai/mastra/commit/e6072cbbd3482e37027e53e4d62da7aad6a36c41), [`8d808d8`](https://github.com/mastra-ai/mastra/commit/8d808d8452b8acd5eda4f8cfe014331a8c0f1e92)]:
+  - @mastra/core@1.68.0-alpha.6
+
+## 1.18.9-alpha.0
+
+### Patch Changes
+
+- Remove unused dependency ([#23998](https://github.com/mastra-ai/mastra/pull/23998))
+
+- Updated dependencies [[`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`467e0a6`](https://github.com/mastra-ai/mastra/commit/467e0a630db09a1750ce9271bddb38e46681bf04), [`c016c9b`](https://github.com/mastra-ai/mastra/commit/c016c9bd051612714e662588e5928b72bd6a6ac6), [`644ac13`](https://github.com/mastra-ai/mastra/commit/644ac131110a9f24a8d92b62dd3777384211a2e7), [`aa38e6f`](https://github.com/mastra-ai/mastra/commit/aa38e6f424a0eae0e43a5c2ae0b387e404f5e6a6), [`8d9eadb`](https://github.com/mastra-ai/mastra/commit/8d9eadb59ccbcae054600128aa15d95ea4d1141a), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`76c7d98`](https://github.com/mastra-ai/mastra/commit/76c7d989f691510d7bfc016723cc78d7e08ac108), [`61f953a`](https://github.com/mastra-ai/mastra/commit/61f953a79736ac0d8a9650f0561c6dab1b097c8e), [`32edb03`](https://github.com/mastra-ai/mastra/commit/32edb0371b8d884bee66897f236e852a959ae07a), [`bc12e6c`](https://github.com/mastra-ai/mastra/commit/bc12e6cd9cc74fb078b006ed5d14429e2101cbb2)]:
+  - @mastra/core@1.68.0-alpha.2
+
 ## 1.18.8
 
 ### Patch Changes

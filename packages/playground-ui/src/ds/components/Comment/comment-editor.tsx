@@ -1,8 +1,9 @@
 import { Check, X } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
 import { Button } from '@/ds/components/Button';
+import { FieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
 import { cn } from '@/lib/utils';
 
 export interface CommentEditorProps {
@@ -29,6 +30,7 @@ export function CommentEditor({
   className,
 }: CommentEditorProps) {
   const [draft, setDraft] = useState(initialBody);
+  const fieldName = useId();
   const body = draft.trim();
   const canSave = body.length > 0 && !isPending;
 
@@ -59,8 +61,10 @@ export function CommentEditor({
           onKeyDown={onKeyDown}
           readOnly={isPending}
           aria-label={ariaLabel}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? fieldErrorId(fieldName) : undefined}
           rows={2}
-          className="border-border1 bg-surface2 text-ui-sm text-neutral6 focus:border-border2 block field-sizing-content max-h-40 w-full resize-none overflow-y-auto rounded-lg border px-2 pt-1.5 pb-9 outline-none"
+          className="border-border1 bg-surface2 text-ui-sm text-foreground focus:border-border2 block field-sizing-content max-h-40 w-full resize-none overflow-y-auto rounded-lg border px-2 pt-1.5 pb-9 outline-none"
         />
         {/* Opaque, so a scrolled line passes behind the actions instead of under them. */}
         <div className="bg-surface2 absolute inset-x-px bottom-px flex items-center justify-end gap-1 rounded-b-lg px-1.5 pt-1 pb-1.5">
@@ -72,11 +76,7 @@ export function CommentEditor({
           </Button>
         </div>
       </div>
-      {error ? (
-        <p role="alert" className="text-ui-xs text-error m-0">
-          {error}
-        </p>
-      ) : null}
+      {error ? <FieldBlock.ErrorMsg name={fieldName}>{error}</FieldBlock.ErrorMsg> : null}
     </div>
   );
 }

@@ -163,7 +163,7 @@ export default function Scorer() {
   const hasNoScores = !isLoadingScores && scores.length === 0;
   const hasFilterApplied = selectedEntityOption?.value !== 'all';
 
-  const isStoredScorer = scorer?.scorer?.source === 'stored';
+  const isStoredScorer = scorer?.source === 'stored';
 
   const runDialog = scorerId ? (
     <ExperimentTriggerDialog

@@ -12,6 +12,7 @@ import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { Mastra } from '../mastra';
+import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
@@ -1343,7 +1344,13 @@ export class AgentController<TState = {}> {
     )?.trim();
     if (!title) return undefined;
 
-    await this.persistThreadRow({ ...thread, title, updatedAt: new Date() });
+    // An explicit regenerate un-pins the title: auto-naming resumes from here.
+    await this.persistThreadRow({
+      ...thread,
+      title,
+      metadata: { ...thread.metadata, [TITLE_PINNED_THREAD_METADATA_KEY]: false },
+      updatedAt: new Date(),
+    });
     session?.emit({ type: 'thread_title_updated', threadId, title });
     return title;
   }
@@ -2293,6 +2300,7 @@ export class AgentController<TState = {}> {
     scope?: { abortSignal?: AbortSignal; resourceId?: string; threadId?: string; modeId?: string },
   ): Promise<RequestContext> {
     requestContext = new RequestContext(requestContext?.entries());
+    const threadId = scope?.threadId ?? session.thread.getId();
     const controllerContext: AgentControllerRequestContext<TState> = {
       controllerId: this.id,
       harnessId: this.id,
@@ -2300,7 +2308,13 @@ export class AgentController<TState = {}> {
       getState: () => session.state.get(),
       setState: updates => session.state.set(updates),
       updateState: updater => session.state.update(updater),
-      threadId: scope?.threadId ?? session.thread.getId(),
+      getThreadSetting: key => (threadId ? session.thread.getSettingOn({ threadId, key }) : Promise.resolve(undefined)),
+      setThreadSetting: setting =>
+        threadId
+          ? session.thread.setSettingOn({ threadId, key: setting.key, value: setting.value })
+          : Promise.resolve(),
+      isThreadActive: () => session.thread.getId() === threadId,
+      threadId,
       resourceId: scope?.resourceId ?? session.identity.getResourceId(),
       scope: this.#sessionScopes.get(session),
       session: {

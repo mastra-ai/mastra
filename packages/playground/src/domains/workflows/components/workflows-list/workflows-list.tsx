@@ -73,7 +73,7 @@ function TreeToggleCell({
           type="button"
           aria-expanded={isExpanded}
           aria-label={`${isExpanded ? 'Collapse' : 'Expand'} nested workflows of ${workflowName}`}
-          className="text-neutral4 hover:text-neutral2 relative grid size-5 shrink-0 place-items-center before:absolute before:-inset-1.5 before:content-['']"
+          className="text-muted-foreground hover:text-placeholder relative grid size-5 shrink-0 place-items-center before:absolute before:-inset-1.5 before:content-['']"
           onClick={event => {
             event.stopPropagation();
             onToggle();
@@ -141,7 +141,7 @@ function WorkflowRow({
             {hasNested ? (
               <span
                 title={`Nested workflows: ${nestedIds.join(', ')}`}
-                className="text-ui-smd text-neutral4 inline-flex shrink-0 items-center gap-1"
+                className="text-ui-smd text-muted-foreground inline-flex shrink-0 items-center gap-1"
               >
                 <WorkflowIcon aria-hidden className="size-3.5" />
                 {nestedIds.length}
@@ -268,7 +268,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
                     <span className="truncate">{truncateString(row.stepId, 50)}</span>
                     <span
                       title="Nested workflow not registered standalone"
-                      className="text-ui-smd text-neutral4 shrink-0"
+                      className="text-ui-smd text-muted-foreground shrink-0"
                     >
                       inline
                     </span>

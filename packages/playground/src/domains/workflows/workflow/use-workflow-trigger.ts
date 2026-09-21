@@ -23,21 +23,14 @@ import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 export interface SuspendedStep {
   stepId: string;
   runId: string;
-  suspendPayload: any;
-  workflow?: GetWorkflowResponse;
-  isLoading: boolean;
+  suspendPayload: unknown;
 }
 
 export function useSuspendedSteps(streamResult: WorkflowRunStreamResult | null, runId: string): SuspendedStep[] {
   return useMemo(() => {
     return Object.entries(streamResult?.steps || {})
       .filter(([_, { status }]) => status === 'suspended')
-      .map(([stepId, { suspendPayload }]) => ({
-        stepId,
-        runId,
-        suspendPayload,
-        isLoading: false,
-      }));
+      .map(([stepId, { suspendPayload }]) => ({ stepId, runId, suspendPayload }));
   }, [streamResult?.steps, runId]);
 }
 
@@ -61,14 +54,6 @@ export function useWorkflowSchemas(workflow?: GetWorkflowResponse) {
   }, [workflow?.inputSchema, workflow?.stateSchema]);
 }
 
-/**
- * Derive everything we need to reason about per-step execution from the static
- * workflow graph (independent of any run state):
- * - `stepNodesInOrder`: step ids in graph order (excludes boundary/condition nodes).
- * - `stepsFlow`: each step -> its predecessor step ids.
- * - `stepSuccessors`: each step -> the steps that depend on it (the inverse of `stepsFlow`).
- * - `conditionalStepIds` / `nestedWorkflowStepIds`: see `collectGraphStepFlags`.
- */
 function useWorkflowStepGraphInfo(stepGraph: GetWorkflowResponse['stepGraph'] | undefined) {
   return useMemo(() => {
     const { nodes, edges } = constructNodesAndEdges({ stepGraph });
@@ -87,12 +72,6 @@ function useWorkflowStepGraphInfo(stepGraph: GetWorkflowResponse['stepGraph'] | 
   }, [stepGraph]);
 }
 
-/**
- * Read-only derivation of the step a paused (per-step/debug) run is waiting on.
- * Pulls run + graph state from context so any component (e.g. the graph viewport)
- * can react to the waited step declaratively without props being drilled through.
- * Returns `undefined` when the run is not paused or there is no next step.
- */
 export function useWaitingStepKey(): string | undefined {
   const { result, workflow } = useContext(WorkflowRunContext);
 
@@ -101,24 +80,15 @@ export function useWaitingStepKey(): string | undefined {
   );
 
   const steps = result?.steps;
-
-  // A run only reaches the 'paused' status when it was started in per-step (debug) mode, so a
-  // paused run is always steppable regardless of the in-memory debugMode flag. This lets the
-  // step controls work when landing directly on a paused run's :runId page, where the debugMode
-  // flag starts out false.
   const isPaused = result?.status === 'paused';
 
-  const isStepSuccess = useCallback((stepId: string) => steps?.[stepId]?.status === 'success', [steps]);
-  // A non-truthy conditional arm is rehydrated as 'skipped' and never produces a successor join,
-  // so isBranchArmBypassed can't infer it. Treat both 'success' and 'skipped' as resolved when
-  // deciding which step still needs to run, otherwise the controls re-select the skipped arm.
   const isStepResolved = useCallback(
     (stepId: string) => steps?.[stepId]?.status === 'success' || steps?.[stepId]?.status === 'skipped',
     [steps],
   );
   const isStepBypassed = useCallback(
-    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess }),
-    [conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess],
+    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, steps }),
+    [conditionalStepIds, stepSuccessors, stepsFlow, steps],
   );
 
   return useMemo(
@@ -126,21 +96,6 @@ export function useWaitingStepKey(): string | undefined {
       isPaused ? selectNextStepKey({ stepNodesInOrder, isStepSuccess: isStepResolved, isStepBypassed }) : undefined,
     [isPaused, stepNodesInOrder, isStepResolved, isStepBypassed],
   );
-}
-
-/**
- * Read-only derivation of the step a suspended run is currently waiting on for
- * human input. Unlike a paused (per-step/debug) run, a suspended run is gated by
- * the workflow itself (`await suspend()`), so the waiting step is whichever step
- * holds `status: 'suspended'`. Returns `undefined` when no step is suspended.
- */
-export function useSuspendedStepKey(): string | undefined {
-  const { result } = useContext(WorkflowRunContext);
-
-  return useMemo(() => {
-    const entry = Object.entries(result?.steps || {}).find(([_, { status }]) => status === 'suspended');
-    return entry?.[0];
-  }, [result?.steps]);
 }
 
 export function useNextPerStep() {
@@ -153,14 +108,13 @@ export function useNextPerStep() {
 
   const steps = result?.steps;
 
-  const isStepSuccess = useCallback((stepId: string) => steps?.[stepId]?.status === 'success', [steps]);
   const isStepResolved = useCallback(
     (stepId: string) => steps?.[stepId]?.status === 'success' || steps?.[stepId]?.status === 'skipped',
     [steps],
   );
   const isStepBypassed = useCallback(
-    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess }),
-    [conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess],
+    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, steps }),
+    [conditionalStepIds, stepSuccessors, stepsFlow, steps],
   );
 
   const nextStepKey = useWaitingStepKey();
@@ -168,11 +122,8 @@ export function useNextPerStep() {
   const stepPayload = useMemo(() => {
     const input = buildNextStepInput({ nextStepKey, stepsFlow, steps, isStepBypassed });
     if (input) return input;
-    // A predecessor-less step (the first step of a paused run with no completed steps) has no
-    // upstream output to build from, so buildNextStepInput returns undefined and the run can never
-    // advance. Seed it from the run's own input/payload so the first step becomes runnable.
     if (nextStepKey && (stepsFlow[nextStepKey]?.length ?? 0) === 0) {
-      return { hasMultiSteps: false, input: result?.input ?? payload };
+      return { hasMultiSteps: false, input: result?.input !== undefined ? result.input : payload };
     }
     return undefined;
   }, [nextStepKey, stepsFlow, steps, result?.input, payload, isStepBypassed]);
@@ -187,10 +138,6 @@ export function useNextPerStep() {
   const runStep = useCallback(
     (isContinueRun: boolean) => {
       if (!nextStepKey || !stepPayload) return;
-
-      // A nested workflow is atomic from the parent's perspective, and the last step must finish
-      // the run instead of pausing again (otherwise the user never sees the run's end output).
-      // Both cases run to completion in a single advance with per-step disabled.
       const isNestedWorkflowStep = nestedWorkflowStepIds.has(nextStepKey);
       const runToFinish = isContinueRun || isNestedWorkflowStep || isLastStep;
 
@@ -200,9 +147,6 @@ export function useNextPerStep() {
         step: nextStepKey,
         inputData: stepPayload.hasMultiSteps ? undefined : stepPayload.input,
         requestContext,
-        // Drive per-step explicitly off the paused-run intent rather than the in-memory
-        // debugMode flag. On the :runId page debugMode starts false, so omitting perStep
-        // would let timeTravelStream default to a full run instead of re-pausing.
         perStep: !runToFinish,
         ...(stepPayload.hasMultiSteps
           ? {
@@ -238,6 +182,7 @@ export function useNextPerStep() {
 
   return {
     canRunNextStep,
+    nextStepLabel: nextStepKey && conditionalStepIds.has(nextStepKey) ? 'Evaluate branch conditions' : nextStepKey,
     runNextStep: useCallback(() => runStep(false), [runStep]),
     continueFullRun: useCallback(() => runStep(true), [runStep]),
   };

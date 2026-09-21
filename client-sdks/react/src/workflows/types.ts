@@ -34,6 +34,8 @@ export interface StreamWorkflowParams {
   requestContext: Record<string, unknown>;
   /** Optional flag to enable per-step execution */
   perStep?: boolean;
+  /** Optional resource ID to attribute the run to (tenant, user, legal entity). */
+  resourceId?: string;
 }
 
 /**
@@ -88,6 +90,8 @@ export interface CreateWorkflowRunParams {
   workflowId: string;
   /** Optional previous run ID to continue from */
   prevRunId?: string;
+  /** Optional resource ID to attribute the run to (tenant, user, legal entity). */
+  resourceId?: string;
 }
 
 /**

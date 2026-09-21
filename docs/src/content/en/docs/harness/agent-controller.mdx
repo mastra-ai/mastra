@@ -82,14 +82,16 @@ const session = await controller.createSession({
 })
 
 const unsubscribe = session.subscribe(event => {
-  if (event.type === 'message_update') {
-    console.log(event.message)
+  if (event.type === 'message_update' && event.event.type === 'text-delta') {
+    process.stdout.write(event.event.delta)
   }
 })
 
 await session.sendMessage({ content: 'Plan a small TypeScript CLI.' })
 unsubscribe()
 ```
+
+Each message emits a `message_start` event with the initial message, zero or more `message_update` events with compact deltas, and a `message_end` event containing the message ID. Apply updates by ID when you need to reconstruct the complete message.
 
 Use the same controller for many Sessions. Don't store a current Session on the controller or route work through controller-level message methods.
 

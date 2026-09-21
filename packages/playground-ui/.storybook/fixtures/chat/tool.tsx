@@ -2,13 +2,11 @@ import type { ReactNode } from 'react';
 import {
   ToolCall,
   ToolCallContent,
-  ToolCallEdit,
-  ToolCallMono,
+  ToolCallArguments,
+  ToolCallOutput,
   ToolCallPresentedHeader,
   ToolCallTrigger,
   presentTool,
-  stringifyToolValue,
-  toolEdit,
 } from '@/ds/components/ai/tool-call';
 import type { ToolCallStatus } from '@/ds/components/ai/tool-call';
 
@@ -23,16 +21,14 @@ interface ReviewToolProps {
 
 export function ReviewTool({ toolName, args, status = 'idle', output, children, defaultOpen }: ReviewToolProps) {
   const presentation = presentTool(toolName, args);
-  const edit = toolEdit(toolName, args);
-  const input = stringifyToolValue(args);
   return (
     <ToolCall status={status} defaultOpen={defaultOpen} aria-label={`Tool: ${toolName}`}>
       <ToolCallTrigger>
         <ToolCallPresentedHeader {...presentation} />
       </ToolCallTrigger>
       <ToolCallContent>
-        {edit ? <ToolCallEdit edit={edit} /> : <ToolCallMono copyText={input}>{input}</ToolCallMono>}
-        {output && <ToolCallMono copyText={output}>{output}</ToolCallMono>}
+        <ToolCallArguments toolName={toolName} args={args} />
+        {output && <ToolCallOutput text={output} />}
         {children}
       </ToolCallContent>
     </ToolCall>

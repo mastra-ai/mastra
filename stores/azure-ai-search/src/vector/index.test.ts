@@ -1,0 +1,828 @@
+import type * as AzureSearchDocuments from '@azure/search-documents';
+import type { Mock } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { AzureAISearchFilterTranslator } from './filter';
+import { AzureAISearchVector } from './index';
+
+// Mock Azure SDK for unit tests.
+// Real integration tests against a live Azure AI Search resource live in
+// integration.test.ts, which does not mock @azure/search-documents.
+vi.mock('@azure/search-documents', () => ({
+  SearchClient: vi.fn(function SearchClient() {}),
+  SearchIndexClient: vi.fn(function SearchIndexClient() {}),
+  AzureKeyCredential: vi.fn(function AzureKeyCredential() {}),
+}));
+
+vi.mock('@azure/core-auth', () => ({}));
+
+// ==========================================
+// UNIT TESTS (Always Run)
+// ==========================================
+
+describe('AzureAISearchVector Unit Tests', () => {
+  let azureVector: AzureAISearchVector;
+  let mockIndexClient: any;
+  let mockSearchClientInstance: any;
+
+  beforeEach(async () => {
+    // Reset all mocks
+    vi.clearAllMocks();
+
+    mockIndexClient = {
+      createIndex: vi.fn(),
+      createOrUpdateIndex: vi.fn(),
+      listIndexes: vi.fn(),
+      getIndex: vi.fn().mockResolvedValue({
+        name: 'test-index',
+        fields: [
+          {
+            name: 'id',
+            type: 'Edm.String',
+            key: true,
+          },
+          {
+            name: 'vector',
+            type: 'Collection(Edm.Single)',
+            dimensions: 128,
+            vectorSearchProfile: 'default',
+          },
+          {
+            name: 'content',
+            type: 'Edm.String',
+            searchable: true,
+          },
+          {
+            name: 'metadata',
+            type: 'Edm.String',
+          },
+          { name: 'category', type: 'Edm.String', filterable: true },
+          { name: 'price', type: 'Edm.Double', filterable: true },
+          { name: 'thread_id', type: 'Edm.String', filterable: true },
+          { name: 'resource_id', type: 'Edm.String', filterable: true },
+        ],
+      }),
+      deleteIndex: vi.fn(),
+    };
+
+    mockSearchClientInstance = {
+      uploadDocuments: vi.fn(),
+      search: vi.fn(),
+      getDocument: vi.fn(),
+      mergeDocuments: vi.fn(),
+      deleteDocuments: vi.fn(),
+      getDocumentsCount: vi.fn(),
+    };
+
+    // Get the mocked constructors
+    const { SearchIndexClient, SearchClient, AzureKeyCredential } =
+      await vi.importMock<typeof AzureSearchDocuments>('@azure/search-documents');
+
+    // Setup mock implementations
+    (SearchIndexClient as Mock).mockImplementation(function () {
+      return mockIndexClient;
+    });
+    (SearchClient as Mock).mockImplementation(function () {
+      return mockSearchClientInstance;
+    });
+    (AzureKeyCredential as Mock).mockImplementation(function (key: string) {
+      return { key };
+    });
+
+    azureVector = new AzureAISearchVector({
+      id: 'test-azure-vector',
+      endpoint: 'https://test.search.windows.net',
+      credential: 'test-api-key',
+    });
+  });
+
+  describe('createIndex', () => {
+    it('should create index successfully', async () => {
+      mockIndexClient.createIndex.mockResolvedValue({ name: 'test-index' });
+
+      await azureVector.createIndex({
+        indexName: 'test-index',
+        dimension: 128,
+      });
+
+      expect(mockIndexClient.createIndex).toHaveBeenCalledTimes(1);
+      expect(mockIndexClient.createIndex).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'test-index',
+          fields: expect.arrayContaining([
+            expect.objectContaining({ name: 'id', type: 'Edm.String', key: true }),
+            expect.objectContaining({ name: 'vector', type: 'Collection(Edm.Single)' }),
+            expect.objectContaining({ name: 'content', type: 'Edm.String' }),
+            expect.objectContaining({ name: 'metadata', type: 'Edm.String' }),
+          ]),
+        }),
+      );
+    });
+
+    it('should create metadata index fields as explicit filterable Azure fields', async () => {
+      mockIndexClient.createIndex.mockResolvedValue({ name: 'memory-messages' });
+
+      await azureVector.createIndex({
+        indexName: 'memory-messages',
+        dimension: 128,
+        metadataIndexes: ['thread_id', 'resource_id'],
+      });
+
+      expect(mockIndexClient.createIndex).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fields: expect.arrayContaining([
+            expect.objectContaining({ name: 'thread_id', type: 'Edm.String', filterable: true }),
+            expect.objectContaining({ name: 'resource_id', type: 'Edm.String', filterable: true }),
+          ]),
+        }),
+      );
+    });
+
+    it('should validate dimension parameter', async () => {
+      await expect(
+        azureVector.createIndex({
+          indexName: 'test-index',
+          dimension: 0,
+        }),
+      ).rejects.toThrow('Dimension must be a positive integer');
+    });
+
+    it('should handle existing index', async () => {
+      const error = new Error('Index already exists');
+      (error as any).statusCode = 409;
+      mockIndexClient.createIndex.mockRejectedValueOnce(error);
+
+      // Should not throw an error when index already exists
+      await expect(
+        azureVector.createIndex({
+          indexName: 'test-index',
+          dimension: 128,
+        }),
+      ).resolves.not.toThrow();
+
+      expect(mockIndexClient.createIndex).toHaveBeenCalledTimes(1);
+    });
+
+    it('should add missing metadata index fields when an index already exists', async () => {
+      const error = new Error('Index already exists');
+      (error as any).statusCode = 409;
+      mockIndexClient.createIndex.mockRejectedValueOnce(error);
+      mockIndexClient.createOrUpdateIndex.mockResolvedValue({ name: 'test-index' });
+      mockIndexClient.getIndex.mockResolvedValue({
+        name: 'test-index',
+        fields: [
+          { name: 'id', type: 'Edm.String', key: true, filterable: true },
+          { name: 'vector', type: 'Collection(Edm.Single)', dimensions: 128 },
+          { name: 'metadata', type: 'Edm.String' },
+        ],
+      });
+
+      await azureVector.createIndex({
+        indexName: 'test-index',
+        dimension: 128,
+        metadataIndexes: ['thread_id', 'resource_id'],
+      });
+
+      expect(mockIndexClient.createOrUpdateIndex).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fields: expect.arrayContaining([
+            expect.objectContaining({ name: 'thread_id', type: 'Edm.String', filterable: true }),
+            expect.objectContaining({ name: 'resource_id', type: 'Edm.String', filterable: true }),
+          ]),
+        }),
+      );
+    });
+  });
+
+  describe('listIndexes', () => {
+    it('should return list of index names', async () => {
+      mockIndexClient.listIndexes.mockReturnValue([{ name: 'index1' }, { name: 'index2' }]);
+
+      const result = await azureVector.listIndexes();
+
+      expect(result).toEqual(['index1', 'index2']);
+      expect(mockIndexClient.listIndexes).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('describeIndex', () => {
+    it('should return index statistics', async () => {
+      mockIndexClient.getIndex.mockResolvedValue({
+        name: 'test-index',
+        fields: [
+          { name: 'id', type: 'Edm.String', key: true },
+          { name: 'content', type: 'Edm.String' },
+          { name: 'metadata', type: 'Edm.String' },
+          {
+            name: 'vector',
+            type: 'Collection(Edm.Single)',
+            vectorSearchDimensions: 128,
+          },
+        ],
+      });
+
+      mockSearchClientInstance.getDocumentsCount.mockResolvedValue(100);
+
+      const result = await azureVector.describeIndex({ indexName: 'test-index' });
+
+      expect(result).toEqual({
+        dimension: 128,
+        count: 100,
+        metric: 'cosine',
+      });
+    });
+  });
+
+  describe('deleteIndex', () => {
+    it('should delete index successfully', async () => {
+      mockIndexClient.deleteIndex.mockResolvedValue({});
+
+      await azureVector.deleteIndex({ indexName: 'test-index' });
+
+      expect(mockIndexClient.deleteIndex).toHaveBeenCalledWith('test-index');
+    });
+  });
+
+  describe('upsert', () => {
+    beforeEach(() => {
+      mockSearchClientInstance.uploadDocuments.mockResolvedValue({
+        results: [
+          { succeeded: true, key: 'doc1' },
+          { succeeded: true, key: 'doc2' },
+        ],
+      });
+
+      // Mock getVectorFieldName to avoid dimension validation
+      vi.spyOn(azureVector as any, 'getVectorFieldName').mockResolvedValue('vector');
+
+      // Mock validateVectorDimensions to allow any dimensions for unit tests
+      vi.spyOn(azureVector as any, 'validateVectorDimensions').mockImplementation(() => Promise.resolve());
+    });
+
+    it('should upsert vectors successfully', async () => {
+      const vectors = [
+        [0.1, 0.2, 0.3],
+        [0.4, 0.5, 0.6],
+      ];
+      const metadata = [
+        { type: 'document', category: 'docs' },
+        { type: 'document', price: 99.99 },
+      ];
+      const ids = ['doc1', 'doc2'];
+
+      const result = await azureVector.upsert({
+        indexName: 'test-index',
+        vectors,
+        metadata,
+        ids,
+      });
+
+      expect(result).toEqual(['doc1', 'doc2']);
+      expect(mockSearchClientInstance.uploadDocuments).toHaveBeenCalledWith([
+        {
+          id: 'doc1',
+          vector: [0.1, 0.2, 0.3],
+          metadata: JSON.stringify({ type: 'document', category: 'docs' }),
+          content: '',
+          category: 'docs',
+        },
+        {
+          id: 'doc2',
+          vector: [0.4, 0.5, 0.6],
+          metadata: JSON.stringify({ type: 'document', price: 99.99 }),
+          content: '',
+          price: 99.99,
+        },
+      ]);
+    });
+
+    it('should batch uploads that exceed Azure per-request document limit', async () => {
+      mockSearchClientInstance.uploadDocuments.mockImplementation((docs: any[]) =>
+        Promise.resolve({ results: docs.map(doc => ({ succeeded: true, key: doc.id })) }),
+      );
+
+      const count = 2500;
+      const vectors = Array.from({ length: count }, () => [0.1, 0.2, 0.3]);
+      const metadata = Array.from({ length: count }, () => ({ type: 'document' }));
+      const ids = Array.from({ length: count }, (_, i) => `doc-${i}`);
+
+      const result = await azureVector.upsert({ indexName: 'test-index', vectors, metadata, ids });
+
+      expect(result).toEqual(ids);
+      // 2500 documents -> 1000 + 1000 + 500 across three requests
+      expect(mockSearchClientInstance.uploadDocuments).toHaveBeenCalledTimes(3);
+      const batchSizes = mockSearchClientInstance.uploadDocuments.mock.calls.map((call: any[]) => call[0].length);
+      expect(batchSizes).toEqual([1000, 1000, 500]);
+    });
+
+    it('should generate IDs when not provided', async () => {
+      const vectors = [[0.1, 0.2, 0.3]];
+      const metadata = [{ type: 'document' }];
+
+      mockSearchClientInstance.uploadDocuments.mockResolvedValue({
+        results: [{ succeeded: true, key: 'generated-id' }],
+      });
+
+      const result = await azureVector.upsert({
+        indexName: 'test-index',
+        vectors,
+        metadata,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(mockSearchClientInstance.uploadDocuments).toHaveBeenCalledWith([
+        expect.objectContaining({
+          id: expect.any(String),
+          vector: [0.1, 0.2, 0.3],
+          metadata: JSON.stringify({ type: 'document' }),
+          content: '',
+        }),
+      ]);
+    });
+
+    it('should apply deleteFilter before upsert', async () => {
+      const deleteVectorsSpy = vi.spyOn(azureVector, 'deleteVectors').mockResolvedValue();
+
+      await azureVector.upsert({
+        indexName: 'test-index',
+        vectors: [[0.1, 0.2, 0.3]],
+        metadata: [{ type: 'document' }],
+        deleteFilter: { type: 'document' },
+      });
+
+      expect(deleteVectorsSpy).toHaveBeenCalledWith({
+        indexName: 'test-index',
+        filter: { type: 'document' },
+      });
+    });
+  });
+
+  describe('query', () => {
+    beforeEach(() => {
+      // Mock search to return object with results property (async iterator)
+      const mockResults = (async function* () {
+        yield {
+          document: {
+            id: 'doc1',
+            vector: [0.1, 0.2, 0.3],
+            metadata: '{"type":"document"}',
+            content: 'test content',
+          },
+          score: 0.95,
+        };
+      })();
+
+      mockSearchClientInstance.search.mockResolvedValue({
+        results: mockResults,
+      });
+    });
+
+    it('should perform vector search successfully', async () => {
+      const result = await azureVector.query({
+        indexName: 'test-index',
+        queryVector: Array.from({ length: 128 }, (_, i) => i * 0.001),
+        topK: 5,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: 'doc1',
+        score: 0.95,
+        metadata: { type: 'document' },
+      });
+    });
+
+    it('should include the vector in results when includeVector is true', async () => {
+      const result = await azureVector.query({
+        indexName: 'test-index',
+        queryVector: Array.from({ length: 128 }, (_, i) => i * 0.001),
+        topK: 5,
+        includeVector: true,
+      });
+
+      expect(result[0].vector).toEqual([0.1, 0.2, 0.3]);
+    });
+
+    it('should omit the vector from results when includeVector is false', async () => {
+      const result = await azureVector.query({
+        indexName: 'test-index',
+        queryVector: Array.from({ length: 128 }, (_, i) => i * 0.001),
+        topK: 5,
+      });
+
+      expect(result[0].vector).toBeUndefined();
+    });
+
+    it('should apply filters correctly', async () => {
+      await azureVector.query({
+        indexName: 'test-index',
+        queryVector: Array.from({ length: 128 }, (_, i) => i * 0.001),
+        topK: 5,
+        filter: { content: 'test' },
+      });
+
+      expect(mockSearchClientInstance.search).toHaveBeenCalledWith(
+        '*',
+        expect.objectContaining({
+          filter: "content eq 'test'",
+        }),
+      );
+    });
+
+    it('should query with flat metadata filters used by Memory semantic recall', async () => {
+      await azureVector.query({
+        indexName: 'test-index',
+        queryVector: Array.from({ length: 128 }, (_, i) => i * 0.001),
+        topK: 5,
+        filter: { resource_id: 'resource-123' },
+      });
+
+      expect(mockSearchClientInstance.search).toHaveBeenCalledWith(
+        '*',
+        expect.objectContaining({
+          filter: "resource_id eq 'resource-123'",
+        }),
+      );
+    });
+  });
+
+  describe('updateVector', () => {
+    beforeEach(() => {
+      mockSearchClientInstance.mergeDocuments.mockResolvedValue({
+        results: [{ succeeded: true, key: 'doc1' }],
+      });
+    });
+
+    it('should update vector successfully', async () => {
+      const newVector = Array.from({ length: 128 }, (_, i) => i * 0.002);
+      await azureVector.updateVector({
+        indexName: 'test-index',
+        id: 'doc1',
+        update: {
+          vector: newVector,
+          metadata: { category: 'new' },
+        },
+      });
+
+      expect(mockSearchClientInstance.mergeDocuments).toHaveBeenCalledWith([
+        expect.objectContaining({
+          id: 'doc1',
+          vector: newVector,
+          metadata: JSON.stringify({ category: 'new' }),
+          category: 'new',
+        }),
+      ]);
+    });
+
+    it('should update explicit index fields from metadata', async () => {
+      await azureVector.updateVector({
+        indexName: 'test-index',
+        id: 'doc1',
+        update: { metadata: { status: 'updated', category: 'docs' } },
+      });
+
+      expect(mockSearchClientInstance.mergeDocuments).toHaveBeenCalledWith([
+        {
+          id: 'doc1',
+          metadata: JSON.stringify({ status: 'updated', category: 'docs' }),
+          category: 'docs',
+          content: '',
+        },
+      ]);
+    });
+
+    it('should clear the derived content column on a metadata-only update that omits content', async () => {
+      await azureVector.updateVector({
+        indexName: 'test-index',
+        id: 'doc1',
+        update: { metadata: { category: 'books' } },
+      });
+      const [batch] = mockSearchClientInstance.mergeDocuments.mock.calls[0];
+      expect(batch[0]).toEqual({
+        id: 'doc1',
+        content: '',
+        metadata: JSON.stringify({ category: 'books' }),
+        category: 'books',
+      });
+    });
+
+    it('should not touch content or metadata on a vector-only update', async () => {
+      await azureVector.updateVector({
+        indexName: 'test-index',
+        id: 'doc1',
+        update: { vector: Array.from({ length: 128 }, () => 0.1) },
+      });
+      const [batch] = mockSearchClientInstance.mergeDocuments.mock.calls[0];
+      expect(batch[0]).not.toHaveProperty('content');
+      expect(batch[0]).not.toHaveProperty('metadata');
+    });
+
+    it('should update vectors by filter', async () => {
+      const mockResults = (async function* () {
+        yield { document: { id: 'doc1' }, score: 1 };
+        yield { document: { id: 'doc2' }, score: 1 };
+      })();
+
+      mockSearchClientInstance.search.mockResolvedValue({ results: mockResults });
+
+      await azureVector.updateVector({
+        indexName: 'test-index',
+        filter: { category: 'old' },
+        update: { metadata: { category: 'new' } },
+      });
+
+      expect(mockSearchClientInstance.mergeDocuments).toHaveBeenCalledWith([
+        { id: 'doc1', metadata: JSON.stringify({ category: 'new' }), category: 'new', content: '' },
+        { id: 'doc2', metadata: JSON.stringify({ category: 'new' }), category: 'new', content: '' },
+      ]);
+    });
+  });
+
+  describe('deleteVector', () => {
+    beforeEach(() => {
+      mockSearchClientInstance.deleteDocuments.mockResolvedValue({
+        results: [{ succeeded: true, key: 'doc1' }],
+      });
+    });
+
+    it('should delete vector successfully', async () => {
+      await azureVector.deleteVector({
+        indexName: 'test-index',
+        id: 'doc1',
+      });
+
+      expect(mockSearchClientInstance.deleteDocuments).toHaveBeenCalledWith([{ id: 'doc1' }]);
+    });
+
+    it('should handle 404 for non-existent document gracefully', async () => {
+      const error = new Error('Document not found') as Error & { statusCode: number };
+      error.statusCode = 404;
+      mockSearchClientInstance.deleteDocuments.mockRejectedValue(error);
+
+      await azureVector.deleteVector({
+        indexName: 'test-index',
+        id: 'non-existent',
+      });
+    });
+
+    it('should throw when Azure reports a per-document delete failure', async () => {
+      mockSearchClientInstance.deleteDocuments.mockResolvedValue({
+        results: [{ succeeded: false, key: 'doc1', errorMessage: 'Delete failed' }],
+      });
+
+      await expect(
+        azureVector.deleteVector({
+          indexName: 'test-index',
+          id: 'doc1',
+        }),
+      ).rejects.toThrow('Document doc1 failed to delete');
+    });
+
+    it('should wrap delete errors', async () => {
+      mockSearchClientInstance.deleteDocuments.mockRejectedValue(new Error('Delete failed'));
+
+      await expect(
+        azureVector.deleteVector({
+          indexName: 'test-index',
+          id: 'doc1',
+        }),
+      ).rejects.toThrow('Delete failed');
+    });
+
+    it('should wrap per-document delete failures with MastraError details', async () => {
+      mockSearchClientInstance.deleteDocuments.mockResolvedValue({
+        results: [{ succeeded: false, key: 'doc1', errorMessage: 'Rejected by Azure' }],
+      });
+
+      await expect(
+        azureVector.deleteVector({
+          indexName: 'test-index',
+          id: 'doc1',
+        }),
+      ).rejects.toMatchObject({
+        id: 'STORAGE_AZURE_AI_SEARCH_DELETE_VECTOR_PARTIAL_FAILURE',
+        details: {
+          indexName: 'test-index',
+          id: 'doc1',
+          failedKey: 'doc1',
+          error: 'Rejected by Azure',
+        },
+      });
+    });
+
+    it('should fall back to requested id when delete failure has no key', async () => {
+      mockSearchClientInstance.deleteDocuments.mockResolvedValue({
+        results: [{ succeeded: false }],
+      });
+
+      await expect(
+        azureVector.deleteVector({
+          indexName: 'test-index',
+          id: 'doc1',
+        }),
+      ).rejects.toThrow('Document doc1 failed to delete');
+    });
+
+    it('should not throw when Azure confirms a missing document delete', async () => {
+      mockSearchClientInstance.deleteDocuments.mockResolvedValue({
+        results: [{ succeeded: true, key: 'non-existent' }],
+      });
+
+      await azureVector.deleteVector({
+        indexName: 'test-index',
+        id: 'non-existent',
+      });
+    });
+  });
+
+  describe('deleteVectors', () => {
+    beforeEach(() => {
+      mockSearchClientInstance.deleteDocuments.mockResolvedValue({
+        results: [{ succeeded: true, key: 'doc1' }],
+      });
+    });
+
+    it('should delete vectors by ids', async () => {
+      await azureVector.deleteVectors({
+        indexName: 'test-index',
+        ids: ['doc1', 'doc2'],
+      });
+
+      expect(mockSearchClientInstance.deleteDocuments).toHaveBeenCalledWith([{ id: 'doc1' }, { id: 'doc2' }]);
+    });
+
+    it('should delete vectors by filter', async () => {
+      const mockResults = (async function* () {
+        yield { document: { id: 'doc1' }, score: 1 };
+        yield { document: { id: 'doc2' }, score: 1 };
+      })();
+
+      mockSearchClientInstance.search.mockResolvedValue({ results: mockResults });
+
+      await azureVector.deleteVectors({
+        indexName: 'test-index',
+        filter: { category: 'books' },
+      });
+
+      expect(mockSearchClientInstance.deleteDocuments).toHaveBeenCalledWith([{ id: 'doc1' }, { id: 'doc2' }]);
+    });
+
+    it('should page filter matches with an ordered search-after range scan', async () => {
+      const makePage = (start: number, size: number) =>
+        (async function* () {
+          for (let i = 0; i < size; i++) {
+            yield { document: { id: `doc-${start + i}` }, score: 1 };
+          }
+        })();
+
+      // First full page (1000) forces a second request; second page is partial.
+      mockSearchClientInstance.search
+        .mockResolvedValueOnce({ results: makePage(0, 1000) })
+        .mockResolvedValueOnce({ results: makePage(1000, 5) });
+
+      await azureVector.deleteVectors({
+        indexName: 'test-index',
+        filter: { category: 'books' },
+      });
+
+      expect(mockSearchClientInstance.search).toHaveBeenCalledTimes(2);
+
+      const [, firstOptions] = mockSearchClientInstance.search.mock.calls[0];
+      const [, secondOptions] = mockSearchClientInstance.search.mock.calls[1];
+
+      // Stable ordering is required; no unbounded $skip is used.
+      expect(firstOptions.orderBy).toEqual(['id asc']);
+      expect(firstOptions.skip).toBeUndefined();
+      // Second page continues after the last seen id rather than skipping.
+      expect(secondOptions.orderBy).toEqual(['id asc']);
+      expect(secondOptions.skip).toBeUndefined();
+      expect(secondOptions.filter).toContain("id gt 'doc-999'");
+
+      expect(mockSearchClientInstance.deleteDocuments).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // Filter Translator Tests
+  describe('AzureAISearchFilterTranslator', () => {
+    let translator: AzureAISearchFilterTranslator;
+
+    beforeEach(() => {
+      translator = new AzureAISearchFilterTranslator();
+    });
+
+    describe('translate', () => {
+      it('should return undefined for empty filter', () => {
+        expect(translator.translate()).toBeUndefined();
+      });
+
+      it('should translate equality filters', () => {
+        const result = translator.translate({ category: { $eq: 'books' }, author: 'Jane Doe' });
+        expect(result).toBe("category eq 'books' and author eq 'Jane Doe'");
+      });
+
+      it('should translate comparison filters', () => {
+        const result = translator.translate({
+          price: { $gt: 10 },
+          rating: { $lt: 5 },
+          year: { $gte: 2020 },
+          pages: { $lte: 300 },
+        });
+        expect(result).toBe('price gt 10 and rating lt 5 and year ge 2020 and pages le 300');
+      });
+
+      it('should translate NOT operations', () => {
+        expect(translator.translate({ $not: { category: 'books' } })).toBe("not (category eq 'books')");
+        expect(translator.translate({ category: { $not: { $eq: 'books' } } })).toBe("not (category eq 'books')");
+      });
+
+      it('should handle complex nested filters', () => {
+        const result = translator.translate({
+          $and: [{ category: 'books' }, { $or: [{ price: { $gt: 20 } }, { author: 'Famous Author' }] }],
+        });
+        expect(result).toBe("(category eq 'books' and (price gt 20 or author eq 'Famous Author'))");
+      });
+
+      it('should escape special characters in strings', () => {
+        expect(translator.translate({ title: "Book's Title" })).toBe("title eq 'Book''s Title'");
+      });
+
+      it('should handle different value types', () => {
+        const result = translator.translate({ isAvailable: true, price: 29.99, category: 'fiction' });
+        expect(result).toBe("isAvailable eq true and price eq 29.99 and category eq 'fiction'");
+      });
+
+      it('should handle date values', () => {
+        const date = new Date('2023-01-01');
+        expect(translator.translate({ publishDate: { $gte: date } })).toBe(`publishDate ge ${date.toISOString()}`);
+        expect(translator.translate({ publishDate: date })).toBe(`publishDate eq ${date.toISOString()}`);
+      });
+
+      it('should translate $in and $nin as equality chains', () => {
+        expect(translator.translate({ category: { $in: ['a', 'b'] } })).toBe("(category eq 'a' or category eq 'b')");
+        expect(translator.translate({ category: ['a', 'b'] })).toBe("(category eq 'a' or category eq 'b')");
+        expect(translator.translate({ category: { $nin: ['a'] } })).toBe("not (category eq 'a')");
+      });
+
+      it('should produce a match-none predicate for empty disjunctions and membership sets', () => {
+        const none = "(id eq '__mastra_none__' and id ne '__mastra_none__')";
+        expect(translator.translate({ $or: [] })).toBe(none);
+        expect(translator.translate({ category: { $in: [] } })).toBe(none);
+        expect(translator.translate({ category: [] })).toBe(none);
+        // Combined with other clauses it still poisons the whole conjunction.
+        expect(translator.translate({ tenant: 't1', category: { $in: [] } })).toBe(`tenant eq 't1' and ${none}`);
+      });
+
+      it('should treat empty $and and empty $nin as vacuously true', () => {
+        expect(translator.translate({ $and: [] })).toBeUndefined();
+        expect(translator.translate({ category: { $nin: [] } })).toBeUndefined();
+      });
+
+      it('should treat and/or/eq/not as ordinary field names, not operators', () => {
+        expect(translator.translate({ and: 'retail' })).toBe("and eq 'retail'");
+        expect(translator.translate({ or: { $gt: 1 }, eq: true, not: null })).toBe(
+          'or gt 1 and eq eq true and not eq null',
+        );
+      });
+
+      it('should reject raw OData and unknown operators', () => {
+        expect(() => translator.translate({ $filter: "category eq 'books'" } as any)).toThrow(
+          /Unsupported filter operator '\$filter'/,
+        );
+        expect(() => translator.translate({ category: { $regex: 'x' } } as any)).toThrow(
+          /Unsupported filter operator '\$regex'/,
+        );
+      });
+
+      it('should refuse to delete or update with a filter that translates to no predicate', async () => {
+        await expect(azureVector.deleteVectors({ indexName: 'test-index', filter: { $and: [] } })).rejects.toThrow(
+          /does not constrain/,
+        );
+        await expect(
+          azureVector.updateVector({
+            indexName: 'test-index',
+            filter: { tag: { $nin: [] } },
+            update: { metadata: { a: 1 } },
+          }),
+        ).rejects.toThrow(/does not constrain/);
+        expect(mockSearchClientInstance.search).not.toHaveBeenCalled();
+      });
+
+      it('should reject field names that could inject OData', () => {
+        expect(() => translator.translate({ "id eq 'x' or 1": 1 } as any)).toThrow(/Invalid field name/);
+      });
+
+      it('should translate Mastra-style operators', () => {
+        const result = translator.translate({
+          $and: [{ category: { $eq: 'books' } }, { price: { $gt: 10 } }],
+        });
+        expect(result).toBe("(category eq 'books' and price gt 10)");
+      });
+
+      it('should translate flat Mastra metadata filters to equality comparisons', () => {
+        expect(translator.translate({ resource_id: 'resource-123' })).toBe("resource_id eq 'resource-123'");
+        expect(translator.translate({ thread_id: 'thread-123', resource_id: 'resource-123' })).toBe(
+          "thread_id eq 'thread-123' and resource_id eq 'resource-123'",
+        );
+      });
+    });
+  });
+});

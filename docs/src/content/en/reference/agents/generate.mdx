@@ -438,7 +438,8 @@ const result = await agent.generate('message for agent')
                     name: 'instructions',
                     type: 'string',
                     isOptional: true,
-                    description: 'Additional instructions for the structured output model.',
+                    description:
+                      'Additional instructions for the structured output model. With `jsonPromptInjection` and no structuring `model`, this text is injected into the prompt in place of the serialized schema.',
                   },
                 ],
               },
@@ -954,6 +955,12 @@ For the streaming version of the same chunk shape, see the [ChunkType reference]
     type: 'Output | undefined',
     isOptional: true,
     description: 'The structured output object if structuredOutput was provided, validated against the schema.',
+  },
+  {
+    name: 'usedFallbackValue',
+    type: 'boolean',
+    description:
+      "True when `object` is the configured `fallbackValue`, substituted because the model output failed schema validation, or the separate structuring model failed, under `errorStrategy: 'fallback'`.",
   },
   {
     name: 'toolCalls',
