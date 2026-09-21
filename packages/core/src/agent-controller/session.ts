@@ -23,6 +23,8 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { createRunScopeKey } from '../mastra/run-scope';
 import type { RunScope } from '../mastra/run-scope';
+import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
+import type { MastraMemory } from '../memory/memory';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -54,6 +56,15 @@ import type {
 } from './types';
 
 export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
+
+/**
+ * Memory the suspended run persisted its messages under, resolved with the
+ * run's own RequestContext while the stream was live. Abort settlement cannot
+ * rebuild that context later (dynamic `memory: ({ requestContext }) => …`
+ * configs would resolve differently against an empty context), so the resolved
+ * instance is retained beside the owning agent for the life of the run scope.
+ */
+export const SUSPENDED_RUN_MEMORY_KEY = createRunScopeKey<MastraMemory>('agent-controller.suspendedRunMemory');
 
 /**
  * Minimal persistence surface the Session uses to read and write per-thread
@@ -286,6 +297,8 @@ export interface SessionMachinery {
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     untilIdle?: boolean | { maxIdleMs?: number };
+    /** Queue preparation owns this signal instead of mutating the active Session run. */
+    abortSignal?: AbortSignal;
   }): Promise<Record<string, unknown>>;
   /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
   buildSharedRunOptions(): Record<string, unknown>;
@@ -510,8 +523,14 @@ export class SessionThread {
 
   /** Read a setting (metadata value) for the active thread. */
   async getSetting({ key }: { key: string }): Promise<unknown> {
-    if (!this.#store || this.#threadId === null) return undefined;
-    return this.#store.getMetadata({ threadId: this.#threadId, key });
+    if (this.#threadId === null) return undefined;
+    return this.getSettingOn({ threadId: this.#threadId, key });
+  }
+
+  /** Read a setting from a specific thread, regardless of the current binding. */
+  async getSettingOn({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {
+    if (!this.#store) return undefined;
+    return this.#store.getMetadata({ threadId, key });
   }
 
   /** Persist a setting (metadata value) for the active thread. */
@@ -545,6 +564,7 @@ export class SessionThread {
 
   /** Tear down the current agent subscription and reset the run tracker. */
   cleanupSubscription(): void {
+    this.#owner.cleanupFollowUpBinding();
     this.#owner.stream.cleanup();
     this.#owner.run.reset();
   }
@@ -557,11 +577,15 @@ export class SessionThread {
     const session = this.#owner;
     const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
-    if (session.stream.matches({ key })) return;
+    if (session.stream.matches({ key })) {
+      session.ensureFollowUpBinding(agent, resourceId, threadId);
+      return;
+    }
 
     this.cleanupSubscription();
     const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId });
     session.stream.attach({ subscription, agent, key });
+    session.ensureFollowUpBinding(agent, resourceId, threadId);
     void session.processSubscribedThreadStream(subscription);
   }
 
@@ -680,8 +704,14 @@ export class SessionThread {
     return thread;
   }
 
-  /** Rename the session's active thread. No-op when unbound or storageless. */
-  async rename({ title }: { title: string }): Promise<void> {
+  /**
+   * Rename the session's active thread. No-op when unbound or storageless.
+   *
+   * Renames pin the title by default (`metadata.titlePinned`) so Observational
+   * Memory's title extractor cannot overwrite a user's manual rename. Pass
+   * `pin: false` for programmatic title writes that should keep auto-naming.
+   */
+  async rename({ title, pin = true }: { title: string; pin?: boolean }): Promise<void> {
     const store = this.#store;
     const threadId = this.#threadId;
     if (!threadId || !store?.hasStorage()) return;
@@ -689,7 +719,12 @@ export class SessionThread {
     const thread = await store.getById({ threadId });
     if (thread) {
       await store.saveThread({
-        thread: { ...thread, title, updatedAt: new Date() },
+        thread: {
+          ...thread,
+          title,
+          metadata: { ...thread.metadata, [TITLE_PINNED_THREAD_METADATA_KEY]: pin },
+          updatedAt: new Date(),
+        },
       });
       this.#owner.emit({ type: 'thread_title_updated', threadId, title });
     }
@@ -1097,6 +1132,10 @@ export interface PendingSuspension {
   runId: string;
   /** The suspended tool's name (e.g. `ask_user`, `submit_plan`). */
   toolName: string;
+  /** The thread the suspended invocation was persisted under. */
+  threadId: string;
+  /** The memory resource the suspended invocation was persisted under. */
+  resourceId: string;
 }
 
 /**
@@ -1115,9 +1154,32 @@ export class SessionSuspensions {
   /** Parked tool calls awaiting a resume, keyed by `toolCallId`. */
   readonly #pending = new Map<string, PendingSuspension>();
 
-  /** Park `toolCallId` as awaiting a resume on `runId` for `toolName`. */
-  register({ toolCallId, runId, toolName }: { toolCallId: string; runId: string; toolName: string }): void {
-    this.#pending.set(toolCallId, { runId, toolName });
+  /**
+   * Park `toolCallId` as awaiting a resume on `runId` for `toolName`, recording
+   * the thread/resource the suspended invocation was persisted under. When the
+   * same tool call is replayed for the same run (e.g. a resumed stream re-emits
+   * the suspension), the original thread/resource binding is preserved so later
+   * settlement still targets where the invocation was first persisted.
+   */
+  register({
+    toolCallId,
+    runId,
+    toolName,
+    threadId,
+    resourceId,
+  }: {
+    toolCallId: string;
+    runId: string;
+    toolName: string;
+    threadId: string;
+    resourceId: string;
+  }): void {
+    const existing = this.#pending.get(toolCallId);
+    if (existing && existing.runId === runId) {
+      this.#pending.set(toolCallId, { ...existing, toolName });
+      return;
+    }
+    this.#pending.set(toolCallId, { runId, toolName, threadId, resourceId });
   }
 
   /** The parked suspension for `toolCallId`, or undefined when none. */
@@ -1156,10 +1218,12 @@ export class SessionSuspensions {
 
   /**
    * Drop all parked suspensions (e.g. on abort or thread switch), returning the
-   * dropped entries so callers can retract the corresponding prompts.
+   * dropped entries — including each suspension's original thread/resource
+   * binding — so callers can retract the corresponding prompts and settle each
+   * invocation where it was persisted.
    */
-  clear(): Array<{ toolCallId: string; toolName: string }> {
-    const dropped = [...this.#pending].map(([toolCallId, { toolName }]) => ({ toolCallId, toolName }));
+  clear(): Array<{ toolCallId: string } & PendingSuspension> {
+    const dropped = [...this.#pending].map(([toolCallId, suspension]) => ({ toolCallId, ...suspension }));
     this.#pending.clear();
     return dropped;
   }
@@ -1946,6 +2010,13 @@ class SessionPermissions {
   }
 }
 
+/**
+ * How long a message submitted right after an abort waits for the aborted run
+ * to finish tearing down before it is dispatched anyway. Real teardown includes
+ * stream cancellation and every output processor; a few seconds is normal.
+ */
+const POST_ABORT_TEARDOWN_TIMEOUT_MS = 30_000;
+
 /** Stamp at submit time: a steer aborts its own run, so the route resolved downstream reads idle. */
 function asInterjection(signal: CreatedAgentSignal): CreatedAgentSignal {
   if (signal.type !== 'user' || signal.attributes?.delivery !== undefined) return signal;
@@ -2102,9 +2173,14 @@ class SessionState<TState = unknown> {
     return defaults as Partial<TState>;
   }
 
-  private async apply(updates: Partial<TState>, persistSetting?: PersistSettingFn): Promise<void> {
+  private async apply(
+    updates: Partial<TState>,
+    persistSetting?: PersistSettingFn,
+    shouldApply?: () => boolean,
+  ): Promise<boolean> {
     const changedKeys = Object.keys(updates as Record<string, unknown>);
     const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
+    let validatedState: TState;
 
     if (this.#schema) {
       const result = await this.#schema['~standard'].validate(newState);
@@ -2112,10 +2188,16 @@ class SessionState<TState = unknown> {
         const messages = result.issues.map(i => i.message).join('; ');
         throw new Error(`Invalid state update: ${messages}`);
       }
-      this.#state = result.value as TState;
+      validatedState = result.value as TState;
     } else {
-      this.#state = newState as TState;
+      validatedState = newState as TState;
     }
+
+    // Re-check after async schema validation, immediately before mutating the
+    // live session. Callers use this to prevent a queued update from crossing
+    // a session/thread ownership boundary while validation was in flight.
+    if (shouldApply && !shouldApply()) return false;
+    this.#state = validatedState;
 
     this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
 
@@ -2133,6 +2215,7 @@ class SessionState<TState = unknown> {
         }
       }
     }
+    return true;
   }
 
   set(updates: Partial<TState>): Promise<void> {
@@ -2140,7 +2223,21 @@ class SessionState<TState = unknown> {
     // Captured now, not at apply time: an update queued behind a thread switch
     // must persist to the thread that was active when the update was requested.
     const persistSetting = this.#capturePersistSetting?.();
-    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, persistSetting));
+    const run = this.#updateQueue.then(async () => {
+      await this.apply(updateSnapshot, persistSetting);
+    });
+    this.#updateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /** Apply an update only while a caller-owned identity still matches. */
+  setIf(updates: Partial<TState>, shouldApply: () => boolean): Promise<boolean> {
+    const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
+    const persistSetting = this.#capturePersistSetting?.();
+    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, persistSetting, shouldApply));
     this.#updateQueue = run.then(
       () => undefined,
       () => undefined,
@@ -2198,11 +2295,9 @@ class SessionState<TState = unknown> {
  *   the native tool-suspension primitive awaiting a resume, keyed by toolCallId.
  *   The Session owns the resume data; the AgentController keeps the richer per-suspension
  *   UI snapshot on its display state.
- * - the follow-up queue (`session.followUps`): messages a user submits while a
- *   run is in progress, held FIFO until the run finishes. The Session owns the
- *   queue; the AgentController drives draining and keeps the `queuedFollowUps` display
- *   mirror.
- * - the interactive tool-approval gate (`session.approval`): when a tool needs
+ * - follow-up queue observation: a subscription to the Agent-owned FIFO for
+ *   the active resource/thread. The Agent runtime schedules messages; the
+ *   Session renders its current shared `queuedFollowUps` count. * - the interactive tool-approval gate (`session.approval`): when a tool needs
  *   user approval, the run parks on a promise here until the UI responds. The
  *   Session owns the gate; the AgentController maps the decision to its effects (run vs
  *   decline, any "always allow" grant), which touch config-derived categories.
@@ -2352,15 +2447,48 @@ export class SessionDisplayState {
 
       // ── Message streaming ──────────────────────────────────────────────
       case 'message_start':
-        ds.currentMessage = event.message;
+        // The run engine keeps the source message mutable while it folds stream
+        // chunks. Display state applies compact deltas independently, so isolate
+        // text parts once here rather than appending each delta twice.
+        ds.currentMessage = {
+          ...event.message,
+          content: {
+            ...event.message.content,
+            parts: event.message.content.parts.map(part => (part.type === 'text' ? { ...part } : part)),
+          },
+        };
         break;
 
-      case 'message_update':
-        ds.currentMessage = event.message;
+      case 'message_update': {
+        if (ds.currentMessage?.id !== event.id) break;
+
+        const parts = [...ds.currentMessage.content.parts];
+        if (event.event.type === 'text-delta') {
+          const textIndex = parts.findLastIndex(part => part.type === 'text');
+          const textPart = parts[textIndex];
+          if (textPart?.type === 'text') {
+            parts[textIndex] = { ...textPart, text: textPart.text + event.event.delta };
+          } else {
+            parts.push({ type: 'text', text: event.event.delta });
+          }
+        } else if (event.event.type === 'reasoning-delta') {
+          const reasoningPart = parts[event.event.index];
+          if (reasoningPart?.type === 'reasoning') {
+            const reasoning = reasoningPart.reasoning + event.event.delta;
+            parts[event.event.index] = { ...reasoningPart, reasoning, details: [{ type: 'text', text: reasoning }] };
+          }
+        } else {
+          parts[event.event.index] = structuredClone(event.event.part);
+        }
+
+        ds.currentMessage = {
+          ...ds.currentMessage,
+          content: { ...ds.currentMessage.content, parts },
+        };
         break;
+      }
 
       case 'message_end':
-        ds.currentMessage = event.message;
         break;
 
       // ── Tool lifecycle ─────────────────────────────────────────────────
@@ -2879,8 +3007,12 @@ export class Session<TState = unknown> {
   readonly stream = new SessionStream();
   /** Tool calls parked awaiting a resume (the resume data, keyed by toolCallId). */
   readonly suspensions = new SessionSuspensions();
-  /** Messages queued to send after the active run finishes. */
-  readonly followUps = new SessionFollowUps();
+  /** Captured Agent queue scope for this session binding. */
+  #followUpBinding?: { agent: Agent; resourceId: string; threadId: string; unsubscribe?: () => void };
+  /** Follow-up preparation that can finish after the session's active run changes. */
+  readonly #preparingFollowUps = new Set<{ generation: number; controller: AbortController }>();
+  /** Invalidates asynchronous follow-up preparation when the session unbinds. */
+  #followUpGeneration = 0;
   /** The interactive tool-approval gate the current run parks on. */
   readonly approval = new SessionApproval();
   /** The session's identity: the memory resourceId it reads/writes under. */
@@ -2924,7 +3056,7 @@ export class Session<TState = unknown> {
       getTokenUsage: () => this.getTokenUsage(),
       getSubagentDisplayName: agentType => this.#resolveSubagentName?.(agentType),
       getThreadId: () => this.thread.getId(),
-      clearFollowUps: () => this.followUps.clear(),
+      clearFollowUps: () => this.cleanupFollowUpBinding(),
     });
     this.#bus.setDisplayState(this.displayState);
     this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus, () => {
@@ -3011,6 +3143,35 @@ export class Session<TState = unknown> {
       }
     }
     this.emit(event);
+  }
+
+  /** Await the terminal event for a specific accepted agent run. */
+  private async waitForAcceptedRunCompletion<OUTPUT>(
+    accepted: Promise<{ action?: SendAgentSignalAccepted<OUTPUT>['action']; runId?: string }>,
+    { waitForDelivery = true }: { waitForDelivery?: boolean } = {},
+  ): Promise<void> {
+    const completedRunIds = new Set<string>();
+    let runId: string | undefined;
+    let resolveCompletion!: () => void;
+    const completion = new Promise<void>(resolve => {
+      resolveCompletion = resolve;
+    });
+    const unsubscribe = this.onBeforeAgentEnd(() => {
+      const endingRunId = this.run.getRunId();
+      if (!endingRunId) return;
+      completedRunIds.add(endingRunId);
+      if (endingRunId === runId) resolveCompletion();
+    });
+
+    try {
+      const result = await accepted;
+      if (result.action !== 'wake' && !waitForDelivery) return;
+      runId = 'runId' in result ? result.runId : undefined;
+      if (!runId || completedRunIds.has(runId)) return;
+      await completion;
+    } finally {
+      unsubscribe();
+    }
   }
 
   /**
@@ -3143,7 +3304,8 @@ export class Session<TState = unknown> {
     // Retract the prompts for every parked suspension. Dropping them silently
     // left the UI rendering `ask_user` / `request_access` prompts whose answers
     // could never land, since the run they belong to is gone.
-    for (const { toolCallId, toolName } of this.suspensions.clear()) {
+    const suspendedToolCalls = this.suspensions.clear();
+    for (const { toolCallId, toolName } of suspendedToolCalls) {
       this.emit({ type: 'tool_suspension_cancelled', toolCallId, toolName, reason: ABORTED_BY_USER_REASON });
     }
 
@@ -3154,9 +3316,25 @@ export class Session<TState = unknown> {
     // active or suspended run". Defer both the stream abort and the abort
     // signal to the engine, which fires them once the decline has landed.
     const wasGated = this.approval.isArmed();
-    this.approval.cancel();
     if (wasGated) {
       this.run.requestAbort({ deferSignal: true });
+      if (suspendedToolCalls.length === 0) {
+        this.approval.cancel();
+        return;
+      }
+      void this.runEngine
+        .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
+        .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
+        .finally(() => this.approval.cancel());
+      return;
+    }
+
+    if (suspendedToolCalls.length > 0) {
+      this.run.requestAbort({ deferSignal: true });
+      void this.runEngine
+        .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
+        .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
+        .finally(() => this.completeDeferredAbort());
       return;
     }
 
@@ -3226,9 +3404,10 @@ export class Session<TState = unknown> {
 
   /**
    * Respond to the parked tool-approval gate with the user's decision. A no-op
-   * when nothing is awaiting approval. "always_allow_category" grants the gated
-   * tool's category for the rest of the session (resolved via the injected
-   * {@link setCategoryResolver}) and then approves; "approve"/"decline" release
+   * when nothing is awaiting approval or the run is already aborting.
+   * "always_allow_category" grants the gated tool's category for the rest of
+   * the session (resolved via the injected {@link setCategoryResolver}) and then
+   * approves; "approve"/"decline" release
    * the run as-is.
    */
   respondToToolApproval({
@@ -3242,6 +3421,7 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
   }): void {
+    if (this.run.isAbortRequested()) return;
     this.approval.respond({
       decision,
       toolCallId,
@@ -3298,6 +3478,34 @@ export class Session<TState = unknown> {
     });
 
     return [{ type: 'text', text: content }, ...fileParts];
+  }
+
+  /**
+   * Watch for the live subscription's next teardown (detach or cleanup). The run
+   * engine detaches an aborted subscription only after that run has ended, so
+   * work that must land on a fresh subscription waits for this first. Register
+   * it before awaiting anything, while the aborted handle is still attached.
+   */
+  #watchStreamTeardown(): { wait: (timeoutMs: number) => Promise<void>; cancel: () => void } {
+    const watcher = new AbortController();
+    const teardown = this.stream.waitForTeardown(watcher.signal);
+    return {
+      wait: async timeoutMs => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            teardown,
+            new Promise<void>(resolve => {
+              timer = setTimeout(resolve, timeoutMs);
+            }),
+          ]);
+        } finally {
+          if (timer) clearTimeout(timer);
+          watcher.abort();
+        }
+      },
+      cancel: () => watcher.abort(),
+    };
   }
 
   /**
@@ -3366,7 +3574,7 @@ export class Session<TState = unknown> {
         if (this.identity.getResourceId() === target.resourceId && this.thread.getId() === target.threadId) {
           const message = signal.toDBMessage(target);
           this.emit({ type: 'message_start', message });
-          this.emit({ type: 'message_end', message });
+          this.emit({ type: 'message_end', id: message.id });
         }
       }
 
@@ -3454,6 +3662,10 @@ export class Session<TState = unknown> {
     const submittedAbortRequested = this.run.isAbortRequested();
     const submittedWhileWorking =
       submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
+    // Registered before any await: resolves when the aborted live subscription is
+    // detached, which the run engine does only after that run has ended.
+    const abortedStreamTeardown =
+      submittedAbortRequested && !submittedIsRunning && this.stream.isOpen() ? this.#watchStreamTeardown() : undefined;
     const submitted = createSignal(
       'content' in input
         ? {
@@ -3504,7 +3716,7 @@ export class Session<TState = unknown> {
             threadId,
           });
           this.emit({ type: 'message_start', message });
-          this.emit({ type: 'message_end', message });
+          this.emit({ type: 'message_end', id: message.id });
         }
         if (requireDelivery) {
           const acceptedResult = settled ?? (await result.accepted);
@@ -3526,22 +3738,52 @@ export class Session<TState = unknown> {
       // Only do this in the post-abort window (an abort was requested but the
       // run hasn't reset yet) so normal idle signals aren't delayed.
       if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
-        const idle = await this.waitForStreamIdle();
-        // On the normal path the abort teardown detached the live subscription
-        // while we waited, so the handle captured by the earlier
-        // `ensureSubscription` is now dead and re-ensuring genuinely
-        // re-subscribes. But when `waitForStreamIdle` times out the old run is
-        // still finalizing with its subscription live and matching, so
-        // `ensureSubscription` would short-circuit to a no-op and dispatch onto
-        // the still-aborting run. Force teardown of the stale subscription first
-        // so the re-ensure always attaches a fresh one — otherwise the new run
-        // starts with no native subscription and its `agent_start`/`agent_end`
-        // never reach the session, leaving `run.isRunning()` stuck true.
+        // A deferred abort (parked approval gate) streams nothing and only
+        // leaves once the gated call is declined, so the short wait is enough.
+        // A normal abort tears down for real: the model stream has to cancel
+        // and the output processors (memory, billing, ...) still run on the
+        // partial result, which takes longer than a second. Dispatching before
+        // that completes hands the new message to the dying run, which drops
+        // it, so wait for the real teardown before falling back below.
+        const teardownDeadline = Date.now() + POST_ABORT_TEARDOWN_TIMEOUT_MS;
+        const idle = await this.waitForStreamIdle(submittedIsRunning ? undefined : POST_ABORT_TEARDOWN_TIMEOUT_MS);
+        // The stream can read idle before the run engine detaches the aborted
+        // subscription (it detaches, then resets the run). Ensuring the
+        // subscription in that gap reuses the handle about to be detached, and
+        // the new run's events never reach this session: wait for the detach.
+        if (idle && abortedStreamTeardown && this.run.isAbortRequested()) {
+          await abortedStreamTeardown.wait(Math.max(0, teardownDeadline - Date.now()));
+        }
         if (!idle) {
+          // On the normal path the abort teardown detached the live subscription
+          // while we waited, so the handle captured by the earlier
+          // `ensureSubscription` is now dead and re-ensuring genuinely
+          // re-subscribes. But when `waitForStreamIdle` times out the old run is
+          // still finalizing with its subscription live and matching, so
+          // `ensureSubscription` would short-circuit to a no-op and dispatch onto
+          // the still-aborting run. Force teardown of the stale subscription first
+          // so the re-ensure always attaches a fresh one — otherwise the new run
+          // starts with no native subscription and its `agent_start`/`agent_end`
+          // never reach the session, leaving `run.isRunning()` stuck true.
           this.thread.cleanupSubscription();
         }
         await this.thread.ensureSubscription(threadId, agent);
+      } else if (abortedStreamTeardown) {
+        // Stop on a run parked on a tool suspension leaves no run id behind,
+        // but the stopped run's subscription is still attached and is about to
+        // deliver the Stop and detach. Sending on it hands the new run's first
+        // event to the stopped run, which is ended as aborted and detached, so
+        // the new run's end never reaches this session. Wait briefly for that
+        // detach; if it never comes, drop the subscription and the abort state
+        // here. Either way the new run starts on a fresh subscription.
+        await abortedStreamTeardown.wait(1_000);
+        if (this.stream.isOpen() && this.run.isAbortRequested()) {
+          this.thread.cleanupSubscription();
+          this.run.reset();
+        }
+        await this.thread.ensureSubscription(threadId, agent);
       }
+      abortedStreamTeardown?.cancel();
 
       const streamOptions = await this.machinery.buildStreamOptions({
         requestContext: requestContextInput,
@@ -3624,6 +3866,44 @@ export class Session<TState = unknown> {
     });
   }
 
+  private async prepareMessageTarget({
+    requestContext,
+    tracingContext,
+    tracingOptions,
+    untilIdle,
+    includeStreamOptions = true,
+  }: {
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    untilIdle?: boolean | { maxIdleMs?: number };
+    includeStreamOptions?: boolean;
+  }) {
+    if (!this.thread.getId()) {
+      const thread = await this.thread.create();
+      this.thread.set({ threadId: thread.id });
+    }
+    const threadId = this.thread.getId()!;
+    await this.thread.ensureSubscription(threadId);
+
+    if (!includeStreamOptions) {
+      return { resourceId: this.identity.getResourceId(), threadId };
+    }
+
+    const streamOptions = await this.machinery.buildStreamOptions({
+      requestContext,
+      tracingContext,
+      tracingOptions,
+      untilIdle,
+    });
+
+    return {
+      resourceId: this.identity.getResourceId(),
+      threadId,
+      ifIdle: { streamOptions: streamOptions as any },
+    };
+  }
+
   /**
    * Send a message to this session's current agent and await the run. Streams
    * the response and emits events.
@@ -3643,119 +3923,144 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     untilIdle?: boolean | { maxIdleMs?: number };
   }): Promise<void> {
-    const messageInput = this.createMessageInput({ content, files });
-
     const wasActive = this.stream.isActive();
-    let resolveAgentEnd: (() => void) | undefined;
-    const agentEnd = new Promise<void>(resolve => {
-      resolveAgentEnd = resolve;
-    });
-    const unsubscribeAgentEnd = wasActive
-      ? undefined
-      : this.subscribe(event => {
-          if (event.type === 'agent_end') {
-            resolveAgentEnd?.();
-          }
-        });
-    const signal = this.sendSignal({
-      content: messageInput,
-      tracingContext,
-      tracingOptions,
-      requestContext: requestContextInput,
-      untilIdle,
-    });
+    const signal = this.sendSignal(
+      {
+        content: this.createMessageInput({ content, files }),
+        tracingContext,
+        tracingOptions,
+        requestContext: requestContextInput,
+        untilIdle,
+      },
+      { requireDelivery: true },
+    );
+
     if (wasActive) {
       await signal.accepted;
     } else {
-      const acceptedFailure = signal.accepted.then(
-        () => new Promise<void>(() => {}),
-        error => Promise.reject(error),
-      );
-      try {
-        await Promise.race([agentEnd, acceptedFailure]);
-      } finally {
-        unsubscribeAgentEnd?.();
-      }
+      await this.waitForAcceptedRunCompletion(signal.accepted);
     }
-    return;
   }
 
   /**
-   * Steer the agent mid-stream: aborts the current run and sends a new message.
+   * Queue a message for the next run, or send it immediately when this session
+   * is idle. Queue ordering and retry behavior are owned by the Agent runtime.
    */
+  async queueMessage({
+    content,
+    files,
+    tracingContext,
+    tracingOptions,
+    requestContext: requestContextInput,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    const wasActive = this.stream.isActive();
+    const target = await this.prepareMessageTarget({
+      requestContext: requestContextInput,
+      tracingContext,
+      tracingOptions,
+    });
+    const messageInput = this.createMessageInput({ content, files });
+    const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));
+    const result = this.machinery
+      .getAgent()
+      .queueMessage(providerOptions ? { contents: messageInput, providerOptions } : messageInput, target);
+
+    if (wasActive) {
+      await result.accepted;
+    } else {
+      await this.waitForAcceptedRunCompletion(result.accepted, { waitForDelivery: false });
+    }
+  }
+
+  /** Abort the current run and send steering input without clearing queued follow-ups. */
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
-    this.followUps.clear();
-    this.emit({ type: 'follow_up_queued', count: 0 });
     await this.sendMessage({ content, requestContext });
   }
 
-  /**
-   * Queue a follow-up message to be processed after the current run completes,
-   * or send it immediately when the session is idle.
-   */
-  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    if (this.run.isRunning()) {
-      this.followUps.enqueue({ content, requestContext });
-      this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
-    } else {
-      await this.sendMessage({ content, requestContext });
+  ensureFollowUpBinding(agent: Agent, resourceId: string, threadId: string) {
+    const existing = this.#followUpBinding;
+    if (existing?.agent === agent && existing.resourceId === resourceId && existing.threadId === threadId)
+      return existing;
+    this.cleanupFollowUpBinding();
+    const binding: {
+      agent: Agent;
+      resourceId: string;
+      threadId: string;
+      unsubscribe?: () => void;
+    } = {
+      agent,
+      resourceId,
+      threadId,
+    };
+    this.#followUpBinding = binding;
+    try {
+      const unsubscribe = agent.subscribeThreadEvents({ resourceId, threadId }, event => {
+        if (event.type === 'queue-count-changed' && this.#followUpBinding === binding) {
+          this.emit({ type: 'follow_up_queued', count: event.count });
+        }
+      });
+      binding.unsubscribe = unsubscribe;
+      if (this.#followUpBinding !== binding) {
+        unsubscribe();
+        return undefined;
+      }
+      return binding;
+    } catch (error) {
+      if (this.#followUpBinding === binding) this.#followUpBinding = undefined;
+      throw error;
     }
   }
 
-  /**
-   * Send the next queued follow-up message after a run finishes. Called by the
-   * run engine when a run ends. Re-queues on failure so the message isn't lost.
-   */
-  async drainFollowUpQueue(options?: {
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-  }): Promise<boolean> {
-    if (this.followUps.isEmpty()) return false;
-
-    const next = this.followUps.dequeue()!;
+  /** Queue a follow-up through the Agent runtime, or send it immediately while idle. */
+  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+    if (!this.run.isRunning()) return this.sendMessage({ content, requestContext });
     const threadId = this.thread.getId();
+    if (!threadId) return;
+    const resourceId = this.identity.getResourceId();
+    const agent = this.machinery.getAgent();
+    const binding = this.ensureFollowUpBinding(agent, resourceId, threadId);
+    if (!binding) return;
+    const operation = { generation: this.#followUpGeneration, controller: new AbortController() };
+    this.#preparingFollowUps.add(operation);
     try {
-      if (this.stream.isOpen() && threadId) {
-        const agent = this.machinery.getAgent();
-        const streamOptions = await this.machinery.buildStreamOptions({
-          requestContext: next.requestContext,
-          tracingContext: options?.tracingContext,
-          tracingOptions: options?.tracingOptions,
-        });
-        const result = agent.queueMessage(
-          {
-            contents: this.createMessageInput({ content: next.content }),
-            providerOptions: withMessageAuthor(undefined, readMessageAuthor(next.requestContext)),
-          },
-          {
-            resourceId: this.identity.getResourceId(),
-            threadId,
-            ifIdle: { streamOptions: streamOptions as any },
-          },
-        );
-        // Let a rejected `accepted` propagate: `next` is already dequeued, so a
-        // setup/misconfig failure must reach the outer catch to requeue it
-        // rather than being swallowed into a false success (the follow-up would
-        // otherwise be lost).
-        const accepted = await result.accepted;
-        const runId = 'runId' in accepted ? accepted.runId : undefined;
-        this.emit({ type: 'follow_up_queued', count: this.followUps.count(), runId });
-      } else {
-        this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
-        await this.sendMessage({
-          content: next.content,
-          requestContext: next.requestContext,
-          tracingContext: options?.tracingContext,
-          tracingOptions: options?.tracingOptions,
-        });
-      }
-      return true;
-    } catch (error) {
-      this.followUps.requeue(next);
-      this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
-      throw error;
+      const streamOptions = await this.machinery.buildStreamOptions({
+        requestContext,
+        abortSignal: operation.controller.signal,
+      });
+      if (operation.controller.signal.aborted || operation.generation !== this.#followUpGeneration) return;
+      // Once submitted, the Agent owns this work independently of the Session.
+      this.#preparingFollowUps.delete(operation);
+      await agent.queueMessage(
+        {
+          contents: this.createMessageInput({ content }),
+          providerOptions: withMessageAuthor(undefined, readMessageAuthor(requestContext)),
+        },
+        {
+          resourceId,
+          threadId,
+          ifIdle: { streamOptions: streamOptions as any },
+        },
+      ).accepted;
+    } finally {
+      this.#preparingFollowUps.delete(operation);
     }
+  }
+
+  cleanupFollowUpBinding(): void {
+    this.#followUpGeneration += 1;
+    for (const operation of this.#preparingFollowUps) operation.controller.abort();
+    this.#preparingFollowUps.clear();
+    const binding = this.#followUpBinding;
+    this.#followUpBinding = undefined;
+    binding?.unsubscribe?.();
+    this.emit({ type: 'follow_up_queued', count: 0 });
   }
 
   /**

@@ -4,7 +4,6 @@ import { useMainSidebar } from './main-sidebar-context';
 import { cn } from '@/lib/utils';
 
 export type MainSidebarMobileTriggerProps = ComponentPropsWithoutRef<'button'> & {
-  /** Override the hamburger icon. */
   icon?: React.ReactNode;
 };
 
@@ -15,11 +14,10 @@ export function MainSidebarMobileTrigger({
   onClick,
   ...props
 }: MainSidebarMobileTriggerProps) {
-  // Always render; visibility toggled via scope's `data-sidebar-mobile` attribute.
-  // SSR-stable and respects the configured `mobileBreakpoint`.
-  const { isMobile, setOpenMobile } = useMainSidebar();
+  const { isMobile, mobileTriggerRef, setOpenMobile } = useMainSidebar();
   return (
     <button
+      ref={mobileTriggerRef}
       type="button"
       aria-label={ariaLabel}
       aria-hidden={!isMobile}
@@ -31,10 +29,11 @@ export function MainSidebarMobileTrigger({
         if (!event.defaultPrevented) setOpenMobile(true);
       }}
       className={cn(
-        'inline-flex size-10 items-center justify-center rounded-md',
+        'new-theme inline-flex size-10 items-center justify-center rounded-md',
         // compound selector, not `in-*` — its `:where()` ties with a consumer's later `.inline-flex`
         "[[data-sidebar-mobile='false']_&]:hidden",
-        'text-neutral4 hover:bg-sidebar-nav-hover hover:text-neutral6',
+        "[[data-sidebar-mobile-present='true']_&]:invisible",
+        'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
         'focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
         className,
       )}

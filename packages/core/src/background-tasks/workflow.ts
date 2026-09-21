@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { resolveSuspendedToolRunId } from '../agent/utils';
 import { InternalSpans } from '../observability';
 import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
@@ -158,8 +159,11 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
 
       try {
         const args = { ...task.args };
-        const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
-        if (resumeData !== undefined && !args.suspendedToolRunId && typeof suspendedToolRunId === 'string') {
+        delete args.suspendedToolRunId;
+        const suspendedToolRunId = resolveSuspendedToolRunId(
+          (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId,
+        );
+        if (resumeData !== undefined && suspendedToolRunId) {
           args.suspendedToolRunId = suspendedToolRunId;
         }
 
@@ -170,6 +174,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           // On resume the runtime populates `resumeData`; undefined on
           // the initial run.
           resumeData,
+          suspendedToolRunId: resumeData !== undefined ? suspendedToolRunId : undefined,
         });
 
         if (pendingSuspend) {

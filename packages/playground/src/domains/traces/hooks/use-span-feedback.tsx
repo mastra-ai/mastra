@@ -1,7 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
-import { getTraceFeedbackRefetchInterval } from './use-trace-feedback';
+import { getFeedbackRefetchInterval } from '@/domains/feedback/utils/feedback-refetch-interval';
 
 type UseSpanFeedbackProps = {
   traceId?: string;
@@ -26,7 +26,7 @@ export const useSpanFeedback = ({ traceId = '', spanId = '', page }: UseSpanFeed
         pagination: { page: pageNumber, perPage: 10 },
       }),
     enabled: !!traceId && !!spanId,
-    refetchInterval: getTraceFeedbackRefetchInterval,
+    refetchInterval: getFeedbackRefetchInterval,
     gcTime: 0,
     staleTime: 0,
   });

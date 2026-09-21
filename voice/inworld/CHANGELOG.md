@@ -1,5 +1,11 @@
 # @mastra/voice-inworld
 
+## 0.4.3-alpha.0
+
+### Patch Changes
+
+- Fixed a WebSocket denial-of-service advisory by updating ws to 8.21.3. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
 ## 0.4.2
 
 ### Patch Changes

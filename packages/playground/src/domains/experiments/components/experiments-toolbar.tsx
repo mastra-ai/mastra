@@ -5,6 +5,8 @@ import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBloc
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { GitCompare, Play, XIcon, X } from 'lucide-react';
 import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
+import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
+import { TargetFilter } from '@/domains/shared/components/target-filter';
 
 export interface ExperimentsToolbarDatasetOption {
   value: string;
@@ -19,6 +21,10 @@ export interface ExperimentsToolbarProps {
   datasetFilter: string;
   onDatasetFilterChange: (value: string) => void;
   datasetOptions: ExperimentsToolbarDatasetOption[];
+  targetType: DatasetTargetType | '';
+  onTargetTypeChange: (type: DatasetTargetType | '') => void;
+  targetId: string;
+  onTargetIdChange: (id: string) => void;
   onReset?: () => void;
   hasActiveFilters?: boolean;
   onRunClick?: () => void;
@@ -45,6 +51,10 @@ export function ExperimentsToolbar({
   datasetFilter,
   onDatasetFilterChange,
   datasetOptions,
+  targetType,
+  onTargetTypeChange,
+  targetId,
+  onTargetIdChange,
   onReset,
   hasActiveFilters,
   onRunClick,
@@ -82,6 +92,12 @@ export function ExperimentsToolbar({
           value={datasetFilter}
           onValueChange={onDatasetFilterChange}
           className="whitespace-nowrap"
+        />
+        <TargetFilter
+          targetType={targetType}
+          targetId={targetId}
+          onTargetTypeChange={onTargetTypeChange}
+          onTargetIdChange={onTargetIdChange}
         />
         {onReset && hasActiveFilters && (
           <Button onClick={onReset} size="sm" variant="default" icon={<XIcon />}>

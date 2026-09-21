@@ -12,6 +12,7 @@ import { InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
+import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
@@ -56,7 +57,42 @@ export interface DurableAgenticWorkflowOptions {
    * default) uses the in-process default engine.
    */
   engine?: 'default' | 'evented';
+  /**
+   * Snapshot-persistence policy applied to both the outer agentic-loop
+   * workflow and the inner single-iteration workflow. When omitted, the
+   * factory keeps the historical policy of persisting
+   * `pending | paused | suspended | running`.
+   *
+   * `DurableAgent.createWorkflow()` always injects a policy here — user
+   * provided, or a recovery-aware default that persists `running` only when
+   * `recovery.durableAgents: 'auto'` is configured.
+   */
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 }
+
+/**
+ * Historical default persistence policy for durable agent workflows.
+ *
+ * A persisted snapshot record supports both:
+ *  - `resumeStream()` after a suspend (records with status
+ *    `pending` / `paused` / `suspended`)
+ *  - boot-time recovery of orphaned RUNNING runs after a process restart,
+ *    via `DurableAgent.recoverActiveRuns()` — this requires the row to
+ *    actually be stamped `running` while the loop is in-flight (issue #19056).
+ *
+ * The engine's persist path guards against overwriting a `suspended` /
+ * `paused` snapshot with a later `running` update from the same run (see
+ * `persistStepUpdate` in workflows/handlers/entry.ts), so it is safe to
+ * return true for `running` here.
+ */
+export const defaultShouldPersistSnapshot: ShouldPersistSnapshotFn = params => {
+  return (
+    params.workflowStatus === 'pending' ||
+    params.workflowStatus === 'paused' ||
+    params.workflowStatus === 'suspended' ||
+    params.workflowStatus === 'running'
+  );
+};
 
 /**
  * Input schema for the durable agentic workflow.
@@ -140,6 +176,7 @@ interface DurableLoopRuntime extends LoopRuntime {
 export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   readonly #options?: DurableAgenticWorkflowOptions;
   readonly #maxSteps: number;
+  readonly #shouldPersistSnapshot: ShouldPersistSnapshotFn;
 
   constructor(options?: DurableAgenticWorkflowOptions) {
     // No main-loop params: the durable loop resolves its runtime from the run
@@ -148,6 +185,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
     super();
     this.#options = options;
     this.#maxSteps = options?.maxSteps ?? DurableAgentDefaults.MAX_STEPS;
+    this.#shouldPersistSnapshot = options?.shouldPersistSnapshot ?? defaultShouldPersistSnapshot;
   }
 
   /**
@@ -343,26 +381,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         inputSchema: iterationStateSchema,
         outputSchema: iterationStateSchema,
         options: {
-          shouldPersistSnapshot: params => {
-            // We need a persisted snapshot record to support both:
-            //  - `resumeStream()` after a suspend (records with status
-            //    `pending` / `paused` / `suspended`)
-            //  - boot-time recovery of orphaned RUNNING runs after a process
-            //    restart, via `DurableAgent.recoverActiveRuns()` — this requires
-            //    the row to actually be stamped `running` while the loop is
-            //    in-flight (issue #19056).
-            //
-            // The engine's persist path guards against overwriting a `suspended`
-            // / `paused` snapshot with a later `running` update from the same
-            // run (see `persistStepUpdate` in workflows/handlers/entry.ts), so
-            // it is safe to return true for `running` here.
-            return (
-              params.workflowStatus === 'pending' ||
-              params.workflowStatus === 'paused' ||
-              params.workflowStatus === 'suspended' ||
-              params.workflowStatus === 'running'
-            );
-          },
+          // Injectable persistence policy (see DurableAgenticWorkflowOptions).
+          // The default persists `pending | paused | suspended | running`;
+          // `DurableAgent` injects a recovery-aware policy that persists
+          // `running` only when crash recovery is enabled.
+          shouldPersistSnapshot: this.#shouldPersistSnapshot,
+          // When the effective policy excludes `running`, resume claims cannot
+          // be written, so per-resume de-dup warnings would fire on every HITL
+          // resume. The durable resume path serializes its own resumes, so
+          // acknowledge unclaimed resumes. Harmless when `running` is persisted:
+          // claims still land and de-dup still works.
+          allowUnclaimedResumes: true,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).
@@ -411,6 +440,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               messageId: state.messageId,
               requestContextEntries: state.requestContextEntries,
               stepIndex: state.iterationCount,
+              // Processor hooks receive the running step list (#24293) — the
+              // llm-execution step reads this for stepNumber/steps parity with
+              // the main loop.
+              accumulatedSteps: state.accumulatedSteps,
               agentSpanData: state.agentSpanData,
               modelSpanData: state.modelSpanData,
             };
@@ -739,17 +772,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         inputSchema: durableAgenticInputSchema,
         outputSchema: durableAgenticOutputSchema,
         options: {
-          shouldPersistSnapshot: params => {
-            // See the singleIterationWorkflow comment above — same policy for
-            // the outer loop. The persist path guards against overwriting a
-            // suspended snapshot with running.
-            return (
-              params.workflowStatus === 'pending' ||
-              params.workflowStatus === 'paused' ||
-              params.workflowStatus === 'suspended' ||
-              params.workflowStatus === 'running'
-            );
-          },
+          // Same injectable policy as the iteration workflow above.
+          shouldPersistSnapshot: this.#shouldPersistSnapshot,
+          // See the iteration workflow comment above — the effective
+          // policy may exclude `running`, in which case resume claims cannot
+          // be de-duplicated.
+          allowUnclaimedResumes: true,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).
@@ -846,6 +874,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               });
             }
 
+            // Keep title generation inside the workflow lifecycle so durable workers do not
+            // abandon it, but wait only after FINISH has released stream/generate callers.
+            await finishResult.titleGeneration;
+
             // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
             // originals were ended as `suspended`, so end the *resume* spans (registry override).
             try {
@@ -860,8 +892,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   const modelSpan = observability.rebuildSpan(
                     modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
                   ) as AIModelGenerationSpan | undefined;
+                  // Surface every tool call made during the run so exporters (e.g. PostHog)
+                  // see the same { toolCallId, toolName, args } shape as the in-process loop.
+                  const toolCalls = state.accumulatedSteps.flatMap(step =>
+                    ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
+                      toolCallId: tc.toolCallId,
+                      toolName: tc.toolName,
+                      args: tc.args,
+                    })),
+                  );
                   modelSpan?.createTracker()?.endGeneration({
-                    output: { text: finalText },
+                    output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
                     attributes: { finishReason: finalOutput.stepResult?.reason },
                     usage: state.accumulatedUsage,
                   });

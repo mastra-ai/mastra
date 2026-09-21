@@ -9,24 +9,40 @@ import { useSearchParams } from 'react-router';
 import { ALL_EXPERIMENTS, ExperimentCombobox } from '@/domains/experiments/components/experiment-combobox';
 import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 import { DatasetReview } from '@/domains/review/components/dataset-review';
+import { TargetFilter } from '@/domains/shared/components/target-filter';
+import { useTargetFilterParams } from '@/domains/shared/hooks/use-target-filter-params';
 import { useLinkComponent } from '@/lib/framework';
 
 /**
  * Single review queue across the project. Lists every item awaiting review by default;
- * `?experiment=<id>` narrows it to one experiment and `?review=<resultId>` features one of its results.
+ * `?targetType=<type>&targetId=<id>` narrows it to one target, `?experiment=<id>` to one
+ * experiment and `?review=<resultId>` features one of its results.
  */
 function ReviewQueuePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get('experiment');
   const featuredResultId = searchParams.get('review');
+  // The selected experiment may fall out of scope when the target changes, so drop it (and `review`).
+  const { targetType, targetId, setTargetType, setTargetId } = useTargetFilterParams({
+    resetParams: ['experiment', 'review'],
+  });
 
   const { Link, paths } = useLinkComponent();
-  const { data, error } = useExperimentsForDatasetFilter(undefined);
+  const { data, error } = useExperimentsForDatasetFilter(undefined, { targetType, targetId });
   const selected = data?.experiments.find(experiment => experiment.id === selectedId);
 
   const selectExperiment = (experimentId: string) => {
     // Changing the filter drops `review`: the featured result belongs to the previous scope.
-    setSearchParams(experimentId === ALL_EXPERIMENTS ? {} : { experiment: experimentId }, { replace: true });
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        if (experimentId === ALL_EXPERIMENTS) next.delete('experiment');
+        else next.set('experiment', experimentId);
+        next.delete('review');
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   if (error && is401UnauthorizedError(error)) {
@@ -56,22 +72,33 @@ function ReviewQueuePage() {
   return (
     <PageLayout height="full">
       <DatasetReview
-        key={selectedId ?? ALL_EXPERIMENTS}
+        key={`${targetType}:${targetId}:${selectedId ?? ALL_EXPERIMENTS}`}
         datasetId={selected?.datasetId ?? undefined}
         experimentId={selectedId ?? undefined}
+        targetType={targetType}
+        targetId={targetId}
         featuredItemId={featuredResultId}
-        detailPanelVariant="overlay"
         toolbarStart={
-          <ExperimentCombobox
-            allOption
-            value={selectedId ?? undefined}
-            onValueChange={selectExperiment}
-            className="w-72"
-          />
+          <>
+            <TargetFilter
+              targetType={targetType}
+              targetId={targetId}
+              onTargetTypeChange={setTargetType}
+              onTargetIdChange={setTargetId}
+            />
+            <ExperimentCombobox
+              allOption
+              value={selectedId ?? undefined}
+              onValueChange={selectExperiment}
+              targetType={targetType}
+              targetId={targetId}
+              className="w-72"
+            />
+          </>
         }
         toolbarEnd={
           selectedId ? (
-            <Button as={Link} href={paths.experimentLink(selectedId)} icon={<ArrowUpRight />}>
+            <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<ArrowUpRight />}>
               See experiment
             </Button>
           ) : undefined

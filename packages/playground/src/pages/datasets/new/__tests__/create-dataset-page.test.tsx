@@ -127,4 +127,28 @@ describe('CreateDatasetPage', () => {
 
     expect((await screen.findByTestId('dataset-probe')).textContent).toBe('ds-new');
   });
+
+  describe('when scoped to a single agent', () => {
+    it('navigates to the new dataset after creating it', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/datasets`, () =>
+          HttpResponse.json({
+            id: 'ds-agent',
+            name: 'My DS',
+            version: 0,
+            targetType: 'agent',
+            targetIds: ['weather-agent'],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }),
+        ),
+      );
+
+      renderPage('/datasets/new?targetType=agent&targetIds=weather-agent');
+      fireEvent.change(screen.getByPlaceholderText('Enter dataset name'), { target: { value: 'My DS' } });
+      fireEvent.click(screen.getByRole('button', { name: /create dataset/i }));
+
+      expect((await screen.findByTestId('dataset-probe')).textContent).toBe('ds-agent');
+    });
+  });
 });

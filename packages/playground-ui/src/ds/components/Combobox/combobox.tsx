@@ -3,9 +3,12 @@ import { Check, ChevronsUpDown, Search, X } from 'lucide-react';
 import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import { Button } from '@/ds/components/Button/Button';
-import type { TextButtonSize } from '@/ds/components/Button/Button';
+import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
+import type { ButtonSize } from '@/ds/components/Button/Button';
+import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
+import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -27,12 +30,18 @@ type ComboboxSharedProps = {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxVariant;
-  size?: TextButtonSize;
+  /** Icon sizes (`icon-*`) render a chevron-only trigger; pass `aria-label` to name it. */
+  size?: ButtonSize;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
   error?: string;
+  id?: string;
+  name?: string;
   'aria-label'?: string;
+  'aria-describedby'?: string;
+  /** Which edge of the trigger the popup lines up with. `end` opens it leftwards (e.g. an icon trigger at the end of a row). */
+  align?: 'start' | 'center' | 'end';
   allowCustomValue?: boolean;
   /** Called with the search input text as it changes (and with `''` after a single-mode selection resets it). */
   onInputValueChange?: (value: string) => void;
@@ -60,6 +69,11 @@ function isMultipleCombobox(props: ComboboxProps): props is ComboboxMultipleProp
   return props.multiple === true;
 }
 
+const ComboboxItem = React.forwardRef<HTMLDivElement, BaseCombobox.Item.Props>((props, ref) => (
+  <BaseCombobox.Item ref={useFluidMenuItemRef(ref)} {...props} />
+));
+ComboboxItem.displayName = 'ComboboxItem';
+
 function ComboboxOptionText({ option }: { option: ComboboxOption }) {
   return (
     <span className={comboboxStyles.optionText}>
@@ -83,12 +97,20 @@ export function Combobox(props: ComboboxProps) {
     onOpenChange,
     container,
     error,
+    id,
+    name,
     'aria-label': ariaLabel,
+    'aria-describedby': ariaDescribedBy,
+    align = 'start',
     allowCustomValue = false,
     onInputValueChange,
   } = props;
   const multiple = isMultipleCombobox(props);
   const clearLabel = multiple ? props.clearLabel : undefined;
+  const generatedName = React.useId();
+  const errorName = name ?? generatedName;
+  const describedBy =
+    [ariaDescribedBy, error ? fieldErrorId(errorName) : undefined].filter(Boolean).join(' ') || undefined;
   const [inputValue, setInputValue] = React.useState('');
   const customValue = inputValue.trim();
   const customOption =
@@ -107,14 +129,21 @@ export function Combobox(props: ComboboxProps) {
   // Default to the nearest SideDialog/Drawer popup so the list stays
   // interactive inside a modal drawer; an explicit `container` still wins.
   const resolvedContainer = usePortalContainer(container);
+  const menu = useFluidMenu<HTMLDivElement>();
+  const iconOnly = isIconButtonSize(size);
 
   const comboboxContent = (
     <>
       <BaseCombobox.Trigger
-        aria-label={ariaLabel}
+        id={id}
+        aria-label={ariaLabel ?? (id ? undefined : multiple ? 'Select options' : 'Select option')}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
         className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}
       >
-        {multiple ? (
+        {iconOnly ? (
+          <span className="sr-only">{multiple ? triggerText : <BaseCombobox.Value placeholder={placeholder} />}</span>
+        ) : multiple ? (
           <span className={cn('truncate', selectedOptions.length === 0 && comboboxStyles.placeholder)}>
             {triggerText}
           </span>
@@ -130,13 +159,13 @@ export function Combobox(props: ComboboxProps) {
         {/* Wrap the chevron in a `<span>` so the svg is one level deep and
             escapes Button's `[&>svg]` adornments — mirrors Select's chevron wrap. */}
         <span className="flex shrink-0 items-center">
-          <ChevronsUpDown className={comboboxStyles.chevron} />
+          <ChevronsUpDown className={cn(comboboxStyles.chevron, iconOnly && 'ml-0')} />
         </span>
       </BaseCombobox.Trigger>
 
       <BaseCombobox.Portal container={resolvedContainer}>
         <BaseCombobox.Positioner
-          align="start"
+          align={align}
           sideOffset={4}
           positionMethod={FLOATING_POSITION_METHOD}
           className={comboboxStyles.positioner}
@@ -147,43 +176,47 @@ export function Combobox(props: ComboboxProps) {
               <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
             </div>
             <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
-            <BaseCombobox.List className={comboboxStyles.list}>
-              {(option: ComboboxOption) => {
-                const isSelected = selectedValueSet.has(option.value);
+            <div className={cn(comboboxStyles.listScroller, menu.containerClassName)} {...menu.getContainerProps({})}>
+              <FluidMenuItems menu={menu}>
+                <BaseCombobox.List className={comboboxStyles.list}>
+                  {(option: ComboboxOption) => {
+                    const isSelected = selectedValueSet.has(option.value);
 
-                return (
-                  <BaseCombobox.Item key={option.value} value={option} className={comboboxItemClass({ multiple })}>
-                    {multiple ? (
-                      <>
-                        {option.start}
-                        <ComboboxOptionText option={option} />
-                        <span className={comboboxStyles.itemRightSlot}>
-                          {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
-                          <span className={comboboxStyles.checkContainer}>
-                            {isSelected ? <Check className={comboboxStyles.checkIcon} /> : null}
-                          </span>
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        {option.start}
-                        <ComboboxOptionText option={option} />
-                        <span className={comboboxStyles.itemRightSlot}>
-                          {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
-                          <span className={comboboxStyles.checkContainer}>
-                            <BaseCombobox.ItemIndicator>
-                              <Check className={comboboxStyles.checkIcon} />
-                            </BaseCombobox.ItemIndicator>
-                          </span>
-                        </span>
-                      </>
-                    )}
-                  </BaseCombobox.Item>
-                );
-              }}
-            </BaseCombobox.List>
+                    return (
+                      <ComboboxItem key={option.value} value={option} className={comboboxItemClass({ multiple })}>
+                        {multiple ? (
+                          <>
+                            {option.start}
+                            <ComboboxOptionText option={option} />
+                            <span className={comboboxStyles.itemRightSlot}>
+                              {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                              <span className={comboboxStyles.checkContainer}>
+                                {isSelected ? <Check className={comboboxStyles.checkIcon} /> : null}
+                              </span>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            {option.start}
+                            <ComboboxOptionText option={option} />
+                            <span className={comboboxStyles.itemRightSlot}>
+                              {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                              <span className={comboboxStyles.checkContainer}>
+                                <BaseCombobox.ItemIndicator>
+                                  <Check className={comboboxStyles.checkIcon} />
+                                </BaseCombobox.ItemIndicator>
+                              </span>
+                            </span>
+                          </>
+                        )}
+                      </ComboboxItem>
+                    );
+                  }}
+                </BaseCombobox.List>
+              </FluidMenuItems>
+            </div>
             {selectedValues.length > 0 && clearLabel ? (
-              <div className={cn('border-t', 'border-border1', 'p-1')}>
+              <div className={cn('border-t', 'border-border', 'p-1')}>
                 <Button
                   type="button"
                   variant="destructive-ghost"
@@ -217,7 +250,7 @@ export function Combobox(props: ComboboxProps) {
         >
           {comboboxContent}
         </BaseCombobox.Root>
-        {error && <span className={comboboxStyles.error}>{error}</span>}
+        {error && <FieldBlock.ErrorMsg name={errorName}>{error}</FieldBlock.ErrorMsg>}
       </div>
     );
   }
@@ -246,7 +279,7 @@ export function Combobox(props: ComboboxProps) {
       >
         {comboboxContent}
       </BaseCombobox.Root>
-      {error && <span className={comboboxStyles.error}>{error}</span>}
+      {error && <FieldBlock.ErrorMsg name={errorName}>{error}</FieldBlock.ErrorMsg>}
     </div>
   );
 }

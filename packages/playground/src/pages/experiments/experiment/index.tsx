@@ -8,10 +8,11 @@ import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from 
 import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Link, Outlet, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
+import { ExperimentItemPanel } from '@/domains/experiments/components/experiment-item-panel';
 import { ExperimentResultsBulkActions } from '@/domains/experiments/components/experiment-results-bulk-actions';
 import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
 import { ExperimentSideRail } from '@/domains/experiments/components/experiment-side-rail';
@@ -94,7 +95,7 @@ function ExperimentPage() {
         titleSlot="Experiment not found"
         descriptionSlot={`No experiment with id "${experimentId}".`}
         actionSlot={
-          <Button as={Link} to="/experiments" icon={<ArrowLeft />}>
+          <Button render={<Link to="/experiments" />} icon={<ArrowLeft />}>
             Back to Experiments
           </Button>
         }
@@ -155,8 +156,8 @@ function ExperimentPage() {
           </PageLayout.MainArea>
         </PageLayout>
 
-        {/* Item detail sub-route renders here as an absolute overlay panel */}
-        <Outlet />
+        {/* Item detail drawer; the `items/:itemId` child route only carries the breadcrumb. */}
+        <ExperimentItemPanel />
 
         <DeleteExperimentDialog
           open={deleteDialogOpen}

@@ -2,6 +2,7 @@ import type { DurableAgenticWorkflowOptions } from './durable-loop-builder';
 import { DurableAgenticLoopBuilder } from './durable-loop-builder';
 
 export type { DurableAgenticWorkflowOptions } from './durable-loop-builder';
+export { defaultShouldPersistSnapshot } from './durable-loop-builder';
 
 /**
  * Composes the durable agentic workflow. The topology, workflow options, and

@@ -48,6 +48,7 @@ import {
   type WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
+import { buildAutomationRunRoutes } from './automation-runs.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
@@ -370,9 +371,10 @@ export function buildIntegrationContext(
 
 /**
  * Disabled-status stub for the well-known integration ids. The SPA polls
- * `/web/github/status` and `/web/linear/status` unconditionally, so when an
- * integration is absent (or not ready) the status contract must still hold.
- * Unknown custom ids get no stub — the SPA doesn't poll them.
+ * `/web/github/status`, `/web/linear/status`, and `/web/jira/status`
+ * unconditionally, so when an integration is absent (or not ready) the status
+ * contract must still hold. Unknown custom ids get no stub — the SPA doesn't
+ * poll them.
  */
 function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string, configured = false): ApiRoute[] {
   if (id === 'github') {
@@ -412,6 +414,26 @@ function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string,
               linearAppConfigured: configured,
               factoryAuthEnabled: deps.auth.enabled(),
               appDbConfigured: true,
+            },
+          }),
+      }),
+    ];
+  }
+  if (id === 'jira') {
+    return [
+      registerApiRoute('/web/jira/status', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: c =>
+          c.json({
+            enabled: false,
+            configured,
+            site: null,
+            reason: 'missing_config',
+            diagnostics: {
+              jiraConfigured: configured,
+              factoryAuthEnabled: deps.auth.enabled(),
+              appDbConfigured: deps.factoryStorage !== undefined,
             },
           }),
       }),
@@ -471,7 +493,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
   });
   // Absent known integrations still get their disabled-status stub.
-  const absentStubs = ['github', 'linear']
+  const absentStubs = ['github', 'linear', 'jira']
     .filter(id => !registrations.some(({ integration }) => integration.id === id))
     .flatMap(id => disabledIntegrationStatusRoutes(deps, id));
   // Absent slack gets the channel-accounts not-registered stub (registered
@@ -590,6 +612,15 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           startCoordinator,
           liveSessions: deps.liveSessions,
         }).routes()
+      : []),
+    ...(deps.factoryReady
+      ? buildAutomationRunRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
+          workItems: deps.domains.workItems,
+          configVersion: deps.configVersion,
+        })
       : []),
   ];
 }

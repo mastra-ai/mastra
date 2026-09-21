@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Input } from '@mastra/playground-ui/components/Input';
+import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Lock, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { useSSOLogin } from '../hooks/use-auth-actions';
@@ -123,7 +124,9 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   ) : null;
 
   const errorBanner = errorMessage ? (
-    <div className="text-ui-md rounded-md bg-red-500/10 p-3 text-red-400">{errorMessage}</div>
+    <div role="alert">
+      <Notice variant="destructive">{errorMessage}</Notice>
+    </div>
   ) : null;
 
   return (
@@ -135,55 +138,47 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       {hasCredentials && (
         <form onSubmit={handleCredentialsSubmit} className="space-y-4">
           {!isSignIn && (
-            <div className="space-y-2">
-              <label htmlFor="name" className="text-neutral4 text-ui-md block">
-                Name
-              </label>
-              <Input
-                id="name"
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Your name"
-                variant="default"
-                size="lg"
-              />
-            </div>
+            <TextFieldBlock
+              name="name"
+              label="Name"
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Your name"
+              variant="default"
+              size="lg"
+            />
           )}
 
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-neutral4 text-ui-md block">
-              Email
-            </label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-              variant="default"
-              size="lg"
-            />
-          </div>
+          <TextFieldBlock
+            name="email"
+            label="Email"
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            required
+            variant="default"
+            size="lg"
+          />
 
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-neutral4 text-ui-md block">
-              Password
-            </label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder={isSignIn ? 'Enter your password' : 'Create a password'}
-              required
-              variant="default"
-              size="lg"
-            />
-          </div>
+          <TextFieldBlock
+            name="password"
+            label="Password"
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder={isSignIn ? 'Enter your password' : 'Create a password'}
+            required
+            variant="default"
+            size="lg"
+          />
 
-          {error && <div className="text-ui-md rounded-md bg-red-500/10 p-3 text-red-400">{error.message}</div>}
+          {error ? (
+            <div role="alert">
+              <Notice variant="destructive">{error.message}</Notice>
+            </div>
+          ) : null}
 
           <Button icon={<LogIn />} type="submit" disabled={isPending} className="w-full" size="lg">
             {isPending ? (isSignIn ? 'Signing in...' : 'Creating account...') : isSignIn ? 'Sign in' : 'Create account'}

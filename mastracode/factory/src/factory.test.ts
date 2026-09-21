@@ -88,7 +88,7 @@ vi.mock('./rules/terminal-cleanup', async importOriginal => {
   return {
     ...actual,
     createTerminalStageCleanup: (options: Parameters<typeof actual.createTerminalStageCleanup>[0]) => {
-      const cleanup = actual.createTerminalStageCleanup(options);
+      const cleanup = vi.fn(actual.createTerminalStageCleanup(options));
       terminalCleanups.push(cleanup);
       return cleanup;
     },
@@ -362,7 +362,26 @@ describe('MastraFactory.prepare', () => {
     // not enough (bindings would stay active until the 24h sweep).
     expect(terminalCleanups).toHaveLength(1);
     expect(transitionServiceOptions).toHaveLength(1);
-    expect(transitionServiceOptions[0]!.onTerminalStage).toBe(terminalCleanups[0]);
+    // The hook maps the transition's actor onto the cleanup: an agent seat that
+    // drove its own terminal transition is passed as `initiatingBindingId` so
+    // cleanup leaves that live run alone while aborting the others.
+    const onTerminalStage = transitionServiceOptions[0]!.onTerminalStage!;
+    expect(onTerminalStage).toBeTypeOf('function');
+    await onTerminalStage({
+      orgId: 'org-1',
+      factoryProjectId: '11111111-2222-4333-8444-555555555555',
+      workItemId: 'item-1',
+      stage: 'done',
+      revision: 3,
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'work' },
+    });
+    expect(terminalCleanups[0]).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      factoryProjectId: '11111111-2222-4333-8444-555555555555',
+      workItemId: 'item-1',
+      revision: 3,
+      initiatingBindingId: 'binding-1',
+    });
   });
 
   it('threads the default config version when the slot is omitted', async () => {
@@ -615,6 +634,51 @@ describe('MastraFactory.prepare', () => {
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
     const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).not.toContain('/web/channel-accounts');
+  });
+
+  it('registers Platform Jira with an access token and no explicit connection ID', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('registers Platform Jira with a secret key and no explicit connection ID', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'platform-secret');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps an explicit Jira integration instead of registering Platform Jira', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({
+            id: 'jira',
+            routes: () => [{ path: '/web/custom-jira', method: 'GET', handler: () => new Response() }],
+          }),
+        ],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/custom-jira');
+      expect(paths).not.toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('omits auth routes when auth is explicitly disabled (auth: null)', async () => {
@@ -1202,6 +1266,60 @@ describe('MastraFactory.prepare integrations', () => {
       });
 
       await expect(factory.prepare()).rejects.toThrow(/\[slack, discord\] all provide channels/);
+    });
+
+    it("collects a ready integration's feedPublisher even when it provides no channels", async () => {
+      const setChannels = withController();
+      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'mirror', feedPublisher })],
+      });
+
+      await factory.prepare();
+
+      // Decoupled from channels(): the publisher is wired even though nothing
+      // attached channels.
+      expect(setChannels).not.toHaveBeenCalled();
+      expect(feedPublisher).toHaveBeenCalledOnce();
+      // Same context shape as routes()/workers().
+      const ctx = feedPublisher.mock.calls[0]![0];
+      expect(ctx.feed).toBeDefined();
+      expect(ctx.auth).toBeDefined();
+    });
+
+    it('collects a channel integration feedPublisher exactly once', async () => {
+      withController();
+      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels, feedPublisher })],
+      });
+
+      await factory.prepare();
+
+      // Guards against a double-push: collection happens only in the feed pass,
+      // not also in the channels loop.
+      expect(feedPublisher).toHaveBeenCalledOnce();
+    });
+
+    it('does not collect a feedPublisher from an integration that is not ready', async () => {
+      withController();
+      const storage = fakeStorage();
+      vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
+      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage,
+        integrations: [fakeIntegration({ id: 'mirror', feedPublisher })],
+      });
+
+      await factory.prepare();
+
+      expect(feedPublisher).not.toHaveBeenCalled();
     });
   });
 });

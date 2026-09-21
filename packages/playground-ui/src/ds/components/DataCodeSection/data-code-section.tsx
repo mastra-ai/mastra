@@ -184,6 +184,8 @@ export interface DataCodeSectionProps {
   className?: string;
   /** Highlight lines that differ from another document. */
   diff?: DataCodeSectionDiff;
+  /** Extra controls rendered in the header, before the built-in copy/expand buttons. */
+  actions?: React.ReactNode;
 }
 
 export function DataCodeSection({
@@ -194,6 +196,7 @@ export function DataCodeSection({
   simplified = false,
   className,
   diff,
+  actions,
 }: DataCodeSectionProps) {
   const theme = useCodemirrorTheme();
   const diffExtension = useMemo(() => (diff ? diffHighlightExtension(codeStr, diff) : []), [codeStr, diff]);
@@ -290,6 +293,7 @@ export function DataCodeSection({
       <div className="flex items-center justify-between">
         <DataPanelSectionHeading icon={icon}>{title}</DataPanelSectionHeading>
         <div className="flex items-center gap-2">
+          {actions}
           {!usePlainTextView && (
             <SearchFieldBlock
               name="code-section-search"

@@ -88,7 +88,10 @@ export async function computeModelOutputProviderMetadata(deps: {
 /** Resolved terminal state for one tool call, as recorded to the transcript. */
 export type ToolResultCommitOutcome =
   | { kind: 'denied'; approval: { id: string; approved: false; reason?: string } }
-  | { kind: 'error'; errorText?: string }
+  /** `result` on an error outcome carries a structured payload alongside the
+   * error text — e.g. a failed sub-agent's partial result — so the model can
+   * read what the delegate produced before it failed, not just the message. */
+  | { kind: 'error'; errorText?: string; result?: unknown }
   | { kind: 'result'; result: unknown };
 
 /**
@@ -141,12 +144,14 @@ export function commitToolResult(deps: {
     });
   }
 
-  const errorText = outcome.kind === 'error' ? outcome.errorText || 'Tool execution failed' : undefined;
+  // Nullish, not truthy: a failure-hook may deliberately replace the error
+  // text with an empty string, and that replacement must survive the commit.
+  const errorText = outcome.kind === 'error' ? (outcome.errorText ?? 'Tool execution failed') : undefined;
   const updated = messageList.updateToolInvocation({
     type: 'tool-invocation' as const,
     toolInvocation: {
       ...(outcome.kind === 'error'
-        ? { state: 'output-error' as const, errorText: errorText! }
+        ? { state: 'output-error' as const, errorText: errorText!, ...(outcome.result ? { result: outcome.result } : {}) }
         : { state: 'result' as const, result: outcome.result }),
       toolCallId: deps.toolCallId,
       toolName,

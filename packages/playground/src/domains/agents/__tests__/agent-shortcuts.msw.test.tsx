@@ -47,7 +47,7 @@ const buildRouter = (initialEntry: string) =>
               </AgentLayout>
             ),
             children: [
-              { path: 'overview', element: <div data-testid="agent-overview" /> },
+              { path: 'threads/new', element: <div data-testid="agent-chat" /> },
               { path: 'traces', element: <div data-testid="agent-traces" /> },
             ],
           },
@@ -109,11 +109,11 @@ describe('agent keyboard shortcuts', () => {
     });
   });
 
-  describe('when on /agents/:agentId/overview', () => {
+  describe('when on /agents/:agentId/threads/new', () => {
     it('g then t navigates to that agent traces page instead of the global one', async () => {
       installHandlers();
-      renderAt(`/agents/${AGENT_ID}/overview`);
-      await screen.findByTestId('agent-overview');
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+      await screen.findByTestId('agent-chat');
 
       pressGThenT();
 
@@ -124,8 +124,8 @@ describe('agent keyboard shortcuts', () => {
   describe('when leaving the agent page for /agents', () => {
     it('g then t goes back to the global traces page', async () => {
       installHandlers();
-      renderAt(`/agents/${AGENT_ID}/overview`);
-      await screen.findByTestId('agent-overview');
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+      await screen.findByTestId('agent-chat');
 
       fireEvent.keyDown(window, { key: 'g' });
       fireEvent.keyDown(window, { key: 'a' });

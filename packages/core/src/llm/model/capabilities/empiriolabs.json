@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "deepseek-v4-1-flash",
     "fugu-ultra-v1-0",
     "fugu-ultra-v1-1",
     "fugu-ultra-v2-0",
@@ -35,6 +36,7 @@
     "qwen3-8-flash",
     "qwen3-8-max",
     "qwen3-8-max-0902",
+    "qwen3-8-omni-flash",
     "seed-2-0-code",
     "seed-2-0-lite",
     "seed-2-0-mini",
@@ -44,6 +46,7 @@
   ],
   "temperature": [
     "deepseek-v3-2",
+    "deepseek-v4-1-flash",
     "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -88,6 +91,7 @@
     "qwen3-8-flash",
     "qwen3-8-max",
     "qwen3-8-max-0902",
+    "qwen3-8-omni-flash",
     "qwen3-max",
     "seed-2-0-code",
     "seed-2-0-lite",
@@ -100,6 +104,7 @@
   ],
   "structuredOutput": [
     "deepseek-v3-2",
+    "deepseek-v4-1-flash",
     "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -150,6 +155,7 @@
     "qwen3-8-flash",
     "qwen3-8-max",
     "qwen3-8-max-0902",
+    "qwen3-8-omni-flash",
     "qwen3-max",
     "seed-2-0-code",
     "seed-2-0-lite",

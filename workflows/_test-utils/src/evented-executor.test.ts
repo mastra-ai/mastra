@@ -74,6 +74,10 @@ createDurableAgentTestSuite({
       storage: config.storage ?? new MockStore(),
       pubsub,
       agents: { [agentId]: eventedAgent as any },
+      // Crash-recovery hosts opt into `running` checkpoints (#23915). The
+      // EventedAgent pins its own persistence policy, but the host config
+      // stays symmetric with the DurableAgent leg.
+      ...(config.recovery ? { recovery: { durableAgents: 'auto' as const } } : {}),
     });
 
     return eventedAgent as unknown as DurableAgentLike;

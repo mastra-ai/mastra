@@ -7,7 +7,7 @@ description: "Browse Alibaba (China) model IDs, capabilities, context windows, a
 
 # <img src="https://models.dev/logos/alibaba-cn.svg" alt="Alibaba (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba (China)
 
-Access 87 Alibaba (China) models through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
+Access 90 Alibaba (China) models through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
 
 Learn more in the [Alibaba (China) documentation](https://www.alibabacloud.com/help/en/model-studio/models).
 
@@ -202,6 +202,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.87
   },
   {
+    "model": "alibaba-cn/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.29754,
+    "outputCost": 1.19015
+  },
+  {
     "model": "alibaba-cn/glm-5",
     "imageInput": false,
     "audioInput": false,
@@ -234,6 +246,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
+    "inputCost": 1.1,
+    "outputCost": 3.851
+  },
+  {
+    "model": "alibaba-cn/glm-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
     "inputCost": 1.1,
     "outputCost": 3.851
   },
@@ -272,6 +296,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 0.929,
     "outputCost": 3.858
+  },
+  {
+    "model": "alibaba-cn/kimi-k3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 2.827,
+    "outputCost": 14.133
   },
   {
     "model": "alibaba-cn/kimi/kimi-k2.5",
@@ -522,8 +558,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 34096,
     "maxOutput": 4096,
-    "inputCost": 0.717,
-    "outputCost": 0.717
+    "inputCost": 0.043,
+    "outputCost": 0.072
   },
   {
     "model": "alibaba-cn/qwen-vl-plus",
@@ -774,8 +810,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 1048576,
     "maxOutput": 65536,
-    "inputCost": 1,
-    "outputCost": 5
+    "inputCost": 0.574,
+    "outputCost": 2.296
   },
   {
     "model": "alibaba-cn/qwen3-max",
@@ -786,8 +822,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.861,
-    "outputCost": 3.441
+    "inputCost": 1.291,
+    "outputCost": 7.749
   },
   {
     "model": "alibaba-cn/qwen3-next-80b-a3b-instruct",
@@ -895,7 +931,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1000000,
     "maxOutput": 65536,
     "inputCost": 0.172,
-    "outputCost": 1.72
+    "outputCost": 1.033
   },
   {
     "model": "alibaba-cn/qwen3.5-plus",
@@ -906,8 +942,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 65536,
-    "inputCost": 0.573,
-    "outputCost": 3.44
+    "inputCost": 0.287,
+    "outputCost": 1.722
   },
   {
     "model": "alibaba-cn/qwen3.6-flash",

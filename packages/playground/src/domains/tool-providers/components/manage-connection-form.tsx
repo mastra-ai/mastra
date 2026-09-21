@@ -1,7 +1,9 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -40,6 +42,7 @@ export const ManageConnectionForm = ({
   const disconnectConnection = useDisconnectConnection();
   const [draft, setDraft] = useState(initialLabel);
   const [confirmDisconnectOpen, setConfirmDisconnectOpen] = useState(false);
+  const connectionNameField = `${testIdPrefix}-name`;
   const integrationName = titleize(providerId);
 
   const disconnect = () => {
@@ -88,8 +91,8 @@ export const ManageConnectionForm = ({
             </Txt>
             <div className="relative w-full">
               <Input
-                id={`${testIdPrefix}-input`}
-                variant="filled"
+                id={`input-${connectionNameField}`}
+                name={connectionNameField}
                 size="sm"
                 value={draft}
                 onChange={event => {
@@ -100,6 +103,8 @@ export const ManageConnectionForm = ({
                 placeholder="Unnamed connection"
                 autoFocus
                 aria-label="Connection name"
+                aria-describedby={rename.error ? fieldErrorId(connectionNameField) : undefined}
+                error={Boolean(rename.error)}
                 testId={`${testIdPrefix}-input`}
                 className="text-center"
               />
@@ -110,9 +115,7 @@ export const ManageConnectionForm = ({
               )}
             </div>
             {rename.error ? (
-              <Txt variant="ui-xs" className="text-red-500">
-                {String(rename.error)}
-              </Txt>
+              <FieldBlock.ErrorMsg name={connectionNameField}>{String(rename.error)}</FieldBlock.ErrorMsg>
             ) : null}
           </div>
 
@@ -139,9 +142,9 @@ export const ManageConnectionForm = ({
             </AlertDialog.Description>
           </AlertDialog.Header>
           {disconnectConnection.error ? (
-            <Txt variant="ui-xs" className="text-red-500">
-              {String(disconnectConnection.error)}
-            </Txt>
+            <div role="alert">
+              <Notice variant="destructive">{String(disconnectConnection.error)}</Notice>
+            </div>
           ) : null}
           <AlertDialog.Footer>
             <AlertDialog.Cancel

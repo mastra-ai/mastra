@@ -23,12 +23,13 @@ import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
 import { Observability } from '@mastra/observability';
 import { MockLanguageModelV1 } from 'ai/test';
-import { execaCommand } from 'execa';
+import { execa, execaCommand } from 'execa';
 import type { ResultPromise } from 'execa';
 import { Inngest } from 'inngest';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { z } from 'zod';
+import { ensureInngestCliBinary } from './__tests__/inngest-cli';
 import type { InngestWorkflow } from './workflow';
 import { init, serve as inngestServe } from './index';
 
@@ -191,8 +192,9 @@ async function resetInngest(expectedFnIds: string[] = []) {
   }
 
   // Start inngest-cli dev server
-  standaloneInngestProcess = execaCommand(
-    `npx inngest-cli dev -p 4000 -u http://localhost:4001/inngest/api --poll-interval=1 --retry-interval=1`,
+  standaloneInngestProcess = execa(
+    ensureInngestCliBinary(),
+    ['dev', '-p', '4000', '-u', 'http://localhost:4001/inngest/api', '--poll-interval=1', '--retry-interval=1'],
     { cwd: import.meta.dirname, stdio: 'ignore', reject: false },
   );
 
@@ -266,8 +268,10 @@ describe('MastraInngestWorkflow', () => {
   let globServer: any;
 
   beforeEach<LocalTestContext>(async ctx => {
-    ctx.inngestPort = 4100;
-    ctx.handlerPort = 4101;
+    // Must match the ports used by `resetInngest()` / docker-compose.yaml (4000/4001).
+    // The durable-agent suites intentionally use 4100/4101 for their own isolated infra.
+    ctx.inngestPort = 4000;
+    ctx.handlerPort = 4001;
 
     globServer?.close();
 
@@ -14970,10 +14974,19 @@ async function startSharedInngest(expectedFnIds: string[] = []) {
     return;
   }
 
-  // Start the inngest dev server as a background process using the npm CLI
+  // Start the inngest dev server as a background process
   console.log('[startSharedInngest] Starting Inngest dev server via inngest-cli...');
-  sharedInngestProcess = execaCommand(
-    `npx inngest-cli dev -p ${SHARED_INNGEST_PORT} -u http://localhost:${SHARED_HANDLER_PORT}/inngest/api --poll-interval=1 --retry-interval=1`,
+  sharedInngestProcess = execa(
+    ensureInngestCliBinary(),
+    [
+      'dev',
+      '-p',
+      String(SHARED_INNGEST_PORT),
+      '-u',
+      `http://localhost:${SHARED_HANDLER_PORT}/inngest/api`,
+      '--poll-interval=1',
+      '--retry-interval=1',
+    ],
     { cwd: import.meta.dirname, stdio: 'ignore', reject: false },
   );
 

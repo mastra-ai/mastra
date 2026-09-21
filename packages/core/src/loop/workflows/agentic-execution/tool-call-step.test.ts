@@ -42,6 +42,110 @@ const makeBaseExecuteParams = (suspend: Mock, overrides: any = {}) => ({
   ...overrides,
 });
 
+describe('createToolCallStep delegated run identity provenance', () => {
+  it('does not forward unverified model-authored resume identity without persisted suspension state', async () => {
+    const execute = vi.fn(async () => ({ ok: true }));
+    const toolCallStep = createToolCallStep({
+      tools: { 'workflow-test': { execute } },
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'fresh-call',
+          toolName: 'workflow-test',
+          args: {
+            inputData: { value: 'fresh' },
+            resumeData: { approved: true },
+            suspendedToolCallId: 'hallucinated-call-id',
+            suspendedToolRunId: 'hallucinated-run-id',
+          },
+        },
+      }),
+    );
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        suspendedToolCallId: expect.anything(),
+        suspendedToolRunId: expect.anything(),
+      }),
+      expect.not.objectContaining({ suspendedToolRunId: expect.anything() }),
+    );
+  });
+
+  it('derives the delegated run from the claimed suspended call instead of a sibling run claim', async () => {
+    const runResume = async (suspendedToolCallId: string, suspendedToolRunId: string) => {
+      const execute = vi.fn(async () => ({ ok: true }));
+      const messages = [
+        {
+          role: 'assistant',
+          content: {
+            metadata: {
+              suspendedTools: {
+                'call-a': {
+                  toolCallId: 'call-a',
+                  toolName: 'workflow-test',
+                  delegatedRunId: 'inner-a',
+                },
+                'call-b': {
+                  toolCallId: 'call-b',
+                  toolName: 'workflow-test',
+                  delegatedRunId: 'inner-b',
+                },
+              },
+            },
+            parts: [],
+          },
+        },
+      ];
+      const messageList = createMessageList();
+      messageList.get.all.db = () => messages as any;
+      const toolCallStep = createToolCallStep({
+        tools: { 'workflow-test': { execute } },
+        messageList,
+        controller: { enqueue: vi.fn() },
+        runId: 'outer-run',
+        streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      } as any);
+
+      await toolCallStep.execute(
+        makeBaseExecuteParams(vi.fn(), {
+          inputData: {
+            toolCallId: 'new-resume-call',
+            toolName: 'workflow-test',
+            args: {
+              inputData: { value: 'resume' },
+              resumeData: { approved: true },
+              suspendedToolCallId,
+              suspendedToolRunId,
+            },
+          },
+        }),
+      );
+
+      return { execute, messages };
+    };
+
+    const mismatched = await runResume('call-b', 'inner-a');
+    expect(mismatched.execute).toHaveBeenCalledWith(
+      expect.not.objectContaining({ suspendedToolRunId: expect.anything() }),
+      expect.not.objectContaining({ suspendedToolRunId: expect.anything() }),
+    );
+    expect(mismatched.messages[0]!.content.metadata.suspendedTools).toHaveProperty('call-a');
+    expect(mismatched.messages[0]!.content.metadata.suspendedTools).toHaveProperty('call-b');
+
+    const matched = await runResume('call-b', 'inner-b');
+    expect(matched.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ suspendedToolRunId: 'inner-b' }),
+      expect.objectContaining({ suspendedToolRunId: 'inner-b' }),
+    );
+  });
+});
+
 describe('createToolCallStep background task resume with falsy payload', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -1724,6 +1828,13 @@ describe('createToolCallStep delegated agent tool metadata', () => {
       delegatedRunId: 'sub-agent-run-id',
     });
     expect(pending.parentRunId).toBeUndefined();
+    expect(suspend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'approval',
+        suspendedToolRunId: 'sub-agent-run-id',
+      }),
+      { resumeLabel: 'parent-tool-call-id' },
+    );
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
@@ -1977,6 +2088,7 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
     toolCallId?: string;
   }) => {
     const messageList = {
+      add: vi.fn(),
       get: {
         input: { aiV5: { model: () => [] } },
         response: { db: () => [message] },
@@ -2095,10 +2207,11 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
     expect(message.content.metadata.suspendedTools).toHaveProperty('sibling-call-id');
   });
 
-  it('still recovers the delegated runId when a workflow tool is resumed with a falsy payload', async () => {
-    // The suspension entry carries the sub-run id a delegated tool must resume into. The lookup
-    // that reads it has to run for falsy resume payloads too, because the cleanup below then
-    // removes the entry: skipping it would silently start a fresh sub-run instead.
+  it.each([
+    ['false', false],
+    ['zero', 0],
+    ['an empty string', ''],
+  ])('resumes and retires only the selected same-name suspension for %s payload', async (_label, resumeData) => {
     const message = {
       id: 'assistant-suspended',
       role: 'assistant' as const,
@@ -2107,28 +2220,42 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
         format: 2 as const,
         metadata: {
           suspendedTools: {
-            'wf-call-id': {
-              toolCallId: 'wf-call-id',
+            'wf-call-a': {
+              toolCallId: 'wf-call-a',
               toolName: 'workflow-sub',
               runId: 'parent-run-id',
-              delegatedRunId: 'sub-run-id',
+              delegatedRunId: 'sub-run-a',
+            },
+            'wf-call-b': {
+              toolCallId: 'wf-call-b',
+              toolName: 'workflow-sub',
+              runId: 'parent-run-id',
+              delegatedRunId: 'sub-run-b',
             },
           },
-        } as Record<string, unknown>,
+        } as Record<string, any>,
         parts: [
           {
-            type: 'tool-invocation' as const,
-            toolInvocation: {
-              state: 'call' as const,
-              toolCallId: 'wf-call-id',
+            type: 'data-tool-call-suspended' as const,
+            data: {
+              toolCallId: 'wf-call-a',
               toolName: 'workflow-sub',
-              args: {},
+              runId: 'sub-run-a',
+            },
+          },
+          {
+            type: 'data-tool-call-suspended' as const,
+            data: {
+              toolCallId: 'wf-call-b',
+              toolName: 'workflow-sub',
+              runId: 'sub-run-b',
             },
           },
         ],
       },
     };
     const messageList = {
+      add: vi.fn(),
       get: {
         input: { aiV5: { model: () => [] } },
         response: { db: () => [message] },
@@ -2136,6 +2263,7 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
       },
     } as unknown as MessageList;
     const execute = vi.fn(async () => ({ done: true }));
+    const flushMessages = vi.fn();
 
     const toolCallStep = createToolCallStep({
       tools: { 'workflow-sub': { execute } } as ToolSet,
@@ -2143,19 +2271,129 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
       controller,
       runId: 'parent-run-id',
       streamState,
-      _internal: { saveQueueManager: { flushMessages: vi.fn() }, threadId: 'thread-1' },
+      _internal: { saveQueueManager: { flushMessages }, threadId: 'thread-1' },
     } as any);
 
     await toolCallStep.execute({
       ...makeBaseExecuteParams(vi.fn()),
-      writer: new ToolStream({ prefix: 'tool', callId: 'wf-call-id', name: 'workflow-sub', runId: 'parent-run-id' }),
-      inputData: { toolCallId: 'wf-call-id', toolName: 'workflow-sub', args: { resumeData: false } },
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: 'wf-resume-call-id',
+        name: 'workflow-sub',
+        runId: 'parent-run-id',
+      }),
+      inputData: {
+        toolCallId: 'wf-resume-call-id',
+        toolName: 'workflow-sub',
+        args: {
+          resumeData,
+          suspendedToolCallId: 'wf-call-b',
+          suspendedToolRunId: 'sub-run-b',
+        },
+      },
     });
 
     expect(execute).toHaveBeenCalledWith(
-      expect.objectContaining({ suspendedToolRunId: 'sub-run-id' }),
-      expect.objectContaining({ resumeData: false }),
+      expect.objectContaining({ suspendedToolRunId: 'sub-run-b' }),
+      expect.objectContaining({ resumeData }),
     );
+    expect(message.content.metadata.suspendedTools).toEqual({
+      'wf-call-a': expect.objectContaining({ delegatedRunId: 'sub-run-a' }),
+    });
+    expect(message.content.parts).toEqual([
+      expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'wf-call-a' }) }),
+      expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'wf-call-b', resumed: true }) }),
+    ]);
+    expect(messageList.add).toHaveBeenCalledWith([message], 'response');
+    expect(flushMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats null model resume data as framework-driven and ignores model identity claims', async () => {
+    const message = {
+      id: 'assistant-suspended',
+      role: 'assistant' as const,
+      createdAt: new Date(0),
+      content: {
+        format: 2 as const,
+        metadata: {
+          suspendedTools: {
+            'wf-call-a': {
+              toolCallId: 'wf-call-a',
+              toolName: 'workflow-sub',
+              delegatedRunId: 'sub-run-a',
+            },
+            'wf-call-b': {
+              toolCallId: 'wf-call-b',
+              toolName: 'workflow-sub',
+              delegatedRunId: 'sub-run-b',
+            },
+          },
+        } as Record<string, any>,
+        parts: [
+          {
+            type: 'data-tool-call-suspended' as const,
+            data: { toolCallId: 'wf-call-a', toolName: 'workflow-sub', runId: 'sub-run-a' },
+          },
+          {
+            type: 'data-tool-call-suspended' as const,
+            data: { toolCallId: 'wf-call-b', toolName: 'workflow-sub', runId: 'sub-run-b' },
+          },
+        ],
+      },
+    };
+    const messageList = {
+      add: vi.fn(),
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [message] },
+        all: { db: () => [message], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+    const execute = vi.fn(async () => ({ done: true }));
+    const flushMessages = vi.fn();
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'workflow-sub': { execute } } as ToolSet,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      _internal: { saveQueueManager: { flushMessages }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute({
+      ...makeBaseExecuteParams(vi.fn(), {
+        resumeData: { approved: true },
+        suspendData: { suspendedToolRunId: 'sub-run-a' },
+      }),
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: 'wf-call-a',
+        name: 'workflow-sub',
+        runId: 'parent-run-id',
+      }),
+      inputData: {
+        toolCallId: 'wf-call-a',
+        toolName: 'workflow-sub',
+        args: {
+          resumeData: null,
+          suspendedToolCallId: 'wf-call-b',
+          suspendedToolRunId: 'sub-run-b',
+        },
+      },
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({ suspendedToolRunId: 'sub-run-a' }),
+      expect.objectContaining({ resumeData: { approved: true } }),
+    );
+    expect(message.content.metadata.suspendedTools).toEqual({
+      'wf-call-b': expect.objectContaining({ delegatedRunId: 'sub-run-b' }),
+    });
+    expect(message.content.parts).toEqual([
+      expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'wf-call-a', resumed: true }) }),
+      expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'wf-call-b' }) }),
+    ]);
   });
 
   it('leaves suspendedTools intact for a plain (non-resume) tool call', async () => {

@@ -17,7 +17,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A complete conversation assembled from playground-ui components: ChatShell, message renderers, grouped tools, plan, edit, question, approvals, tasks, timeline, attachments, and Composer. Send a message or attach a local file; a deterministic fixture produces incoming chunks, and useRevealedParts paces the displayed text just as in Studio and Factory. Reset restores the selected scenario. This is the shared UI reference; transport, persistence, model selection, and application-specific message wrappers remain owned by Studio and Factory.',
+          'An interactive conversation assembled from playground-ui components: ChatShell, message renderers, grouped tools, plan, edit, question, approvals, tasks, timeline, attachments, and Composer. Type / for fixture commands, send a message, or attach a local file. ComposerSuggestions and useComposerCommands provide the shared command interaction; command selection submits a fixture message. A deterministic fixture produces incoming chunks, and useRevealedParts paces the displayed text. Reset restores the selected scenario. Transport, persistence, model selection, and application-specific message wrappers remain owned by Studio and Factory.',
       },
     },
   },
@@ -36,6 +36,29 @@ export const Declined: Story = { args: { scenario: 'declined' } };
 export const Error: Story = { args: { scenario: 'error' } };
 export const LongConversation: Story = { args: { scenario: 'long' } };
 
+export const SlashCommands: Story = {
+  args: { scenario: 'empty' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('textbox', { name: 'Message' });
+    await userEvent.type(input, '/');
+    await expect(await canvas.findByRole('listbox', { name: 'Slash commands' })).toBeVisible();
+    await userEvent.type(input, 'rev');
+    await userEvent.keyboard('{Tab}');
+    await expect(input).toHaveValue('/review ');
+    await expect(await canvas.findByRole('listbox', { name: '/review options' })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await expect(input).toHaveValue('/review');
+    await userEvent.keyboard('{Enter}{ArrowDown}{Enter}');
+    await expect(input).toHaveValue('');
+    await expect(input).toHaveFocus();
+    await expect(canvas.getByRole('region', { name: 'Turn 1' })).toHaveTextContent('/review attachments');
+    await expect(canvas.getByRole('button', { name: 'Stop response' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Stop response' }));
+    await expect(input).toHaveFocus();
+  },
+};
+
 export const ReviewAndApprove: Story = {
   args: { scenario: 'question' },
   play: async ({ canvasElement }) => {
@@ -44,11 +67,11 @@ export const ReviewAndApprove: Story = {
     await userEvent.click(within(await canvas.findByRole('group', { name: 'Tool: read_file' })).getByRole('button'));
     await waitFor(() => expect(canvas.getByText('Enter currently adds a newline.')).toBeVisible());
     await userEvent.click(canvas.getByRole('radio', { name: /Keyboard access/ }));
-    await userEvent.click(await canvas.findByRole('button', { name: 'Approve' }));
+    await userEvent.click(await canvas.findByRole('button', { name: 'Approve edit_file' }));
     await waitFor(() => expect(canvas.getByText('The conversation is ready for another review.')).toBeVisible(), {
       timeout: 8000,
     });
-    await expect(canvas.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: 'Approve edit_file' })).not.toBeInTheDocument();
   },
 };
 
@@ -56,7 +79,7 @@ export const DeclineEdit: Story = {
   args: { scenario: 'approval' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Decline' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Decline edit_file' }));
     await waitFor(() => expect(canvas.getByText(/The edit was declined/)).toBeVisible());
     await expect(canvas.queryByRole('button', { name: 'Stop response' })).not.toBeInTheDocument();
   },

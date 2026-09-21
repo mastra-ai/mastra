@@ -31,7 +31,7 @@ export const ListSearch = ({
   debounceMs = 300,
   size,
   value: controlledValue,
-  variant = 'outline',
+  variant = 'default',
   shortcutDisabled = false,
 }: ListSearchProps) => {
   const id = useId();

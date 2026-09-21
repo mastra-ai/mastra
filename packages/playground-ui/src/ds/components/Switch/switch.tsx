@@ -1,3 +1,4 @@
+import '../../../../new-theme.css';
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
 import * as React from 'react';
 
@@ -36,16 +37,16 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         ref={ref}
         data-slot="switch"
         className={cn(
-          'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-neutral6/[0.14] p-0.5 outline-hidden',
-          'duration-normal transition-colors ease-out-custom motion-reduce:transition-none',
-          'hover:bg-neutral6/[0.18]',
-          'active:bg-neutral6/[0.22]',
-          'focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
-          'data-[checked]:bg-neutral6/[0.92]',
-          'data-[checked]:hover:bg-neutral6',
-          'data-[checked]:active:bg-neutral5',
-          'data-[disabled]:cursor-not-allowed data-[disabled]:bg-neutral6/[0.16] data-[disabled]:hover:bg-neutral6/[0.16]',
-          'data-[disabled]:data-[checked]:bg-neutral6/[0.3] data-[disabled]:data-[checked]:hover:bg-neutral6/[0.3]',
+          'new-theme peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-foreground/14 p-0.5 outline-hidden',
+          'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
+          'hover:bg-foreground/18',
+          'active:bg-foreground/30',
+          'focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-foreground/45 focus-visible:outline-solid',
+          'data-[checked]:bg-foreground/90',
+          'data-[checked]:hover:bg-foreground',
+          'data-[checked]:active:bg-foreground/75',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:bg-foreground/14 data-[disabled]:hover:bg-foreground/14',
+          'data-[disabled]:data-[checked]:bg-foreground/30 data-[disabled]:data-[checked]:hover:bg-foreground/30',
           className,
         )}
         {...renderProps}
@@ -55,12 +56,12 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         <SwitchPrimitive.Thumb
           data-slot="switch-thumb"
           className={cn(
-            'switch-thumb-motion pointer-events-none relative block h-4 w-5 rounded-full bg-neutral6',
-            'duration-normal transition-[background-color,translate,width,transform] ease-out-custom motion-reduce:transition-none',
+            'switch-thumb-motion pointer-events-none relative block h-4 w-5 rounded-full bg-foreground',
+            'transition-[background-color,translate,width,transform] duration-normal ease-out-custom motion-reduce:transition-none',
             'group-active/switch:w-6 group-data-[disabled]/switch:w-5',
-            'data-[checked]:translate-x-3 data-[checked]:bg-surface1 data-[unchecked]:translate-x-0',
+            'data-[checked]:translate-x-3 data-[checked]:bg-background data-[unchecked]:translate-x-0',
             'group-active/switch:data-[checked]:translate-x-2',
-            'data-[disabled]:data-[checked]:bg-surface1/80 data-[disabled]:data-[unchecked]:bg-neutral6/[0.42]',
+            'data-[disabled]:data-[checked]:bg-background/75 data-[disabled]:data-[unchecked]:bg-foreground/45',
           )}
         >
           {shouldRenderIcon ? <SwitchThumbIcon checkedIcon={onIcon} icon={singleIcon} uncheckedIcon={offIcon} /> : null}
@@ -81,8 +82,8 @@ function SwitchThumbIcon({
   uncheckedIcon?: React.ReactNode;
 }) {
   const iconClassName = cn(
-    'absolute inset-0 flex items-center justify-center text-surface1',
-    'duration-normal transition-[color,opacity] ease-out-custom motion-reduce:transition-none',
+    'absolute inset-0 flex items-center justify-center text-background',
+    'transition-[color,opacity] duration-normal ease-out-custom motion-reduce:transition-none',
     '[&_svg]:stroke-2.5 [&_svg]:size-2.5',
   );
 
@@ -91,7 +92,7 @@ function SwitchThumbIcon({
       <span
         aria-hidden
         data-slot="switch-thumb-icon"
-        className={cn(iconClassName, 'group-data-[checked]/switch:text-neutral6')}
+        className={cn(iconClassName, 'group-data-[checked]/switch:text-foreground')}
       >
         {icon}
       </span>
@@ -115,7 +116,7 @@ function SwitchThumbIcon({
           aria-hidden
           data-slot="switch-thumb-icon"
           data-switch-icon="checked"
-          className={cn(iconClassName, 'text-neutral6 opacity-0 group-data-[checked]/switch:opacity-100')}
+          className={cn(iconClassName, 'text-foreground opacity-0 group-data-[checked]/switch:opacity-100')}
         >
           {checkedIcon}
         </span>

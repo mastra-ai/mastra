@@ -16,7 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/ds/components/Dialog';
-import { FieldBlock, TextFieldBlock } from '@/ds/components/FormFieldBlocks';
+import { FieldBlock, TextFieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
+import { Notice } from '@/ds/components/Notice';
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
 
@@ -43,6 +44,7 @@ export interface SignalDefinitionFormDialogProps {
 }
 
 type FormValue = CreateTraceSignalDefinitionInput;
+type FormErrors = Partial<Record<keyof FormValue, string>>;
 
 function initialValue(definition?: TraceSignalDefinition): FormValue {
   return definition
@@ -60,15 +62,16 @@ function initialValue(definition?: TraceSignalDefinition): FormValue {
       };
 }
 
-function validate(value: FormValue, editing: boolean): string | undefined {
+function validate(value: FormValue, editing: boolean): FormErrors {
+  const errors: FormErrors = {};
   if (!editing && (!/^[a-z][a-z0-9_-]{1,31}$/.test(value.name) || reservedNames.has(value.name))) {
-    return 'Use an unreserved lowercase slug of 2–32 letters, numbers, underscores, or hyphens.';
+    errors.name = 'Use an unreserved lowercase slug of 2–32 letters, numbers, underscores, or hyphens.';
   }
-  if (!value.displayLabel.trim()) return 'Display label is required.';
+  if (!value.displayLabel.trim()) errors.displayLabel = 'Display label is required.';
   if (!value.taskPrompt.trim() || value.taskPrompt.length > 2000) {
-    return 'Signal instructions are required and must be at most 2,000 characters.';
+    errors.taskPrompt = 'Signal instructions are required and must be at most 2,000 characters.';
   }
-  return undefined;
+  return errors;
 }
 
 export function SignalDefinitionFormDialog({
@@ -82,11 +85,13 @@ export function SignalDefinitionFormDialog({
 }: SignalDefinitionFormDialogProps) {
   const formId = useId();
   const [value, setValue] = useState(() => initialValue(definition));
-  const [validationError, setValidationError] = useState<string>();
+  const [validationErrors, setValidationErrors] = useState<FormErrors>({});
   const editing = Boolean(definition);
 
-  const setField = <Key extends keyof FormValue>(key: Key, fieldValue: FormValue[Key]) =>
+  const setField = <Key extends keyof FormValue>(key: Key, fieldValue: FormValue[Key]) => {
     setValue(current => ({ ...current, [key]: fieldValue }));
+    setValidationErrors(current => ({ ...current, [key]: undefined }));
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -103,9 +108,9 @@ export function SignalDefinitionFormDialog({
             className="space-y-4"
             onSubmit={event => {
               event.preventDefault();
-              const invalid = validate(value, editing);
-              setValidationError(invalid);
-              if (invalid) return;
+              const errors = validate(value, editing);
+              setValidationErrors(errors);
+              if (Object.keys(errors).length > 0) return;
               const action = definition
                 ? onUpdate(definition.id, {
                     displayLabel: value.displayLabel,
@@ -124,6 +129,7 @@ export function SignalDefinitionFormDialog({
               placeholder="handoff_quality"
               value={value.name}
               disabled={editing || pending}
+              errorMsg={validationErrors.name}
               onChange={event => setField('name', event.target.value)}
             />
             <TextFieldBlock
@@ -133,6 +139,7 @@ export function SignalDefinitionFormDialog({
               placeholder="Handoff quality"
               value={value.displayLabel}
               disabled={pending}
+              errorMsg={validationErrors.displayLabel}
               onChange={event => setField('displayLabel', event.target.value)}
             />
             <FieldBlock.Layout>
@@ -154,12 +161,17 @@ export function SignalDefinitionFormDialog({
                   value={value.taskPrompt}
                   disabled={pending}
                   placeholder="Describe what this signal should evaluate and how the result should be written."
+                  error={Boolean(validationErrors.taskPrompt)}
+                  aria-describedby={validationErrors.taskPrompt ? fieldErrorId('taskPrompt') : undefined}
                   onChange={event => setField('taskPrompt', event.target.value)}
                 />
                 <FieldBlock.HelpText>
                   Tell the model what to evaluate and what the signal result should contain. {value.taskPrompt.length}
                   /2,000 characters
                 </FieldBlock.HelpText>
+                {validationErrors.taskPrompt ? (
+                  <FieldBlock.ErrorMsg name="taskPrompt">{validationErrors.taskPrompt}</FieldBlock.ErrorMsg>
+                ) : null}
               </FieldBlock.Column>
             </FieldBlock.Layout>
             {editing ? (
@@ -167,14 +179,9 @@ export function SignalDefinitionFormDialog({
                 Instruction changes create a new version and apply only to new traces. Existing analysis is unchanged.
               </p>
             ) : null}
-            {validationError ? (
-              <div role="alert">
-                <FieldBlock.ErrorMsg>{validationError}</FieldBlock.ErrorMsg>
-              </div>
-            ) : null}
             {error ? (
               <div role="alert">
-                <FieldBlock.ErrorMsg>{error}</FieldBlock.ErrorMsg>
+                <Notice variant="destructive">{error}</Notice>
               </div>
             ) : null}
           </form>

@@ -112,6 +112,14 @@ export interface CreateAgentConfig<TTools extends ToolsInput = ToolsInput, TOutp
    * share the crashed host's bus, mirroring a real process restart.
    */
   isolatedPubsub?: boolean;
+  /**
+   * Configure the Mastra host with `recovery: { durableAgents: 'auto' }`.
+   * Since #23915, `running` checkpoints — the records `listActiveRuns()` /
+   * `recover()` discover orphaned runs from — are only persisted when crash
+   * recovery is enabled (they are pure write amplification otherwise).
+   * Recovery-domain hosts must opt in per that contract.
+   */
+  recovery?: boolean;
   /** Forwarded to the underlying Agent when set (shared MastraMemory instance). */
   memory?: any;
   /** Forwarded to the underlying Agent when set. */

@@ -36,6 +36,7 @@ import {
   ProcessorStepSchema,
   createProcessorSendSignal,
 } from '../../processors';
+import { OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX } from '../../processors/runner';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -1364,21 +1365,33 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               // Handle outputStream span lifecycle explicitly (not via executePhaseWithSpan)
               // because outputStream uses a per-processor span stored in mutableState
+              // Accumulates time spent inside the hook across chunks, beside the span.
+              const hookDurationKey = `${OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX}${processor.id}`;
+              const readHookDurationMs = () => (mutableState[hookDurationKey] as number | undefined) ?? 0;
               let result: ChunkType | null | undefined;
               try {
-                result = await processor.processOutputStream({
-                  ...baseContext,
-                  ...processorObservabilityContext,
-                  part: part as ChunkType,
-                  streamParts: (streamParts ?? []) as ChunkType[],
-                  state: mutableState,
-                  messageList: passThrough.messageList, // Optional for stream processing
-                });
+                const hookStart = performance.now();
+                try {
+                  result = await processor.processOutputStream({
+                    ...baseContext,
+                    ...processorObservabilityContext,
+                    part: part as ChunkType,
+                    streamParts: (streamParts ?? []) as ChunkType[],
+                    state: mutableState,
+                    messageList: passThrough.messageList, // Optional for stream processing
+                  });
+                } finally {
+                  mutableState[hookDurationKey] = readHookDurationMs() + (performance.now() - hookStart);
+                }
 
                 // End span on finish chunk
                 if (part && (part as ChunkType).type === 'finish') {
-                  processorSpan?.end({ output: { totalChunks: (streamParts ?? []).length } });
+                  processorSpan?.end({
+                    output: { totalChunks: (streamParts ?? []).length },
+                    attributes: { hookDurationMs: readHookDurationMs() },
+                  });
                   delete mutableState[spanKey];
+                  delete mutableState[hookDurationKey];
                 }
               } catch (error) {
                 // End span with error and clean up state
@@ -1387,6 +1400,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                     error,
                     endSpan: true,
                     attributes: {
+                      hookDurationMs: readHookDurationMs(),
                       tripwireAbort: {
                         reason: error.message,
                         retry: error.options?.retry,
@@ -1395,9 +1409,14 @@ function createStepFromProcessor<TProcessorId extends string>(
                     },
                   });
                 } else {
-                  processorSpan?.error({ error: error as Error, endSpan: true });
+                  processorSpan?.error({
+                    error: error as Error,
+                    endSpan: true,
+                    attributes: { hookDurationMs: readHookDurationMs() },
+                  });
                 }
                 delete mutableState[spanKey];
+                delete mutableState[hookDurationKey];
                 throw error;
               }
 
@@ -2520,6 +2539,7 @@ export class EventedRun<
       .then(result => {
         if (result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
+          this.cleanup?.();
         }
 
         return result;

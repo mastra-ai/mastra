@@ -1,57 +1,31 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Loader2, PlayIcon, StepForwardIcon } from 'lucide-react';
+import { WorkflowDebugControls } from '@mastra/playground-ui/components/Workflow';
 import { useContext } from 'react';
-
+import type { ReactNode } from 'react';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useNextPerStep } from './use-workflow-trigger';
 
 export interface WorkflowDebugStepControlsProps {
   isStreaming?: boolean;
+  disabled?: boolean;
+  children?: ReactNode;
 }
 
-export function WorkflowDebugStepControls({ isStreaming }: WorkflowDebugStepControlsProps) {
+export function WorkflowDebugStepControls({ isStreaming, disabled, children }: WorkflowDebugStepControlsProps) {
   const { result } = useContext(WorkflowRunContext);
-  const { canRunNextStep, runNextStep, continueFullRun } = useNextPerStep();
+  const { canRunNextStep, nextStepLabel, runNextStep, continueFullRun } = useNextPerStep();
 
-  // A run only reaches the 'paused' status when it was started in per-step (debug) mode, so a
-  // paused run always shows the step controls — including when landing directly on a paused
-  // run's :runId page, where the in-memory debugMode flag starts out false.
-  if (result?.status !== 'paused') {
-    return null;
-  }
+  if (result?.status !== 'paused') return null;
 
   return (
-    <div className="flex flex-col gap-2" data-testid="workflow-debug-step-controls">
-      <Button
-        type="button"
-        variant="primary"
-        className="w-full"
-        onClick={runNextStep}
-        disabled={!canRunNextStep || isStreaming}
-      >
-        {isStreaming ? (
-          <Icon>
-            <Loader2 className="animate-spin" />
-          </Icon>
-        ) : (
-          <Icon>
-            <PlayIcon />
-          </Icon>
-        )}
-        Run next step
-      </Button>
-
-      <Button
-        type="button"
-        variant="ghost"
-        className="w-full"
-        onClick={continueFullRun}
-        disabled={isStreaming}
-        icon={<StepForwardIcon />}
-      >
-        Continue full run
-      </Button>
-    </div>
+    <WorkflowDebugControls
+      isStreaming={isStreaming}
+      canRunNextStep={canRunNextStep}
+      nextStepLabel={nextStepLabel}
+      disabled={disabled}
+      onRunNextStep={runNextStep}
+      onContinueRun={continueFullRun}
+    >
+      {children}
+    </WorkflowDebugControls>
   );
 }

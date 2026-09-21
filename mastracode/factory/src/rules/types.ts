@@ -1,6 +1,12 @@
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 
-export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
+export type WorkItemSource =
+  | 'github-issue'
+  | 'github-pr'
+  | 'linear-issue'
+  | 'jira-issue'
+  | 'incidentio-follow-up'
+  | 'manual';
 
 /** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
@@ -25,8 +31,10 @@ export function needsApproval(item: {
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'linear') return 'linear-issue';
-  // Only GitHub and Linear have provider-specific rules; anything else (a Slack
-  // thread, say) is a plain work item, not a mislabeled GitHub issue.
+  if (source.integrationId === 'jira') return 'jira-issue';
+  if (source.integrationId === 'incidentio') return 'incidentio-follow-up';
+  // Only GitHub, Linear, and Jira have provider-specific rules; anything else
+  // (a Slack thread, say) is a plain work item, not a mislabeled GitHub issue.
   if (source.integrationId !== 'github') return 'manual';
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
@@ -115,7 +123,14 @@ export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
 export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number] | (string & {});
 
-export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'manual'] as const;
+export const FACTORY_RULE_SOURCES = [
+  'issue',
+  'pullRequest',
+  'linearIssue',
+  'jiraIssue',
+  'incidentioFollowUp',
+  'manual',
+] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
 
 export const FACTORY_GITHUB_EVENTS = [
@@ -137,6 +152,12 @@ export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
 export const FACTORY_LINEAR_EVENTS = ['issueObserved', 'issueClosed'] as const;
 export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
+
+export const FACTORY_JIRA_EVENTS = ['issueObserved', 'issueClosed'] as const;
+export type FactoryJiraEventName = (typeof FACTORY_JIRA_EVENTS)[number];
+
+export const FACTORY_INCIDENTIO_EVENTS = ['followUpObserved', 'followUpClosed'] as const;
+export type FactoryIncidentioEventName = (typeof FACTORY_INCIDENTIO_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
   | null
@@ -166,7 +187,7 @@ export type FactoryRuleActor =
   | { type: 'system'; id: string };
 
 export interface FactoryRuleIngressIdentity {
-  type: 'human' | 'agent' | 'toolResult' | 'github' | 'linear' | 'rule';
+  type: 'human' | 'agent' | 'toolResult' | 'github' | 'linear' | 'jira' | 'incidentio' | 'rule';
   id: string;
 }
 
@@ -300,6 +321,58 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
   };
 }
 
+export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  /** Bound board for the source this issue came from, when one is configured and installed. */
+  intake?: FactoryRuleIntakeTarget;
+  event: FactoryJiraEventName;
+  issue: {
+    /** Stable issue reference — the direct integration's Jira id or the Platform-encoded issue reference. */
+    id: string;
+    identifier: string;
+    title: string;
+    url: string;
+    state: string;
+    stateType: string;
+    priorityLabel: string;
+    assignee: string | null;
+    author: string | null;
+    project: string | null;
+    site: string | null;
+    labels: readonly string[];
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
+export interface FactoryIncidentioRuleContext extends FactoryRuleContextBase {
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  /** Bound board for the source this follow-up came from, when one is configured and installed. */
+  intake?: FactoryRuleIntakeTarget;
+  event: FactoryIncidentioEventName;
+  issue: {
+    /** Stable item reference — the prefixed incident.io follow-up id the intake feed serves as `id`. */
+    id: string;
+    identifier: string;
+    title: string;
+    url: string;
+    state: string;
+    stateType: string;
+    priorityLabel: string;
+    assignee: string | null;
+    author: string | null;
+    /** Reference of the incident this follow-up belongs to, when available. */
+    incident: string | null;
+    labels: readonly string[];
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
 export type FactoryRuleHandler<TContext> = (
   context: Readonly<TContext>,
 ) => FactoryRuleDecision | void | Promise<FactoryRuleDecision | void>;
@@ -355,6 +428,13 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   board: FactoryRuleBoard;
   source: WorkItemSource;
   sourceKey: string;
+  /**
+   * Org-wide ownership key for the external record, when one Factory at a time
+   * may hold a live card for it (a stable Linear issue id, for instance). The
+   * store enforces it with a unique index, so a second project's materialization
+   * is refused rather than duplicated.
+   */
+  claimKey?: string;
   title: string;
   url: string | null;
   stage: FactoryRuleStage;
@@ -377,7 +457,20 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
  * instead of an otherwise empty skill.
  */
 export type FactoryInvokeSkillDecision = FactoryInvokeSkillDecisionBase &
-  ({ skillName: string; prompt?: never } | { prompt: string; skillName?: never });
+  (
+    | {
+        skillName: string;
+        prompt?: never;
+        /**
+         * Same-stage re-entry: the skill is already active in the card's live session,
+         * so deliver a compact continuation that references it by name and carries only
+         * the fresh arguments, instead of re-pasting the whole skill document. Only valid
+         * for named-skill decisions — a plain prompt run has no active skill to resume.
+         */
+        resume?: boolean;
+      }
+    | { prompt: string; skillName?: never; resume?: never }
+  );
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   type: 'sendMessage';
@@ -432,6 +525,10 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'pullRequest';
     case 'linear-issue':
       return 'linearIssue';
+    case 'jira-issue':
+      return 'jiraIssue';
+    case 'incidentio-follow-up':
+      return 'incidentioFollowUp';
     case 'manual':
       return 'manual';
   }

@@ -133,6 +133,9 @@ function defaultCreateAgent(config: CreateAgentConfig, context: DurableAgentTest
       // build a second host over the crashed host's storage).
       storage: config.storage ?? new MockStore(),
       agents: { [config.id]: durableAgent as any },
+      // Crash-recovery hosts opt into `running` checkpoints (#23915): the
+      // default policy skips them unless recovery is enabled.
+      ...(config.recovery ? { recovery: { durableAgents: 'auto' as const } } : {}),
     });
   }
 

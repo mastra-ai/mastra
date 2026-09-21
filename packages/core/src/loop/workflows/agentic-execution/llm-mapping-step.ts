@@ -16,7 +16,7 @@ import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
 import { commitToolResult, computeModelOutputProviderMetadata } from '../../shared/steps/tool-result-commit-core';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
 import type { OuterLLMRun } from '../../types';
-import { deserializeToolError } from '../errors';
+import { deserializeToolError, getSubAgentErrorResult } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
@@ -236,6 +236,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // serializes (Error instances become `{}` over the pubsub bus). Reify here so
             // chunk consumers see a real Error with name/message/stack intact.
             const reifiedError = deserializeToolError(toolCall.error);
+            const subAgentResult = getSubAgentErrorResult(reifiedError);
             const chunk = await transformToolChunk(
               {
                 type: 'tool-error',
@@ -258,9 +259,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // plain {name,message,stack} shape after the pubsub JSON round-trip).
             // Without reification the `instanceof Error` check below falls through to
             // `safeStringify`, dumping the whole stringified payload into the history.
+            // A failed sub-agent's structured result rides along so the model can
+            // read what the delegate produced before it failed.
             commitToolResult({
               messageList: rest.messageList,
-              outcome: { kind: 'error', errorText: reifiedError.message },
+              outcome: { kind: 'error', errorText: reifiedError.message, result: subAgentResult },
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               toolArgs: toolCall.args,
@@ -379,6 +382,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // so the model will see them and can retry with correct tool names
           initialResult.stepResult.isContinued = true;
           initialResult.stepResult.reason = 'tool-calls';
+          // A delegation hook may still bail on a failed delegation (e.g. the sub-agent
+          // threw); honor it here too so the loop stops instead of retrying.
+          if (rest.requestContext?.get('__mastra_delegationBailed')) {
+            writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
+            rest.requestContext.set('__mastra_delegationBailed', false);
+          }
           return {
             ...initialResult,
             messages: {

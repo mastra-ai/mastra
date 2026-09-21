@@ -1282,6 +1282,62 @@ describe('CachingPubSub', () => {
       expect(history[0].index).toBe(0);
     });
 
+    it('acks every source delivery, including dedup-suppressed and cache-failure paths', async () => {
+      // Pins the composition of two shipped behaviors: the source-follower
+      // wiring (transport unification) and the pubsub ack contract (#24348).
+      // On a durable source backend (Redis Streams, GCP Pub/Sub) the follower
+      // is a real consumer — every delivery it filters out or fails to cache
+      // must still be acked, or it stays pending and is redelivered forever.
+      class AckRecordingSource extends PubSub {
+        private listeners = new Map<string, Set<EventCallback>>();
+        acked: Event[] = [];
+
+        async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+          const full: Event = { ...event, id: crypto.randomUUID(), createdAt: new Date() } as Event;
+          for (const cb of this.listeners.get(topic) ?? []) {
+            await cb(full, async () => {
+              this.acked.push(full);
+            });
+          }
+        }
+
+        async subscribe(topic: string, cb: EventCallback): Promise<void> {
+          let cbs = this.listeners.get(topic);
+          if (!cbs) {
+            cbs = new Set();
+            this.listeners.set(topic, cbs);
+          }
+          cbs.add(cb);
+        }
+
+        async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+          this.listeners.get(topic)?.delete(cb);
+        }
+
+        async flush(): Promise<void> {}
+      }
+
+      const sourceBus = new AckRecordingSource();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
+      await caching.subscribe(topic, () => {});
+
+      // 1. Normal delivery: cached, republished, and acked.
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
+      expect(sourceBus.acked).toHaveLength(1);
+
+      // 2. Already-indexed delivery (dedup-suppressed — never republished): still acked.
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 2 }, index: 5 });
+      expect(sourceBus.acked).toHaveLength(2);
+
+      // 3. Cache write failure (falls back to uncached republish): still acked.
+      const failingPush = vi
+        .spyOn(cache, 'listPushIndexed')
+        .mockRejectedValueOnce(new Error('cache down'));
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 3 } });
+      expect(sourceBus.acked).toHaveLength(3);
+      failingPush.mockRestore();
+    });
+
     it('replays source-published events to late subscribers', async () => {
       const sourceBus = new EventEmitterPubSub();
       const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });

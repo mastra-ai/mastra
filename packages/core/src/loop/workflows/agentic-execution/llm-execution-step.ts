@@ -10,6 +10,7 @@ import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraModelSettings } from '../../../llm/model/model-settings';
+import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
@@ -33,9 +34,9 @@ import type {
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
-import { isMaybeAnthropicWithoutAssistantPrefill } from '../../../processors/provider-history-compat';
 import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
+import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -84,6 +85,7 @@ import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
+import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import { isMastraTimeoutError } from '../../timeout';
@@ -1220,9 +1222,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // consecutive tool-only turns are not collapsed into a single block
       // by convertToModelMessages. This ensures the LLM sees them as
       // sequential steps rather than parallel tool calls.
-      if (currentIteration > 1) {
-        messageList.stepStart();
-      }
+      // Held for the rollback below: it identifies *this* iteration's boundary, which
+      // "the last step-start part" does not — markers are also synthesized within a single
+      // response when a tool call is followed by text, and nothing stored tells them apart.
+      // Undefined on the first iteration, and on any iteration with no open assistant message to
+      // append to — both roll the message back whole, which is what the rejection means there.
+      const iterationBoundary = currentIteration > 1 ? messageList.openStepBoundary().boundary : undefined;
 
       let currentMessageId = inputData.isTaskCompleteCheckFailed
         ? `${messageIdPassed}-${currentIteration}`
@@ -1307,6 +1312,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
         }
 
+        // Per-model modelSettings shallow-merge on top of call-time modelSettings,
+        // resolved once here so that input processors see (and can override) the
+        // settings this step will actually run with. Mirrors how per-model
+        // providerOptions are merged below.
+        // An explicit model or agent maxRetries wins; otherwise preserve modelSettings before using the default.
+        const resolvedModelSettings: MastraModelSettings = {
+          ...modelSettings,
+          ...modelConfig.modelSettings,
+          timeout:
+            modelSettings?.timeout || modelConfig.modelSettings?.timeout
+              ? { ...modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
+              : undefined,
+          maxRetries: modelConfig.maxRetriesConfigured
+            ? modelConfig.maxRetries
+            : (modelSettings?.maxRetries ?? modelConfig.maxRetries),
+        };
+
         const currentStep: {
           messageId: string;
           model: MastraLanguageModel;
@@ -1324,7 +1346,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           toolChoice,
           activeTools,
           providerOptions: mergeProviderOptions(providerOptions, modelConfig.providerOptions),
-          modelSettings,
+          modelSettings: resolvedModelSettings,
           structuredOutput,
           workspace,
         };
@@ -1365,7 +1387,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           ...(inputProcessors || []),
           ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
         ];
-        if (inputStepProcessors.length > 0 || isMaybeAnthropicWithoutAssistantPrefill(model)) {
+        if (needsTrailingAssistantGuard(model, inputStepProcessors)) {
           const processorRunner = new ProcessorRunner({
             inputProcessors: inputStepProcessors,
             outputProcessors: [],
@@ -1430,6 +1452,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // `currentStep`. This is the contract the regular path relied on
             // before composeStepInput was extracted.
             Object.assign(currentStep, mergedStepInput);
+            // `composeStepInput` replaces `modelSettings` wholesale, so a processor
+            // returning the idiomatic partial shape (`{ temperature }`) drops every
+            // key it did not restate. `maxRetries` and `timeout` are infrastructure
+            // budgets rather than model knobs, and were re-applied after the
+            // processor ran before this resolution moved into `currentStep` — keep
+            // them rather than silently falling back to provider defaults.
+            const processorSettings = currentStep.modelSettings;
+            currentStep.modelSettings = {
+              ...processorSettings,
+              maxRetries: processorSettings?.maxRetries ?? resolvedModelSettings.maxRetries,
+              timeout: processorSettings?.timeout ?? resolvedModelSettings.timeout,
+            };
             executedStepModel =
               currentStep.model.provider && currentStep.model.modelId
                 ? `${currentStep.model.provider}/${currentStep.model.modelId}`
@@ -1438,7 +1472,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // Update MODEL_GENERATION span if processor actually changed model or modelSettings
             const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
             const modelSettingsChanged =
-              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
+              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== resolvedModelSettings;
             if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
               modelSpanTracker.updateGeneration({
                 ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
@@ -1568,25 +1602,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : currentStep.model?.specificationVersion === 'v3'
               ? messageList.get.all.aiV6.llmPrompt
               : messageList.get.all.aiV5.llmPrompt;
-        let inputMessages = await llmPromptForModel(messageListPromptArgs);
-
-        inputMessages = applyAutoResumeSystemMessage({
-          autoResume: autoResumeSuspendedTools,
-          inputMessages,
-          messages: messageList.get.all.db(),
+        let downloadError: MastraError | undefined;
+        let inputMessages = await llmPromptForModel(messageListPromptArgs).catch(error => {
+          if (!(error instanceof MastraError) || error.id !== 'DOWNLOAD_ASSETS_FAILED') {
+            throw error;
+          }
+          downloadError = error;
+          return [];
         });
-
-        inputMessages = injectBackgroundTaskPrompt({
-          inputMessages,
-          backgroundTaskManager: readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager'),
-          tools: currentStep.tools,
-          agentBackgroundConfig: readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
-        });
-
-        // Run `processLLMRequest` for any input processors that implement it.
-        // This hook lets processors rewrite the outbound prompt transiently
-        // without persisting changes back to the message list, or short-circuit
-        // the call entirely by returning a cached response.
+        let cachedResponse: CachedLLMStepResponse | undefined;
         const requestStepRunner = new ProcessorRunner({
           inputProcessors: getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
           outputProcessors: [],
@@ -1600,61 +1624,89 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
             }
           : undefined;
-        let cachedResponse: CachedLLMStepResponse | undefined;
-        try {
-          const requestStepResult = await requestStepRunner.runProcessLLMRequest({
-            prompt: inputMessages,
-            model: currentStep.model,
-            stepNumber: inputData.output?.steps?.length || 0,
-            steps: inputData.output?.steps || [],
-            retryCount: inputData.processorRetryCount || 0,
-            requestContext,
-            tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-            writer: requestStepWriter,
-            abortSignal: options?.abortSignal,
+
+        if (!downloadError) {
+          inputMessages = applyAutoResumeSystemMessage({
+            autoResume: autoResumeSuspendedTools,
+            inputMessages,
+            messages: messageList.get.all.db(),
           });
-          inputMessages = requestStepResult.prompt;
-          cachedResponse = requestStepResult.response;
-        } catch (error) {
-          if (error instanceof TripWire) {
-            logger?.warn('Streaming request processor tripwire triggered', {
-              reason: error.message,
-              processorId: error.processorId,
-              retry: error.options?.retry,
-            });
-            return buildTripWireBailResponse({
-              error,
-              controller,
-              runId,
+
+          inputMessages = injectBackgroundTaskPrompt({
+            inputMessages,
+            backgroundTaskManager: readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager'),
+            tools: currentStep.tools,
+            agentBackgroundConfig: readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
+          });
+
+          // Run `processLLMRequest` for any input processors that implement it.
+          // This hook lets processors rewrite the outbound prompt transiently
+          // without persisting changes back to the message list, or short-circuit
+          // the call entirely by returning a cached response.
+          try {
+            const requestStepResult = await requestStepRunner.runProcessLLMRequest({
+              prompt: inputMessages,
               model: currentStep.model,
               messageList,
-              messageId: currentStep.messageId,
-              stepTools: currentStep.tools,
-              _internal: _internal,
+              stepNumber: inputData.output?.steps?.length || 0,
+              steps: inputData.output?.steps || [],
+              retryCount: inputData.processorRetryCount || 0,
+              requestContext,
+              tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+              writer: requestStepWriter,
+              abortSignal: options?.abortSignal,
             });
+            inputMessages = requestStepResult.prompt;
+            cachedResponse = requestStepResult.response;
+          } catch (error) {
+            if (error instanceof TripWire) {
+              logger?.warn('Streaming request processor tripwire triggered', {
+                reason: error.message,
+                processorId: error.processorId,
+                retry: error.options?.retry,
+              });
+              return buildTripWireBailResponse({
+                error,
+                controller,
+                runId,
+                model: currentStep.model,
+                messageList,
+                messageId: currentStep.messageId,
+                stepTools: currentStep.tools,
+                _internal: _internal,
+              });
+            }
+            logger?.error('Error in processLLMRequest processors:', error);
+            throw error;
           }
-          logger?.error('Error in processLLMRequest processors:', error);
-          throw error;
+
+          const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');
+          const omContinuationText = omContinuation?.content.parts
+            .filter(part => part.type === 'text')
+            .map(part => part.text)
+            .join('');
+          const delegationMessages = omContinuationText
+            ? inputMessages.filter(message => {
+                if (message.role !== 'user' || !Array.isArray(message.content)) return true;
+                const text = message.content
+                  .filter(part => part.type === 'text')
+                  .map(part => part.text)
+                  .join('');
+                return text !== omContinuationText;
+              })
+            : inputMessages;
+          writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
         }
 
-        const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');
-        const omContinuationText = omContinuation?.content.parts
-          .filter(part => part.type === 'text')
-          .map(part => part.text)
-          .join('');
-        const delegationMessages = omContinuationText
-          ? inputMessages.filter(message => {
-              if (message.role !== 'user' || !Array.isArray(message.content)) return true;
-              const text = message.content
-                .filter(part => part.type === 'text')
-                .map(part => part.text)
-                .join('');
-              return text !== omContinuationText;
-            })
-          : inputMessages;
-        writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
-
-        if (cachedResponse) {
+        if (downloadError) {
+          // Use the existing error-processor and model-fallback path without calling
+          // request processors or the model with an incomplete prompt.
+          modelResult = new globalThis.ReadableStream<ChunkType>({
+            start(controller) {
+              controller.error(downloadError);
+            },
+          });
+        } else if (cachedResponse) {
           // Short-circuit: replay cached chunks instead of calling the model.
           // Output processors are skipped on cache hit because the cached
           // chunks already reflect their effects from the original call.
@@ -1689,20 +1741,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             },
           }) as unknown as ReturnType<typeof execute>;
         } else if (isSupportedLanguageModel(currentStep.model)) {
+          validateModelTimeoutSettings(currentStep.modelSettings?.timeout);
+
           // Apply request-side context to MODEL_INFERENCE using the post-processor
           // tool set + per-step settings, then open the inference span. Doing this
           // immediately before execute() ensures the span's startTime excludes
           // input processor / prepareStep / processLLMRequest work, and that
           // availableTools / toolChoice reflect any per-step mutations.
           modelSpanTracker?.setInferenceContext?.({
-            parameters: {
-              ...currentStep.modelSettings,
-              ...modelConfig.modelSettings,
-              timeout:
-                currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
-                  ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
-                  : undefined,
-            } as Record<string, unknown> | undefined,
+            parameters: currentStep.modelSettings as Record<string, unknown> | undefined,
             providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
             availableTools: getStepAvailableToolNames(
               currentStep.tools as Record<string, unknown> | undefined,
@@ -1726,19 +1773,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 toolChoice: currentStep.toolChoice,
                 activeTools: currentStep.activeTools as string[] | undefined,
                 options,
-                // Per-model modelSettings shallow-merge on top of call-time modelSettings.
-                // An explicit model or agent maxRetries wins; otherwise preserve modelSettings before using the default.
-                modelSettings: {
-                  ...currentStep.modelSettings,
-                  ...modelConfig.modelSettings,
-                  timeout:
-                    currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
-                      ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
-                      : undefined,
-                  maxRetries: modelConfig.maxRetriesConfigured
-                    ? modelConfig.maxRetries
-                    : (currentStep.modelSettings?.maxRetries ?? modelConfig.maxRetries),
-                },
+                // Resolved once in `currentStep` above (call-time < per-model < processor).
+                modelSettings: currentStep.modelSettings,
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,
                 headers: mergeLlmCallHeaders({
@@ -1799,6 +1835,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           messageId: currentStep.messageId,
           options: {
             runId,
+            logger,
             toolCallStreaming,
             includeRawChunks,
             structuredOutput: currentStep.structuredOutput,
@@ -2158,6 +2195,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         return bailFromExecution();
       }
 
+      // The failed attempt's materialization id, captured before processAPIError
+      // can rotate the active response id. This attempt's partial output was
+      // stored under this id, so a terminal error part has to land on that same
+      // record instead of a fresh one.
+      const attemptMessageId = currentMessageId;
+
       // Handle processAPIError for API rejections
       // This covers two cases:
       // 1. Non-last model: processAPIError was already run in the catch block, result passed via processAPIErrorRetry
@@ -2311,6 +2354,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger?.debug?.(`Output processor failed on deferred error chunk: ${processorError}`, { runId });
           }
         }
+
+        // Nothing recovered, so this is the terminal failure for the turn: keep it
+        // in thread history as an `error` part on this attempt's assistant record
+        // (creating one when the attempt produced no output). The streamed chunk,
+        // onError callback and result.error keep the original error identity.
+        recordTerminalErrorMessage({
+          messageList,
+          attemptId: attemptMessageId,
+          activeId: currentMessageId,
+          error: deferredError,
+        });
 
         safeEnqueue(controller, errorChunk);
         await options?.onError?.({ error: deferredError });
@@ -2510,11 +2564,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }),
       );
 
-      // Remove rejected response messages from the messageList before the next iteration.
+      // Remove the rejected response from the messageList before the next iteration.
       // Without this, the LLM sees the rejected assistant response in its prompt on retry,
       // which confuses models and often causes empty text responses.
+      //
+      // Scoped to the rejected step, not the whole message: the response message id is stable
+      // across retry iterations, so removing the message outright also destroyed the reasoning
+      // and tool-invocation parts of steps the processor already accepted. That left a persisted
+      // assistant message carrying an OpenAI text itemId with no reasoning item to pair with,
+      // which OpenAI rejects with a non-retryable 400 on the next turn (issue #22291).
       if (shouldRetry) {
-        messageList.removeByIds([outputStream.messageId]);
+        messageList.rollbackToStepBoundary(outputStream.messageId, iterationBoundary);
       }
 
       const retryFeedbackText =
@@ -2532,8 +2592,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // If shouldRetry is true, we continue the loop instead of triggering tripwire
       const stepReason = shouldRetry ? 'retry' : tripwireTriggered ? 'tripwire' : hasErrored ? 'error' : finishReason;
 
-      const nextFallbackModelIndex = shouldRetry ? activeFallbackModelIndex : 0;
-
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
       // - OR there are non-provider-executed tool calls to process (some LLMs return finishReason 'stop' even with tool calls)
@@ -2542,6 +2600,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // contains both the tool execution and the text output, so no additional loop iteration is needed.
       // The shouldContinue/hasPendingToolCalls decision is computed above so reconciliation can run
       // before the returned snapshots are built.
+      const nextFallbackModelIndex = shouldContinue ? activeFallbackModelIndex : 0;
 
       // On terminal exit, materialize spans for provider tool calls whose result never arrived.
       // On retry (shouldRetry), pending calls from the rejected attempt must also be flushed —

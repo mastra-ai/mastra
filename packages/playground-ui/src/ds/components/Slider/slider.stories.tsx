@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { expect, userEvent, within } from 'storybook/test';
 import { Slider } from './slider';
 
 const meta: Meta<typeof Slider> = {
   title: 'Elements/Slider',
   component: Slider,
+  args: { 'aria-label': 'Value' },
   parameters: {
     layout: 'centered',
   },
@@ -24,6 +26,20 @@ export const Default: Story = {
     max: 100,
     step: 1,
     className: 'w-[240px]',
+  },
+};
+
+export const ControlledScalar: Story = {
+  args: {
+    value: 25,
+    defaultValue: [10, 90],
+    'aria-label': 'Canvas zoom',
+    className: 'w-60',
+  },
+  play: async ({ canvasElement }) => {
+    const sliders = await within(canvasElement).findAllByRole('slider', { name: 'Canvas zoom' });
+    await expect(sliders).toHaveLength(1);
+    await expect(sliders[0]).toHaveAttribute('aria-valuenow', '25');
   },
 };
 
@@ -78,14 +94,26 @@ export const WithLabel: Story = {
   render: () => {
     const [value, setValue] = useState<number[]>([50]);
     return (
-      <div className="flex w-70 flex-col gap-2">
+      <div className="flex w-[280px] flex-col gap-2">
         <div className="flex justify-between">
-          <span className="text-neutral5 text-ui-md">Volume</span>
-          <span className="text-neutral3 text-ui-md tabular-nums">{value[0]}%</span>
+          <span id="volume-label" className="text-ui-md text-neutral5">
+            Volume
+          </span>
+          <span className="text-ui-md text-neutral3 tabular-nums">{value[0]}%</span>
         </div>
-        <Slider value={value} max={100} step={1} onValueChange={setValue} />
+        <Slider aria-labelledby="volume-label" value={value} max={100} step={1} onValueChange={setValue} />
       </div>
     );
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    (await canvas.findByRole('slider', { name: 'Volume' })).focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await expect(canvas.getByText('51%')).toBeVisible();
+    await userEvent.keyboard('{End}');
+    await expect(canvas.getByText('100%')).toBeVisible();
+    await userEvent.keyboard('{Home}');
+    await expect(canvas.getByText('0%')).toBeVisible();
   },
 };
 
@@ -93,14 +121,21 @@ export const PriceRange: Story = {
   render: () => {
     const [value, setValue] = useState<number[]>([200, 800]);
     return (
-      <div className="flex w-70 flex-col gap-2">
+      <div className="flex w-[280px] flex-col gap-2">
         <div className="flex justify-between">
-          <span className="text-neutral5 text-ui-md">Price range</span>
-          <span className="text-neutral3 text-ui-md tabular-nums">
+          <span className="text-ui-md text-neutral5">Price range</span>
+          <span className="text-ui-md text-neutral3 tabular-nums">
             ${value[0]} – ${value[1]}
           </span>
         </div>
-        <Slider value={value} min={0} max={1000} step={10} onValueChange={setValue} />
+        <Slider
+          getAriaLabel={index => (index === 0 ? 'Minimum price' : 'Maximum price')}
+          value={value}
+          min={0}
+          max={1000}
+          step={10}
+          onValueChange={setValue}
+        />
       </div>
     );
   },
@@ -118,21 +153,21 @@ export const Vertical: Story = {
 
 export const States: Story = {
   render: () => (
-    <div className="flex w-70 flex-col gap-6">
+    <div className="flex w-[280px] flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <span className="text-neutral5 text-ui-md">Default</span>
+        <span className="text-ui-md text-neutral5">Default</span>
         <Slider defaultValue={[40]} max={100} step={1} />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-neutral5 text-ui-md">Range</span>
+        <span className="text-ui-md text-neutral5">Range</span>
         <Slider defaultValue={[20, 80]} max={100} step={1} />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-neutral5 text-ui-md">Disabled</span>
+        <span className="text-ui-md text-neutral5">Disabled</span>
         <Slider defaultValue={[50]} max={100} step={1} disabled />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-neutral5 text-ui-md">Disabled range</span>
+        <span className="text-ui-md text-neutral5">Disabled range</span>
         <Slider defaultValue={[20, 80]} max={100} step={1} disabled />
       </div>
     </div>

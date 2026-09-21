@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpRight, EllipsisVertical, Plus } from 'lucide-react';
+import { ArrowUpRight, EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useId } from 'react';
 
@@ -22,7 +22,6 @@ export function CandidateCard({
   projectRepositoryId,
   factoryProjectId,
   onRun,
-  onFile,
 }: {
   candidate: BoardCandidate;
   /** Repository id resolving GitHub descriptions in the detail panel. */
@@ -31,7 +30,6 @@ export function CandidateCard({
   factoryProjectId: string;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
-  onFile: () => void;
 }) {
   const detailsTitleId = useId();
   const morph = useCardMorph();
@@ -39,11 +37,6 @@ export function CandidateCard({
   const moves = cardMoves(candidate, candidate.column);
   const [defaultMove] = moves;
   const status = boardCardStatus({});
-
-  const fileFromDetails = () => {
-    morph.closeDetails();
-    onFile();
-  };
 
   const menuItems: ReactElement[] = [
     ...moves.map(move => (
@@ -58,10 +51,6 @@ export function CandidateCard({
         <span>{move.label}</span>
       </DropdownMenu.Item>
     )),
-    <DropdownMenu.Item key="file" onClick={fileFromDetails}>
-      <Plus aria-hidden />
-      <span>Add to board</span>
-    </DropdownMenu.Item>,
     <DropdownMenu.Item key="source" render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
       <ArrowUpRight aria-hidden />
       <span>{externalLinkLabel(candidate.source)}</span>

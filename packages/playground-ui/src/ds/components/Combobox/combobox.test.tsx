@@ -281,31 +281,6 @@ describe('Combobox', () => {
     expect(trigger.className).toContain('justify-between');
   });
 
-  it('defaults to the filled default variant; outline is transparent-bordered; ghost drops the border', () => {
-    const { rerender } = render(<Combobox options={options} placeholder="Pick provider" />);
-    // Default === the Button `default`: a filled surface.
-    const defaultClass = screen.getByRole('combobox').className;
-    expect(defaultClass).toContain('bg-surface3');
-    expect(defaultClass).not.toContain('bg-transparent');
-
-    // Outline === a transparent bordered field.
-    rerender(<Combobox options={options} placeholder="Pick provider" variant="outline" />);
-    const outlineClass = screen.getByRole('combobox').className;
-    expect(outlineClass).toContain('bg-transparent');
-    expect(outlineClass).toContain('border-border1');
-
-    // Ghost === borderless: same shape, transparent border instead.
-    rerender(<Combobox options={options} placeholder="Pick provider" variant="ghost" />);
-    const ghostClass = screen.getByRole('combobox').className;
-    expect(ghostClass).toContain('border-transparent');
-    expect(ghostClass).not.toContain('border-border1');
-
-    // Legacy `link` is still accepted for source compatibility, but renders as
-    // the closest field-safe look.
-    rerender(<Combobox options={options} placeholder="Pick provider" variant="link" />);
-    expect(screen.getByRole('combobox').className).toContain('border-transparent');
-  });
-
   it('renders options on the shared menu item recipe (ghost/md, rounded-lg)', async () => {
     render(<Combobox options={options} placeholder="Pick provider" />);
 
@@ -317,17 +292,24 @@ describe('Combobox', () => {
     expect(option.className).toContain('rounded-lg');
     expect(option.className).not.toContain('rounded-full');
     expect(option.className).not.toContain('rounded-md');
-    expect(option.className).toContain('data-highlighted:bg-neutral6/5');
+    expect(option.className).toContain('data-highlighted:text-foreground');
   });
 
   it('applies the error border when an error is provided', () => {
     render(<Combobox options={options} placeholder="Pick provider" error="Required" />);
-    expect(screen.getByRole('combobox').className).toContain('border-error');
+    expect(screen.getByRole('combobox').className).toContain('border-destructive');
+    expect(screen.getByRole('combobox').className).toContain('font-normal');
   });
 
   it('says what went wrong under the field, and nothing when nothing did', () => {
-    const withError = render(<Combobox options={options} error="Required" />);
-    expect(screen.getByText('Required')).toBeTruthy();
+    const withError = render(<Combobox options={options} name="provider" error="Required" />);
+    const field = screen.getByRole('combobox');
+    const message = screen.getByRole('alert');
+
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    expect(field.getAttribute('aria-describedby')).toBe('error-provider');
+    expect(message.id).toBe('error-provider');
+    expect(message.textContent).toContain('Required');
     const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
 
     cleanup();
@@ -344,6 +326,29 @@ describe('Combobox', () => {
     rerender(<Combobox options={options} size="sm" />);
 
     expect(screen.getByRole('combobox').className).toContain('h-form-sm');
+  });
+
+  it('renders a chevron-only trigger at icon sizes while keeping the value for assistive tech', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Combobox
+        options={options}
+        value="openai"
+        onValueChange={onValueChange}
+        size="icon-sm"
+        aria-label="Switch provider"
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: 'Switch provider' });
+    expect(trigger.className).toContain('w-form-sm');
+    expect(trigger.className).not.toContain('w-full');
+    expect(screen.getByText('OpenAI').className).toContain('sr-only');
+
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole('option', { name: 'Anthropic' }));
+
+    expect(onValueChange).toHaveBeenCalledWith('anthropic');
   });
 
   it('invites a choice in its own words when the caller gives none', () => {
@@ -375,12 +380,27 @@ describe('Combobox', () => {
   it('greys out the invitation only while nothing is chosen', () => {
     const { rerender } = render(<Combobox multiple options={options} value={[]} placeholder="Pick providers" />);
     const label = () => getFirstHTMLElement(screen.getByRole('combobox'));
-    expect(label().classList.contains('text-neutral3')).toBe(true);
+    expect(label().classList.contains('text-muted-foreground')).toBe(true);
 
     rerender(<Combobox multiple options={options} value={['openai']} placeholder="Pick providers" />);
 
     expect(label().textContent).toBe('1 selected');
-    expect(label().classList.contains('text-neutral3')).toBe(false);
+    expect(label().classList.contains('text-muted-foreground')).toBe(false);
+  });
+
+  it('uses the Input overlay surface (not the Button surface) for the default variant', () => {
+    render(<Combobox options={options} placeholder="Pick provider" />);
+
+    const trigger = screen.getByRole('combobox');
+    expect(trigger.classList.contains('bg-foreground/10')).toBe(true);
+    expect(trigger.classList.contains('border-border')).toBe(true);
+    expect(trigger.classList.contains('data-[placeholder]:text-muted-foreground')).toBe(true);
+    expect(trigger.classList.contains('data-[popup-open]:bg-foreground/14')).toBe(true);
+    expect(trigger.className).not.toContain('button-default');
+
+    const chevron = trigger.querySelector('svg');
+    expect(chevron?.classList.contains('text-muted-foreground')).toBe(true);
+    expect(chevron?.className.baseVal).not.toContain('opacity');
   });
 
   it('keeps up with a selection that changes from outside', () => {

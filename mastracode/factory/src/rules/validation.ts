@@ -29,7 +29,14 @@ export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 export const BOARD_IDENTIFIER_RE = IDENTIFIER_RE;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|token)/i;
-const WORK_ITEM_SOURCES: readonly WorkItemSource[] = ['github-issue', 'github-pr', 'linear-issue', 'manual'];
+const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
+  'github-issue',
+  'github-pr',
+  'linear-issue',
+  'jira-issue',
+  'incidentio-follow-up',
+  'manual',
+];
 const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [
   'forbidden',
   'invalid_transition',
@@ -227,8 +234,13 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'upsertLinkedWorkItem': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'board', 'source', 'sourceKey', 'title', 'url', 'stage', 'metadata'],
+        ['type', 'idempotencyKey', 'board', 'source', 'sourceKey', 'claimKey', 'title', 'url', 'stage', 'metadata'],
         'Factory linked work item decision',
+      );
+      const claimKey = optionalBoundedString(
+        value.claimKey,
+        'Factory linked work item claimKey',
+        MAX_SOURCE_KEY_LENGTH,
       );
       const url = value.url;
       if (url !== null && (typeof url !== 'string' || url.length > MAX_URL_LENGTH || !/^https?:\/\//.test(url))) {
@@ -241,6 +253,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         board: boardIdentifier(value.board, 'Factory linked work item board'),
         source: enumValue(value.source, WORK_ITEM_SOURCES, 'Factory linked work item source'),
         sourceKey: boundedString(value.sourceKey, 'Factory linked work item sourceKey', MAX_SOURCE_KEY_LENGTH),
+        ...(claimKey ? { claimKey } : {}),
         title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
@@ -250,7 +263,17 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'invokeSkill': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'role', 'skillName', 'prompt', 'arguments', 'precedingMessage', 'cancelInFlight'],
+        [
+          'type',
+          'idempotencyKey',
+          'role',
+          'skillName',
+          'prompt',
+          'arguments',
+          'precedingMessage',
+          'cancelInFlight',
+          'resume',
+        ],
         'Factory invoke skill decision',
       );
       // A run activates a skill or carries a prompt, never both: they are two
@@ -268,13 +291,24 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.cancelInFlight !== undefined && typeof value.cancelInFlight !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill cancelInFlight must be a boolean.');
       }
+      if (value.resume !== undefined && typeof value.resume !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory skill resume must be a boolean.');
+      }
+      // Resume continues an already-active skill by name; a plain prompt run has no
+      // skill to resume, so the dispatcher would silently ignore the flag.
+      if (value.resume === true && value.skillName === undefined) {
+        throw new FactoryRuleValidationError('Factory skill resume requires skillName.');
+      }
       return {
         type,
         ...commonCommitFields(value),
         role: boundedString(value.role, 'Factory skill role', MAX_ROLE_LENGTH, IDENTIFIER_RE),
         ...(value.skillName === undefined
           ? { prompt: boundedString(value.prompt, 'Factory skill prompt', MAX_MESSAGE_LENGTH) }
-          : { skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE) }),
+          : {
+              skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE),
+              ...(value.resume === true ? { resume: true } : {}),
+            }),
         ...(args ? { arguments: args } : {}),
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),

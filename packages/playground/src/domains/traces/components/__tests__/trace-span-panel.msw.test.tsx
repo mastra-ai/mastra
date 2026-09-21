@@ -1,9 +1,10 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TraceSpanPanel, type TraceSpanPanelProps } from '../trace-span-panel';
+import { queryPageFromList } from './fixtures/thread-traces';
 import { TRACE_ID, panelTraceSpans, spanDetailById } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -25,9 +26,21 @@ afterAll(() => {
 
 const onSpanDetailRequest = vi.fn<(spanId: string) => void>();
 
-const installHandlers = () => {
+const threadTraceList = (count: number) => ({
+  spans: Array.from({ length: count }, (_, i) => ({ ...panelTraceSpans.spans[0], traceId: `thread-trace-${i}` })),
+  pagination: { page: 0, perPage: 25, total: count, hasMore: false },
+});
+
+const installHandlers = ({ threadTraceCount = 2 }: { threadTraceCount?: number } = {}) => {
   onSpanDetailRequest.mockClear();
   server.use(
+    http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () =>
+      HttpResponse.json(queryPageFromList(threadTraceList(threadTraceCount))),
+    ),
+    // Registered before the `:traceId` route so the literal `traces/light` segment wins.
+    http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () =>
+      HttpResponse.json(threadTraceList(threadTraceCount)),
+    ),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, ({ params }) => {
       const spanId = String(params.spanId);
       onSpanDetailRequest(spanId);
@@ -38,6 +51,7 @@ const installHandlers = () => {
     http.get(`${TEST_BASE_URL}/api/observability/feedback`, () =>
       HttpResponse.json({ feedback: [], pagination: { page: 0, perPage: 10, total: 0, hasMore: false } }),
     ),
+    http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
   );
 };
 
@@ -81,8 +95,8 @@ describe('TraceSpanPanel', () => {
       installHandlers();
       const { queryClient } = renderPanel({ showPartialThread: true });
 
-      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
-      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
       expect(await screen.findByText('Will it rain?')).not.toBeNull();
       expect(screen.getByText('No rain is expected.')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -109,17 +123,63 @@ describe('TraceSpanPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when rendered, then a "View full thread" link points to the advanced thread view', async () => {
-      installHandlers();
+    it('when the thread has other traces and the panel can swap in place, then "Open full thread" asks to open it', async () => {
+      installHandlers({ threadTraceCount: 2 });
+      const onFullThreadOpenChange = vi.fn();
+      const { queryClient } = renderPanel({ showPartialThread: true, onFullThreadOpenChange });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
+      expect(onFullThreadOpenChange).toHaveBeenCalledWith(true);
+      expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('when the thread has other traces but no in-place swap is wired, then no "Open full thread" action is shown', async () => {
+      installHandlers({ threadTraceCount: 2 });
       const { queryClient } = renderPanel({ showPartialThread: true });
 
       await screen.findByText('No rain is expected.');
-
-      const link = screen.getByRole('link', { name: 'View full thread' });
-      expect(link.getAttribute('href')).toBe(
-        '/agents/weather-agent/threads/weather-thread?variant=advanced&traceId=trace-panel',
-      );
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Open full thread' })).toBeNull();
+    });
+
+    it('when this trace is the only one in its thread, then no "Open full thread" action is shown', async () => {
+      installHandlers({ threadTraceCount: 1 });
+      const { queryClient } = renderPanel({ showPartialThread: true, onFullThreadOpenChange: vi.fn() });
+
+      await screen.findByText('No rain is expected.');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Open full thread' })).toBeNull();
+    });
+
+    describe('when the full thread is open', () => {
+      it('replaces the trace timeline with the thread view and can go back or close', async () => {
+        installHandlers({ threadTraceCount: 2 });
+        const onFullThreadOpenChange = vi.fn();
+        const onClose = vi.fn();
+        const { queryClient } = renderPanel({
+          showPartialThread: true,
+          isFullThreadOpen: true,
+          onFullThreadOpenChange,
+          onClose,
+        });
+
+        expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
+        expect(screen.queryByText(`Trace ${TRACE_ID}`)).toBeNull();
+        expect(screen.queryByTestId('messages-panel')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
+        expect(onFullThreadOpenChange).toHaveBeenCalledWith(false);
+
+        // The thread view has no dedicated close arrow (the leading arrow goes back to the trace); the drawer closes via Escape.
+        fireEvent.keyDown(screen.getByRole('dialog', { name: /^Thread / }), { key: 'Escape' });
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
     });
 
     it('does not render the highlight action when no handler is provided', async () => {
@@ -196,19 +256,19 @@ describe('TraceSpanPanel', () => {
     expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByLabelText('Next span'));
+    fireEvent.click(screen.getByLabelText('Go to next span'));
     expect(await screen.findByRole('heading', { name: /span-child-2/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByLabelText('Previous span'));
+    fireEvent.click(screen.getByLabelText('Go to previous span'));
     expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
 
-    fireEvent.click(screen.getByLabelText('Previous span'));
+    fireEvent.click(screen.getByLabelText('Go to previous span'));
     expect(await screen.findByRole('heading', { name: /span-root/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
-  it('when the span panel is closed, then onSpanSelect(undefined) clears the selection', async () => {
+  it('when the selected span is clicked again, then onSpanSelect(undefined) clears the selection', async () => {
     installHandlers();
     const onSpanSelect = vi.fn<(spanId: string | undefined) => void>();
     const { queryClient } = renderPanel({ initialSpanId: 'span-child-1', onSpanSelect });
@@ -216,9 +276,8 @@ describe('TraceSpanPanel', () => {
     expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    // Two close buttons are visible (trace panel + span panel); the span panel's is the last.
-    const closeButtons = screen.getAllByLabelText('Close Panel');
-    fireEvent.click(closeButtons[closeButtons.length - 1]);
+    // The span column has no close button: clicking the selected span row again toggles it off.
+    fireEvent.click(screen.getByText('First tool call'));
 
     expect(onSpanSelect).toHaveBeenCalledWith(undefined);
     await waitFor(() => expect(screen.queryByRole('heading', { name: /span-child-1/ })).toBeNull());

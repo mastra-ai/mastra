@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { getDeployer } from '@mastra/deployer';
 import {
   analyzeEntryProjectType,
@@ -30,7 +30,7 @@ export async function build({
   force?: boolean;
   debug: boolean;
 }) {
-  const rootDir = root || process.cwd();
+  const rootDir = resolve(root || process.cwd());
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
   const logger = createLogger(debug);

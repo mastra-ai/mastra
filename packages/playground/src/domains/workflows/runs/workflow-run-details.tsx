@@ -1,9 +1,9 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useContext } from 'react';
-import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
+import { useCallback, useContext } from 'react';
+import type { WorkflowRunContextType } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { convertWorkflowRunStateToStreamResult } from '../utils';
+import { isWorkflowRunFinished } from '../utils';
 import type { WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
 
@@ -13,15 +13,7 @@ export interface WorkflowRunDetailProps extends Omit<
 > {
   workflowId: string;
   runId?: string;
-  observeWorkflowStream?: ({
-    workflowId,
-    runId,
-    storeRunResult,
-  }: {
-    workflowId: string;
-    runId: string;
-    storeRunResult: WorkflowRunStreamResult | null;
-  }) => void;
+  observeWorkflowStream?: WorkflowRunContextType['observeWorkflowStream'];
 }
 
 export const WorkflowRunDetail = ({
@@ -31,6 +23,15 @@ export const WorkflowRunDetail = ({
   ...triggerProps
 }: WorkflowRunDetailProps) => {
   const { runSnapshot, isLoadingRunExecutionResult } = useContext(WorkflowRunContext);
+
+  const observeSelectedRun = useCallback(() => {
+    if (!runId || !runSnapshot || isWorkflowRunFinished(runSnapshot.status)) return;
+    observeWorkflowStream?.({
+      workflowId,
+      runId,
+      storedStatus: runSnapshot.status,
+    });
+  }, [workflowId, runId, runSnapshot, observeWorkflowStream]);
 
   if (isLoadingRunExecutionResult) {
     return (
@@ -47,13 +48,11 @@ export const WorkflowRunDetail = ({
           </div>
         </div>
 
-        {/* "Run input" label + Form/JSON toggle */}
         <div className="flex items-center justify-between">
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-7 w-28 rounded-md" />
         </div>
 
-        {/* Form fields */}
         <div className="space-y-3">
           <Skeleton className="h-9 w-full rounded-md" />
           <Skeleton className="h-9 w-full rounded-md" />
@@ -73,23 +72,14 @@ export const WorkflowRunDetail = ({
     );
   }
 
-  const runResult = convertWorkflowRunStateToStreamResult(runSnapshot);
-  const runStatus = runResult?.status;
-
-  if (runId) {
-    return (
-      <div className="grid h-full grid-rows-[1fr_auto]">
-        <WorkflowTrigger
-          {...triggerProps}
-          paramsRunId={runId}
-          workflowId={workflowId}
-          observeWorkflowStream={() => {
-            if (runStatus !== 'success' && runStatus !== 'failed' && runStatus !== 'canceled') {
-              observeWorkflowStream?.({ workflowId, runId, storeRunResult: runResult });
-            }
-          }}
-        />
-      </div>
-    );
-  }
+  return (
+    <WorkflowTrigger
+      key={`${workflowId}:${runId}`}
+      {...triggerProps}
+      paramsRunId={runId}
+      paramsRunStatus={runSnapshot.status}
+      workflowId={workflowId}
+      observeWorkflowStream={observeSelectedRun}
+    />
+  );
 };

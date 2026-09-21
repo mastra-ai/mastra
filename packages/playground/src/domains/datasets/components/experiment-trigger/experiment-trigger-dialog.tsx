@@ -14,6 +14,7 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -67,7 +68,11 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-destructive text-ui-md">Failed to parse request context schema</p>;
+    return (
+      <div role="alert">
+        <Notice variant="destructive">Failed to parse request context schema</Notice>
+      </div>
+    );
   }
 
   return (

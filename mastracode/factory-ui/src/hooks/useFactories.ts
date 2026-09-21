@@ -60,7 +60,7 @@ export function useCreateFactoryMutation() {
 export const useAddFactoryMutation = useCreateFactoryMutation;
 
 /**
- * Also feeds the caller's issue intake. The link lands first, so the Factory list
+ * Also feeds the org's issue intake. The link lands first, so the Factory list
  * refreshes even when the intake write fails; the server link is idempotent, so retrying is safe.
  */
 export function useLinkRepositoryMutation() {

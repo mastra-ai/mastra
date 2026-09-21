@@ -1,6 +1,4 @@
 import type { TimeTravelParams } from '@mastra/client-js';
-import type { WorkflowRunStatus } from '@mastra/core/workflows';
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
   DialogContent,
@@ -9,47 +7,35 @@ import {
   DialogDescription,
   DialogBody,
 } from '@mastra/playground-ui/components/Dialog';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import {
-  AlertCircleIcon,
-  BracesIcon,
-  Clock3Icon,
-  LayersIcon,
-  MoreVerticalIcon,
-  PlayIcon,
-  RotateCcwIcon,
-  ShieldAlertIcon,
-  StepForwardIcon,
-} from 'lucide-react';
+  WorkflowCodeContent,
+  WorkflowStepActions,
+  WorkflowStepAction,
+} from '@mastra/playground-ui/components/Workflow';
+
 import { useContext, useMemo, useState } from 'react';
 import type { TripwireData } from '../context/use-current-run';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
-import { CodeDialogContent } from './workflow-code-dialog-content';
 import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export interface WorkflowStepActionBarProps {
-  input?: any;
   resumeData?: any;
-  output?: any;
-  suspendOutput?: any;
   error?: any;
   tripwire?: TripwireData;
   stepName: string;
   stepId?: string;
   mapConfig?: string;
   onShowNestedGraph?: () => void;
-  status?: WorkflowRunStatus;
   stepKey?: string;
   stepsFlow?: Record<string, string[]>;
 }
 
+type StepDialog = 'timeTravel' | 'runStep' | 'continueRun' | 'resumeData' | 'error' | 'tripwire';
+
 export const WorkflowStepActionBar = ({
-  input: _input,
   resumeData,
-  output: _output,
-  suspendOutput: _suspendOutput,
   error,
   tripwire,
   mapConfig,
@@ -59,12 +45,12 @@ export const WorkflowStepActionBar = ({
   stepKey,
   stepsFlow,
 }: WorkflowStepActionBarProps) => {
-  const [isResumeDataOpen, setIsResumeDataOpen] = useState(false);
-  const [isErrorOpen, setIsErrorOpen] = useState(false);
-  const [isTripwireOpen, setIsTripwireOpen] = useState(false);
-  const [isTimeTravelOpen, setIsTimeTravelOpen] = useState(false);
-  const [isContinueRunOpen, setIsContinueRunOpen] = useState(false);
-  const [isPerStepRunOpen, setIsPerStepRunOpen] = useState(false);
+  const [openDialog, setOpenDialog] = useState<StepDialog | null>(null);
+  const dialogProps = (dialog: StepDialog) => ({
+    open: openDialog === dialog,
+    onOpenChange: (open: boolean) => setOpenDialog(open ? dialog : null),
+  });
+  const closeDialog = () => setOpenDialog(null);
 
   const {
     withoutTimeTravel,
@@ -118,9 +104,8 @@ export const WorkflowStepActionBar = ({
 
   const showDebugMode = inDebugMode && stepPayload && !result?.steps?.[stepKey];
 
-  // Check if this step's detail is currently open
   const isMapConfigOpen = stepDetail?.type === 'map-config' && stepDetail?.stepName === stepName;
-  const isNestedGraphOpen = stepDetail?.type === 'nested-graph' && stepDetail?.stepName === stepName;
+  const isNestedGraphOpen = stepDetail?.type === 'nested-graph' && stepDetail.nestedGraph?.fullStep === stepKey;
 
   const handleMapConfigClick = () => {
     if (isMapConfigOpen) {
@@ -178,95 +163,44 @@ export const WorkflowStepActionBar = ({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenu.Trigger asChild>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Step actions"
-            title="Step actions"
-            className="nodrag nopan"
-          >
-            <MoreVerticalIcon />
-          </Button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end">
-          {onShowNestedGraph && (
-            <DropdownMenu.Item onSelect={handleNestedGraphClick}>
-              <LayersIcon />
-              <span>{isNestedGraphOpen ? 'Hide nested graph' : 'View nested graph'}</span>
-            </DropdownMenu.Item>
-          )}
-          {showTimeTravel && (
-            <DropdownMenu.Item onSelect={() => setIsTimeTravelOpen(true)}>
-              <Clock3Icon />
-              <span>Time travel</span>
-            </DropdownMenu.Item>
-          )}
-          {showDebugMode && (
-            <>
-              <DropdownMenu.Item
-                onSelect={() => {
-                  if (mapConfig) {
-                    handleRunMapStep();
-                  } else {
-                    setIsPerStepRunOpen(true);
-                  }
-                }}
-              >
-                <PlayIcon />
-                <span>Run step</span>
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                onSelect={() => {
-                  if (mapConfig) {
-                    handleRunMapStep(true);
-                  } else {
-                    setIsContinueRunOpen(true);
-                  }
-                }}
-              >
-                <StepForwardIcon />
-                <span>Continue run</span>
-              </DropdownMenu.Item>
-            </>
-          )}
-          {mapConfig && (
-            <DropdownMenu.Item onSelect={handleMapConfigClick}>
-              <BracesIcon />
-              <span>{isMapConfigOpen ? 'Hide map config' : 'Map config'}</span>
-            </DropdownMenu.Item>
-          )}
-          {resumeData && (
-            <DropdownMenu.Item onSelect={() => setIsResumeDataOpen(true)}>
-              <RotateCcwIcon />
-              <span>Resume data</span>
-            </DropdownMenu.Item>
-          )}
-          {error && (
-            <DropdownMenu.Item onSelect={() => setIsErrorOpen(true)}>
-              <AlertCircleIcon />
-              <span>Error</span>
-            </DropdownMenu.Item>
-          )}
-          {tripwire && (
-            <DropdownMenu.Item onSelect={() => setIsTripwireOpen(true)} className="text-amber-400">
-              <ShieldAlertIcon />
-              <span>Tripwire</span>
-            </DropdownMenu.Item>
-          )}
-        </DropdownMenu.Content>
-      </DropdownMenu>
+      <WorkflowStepActions>
+        {onShowNestedGraph && (
+          <WorkflowStepAction action="nested" isActive={isNestedGraphOpen} onSelect={handleNestedGraphClick} />
+        )}
+        {showTimeTravel && <WorkflowStepAction action="timeTravel" onSelect={() => setOpenDialog('timeTravel')} />}
+        {showDebugMode && (
+          <>
+            <WorkflowStepAction
+              action="runStep"
+              onSelect={() => {
+                if (mapConfig) handleRunMapStep();
+                else setOpenDialog('runStep');
+              }}
+            />
+            <WorkflowStepAction
+              action="continueRun"
+              onSelect={() => {
+                if (mapConfig) handleRunMapStep(true);
+                else setOpenDialog('continueRun');
+              }}
+            />
+          </>
+        )}
+        {mapConfig && <WorkflowStepAction action="map" isActive={isMapConfigOpen} onSelect={handleMapConfigClick} />}
+        {resumeData && <WorkflowStepAction action="resumeData" onSelect={() => setOpenDialog('resumeData')} />}
+        {error && <WorkflowStepAction action="error" onSelect={() => setOpenDialog('error')} />}
+        {tripwire && <WorkflowStepAction action="tripwire" onSelect={() => setOpenDialog('tripwire')} />}
+      </WorkflowStepActions>
 
       {showTimeTravel && (
-        <Dialog open={isTimeTravelOpen} onOpenChange={setIsTimeTravelOpen}>
+        <Dialog {...dialogProps('timeTravel')}>
           <DialogContent className={dialogContentClass}>
             <DialogHeader>
               <DialogTitle>Time travel to {stepKey}</DialogTitle>
               <DialogDescription>Time travel to a specific workflow step</DialogDescription>
             </DialogHeader>
             <DialogBody className="max-h-[600px]">
-              <WorkflowTimeTravelForm stepKey={stepKey} closeModal={() => setIsTimeTravelOpen(false)} />
+              <WorkflowTimeTravelForm stepKey={stepKey} closeModal={closeDialog} />
             </DialogBody>
           </DialogContent>
         </Dialog>
@@ -274,7 +208,7 @@ export const WorkflowStepActionBar = ({
 
       {showDebugMode && !mapConfig && (
         <>
-          <Dialog open={isPerStepRunOpen} onOpenChange={setIsPerStepRunOpen}>
+          <Dialog {...dialogProps('runStep')}>
             <DialogContent className={dialogContentClass}>
               <DialogHeader>
                 <DialogTitle>Run step {stepKey}</DialogTitle>
@@ -283,7 +217,7 @@ export const WorkflowStepActionBar = ({
               <DialogBody className="max-h-[600px]">
                 <WorkflowTimeTravelForm
                   stepKey={stepKey}
-                  closeModal={() => setIsPerStepRunOpen(false)}
+                  closeModal={closeDialog}
                   isPerStepRun
                   buttonText="Run step"
                   inputData={stepPayload?.input}
@@ -292,7 +226,7 @@ export const WorkflowStepActionBar = ({
             </DialogContent>
           </Dialog>
 
-          <Dialog open={isContinueRunOpen} onOpenChange={setIsContinueRunOpen}>
+          <Dialog {...dialogProps('continueRun')}>
             <DialogContent className={dialogContentClass}>
               <DialogHeader>
                 <DialogTitle>Continue run {stepKey}</DialogTitle>
@@ -301,7 +235,7 @@ export const WorkflowStepActionBar = ({
               <DialogBody className="max-h-[600px]">
                 <WorkflowTimeTravelForm
                   stepKey={stepKey}
-                  closeModal={() => setIsContinueRunOpen(false)}
+                  closeModal={closeDialog}
                   isContinueRun
                   buttonText="Continue run"
                   inputData={stepPayload?.input}
@@ -313,42 +247,42 @@ export const WorkflowStepActionBar = ({
       )}
 
       {resumeData && (
-        <Dialog open={isResumeDataOpen} onOpenChange={setIsResumeDataOpen}>
+        <Dialog {...dialogProps('resumeData')}>
           <DialogContent className={dialogContentClass}>
             <DialogHeader>
               <DialogTitle>{stepName} resume data</DialogTitle>
               <DialogDescription>View the resume data for this step</DialogDescription>
             </DialogHeader>
             <DialogBody>
-              <CodeDialogContent data={resumeData} />
+              <WorkflowCodeContent data={resumeData} />
             </DialogBody>
           </DialogContent>
         </Dialog>
       )}
 
       {error && (
-        <Dialog open={isErrorOpen} onOpenChange={setIsErrorOpen}>
+        <Dialog {...dialogProps('error')}>
           <DialogContent className={dialogContentClass}>
             <DialogHeader>
               <DialogTitle>{stepName} error</DialogTitle>
               <DialogDescription>View the error details for this step</DialogDescription>
             </DialogHeader>
             <DialogBody>
-              <CodeDialogContent data={error} />
+              <WorkflowCodeContent data={error} />
             </DialogBody>
           </DialogContent>
         </Dialog>
       )}
 
       {tripwire && (
-        <Dialog open={isTripwireOpen} onOpenChange={setIsTripwireOpen}>
+        <Dialog {...dialogProps('tripwire')}>
           <DialogContent className={dialogContentClass}>
             <DialogHeader>
               <DialogTitle>{stepName} tripwire</DialogTitle>
               <DialogDescription>View the tripwire details for this step</DialogDescription>
             </DialogHeader>
             <DialogBody>
-              <CodeDialogContent
+              <WorkflowCodeContent
                 data={{
                   reason: tripwire.reason,
                   retry: tripwire.retry,

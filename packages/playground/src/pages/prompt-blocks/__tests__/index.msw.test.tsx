@@ -1,9 +1,14 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptBlocksPage from '..';
 import { fewPromptBlocks, pagedPromptBlocks, systemPackages } from './fixtures/prompt-blocks';
-import { TestLinkProvider } from '@/test/link-provider';
+import { LinkComponentProvider } from '@/lib/framework';
+import { Link } from '@/lib/link';
+import { RouteHeaderActionsProvider } from '@/lib/route-header';
+import { RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
+import { stubLinkPaths, TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -130,6 +135,50 @@ describe('Prompt Blocks page', () => {
 
       expect(await screen.findByText('Prompt Block 2')).not.toBeNull();
       expect(screen.queryByText('Prompt Block 51')).toBeNull();
+    });
+  });
+
+  describe('when the CMS is available', () => {
+    const useCmsEnabled = () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/stored/prompt-blocks`, () => HttpResponse.json(fewPromptBlocks)),
+        http.get(`${TEST_BASE_URL}/api/system/packages`, () =>
+          HttpResponse.json({ ...systemPackages, cmsEnabled: true }),
+        ),
+      );
+    };
+
+    const renderPageWithRouter = () =>
+      renderWithProviders(
+        // Real react-router Link so the C shortcut's synthetic click navigates the MemoryRouter.
+        <LinkComponentProvider Link={Link} navigate={() => {}} paths={stubLinkPaths}>
+          <RouteHeaderActionsProvider>
+            <RouteHeaderActionsSlot />
+            <Routes>
+              <Route path="/prompt-blocks" element={<PromptBlocksPage />} />
+              <Route path="/cms/prompt-blocks/create" element={<div>Create prompt page</div>} />
+            </Routes>
+          </RouteHeaderActionsProvider>
+        </LinkComponentProvider>,
+        { router: { initialEntries: ['/prompt-blocks'] } },
+      );
+
+    it('shows a New prompt link to the create page in the header slot', async () => {
+      useCmsEnabled();
+      renderPageWithRouter();
+
+      const link = await screen.findByRole('link', { name: 'New prompt' });
+      expect(link.getAttribute('href')).toBe('/cms/prompt-blocks/create');
+    });
+
+    it('navigates to the create page when pressing C', async () => {
+      useCmsEnabled();
+      renderPageWithRouter();
+
+      await screen.findByRole('link', { name: 'New prompt' });
+      fireEvent.keyDown(window, { key: 'c' });
+
+      expect(await screen.findByText('Create prompt page')).not.toBeNull();
     });
   });
 

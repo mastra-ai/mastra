@@ -1,11 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import { McpServer } from '@modelcontextprotocol/server';
+import { toNodeHandler } from '@modelcontextprotocol/node';
+import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
-import { SSEServerTransport } from '@modelcontextprotocol/server-legacy/sse';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -339,7 +337,10 @@ type TestMcpServer = {
 };
 
 function buildMcpServer(): McpServer {
-  const mcpServer = new McpServer({ name: 'url-policy-test-server', version: '1.0.0' }, { capabilities: { tools: {} } });
+  const mcpServer = new McpServer(
+    { name: 'url-policy-test-server', version: '1.0.0' },
+    { capabilities: { tools: { listChanged: true } } },
+  );
   mcpServer.registerTool(
     'greet',
     {
@@ -368,26 +369,24 @@ function closeServer(httpServer: HttpServer): Promise<void> {
 }
 
 /**
- * Stateless Streamable HTTP MCP server (SDK 1.27+ requires a fresh transport per
- * request). `intercept` runs first for every request; returning true means the
- * interceptor handled the response.
+ * 2026-07-28-only Streamable HTTP MCP server. `intercept` runs first for every request;
+ * returning true means the interceptor handled the response.
  */
 async function startStreamableServer(
   intercept?: (req: IncomingMessage, res: ServerResponse) => boolean,
 ): Promise<TestMcpServer> {
   const mcpServer = buildMcpServer();
   const requests: { method: string; url: string }[] = [];
+  const mcpHandler = createMcpHandler(() => mcpServer.server, { legacy: 'reject' });
+  const handler = toNodeHandler(mcpHandler);
 
   const httpServer = createServer();
-  httpServer.on('request', async (req, res) => {
+  httpServer.on('request', (req, res) => {
     requests.push({ method: req.method ?? '', url: req.url ?? '' });
     if (intercept?.(req, res)) {
       return;
     }
-    await mcpServer.close().catch(() => {});
-    const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await mcpServer.connect(transport);
-    await transport.handleRequest(req, res);
+    handler(req, res);
   });
 
   const baseUrl = await listen(httpServer, '/mcp');
@@ -397,76 +396,7 @@ async function startStreamableServer(
     host: baseUrl.host,
     requests,
     close: async () => {
-      await mcpServer.close().catch(() => {});
-      await closeServer(httpServer);
-    },
-  };
-}
-
-/** Stateful Streamable HTTP MCP server — needed for the persistent GET event stream. */
-async function startStatefulStreamableServer(): Promise<TestMcpServer> {
-  const mcpServer = buildMcpServer();
-  const requests: { method: string; url: string }[] = [];
-  const serverTransport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
-  await mcpServer.connect(serverTransport);
-
-  const httpServer = createServer();
-  httpServer.on('request', async (req, res) => {
-    requests.push({ method: req.method ?? '', url: req.url ?? '' });
-    await serverTransport.handleRequest(req, res);
-  });
-
-  const baseUrl = await listen(httpServer, '/mcp');
-  return {
-    httpServer,
-    baseUrl,
-    host: baseUrl.host,
-    requests,
-    close: async () => {
-      await mcpServer.close().catch(() => {});
-      await serverTransport.close().catch(() => {});
-      await closeServer(httpServer);
-    },
-  };
-}
-
-/** Legacy HTTP+SSE MCP server, for exercising the eventSourceInit.fetch path. */
-async function startSseServer(): Promise<TestMcpServer> {
-  const mcpServer = buildMcpServer();
-  const requests: { method: string; url: string }[] = [];
-  const transports = new Map<string, SSEServerTransport>();
-
-  const httpServer = createServer();
-  httpServer.on('request', async (req, res) => {
-    requests.push({ method: req.method ?? '', url: req.url ?? '' });
-    const requestUrl = new URL(req.url ?? '', 'http://127.0.0.1');
-    if (req.method === 'GET' && requestUrl.pathname === '/sse') {
-      const transport = new SSEServerTransport('/messages', res);
-      transports.set(transport.sessionId, transport);
-      await mcpServer.connect(transport);
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/messages') {
-      const sessionId = requestUrl.searchParams.get('sessionId') ?? '';
-      const transport = transports.get(sessionId);
-      if (!transport) {
-        res.writeHead(404).end();
-        return;
-      }
-      await transport.handlePostMessage(req, res);
-      return;
-    }
-    res.writeHead(404).end();
-  });
-
-  const baseUrl = await listen(httpServer, '/sse');
-  return {
-    httpServer,
-    baseUrl,
-    host: baseUrl.host,
-    requests,
-    close: async () => {
-      await mcpServer.close().catch(() => {});
+      await mcpHandler.close().catch(() => {});
       await closeServer(httpServer);
     },
   };
@@ -588,8 +518,8 @@ describe('MastraMCPClient allowedHosts policy', () => {
     expect(redirectServed).toBe(1);
   }, 15000);
 
-  it('keeps the Datadog span-detach behavior for persistent GET streams with the policy on', async () => {
-    const server = track(await startStatefulStreamableServer());
+  it('keeps the Datadog span-detach behavior for the subscriptions/listen stream with the policy on', async () => {
+    const server = track(await startStreamableServer());
     const globalFetchSpy = vi.spyOn(globalThis, 'fetch');
     const activateSpy = vi.fn((_span: unknown, callback: () => unknown) => callback());
     (globalThis as Record<PropertyKey, unknown>)[datadogTracerTestSymbol] = {
@@ -601,12 +531,14 @@ describe('MastraMCPClient allowedHosts policy', () => {
       server: { url: server.baseUrl, allowedHosts: [server.host] },
     });
     await client.connect();
+    await client.setToolListChangedNotificationHandler(() => {});
 
-    const getCalls = globalFetchSpy.mock.calls.filter(
-      ([, init]) => ((init?.method as string | undefined) ?? 'GET').toUpperCase() === 'GET',
+    // Only the long-lived subscriptions/listen request is detached from the active span.
+    const listenCalls = globalFetchSpy.mock.calls.filter(
+      ([, init]) => typeof init?.body === 'string' && init.body.includes('subscriptions/listen'),
     );
-    expect(getCalls.length).toBeGreaterThan(0);
-    expect(activateSpy).toHaveBeenCalledTimes(getCalls.length);
+    expect(listenCalls.length).toBe(1);
+    expect(activateSpy).toHaveBeenCalledTimes(1);
     expect(activateSpy).toHaveBeenNthCalledWith(1, null, expect.any(Function));
     // The policy path dispatches with manual redirect handling.
     expect(globalFetchSpy.mock.calls.every(([, init]) => init?.redirect === 'manual')).toBe(true);
@@ -614,10 +546,7 @@ describe('MastraMCPClient allowedHosts policy', () => {
     activateSpy.mockClear();
     globalFetchSpy.mockClear();
     await client.tools();
-    const postCalls = globalFetchSpy.mock.calls.filter(
-      ([, init]) => ((init?.method as string | undefined) ?? 'GET').toUpperCase() === 'POST',
-    );
-    expect(postCalls.length).toBeGreaterThan(0);
+    expect(globalFetchSpy.mock.calls.length).toBeGreaterThan(0);
     expect(activateSpy).not.toHaveBeenCalled();
   }, 15000);
 
@@ -628,7 +557,6 @@ describe('MastraMCPClient allowedHosts policy', () => {
         if (req.method === 'POST') {
           res.writeHead(302, { location: `http://${decoy.host}/mcp` }).end();
         } else {
-          // Fail the SSE fallback's GET stream fast instead of leaving it open.
           res.writeHead(404).end();
         }
         return true;
@@ -642,71 +570,21 @@ describe('MastraMCPClient allowedHosts policy', () => {
       server: { url: server.baseUrl, allowedHosts: [server.host], fetch: userFetch },
     });
 
-    // The policy error surfaces directly (no SSE-fallback burial into a
-    // generic "could not connect" message) …
+    // The policy error surfaces directly …
     await expect(client.connect()).rejects.toThrow(/allowedHosts/);
     expect(userFetch.mock.calls.length).toBeGreaterThan(0);
     // … and post-hoc semantics: the outbound hop DID reach the disallowed host
     // (documented limitation of the custom-fetch path) — exactly once, because
-    // a policy violation must not trigger a second connect attempt over SSE.
+    // a policy violation must not trigger a second connect attempt.
     expect(decoy.requests.length).toBe(1);
   }, 15000);
 
-  it('wraps a caller-supplied eventSourceInit.fetch (SSE stream) with the policy', async () => {
-    const sse = track(await startSseServer());
-    const sseFetchSpy = vi.fn((url: string | URL, init?: RequestInit) => fetch(url, init));
-    client = new InternalMastraMCPClient({
-      name: 'sse-wrap-positive-test',
-      server: {
-        url: sse.baseUrl,
-        allowedHosts: [sse.host],
-        eventSourceInit: { fetch: sseFetchSpy as any },
-      },
-    });
-    await client.connect();
-    // The caller's fetch was used for the SSE stream (wrapping preserves it).
-    expect(sseFetchSpy.mock.calls.length).toBeGreaterThan(0);
-    const tools = await client.tools();
-    expect(tools['greet']).toBeDefined();
-  }, 15000);
-
-  it('blocks the SSE stream post-hoc when eventSourceInit.fetch lands on a disallowed host', async () => {
-    const decoy = track(await startDecoyServer());
-    const sse = track(await startSseServer());
-    // A caller fetch that (like a redirect-following or rewriting proxy) ends up
-    // on a different host than requested.
-    const sseFetchSpy = vi.fn((_url: string | URL, init?: RequestInit) => fetch(decoy.baseUrl, init));
-    client = new InternalMastraMCPClient({
-      name: 'sse-wrap-negative-test',
-      server: {
-        url: sse.baseUrl,
-        allowedHosts: [sse.host],
-        eventSourceInit: { fetch: sseFetchSpy as any },
-      },
-    });
-    // The policy error surfaces directly instead of the generic connect error.
-    const thrown = await client.connect().then(
-      () => undefined,
-      (e: unknown) => e,
-    );
-    expect(thrown).toBeInstanceOf(Error);
-    expect((thrown as Error).message).toMatch(/allowedHosts/);
-    // The error that crossed the eventsource boundary (flattened to a message
-    // string and re-wrapped as SseError) must STILL be non-reconnectable, or
-    // the reconnect machinery would retry the blocked host.
-    expect(isReconnectableMCPError(thrown)).toBe(false);
-    // Pre-request check passed (requested URL was allowed), the fetch ran …
-    expect(sseFetchSpy.mock.calls.length).toBeGreaterThan(0);
-    // … exactly one outbound hop reached the decoy: no retry, no reconnect.
-    expect(decoy.requests.length).toBe(1);
-  }, 15000);
 });
 
 // =============================================================================
 // OAuth discovery + allowedHosts
 //
-// Observed branch (SDK 1.29.0): the transports route auth() through
-// _fetchWithInit, built from the transport's `fetch` option — OAuth discovery
+// The transport routes auth() through its `fetch` option, so OAuth discovery
 // goes THROUGH the policy-wrapped fetch. These tests pin that observation:
 // a change in SDK routing flips them visibly.
 // =============================================================================
@@ -723,7 +601,10 @@ describe('allowedHosts and OAuth discovery', () => {
     }
   });
 
-  /** Minimal fake authorization server: metadata + dynamic registration. */
+  /**
+   * Minimal fake authorization server: metadata plus a registration endpoint that acts
+   * as a trap — the v2 client never registers dynamically, so it must never be hit.
+   */
   async function startAuthServer() {
     const requests: string[] = [];
     const httpServer = createServer((req, res) => {
@@ -745,18 +626,26 @@ describe('allowedHosts and OAuth discovery', () => {
         );
         return;
       }
-      if (requestUrl.pathname === '/register' && req.method === 'POST') {
-        let body = '';
-        req.on('data', chunk => (body += chunk));
-        req.on('end', () => {
-          const metadata = JSON.parse(body);
-          res.writeHead(201, { 'content-type': 'application/json' }).end(
-            JSON.stringify({ ...metadata, client_id: `client-${randomUUID()}`, token_endpoint_auth_method: 'none' }),
-          );
-        });
+      if (requestUrl.pathname === '/register') {
+        res.writeHead(201, { 'content-type': 'application/json' }).end(
+          JSON.stringify({ client_id: 'dcr-trap', token_endpoint_auth_method: 'none' }),
+        );
         return;
       }
       res.writeHead(404).end();
+    });
+    const baseUrl = await listen(httpServer, '/');
+    const close = () => closeServer(httpServer);
+    cleanups.push(close);
+    return { host: baseUrl.host, url: `http://${baseUrl.host}`, requests };
+  }
+
+  /** Authorization-server stand-in whose metadata endpoint redirects elsewhere. */
+  async function startMetadataRedirectServer(location: string) {
+    const requests: string[] = [];
+    const httpServer = createServer((req, res) => {
+      requests.push(req.url ?? '');
+      res.writeHead(302, { location }).end();
     });
     const baseUrl = await listen(httpServer, '/');
     const close = () => closeServer(httpServer);
@@ -803,6 +692,7 @@ describe('allowedHosts and OAuth discovery', () => {
         response_types: ['code'],
         token_endpoint_auth_method: 'none',
       },
+      clientInformation: { client_id: 'url-policy-test-client' },
       storage: new InMemoryOAuthStorage(),
       onRedirectToAuthorization: url => void authorizationUrls.push(url),
     });
@@ -830,6 +720,27 @@ describe('allowedHosts and OAuth discovery', () => {
     expect(authorizationUrls).toHaveLength(0);
   }, 15000);
 
+  it('blocks an OAuth metadata redirect to a disallowed host before following it', async () => {
+    const authServer = await startAuthServer();
+    const redirectServer = await startMetadataRedirectServer(`${authServer.url}/.well-known/oauth-authorization-server`);
+    const mcpServer = await startProtectedServer(redirectServer.url);
+    const authorizationUrls: URL[] = [];
+
+    client = new InternalMastraMCPClient({
+      name: 'oauth-metadata-redirect-test',
+      server: {
+        url: mcpServer.baseUrl,
+        authProvider: createProvider(authorizationUrls),
+        allowedHosts: [mcpServer.host, redirectServer.host],
+      },
+    });
+
+    await expect(client.connect()).rejects.toThrow(/allowedHosts/);
+    expect(redirectServer.requests.length).toBeGreaterThan(0);
+    expect(authServer.requests).toHaveLength(0);
+    expect(authorizationUrls).toHaveLength(0);
+  }, 15000);
+
   it('lets the OAuth flow proceed when the authorization server host is allowlisted', async () => {
     const authServer = await startAuthServer();
     const mcpServer = await startProtectedServer(authServer.url);
@@ -848,6 +759,8 @@ describe('allowedHosts and OAuth discovery', () => {
     // flow reached the authorization redirect through the allowlisted hosts.
     await expect(client.connect()).rejects.toThrow();
     expect(authServer.requests.length).toBeGreaterThan(0);
+    expect(authServer.requests).not.toContain('/register');
     expect(authorizationUrls).toHaveLength(1);
+    expect(authorizationUrls[0]!.searchParams.get('client_id')).toBe('url-policy-test-client');
   }, 15000);
 });

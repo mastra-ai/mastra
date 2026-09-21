@@ -1,5 +1,4 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Plus } from 'lucide-react';
+import { CreateButton } from '@mastra/playground-ui/components/Button';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
@@ -16,9 +15,9 @@ export function AgentHeaderCreateAction() {
   if (!canCreateAgent || !createPath) return null;
   return (
     <RouteHeaderActions owner="agent-list">
-      <Button as={Link} to={createPath} tooltip="Create an agent" size="icon-sm">
-        <Plus />
-      </Button>
+      <CreateButton render={<Link href={createPath} />} tooltip="Create an agent" variant="ghost" size="sm">
+        New agent
+      </CreateButton>
     </RouteHeaderActions>
   );
 }

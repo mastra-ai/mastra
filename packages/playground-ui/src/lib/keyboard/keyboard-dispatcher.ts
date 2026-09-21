@@ -219,11 +219,14 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
   const accepts = (layer: KeyboardLayer, event: KeyboardEvent) => !layer.shouldHandle || layer.shouldHandle(event);
 
   const handleKeydown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented || event.isComposing) {
+    // IME boundary events can report 229 while isComposing is false.
+    const isImeComposition = event.isComposing || event.keyCode === 229;
+    if (event.defaultPrevented || isImeComposition) {
       reset();
       return;
     }
-    if (isTypingInConsumer(event)) return;
+    const isAncestorShortcut = event.target !== event.currentTarget;
+    if (isAncestorShortcut && isTypingInConsumer(event)) return;
 
     const bindings = resolveBindings();
     const now = Date.now();
