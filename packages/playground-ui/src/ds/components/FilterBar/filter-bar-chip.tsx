@@ -3,7 +3,7 @@ import type { BaseUIEvent } from '@base-ui/react/types';
 import { LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
+import type { AnimationEvent, CSSProperties, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
@@ -38,7 +38,7 @@ export const segmentClass = cn(
 
 // A chip shares the `sm` control height (border-box, like the typeahead pill beside it).
 export const chipClass = cn(
-  'filter-bar-chip flex max-w-full items-stretch divide-x divide-border1 rounded-full border border-border1 bg-surface5 text-neutral5',
+  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border1 rounded-full border border-border1 bg-surface5 text-neutral5',
   controlHeight.sm,
 );
 
@@ -155,6 +155,10 @@ export function FilterBarChip({
   const [segments, setSegments] = useState({ settled: 0, count: segmentCount });
   if (segments.count !== segmentCount) setSegments({ settled: segments.count, count: segmentCount });
 
+  // Landing the value turns the draft into a filter: the chip glints once to mark it.
+  const [shine, setShine] = useState({ wasDraft: draft, active: false });
+  if (shine.wasDraft !== draft) setShine({ wasDraft: draft, active: shine.wasDraft && !draft });
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       if (readOnly || draft || isInsidePopup(event.target)) return;
@@ -212,10 +216,14 @@ export function FilterBarChip({
         data-slot="filter-bar-chip"
         data-draft={draft || undefined}
         data-readonly={readOnly || undefined}
+        data-shine={shine.active || undefined}
         className={cn(chipClass, className)}
         style={{ '--filter-bar-segments-settled': segments.settled } as CSSProperties}
         onKeyDown={handleKeyDown}
         onClick={(event: MouseEvent) => event.stopPropagation()}
+        onAnimationEnd={(event: AnimationEvent) => {
+          if (event.animationName === 'filter-bar-chip-shine') setShine(s => ({ ...s, active: false }));
+        }}
       >
         {readOnly && (
           <span

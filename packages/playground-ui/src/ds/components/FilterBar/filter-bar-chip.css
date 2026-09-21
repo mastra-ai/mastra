@@ -55,8 +55,44 @@
   }
 }
 
+/* Once the value lands, a narrow band of the text colour sweeps across the chip like
+ * light catching a surface. Drawn as an overlay so no segment has to know about it;
+ * it waits for the last segment to finish growing before it starts. */
+
+@keyframes filter-bar-chip-shine {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.filter-bar-chip[data-shine]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: linear-gradient(
+    105deg,
+    transparent 40%,
+    color-mix(in oklab, currentColor 22%, transparent) 50%,
+    transparent 60%
+  );
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  animation: filter-bar-chip-shine 480ms cubic-bezier(0.4, 0, 0.2, 1) 220ms both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .filter-bar-segment {
     animation: none;
+  }
+
+  .filter-bar-chip[data-shine]::after {
+    animation: none;
+    display: none;
   }
 }
