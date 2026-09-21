@@ -1,8 +1,11 @@
-import pMap from 'p-map';
+import pMapModule from 'p-map';
 import { MastraError } from '../../../error/index.js';
+import { interopDefault } from '../../../utils/interop.js';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import type { GatewayAuthRequest, GatewayAuthResult, MastraModelGatewayInterface, ProviderConfig } from './base.js';
 import { findGatewayForModel, getGatewayId, hasAuthCredentials, shouldEnableGateway } from './gateway-helpers.js';
+
+const pMap = interopDefault(pMapModule);
 
 /**
  * MastraError IDs that represent expected "auth not available" states —
