@@ -110,7 +110,7 @@ const processor = new TokenLimiterProcessor({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      'Prunes messages at each step of the agentic loop (including tool call continuations) to keep the conversation within the token limit, mutating the messageList directly and always preserving system messages. In `best-fit` it walks newest-first and drops what does not fit the remaining budget; in `contiguous` it drops everything from the first non-fit onward. Neither mode trims the tool calls and tool results produced by the run in progress, so the model always sees the tool traffic it just produced, and if that traffic alone exceeds the budget remaining after system messages and conversation overhead a non-retryable `TripWire` is thrown instead of silently dropping the tool call the loop depends on. In `memory-only` it leaves the current run untouched and trims only eligible remembered messages, oldest first.',
+      'Prunes messages at each step of the agentic loop (including tool call continuations) to keep the conversation within the token limit, mutating the messageList directly and always preserving system messages. In `best-fit` it walks newest-first and drops what does not fit the remaining budget; in `contiguous` it drops everything from the first non-fit onward. Neither mode trims the tool calls and tool results produced by the run in progress, so the model always sees the tool traffic it just produced. Those messages are kept whole and measured whole, so if they exceed the budget remaining after system messages and conversation overhead a non-retryable `TripWire` is thrown instead of silently dropping the tool call the loop depends on. In `memory-only` it leaves the current run untouched and trims only eligible remembered messages, oldest first.',
     isOptional: false,
   },
   {
@@ -159,7 +159,7 @@ When used as an input processor (both `processInput` and `processInputStep`), `T
 
 - **Empty messages**: If there are no messages to process, a TripWire is thrown because you can't send an LLM request with no messages.
 - **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you can't send an LLM request with only system messages and no user/assistant messages.
-- **Current run tool traffic exceeds limit** (`processInputStep` only): If the tool calls and results produced by the run in progress alone exceed the remaining budget, a non-retryable TripWire is thrown. Nothing else can be removed without dropping the tool call the loop depends on, so the run fails with the real cause instead of silently re-running the tool.
+- **Current run tool traffic exceeds limit** (`processInputStep` only): If the messages carrying the tool calls and results produced by the run in progress exceed the remaining budget, a non-retryable TripWire is thrown. Those messages are kept whole, so any text they also carry counts toward that total. Nothing else can be removed without dropping the tool call the loop depends on, so the run fails with the real cause instead of silently re-running the tool.
 
 ```typescript
 import { TripWire } from '@mastra/core/agent'

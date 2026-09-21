@@ -1711,7 +1711,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       .find(chunk => chunk?.type === 'tripwire');
     expect(tripwireChunk).toBeDefined();
     expect(tripwireChunk.payload.retry).toBe(false);
-    expect(tripwireChunk.payload.reason).toMatch(/^TokenLimiterProcessor: The current run tool calls/);
+    expect(tripwireChunk.payload.reason).toMatch(/^TokenLimiterProcessor: The current run's messages carrying tool calls/);
     expect(tripwireChunk.payload.metadata.currentRunTokens).toBeGreaterThan(
       tripwireChunk.payload.metadata.remainingBudget,
     );

@@ -1632,7 +1632,7 @@ describe('TokenLimiterProcessor', () => {
       // The run's own tool traffic is over budget by itself, so trimming every last remembered
       // message still would not bring the prompt under the limit. Fail loudly with the real cause
       // rather than drop the tool call the loop depends on, same shape as the system-message guard.
-      it('throws a non-retryable TripWire when the current run tool traffic alone exceeds the budget', async () => {
+      it('throws a non-retryable TripWire when the protected current-run messages exceed the budget', async () => {
         const processor = new TokenLimiterProcessor({ limit: 500 });
         const messageList = new MessageList();
 
@@ -1650,7 +1650,7 @@ describe('TokenLimiterProcessor', () => {
 
         expect(error).toBeInstanceOf(TripWire);
         const tripWire = error as TripWire;
-        expect(tripWire.message).toContain('current run tool calls and results alone exceed');
+        expect(tripWire.message).toContain("current run's messages carrying tool calls and results exceed");
         expect(tripWire.options?.retry).toBe(false);
         expect(tripWire.options?.metadata).toMatchObject({
           limit: 500,
@@ -1663,6 +1663,52 @@ describe('TokenLimiterProcessor', () => {
         expect(metadata.currentRunTokens).toBeGreaterThan(metadata.remainingBudget);
         // Exact set: the guard throws *before* removing anything, so nothing was mutated on the way out.
         expect(ids(messageList)).toEqual(['memory-1', 'input-1', 'response-1']);
+      });
+
+      // A protected message is kept whole, so it is measured whole. Text riding along in the same
+      // message counts toward the guard even though the tool parts on their own would have fit.
+      it('counts the text in a protected message, not only its tool parts', async () => {
+        const limit = 500;
+        const remainingBudget = limit - 24;
+        const processor = new TokenLimiterProcessor({ limit });
+
+        const toolOnly = toolMessage('response-1', { rules: ['a', 'b'] });
+        const withText: MastraDBMessage = {
+          ...toolOnly,
+          content: {
+            ...toolOnly.content,
+            parts: [...(toolOnly.content as { parts: unknown[] }).parts, { type: 'text', text: 'y'.repeat(4000) }],
+          },
+        } as MastraDBMessage;
+
+        // Premise: the tool parts fit on their own, the same message with its text does not.
+        expect(await tokensOf(processor, toolOnly)).toBeLessThanOrEqual(remainingBudget);
+        expect(await tokensOf(processor, withText)).toBeGreaterThan(remainingBudget);
+
+        const fits = new MessageList();
+        fits.add(
+          at(createTestMessage('How many rules do I have?', 'user', 'input-1'), '2023-01-01T00:00:05Z'),
+          'input',
+        );
+        fits.add(toolOnly, 'response');
+        await expect(runStep(processor, fits)).resolves.toBeUndefined();
+        // Resolved because the protected message survived, not because it was dropped.
+        expect(ids(fits)).toContain('response-1');
+
+        const overflows = new MessageList();
+        overflows.add(
+          at(createTestMessage('How many rules do I have?', 'user', 'input-1'), '2023-01-01T00:00:05Z'),
+          'input',
+        );
+        overflows.add(withText, 'response');
+
+        const error = await runStep(processor, overflows).then(
+          () => undefined,
+          (thrown: unknown) => thrown,
+        );
+
+        expect(error).toBeInstanceOf(TripWire);
+        expect((error as TripWire).message).toContain("current run's messages carrying tool calls and results exceed");
       });
 
       it('counts system tokens against the budget before deciding the tool traffic does not fit', async () => {
@@ -1691,7 +1737,7 @@ describe('TokenLimiterProcessor', () => {
           (thrown: unknown) => thrown,
         );
         expect(error).toBeInstanceOf(TripWire);
-        expect((error as TripWire).message).toContain('current run tool calls and results alone exceed');
+        expect((error as TripWire).message).toContain("current run's messages carrying tool calls and results exceed");
         expect((error as TripWire).options?.metadata).toMatchObject({ limit: 1400 });
         const metadata = (error as TripWire).options?.metadata as { systemTokens: number; remainingBudget: number };
         expect(metadata.systemTokens).toBeGreaterThan(0);

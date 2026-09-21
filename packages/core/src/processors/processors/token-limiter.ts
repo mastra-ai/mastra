@@ -268,12 +268,13 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       currentTokens += await this.countInputMessageTokens(message);
     }
 
-    // The current run can exceed the budget on its own, since one large tool result is enough. Nothing
-    // remains that may be removed, so this mirrors the system-message guard above: fail loudly and
+    // The current run can exceed the budget on its own, since one large tool result is enough. The count
+    // covers each protected message in full, text parts and overhead included, not just its tool parts.
+    // Nothing remains that may be removed, so this mirrors the system-message guard above: fail loudly and
     // non-retryably rather than sending a request that is known to be over the limit.
     if (currentRunMessages.length > 0 && currentTokens > remainingBudget) {
       throw new TripWire(
-        'TokenLimiterProcessor: The current run tool calls and results alone exceed the remaining token budget. They cannot be removed without breaking the agent loop.',
+        "TokenLimiterProcessor: The current run's messages carrying tool calls and results exceed the remaining token budget. They cannot be removed without breaking the agent loop.",
         {
           retry: false,
           metadata: {
