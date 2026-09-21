@@ -50,6 +50,7 @@ export type {
   GetTraceQueryValuesResponse,
   TraceQueryCanonicalFieldDescriptor,
   TraceQueryGroupResponse,
+  TraceQueryKeysetTraceResponse,
   TraceQueryObservedFieldDescriptor,
   TraceQueryOperator,
   TraceQueryPredicateScope,

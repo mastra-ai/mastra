@@ -1,7 +1,7 @@
 import type {
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesResponse,
-  TraceQueryTraceResponse,
+  TraceQueryKeysetTraceResponse,
 } from '@mastra/client-js';
 
 export const emptyTraceQueryFields: GetTraceQueryFieldsResponse = {
@@ -40,7 +40,7 @@ export const traceQuerySpanModelValues: GetTraceQueryValuesResponse = {
   valuesTruncated: false,
 };
 
-export const traceQueryPage: Extract<TraceQueryTraceResponse, { page: { next: string | null } }> = {
+export const traceQueryPage: TraceQueryKeysetTraceResponse = {
   traces: [
     {
       traceId: 'trace-a',

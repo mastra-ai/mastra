@@ -13,6 +13,7 @@ import type {
   TraceQueryRequest,
   TraceQueryResponse,
   TraceQueryTraceResponse,
+  TraceQueryKeysetTraceResponse,
   TraceQueryGroupResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
@@ -173,6 +174,7 @@ export type QueryTracesGroupedInput = QueryTracesBaseInput & {
   mode?: never;
   after?: never;
   limit?: never;
+  orderBy?: never;
 };
 
 export type QueryTracesUngroupedInput = QueryTracesKeysetInput | QueryTracesPaginatedInput | QueryTracesDeltaInput;
@@ -302,7 +304,7 @@ export class Observability extends BaseResource {
   queryTraces(params: QueryTracesGroupedInput): Promise<TraceQueryGroupResponse>;
   queryTraces(params: QueryTracesDeltaInput): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
   queryTraces(params: QueryTracesPaginatedInput): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
-  queryTraces(params: QueryTracesKeysetInput): Promise<Extract<TraceQueryTraceResponse, { page: unknown }>>;
+  queryTraces(params: QueryTracesKeysetInput): Promise<TraceQueryKeysetTraceResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.request('/observability/traces/query', { method: 'POST', body: params });

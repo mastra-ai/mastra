@@ -47,8 +47,8 @@ import type {
   ListTracesResponse,
   ListTracesLightResponse,
   TraceQueryGroupResponse,
+  TraceQueryKeysetTraceResponse,
   TraceQueryResponse,
-  TraceQueryTraceResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -1128,7 +1128,7 @@ export class MastraClient extends BaseResource {
   queryTraces(params: QueryTracesGroupedInput): Promise<TraceQueryGroupResponse>;
   queryTraces(params: QueryTracesDeltaInput): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
   queryTraces(params: QueryTracesPaginatedInput): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
-  queryTraces(params: QueryTracesKeysetInput): Promise<Extract<TraceQueryTraceResponse, { page: unknown }>>;
+  queryTraces(params: QueryTracesKeysetInput): Promise<TraceQueryKeysetTraceResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.observability.queryTraces(params);

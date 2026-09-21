@@ -1,5 +1,5 @@
 import { MastraClient } from '@mastra/client-js';
-import type { QueryTracesKeysetInput, TraceQueryTraceResponse } from '@mastra/client-js';
+import type { QueryTracesKeysetInput, TraceQueryKeysetTraceResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, skipToken, useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -7,8 +7,7 @@ import { useInView } from '@/hooks/use-in-view';
 
 export const TRACE_QUERY_PER_PAGE = 25;
 
-type TraceQueryCursorResponse = Extract<TraceQueryTraceResponse, { page: { next: string | null } }>;
-type TraceQueryTrace = TraceQueryCursorResponse['traces'][number];
+type TraceQueryTrace = TraceQueryKeysetTraceResponse['traces'][number];
 
 export type TraceQueryArgs = Omit<QueryTracesKeysetInput, 'page' | 'pagination'>;
 
@@ -35,11 +34,11 @@ export interface UseTraceQueryReturn {
   setEndOfListElement: (node: HTMLDivElement | null) => void;
 }
 
-export function getTraceQueryNextPageParam(lastPage: TraceQueryCursorResponse | undefined): string | undefined {
+export function getTraceQueryNextPageParam(lastPage: TraceQueryKeysetTraceResponse | undefined): string | undefined {
   return lastPage?.page.next ?? undefined;
 }
 
-export function selectTraceQueryTraces(data: { pages: TraceQueryCursorResponse[] }): TraceQueryTrace[] {
+export function selectTraceQueryTraces(data: { pages: TraceQueryKeysetTraceResponse[] }): TraceQueryTrace[] {
   const seen = new Set<string>();
   return data.pages.flatMap(page =>
     page.traces.filter(trace => {
@@ -61,7 +60,7 @@ export function useTraceQuery({
   const client = useMastraClient();
   const { inView, setRef: setEndOfListElement } = useInView();
   const result = useInfiniteQuery<
-    TraceQueryCursorResponse,
+    TraceQueryKeysetTraceResponse,
     Error,
     TraceQueryTrace[],
     readonly unknown[],
