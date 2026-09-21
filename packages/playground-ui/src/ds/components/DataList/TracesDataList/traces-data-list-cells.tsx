@@ -1,5 +1,5 @@
 import { CornerDownRightIcon, DatabaseIcon, ListTreeIcon, RouteIcon } from 'lucide-react';
-import type { ComponentType } from 'react';
+import type { ComponentType, SVGProps } from 'react';
 import { DataListCell, DataListTextCell } from '../data-list-cells';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
@@ -65,7 +65,7 @@ export function TracesDataListInputCell({ input }: TracesDataListInputCellProps)
 // TypeCell
 // ---------------------------------------------------------------------------
 
-type EntityTypeDisplay = { label: string; Icon: ComponentType<{ className?: string }> };
+type EntityTypeDisplay = { label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
 
 // Keys are lowercase `EntityType` enum values (plus legacy `workflow`).
 const ENTITY_TYPE_DISPLAY: Record<string, EntityTypeDisplay> = {
