@@ -83,7 +83,7 @@ export function SettingsRowLayout({
             className={cn(
               'min-w-0',
               isSectionLayout && 'sm:justify-self-end',
-              viewOnly && 'flex items-center gap-2 text-body text-muted-foreground',
+              viewOnly && 'flex items-center gap-2 text-body-sm text-muted-foreground',
             )}
           >
             {control}
