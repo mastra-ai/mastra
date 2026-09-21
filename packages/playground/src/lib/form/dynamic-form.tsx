@@ -150,7 +150,7 @@ export function DynamicForm({
 
   const formComponents = useMemo(
     () => ({
-      Label: ({ value }: { value: string }) => <Label className="text-ui-md font-normal">{value}</Label>,
+      Label: ({ value }: { value: string }) => <Label className="font-normal">{value}</Label>,
     }),
     [],
   );

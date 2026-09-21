@@ -158,7 +158,7 @@ export function ToolsPage() {
               aria-label={`Description for ${tool.label}`}
               disabled={!canEditToolDescriptions}
               className={cn(
-                'border border-transparent appearance-none block w-full text-neutral3 bg-transparent rounded px-1 -mx-1 transition-colors focus:outline-solid focus:outline-1 focus:outline-white focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-white',
+                'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent rounded px-1 -mx-1 transition-colors focus:outline-solid focus:outline-1 focus:outline-white focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-white',
                 canEditToolDescriptions && 'hover:bg-surface4 focus:bg-surface4',
               )}
               value={selectedTools?.[tool.value]?.description ?? tool.description}
@@ -180,7 +180,7 @@ export function ToolsPage() {
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
-            className="text-neutral3 hover:text-neutral5 rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
+            className="text-muted-foreground hover:text-foreground rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
             aria-label={`Remove ${tool.label}`}
           >
             <Icon size="sm">
@@ -230,8 +230,8 @@ export function ToolsPage() {
                       onClick={() => handleAddTool(tool.value)}
                       className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left transition-colors hover:bg-white/10 focus:bg-white/10 focus-visible:ring-0 focus-visible:outline-hidden"
                     >
-                      <span className="text-ui-md text-neutral5 font-normal">{tool.label}</span>
-                      {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}
+                      <span className="text-ui-md text-foreground font-normal">{tool.label}</span>
+                      {tool.description && <span className="text-ui-xs text-muted-foreground">{tool.description}</span>}
                     </button>
                   ))}
                 </PopoverContent>

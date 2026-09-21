@@ -79,23 +79,23 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
         <DialogBody>
           <div className="flex flex-col gap-3">
             <div className="border-border1 bg-surface2 flex items-center gap-2 rounded-md border px-3 py-2">
-              <Search className="text-neutral3 h-4 w-4" />
+              <Search className="text-muted-foreground h-4 w-4" />
               <input
                 type="text"
                 value={search}
                 onChange={e => handleSearchChange(e.target.value)}
                 placeholder="Search prompt blocks..."
-                className="text-ui-sm text-neutral6 placeholder:text-neutral3 flex-1 bg-transparent outline-hidden"
+                className="text-ui-sm text-foreground placeholder:text-muted-foreground flex-1 bg-transparent outline-hidden"
               />
             </div>
 
             {isLoading ? (
-              <div className="text-neutral3 flex flex-col items-center justify-center gap-2 py-5">
+              <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-5">
                 <Spinner className="h-6 w-6" />
                 <Txt variant="ui-sm">Loading prompt blocks...</Txt>
               </div>
             ) : filtered.length === 0 ? (
-              <div className="text-neutral3 flex flex-col items-center justify-center gap-2 py-5">
+              <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-5">
                 <FileText className="h-8 w-8" />
                 <Txt variant="ui-sm">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
               </div>
@@ -111,11 +111,11 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                       'hover:bg-surface4 active:bg-surface5 transition-colors',
                     )}
                   >
-                    <Txt variant="ui-sm" className="text-neutral6 font-medium">
+                    <Txt variant="ui-sm" className="text-foreground font-medium">
                       {block.name}
                     </Txt>
                     {block.description && (
-                      <Txt variant="ui-xs" className="text-neutral3 line-clamp-1">
+                      <Txt variant="ui-xs" className="text-muted-foreground line-clamp-1">
                         {block.description}
                       </Txt>
                     )}

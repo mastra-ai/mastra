@@ -161,7 +161,7 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
         Import
       </Button>
 
-      {showNoSchemaWarning && <span className="text-neutral3 text-ui-sm">No {schemaType} schema</span>}
+      {showNoSchemaWarning && <span className="text-muted-foreground text-ui-sm">No {schemaType} schema</span>}
     </div>
   );
 }

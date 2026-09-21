@@ -51,7 +51,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     <div className="flex flex-col gap-4 p-4">
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <h3 className="text-neutral5 text-ui-md font-medium">Working Memory</h3>
+          <h3 className="text-foreground text-ui-md font-medium">Working Memory</h3>
           {isWorkingMemoryEnabled && workingMemorySource && (
             <span
               className={cn(
@@ -71,7 +71,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           )}
         </div>
         {isWorkingMemoryEnabled && !threadExists && (
-          <p className="text-neutral3 text-ui-sm">Send a message to the agent to enable working memory.</p>
+          <p className="text-muted-foreground text-ui-sm">Send a message to the agent to enable working memory.</p>
         )}
       </div>
 
@@ -107,7 +107,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                                 Copied!
                               </span>
                             )}
-                            <span className="text-ui-xs bg-surface3 text-neutral4 pointer-events-none absolute top-2 right-2 z-20 rounded-full px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                            <span className="text-ui-xs bg-surface3 text-muted-foreground pointer-events-none absolute top-2 right-2 z-20 rounded-full px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                               Click to copy
                             </span>
                           </div>
@@ -117,14 +117,14 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   )}
                 </>
               ) : (
-                <div className="text-neutral3 text-ui-md font-mono">
+                <div className="text-muted-foreground text-ui-md font-mono">
                   No working memory content yet. Click "Edit Working Memory" to add content.
                 </div>
               )}
             </>
           ) : (
             <textarea
-              className="border-border1 bg-surface3 text-neutral5 text-ui-md min-h-[150px] w-full resize-none rounded-lg border p-3 font-mono"
+              className="border-border1 bg-surface3 text-foreground text-ui-md min-h-[150px] w-full resize-none rounded-lg border p-3 font-mono"
               value={editState.value}
               onChange={e => setEditState(state => ({ ...state, value: e.target.value }))}
               disabled={isUpdating}
@@ -197,7 +197,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
         </>
       ) : (
         <div className="bg-surface3 border-border1 rounded-lg border p-4">
-          <p className="text-neutral3 text-ui-md mb-3">
+          <p className="text-muted-foreground text-ui-md mb-3">
             Working memory is not enabled for this agent. Enable it to maintain context across conversations.
           </p>
           <a

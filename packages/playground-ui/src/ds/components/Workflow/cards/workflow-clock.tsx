@@ -29,7 +29,7 @@ function ElapsedTime({ startedAt, endedAt }: Pick<WorkflowClockProps, 'startedAt
   const timeDiff = Number.isFinite(duration) && duration >= 0 ? duration : undefined;
 
   return (
-    <Txt variant="ui-xs" className="text-neutral3 font-mono whitespace-nowrap">
+    <Txt variant="ui-xs" className="text-muted-foreground font-mono whitespace-nowrap">
       {timeDiff === undefined ? <span aria-label="Timing unavailable">—</span> : `${toSigFigs(timeDiff, 3)}ms`}
     </Txt>
   );

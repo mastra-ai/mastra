@@ -227,7 +227,7 @@ export const useCodemirrorTheme = (): Extension => {
 const codeEditorVariants = cva(
   cn(
     'relative overflow-hidden font-mono outline-hidden focus-within:outline-hidden focus:outline-hidden',
-    'duration-normal transition-colors ease-out-custom',
+    'transition-colors duration-normal ease-out-custom',
   ),
   {
     variants: {
@@ -270,6 +270,13 @@ const editorFocusTheme = Prec.highest(
 
 const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTheme];
 
+type CodeEditorContentAttributes = {
+  'aria-label': string;
+  id?: string;
+  'aria-describedby'?: string;
+  'aria-invalid'?: string;
+};
+
 export type CodeEditorProps = {
   data?: Record<string, unknown> | Array<Record<string, unknown>>;
   value?: string;
@@ -308,6 +315,10 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       lineWrapping = true,
       editable,
       variant,
+      id,
+      'aria-label': ariaLabel = 'Code editor',
+      'aria-describedby': ariaDescribedBy,
+      'aria-invalid': ariaInvalid,
       ...props
     },
     ref,
@@ -316,7 +327,12 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
     const extensions = useMemo(() => {
-      const exts: Extension[] = [...editorFocusExtensions];
+      const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
+      if (id) contentAttributes.id = id;
+      if (ariaDescribedBy) contentAttributes['aria-describedby'] = ariaDescribedBy;
+      if (ariaInvalid !== undefined) contentAttributes['aria-invalid'] = String(ariaInvalid);
+
+      const exts: Extension[] = [...editorFocusExtensions, EditorView.contentAttributes.of(contentAttributes)];
 
       if (lineWrapping) {
         exts.push(EditorView.lineWrapping);
@@ -341,7 +357,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [language, highlightVariables, schema, editable, lineWrapping]);
+    }, [language, highlightVariables, schema, editable, lineWrapping, id, ariaLabel, ariaDescribedBy, ariaInvalid]);
 
     return (
       <div className={cn(codeEditorVariants({ variant }), className)} {...props}>
@@ -353,7 +369,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
           extensions={extensions}
           onChange={onChange}
           editable={editable}
-          aria-label="Code editor"
+          aria-label={ariaLabel}
           placeholder={placeholder}
           height="100%"
           style={{ height: '100%' }}

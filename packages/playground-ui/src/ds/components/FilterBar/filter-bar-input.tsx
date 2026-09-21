@@ -262,7 +262,7 @@ export function FilterBarInput({
             className={cn(
               unstyledFormElementStyle,
               'min-w-0 flex-1 bg-transparent',
-              'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
+              'placeholder:text-placeholder placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
             )}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
@@ -332,7 +332,7 @@ export function FilterBarInput({
               )}
               {step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
-                  <Txt variant="ui-sm" className="text-neutral3">
+                  <Txt variant="ui-sm" className="text-muted-foreground">
                     Type a value
                   </Txt>
                   <Button

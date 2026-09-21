@@ -67,7 +67,7 @@ export const DisabledAndRunning: Story = {
       <ComposerBox sendingPulseKey={1}>
         <ComposerInput aria-label="Message" value="Waiting for the current run..." disabled readOnly />
         <ComposerActions>
-          <span className="text-ui-sm text-neutral3">Running</span>
+          <span className="text-ui-sm text-muted-foreground">Running</span>
           <Button type="button" size="md">
             Cancel
           </Button>
