@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ChevronDownIcon, CopyIcon, ScissorsIcon, ClipboardIcon, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
+import { Combobox } from '../Combobox';
 import { DropdownMenu } from '../DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
@@ -223,6 +224,43 @@ export const SearchWithDropdown: Story = {
             <SelectItem value="name">Name</SelectItem>
           </SelectContent>
         </Select>
+      </ButtonsGroup>
+    );
+  },
+};
+
+/**
+ * Two field triggers joined — Studio's composer pairs a provider picker with a model picker
+ * this way. A field's resting edge is its material's inset rim, which paints all four sides,
+ * so the group flattens the material and gives both segments the border it can halve at the
+ * seam. Hover and focus move that border instead of the rim.
+ */
+export const AsFieldPair: Story = {
+  render: () => {
+    const [provider, setProvider] = useState('openai');
+    const [model, setModel] = useState('gpt-5');
+    return (
+      <ButtonsGroup>
+        <Combobox
+          value={provider}
+          onValueChange={value => setProvider(String(value))}
+          options={[
+            { value: 'openai', label: 'OpenAI' },
+            { value: 'anthropic', label: 'Anthropic' },
+          ]}
+          aria-label="Provider"
+          className="w-auto"
+        />
+        <Combobox
+          value={model}
+          onValueChange={value => setModel(String(value))}
+          options={[
+            { value: 'gpt-5', label: 'gpt-5' },
+            { value: 'gpt-5-mini', label: 'gpt-5-mini' },
+          ]}
+          aria-label="Model"
+          className="w-auto"
+        />
       </ButtonsGroup>
     );
   },

@@ -121,11 +121,10 @@ describe('Button', () => {
   // 20px, 16px, or 15.39px icon depending on whether it arrived as an icon-mode
   // child, the `icon` prop, or a bare SVG.
   it.each([
-    ['xs', 'icon-xs', 'h-icon-sm'],
-    ['sm', 'icon-sm', 'h-icon-smd'],
-    ['md', 'icon-md', 'h-icon-default'],
-    ['lg', 'icon-lg', 'h-icon-lg'],
-  ] as const)('sizes the %s icon the same through every path', (textSize, iconSize, expected) => {
+    ['sm', 'icon-sm'],
+    ['md', 'icon-md'],
+    ['lg', 'icon-lg'],
+  ] as const)('sizes the %s icon the same through every path', (textSize, iconSize) => {
     const { container } = render(
       <>
         <Button size={iconSize} aria-label="icon mode">
@@ -137,9 +136,9 @@ describe('Button', () => {
       </>,
     );
 
-    for (const slot of container.querySelectorAll('span[class*="h-icon"]')) {
-      expect(slot.className).toContain(expected);
-    }
+    const slots = [...container.querySelectorAll('span[class*="size-icon"]')];
+    expect(slots).toHaveLength(2);
+    expect(new Set(slots.map(slot => slot.className)).size).toBe(1);
   });
 
   describe('icon prop', () => {

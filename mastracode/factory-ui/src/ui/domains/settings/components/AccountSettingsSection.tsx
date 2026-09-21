@@ -41,7 +41,7 @@ function CopyableAccountValue({ value, label }: { value: string; label: string }
   return (
     <div className="flex min-w-0 items-center gap-1">
       <AccountValue mono>{value}</AccountValue>
-      <CopyButton content={value} size="icon-xs" variant="ghost" tooltip={`Copy ${label}`} />
+      <CopyButton content={value} size="icon-sm" variant="ghost" tooltip={`Copy ${label}`} />
     </div>
   );
 }

@@ -181,7 +181,7 @@ export function ModelPicker() {
         aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
         aria-busy={busy}
         className={cn(
-          buttonVariants({ variant: 'ghost', size: 'xs' }),
+          buttonVariants({ variant: 'ghost', size: 'sm' }),
           notConfigured ? 'text-accent2' : 'text-neutral3',
         )}
         title={[selectedModelId, selectedPack?.name].filter(Boolean).join(' · ') || undefined}

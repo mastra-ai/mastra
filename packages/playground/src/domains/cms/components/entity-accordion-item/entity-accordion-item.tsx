@@ -45,7 +45,7 @@ export function EntityAccordionItem({
       <div className="bg-background flex flex-col gap-2 p-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Icon size="sm">{icon}</Icon>
+            <Icon size="xs">{icon}</Icon>
             <span className="text-foreground text-column">{name}</span>
           </div>
           {onRemove && (

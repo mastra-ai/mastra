@@ -53,10 +53,10 @@ export function WorkspaceFileViewer({
         </Txt>
         <div className="flex shrink-0 items-center gap-1">
           {file?.contentType === 'text' ? (
-            <CopyButton content={content} size="icon-xs" variant="ghost" tooltip="Copy file contents" />
+            <CopyButton content={content} size="icon-sm" variant="ghost" tooltip="Copy file contents" />
           ) : null}
           <Button
-            size="icon-xs"
+            size="icon-sm"
             variant="ghost"
             onClick={onRefresh}
             disabled={isRefreshing}

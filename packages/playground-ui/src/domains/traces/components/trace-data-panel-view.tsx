@@ -173,7 +173,7 @@ export function TraceDataPanelView({
         value: 'messages',
         label: (
           <>
-            <Icon size="sm">
+            <Icon size="xs">
               <MessageSquareTextIcon />
             </Icon>
             Messages
@@ -186,7 +186,7 @@ export function TraceDataPanelView({
         value: 'feedback',
         label: (
           <>
-            <Icon size="sm">
+            <Icon size="xs">
               <MessageSquareReplyIcon />
             </Icon>
             Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}
@@ -199,7 +199,7 @@ export function TraceDataPanelView({
         value: 'scores',
         label: (
           <>
-            <Icon size="sm">
+            <Icon size="xs">
               <ScorersIcon />
             </Icon>
             Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}

@@ -55,7 +55,7 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
           {options.map(option => (
             <SelectItem key={option.path} value={option.path}>
               <span className="flex items-center gap-2">
-                <Icon size="sm" className="text-muted-foreground">
+                <Icon size="xs" className="text-muted-foreground">
                   {getFieldTypeIcon(option.type)}
                 </Icon>
                 {option.label}

@@ -104,7 +104,6 @@ const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(
 InputGroup.displayName = 'InputGroup';
 
 const inputGroupControlTextBySize = cn(
-  'group-data-[size=xs]/input-group:text-meta',
   'group-data-[size=sm]/input-group:text-caption',
   'group-data-[size=md]/input-group:text-body-sm',
   'group-data-[size=lg]/input-group:text-body',
@@ -169,10 +168,9 @@ InputGroupAddon.displayName = 'InputGroupAddon';
 // The explicit height also keeps the control from collapsing to the line-height in block
 // mode (flex-col + flex-none).
 const inputGroupControlHeightBySize = cn(
-  'group-data-[size=xs]/input-group:h-[calc(var(--spacing-form-xs)-2px)]',
-  'group-data-[size=sm]/input-group:h-[calc(var(--spacing-form-sm)-2px)]',
-  'group-data-[size=md]/input-group:h-[calc(var(--spacing-form-md)-2px)]',
-  'group-data-[size=lg]/input-group:h-[calc(var(--spacing-form-lg)-2px)]',
+  'group-data-[size=sm]/input-group:h-[calc(var(--spacing-control-sm)-2px)]',
+  'group-data-[size=md]/input-group:h-[calc(var(--spacing-control-md)-2px)]',
+  'group-data-[size=lg]/input-group:h-[calc(var(--spacing-control-lg)-2px)]',
 );
 export type InputGroupInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> & {
   testId?: string;

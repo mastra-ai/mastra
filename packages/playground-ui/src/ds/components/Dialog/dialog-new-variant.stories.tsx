@@ -118,7 +118,7 @@ const meta = {
   },
   argTypes: {
     holdSeconds: { control: { type: 'number', min: 0.1, step: 0.1 } },
-    buttonSize: { control: 'inline-radio', options: ['xs', 'sm', 'md', 'lg'] },
+    buttonSize: { control: 'inline-radio', options: ['sm', 'md', 'lg'] },
     intent: { control: 'inline-radio', options: ['default', 'destructive'] },
     confirmation: { control: 'inline-radio', options: ['click', 'hold'] },
   },

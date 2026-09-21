@@ -5,15 +5,14 @@
 // padding stays per-component (a button hugs its label tighter than an input
 // hugs its text), so it deliberately lives in each component, not here.
 
-export type ControlSize = 'xs' | 'sm' | 'md' | 'lg';
+export type ControlSize = 'sm' | 'md' | 'lg';
 
 // Height only — for square/icon controls and wrappers that own height on the
 // border-box while their inner control inherits it.
 export const controlHeight: Record<ControlSize, string> = {
-  xs: 'h-form-xs',
-  sm: 'h-form-sm',
-  md: 'h-form-md',
-  lg: 'h-form-lg',
+  sm: 'h-control-sm',
+  md: 'h-control-md',
+  lg: 'h-control-lg',
 };
 
 // Controls centre their label with flex, not with the line box, so `text-box-trim`
@@ -22,29 +21,17 @@ export const controlHeight: Record<ControlSize, string> = {
 // and its paired leading token carry this. Revisit only if a label moves to a
 // block-level wrapper.
 
-// Height + text role. Heights: xs 20px / sm 24px / md 28px / lg 32px.
-// A control's label is a label at every height — `lg` grows the box, not the
-// type, which is why it shares `text-label` with `md` (13px/500, measured from
-// Linear, whose buttons are 13px regardless of height). Only the compact sizes
-// step the type down, because their box cannot hold 13px.
+// Height + text role. Heights: sm 28px / md 30px / lg 32px. `md` is the default
+// everywhere, and a control's label is a label at every height — the box grows, the
+// type does not, which is why all three share `text-label` (13px/500, measured from
+// Linear, whose buttons are 13px regardless of height). The 20px rung is gone: a
+// control that small cannot hold a 13px label, and the pages here carry few enough
+// items that they never needed it.
 // The role carries the weight, so no control adds `font-medium` on top.
 export const controlSizeClasses: Record<ControlSize, string> = {
-  xs: 'h-form-xs text-meta',
-  sm: 'h-form-sm text-column',
-  md: 'h-form-md text-label',
-  lg: 'h-form-lg text-label',
-};
-
-// Icon geometry for a bare `<svg>` child, keyed by control size so it matches what
-// `<Icon>` renders for the same control. Sizes are integers (12/14/16/20) because an
-// em-relative icon lands on fractions like 14.3px and renders soft, and the stroke is
-// pinned per size so every icon holds a ~1px line. Icon size names live on `<Icon>`;
-// these classes exist only for children the DS does not wrap.
-export const controlIconClasses: Record<ControlSize, string> = {
-  xs: '[&>svg]:size-3 [&>svg]:[stroke-width:2]',
-  sm: '[&>svg]:size-3.5 [&>svg]:[stroke-width:1.75]',
-  md: '[&>svg]:size-4 [&>svg]:[stroke-width:1.5]',
-  lg: '[&>svg]:size-5 [&>svg]:[stroke-width:1.25]',
+  sm: 'h-control-sm text-label',
+  md: 'h-control-md text-label',
+  lg: 'h-control-lg text-label',
 };
 
 export type ControlTriggerVisualVariant = 'default' | 'outline' | 'ghost';

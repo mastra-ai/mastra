@@ -37,24 +37,22 @@ const spacingRungs = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32] as const;
 
 const sizeKeys = Object.keys(Sizes) as SizeToken[];
 const iconKeys = sizeKeys.filter(key => key.startsWith('icon-'));
-const formKeys = sizeKeys.filter(key => key.startsWith('form-'));
+const controlKeys = sizeKeys.filter(key => key.startsWith('control-'));
 // `dropdown` caps a popup rather than sizing a control, so it sits in the note.
-const elementKeys = sizeKeys.filter(key => !key.startsWith('icon-') && !key.startsWith('form-') && key !== 'dropdown');
-
-// A form rung is declared as a named spacing so it can size a height and a
-// width from one token; everything else is declared as a height.
-const sizeToken = (key: SizeToken) => (key.startsWith('form-') ? `--spacing-${key}` : `--height-${key}`);
+const elementKeys = sizeKeys.filter(
+  key => !key.startsWith('icon-') && !key.startsWith('control-') && key !== 'dropdown',
+);
 
 const SizeRow = ({ token }: { token: SizeToken }) => (
   <div className="border-border grid grid-cols-[minmax(0,13rem)_minmax(0,1fr)] items-center gap-4 border-b py-2 last:border-b-0">
     <Txt variant="meta" font="mono" tone="muted" className="truncate">
-      {sizeToken(token)}
+      --spacing-{token}
     </Txt>
     <div
       role="img"
       aria-label={`${token} height`}
       className="border-border bg-fill w-40 rounded-md border"
-      style={{ height: `var(${sizeToken(token)})` }}
+      style={{ height: `var(--spacing-${token})` }}
     />
   </div>
 );
@@ -110,18 +108,18 @@ export const ShapeFoundations: Story = {
 
       <FoundationSection
         label="Sizes"
-        description="Named heights, so every control in a row lands on the same baseline instead of a guessed pixel value. --max-height-dropdown (300px) is the one constraint here rather than a height: it caps how far a popup may grow."
+        description="Named rungs, so every control in a row lands on the same baseline instead of a guessed pixel value. Each is declared once as a named spacing, which is what lets one token drive h-*, w-* and size-* alike. `dropdown` (300px) is the one cap rather than a height: it bounds how far a popup may grow."
       >
         <SpecimenGroup label="Icons">
           <div className="flex flex-wrap items-end gap-6">
             {iconKeys.map(token => (
               <div key={token} className="w-32">
-                <Specimen name={sizeToken(token)} note="Also --width-* and --container-*">
+                <Specimen name={`--spacing-${token}`} note={`${Sizes[token]} glyph box`}>
                   <div
                     role="img"
                     aria-label={`${token} icon box`}
                     className="bg-fill-strong rounded-sm"
-                    style={{ height: `var(--height-${token})`, width: `var(--width-${token})` }}
+                    style={{ height: `var(--spacing-${token})`, width: `var(--spacing-${token})` }}
                   />
                 </Specimen>
               </div>
@@ -129,9 +127,9 @@ export const ShapeFoundations: Story = {
           </div>
         </SpecimenGroup>
 
-        <SpecimenGroup label="Form controls">
+        <SpecimenGroup label="Controls">
           <div className="min-w-0">
-            {formKeys.map(token => (
+            {controlKeys.map(token => (
               <SizeRow key={token} token={token} />
             ))}
           </div>

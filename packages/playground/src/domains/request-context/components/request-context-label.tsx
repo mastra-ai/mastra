@@ -36,7 +36,7 @@ export function RequestContextLabel({ as = 'span', children, tooltip }: RequestC
                   'focus-visible:ring-border-strong rounded-sm focus-visible:ring-2 focus-visible:outline-none',
                 )}
               >
-                <Icon size="sm">
+                <Icon size="xs">
                   <Info />
                 </Icon>
               </button>

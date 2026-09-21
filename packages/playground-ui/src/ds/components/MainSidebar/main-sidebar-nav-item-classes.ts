@@ -1,23 +1,24 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
+import { controlHeight } from '@/ds/primitives/control-size';
 import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-// Sizes mirror the measured Linear sidebar: a 28px row carrying a 13px medium
-// label and a 16px icon. A nav label is a label at every row height, so only
-// the box grows — 12px reads too small for a primary navigation target, and
-// 400 weight makes the label recede below its icon.
+// A nav row is a control: same rhythm as a button or a field, from the same rungs, so a
+// sidebar row and a toolbar button in the same app are never 2px apart. A nav label is a
+// label at every row height, so only the box grows — 12px reads too small for a primary
+// navigation target, and 400 weight makes the label recede below its icon.
 const navItemVariants = cva('flex min-w-0 cursor-pointer items-center rounded-lg text-label whitespace-nowrap', {
   variants: {
     size: {
-      default: 'h-8',
-      sm: 'h-7',
-      lg: 'h-9',
+      sm: controlHeight.sm,
+      md: controlHeight.md,
+      lg: controlHeight.lg,
     },
   },
   defaultVariants: {
-    size: 'sm',
+    size: 'md',
   },
 });
 
@@ -40,9 +41,9 @@ type ItemStyleOptions = NavRowSurfaceOptions & NavItemLayoutOptions;
 
 const nestedExpandedItemClasses = (level: number) => {
   if (level <= 0) return 'gap-2 py-1 px-3';
-  if (level === 1) return 'gap-2 py-1 pr-3 pl-8 h-8';
-  if (level === 2) return 'gap-2 py-1 pr-3 pl-10 h-8';
-  return 'gap-2 py-1 pr-3 pl-12 h-8';
+  if (level === 1) return `gap-2 py-1 pr-3 pl-8 ${controlHeight.md}`;
+  if (level === 2) return `gap-2 py-1 pr-3 pl-10 ${controlHeight.md}`;
+  return `gap-2 py-1 pr-3 pl-12 ${controlHeight.md}`;
 };
 
 // Two neutral tones, never more: a row is either quiet (`muted-foreground`) or

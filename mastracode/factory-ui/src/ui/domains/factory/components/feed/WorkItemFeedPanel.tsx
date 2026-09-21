@@ -34,7 +34,7 @@ export function WorkItemFeedPanel({
       data-testid="work-item-feed-panel"
     >
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-xs" variant="ghost" onClick={onBack} aria-label="Back to workspace">
+        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
           <ArrowLeft />
         </Button>
         <MessageSquare className="text-icon3" size={14} />
@@ -45,7 +45,7 @@ export function WorkItemFeedPanel({
           {item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}
         </Txt>
         <Button
-          size="icon-xs"
+          size="icon-sm"
           variant="ghost"
           aria-label="Refresh comments"
           onClick={() => void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(item.id) })}

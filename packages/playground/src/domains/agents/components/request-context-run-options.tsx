@@ -94,7 +94,7 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
           mode === 'form' ? 'bg-fill-hover text-foreground' : quietTextHover,
         )}
       >
-        <Icon size="sm">
+        <Icon size="xs">
           <FormInput />
         </Icon>
         Form
@@ -109,7 +109,7 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
           mode === 'json' ? 'bg-fill-hover text-foreground' : quietTextHover,
         )}
       >
-        <Icon size="sm">
+        <Icon size="xs">
           <FileJson />
         </Icon>
         JSON

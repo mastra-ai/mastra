@@ -28,13 +28,13 @@ export function AssistantMessageActions({
       )}
       {(onReadAloud || onStopSpeaking) &&
         (isSpeaking ? (
-          <Button variant="ghost" size="icon-xs" tooltip="Stop" aria-label="Stop" onClick={() => onStopSpeaking?.()}>
+          <Button variant="ghost" size="icon-sm" tooltip="Stop" aria-label="Stop" onClick={() => onStopSpeaking?.()}>
             <StopCircleIcon />
           </Button>
         ) : (
           <Button
             variant="ghost"
-            size="icon-xs"
+            size="icon-sm"
             tooltip="Read aloud"
             aria-label="Read aloud"
             onClick={() => onReadAloud?.(text)}

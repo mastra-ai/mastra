@@ -38,7 +38,6 @@ const textareaVariants = cva(
       // Text roles mirror the Input size scale so a Textarea reads at the same size as a
       // sibling Input: a field value is 400 weight at every height.
       size: {
-        xs: 'px-1.5 py-1 text-meta',
         sm: 'px-2 py-1.5 text-caption',
         md: 'px-2.5 py-1.5 text-body-sm',
         lg: 'px-3 py-2 text-body',

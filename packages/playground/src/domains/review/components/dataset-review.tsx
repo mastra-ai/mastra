@@ -482,7 +482,7 @@ export function DatasetReview({
               size="md"
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
-              <Icon size="sm">
+              <Icon size="xs">
                 <GaugeIcon />
               </Icon>
               Create Scorer
@@ -509,14 +509,14 @@ export function DatasetReview({
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={openAnalyzeDialog}>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Sparkles />
                     </Icon>
                     Analyze
                   </DropdownMenu.Item>
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item onSelect={handleBulkRemove}>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Trash2 />
                     </Icon>
                     Remove from queue

@@ -53,7 +53,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                         aria-label="Private skill"
                         data-testid="skill-builder-private-visibility-icon"
                       >
-                        <Icon size="sm">
+                        <Icon size="xs">
                           <LockIcon />
                         </Icon>
                       </span>

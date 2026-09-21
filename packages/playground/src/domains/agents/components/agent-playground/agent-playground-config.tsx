@@ -25,7 +25,7 @@ type AgentConfigTab = 'variables' | 'instructions' | 'tools';
 function ConfigTabLabel({ title, icon, badge }: { title: string; icon: React.ReactNode; badge?: React.ReactNode }) {
   return (
     <>
-      <Icon size="sm" className="text-inherit">
+      <Icon size="xs" className="text-inherit">
         {icon}
       </Icon>
       <Txt as="span" variant="caption" className="text-inherit">

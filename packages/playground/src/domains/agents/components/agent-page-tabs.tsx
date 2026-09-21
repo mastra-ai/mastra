@@ -53,7 +53,7 @@ function AgentTab({
 }) {
   const tabContent = (
     <>
-      <Icon size="sm">{icon}</Icon>
+      <Icon size="xs">{icon}</Icon>
       <Txt variant="caption" className="text-inherit">
         {label}
       </Txt>

@@ -55,7 +55,7 @@ export function FilterBarOptionList<T>({
       <div
         className={cn(
           comboboxStyles.listScroller,
-          'max-h-[min(var(--max-height-dropdown),60dvh)]',
+          'max-h-[min(var(--spacing-dropdown),60dvh)]',
           menu.containerClassName,
         )}
         {...menu.getContainerProps({})}

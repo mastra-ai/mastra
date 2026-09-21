@@ -47,7 +47,6 @@ const inputVariants = cva(
         unstyled: unstyledFormElementStyle,
       },
       size: {
-        xs: cn(controlSizeClasses.xs, 'px-[.75em]'),
         sm: cn(controlSizeClasses.sm, 'px-[.75em]'),
         md: cn(controlSizeClasses.md, 'px-[.75em]'),
         lg: cn(controlSizeClasses.lg, 'px-[.85em]'),

@@ -48,7 +48,7 @@ export const Variants: Story = {
     <div className="grid gap-4">
       {(['default', 'outline', 'ghost', 'primary'] as const).map(variant => (
         <div key={variant} className="flex items-center gap-2">
-          {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+          {(['sm', 'md', 'lg'] as const).map(size => (
             <Popover key={size}>
               <PopoverTrigger variant={variant} size={size}>
                 {variant} / {size}

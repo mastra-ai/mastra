@@ -10,7 +10,6 @@ interface PullRequestLinksProps {
   repository?: Pick<LinkedRepositoryPayload, 'slug'>;
   reviewItem?: WorkItem;
   threadId: string | undefined;
-  size?: 'xs' | 'sm';
 }
 
 function reviewStatus(reviewItem: WorkItem): PullRequestSubscription['status'] {
@@ -63,7 +62,7 @@ function pullRequestLinks(
  * Must render inside `ChatSessionBoundary` — `usePullRequestSubscriptions`
  * reads the chat session and transcript contexts.
  */
-export function PullRequestLinks({ repository, reviewItem, threadId, size = 'xs' }: PullRequestLinksProps) {
+export function PullRequestLinks({ repository, reviewItem, threadId }: PullRequestLinksProps) {
   const subscriptions = usePullRequestSubscriptions(threadId, Boolean(repository));
   const activeReview = reviewSubscription(reviewItem, repository?.slug);
   const links = pullRequestLinks(subscriptions, activeReview);
@@ -76,7 +75,7 @@ export function PullRequestLinks({ repository, reviewItem, threadId, size = 'xs'
           key={subscription.id}
           as="a"
           variant="ghost"
-          size={size}
+          size="sm"
           href={subscription.url}
           target="_blank"
           rel="noreferrer"

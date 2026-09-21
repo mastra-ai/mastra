@@ -28,7 +28,7 @@ const meta: Meta<typeof Button> = {
     },
     size: {
       control: { type: 'select' },
-      options: ['xs', 'sm', 'md', 'lg', 'icon-xs', 'icon-sm', 'icon-md', 'icon-lg'],
+      options: ['sm', 'md', 'lg', 'icon-sm', 'icon-md', 'icon-lg'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -61,7 +61,6 @@ export const Variants: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex items-center gap-4">
-      <Button size="xs">Extra Small</Button>
       <Button size="sm">Small</Button>
       <Button size="md">Medium</Button>
       <Button size="lg">Large</Button>
@@ -91,7 +90,7 @@ export const WithIcon: Story = {
 export const WithIconSizes: Story = {
   render: () => (
     <div className="flex items-center gap-4">
-      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+      {(['sm', 'md', 'lg'] as const).map(size => (
         <Button key={size} size={size} icon={<Plus />}>
           Add Item
         </Button>
@@ -110,7 +109,7 @@ export const WithTooltip: Story = {
 export const IconAutoDetect: Story = {
   render: () => (
     <div className="flex items-center gap-4">
-      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+      {(['sm', 'md', 'lg'] as const).map(size => (
         <Button key={size} size={size}>
           <Settings />
         </Button>
@@ -143,9 +142,6 @@ export const IconButtonVariants: Story = {
 export const IconButtonSizes: Story = {
   render: () => (
     <div className="flex items-center gap-2">
-      <Button size="icon-xs" tooltip="Extra Small">
-        <Settings />
-      </Button>
       <Button size="icon-sm" tooltip="Small">
         <Settings />
       </Button>
@@ -170,9 +166,9 @@ export const IconButtonDisabled: Story = {
 
 export const VariantSizeMatrix: Story = {
   render: () => (
-    <div className="grid grid-cols-[6rem_repeat(4,max-content)_max-content] items-center gap-3">
+    <div className="grid grid-cols-[6rem_repeat(3,max-content)_max-content] items-center gap-3">
       <span />
-      {['xs', 'sm', 'default', 'lg', 'with icon'].map(label => (
+      {['sm', 'default', 'lg', 'with icon'].map(label => (
         <Txt key={label} as="span" variant="meta" className="text-muted-foreground text-center">
           {label}
         </Txt>
@@ -182,9 +178,6 @@ export const VariantSizeMatrix: Story = {
           <Txt as="span" variant="meta" className="text-muted-foreground">
             {variant}
           </Txt>
-          <Button variant={variant} size="xs">
-            xs
-          </Button>
           <Button variant={variant} size="sm">
             sm
           </Button>

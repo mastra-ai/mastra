@@ -3,8 +3,8 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Icon } from '@/ds/icons/Icon';
-import { controlHeight, controlIconClasses, controlSizeClasses } from '@/ds/primitives/control-size';
+import { Icon, iconSizeClasses, type IconSize } from '@/ds/icons/Icon';
+import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   controlFocusBorderVisible,
   disabledFilledSurfaceStyle,
@@ -78,17 +78,15 @@ export const buttonVariants = cva(
         ),
       },
       size: {
-        xs: cn(controlSizeClasses.xs, controlIconClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),
-        sm: cn(controlSizeClasses.sm, controlIconClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        md: cn(controlSizeClasses.md, controlIconClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        lg: cn(controlSizeClasses.lg, controlIconClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
+        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
+        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
+        lg: cn(controlSizeClasses.lg, iconSizeClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // so icon-mode and text-mode use the same press feedback. The glyph is sized by the `Icon`
         // wrapper the component puts around an icon-mode child, keyed off the same scale.
-        'icon-xs': cn(controlHeight.xs, 'w-form-xs rounded-full'),
-        'icon-sm': cn(controlHeight.sm, 'w-form-sm rounded-full'),
-        'icon-md': cn(controlHeight.md, 'w-form-md rounded-full'),
-        'icon-lg': cn(controlHeight.lg, 'w-form-lg rounded-full'),
+        'icon-sm': cn(controlHeight.sm, 'w-control-sm rounded-full'),
+        'icon-md': cn(controlHeight.md, 'w-control-md rounded-full'),
+        'icon-lg': cn(controlHeight.lg, 'w-control-lg rounded-full'),
       },
     },
     defaultVariants: {
@@ -144,20 +142,16 @@ function preventLinkActivation(event: React.SyntheticEvent): void {
   event.stopPropagation();
 }
 
-// One icon step per control step, so the same nominal size renders the same icon
-// whether it arrives as an icon-mode child, the `icon` prop, or a bare SVG.
-const iconChildSizeMap: Record<IconButtonSize, 'sm' | 'smd' | 'default' | 'lg'> = {
-  'icon-xs': 'sm',
-  'icon-sm': 'smd',
-  'icon-md': 'default',
-  'icon-lg': 'lg',
-};
-
-const textIconSizeMap: Record<TextButtonSize, 'sm' | 'smd' | 'default' | 'lg'> = {
-  xs: 'sm',
-  sm: 'smd',
-  md: 'default',
+// One icon step per control step: a glyph is sized by the rung it sits in, so the
+// same nominal size renders the same icon whether it arrives as an icon-mode child,
+// the `icon` prop, or a bare SVG.
+const iconSizeMap: Record<ButtonSize, IconSize> = {
+  sm: 'sm',
+  md: 'md',
   lg: 'lg',
+  'icon-sm': 'sm',
+  'icon-md': 'md',
+  'icon-lg': 'lg',
 };
 
 // Walks React children, expanding `<></>` fragments so `isIconOnly` can inspect the real
@@ -181,8 +175,8 @@ function isIconOnly(children: React.ReactNode): boolean {
   return flat.length > 0 && flat.every(child => React.isValidElement(child));
 }
 
-// Type guard: narrows `ButtonSize` to `IconButtonSize` so consumers (e.g. `iconChildSizeMap`)
-// can index into icon-only structures without a cast.
+// Type guard: narrows `ButtonSize` to `IconButtonSize`, so an icon-mode button can be
+// told from a text-mode one without a cast.
 // eslint-disable-next-line react-refresh/only-export-components -- shared with Combobox's icon-only trigger
 export function isIconButtonSize(size: ButtonSize | null | undefined): size is IconButtonSize {
   return size?.startsWith('icon-') ?? false;
@@ -218,11 +212,11 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
     const ariaLabel = ariaLabelProp ?? ((iconMode || isLabelless) && typeof tooltip === 'string' ? tooltip : undefined);
 
     const content = iconMode ? (
-      <Icon size={iconChildSizeMap[size]}>{children}</Icon>
+      <Icon size={iconSizeMap[resolvedSize]}>{children}</Icon>
     ) : (
       <>
         {icon ? (
-          <Icon data-slot="button-icon" size={textIconSizeMap[resolvedSize as TextButtonSize]}>
+          <Icon data-slot="button-icon" size={iconSizeMap[resolvedSize]}>
             {icon}
           </Icon>
         ) : null}

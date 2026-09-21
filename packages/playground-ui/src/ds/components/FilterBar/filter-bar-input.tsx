@@ -336,7 +336,7 @@ export function FilterBarInput({
                     Type a value
                   </Txt>
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="default"
                     disabled={!valueStep.canCommitQuery}
                     onMouseDown={e => e.preventDefault()}
@@ -350,7 +350,7 @@ export function FilterBarInput({
               {step === 'value' && valueStep.isMany && (
                 <div className="border-border flex items-center justify-end gap-1 border-t p-1">
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="default"
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}

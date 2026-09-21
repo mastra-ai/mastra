@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { compile } from 'tailwindcss';
@@ -375,35 +375,78 @@ describe('theme.css export', () => {
     }
   });
 
-  // `sizes.ts` is the TypeScript mirror of the size namespaces, and
+  // `sizes.ts` is the TypeScript mirror of the named spacing rungs, and
   // `tw-merge-config.ts` uses it as the whole named spacing scale: a rung
   // missing here silently stops `h-<rung>` from merging. Nothing derived the
-  // two from one another, which is how `form-lg` came to say 1.75rem while the
+  // two from one another, which is how `control-lg` came to say 1.75rem while the
   // CSS said 2rem, and how `icon-smd` existed only in CSS.
-  it('mirrors every size token between theme.css and the TypeScript scale', () => {
-    const namespaces = [
-      'height',
-      'min-height',
-      'max-height',
-      'width',
-      'min-width',
-      'max-width',
-      'spacing',
-      'container',
-    ];
+  it('mirrors every size rung between theme.css and the TypeScript scale', () => {
     const themeBlock = themeCss.slice(themeCss.indexOf('@theme'));
 
-    for (const [token, value] of Object.entries(Sizes)) {
-      const namespace = namespaces.find(space => themeBlock.includes(`--${space}-${token}:`));
-      expect(namespace, `${token} is in sizes.ts but no size namespace declares it`).toBeDefined();
-      expect(themeBlock).toContain(`--${namespace}-${token}: ${value};`);
+    for (const [rung, value] of Object.entries(Sizes)) {
+      expect(themeBlock).toContain(`--spacing-${rung}: ${value};`);
     }
 
-    const namedDeclarations = themeBlock.matchAll(new RegExp(`--(?:${namespaces.join('|')})-([a-z][\\w-]*):`, 'g'));
-
-    for (const [, token = ''] of namedDeclarations) {
-      expect(Object.hasOwn(Sizes, token), `--*-${token} is declared but missing from sizes.ts`).toBe(true);
+    for (const [, rung = ''] of themeBlock.matchAll(/--spacing-([a-z][\w-]*):/g)) {
+      expect(Object.hasOwn(Sizes, rung), `--spacing-${rung} is declared but missing from sizes.ts`).toBe(true);
     }
+  });
+
+  // A rung declared in a per-utility namespace resolves for that utility only, so
+  // `h-icon-md` would work while `w-icon-md` silently dropped. Every size utility
+  // reads `--spacing-*`, so one declaration per rung serves all of them.
+  it('declares every size rung in the spacing namespace alone', () => {
+    const strayNamespaces = [
+      ...themeCss.matchAll(/^\s*(--(?:min-|max-)?(?:height|width)-[\w-]+|--container-[\w-]+):/gm),
+    ];
+
+    expect(strayNamespaces.map(([, declaration]) => declaration)).toEqual([]);
+  });
+
+  // A `var()` inside an arbitrary value (`max-h-[min(var(--spacing-dropdown),60dvh)]`) is opaque
+  // to Tailwind: nothing resolves it against the token registry, and an undefined custom property
+  // with no fallback invalidates the whole declaration at computed-value time — the style vanishes
+  // in silence. Renaming `--max-height-dropdown` did exactly that to every popup's height cap while
+  // typecheck, the whole suite and the rendered stories all stayed green. Only fallback-less
+  // references can fail this way: `var(--x, 60dvh)` degrades to its fallback by construction.
+  it('declares every custom property the source references without a fallback', () => {
+    // Base UI writes these on the element it owns, so no declaration exists to find here.
+    const runtimeProperties = new Set([
+      '--available-height',
+      '--anchor-width',
+      '--transform-origin',
+      '--active-tab-left',
+      '--active-tab-width',
+      '--active-tab-height',
+      '--collapsible-panel-height',
+    ]);
+
+    const stripComments = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    const sourceRoot = resolve(pkgRoot, 'src');
+    const sources = readdirSync(sourceRoot, { recursive: true, encoding: 'utf8' })
+      .filter(entry => /\.(css|ts|tsx)$/.test(entry))
+      .map(entry => stripComments(readFileSync(resolve(sourceRoot, entry), 'utf8')));
+
+    const declared = new Set<string>();
+    const references = new Map<string, number>();
+
+    for (const source of [stripComments(themeCss), ...sources]) {
+      for (const [, property = ''] of source.matchAll(/(--[a-zA-Z][\w-]*)\s*:/g)) declared.add(property);
+      // Written from JS as a style key: `style={{ '--bar-width': width }}`.
+      for (const [, property = ''] of source.matchAll(/['"`](--[a-zA-Z][\w-]*)['"`]/g)) declared.add(property);
+      for (const [, property = '', terminator] of source.matchAll(/var\((--[a-zA-Z][\w-]*)\s*([,)])/g)) {
+        if (terminator === ')') references.set(property, (references.get(property) ?? 0) + 1);
+      }
+    }
+
+    const undeclared = [...references.keys()].filter(
+      // Tailwind declares its own `--tw-*` internals in the compiled output, not in source.
+      property => !declared.has(property) && !runtimeProperties.has(property) && !property.startsWith('--tw-'),
+    );
+
+    expect(undeclared).toEqual([]);
+    expect(references.size).toBeGreaterThan(100);
   });
 
   // Two tiers, because the two tones do different jobs. Ink carries the content and is held

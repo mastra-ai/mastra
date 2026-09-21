@@ -29,7 +29,7 @@ export function CommentQuote({ authorName, quote, onDismiss, className }: Commen
         <Button
           type="button"
           variant="ghost"
-          size="icon-xs"
+          size="icon-sm"
           aria-label="Remove quote"
           onClick={onDismiss}
           className="shrink-0"

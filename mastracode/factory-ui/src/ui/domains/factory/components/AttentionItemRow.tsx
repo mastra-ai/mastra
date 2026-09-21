@@ -75,7 +75,7 @@ function RowAction({
     <Button
       type="button"
       variant="ghost"
-      size="icon-xs"
+      size="icon-sm"
       disabled={disabled}
       tooltip={tooltip}
       aria-label={label}
@@ -143,7 +143,7 @@ export function AttentionItemRow({
           <span className={REVEAL_ACTIONS}>
             <Button
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               tooltip="Ask supervisor"
               aria-label={`Ask supervisor about ${item.title}`}
               onClick={() => {

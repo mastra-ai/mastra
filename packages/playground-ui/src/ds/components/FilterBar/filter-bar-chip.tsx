@@ -558,10 +558,10 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
       )}
       {step.isMany && (
         <div className="border-border flex items-center justify-end gap-1 border-t p-1">
-          <Button size="xs" variant="ghost" onClick={onCancel}>
+          <Button size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button size="xs" variant="default" onClick={() => step.commitSelection() || step.commitFreeText()}>
+          <Button size="sm" variant="default" onClick={() => step.commitSelection() || step.commitFreeText()}>
             Done
             <Kbd size="xs">{modEnterLabel}</Kbd>
           </Button>

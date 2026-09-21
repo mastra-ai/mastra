@@ -234,7 +234,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                 <DropdownMenu.Trigger
                   aria-label={`${hiddenTabs.length} more tabs`}
                   variant="ghost"
-                  size="xs"
+                  size="sm"
                   className="tabular-nums"
                 >
                   +{hiddenTabs.length}

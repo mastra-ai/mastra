@@ -84,7 +84,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
         <Button
           type="button"
           variant="ghost"
-          size="icon-xs"
+          size="icon-sm"
           aria-label="Cancel new work item"
           onClick={close}
           disabled={submitting}
@@ -94,7 +94,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
         <Button
           type="submit"
           variant="ghost"
-          size="icon-xs"
+          size="icon-sm"
           aria-label={`Add work item to ${stageLabel}`}
           disabled={!trimmedTitle || submitting}
         >

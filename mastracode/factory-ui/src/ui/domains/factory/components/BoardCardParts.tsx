@@ -40,7 +40,7 @@ export function CardDetailsHint() {
   return (
     <span
       aria-hidden
-      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-xs' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
     >
       <Maximize2 size={13} aria-hidden />
     </span>

@@ -191,7 +191,7 @@ export function UserSessionsSection() {
             <Txt as="p" variant="meta" className="text-error m-0">
               Couldn’t load sessions
             </Txt>
-            <Button variant="ghost" size="xs" onClick={() => void sessionsQuery.refetch()}>
+            <Button variant="ghost" size="sm" onClick={() => void sessionsQuery.refetch()}>
               Retry
             </Button>
           </div>

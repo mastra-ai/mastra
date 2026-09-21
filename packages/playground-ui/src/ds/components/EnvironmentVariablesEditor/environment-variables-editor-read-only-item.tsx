@@ -68,7 +68,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
             <Button
               type="button"
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               aria-label={isRevealed ? 'Hide value' : 'Show value'}
               onClick={toggleRevealed}
             >
@@ -87,7 +87,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon-xs"
+                  size="icon-sm"
                   aria-label={isCopied ? 'Copied value' : copyLabel}
                   tooltip={isCopied ? 'Copied' : copyLabel}
                   className="absolute right-0 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100"

@@ -96,7 +96,7 @@ export function ReviewItemCard({
       {/* Header row */}
       <div className="flex items-center gap-2">
         {isCompleted ? (
-          <Icon size="sm" className="text-positive1 shrink-0">
+          <Icon size="xs" className="text-positive1 shrink-0">
             <CheckCircle />
           </Icon>
         ) : (
@@ -133,7 +133,7 @@ export function ReviewItemCard({
               onClick={() => onRate(item.rating === 'positive' ? undefined : 'positive')}
               disabled={isCompleted}
             >
-              <Icon size="sm" className={item.rating === 'positive' ? 'text-positive1' : ''}>
+              <Icon size="xs" className={item.rating === 'positive' ? 'text-positive1' : ''}>
                 <ThumbsUp />
               </Icon>
             </Button>
@@ -145,7 +145,7 @@ export function ReviewItemCard({
               onClick={() => onRate(item.rating === 'negative' ? undefined : 'negative')}
               disabled={isCompleted}
             >
-              <Icon size="sm" className={item.rating === 'negative' ? 'text-negative1' : ''}>
+              <Icon size="xs" className={item.rating === 'negative' ? 'text-negative1' : ''}>
                 <ThumbsDown />
               </Icon>
             </Button>
@@ -167,7 +167,7 @@ export function ReviewItemCard({
           {/* Scores */}
           {item.scores && Object.keys(item.scores).length > 0 && (
             <div className="mr-1 flex items-center gap-1">
-              <Icon size="sm" className="text-muted-foreground">
+              <Icon size="xs" className="text-muted-foreground">
                 <GaugeIcon />
               </Icon>
               <div className="flex gap-1">
@@ -188,13 +188,13 @@ export function ReviewItemCard({
             <div className="flex items-center gap-0.5">
               {onComplete && (
                 <Button tooltip="Mark as complete" variant="ghost" size="sm" onClick={onComplete}>
-                  <Icon size="sm" className="text-positive1">
+                  <Icon size="xs" className="text-positive1">
                     <CheckCircle />
                   </Icon>
                 </Button>
               )}
               <Button tooltip="Remove from review" variant="ghost" size="sm" onClick={onRemove}>
-                <Icon size="sm" className="text-placeholder hover:text-negative1">
+                <Icon size="xs" className="text-placeholder hover:text-negative1">
                   <Trash2 />
                 </Icon>
               </Button>

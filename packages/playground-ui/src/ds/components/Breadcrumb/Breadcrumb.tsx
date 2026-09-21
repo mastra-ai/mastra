@@ -49,7 +49,7 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
 
   return (
     <>
-      <li className={cn('group flex h-form-sm min-w-0 items-center', isCurrent ? 'shrink' : 'shrink-0')}>
+      <li className={cn('group flex h-control-sm min-w-0 items-center', isCurrent ? 'shrink' : 'shrink-0')}>
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
@@ -85,7 +85,7 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
             <span className="min-w-0 flex-1 truncate">{children}</span>
           )}
         </Root>
-        {action && <span className="h-form-sm -ml-1 flex shrink-0 items-center">{action}</span>}
+        {action && <span className="h-control-sm -ml-1 flex shrink-0 items-center">{action}</span>}
       </li>
       {!isCurrent && (
         <li role="separator" className="flex h-full items-center">

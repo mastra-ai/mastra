@@ -138,7 +138,7 @@ export function CommentComposer({
           <Button
             type="submit"
             variant="primary"
-            size="icon-xs"
+            size="icon-sm"
             aria-label="Send comment"
             disabled={draft.trim().length === 0 || createComment.isPending}
           >

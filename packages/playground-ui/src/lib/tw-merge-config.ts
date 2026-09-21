@@ -14,7 +14,7 @@ export const twMerge = extendTailwindMerge({
     theme: {
       color: colorKeys,
       // Numeric rungs come off one multiplier, which tailwind-merge already
-      // understands; the named rungs (`form-md`, `avatar-lg`) are the spacing
+      // understands; the named rungs (`control-md`, `avatar-lg`) are the spacing
       // scale, so registering them here covers every utility that reads it —
       // h/w/size/min-*/max-* as well as p/m/gap.
       spacing: sizeKeys,

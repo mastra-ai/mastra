@@ -126,7 +126,7 @@ export const AgentBadge = ({
       {onLoadPrevious && (
         <Button
           variant="ghost"
-          size="xs"
+          size="sm"
           onClick={onLoadPrevious}
           disabled={isLoadingPrevious}
           data-testid="agent-badge-load-previous"

@@ -30,7 +30,7 @@ function LinearReauthNotice({ onConnect }: { onConnect: () => void }) {
       <Txt as="span" variant="meta" className="text-icon3">
         Linear authorization expired. Reconnect to keep syncing issues.
       </Txt>
-      <Button size="xs" onClick={onConnect}>
+      <Button size="sm" onClick={onConnect}>
         Connect Linear
       </Button>
     </div>
@@ -43,7 +43,7 @@ function FeedFailureNotice({ message, onRetry }: { message: string; onRetry: () 
       <Txt as="p" role="alert" variant="meta" className="text-notice-destructive-fg m-0">
         {message}
       </Txt>
-      <Button size="xs" onClick={onRetry}>
+      <Button size="sm" onClick={onRetry}>
         Retry
       </Button>
     </div>

@@ -7,7 +7,7 @@ export type SignalsViewMode = 'flow' | 'compare' | 'lifelines';
 export function ViewModeTab({ value, icon, label }: { value: SignalsViewMode; icon: React.ReactNode; label: string }) {
   return (
     <Tab value={value}>
-      <Icon size="sm">{icon}</Icon>
+      <Icon size="xs">{icon}</Icon>
       <Txt variant="caption" className="text-inherit">
         {label}
       </Txt>

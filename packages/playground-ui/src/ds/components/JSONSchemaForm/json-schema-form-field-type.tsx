@@ -12,7 +12,7 @@ const TYPE_OPTIONS = [
     value: 'string',
     label: 'String',
     icon: (
-      <Icon size="sm">
+      <Icon size="xs">
         <Type />
       </Icon>
     ),
@@ -21,7 +21,7 @@ const TYPE_OPTIONS = [
     value: 'number',
     label: 'Number',
     icon: (
-      <Icon size="sm">
+      <Icon size="xs">
         <Hash />
       </Icon>
     ),
@@ -30,7 +30,7 @@ const TYPE_OPTIONS = [
     value: 'boolean',
     label: 'Boolean',
     icon: (
-      <Icon size="sm">
+      <Icon size="xs">
         <ToggleLeft />
       </Icon>
     ),
@@ -39,7 +39,7 @@ const TYPE_OPTIONS = [
     value: 'text',
     label: 'Text',
     icon: (
-      <Icon size="sm">
+      <Icon size="xs">
         <AlignLeft />
       </Icon>
     ),
@@ -48,7 +48,7 @@ const TYPE_OPTIONS = [
     value: 'object',
     label: 'Object',
     icon: (
-      <Icon size="sm">
+      <Icon size="xs">
         <Braces />
       </Icon>
     ),
@@ -57,7 +57,7 @@ const TYPE_OPTIONS = [
     value: 'array',
     label: 'Array',
     icon: (
-      <Icon size="sm">
+      <Icon size="xs">
         <List />
       </Icon>
     ),

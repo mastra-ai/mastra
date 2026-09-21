@@ -28,7 +28,7 @@ describe('PopoverTrigger', () => {
   it('forwards variant and size to the Button', () => {
     render(
       <Popover>
-        <PopoverTrigger variant="ghost" size="xs">
+        <PopoverTrigger variant="ghost" size="sm">
           Open
         </PopoverTrigger>
       </Popover>,

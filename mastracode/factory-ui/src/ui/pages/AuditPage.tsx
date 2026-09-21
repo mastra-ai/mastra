@@ -118,11 +118,11 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
     <section className="flex min-w-0 flex-1 flex-col gap-3" aria-label="Audit history">
       <h1 className="sr-only">Audit log</h1>
 
-      <div className="min-h-form-xs flex items-center justify-end">
+      <div className="min-h-control-sm flex items-center justify-end">
         {portalUrl ? (
           <Button
             variant="outline"
-            size="xs"
+            size="sm"
             onClick={() => {
               window.open(portalUrl, '_blank', 'noopener,noreferrer');
               void portalQuery.refetch();

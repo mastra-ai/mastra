@@ -66,7 +66,6 @@ const buttonsGroupTextVariants = cva(
   {
     variants: {
       size: {
-        xs: controlSizeClasses.xs,
         sm: controlSizeClasses.sm,
         md: controlSizeClasses.md,
         lg: controlSizeClasses.lg,

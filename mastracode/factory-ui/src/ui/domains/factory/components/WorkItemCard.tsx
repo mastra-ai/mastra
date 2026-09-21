@@ -276,7 +276,7 @@ export function WorkItemCard({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon-xs"
+                      size="icon-sm"
                       disabled={evaluating}
                       aria-label={`Actions for ${item.title}`}
                       className={REVEAL_ON_CARD_HOVER}

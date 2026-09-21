@@ -129,7 +129,7 @@ function LinearIntakeSection({
       <Txt as="span" variant="caption" className="text-icon3">
         Connected to {status?.workspace?.name ?? 'a Linear workspace'}
       </Txt>
-      <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>
+      <Button size="sm" variant="ghost" onClick={() => connectLinear(baseUrl)}>
         Reconnect
       </Button>
     </span>
@@ -216,13 +216,13 @@ function JiraIntakeSection({
       provider="jira"
       reconnectConnectionId={reconnectTarget.id}
       label="Reconnect Jira"
-      size={configured ? 'xs' : 'sm'}
+      size="sm"
     />
   ) : (
     <ProviderConnectControl
       provider="jira"
       label={configured ? 'Connect another site' : 'Connect Jira'}
-      size={configured ? 'xs' : 'sm'}
+      size="sm"
       variant={configured ? 'ghost' : 'default'}
     />
   );
@@ -296,7 +296,7 @@ function IncidentioIntakeSection({
         title="incident.io follow-ups"
         description="Couldn't load incident.io connections."
         action={
-          <Button size="xs" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
+          <Button size="sm" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
             Retry
           </Button>
         }
@@ -317,7 +317,7 @@ function IncidentioIntakeSection({
             ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
             : `${active.length} ${meta.displayName} accounts connected`}
         </Txt>
-        <ProviderConnectControl provider={provider} label="Connect another" size="xs" variant="ghost" />
+        <ProviderConnectControl provider={provider} label="Connect another" size="sm" variant="ghost" />
       </span>
     );
 
@@ -355,7 +355,7 @@ function IncidentioIntakeSection({
             </SettingsRow>
             {config.incidentio.enabled && active.length > 0 && sourcesQuery.isError && (
               <SettingsRow label="Follow-up sources" description="Couldn't load follow-up sources.">
-                <Button size="xs" variant="ghost" onClick={() => void sourcesQuery.refetch()}>
+                <Button size="sm" variant="ghost" onClick={() => void sourcesQuery.refetch()}>
                   Retry
                 </Button>
               </SettingsRow>

@@ -286,7 +286,7 @@ describe('Combobox', () => {
     fireEvent.click(screen.getByRole('combobox'));
 
     const option = await screen.findByRole('option', { name: 'OpenAI' });
-    expect(option.className).toContain('min-h-form-md');
+    expect(option.className).toContain('min-h-control-md');
     expect(option.className).toContain('text-label');
     expect(option.className).toContain('rounded-lg');
     expect(option.className).not.toContain('rounded-full');
@@ -319,11 +319,11 @@ describe('Combobox', () => {
 
   it('takes the medium size unless the caller asks otherwise', () => {
     const { rerender } = render(<Combobox options={options} />);
-    expect(screen.getByRole('combobox').className).toContain('h-form-md');
+    expect(screen.getByRole('combobox').className).toContain('h-control-md');
 
     rerender(<Combobox options={options} size="sm" />);
 
-    expect(screen.getByRole('combobox').className).toContain('h-form-sm');
+    expect(screen.getByRole('combobox').className).toContain('h-control-sm');
   });
 
   it('renders a chevron-only trigger at icon sizes while keeping the value for assistive tech', async () => {
@@ -339,7 +339,7 @@ describe('Combobox', () => {
     );
 
     const trigger = screen.getByRole('combobox', { name: 'Switch provider' });
-    expect(trigger.className).toContain('w-form-sm');
+    expect(trigger.className).toContain('w-control-sm');
     expect(trigger.className).not.toContain('w-full');
     expect(screen.getByText('OpenAI').className).toContain('sr-only');
 

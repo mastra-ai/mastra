@@ -61,7 +61,7 @@ function PrivateVisibilityIcon() {
           aria-label="Private agent"
           data-testid="agent-builder-private-visibility-icon"
         >
-          <Icon size="sm">
+          <Icon size="xs">
             <LockIcon />
           </Icon>
         </span>

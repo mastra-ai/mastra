@@ -50,7 +50,7 @@ export function DataPanelMeta({ as, icon, tooltip, children, className, ...props
       {...props}
     >
       {icon && (
-        <Icon size="sm" className={cn('shrink-0 opacity-50 group-hover:opacity-100', transitions.opacity)}>
+        <Icon size="xs" className={cn('shrink-0 opacity-50 group-hover:opacity-100', transitions.opacity)}>
           {icon}
         </Icon>
       )}
@@ -59,7 +59,7 @@ export function DataPanelMeta({ as, icon, tooltip, children, className, ...props
   );
 
   return (
-    <li className="group h-form-sm flex min-w-0 shrink-0 items-center">
+    <li className="group h-control-sm flex min-w-0 shrink-0 items-center">
       {!hasTooltip ? (
         root
       ) : (

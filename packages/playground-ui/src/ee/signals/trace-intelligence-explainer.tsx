@@ -22,7 +22,7 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
         className={cn(quietTextHover, controlStateColorTransition, 'flex cursor-help items-center')}
         type="button"
       >
-        <Icon size="sm">
+        <Icon size="xs">
           <Info />
         </Icon>
       </TooltipTrigger>

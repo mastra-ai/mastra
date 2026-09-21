@@ -189,7 +189,7 @@ export function ToolsPage() {
             )}
             aria-label={`Remove ${tool.label}`}
           >
-            <Icon size="sm">
+            <Icon size="xs">
               <XIcon />
             </Icon>
           </button>

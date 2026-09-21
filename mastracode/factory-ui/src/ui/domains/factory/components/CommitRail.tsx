@@ -102,7 +102,7 @@ export function CommitRail({ projectRepositoryId }: { projectRepositoryId: strin
         ))}
       </ul>
       {hidden > 0 ? (
-        <Button variant="ghost" size="xs" className="ml-8" onClick={() => setExpanded(true)}>
+        <Button variant="ghost" size="sm" className="ml-8" onClick={() => setExpanded(true)}>
           Show {hidden} more
         </Button>
       ) : null}

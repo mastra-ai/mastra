@@ -15,7 +15,7 @@ const MENU_ITEM_OVERRIDES = cn(
   // An item may carry a second line (a name over its description). The Button
   // height becomes the floor so single-line rows keep the control rhythm and a
   // taller item grows instead of overflowing into its neighbour.
-  'h-auto min-h-form-md py-1',
+  'h-auto min-h-control-md py-1',
   // Button brightens its border on focus-visible; inside a menu the highlight is the focus cue.
   'focus-visible:border-transparent',
   // No row background: the popup's FluidMenuItems highlight travels between rows;
@@ -52,7 +52,7 @@ export const menuPositionerClass = 'z-50 outline-none data-[anchor-hidden]:hidde
 // Width: at least the anchor (or 11rem), otherwise as wide as the widest item, never
 // wider than the space Floating UI reports. Shared by every menu-like popup.
 export const menuPopupClass = cn(
-  'z-50 max-h-[min(var(--max-height-dropdown),var(--available-height))]',
+  'z-50 max-h-[min(var(--spacing-dropdown),var(--available-height))]',
   'w-max max-w-(--available-width) min-w-[max(11rem,var(--anchor-width))]',
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
   cn('rounded-xl p-1 text-foreground/90 outline-none', overlaySurfaceStyle),
@@ -68,14 +68,15 @@ export const menuShortcutClass = 'ml-auto text-meta tracking-wider text-muted-fo
 
 /** Non-interactive row (empty / loading) on the same size grid as an item. */
 export const menuEmptyClass =
-  'flex h-form-md items-center gap-[.75em] px-[.9em] py-0.5 text-body-sm text-muted-foreground box-content';
+  'flex h-control-md items-center gap-[.75em] px-[.9em] py-0.5 text-body-sm text-muted-foreground box-content';
 
 export const menuSearchClasses = {
-  // Row = h-form-md input + py-0.5 → 32px, one notch above the 28px items so the
-  // divider does not crowd the first option while the text stays on the item grid.
+  // The input is a full control rung and the row adds `py-0.5` on top, so the search
+  // row sits one notch taller than an item: the divider does not crowd the first
+  // option while the text stays on the item grid.
   container:
     'flex items-center gap-[.75em] border-b border-border px-[.9em] py-0.5 text-body-sm focus-within:bg-fill-subtle',
   icon: 'size-[1.1em] shrink-0 text-muted-foreground',
   input:
-    'h-form-md w-full bg-transparent text-body-sm text-foreground outline-hidden placeholder:text-muted-foreground',
+    'h-control-md w-full bg-transparent text-body-sm text-foreground outline-hidden placeholder:text-muted-foreground',
 };

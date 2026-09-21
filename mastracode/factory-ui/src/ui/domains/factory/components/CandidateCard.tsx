@@ -104,7 +104,7 @@ export function CandidateCard({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon-xs"
+                      size="icon-sm"
                       aria-label={`Actions for ${candidate.title}`}
                       className={REVEAL_ON_CARD_HOVER}
                     >

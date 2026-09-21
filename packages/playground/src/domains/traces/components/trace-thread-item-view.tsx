@@ -64,7 +64,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
               onHighlightSpans && message.traceSpanIds.length > 0 ? (
                 <Button
                   variant="ghost"
-                  size="icon-xs"
+                  size="icon-sm"
                   tooltip="Highlight spans"
                   aria-label="Highlight spans"
                   onClick={() => onHighlightSpans(message.traceSpanIds)}

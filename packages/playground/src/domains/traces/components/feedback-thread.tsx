@@ -112,7 +112,7 @@ function FeedbackItems({
                 disabled={pendingFeedbackId === feedbackId}
                 onSelect={() => onMarkReviewed?.(feedbackId)}
               >
-                <Icon size="sm">
+                <Icon size="xs">
                   <ClipboardCheck />
                 </Icon>
                 Mark reviewed
@@ -120,7 +120,7 @@ function FeedbackItems({
             )}
             {canDelete && (
               <DropdownMenu.Item disabled={isDeleting} onSelect={() => onRequestDelete?.(feedbackId)}>
-                <Icon size="sm">
+                <Icon size="xs">
                   <Trash2 />
                 </Icon>
                 Delete feedback

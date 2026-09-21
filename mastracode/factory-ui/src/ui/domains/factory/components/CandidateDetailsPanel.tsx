@@ -70,7 +70,7 @@ export function CandidateDetailsPanel({
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-xs"
+                size="icon-sm"
                 aria-label={`Collapse ${candidate.title}`}
                 onClick={morph.closeDetails}
               >
@@ -82,7 +82,7 @@ export function CandidateDetailsPanel({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon-xs"
+                      size="icon-sm"
                       aria-label={`All actions for ${candidate.title}`}
                     >
                       <EllipsisVertical size={13} aria-hidden />
@@ -151,10 +151,10 @@ export function CandidateDetailsPanel({
               }}
             />
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" size="xs" onClick={closePrompt}>
+              <Button type="button" variant="ghost" size="sm" onClick={closePrompt}>
                 Cancel
               </Button>
-              <Button type="submit" size="xs" disabled={!prompt.trim()}>
+              <Button type="submit" size="sm" disabled={!prompt.trim()}>
                 Run
               </Button>
             </div>

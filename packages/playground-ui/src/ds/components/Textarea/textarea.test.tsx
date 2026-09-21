@@ -28,7 +28,6 @@ describe('Textarea', () => {
   });
 
   it.each([
-    ['xs', 'text-meta'],
     ['sm', 'text-caption'],
     ['md', 'text-body-sm'],
     ['lg', 'text-body'],

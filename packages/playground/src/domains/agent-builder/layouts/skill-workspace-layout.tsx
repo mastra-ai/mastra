@@ -71,7 +71,7 @@ export const SkillWorkspaceLayout = ({
             aria-label="Workspace view"
             className={cn(
               raisedSurfaceStyle,
-              'h-form-lg relative mx-auto flex w-full max-w-sm items-center rounded-full p-0.5',
+              'h-control-lg relative mx-auto flex w-full max-w-sm items-center rounded-full p-0.5',
             )}
           >
             <span

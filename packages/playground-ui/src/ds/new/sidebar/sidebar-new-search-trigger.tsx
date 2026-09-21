@@ -17,7 +17,7 @@ export const SidebarNewSearchTrigger = forwardRef<HTMLButtonElement, SidebarNewS
         data-slot="sidebar-new-search-trigger"
         type={type}
         className={cn(
-          'group inline-flex size-form-md shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent hover:bg-fill-subtle',
+          'group inline-flex size-control-md shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent hover:bg-fill-subtle',
           quietTextHover,
           controlStateColorTransition,
           focusRing.visible,

@@ -160,7 +160,7 @@ export function AgentPlaygroundVersionBar({
               controlStateColorTransition,
             )}
           >
-            <Icon size="sm">
+            <Icon size="xs">
               <Info />
             </Icon>
           </TooltipTrigger>
@@ -201,7 +201,7 @@ export function AgentPlaygroundVersionBar({
                   </>
                 ) : (
                   <>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Save />
                     </Icon>
                     Save to filesystem
@@ -221,7 +221,7 @@ export function AgentPlaygroundVersionBar({
                   </>
                 ) : (
                   <>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Save />
                     </Icon>
                     Save New Version
@@ -236,7 +236,7 @@ export function AgentPlaygroundVersionBar({
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={() => setShowMessageDialog(true)}>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <MessageSquare />
                     </Icon>
                     Save with message
@@ -262,7 +262,7 @@ export function AgentPlaygroundVersionBar({
                 </>
               ) : (
                 <>
-                  <Icon size="sm">
+                  <Icon size="xs">
                     <Check />
                   </Icon>
                   {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}

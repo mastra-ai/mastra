@@ -91,7 +91,7 @@ export function GithubLabelRouting({
                 onChange={next => route(existing.label, next)}
               />
               <Button
-                size="xs"
+                size="sm"
                 variant="ghost"
                 aria-label={`Remove route for ${existing.label}`}
                 disabled={busy}

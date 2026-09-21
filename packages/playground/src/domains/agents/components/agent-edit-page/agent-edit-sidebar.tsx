@@ -114,20 +114,20 @@ export function AgentEditSidebar({
       <Tabs defaultTab="identity" className="flex min-h-0 flex-1 flex-col">
         <TabList className="shrink-0">
           <Tab value="identity">
-            <Icon size="sm">
+            <Icon size="xs">
               <AgentIcon />
             </Icon>
             Identity
           </Tab>
           <Tab value="capabilities">
-            <Icon size="sm">
+            <Icon size="xs">
               <ToolsIcon />
             </Icon>
             Capabilities
           </Tab>
 
           <Tab value="variables">
-            <Icon size="sm">
+            <Icon size="xs">
               <VariablesIcon />
             </Icon>
             Variables

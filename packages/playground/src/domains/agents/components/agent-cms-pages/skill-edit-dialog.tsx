@@ -274,7 +274,7 @@ export function SkillEditDialog({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="text-muted-foreground shrink-0" aria-label="Private skill">
-                  <Icon size="sm">
+                  <Icon size="xs">
                     <LockIcon />
                   </Icon>
                 </span>

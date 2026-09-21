@@ -59,7 +59,7 @@ export function ComparisonSideHeader({
         {experiment && (
           <Button
             render={<Link href={`/experiments/${experiment.id}`} />}
-            size="xs"
+            size="sm"
 
             aria-label={`Open experiment ${experiment.name || shortId}`}
           >

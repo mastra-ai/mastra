@@ -61,7 +61,7 @@ function RowAction({
     <Button
       type="button"
       variant="ghost"
-      size="icon-xs"
+      size="icon-sm"
       tooltip={label}
       aria-label={label}
       onClick={onClick}

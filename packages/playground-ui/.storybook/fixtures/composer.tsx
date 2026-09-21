@@ -77,7 +77,7 @@ export function ComposerPreview({
           <ComposerActions>
             {controls === 'mode' ? (
               <Select value={selectedMode} onValueChange={setSelectedMode} disabled={disabled}>
-                <SelectTrigger variant="ghost" size="xs" aria-label="Session mode" className="w-auto">
+                <SelectTrigger variant="ghost" size="sm" aria-label="Session mode" className="w-auto">
                   <ComposerToneLabel tone={tone} className="inline-flex items-center gap-1.5">
                     {modeOption && <modeOption.Icon size={12} aria-hidden />}
                     {modeOption?.label ?? selectedMode}

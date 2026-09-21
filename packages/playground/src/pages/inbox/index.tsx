@@ -114,7 +114,7 @@ export default function InboxPage() {
             >
               <TabList variant="pill-ghost">
                 <Tab value="feedback">
-                  <Icon size="sm">
+                  <Icon size="xs">
                     <MessageSquare />
                   </Icon>
                   <Txt variant="caption" className="text-inherit">
@@ -127,7 +127,7 @@ export default function InboxPage() {
                   )}
                 </Tab>
                 <Tab value="dataset">
-                  <Icon size="sm">
+                  <Icon size="xs">
                     <ClipboardCheck />
                   </Icon>
                   <Txt variant="caption" className="text-inherit">

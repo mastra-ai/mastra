@@ -18,7 +18,7 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
         <ButtonsGroup aria-label="Table actions">
           <Button
             type="button"
-            size="xs"
+            size="sm"
             variant="ghost"
             disabled={typeof markdown !== 'string'}
             onClick={() => {
@@ -33,7 +33,7 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
             <DropdownMenu.Trigger
               disabled={typeof csv !== 'string'}
               render={
-                <Button type="button" size="icon-xs" variant="ghost" aria-label="More table options">
+                <Button type="button" size="icon-sm" variant="ghost" aria-label="More table options">
                   <ChevronDownIcon />
                 </Button>
               }

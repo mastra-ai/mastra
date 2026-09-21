@@ -304,7 +304,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         />
         <FilterBar.Input placeholder="Filter traces…" />
       </FilterBar>
-      <div className="min-h-form-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+      <div className="min-h-control-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
         <TraceColumnsMenu
           preferences={traceColumns.preferences}
           usageDisabledReason={usageDisabledReason}

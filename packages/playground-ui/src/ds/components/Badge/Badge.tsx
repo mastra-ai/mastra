@@ -133,7 +133,7 @@ export const Badge = ({
           )}
         />
       ) : null}
-      {hasIcon ? <Icon size="sm">{icon}</Icon> : null}
+      {hasIcon ? <Icon size="xs">{icon}</Icon> : null}
       {children}
     </span>
   );

@@ -12,7 +12,7 @@ import { normalizePromptIndentation } from './normalize-prompt-indentation';
 import { cn } from '@/lib/utils';
 
 const promptTabClassName =
-  'h-form-sm px-1 text-column underline-offset-4 data-[active]:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+  'h-control-sm px-1 text-column underline-offset-4 data-[active]:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11';
 
 export function AgentSystemPrompt({ instructions, children }: { instructions: string; children?: ReactNode }) {
   const [activeTab, setActiveTab] = useState('read');

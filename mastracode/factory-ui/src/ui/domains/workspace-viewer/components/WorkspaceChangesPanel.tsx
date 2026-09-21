@@ -209,7 +209,7 @@ function DiffViewer({
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Workspace change diff">
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-xs" variant="ghost" onClick={onBack} aria-label="Back to changed files">
+        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to changed files">
           <ArrowLeft />
         </Button>
         <div className="min-w-0 flex-1">
@@ -229,7 +229,7 @@ function DiffViewer({
           </span>
         ) : null}
         <Button
-          size="icon-xs"
+          size="icon-sm"
           variant="ghost"
           onClick={onRefresh}
           disabled={isRefreshing}
@@ -317,7 +317,7 @@ export function WorkspaceChangesPanel({
       data-testid="workspace-changes-panel"
     >
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-xs" variant="ghost" onClick={onBack} aria-label="Back to workspace">
+        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
           <ArrowLeft />
         </Button>
         <FileDiff className="text-icon3" size={14} />
@@ -334,7 +334,7 @@ export function WorkspaceChangesPanel({
         ) : null}
         <Button
           className={isLoading || error ? 'ml-auto' : undefined}
-          size="icon-xs"
+          size="icon-sm"
           variant="ghost"
           onClick={onRefresh}
           disabled={isRefreshing}

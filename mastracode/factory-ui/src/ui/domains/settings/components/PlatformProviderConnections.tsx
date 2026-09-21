@@ -86,7 +86,7 @@ export interface ProviderConnectControlProps {
   /** Reconnect an existing connection instead of creating a new one. */
   reconnectConnectionId?: string;
   label: string;
-  size?: 'xs' | 'sm' | 'md';
+  size?: 'sm' | 'md';
   variant?: 'default' | 'ghost' | 'primary';
   /** Leading icon inside the button, e.g. the provider's logomark. */
   icon?: ReactNode;
@@ -187,7 +187,7 @@ export function ProviderConnectionsList({ provider, connections }: ProviderConne
             provider={provider}
             reconnectConnectionId={connection.id}
             label="Reconnect"
-            size="xs"
+            size="sm"
             variant={connection.status === 'needs_reauth' ? 'default' : 'ghost'}
           />
         </li>

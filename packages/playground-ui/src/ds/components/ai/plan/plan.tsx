@@ -81,7 +81,7 @@ export type PlanLabelProps = ComponentProps<'div'>;
 export function PlanLabel({ children = 'Plan', className, ...props }: PlanLabelProps) {
   return (
     <div data-slot="plan-label" className={cn('flex min-w-0 items-center gap-2', className)} {...props}>
-      <Icon size="sm" className="text-icon3">
+      <Icon size="xs" className="text-icon3">
         <ClipboardList />
       </Icon>
       <Txt as="span" variant="caption" className="text-muted-foreground">

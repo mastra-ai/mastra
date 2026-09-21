@@ -542,7 +542,7 @@ describe('Tab', () => {
       );
 
       const tab = screen.getByRole('tab', { name: 'First' });
-      expect(tab.className).not.toContain('h-form-md');
+      expect(tab.className).not.toContain('h-control-md');
       expect(tab.className).toContain('text-muted-foreground');
     });
   });
@@ -575,7 +575,7 @@ describe('Tab', () => {
       );
 
       const tab = screen.getByRole('tab', { name: 'First' });
-      expect(tab.className).toContain('h-form-sm');
+      expect(tab.className).toContain('h-control-sm');
       expect(screen.getByRole('tablist').getAttribute('data-size')).toBe('sm');
     });
 
@@ -591,7 +591,7 @@ describe('Tab', () => {
 
       const tab = screen.getByRole('tab', { name: 'First' });
       expect(tab.className).toContain('text-label');
-      expect(tab.className).not.toContain('h-form-sm');
+      expect(tab.className).not.toContain('h-control-sm');
       expect(screen.getByRole('tablist').getAttribute('data-size')).toBe('md');
     });
   });

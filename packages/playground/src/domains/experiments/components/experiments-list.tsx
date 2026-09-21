@@ -118,7 +118,7 @@ function ExperimentRow({
         <Button
           type="button"
           variant="ghost"
-          size="icon-xs"
+          size="icon-sm"
           tooltip="Delete experiment"
           aria-label={`Delete experiment ${exp.name ?? exp.id}`}
           onClick={(e: MouseEvent) => {

@@ -183,7 +183,7 @@ function FileCard({
         <FileJson className="text-muted-foreground size-4 shrink-0" />
         <span className="text-caption text-foreground min-w-0 flex-1 truncate font-mono">{file.name}</span>
         <span className="text-meta text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
-        <Button icon={<RefreshCw />} variant="ghost" size="xs" onClick={onReplace} disabled={isImporting}>
+        <Button icon={<RefreshCw />} variant="ghost" size="sm" onClick={onReplace} disabled={isImporting}>
           Replace
         </Button>
       </div>

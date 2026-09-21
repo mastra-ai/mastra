@@ -256,7 +256,7 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
   }
   return (
     <div className="flex items-center gap-1">
-      <Icon size="sm" className="text-muted-foreground">
+      <Icon size="xs" className="text-muted-foreground">
         <GaugeIcon />
       </Icon>
       <Txt variant="meta" className="text-muted-foreground font-mono">

@@ -45,7 +45,7 @@ export function OperationalMemoryStatus() {
     <Popover>
       <PopoverTrigger
         aria-label={`Memory budgets: ${spoken.join('. ')}`}
-        className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'gap-3')}
+        className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'gap-3')}
       >
         {showMsg && (
           <TokenBudget

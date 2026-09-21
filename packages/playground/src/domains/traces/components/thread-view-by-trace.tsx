@@ -132,19 +132,19 @@ function ThreadTraceRowContent() {
         <ThreadTrace.MessagesHeader>
           <ThreadTrace.TabList>
             <ThreadTrace.Tab value="messages">
-              <Icon size="sm">
+              <Icon size="xs">
                 <MessageSquareTextIcon />
               </Icon>
               Messages
             </ThreadTrace.Tab>
             <ThreadTrace.Tab value="feedback">
-              <Icon size="sm">
+              <Icon size="xs">
                 <MessageSquareReplyIcon />
               </Icon>
               Feedback{feedbackTotal != null && <> ({feedbackTotal})</>}
             </ThreadTrace.Tab>
             <ThreadTrace.Tab value="scores">
-              <Icon size="sm">
+              <Icon size="xs">
                 <ScorersIcon />
               </Icon>
               Scores{scoresTotal != null && <> ({scoresTotal})</>}

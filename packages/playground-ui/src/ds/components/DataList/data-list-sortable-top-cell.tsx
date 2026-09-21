@@ -60,7 +60,7 @@ export function DataListSortableTopCell({
       <span className="min-w-0 truncate">{children}</span>
       <Button
         variant="ghost"
-        size="icon-xs"
+        size="icon-sm"
         aria-label={`${label}, ${current}, sort ${sortLabels[next]}`}
         tooltip={sortTooltips[sort ?? 'none']}
         onClick={() => onSortChange(next, sortKey)}

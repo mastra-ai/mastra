@@ -29,7 +29,7 @@ export function SubSectionHeader({ title, icon }: SectionHeaderProps) {
   return (
     <Txt as="h4" variant="caption" className="text-placeholder flex items-center gap-1 uppercase">
       {icon && (
-        <Icon size="sm" className="text-placeholder">
+        <Icon size="xs" className="text-placeholder">
           {icon}
         </Icon>
       )}

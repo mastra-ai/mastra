@@ -55,7 +55,7 @@ export const RuleOperatorSelect: React.FC<RuleOperatorSelectProps> = ({ value, o
           {operatorList.map(operator => (
             <SelectItem key={operator} value={operator}>
               <span className="flex items-center gap-2">
-                <Icon size="sm" className="text-muted-foreground">
+                <Icon size="xs" className="text-muted-foreground">
                   {OPERATOR_ICONS[operator]}
                 </Icon>
                 {OPERATOR_LABELS[operator]}

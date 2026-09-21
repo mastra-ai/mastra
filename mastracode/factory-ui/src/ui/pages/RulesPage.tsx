@@ -245,7 +245,7 @@ function DecisionRow({
         {decision.status === 'failed' ? (
           <Button
             variant="ghost"
-            size="icon-xs"
+            size="icon-sm"
             tooltip="Ask supervisor"
             aria-label={`Ask supervisor about failed ${decision.type} decision`}
             onClick={() =>
@@ -262,15 +262,15 @@ function DecisionRow({
         ) : null}
         {decision.status === 'proposed' ? (
           <>
-            <Button variant="ghost" size="xs" disabled={approving || dismissing} onClick={onDismiss}>
+            <Button variant="ghost" size="sm" disabled={approving || dismissing} onClick={onDismiss}>
               {dismissing ? 'Dismissing…' : 'Dismiss'}
             </Button>
-            <Button size="xs" disabled={approving || dismissing} onClick={onApprove}>
+            <Button size="sm" disabled={approving || dismissing} onClick={onApprove}>
               {approving ? 'Starting…' : 'Run'}
             </Button>
           </>
         ) : decision.status === 'failed' && decision.canRetry ? (
-          <Button variant="outline" size="xs" disabled={retrying} onClick={onRetry}>
+          <Button variant="outline" size="sm" disabled={retrying} onClick={onRetry}>
             {retrying ? 'Retrying…' : 'Retry'}
           </Button>
         ) : null}

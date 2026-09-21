@@ -84,7 +84,7 @@ function ScopeOption({
         <ScopeBadge scope={scope} />
       ) : (
         <span className="text-meta inline-flex h-5 items-center gap-1 px-1.5">
-          <Icon aria-hidden="true" className="h-icon-sm w-icon-sm" />
+          <Icon aria-hidden="true" className="size-icon-xs" />
           {label}
         </span>
       )}

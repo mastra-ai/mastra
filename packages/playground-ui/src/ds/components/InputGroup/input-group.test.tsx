@@ -44,7 +44,7 @@ describe('InputGroup', () => {
     // The root carries an explicit, border-box height. This is the fix for the group
     // rendering ~2px taller than a same-size Select trigger (previously the height lived
     // only on the inner control, so the root's own border was added on top).
-    expect(getWrapper().className).toContain('h-form-md');
+    expect(getWrapper().className).toContain('h-control-md');
     expect(getInput().className).toContain('flex-1');
   });
 
@@ -55,13 +55,13 @@ describe('InputGroup', () => {
       </InputGroup>,
     );
     // Root height for the size...
-    expect(getWrapper().className).toContain('h-form-lg');
+    expect(getWrapper().className).toContain('h-control-lg');
     // ...and the control is sized to the root's content box (token minus the 1px borders)
     // via the parent's data-size (no React context). This keeps it from shrinking to the
     // line-height when the group goes vertical, and from overflowing the root inline —
     // which would let a flex-column parent grow the group 2px past a sibling control.
-    expect(getInput().className).toContain('group-data-[size=lg]/input-group:h-[calc(var(--spacing-form-lg)-2px)]');
-    expect(getInput().className).not.toContain('h-form-lg');
+    expect(getInput().className).toContain('group-data-[size=lg]/input-group:h-[calc(var(--spacing-control-lg)-2px)]');
+    expect(getInput().className).not.toContain('h-control-lg');
   });
 
   it('block-start mode: control keeps a form height (no collapse) and the root height goes auto', () => {
@@ -77,7 +77,7 @@ describe('InputGroup', () => {
         <InputGroupInput placeholder="name@example.com" />
       </InputGroup>,
     );
-    expect(getInput().className).toContain('group-data-[size=md]/input-group:h-[calc(var(--spacing-form-md)-2px)]');
+    expect(getInput().className).toContain('group-data-[size=md]/input-group:h-[calc(var(--spacing-control-md)-2px)]');
     expect(getWrapper().className).toContain('has-[>[data-align=block-start]]:h-auto');
   });
 

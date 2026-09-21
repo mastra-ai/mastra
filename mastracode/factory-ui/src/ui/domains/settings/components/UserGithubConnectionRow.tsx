@@ -38,7 +38,7 @@ export function UserGithubConnectionRow() {
     <SettingsSubsection scope="personal" title="GitHub account">
       <SettingsContainer>
         <SettingsRow label="Not connected" description="Connect it so issues and PRs you create are authored as you.">
-          <Button size="xs" variant="outline" onClick={() => connectUserGithub(baseUrl)}>
+          <Button size="sm" variant="outline" onClick={() => connectUserGithub(baseUrl)}>
             <GithubIcon className="size-3.5" />
             Connect GitHub
           </Button>

@@ -47,6 +47,22 @@
     border-color: var(--border);
   }
 
+  /* A field trigger (`Combobox`/`Select` in their default variant) carries no border at all:
+     its edge is the raised material's inset rim, which paints all four sides at once. The
+     seam rules below can only halve a border, so that rim survives next to its neighbour's
+     edge and the seam reads as two lines. Inside a group the edges belong to the group, so
+     the material goes flat and the segment takes the same 1px border as every other one —
+     the border its focus state already moves (`focus-visible:border-border-focus`). Hover
+     moved with the rim, so it moves to the border here too. */
+  [data-slot='buttons-group'] > .shadow-raised {
+    box-shadow: none;
+    border-width: 1px;
+  }
+
+  [data-slot='buttons-group'] > .shadow-raised:hover:not(:focus-visible) {
+    border-color: var(--border-hover);
+  }
+
   /* One border per seam, and no overlap. A border is a translucent alpha of the
      foreground, so two 1px edges collapsed onto the same pixel (the `-ml-px` trick) stack
      to double the alpha and out-read the ring around the group. The left segment owns the

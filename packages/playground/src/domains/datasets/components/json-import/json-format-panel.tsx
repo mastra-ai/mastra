@@ -50,7 +50,7 @@ export function JSONFormatPanel() {
       <div className="border-border overflow-hidden rounded-lg border">
         <div className="border-border bg-card flex items-center justify-between border-b py-1.5 pr-1.5 pl-3">
           <span className="text-meta text-muted-foreground font-mono">example.json</span>
-          <Button icon={isCopied ? <Check /> : <Copy />} variant="ghost" size="xs" onClick={handleCopy}>
+          <Button icon={isCopied ? <Check /> : <Copy />} variant="ghost" size="sm" onClick={handleCopy}>
             {isCopied ? 'Copied' : 'Copy'}
           </Button>
         </div>

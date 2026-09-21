@@ -121,7 +121,7 @@ export function SidebarAttention() {
               to={inboxPath}
               onClick={() => setOpen(false)}
               aria-label="View all attention"
-              className={buttonVariants({ variant: 'ghost', size: 'xs', className: 'shrink-0' })}
+              className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'shrink-0' })}
             >
               View all
               <ArrowRight aria-hidden />

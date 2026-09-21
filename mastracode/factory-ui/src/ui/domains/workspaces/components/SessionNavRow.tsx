@@ -139,7 +139,7 @@ export function SessionNavRow({
   );
 }
 
-const trailingSlot = 'size-form-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';
+const trailingSlot = 'size-control-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';
 
 // An empty slot claims no width, so the label runs the full row until there is something to show.
 const revealedSlot =

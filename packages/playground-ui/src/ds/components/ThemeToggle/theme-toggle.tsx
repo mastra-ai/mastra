@@ -33,14 +33,14 @@ const SIZE_CONFIG = {
     itemWidth: 20,
     root: 'gap-px p-px',
     indicator: 'inset-y-px left-px',
-    item: 'h-4 [&_svg]:h-icon-sm [&_svg]:w-icon-sm',
+    item: 'h-4 [&_svg]:size-icon-xs',
   },
   sm: {
     itemGap: 1,
     itemWidth: 24,
     root: 'gap-px p-px',
     indicator: 'inset-y-px left-px',
-    item: 'h-5 [&_svg]:h-icon-sm [&_svg]:w-icon-sm',
+    item: 'h-5 [&_svg]:size-icon-xs',
   },
 } as const;
 

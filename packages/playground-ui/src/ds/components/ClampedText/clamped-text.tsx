@@ -46,7 +46,7 @@ export function ClampedText({
       {(isClamped || isExpanded) && (
         <Button
           variant="ghost"
-          size="xs"
+          size="sm"
           className="mt-1 -ml-[.8em] self-start justify-self-start"
           aria-expanded={isExpanded}
           onClick={() => setIsExpanded(v => !v)}
