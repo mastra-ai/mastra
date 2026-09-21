@@ -1,6 +1,6 @@
 ---
-name: gh-review2
-description: Draft and post direct, unhedged GitHub PR reviews and issue comments — every item is a required change with a pointer and reason, PR reviews land as "request changes" or "approve" (never a bare comment), and nothing is marked optional or deferred to a follow-up. Use whenever understand-pr2 or understand-issue2 (or any review) is about to draft or post to GitHub.
+name: gh-review
+description: Draft and post direct, unhedged GitHub PR reviews and issue comments — every item is a required change with a pointer and reason, PR reviews land as "request changes" or "approve" (never a bare comment), and nothing is marked optional or deferred to a follow-up. Use whenever understand-pr or understand-issue (or any review) is about to draft or post to GitHub.
 ---
 
 # GitHub review voice
