@@ -228,6 +228,22 @@ await session.thread.switch({ threadId: thread.id })
 console.log(threads.length)
 ```
 
+Branch a conversation at any message to explore a different continuation while the original thread stays intact. [`session.thread.branch()`](/reference/agent-controller/session#sessionthreadbranch-sourcethreadid-branchpointmessageid-title-metadata-) creates a shared-history child that references the source conversation up to and including the fork message and stores only its divergent tail, then binds the session to the branch:
+
+```typescript
+const { thread, branch } = await session.thread.branch({
+  branchPointMessageId: 'msg-42',
+  title: 'Try a different approach',
+})
+
+const parent = await session.thread.getParent()
+const { branches } = await session.thread.listBranches({ perPage: false })
+```
+
+Use [`session.thread.getParent()`](/reference/agent-controller/session#sessionthreadgetparent-threadid-) and [`session.thread.getBranchInfo()`](/reference/agent-controller/session#sessionthreadgetbranchinfo-threadid-) to return from a branch to its source, and [`session.thread.listBranches()`](/reference/agent-controller/session#sessionthreadlistbranches-threadid-page-perpage-) to list the branches forked from a thread. Branching requires a memory implementation with `supportsThreadBranching`, such as the standard `Memory`. Other configurations throw `BRANCHING_UNSUPPORTED`.
+
+The Mastra Code TUI exposes the same flow as slash commands: `/branch` forks the active thread at its latest message, `/parent` jumps from a branch to its source thread, and `/branches` lists the active thread's branches for quick switching. Fork points are marked inline in both the source and branch message history.
+
 Use `session.state` for structured live state associated with the Session. Read it with [`session.state.get()`](/reference/agent-controller/session#sessionstateget) and write updates with [`session.state.set()`](/reference/agent-controller/session#sessionstatesetupdates). Define `stateSchema` and `initialState` on the controller when you need validation and defaults:
 
 ```typescript

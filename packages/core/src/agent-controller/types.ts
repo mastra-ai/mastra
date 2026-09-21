@@ -11,6 +11,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
+import type { PublicThreadBranchMetadata } from '../storage/types';
 import type { GoalEvaluationPayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceStatus } from '../workspace';
@@ -506,6 +507,15 @@ export interface AgentControllerThread {
   updatedAt: Date;
   tokenUsage?: TokenUsage;
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * A branched thread plus its public branch (fork-point) metadata. Returned when
+ * a session branches a thread and when listing a thread's direct branches.
+ */
+export interface AgentControllerBranch {
+  thread: AgentControllerThread;
+  branch: PublicThreadBranchMetadata;
 }
 
 // =============================================================================

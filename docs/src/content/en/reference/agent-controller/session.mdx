@@ -387,6 +387,51 @@ const clone = await session.thread.clone({
 
 Returns: `Promise<AgentControllerThread>`
 
+### `session.thread.branch({ sourceThreadId?, branchPointMessageId, title?, metadata? })`
+
+Branch an owned thread at a message into a shared-history child thread, then bind the session to the branch. The branch shares the source conversation up to and including `branchPointMessageId`, and only its divergent tail is stored. `sourceThreadId` defaults to the active thread.
+
+```typescript
+const branch = await session.thread.branch({
+  branchPointMessageId: 'msg-42',
+  title: 'Try a different approach',
+})
+```
+
+Returns: `Promise<AgentControllerBranch>`, an object with `thread` and `branch`. The `branch` field holds the fork metadata `{ parentThreadId, branchPointMessageId, branchPointCreatedAt, branchCreatedAt }`.
+
+Branching requires a memory implementation with `supportsThreadBranching`. Other configurations throw `BRANCHING_UNSUPPORTED`.
+
+### `session.thread.getParent({ threadId? })`
+
+Return the parent thread of the active (or given) thread, or `null` for a root thread.
+
+```typescript
+const parent = await session.thread.getParent()
+```
+
+Returns: `Promise<AgentControllerThread | null>`
+
+### `session.thread.listBranches({ threadId?, page?, perPage? })`
+
+List the direct branches of the active (or given) thread with their fork-point metadata.
+
+```typescript
+const { branches } = await session.thread.listBranches({ perPage: false })
+```
+
+Returns: `Promise<PaginationInfo & { branches: AgentControllerBranch[] }>`
+
+### `session.thread.getBranchInfo({ threadId? })`
+
+Return the fork-point metadata of the active (or given) thread, or `null` for a root thread. Derived from the parent's branch list so the branch view can show where it forked from its source.
+
+```typescript
+const info = await session.thread.getBranchInfo()
+```
+
+Returns: `Promise<AgentControllerBranch['branch'] | null>`
+
 ### `session.thread.switch({ threadId, emitEvent? })`
 
 Switch to an owned stored thread and hydrate its mode, model, and observational memory settings.

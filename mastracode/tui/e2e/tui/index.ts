@@ -19,6 +19,7 @@ import { backgroundPlaceholderOptOutScenario } from './background-placeholder-op
 import { backgroundSubagentsScenario } from './background-subagents.js';
 import { backgroundToolsSettingsScenario } from './background-tools-settings.js';
 import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
+import { branchCommandsScenario } from './branch-commands.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { browserActivePendingStatusScenario } from './browser-active-pending-status.js';
 import { browserModelPickerScenario } from './browser-model-picker.js';
@@ -208,6 +209,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
   'abort-followup': abortFollowupScenario,
   'branch-context-long-name': branchContextLongNameScenario,
+  'branch-commands': branchCommandsScenario,
   'active-signal-followup': activeSignalFollowupScenario,
   'agent-connections-expected-reply-watchdog': agentConnectionsExpectedReplyWatchdogScenario,
   'agent-connections-notification-signal': agentConnectionsNotificationSignalScenario,

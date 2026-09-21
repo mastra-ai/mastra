@@ -30,7 +30,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
-import type { StorageListMessagesOutput } from '../storage/types';
+import type { PaginationInfo, StorageListMessagesOutput } from '../storage/types';
 import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
@@ -40,6 +40,7 @@ import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
 import type {
+  AgentControllerBranch,
   AgentControllerDisplayState,
   AgentControllerEvent,
   AgentControllerEventListener,
@@ -259,6 +260,25 @@ export interface ThreadDataStore {
     title?: string;
     metadata?: Record<string, unknown>;
   }): Promise<AgentControllerThread>;
+  /**
+   * Branch a thread at a message via the host's memory, returning the new
+   * branch thread and its public fork-point metadata. Unlike {@link cloneThread},
+   * the branch shares the source's inherited history instead of copying it.
+   */
+  branchThread(input: {
+    sourceThreadId: string;
+    branchPointMessageId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<AgentControllerBranch>;
+  /** Return the parent thread of a branch, or null for a root thread / when branching is unsupported. */
+  getThreadParent(input: { threadId: string }): Promise<AgentControllerThread | null>;
+  /** List the direct branches of a thread with their public fork-point metadata. */
+  listThreadBranches(input: {
+    threadId: string;
+    page?: number;
+    perPage?: number | false;
+  }): Promise<PaginationInfo & { branches: AgentControllerBranch[] }>;
   /** Acquire the host thread lock for a thread id. No-op when no lock is configured. */
   acquireLock(threadId: string): Promise<void>;
   /** Release the host thread lock for a thread id. No-op when no lock is configured. */
@@ -806,6 +826,126 @@ export class SessionThread {
     await this.ensureCurrentSubscription();
 
     return clonedThread;
+  }
+
+  /**
+   * Branch a thread at a fork-point message, bind the session to the branch,
+   * and rebind the stream. The branch shares the source's inherited history up
+   * to and including `branchPointMessageId`; only its divergent tail is stored.
+   */
+  async branch({
+    sourceThreadId,
+    branchPointMessageId,
+    title,
+    metadata,
+  }: {
+    sourceThreadId?: string;
+    branchPointMessageId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<AgentControllerBranch> {
+    const sourceId = sourceThreadId ?? this.#threadId;
+    if (!sourceId) {
+      throw new Error('No source thread to branch');
+    }
+    // Only allow branching from a source thread this session owns.
+    if (this.#store?.hasStorage()) {
+      await this.#requireOwnedThread({ threadId: sourceId });
+    }
+    return this.#branchThread({ sourceThreadId: sourceId, branchPointMessageId, title, metadata });
+  }
+
+  async #branchThread({
+    sourceThreadId,
+    branchPointMessageId,
+    title,
+    metadata,
+  }: {
+    sourceThreadId: string;
+    branchPointMessageId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<AgentControllerBranch> {
+    const session = this.#owner;
+    const store = this.#store;
+    if (!store) {
+      throw new Error('Memory is not configured on this AgentController');
+    }
+
+    const result = await store.branchThread({ sourceThreadId, branchPointMessageId, title, metadata });
+
+    // Acquire lock on new thread before releasing old one
+    const oldThreadId = this.#threadId;
+    try {
+      await store.acquireLock(result.thread.id);
+    } catch (err) {
+      if (oldThreadId) {
+        try {
+          await store.acquireLock(oldThreadId);
+        } catch {
+          // Best-effort re-acquire; original error is more important
+        }
+      }
+      throw err;
+    }
+    if (oldThreadId) {
+      await store.releaseLock(oldThreadId);
+    }
+
+    this.cleanupSubscription();
+    this.set({ threadId: result.thread.id });
+    await this.loadMetadata();
+    session.resetTokenUsage();
+    session.emit({ type: 'thread_created', thread: result.thread });
+    await this.ensureCurrentSubscription();
+
+    return result;
+  }
+
+  /** The parent thread of the active (or given) thread, or null for a root thread. */
+  async getParent({ threadId }: { threadId?: string } = {}): Promise<AgentControllerThread | null> {
+    const targetId = threadId ?? this.#threadId;
+    if (!this.#store || !targetId) return null;
+    // Only expose lineage for threads this session owns.
+    if (this.#store.hasStorage()) {
+      await this.#requireOwnedThread({ threadId: targetId });
+    }
+    return this.#store.getThreadParent({ threadId: targetId });
+  }
+
+  /**
+   * The fork-point metadata of the active (or given) thread, or null for a
+   * root thread. Derived from the parent's branch list so the branch view can
+   * show where it forked from its source.
+   */
+  async getBranchInfo({ threadId }: { threadId?: string } = {}): Promise<AgentControllerBranch['branch'] | null> {
+    const targetId = threadId ?? this.#threadId;
+    if (!this.#store || !targetId) return null;
+    const parent = await this.getParent({ threadId: targetId });
+    if (!parent) return null;
+    const { branches } = await this.listBranches({ threadId: parent.id, perPage: false });
+    return branches.find(entry => entry.thread.id === targetId)?.branch ?? null;
+  }
+
+  /** Direct branches of the active (or given) thread with their fork-point metadata. */
+  async listBranches({
+    threadId,
+    page,
+    perPage,
+  }: {
+    threadId?: string;
+    page?: number;
+    perPage?: number | false;
+  } = {}): Promise<PaginationInfo & { branches: AgentControllerBranch[] }> {
+    const targetId = threadId ?? this.#threadId;
+    if (!this.#store || !targetId) {
+      return { total: 0, page: 0, perPage: false, hasMore: false, branches: [] };
+    }
+    // Only expose lineage for threads this session owns.
+    if (this.#store.hasStorage()) {
+      await this.#requireOwnedThread({ threadId: targetId });
+    }
+    return this.#store.listThreadBranches({ threadId: targetId, page, perPage });
   }
 
   /** Switch the session to an existing thread, hydrating its persisted settings and rebinding the stream. */
