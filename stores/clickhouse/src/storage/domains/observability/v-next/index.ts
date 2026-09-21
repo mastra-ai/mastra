@@ -122,6 +122,7 @@ import {
   DELTA_MV_NAMES,
   MV_DISCOVERY_VALUES,
   MV_DISCOVERY_PAIRS,
+  MV_SCORE_EVENTS_DELTA,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
   RETENTION_MANAGED_TABLES,
@@ -519,6 +520,33 @@ async function queryNamesByTable(
   return out;
 }
 
+/**
+ * Drops a score delta MV created before per-scoreId deduplication so init()'s
+ * `CREATE MATERIALIZED VIEW IF NOT EXISTS` recreates it with the current
+ * definition. Only the view is dropped; the delta table and its rows stay.
+ */
+async function dropStaleScoreDeltaMv(
+  client: ClickHouseClient,
+  replication: ClickhouseReplicationConfig | undefined,
+): Promise<void> {
+  let createQuery: string | undefined;
+  try {
+    const result = await client.query({
+      query: `SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = {name:String}`,
+      query_params: { name: MV_SCORE_EVENTS_DELTA },
+      format: 'JSONEachRow',
+    });
+    createQuery =
+      ((await result.json()) as Array<{ create_table_query?: string | null }>)[0]?.create_table_query ?? undefined;
+  } catch {
+    return;
+  }
+
+  if (createQuery && !/NOT IN/i.test(createQuery)) {
+    await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${MV_SCORE_EVENTS_DELTA}`, replication) });
+  }
+}
+
 async function detectDeltaCursorStrategy(
   client: ClickHouseClient,
   override?: ClickHouseDeltaCursorStrategy,
@@ -714,6 +742,8 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       for (const migration of pendingMigrations) {
         await this.#client.command({ query: addOnClusterToDDL(migration.sql, this.#replication) });
       }
+
+      await dropStaleScoreDeltaMv(this.#client, this.#replication);
 
       const coreMvDdl = this.#deltaCursorStrategy === null ? BASE_MV_DDL : buildAllMvDDL(this.#deltaCursorStrategy);
       for (const ddl of coreMvDdl) {

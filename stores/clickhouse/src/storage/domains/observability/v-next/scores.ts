@@ -367,12 +367,13 @@ async function queryScoresAfterCursor(
         s.scoreId AS scoreId,
         toString(d.cursorId) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS} s
+      INNER JOIN ${TABLE_SCORE_EVENTS} s FINAL
         ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
        AND s.timestamp = d.timestamp
        AND s.scoreId = d.scoreId
       ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
       ORDER BY d.cursorId ASC
+      LIMIT 1 BY s.scoreId
       LIMIT {fetchLimit:UInt32}
     `,
     { ...params, afterCursor: cursorId, fetchLimit: limit + 1 },
@@ -389,7 +390,7 @@ async function getDeltaCursor(
     `
       SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS} s
+      INNER JOIN ${TABLE_SCORE_EVENTS} s FINAL
         ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
        AND s.timestamp = d.timestamp
        AND s.scoreId = d.scoreId

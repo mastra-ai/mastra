@@ -800,6 +800,14 @@ SETTINGS allow_nullable_key = 1
 
 // Forward-only index: historical rows that predate this delta schema are not
 // backfilled into delta polling.
+//
+// A scoreId gets exactly one cursorId. Retried or re-written inserts of the
+// same scoreId (client retries, Pub/Sub redelivery, writeVersion bumps) are
+// skipped when the scoreId is already in the delta table, and `LIMIT 1 BY`
+// collapses duplicates within a single insert block. This mirrors the DuckDB
+// store, which preserves cursorId on retry so the score is not re-emitted to
+// delta consumers. Concurrent inserts of one scoreId can still race past the
+// NOT IN check; the read side dedupes those with `LIMIT 1 BY scoreId`.
 export function buildScoreEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
   return `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
@@ -818,6 +826,8 @@ FROM (
     timestamp,
     scoreId
   FROM ${TABLE_SCORE_EVENTS}
+  WHERE scoreId NOT IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA})
+  LIMIT 1 BY scoreId
 )
 `;
 }

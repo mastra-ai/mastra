@@ -33,6 +33,8 @@ import {
   MV_DISCOVERY_VALUES,
   MV_SCORE_EVENTS_CURRENT,
   MV_TRACE_ROOTS_DELTA,
+  MV_SCORE_EVENTS_DELTA,
+  buildScoreEventsDeltaMvDDL,
   parseTtlExpression,
   SCORE_EVENT_COLUMN_NAMES,
   TABLE_DELETION_REQUESTS,
@@ -848,6 +850,57 @@ LIMIT 1`,
       );
       expect(delta.scores.map(score => score.scoreId)).toEqual(['delta-score-2']);
       expect(delta.deltaCursor).toBeTruthy();
+    });
+
+    it('emits a retried score once across delta polls', async () => {
+      const filters = { scorerId: 'delta-retry-scorer' } as any;
+      const score = {
+        scoreId: 'delta-score-retry',
+        timestamp: new Date('2026-05-05T00:00:02Z'),
+        traceId: 'delta-score-retry-trace',
+        spanId: null,
+        scorerId: 'delta-retry-scorer',
+        score: 0.3,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      };
+
+      const bootstrap = await storage.listScores({ mode: 'delta', filters });
+      await storage.createScore({ score });
+
+      const first = await waitForValue(
+        () => storage.listScores({ mode: 'delta', after: bootstrap.deltaCursor!, filters }),
+        result => result.scores.length > 0,
+      );
+      expect(first.scores.map(s => s.scoreId)).toEqual(['delta-score-retry']);
+
+      // The consumer has already seen the score; a retry and a rewrite land afterwards.
+      await storage.createScore({ score });
+      await storage.createScore({ score: { ...score, score: 0.9 } });
+
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      try {
+        const deltaRows = await client.query({
+          query: `SELECT count() AS count FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+          format: 'JSONEachRow',
+        });
+        expect((await deltaRows.json<{ count: string | number }>()).map(row => Number(row.count))).toEqual([1]);
+      } finally {
+        await client.close();
+      }
+
+      const second = await storage.listScores({ mode: 'delta', after: first.deltaCursor!, filters });
+      expect(second.scores).toEqual([]);
+      expect(second.deltaCursor).toBe(first.deltaCursor);
+
+      const replay = await storage.listScores({ mode: 'delta', after: bootstrap.deltaCursor!, filters });
+      expect(replay.scores.map(s => s.scoreId)).toEqual(['delta-score-retry']);
     });
 
     it('supports page deltaCursor and delta polling for feedback', async () => {
@@ -5372,6 +5425,72 @@ LIMIT 1`,
           migration => migration.kind === 'column' && migration.table === table && migration.name === 'writeVersion',
         )?.sql,
       ).toContain('ADD COLUMN IF NOT EXISTS writeVersion UInt64 DEFAULT 0');
+    });
+
+    it('mints one delta cursor per scoreId', () => {
+      for (const strategy of ['serial', 'fallback'] as const) {
+        const mvDdl = buildAllMvDDL(strategy).find(ddl =>
+          ddl.includes(`CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}`),
+        );
+        expect(mvDdl).toContain(`WHERE scoreId NOT IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA})`);
+        expect(mvDdl).toContain('LIMIT 1 BY scoreId');
+      }
+    });
+
+    it('recreates a score delta view that predates per-scoreId deduplication', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const score = {
+        scoreId: 'legacy-delta-mv-score',
+        timestamp: new Date('2026-01-02T00:00:00Z'),
+        traceId: 'legacy-delta-mv-trace',
+        spanId: null,
+        scorerId: 'quality',
+        score: 0.4,
+        reason: null,
+        metadata: null,
+      };
+      const readMvDdl = async () => {
+        const result = await client.query({
+          query: `SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = {name:String}`,
+          query_params: { name: MV_SCORE_EVENTS_DELTA },
+          format: 'JSONEachRow',
+        });
+        return (await result.json<{ create_table_query: string }>())[0]?.create_table_query ?? '';
+      };
+
+      try {
+        const strategy = (await readMvDdl()).includes('generateSerialID(') ? 'serial' : 'fallback';
+        const legacyMvDdl = buildScoreEventsDeltaMvDDL(strategy)
+          .replace(/\n\s*WHERE scoreId NOT IN \(SELECT scoreId FROM \w+\)/, '')
+          .replace(/\n\s*LIMIT 1 BY scoreId/, '');
+        expect(legacyMvDdl).not.toContain('NOT IN');
+
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_SCORE_EVENTS_DELTA}` });
+        await client.command({ query: legacyMvDdl });
+        expect(await readMvDdl()).not.toContain('NOT IN');
+
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        expect(await readMvDdl()).toContain('NOT IN');
+
+        const storage = new ObservabilityStorageClickhouseVNext({ client });
+        await storage.init();
+        await storage.createScore({ score });
+        await storage.createScore({ score });
+
+        const deltaResult = await client.query({
+          query: `SELECT count() AS count FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+          format: 'JSONEachRow',
+        });
+        expect((await deltaResult.json<{ count: string | number }>()).map(row => Number(row.count))).toEqual([1]);
+      } finally {
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        await client.close();
+      }
     });
 
     it('additively upgrades legacy score rows without losing source or delta data', async () => {
