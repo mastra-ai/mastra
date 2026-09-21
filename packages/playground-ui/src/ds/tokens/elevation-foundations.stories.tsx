@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Txt } from '../components/Txt/Txt';
 import { Colors } from './colors';
 import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';
-import { Glows, Shadows } from './shadows';
+import { Glows } from './shadows';
 
 const meta: Meta = {
   title: 'Foundations/Elevation',
@@ -11,7 +11,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'One recipe carries elevation: --shadow-raised. It draws the rim as well as the drop, so a raised surface never adds a border of its own. The remaining shadow tokens are the older, per-case drops still declared in theme.css.',
+          'One recipe carries elevation: --shadow-raised. It draws the rim as well as the drop, so a raised surface never adds a border of its own. Beside it, only the coloured glows remain — a status marker and the focus halo.',
       },
     },
   },

@@ -91,7 +91,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
         </div>
         <span className="border-border1 bg-surface3 text-meta text-foreground rounded-md border px-2.5 py-1">Live</span>
       </header>
-      <section className="rounded-studio-frame border-border bg-card shadow-raised mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
+      <section className="rounded-studio-frame bg-card shadow-raised mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
         <div className="grid min-h-full grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
           <div className="grid grid-cols-3 gap-3">
             {[
@@ -570,13 +570,13 @@ export const Floating: Story = {
     docs: {
       description: {
         story:
-          'Floating variant via pure composition: parent gets `m-3` and `gap-3`, the `MainSidebar` gets `rounded-2xl border shadow-raised`. Works with resize, collapse, and mobile drawer exactly like the default variant.',
+          'Floating variant via pure composition: parent gets `m-3` and `gap-3`, the `MainSidebar` gets `rounded-2xl shadow-raised`. Works with resize, collapse, and mobile drawer exactly like the default variant.',
       },
     },
   },
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-border bg-card shadow-raised m-1 rounded-2xl border">
+      <MainSidebar className="bg-card shadow-raised m-1 rounded-2xl">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>

@@ -41,7 +41,7 @@ export function ReferenceViewerDialog({
 
       {/* Dialog */}
       <div
-        className="border-border bg-card shadow-raised relative mx-4 flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border"
+        className="bg-card shadow-raised relative mx-4 flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="reference-viewer-title"

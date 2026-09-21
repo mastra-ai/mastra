@@ -53,7 +53,7 @@ const InlineResult = ({
 
 export const Default: Story = {
   render: () => (
-    <Command className="border-border shadow-raised w-100 rounded-lg border">
+    <Command className="shadow-raised w-100 rounded-lg">
       <CommandInput placeholder="Type a command or search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -96,7 +96,7 @@ export const Default: Story = {
 
 export const InlineVercelStyle: Story = {
   render: () => (
-    <div className="border-border bg-card shadow-raised w-sm overflow-hidden rounded-xl border">
+    <div className="bg-card shadow-raised w-sm overflow-hidden rounded-xl">
       <Command className="bg-surface2 rounded-none">
         <CommandInput
           placeholder="Find..."
@@ -230,7 +230,7 @@ export const WithDialog: Story = {
 
 export const Empty: Story = {
   render: () => (
-    <Command className="border-border shadow-raised w-100 rounded-lg border">
+    <Command className="shadow-raised w-100 rounded-lg">
       <CommandInput placeholder="Search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -241,7 +241,7 @@ export const Empty: Story = {
 
 export const WithShortcuts: Story = {
   render: () => (
-    <Command className="border-border shadow-raised w-100 rounded-lg border">
+    <Command className="shadow-raised w-100 rounded-lg">
       <CommandInput placeholder="Type a command..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -300,7 +300,7 @@ export const SearchOnly: Story = {
     const filteredItems = items.filter(item => item.toLowerCase().includes(search.toLowerCase()));
 
     return (
-      <Command className="border-border shadow-raised w-100 rounded-lg border">
+      <Command className="shadow-raised w-100 rounded-lg">
         <CommandInput placeholder="Search fruits..." value={search} onValueChange={setSearch} />
         <CommandList>
           <CommandEmpty>No fruits found.</CommandEmpty>
